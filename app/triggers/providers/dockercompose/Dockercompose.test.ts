@@ -107,4 +107,87 @@ describe('Dockercompose Trigger', () => {
 
         expect(dockerTriggerSpy).toHaveBeenCalledWith(container);
     });
+
+    test('processComposeFile should only trigger containers with actual image changes', async () => {
+        const tagContainer = {
+            name: 'nginx',
+            image: {
+                name: 'nginx',
+                registry: { name: 'hub' },
+                tag: { value: '1.0.0' },
+            },
+            updateKind: {
+                kind: 'tag',
+                remoteValue: '1.1.0',
+            },
+        };
+        const digestContainer = {
+            name: 'redis',
+            image: {
+                name: 'redis',
+                registry: { name: 'hub' },
+                tag: { value: '7.0.0' },
+            },
+            updateKind: {
+                kind: 'digest',
+                remoteValue: 'sha256:deadbeef',
+            },
+        };
+
+        jest.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue({
+            services: {
+                nginx: { image: 'nginx:1.0.0' },
+                redis: { image: 'redis:7.0.0' },
+            },
+        });
+
+        const dockerTriggerSpy = jest
+            .spyOn(Docker.prototype, 'trigger')
+            .mockResolvedValue();
+
+        await trigger.processComposeFile('/tmp/stack.yml', [
+            tagContainer,
+            digestContainer,
+        ]);
+
+        expect(dockerTriggerSpy).toHaveBeenCalledTimes(1);
+        expect(dockerTriggerSpy).toHaveBeenCalledWith(tagContainer);
+    });
+
+    test('processComposeFile should skip writes and triggers when no service image changes are needed', async () => {
+        trigger.configuration.dryrun = false;
+        const container = {
+            name: 'redis',
+            image: {
+                name: 'redis',
+                registry: { name: 'hub' },
+                tag: { value: '7.0.0' },
+            },
+            updateKind: {
+                kind: 'digest',
+                remoteValue: 'sha256:deadbeef',
+            },
+        };
+
+        jest.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue({
+            services: {
+                redis: { image: 'redis:7.0.0' },
+            },
+        });
+
+        const getComposeFileSpy = jest.spyOn(trigger, 'getComposeFile');
+        const writeComposeFileSpy = jest.spyOn(trigger, 'writeComposeFile');
+        const dockerTriggerSpy = jest
+            .spyOn(Docker.prototype, 'trigger')
+            .mockResolvedValue();
+
+        await trigger.processComposeFile('/tmp/stack.yml', [container]);
+
+        expect(getComposeFileSpy).not.toHaveBeenCalled();
+        expect(writeComposeFileSpy).not.toHaveBeenCalled();
+        expect(dockerTriggerSpy).not.toHaveBeenCalled();
+        expect(mockLog.info).toHaveBeenCalledWith(
+            expect.stringContaining('already up to date'),
+        );
+    });
 });
