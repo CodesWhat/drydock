@@ -20,7 +20,7 @@ The `gitlab` registry lets you configure [GITLAB](https://docs.gitlab.com/ee/use
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_REGISTRY_GITLAB_PUBLIC_TOKEN=xxxxx 
@@ -30,7 +30,7 @@ services:
 docker run \
   -e WUD_REGISTRY_GITLAB_PUBLIC_TOKEN="xxxxx" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -41,7 +41,7 @@ docker run \
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_REGISTRY_GITLAB_PRIVATE_URL=https://registry.mygitlab.acme.com
@@ -55,7 +55,7 @@ docker run \
   -e WUD_REGISTRY_GITLAB_PRIVATE_AUTHURL="https://mygitlab.acme.com"
   -e WUD_REGISTRY_GITLAB_PRIVATE_TOKEN="xxxxx" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 

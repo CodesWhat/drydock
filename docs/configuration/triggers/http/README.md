@@ -25,7 +25,7 @@ The `http` trigger lets you send container update notifications via HTTP.
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_TRIGGER_HTTP_MYREMOTEHOST_URL=https://my-remote-host/new-version
@@ -35,7 +35,7 @@ services:
 docker run \
   -e WUD_TRIGGER_HTTP_MYREMOTEHOST_URL="https://my-remote-host/new-version" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 

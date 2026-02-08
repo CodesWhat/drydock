@@ -83,7 +83,7 @@ watcher='local'
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_TRIGGER_COMMAND_LOCAL_CMD=echo $${display_name} can be updated to $${update_kind_remote_value}
@@ -93,7 +93,7 @@ services:
 docker run \
   -e WUD_TRIGGER_COMMAND_LOCAL_CMD=echo ${display_name} can be updated to ${update_kind_remote_value} \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -104,7 +104,7 @@ docker run \
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_TRIGGER_COMMAND_LOCAL_CMD=bash -c /wud/trigger.sh
@@ -117,6 +117,6 @@ docker run \
   -e WUD_TRIGGER_COMMAND_LOCAL_CMD=WUD_TRIGGER_COMMAND_LOCAL_CMD=bash -c /wud/trigger.sh \
   -v ${PWD}/wud/trigger.sh:/wud/trigger.sh
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->

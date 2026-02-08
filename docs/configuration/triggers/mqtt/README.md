@@ -34,7 +34,7 @@ The `mqtt` trigger lets you send container update notifications to an MQTT broke
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_TRIGGER_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
@@ -45,7 +45,7 @@ services:
 docker run \
     -e WUD_TRIGGER_MQTT_MOSQUITTO_URL="mqtt://localhost:1883" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -56,7 +56,7 @@ docker run \
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_TRIGGER_MQTT_MOSQUITTO_URL=mqtts://localhost:8883
@@ -77,7 +77,7 @@ docker run \
     -e WUD_TRIGGER_MQTT_MOSQUITTO_TLS_CLIENTCERT="/wud/mqtt/client-cert.pem" \
     -e WUD_TRIGGER_MQTT_MOSQUITTO_TLS_CACHAIN="/wud/mqtt/ca.pem" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -88,7 +88,7 @@ docker run \
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_TRIGGER_MQTT_MAQIATTO_URL=tcp://maqiatto.com:1883
@@ -105,7 +105,7 @@ docker run \
     -e WUD_TRIGGER_MQTT_MAQIATTO_PASSWORD="mysecretpassword" \
     -e WUD_TRIGGER_MQTT_MAQIATTO_TOPIC="john@doe.com/wud/image" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -141,7 +141,7 @@ WUD can be easily integrated into [Home-Assistant](https://www.home-assistant.io
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_TRIGGER_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
@@ -156,7 +156,7 @@ docker run \
     -e WUD_TRIGGER_MQTT_MOSQUITTO_HASS_ENABLED="true" \
     -e WUD_TRIGGER_MQTT_MOSQUITTO_HASS_DISCOVERY="true" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 

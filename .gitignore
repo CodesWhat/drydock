@@ -101,3 +101,6 @@ typings/
 
 # Ignore OSX crap-files
 *.DS_Store
+
+# Local planning docs
+.planning/

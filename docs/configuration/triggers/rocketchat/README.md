@@ -32,7 +32,7 @@ The `rocketchat` trigger lets you post image update notifications to a Rocket.Ch
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
         - WUD_TRIGGER_ROCKETCHAT_LOCAL_URL=https://example.com
@@ -50,7 +50,7 @@ docker run \
     -e WUD_TRIGGER_ROCKETCHAT_LOCAL_AUTH_TOKEN="Rbqz90hnkRyVwRfcmE5PzkP5Pqwml_fo7ZUXzxv2_zx" \
     -e WUD_TRIGGER_ROCKETCHAT_LOCAL_CHANNEL="#wud" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 

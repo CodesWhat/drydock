@@ -28,7 +28,7 @@ The `gotify` trigger lets you send container update notifications via [Gotify](h
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_TRIGGER_GOTIFY_LOCAL_URL=http://gotify.localhost
@@ -40,6 +40,6 @@ docker run \
   -e WUD_TRIGGER_GOTIFY_LOCAL_URL="http://gotify.localhost" \
   -e WUD_TRIGGER_GOTIFY_LOCAL_TOKEN="AWp8A.TbBO3xpn4" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->

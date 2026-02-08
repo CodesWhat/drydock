@@ -13,7 +13,9 @@
         <v-icon v-if="!mini">mdi-close</v-icon>
         <v-icon v-else>mdi-menu</v-icon>
       </v-app-bar-nav-icon>
-      <v-toolbar-title v-if="!mini" class="text-body-1">WUD</v-toolbar-title>
+      <v-toolbar-title v-if="!mini" class="text-body-1">
+        <img :src="logo" alt="WUD logo" class="drawer-logo" />
+      </v-toolbar-title>
     </v-toolbar>
     <v-list nav class="pt-0 pb-0">
       <v-fade-transition group hide-on-leave mode="in-out">
@@ -95,6 +97,7 @@ import { getTriggerIcon } from "@/services/trigger";
 import { getServerIcon } from "@/services/server";
 import { getWatcherIcon } from "@/services/watcher";
 import { getAuthenticationIcon } from "@/services/authentication";
+import logo from "@/assets/whale-logo.png";
 
 export default {
   setup() {
@@ -141,6 +144,7 @@ export default {
     });
 
     return {
+      logo,
       mini,
       darkMode,
       containerIcon: getContainerIcon(),
@@ -158,3 +162,10 @@ export default {
   },
 };
 </script>
+<style scoped>
+.drawer-logo {
+  display: block;
+  height: 26px;
+  width: auto;
+}
+</style>

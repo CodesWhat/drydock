@@ -29,7 +29,7 @@ The `pushover` trigger lets you send realtime notifications to your devices (And
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_TRIGGER_PUSHOVER_1_TOKEN=*****************************
@@ -42,7 +42,7 @@ docker run \
   -e WUD_TRIGGER_PUSHOVER_1_TOKEN="*****************************" \
   -e WUD_TRIGGER_PUSHOVER_1_USER="******************************" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -52,7 +52,7 @@ docker run \
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
         - WUD_TRIGGER_PUSHOVER_1_TOKEN=*****************************
@@ -75,7 +75,7 @@ docker run \
     -e WUD_TRIGGER_PUSHOVER_1_EXPIRE="600" \
     -e WUD_TRIGGER_PUSHOVER_1_RETRY="60" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 

@@ -17,7 +17,7 @@ The `lscr` registry lets you configure [LSCR](https://fleet.linuxserver.io/) int
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_REGISTRY_LSCR_PRIVATE_USERNAME=johndoe
@@ -29,7 +29,7 @@ docker run \
   -e WUD_REGISTRY_LSCR_PRIVATE_USERNAME="johndoe" \
   -e WUD_REGISTRY_LSCR_PRIVATE_TOKEN="xxxxx" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 

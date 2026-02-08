@@ -34,7 +34,8 @@ function getState() {
 function getAvailableProviders(basePath) {
     try {
         const resolvedPath = path.resolve(__dirname, basePath);
-        const providers = fs.readdirSync(resolvedPath)
+        const providers = fs
+            .readdirSync(resolvedPath)
             .filter((file) => {
                 const filePath = path.join(resolvedPath, file);
                 return fs.statSync(filePath).isDirectory();
@@ -53,12 +54,19 @@ function getAvailableProviders(basePath) {
  */
 function getDocumentationLink(kind) {
     const docLinks = {
-        trigger: 'https://github.com/getwud/wud/tree/main/docs/configuration/triggers',
-        watcher: 'https://github.com/getwud/wud/tree/main/docs/configuration/watchers',
-        registry: 'https://github.com/getwud/wud/tree/main/docs/configuration/registries',
-        authentication: 'https://github.com/getwud/wud/tree/main/docs/configuration/authentications',
+        trigger:
+            'https://github.com/CodesWhat/whatsupdocker-ce/tree/main/docs/configuration/triggers',
+        watcher:
+            'https://github.com/CodesWhat/whatsupdocker-ce/tree/main/docs/configuration/watchers',
+        registry:
+            'https://github.com/CodesWhat/whatsupdocker-ce/tree/main/docs/configuration/registries',
+        authentication:
+            'https://github.com/CodesWhat/whatsupdocker-ce/tree/main/docs/configuration/authentications',
     };
-    return docLinks[kind] || 'https://github.com/getwud/wud/tree/main/docs/configuration';
+    return (
+        docLinks[kind] ||
+        'https://github.com/CodesWhat/whatsupdocker-ce/tree/main/docs/configuration'
+    );
 }
 
 /**
@@ -98,10 +106,22 @@ function getHelpfulErrorMessage(kind, provider, error, availableProviders) {
  * @param {*} configuration
  * @param {*} componentPath
  */
-async function registerComponent(kind, provider, name, configuration, componentPath) {
+async function registerComponent(
+    kind,
+    provider,
+    name,
+    configuration,
+    componentPath,
+) {
     const providerLowercase = provider.toLowerCase();
     const nameLowercase = name.toLowerCase();
-    const componentFile = `${componentPath}/${providerLowercase.toLowerCase()}/${capitalize(provider)}`;
+    const componentFileByConvention = `${componentPath}/${providerLowercase}/${capitalize(provider)}`;
+    const componentFileLowercase = `${componentPath}/${providerLowercase}/${providerLowercase}`;
+    const componentFile = fs.existsSync(
+        path.resolve(__dirname, `${componentFileByConvention}.js`),
+    )
+        ? componentFileByConvention
+        : componentFileLowercase;
     try {
         const Component = require(componentFile);
         const component = new Component();
@@ -115,7 +135,12 @@ async function registerComponent(kind, provider, name, configuration, componentP
         return componentRegistered;
     } catch (e) {
         const availableProviders = getAvailableProviders(componentPath);
-        const helpfulMessage = getHelpfulErrorMessage(kind, providerLowercase, e.message, availableProviders);
+        const helpfulMessage = getHelpfulErrorMessage(
+            kind,
+            providerLowercase,
+            e.message,
+            availableProviders,
+        );
         throw new Error(helpfulMessage);
     }
 }

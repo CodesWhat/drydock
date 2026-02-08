@@ -20,7 +20,7 @@ The `quay` registry lets you configure [QUAY](https://quay.io/) integration.
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_REGISTRY_QUAY_PRIVATE_NAMESPACE=mynamespace
@@ -34,7 +34,7 @@ docker run \
   -e WUD_REGISTRY_QUAY_PRIVATE_ACCOUNT="myaccount" \
   -e WUD_REGISTRY_QUAY_PRIVATE_TOKEN="BA8JI3Y2BWQDH849RYT3YD5J0J6CYEORYTQMMJK364B4P88VPTJIAI704L0BBP8D6CYE4P88V" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 

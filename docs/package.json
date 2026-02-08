@@ -7,7 +7,7 @@
     "doc": "docsify serve"
   },
   "author": "fmartinou",
-  "repository": "getwud/wud",
+  "repository": "CodesWhat/whatsupdocker-ce",
   "license": "MIT",
   "devDependencies": {
     "docsify-cli": "4.4.4"

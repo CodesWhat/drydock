@@ -17,7 +17,7 @@ The `acr`registry lets you configure [ACR](https://azure.microsoft.com/services/
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_REGISTRY_ACR_PRIVATE_CLIENTID=7c0195aa-112d-4ac3-be24-6664a13f3d2b
@@ -29,7 +29,7 @@ docker run \
   -e WUD_REGISTRY_ACR_PRIVATE_CLIENTID=7c0195aa-112d-4ac3-be24-6664a13f3d2b \
   -e WUD_REGISTRY_ACR_PRIVATE_CLIENTSECRET=SBgHNi3zA5K.f9.f9ft~_hpqbS~.pk.t_i \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 

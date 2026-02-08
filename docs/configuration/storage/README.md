@@ -9,7 +9,7 @@ If you want the state to persist after the container removal, you need to mount 
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     volumes:
       - /path-on-my-host:/store
@@ -19,6 +19,6 @@ services:
 docker run \
   -v /path-on-my-host:/store
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->

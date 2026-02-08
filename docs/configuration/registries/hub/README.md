@@ -38,7 +38,7 @@ Don't forget to configure authentication if you're using [Docker Hub Private Rep
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_REGISTRY_HUB_PUBLIC_LOGIN=mylogin
@@ -50,7 +50,7 @@ docker run \
   -e WUD_REGISTRY_HUB_PUBLIC_LOGIN="mylogin"
   -e WUD_REGISTRY_HUB_PUBLIC_PASSWORD="fb4d5db9-e64d-3648-8846-74d0846e55de"
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -72,7 +72,7 @@ For example,
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_REGISTRY_HUB_PUBLIC_AUTH=am9obmRvZToyYzFiZDg3Mi1lZmI2LTRmM2EtODFhYS03MjQ1MThhMGE1OTI=
@@ -82,6 +82,6 @@ services:
 docker run \
   -e WUD_REGISTRY_HUB_PUBLIC_AUTH="am9obmRvZToyYzFiZDg3Mi1lZmI2LTRmM2EtODFhYS03MjQ1MThhMGE1OTI="
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->

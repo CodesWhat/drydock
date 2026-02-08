@@ -52,11 +52,11 @@ test.each([
             ...configurationValid,
             allowcustomtld: allowCustomTld,
             from:
-                field === 'from' || field == 'both'
+                field === 'from' || field === 'both'
                     ? 'user@domain.lan'
                     : configurationValid.from,
             to:
-                field === 'to' || field == 'both'
+                field === 'to' || field === 'both'
                     ? 'user@domain.lan'
                     : configurationValid.to,
         };

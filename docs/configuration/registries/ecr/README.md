@@ -19,7 +19,7 @@ The `ecr` registry lets you configure [ECR](https://aws.amazon.com/ecr/) integra
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_REGISTRY_ECR_PRIVATE_ACCESSKEYID=xxx
@@ -33,7 +33,7 @@ docker run \
   -e WUD_REGISTRY_ECR_PRIVATE_SECRETACCESSKEY="xxx" \
   -e WUD_REGISTRY_ECR_PRIVATE_REGION="eu-west-1" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 

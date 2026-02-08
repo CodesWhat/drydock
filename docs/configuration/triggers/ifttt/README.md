@@ -29,7 +29,7 @@ On Webhook call, Ifttt captures the following ingredients:
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_TRIGGER_IFTTT_PROD_KEY=*******************************************
@@ -40,7 +40,7 @@ services:
 docker run \
   -e WUD_TRIGGER_IFTTT_PROD_KEY="*******************************************" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 

@@ -22,7 +22,7 @@ You can use it to configure health checks performed by your container orchestrat
 services:
 
   whatsupdocker:
-    image: getwud/wud:7.2.0
+    image: ghcr.io/codeswhat/whatsupdocker-ce:live-test
     ...
     healthcheck:
       test: curl --fail http://localhost:${WUD_SERVER_PORT:-3000}/health || exit 1

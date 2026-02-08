@@ -28,7 +28,7 @@ The `smtp` trigger lets you send emails with smtp.
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
         - WUD_TRIGGER_SMTP_GMAIL_HOST=smtp.gmail.com
@@ -52,7 +52,7 @@ docker run \
     -e WUD_TRIGGER_SMTP_GMAIL_TO="jane.doe@gmail.com" \
     -e WUD_TRIGGER_SMTP_GMAIL_TLS_ENABLED="true" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 

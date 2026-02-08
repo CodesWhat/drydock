@@ -22,7 +22,7 @@ The `discord` trigger lets you send realtime notifications using [Discord](https
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_TRIGGER_DISCORD_1_URL=https://discord.com/api/webhooks/123/456
@@ -35,7 +35,7 @@ docker run \
   -e WUD_TRIGGER_DISCORD_1_URL="https://discord.com/api/webhooks/123/456" \
   -e WUD_TRIGGER_DISCORD_1_BOTUSERNAME="WUD" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 

@@ -1,18 +1,12 @@
-const trueforge = require('./trueforge');
+const Trueforge = require('./trueforge');
 
-jest.mock('axios', () =>
-    jest.fn().mockImplementation(() => ({
-        data: { token: 'xxxxx' },
-    })),
-);
+jest.mock('axios');
 
-const trueforge = new trueforge();
+const trueforge = new Trueforge();
 trueforge.configuration = {
     username: 'user',
     token: 'token',
 };
-
-jest.mock('axios');
 
 test('validatedConfiguration should initialize when configuration is valid', () => {
     expect(

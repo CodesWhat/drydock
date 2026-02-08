@@ -23,7 +23,7 @@ The `apprise` trigger lets you send container update notifications via the [Appr
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_TRIGGER_APPRISE_LOCAL_URL=http://apprise:8000
@@ -35,7 +35,7 @@ docker run \
   -e WUD_TRIGGER_APPRISE_LOCAL_URL="http://apprise:8000" \
   -e WUD_TRIGGER_APPRISE_LOCAL_URLS="mailto://john.doe:secret@gmail.com,sns://AHIAJGNT76XIMXDBIJYA/bu1dHSdO22pfaaVy/wmNsdljF4C07D3bndi9PQJ9/us-east-2/+1(800)555-1223" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -53,7 +53,7 @@ urls:
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_TRIGGER_APPRISE_LOCAL_URL=http://apprise:8000
@@ -67,7 +67,7 @@ docker run \
   -e WUD_TRIGGER_APPRISE_LOCAL_CONFIG="wud" \
   -e WUD_TRIGGER_APPRISE_LOCAL_TAG="devops" \  
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 

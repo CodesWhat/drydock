@@ -63,11 +63,11 @@ class Trigger extends Component {
             switch (threshold) {
                 case 'major-only':
                     thresholdPassing =
-                        containerResult.updateKind.semverDiff == 'major';
+                        containerResult.updateKind.semverDiff === 'major';
                     break;
                 case 'minor-only':
                     thresholdPassing =
-                        containerResult.updateKind.semverDiff == 'minor';
+                        containerResult.updateKind.semverDiff === 'minor';
                     break;
                 case 'minor':
                     thresholdPassing =
@@ -290,7 +290,14 @@ class Trigger extends Component {
             threshold: this.joi
                 .string()
                 .insensitive()
-                .valid('all', 'major', 'minor', 'patch', 'major-only', 'minor-only')
+                .valid(
+                    'all',
+                    'major',
+                    'minor',
+                    'patch',
+                    'major-only',
+                    'minor-only',
+                )
                 .default('all'),
             mode: this.joi
                 .string()

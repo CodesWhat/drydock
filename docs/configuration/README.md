@@ -64,7 +64,7 @@ services:
 
   # Wud self tracking :)
   whatsupdocker:
-    image: getwud/wud:5.1.0
+    image: ghcr.io/codeswhat/whatsupdocker-ce:live-test
     container_name: wud
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -76,8 +76,8 @@ services:
       retries: 3
       start_period: 10s       
     labels:
-      - 'wud.tag.include=^\d+\.\d+\.\d+$$'
-      - 'wud.link.template=https://github.com/getwud/wud/releases/tag/$${major}.$${minor}.$${patch}'
+      - 'wud.tag.include=^live-test$$'
+      - 'wud.link.template=https://github.com/orgs/CodesWhat/packages/container/package/whatsupdocker-ce'
 ```
 
 ## Secret management

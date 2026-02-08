@@ -1,7 +1,9 @@
 # Introduction
 
-![Docker pulls](https://img.shields.io/docker/pulls/getwud/wud)
-![License](https://img.shields.io/github/license/getwud/wud)
+![GitHub stars](https://img.shields.io/github/stars/CodesWhat/whatsupdocker-ce)
+![Last commit](https://img.shields.io/github/last-commit/CodesWhat/whatsupdocker-ce)
+![License](https://img.shields.io/github/license/CodesWhat/whatsupdocker-ce)
+![GHCR package](https://img.shields.io/badge/GHCR-codeswhat%2Fwhatsupdocker--ce-2ea44f)
 
 ## WUD <small>(aka ***What's up Docker?***)</small>
 
@@ -64,8 +66,8 @@ A Web UI allows to get container insights and to manually run the triggers.
 > [**Follow the quick start guide!**](quickstart/)
 
 ## Contact & Support
-- Create a [GitHub issue](https://github.com/getwud/wud/issues) for bug reports, feature requests, or questions
-- Add a [:star: on GitHub](https://github.com/getwud/wud) or [Buy me coffee](https://www.buymeacoffee.com/61rUNMm)&nbsp;to support the project!
+- Create a [GitHub issue](https://github.com/CodesWhat/whatsupdocker-ce/issues) for bug reports, feature requests, or questions
+- Add a [:star: on GitHub](https://github.com/CodesWhat/whatsupdocker-ce) to support the project!
 
 ## License
-This project is licensed under the [MIT license](https://github.com/getwud/wud/blob/main/LICENSE).
+This project is licensed under the [MIT license](https://github.com/CodesWhat/whatsupdocker-ce/blob/main/LICENSE).

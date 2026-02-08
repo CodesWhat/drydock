@@ -30,7 +30,7 @@ The trigger will:
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_TRIGGER_DOCKER_EXAMPLE_PRUNE=true
@@ -40,6 +40,6 @@ services:
 docker run \
   -e "WUD_TRIGGER_DOCKER_EXAMPLE_PRUNE=true" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->

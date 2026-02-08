@@ -1,5 +1,6 @@
 <template>
   <v-app-bar app flat dark tile clipped-left dense color="primary">
+    <img :src="logo" alt="WUD logo" class="app-logo" />
     <v-toolbar-title
       v-if="viewName && 'home'.toLowerCase() !== viewName.toLowerCase()"
       class="text-body-1 text-capitalize ma-0 pl-4"
@@ -31,6 +32,7 @@
 import { computed, inject } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { logout } from "@/services/auth";
+import logo from "@/assets/whale-logo.png";
 
 export default {
   props: {
@@ -68,9 +70,17 @@ export default {
     };
 
     return {
+      logo,
       viewName,
       logout: performLogout,
     };
   },
 };
 </script>
+<style scoped>
+.app-logo {
+  height: 30px;
+  width: auto;
+  margin-left: 12px;
+}
+</style>

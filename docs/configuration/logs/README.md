@@ -18,14 +18,14 @@ You can adjust the log level with env var WUD_LOG_LEVEL.
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_LOG_LEVEL=debug
 ```
 #### **Docker**
 ```bash
-docker run -e WUD_LOG_LEVEL=debug ... getwud/wud
+docker run -e WUD_LOG_LEVEL=debug ... ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -34,14 +34,14 @@ docker run -e WUD_LOG_LEVEL=debug ... getwud/wud
 <!-- tabs:start -->
 #### **Docker**
 ```bash
-docker run -e WUD_LOG_FORMAT=json ... getwud/wud
+docker run -e WUD_LOG_FORMAT=json ... ghcr.io/codeswhat/whatsupdocker-ce
 ```
 
 #### **Docker Compose**
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_LOG_FORMAT=json

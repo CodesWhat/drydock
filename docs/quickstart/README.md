@@ -1,14 +1,14 @@
 # Quick start
 
 ## Run the Docker image
-The easiest way to start is to deploy the official _**WUD**_ image.
+The easiest way to start is to deploy the official _**WUD CodesWhat CE**_ image.
 
 <!-- tabs:start -->
 #### **Docker Compose**
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     container_name: wud
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -20,13 +20,12 @@ services:
 docker run -d --name wud \
   -v "/var/run/docker.sock:/var/run/docker.sock" \
   -p 3000:3000 \
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
-?> Please notice that wud is available on multiple container registries \
-\- Docker Hub: `getwud/wud` \
-\- Github Container Registry: `ghcr.io/getwud/wud`
+?> Please notice that this CE build is currently published on Github Container Registry \
+\- Github Container Registry: `ghcr.io/codeswhat/whatsupdocker-ce`
 
 ## Open the UI
 [Open the UI](http://localhost:3000) in a browser and check that everything is working as expected.

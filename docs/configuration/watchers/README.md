@@ -51,7 +51,7 @@ If you face [quota related errors](https://docs.docker.com/docker-hub/download-r
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
         - WUD_WATCHER_LOCAL_CRON=0 1 * * *
@@ -62,7 +62,7 @@ services:
 docker run \
     -e WUD_WATCHER_LOCAL_CRON="0 1 * * *" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -73,7 +73,7 @@ docker run \
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
         - WUD_WATCHER_LOCAL_WATCHALL=true
@@ -84,7 +84,7 @@ services:
 docker run \
     -e WUD_WATCHER_LOCAL_WATCHALL="true" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -95,7 +95,7 @@ docker run \
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
         - WUD_WATCHER_MYREMOTEHOST_HOST=myremotehost 
@@ -106,7 +106,7 @@ services:
 docker run \
     -e WUD_WATCHER_MYREMOTEHOST_HOST="myremotehost" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -117,7 +117,7 @@ docker run \
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
         - WUD_WATCHER_MYREMOTEHOST_HOST=myremotehost
@@ -143,7 +143,7 @@ docker run \
     -v /my-host/my-certs/ca.pem:/certs/cert.pem:ro \
     -v /my-host/my-certs/ca.pem:/certs/key.pem:ro \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -156,7 +156,7 @@ docker run \
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
         -  WUD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
@@ -171,7 +171,7 @@ docker run \
     -e  WUD_WATCHER_MYREMOTEHOST1_HOST="myremotehost1" \
     -e  WUD_WATCHER_MYREMOTEHOST2_HOST="myremotehost2" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -201,7 +201,7 @@ Configure WUD to disable WATCHBYDEFAULT feature.
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_WATCHER_LOCAL_WATCHBYDEFAULT=false
@@ -212,7 +212,7 @@ services:
 docker run \
     -e WUD_WATCHER_LOCAL_WATCHBYDEFAULT="false" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 

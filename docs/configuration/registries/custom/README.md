@@ -19,7 +19,7 @@ The `custom` registry lets you configure a self-hosted [Docker Registry](https:/
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_REGISTRY_CUSTOM_PRIVATE_URL=http://localhost:5000
@@ -29,7 +29,7 @@ services:
 docker run \
   -e "WUD_REGISTRY_CUSTOM_PRIVATE_URL=http://localhost:5000" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -39,7 +39,7 @@ docker run \
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_REGISTRY_CUSTOM_PRIVATE_URL=http://localhost:5000
@@ -53,7 +53,7 @@ docker run \
   -e "WUD_REGISTRY_CUSTOM_PRIVATE_LOGIN=john" \
   -e "WUD_REGISTRY_CUSTOM_PRIVATE_PASSWORD=doe" \
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
 
@@ -64,7 +64,7 @@ docker run \
 ```yaml
 services:
   whatsupdocker:
-    image: getwud/wud
+    image: ghcr.io/codeswhat/whatsupdocker-ce
     ...
     environment:
       - WUD_REGISTRY_CUSTOM_PRIVATE1_URL=http://localhost:5000
@@ -84,6 +84,6 @@ docker run \
   -e "WUD_REGISTRY_CUSTOM_PRIVATE2_LOGIN=jane" \
   -e "WUD_REGISTRY_CUSTOM_PRIVATE2_PASSWORD=doe" \  
   ...
-  getwud/wud
+  ghcr.io/codeswhat/whatsupdocker-ce
 ```
 <!-- tabs:end -->
