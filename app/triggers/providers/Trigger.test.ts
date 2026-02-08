@@ -41,6 +41,21 @@ test('validateConfiguration should return validated configuration when valid', a
     expect(validatedConfiguration).toStrictEqual(configurationValid);
 });
 
+test('validateConfiguration should accept digest and non-digest thresholds', async () => {
+    expect(
+        trigger.validateConfiguration({
+            ...configurationValid,
+            threshold: 'digest',
+        }).threshold,
+    ).toStrictEqual('digest');
+    expect(
+        trigger.validateConfiguration({
+            ...configurationValid,
+            threshold: 'patch-no-digest',
+        }).threshold,
+    ).toStrictEqual('patch-no-digest');
+});
+
 test('validateConfiguration should throw error when invalid', async () => {
     const configuration = {
         url: 'git://xxx.com',
@@ -332,6 +347,48 @@ const isThresholdReachedTestCases = [
         change: 'unknown',
         kind: 'digest',
     },
+    {
+        result: true,
+        threshold: 'digest',
+        change: 'unknown',
+        kind: 'digest',
+    },
+    {
+        result: false,
+        threshold: 'digest',
+        change: 'patch',
+        kind: 'tag',
+    },
+    {
+        result: false,
+        threshold: 'patch-no-digest',
+        change: 'unknown',
+        kind: 'digest',
+    },
+    {
+        result: true,
+        threshold: 'patch-no-digest',
+        change: 'patch',
+        kind: 'tag',
+    },
+    {
+        result: false,
+        threshold: 'patch-no-digest',
+        change: 'minor',
+        kind: 'tag',
+    },
+    {
+        result: true,
+        threshold: 'minor-only-no-digest',
+        change: 'minor',
+        kind: 'tag',
+    },
+    {
+        result: false,
+        threshold: 'minor-only-no-digest',
+        change: 'major',
+        kind: 'tag',
+    },
 ];
 
 test.each(isThresholdReachedTestCases)(
@@ -366,6 +423,23 @@ test('isThresholdReached should return true when there is no semverDiff regardle
             trigger.configuration.threshold,
         ),
     ).toBeTruthy();
+});
+
+test('parseIncludeOrIncludeTriggerString should parse digest thresholds', async () => {
+    expect(
+        Trigger.parseIncludeOrIncludeTriggerString('docker.local:digest'),
+    ).toStrictEqual({
+        id: 'docker.local',
+        threshold: 'digest',
+    });
+    expect(
+        Trigger.parseIncludeOrIncludeTriggerString(
+            'docker.local:patch-no-digest',
+        ),
+    ).toStrictEqual({
+        id: 'docker.local',
+        threshold: 'patch-no-digest',
+    });
 });
 
 test('renderSimpleTitle should replace placeholders when called', async () => {

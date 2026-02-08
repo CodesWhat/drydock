@@ -490,3 +490,7 @@ docker run -d --name my_important_service --label 'wud.trigger.include=smtp.gmai
 ?> Threshold `minor` means that the trigger will run only if this is a `minor` or `patch` semver change
 
 ?> Threshold `patch` means that the trigger will run only if this is a `patch` semver change
+
+?> Threshold `digest` means that the trigger will run only on digest updates
+
+?> Any threshold ending with `-no-digest` excludes digest updates for that threshold

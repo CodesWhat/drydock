@@ -73,6 +73,40 @@ function renderBatch(template: string, containers: Container[]) {
 class Trigger extends Component {
     public configuration: TriggerConfiguration = {};
 
+    static getSupportedThresholds() {
+        return [
+            'all',
+            'major',
+            'minor',
+            'patch',
+            'major-only',
+            'minor-only',
+            'digest',
+            'major-no-digest',
+            'minor-no-digest',
+            'patch-no-digest',
+            'major-only-no-digest',
+            'minor-only-no-digest',
+        ];
+    }
+
+    static parseThresholdWithDigestBehavior(threshold: string | undefined) {
+        const thresholdNormalized = (threshold || 'all').toLowerCase();
+        const nonDigestOnlySuffix = '-no-digest';
+        const nonDigestOnly =
+            thresholdNormalized.endsWith(nonDigestOnlySuffix);
+        const thresholdBase = nonDigestOnly
+            ? thresholdNormalized.slice(
+                  0,
+                  thresholdNormalized.length - nonDigestOnlySuffix.length,
+              )
+            : thresholdNormalized;
+        return {
+            thresholdBase,
+            nonDigestOnly,
+        };
+    }
+
     /**
      * Return true if update reaches trigger threshold.
      * @param containerResult
@@ -80,37 +114,38 @@ class Trigger extends Component {
      * @returns {boolean}
      */
     static isThresholdReached(containerResult: Container, threshold: string) {
-        let thresholdPassing = true;
-        if (
-            threshold.toLowerCase() !== 'all' &&
-            containerResult.updateKind &&
-            containerResult.updateKind.kind === 'tag' &&
-            containerResult.updateKind.semverDiff &&
-            containerResult.updateKind.semverDiff !== 'unknown'
-        ) {
-            switch (threshold) {
+        const { thresholdBase, nonDigestOnly } =
+            Trigger.parseThresholdWithDigestBehavior(threshold);
+        const updateKind = containerResult.updateKind?.kind;
+        const semverDiff = containerResult.updateKind?.semverDiff;
+
+        if (nonDigestOnly && updateKind === 'digest') {
+            return false;
+        }
+
+        if (thresholdBase === 'digest') {
+            return updateKind === 'digest';
+        }
+
+        if (thresholdBase === 'all') {
+            return true;
+        }
+
+        if (updateKind === 'tag' && semverDiff && semverDiff !== 'unknown') {
+            switch (thresholdBase) {
                 case 'major-only':
-                    thresholdPassing =
-                        containerResult.updateKind.semverDiff === 'major';
-                    break;
+                    return semverDiff === 'major';
                 case 'minor-only':
-                    thresholdPassing =
-                        containerResult.updateKind.semverDiff === 'minor';
-                    break;
+                    return semverDiff === 'minor';
                 case 'minor':
-                    thresholdPassing =
-                        containerResult.updateKind.semverDiff !== 'major';
-                    break;
+                    return semverDiff !== 'major';
                 case 'patch':
-                    thresholdPassing =
-                        containerResult.updateKind.semverDiff !== 'major' &&
-                        containerResult.updateKind.semverDiff !== 'minor';
-                    break;
+                    return semverDiff !== 'major' && semverDiff !== 'minor';
                 default:
-                    thresholdPassing = true;
+                    return true;
             }
         }
-        return thresholdPassing;
+        return true;
     }
 
     /**
@@ -128,24 +163,12 @@ class Trigger extends Component {
             threshold: 'all',
         };
         if (includeOrExcludeTriggerSplit.length === 2) {
-            switch (includeOrExcludeTriggerSplit[1]) {
-                case 'major-only':
-                    includeOrExcludeTrigger.threshold = 'major-only';
-                    break;
-                case 'minor-only':
-                    includeOrExcludeTrigger.threshold = 'minor-only';
-                    break;
-                case 'major':
-                    includeOrExcludeTrigger.threshold = 'major';
-                    break;
-                case 'minor':
-                    includeOrExcludeTrigger.threshold = 'minor';
-                    break;
-                case 'patch':
-                    includeOrExcludeTrigger.threshold = 'patch';
-                    break;
-                default:
-                    includeOrExcludeTrigger.threshold = 'all';
+            const thresholdCandidate =
+                includeOrExcludeTriggerSplit[1].toLowerCase();
+            if (
+                Trigger.getSupportedThresholds().includes(thresholdCandidate)
+            ) {
+                includeOrExcludeTrigger.threshold = thresholdCandidate;
             }
         }
         return includeOrExcludeTrigger;
@@ -334,14 +357,7 @@ class Trigger extends Component {
             threshold: this.joi
                 .string()
                 .insensitive()
-                .valid(
-                    'all',
-                    'major',
-                    'minor',
-                    'patch',
-                    'major-only',
-                    'minor-only',
-                )
+                .valid(...Trigger.getSupportedThresholds())
                 .default('all'),
             mode: this.joi
                 .string()
