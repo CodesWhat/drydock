@@ -17,6 +17,7 @@ import {
     wudTagInclude,
     wudTagExclude,
     wudTagTransform,
+    wudInspectTagPath,
     wudWatchDigest,
     wudLinkTemplate,
     wudDisplayName,
@@ -294,6 +295,43 @@ function getRepoDigest(containerImage: any) {
 }
 
 /**
+ * Resolve a value in a Docker inspect payload from a slash-separated path.
+ * Example: Config/Labels/org.opencontainers.image.version
+ */
+function getInspectValueByPath(containerInspect: any, path: string) {
+    if (!path) {
+        return undefined;
+    }
+    const pathSegments = path.split('/').filter((segment) => segment !== '');
+    return pathSegments.reduce((value, key) => {
+        if (value === undefined || value === null) {
+            return undefined;
+        }
+        return value[key];
+    }, containerInspect);
+}
+
+/**
+ * Try to derive a semver tag from a Docker inspect path.
+ */
+function getSemverTagFromInspectPath(
+    containerInspect: any,
+    inspectPath: string,
+    transformTags: string,
+) {
+    const inspectValue = getInspectValueByPath(containerInspect, inspectPath);
+    if (inspectValue === undefined || inspectValue === null) {
+        return undefined;
+    }
+    const tagValue = `${inspectValue}`.trim();
+    if (tagValue === '') {
+        return undefined;
+    }
+    const parsedTag = parseSemver(transformTag(transformTags, tagValue));
+    return parsedTag?.version;
+}
+
+/**
  * Return true if container must be watched.
  * @param wudWatchLabelValue the value of the wud.watch label
  * @param watchByDefault true if containers must be watched by default
@@ -526,40 +564,45 @@ class Docker extends Watcher {
      */
     async onDockerEvent(dockerEventChunk: any) {
         this.ensureLogger();
-        const dockerEvent = JSON.parse(dockerEventChunk.toString());
-        const action = dockerEvent.Action;
-        const containerId = dockerEvent.id;
+        try {
+            const dockerEvent = JSON.parse(dockerEventChunk.toString());
+            const action = dockerEvent.Action;
+            const containerId = dockerEvent.id;
 
-        // If the container was created or destroyed => perform a watch
-        if (action === 'destroy' || action === 'create') {
-            await this.watchCronDebounced();
-        } else {
-            // Update container state in db if so
-            try {
-                const container =
-                    await this.dockerApi.getContainer(containerId);
-                const containerInspect = await container.inspect();
-                const newStatus = containerInspect.State.Status;
-                const containerFound = storeContainer.getContainer(containerId);
-                if (containerFound) {
-                    // Child logger for the container to process
-                    const logContainer = this.log.child({
-                        container: fullName(containerFound),
-                    });
-                    const oldStatus = containerFound.status;
-                    containerFound.status = newStatus;
-                    if (oldStatus !== newStatus) {
-                        storeContainer.updateContainer(containerFound);
-                        logContainer.info(
-                            `Status changed from ${oldStatus} to ${newStatus}`,
-                        );
+            // If the container was created or destroyed => perform a watch
+            if (action === 'destroy' || action === 'create') {
+                await this.watchCronDebounced();
+            } else {
+                // Update container state in db if so
+                try {
+                    const container =
+                        await this.dockerApi.getContainer(containerId);
+                    const containerInspect = await container.inspect();
+                    const newStatus = containerInspect.State.Status;
+                    const containerFound =
+                        storeContainer.getContainer(containerId);
+                    if (containerFound) {
+                        // Child logger for the container to process
+                        const logContainer = this.log.child({
+                            container: fullName(containerFound),
+                        });
+                        const oldStatus = containerFound.status;
+                        containerFound.status = newStatus;
+                        if (oldStatus !== newStatus) {
+                            storeContainer.updateContainer(containerFound);
+                            logContainer.info(
+                                `Status changed from ${oldStatus} to ${newStatus}`,
+                            );
+                        }
                     }
+                } catch (e: any) {
+                    this.log.debug(
+                        `Unable to get container details for container id=[${containerId}] (${e.message})`,
+                    );
                 }
-            } catch (e: any) {
-                this.log.debug(
-                    `Unable to get container details for container id=[${containerId}] (${e.message})`,
-                );
             }
+        } catch (e: any) {
+            this.log.debug(`Unable to process Docker event (${e.message})`);
         }
     }
 
@@ -835,6 +878,7 @@ class Docker extends Watcher {
         triggerExclude: string,
     ) {
         const containerId = container.Id;
+        const containerLabels = container.Labels || {};
 
         // Is container already in store? just return it :)
         const containerInStore = storeContainer.getContainer(containerId);
@@ -848,7 +892,14 @@ class Docker extends Watcher {
         }
 
         // Get container image details
-        const image = await this.dockerApi.getImage(container.Image).inspect();
+        let image;
+        try {
+            image = await this.dockerApi.getImage(container.Image).inspect();
+        } catch (e: any) {
+            throw new Error(
+                `Unable to inspect image for container ${containerId}: ${e.message}`,
+            );
+        }
 
         // Get useful properties
         const containerName = getContainerName(container);
@@ -874,11 +925,27 @@ class Docker extends Watcher {
             [imageNameToParse] = image.RepoTags;
         }
         const parsedImage = parse(imageNameToParse);
-        const tagName = parsedImage.tag || 'latest';
+        const inspectTagPath = containerLabels[wudInspectTagPath];
+        let tagName = parsedImage.tag || 'latest';
+        if (inspectTagPath) {
+            const semverTagFromInspect = getSemverTagFromInspectPath(
+                image,
+                inspectTagPath,
+                transformTags,
+            );
+            if (semverTagFromInspect) {
+                tagName = semverTagFromInspect;
+            } else {
+                this.ensureLogger();
+                this.log.debug(
+                    `No semver value found at inspect path ${inspectTagPath} for container ${containerId}; falling back to parsed image tag`,
+                );
+            }
+        }
         const parsedTag = parseSemver(transformTag(transformTags, tagName));
         const isSemver = parsedTag !== null && parsedTag !== undefined;
         const watchDigest = isDigestToWatch(
-            container.Labels[wudWatchDigest],
+            containerLabels[wudWatchDigest],
             parsedImage,
             isSemver,
         );
@@ -921,7 +988,7 @@ class Docker extends Watcher {
                 variant,
                 created,
             },
-            labels: container.Labels,
+            labels: containerLabels,
             result: {
                 tag: tagName,
             },

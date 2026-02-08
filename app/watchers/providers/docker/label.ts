@@ -24,6 +24,11 @@ export const wudTagExclude = 'wud.tag.exclude';
 export const wudTagTransform = 'wud.tag.transform';
 
 /**
+ * Optional path in Docker inspect JSON to derive the running tag value.
+ */
+export const wudInspectTagPath = 'wud.inspect.tag.path';
+
+/**
  * Should container digest be tracked? (true | false).
  */
 export const wudWatchDigest = 'wud.watch.digest';

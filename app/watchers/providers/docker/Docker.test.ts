@@ -328,6 +328,17 @@ describe('Docker Watcher', () => {
                 expect.stringContaining('Unable to get container'),
             );
         });
+
+        test('should handle malformed docker event payload', async () => {
+            const mockLog = { debug: jest.fn() };
+            docker.log = mockLog;
+
+            await docker.onDockerEvent(Buffer.from('{invalid-json'));
+
+            expect(mockLog.debug).toHaveBeenCalledWith(
+                expect.stringContaining('Unable to process Docker event'),
+            );
+        });
     });
 
     describe('Container Watching', () => {
@@ -940,6 +951,122 @@ describe('Docker Watcher', () => {
             const result = await docker.addImageDetailsToContainer(container);
 
             expect(result).toBeDefined();
+        });
+
+        test('should use inspect path semver when wud.inspect.tag.path is set', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            const container = {
+                Id: '123',
+                Image: 'ghcr.io/example/service:latest',
+                Names: ['/service'],
+                State: 'running',
+                Labels: {
+                    'wud.inspect.tag.path':
+                        'Config/Labels/org.opencontainers.image.version',
+                },
+            };
+            const imageDetails = {
+                Id: 'image123',
+                Architecture: 'amd64',
+                Os: 'linux',
+                Created: '2023-01-01',
+                Config: {
+                    Labels: {
+                        'org.opencontainers.image.version': '2.7.5',
+                    },
+                },
+            };
+            mockImage.inspect.mockResolvedValue(imageDetails);
+            mockParse.mockReturnValue({
+                domain: 'ghcr.io',
+                path: 'example/service',
+                tag: 'latest',
+            });
+            mockTag.parse.mockImplementation((tag) =>
+                tag === '2.7.5' ? { version: '2.7.5' } : null,
+            );
+            const mockRegistry = {
+                normalizeImage: jest.fn((img) => img),
+                getId: () => 'hub',
+                match: () => true,
+            };
+            registry.getState.mockReturnValue({
+                registry: { hub: mockRegistry },
+            });
+
+            const containerModule = await import('../../../model/container');
+            const validateContainer = containerModule.validate;
+            // @ts-ignore
+            validateContainer.mockImplementation((c) => c);
+
+            const result = await docker.addImageDetailsToContainer(container);
+
+            expect(result.image.tag.value).toBe('2.7.5');
+            expect(result.image.tag.semver).toBe(true);
+        });
+
+        test('should fall back to parsed image tag when inspect path is missing', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            const container = {
+                Id: '123',
+                Image: 'ghcr.io/example/service:latest',
+                Names: ['/service'],
+                State: 'running',
+                Labels: {
+                    'wud.inspect.tag.path':
+                        'Config/Labels/org.opencontainers.image.version',
+                },
+            };
+            const imageDetails = {
+                Id: 'image123',
+                Architecture: 'amd64',
+                Os: 'linux',
+                Created: '2023-01-01',
+                Config: { Labels: {} },
+            };
+            mockImage.inspect.mockResolvedValue(imageDetails);
+            mockParse.mockReturnValue({
+                domain: 'ghcr.io',
+                path: 'example/service',
+                tag: 'latest',
+            });
+            mockTag.parse.mockReturnValue(null);
+            const mockRegistry = {
+                normalizeImage: jest.fn((img) => img),
+                getId: () => 'hub',
+                match: () => true,
+            };
+            registry.getState.mockReturnValue({
+                registry: { hub: mockRegistry },
+            });
+
+            const containerModule = await import('../../../model/container');
+            const validateContainer = containerModule.validate;
+            // @ts-ignore
+            validateContainer.mockImplementation((c) => c);
+
+            const result = await docker.addImageDetailsToContainer(container);
+
+            expect(result.image.tag.value).toBe('latest');
+            expect(result.image.tag.semver).toBe(false);
+        });
+
+        test('should return a clear error when image inspection fails', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            const container = {
+                Id: '123',
+                Image: 'ghcr.io/example/service:latest',
+                Names: ['/service'],
+                State: 'running',
+                Labels: {},
+            };
+            mockImage.inspect.mockRejectedValue(new Error('inspect failed'));
+
+            await expect(
+                docker.addImageDetailsToContainer(container),
+            ).rejects.toThrow(
+                'Unable to inspect image for container 123: inspect failed',
+            );
         });
     });
 
