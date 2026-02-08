@@ -19,14 +19,39 @@ class Smtp extends Trigger {
             port: this.joi.number().port().required(),
             user: this.joi.string(),
             pass: this.joi.string(),
-            from: this.joi
-                .string()
-                .required()
-                .when('allowcustomtld', {
-                    is: true,
-                    then: this.joi.string().email({ tlds: { allow: false } }),
-                    otherwise: this.joi.string().email(),
-                }),
+            from: this.joi.string().required().custom((value, helpers) => {
+                const match =
+                    /^("?(?<displayName>[^"]*)"? <)?(?<emailAddress>[^ <]+@[^ >]+)>?$/.exec(
+                        value,
+                    );
+                if (!match || !match.groups || !match.groups.emailAddress) {
+                    return helpers.error('string.email');
+                }
+
+                const emailAddress = match.groups.emailAddress;
+                const allowCustomTld =
+                    !!helpers.state.ancestors[0].allowcustomtld;
+                const emailValidationResult = this.joi
+                    .string()
+                    .email({ tlds: { allow: !allowCustomTld } })
+                    .validate(emailAddress);
+                if (emailValidationResult.error) {
+                    return helpers.error('string.email');
+                }
+
+                const displayName = match.groups.displayName;
+                if (!displayName) {
+                    return emailAddress;
+                }
+                if (
+                    displayName.includes('\n') ||
+                    displayName.includes('\r')
+                ) {
+                    return helpers.error('string.email');
+                }
+
+                return `"${displayName}" <${emailAddress}>`;
+            }),
             to: this.joi
                 .string()
                 .required()

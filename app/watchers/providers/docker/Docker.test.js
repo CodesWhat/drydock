@@ -694,6 +694,49 @@ describe('Docker Watcher', () => {
     });
 
     describe('Container Details', () => {
+        const setupContainerForDigestWatch = async ({
+            labels,
+            parsedImage,
+            semverValue,
+        }) => {
+            await docker.register('watcher', 'docker', 'test', {});
+            const container = {
+                Id: '123',
+                Image: `${parsedImage.domain ? `${parsedImage.domain}/` : ''}${parsedImage.path}:${parsedImage.tag}`,
+                Names: ['/test-container'],
+                State: 'running',
+                Labels: labels || {},
+            };
+            const imageDetails = {
+                Id: 'image123',
+                Architecture: 'amd64',
+                Os: 'linux',
+                Created: '2023-01-01',
+                RepoDigests: ['repo/image@sha256:abc123'],
+            };
+            mockImage.inspect.mockResolvedValue(imageDetails);
+            mockParse.mockReturnValue(parsedImage);
+            mockTag.parse.mockReturnValue(semverValue);
+
+            const mockRegistry = {
+                normalizeImage: jest.fn((img) => img),
+                getId: () => 'hub',
+                match: () => true,
+            };
+            registry.getState.mockReturnValue({
+                registry: { hub: mockRegistry },
+            });
+
+            const {
+                validate: validateContainer,
+            } = require('../../../model/container');
+            validateContainer.mockImplementation((containerToValidate) =>
+                containerToValidate,
+            );
+
+            return docker.addImageDetailsToContainer(container);
+        };
+
         test('should return existing container from store', async () => {
             await docker.register('watcher', 'docker', 'test', {});
             const mockLog = { debug: jest.fn() };
@@ -857,6 +900,76 @@ describe('Docker Watcher', () => {
 
             expect(result).toBeDefined();
         });
+
+        test('should respect explicit digest watch label for semver images', async () => {
+            const result = await setupContainerForDigestWatch({
+                labels: { 'wud.watch.digest': 'true' },
+                parsedImage: {
+                    domain: 'docker.io',
+                    path: 'library/nginx',
+                    tag: '1.0.0',
+                },
+                semverValue: { major: 1, minor: 0, patch: 0 },
+            });
+
+            expect(result.image.digest.watch).toBe(true);
+        });
+
+        test('should disable digest watch by default for semver images', async () => {
+            const result = await setupContainerForDigestWatch({
+                labels: {},
+                parsedImage: {
+                    domain: 'ghcr.io',
+                    path: 'codeswhat/whatsupdocker-ce',
+                    tag: '1.0.0',
+                },
+                semverValue: { major: 1, minor: 0, patch: 0 },
+            });
+
+            expect(result.image.digest.watch).toBe(false);
+        });
+
+        test('should enable digest watch by default for non-semver custom registry images', async () => {
+            const result = await setupContainerForDigestWatch({
+                labels: {},
+                parsedImage: {
+                    domain: 'ghcr.io',
+                    path: 'codeswhat/whatsupdocker-ce',
+                    tag: 'latest',
+                },
+                semverValue: null,
+            });
+
+            expect(result.image.digest.watch).toBe(true);
+        });
+
+        test('should disable digest watch by default for non-semver docker hub images', async () => {
+            const result = await setupContainerForDigestWatch({
+                labels: {},
+                parsedImage: {
+                    domain: 'docker.io',
+                    path: 'library/nginx',
+                    tag: 'latest',
+                },
+                semverValue: null,
+            });
+
+            expect(result.image.digest.watch).toBe(false);
+        });
+
+        test('should disable digest watch when explicit label is false', async () => {
+            const result = await setupContainerForDigestWatch({
+                labels: { 'wud.watch.digest': 'false' },
+                parsedImage: {
+                    domain: 'ghcr.io',
+                    path: 'codeswhat/whatsupdocker-ce',
+                    tag: 'latest',
+                },
+                semverValue: null,
+            });
+
+            expect(result.image.digest.watch).toBe(false);
+        });
     });
 
     describe('Container Reporting', () => {
@@ -948,31 +1061,6 @@ describe('Docker Watcher', () => {
             expect('true'.toLowerCase() === 'true').toBe(true);
             expect('false'.toLowerCase() === 'true').toBe(false);
             expect(undefined !== undefined && undefined !== '').toBe(false);
-        });
-
-        test('should determine digest watching for semver', () => {
-            const isSemver = true;
-            const watchDigestLabel = 'true';
-            let result = false;
-            if (isSemver) {
-                if (watchDigestLabel !== undefined && watchDigestLabel !== '') {
-                    result = watchDigestLabel.toLowerCase() === 'true';
-                }
-            }
-            expect(result).toBe(true);
-        });
-
-        test('should determine digest watching for non-semver', () => {
-            const isSemver = false;
-            const watchDigestLabel = undefined;
-            let result = false;
-            if (!isSemver) {
-                result = true;
-                if (watchDigestLabel !== undefined && watchDigestLabel !== '') {
-                    result = watchDigestLabel.toLowerCase() === 'true';
-                }
-            }
-            expect(result).toBe(true);
         });
 
         test('should get old containers for pruning', () => {

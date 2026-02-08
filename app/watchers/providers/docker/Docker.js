@@ -278,24 +278,36 @@ function isContainerToWatch(wudWatchLabelValue, watchByDefault) {
  * Return true if container digest must be watched.
  * @param {string} wudWatchDigestLabelValue - the value of wud.watch.digest label
  * @param {object} parsedImage - object containing at least `domain` property
+ * @param {boolean} isSemver - true if the current image tag is a semver tag
  * @returns {boolean}
  */
-function isDigestToWatch(wudWatchDigestLabelValue, parsedImage) {
-    let result = true;
+function isDigestToWatch(wudWatchDigestLabelValue, parsedImage, isSemver) {
+    const domain = parsedImage && parsedImage.domain ? parsedImage.domain : '';
+    const imagePath = parsedImage && parsedImage.path ? parsedImage.path : '';
+    const isDockerHub =
+        domain === '' ||
+        domain === 'docker.io' ||
+        domain === 'registry-1.docker.io' ||
+        domain.endsWith('.docker.io');
 
     if (
-        parsedImage.domain === 'docker.io' ||
-        parsedImage.domain === 'registry-1.docker.io' ||
-        parsedImage.domain === ''
+        wudWatchDigestLabelValue !== undefined &&
+        wudWatchDigestLabelValue !== ''
     ) {
-        result = false;
+        const shouldWatch = wudWatchDigestLabelValue.toLowerCase() === 'true';
+        if (shouldWatch && isDockerHub) {
+            log.warn(
+                `Watching digest for image ${imagePath} with domain ${domain} may result in throttled requests`,
+            );
+        }
+        return shouldWatch;
     }
 
-    if (wudWatchDigestLabelValue) {
-        result = wudWatchDigestLabelValue.toLowerCase() === 'true';
+    if (isSemver) {
+        return false;
     }
 
-    return result;
+    return !isDockerHub;
 }
 
 /**
@@ -819,7 +831,8 @@ class Docker extends Component {
         const isSemver = parsedTag !== null && parsedTag !== undefined;
         const watchDigest = isDigestToWatch(
             container.Labels[wudWatchDigest],
-            parsedImage.domain,
+            parsedImage,
+            isSemver,
         );
         if (!isSemver && !watchDigest) {
             this.ensureLogger();
