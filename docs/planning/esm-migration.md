@@ -72,3 +72,13 @@ Current baseline (2026-02-09):
 See `Compatibility Workarounds To Revert` in:
 
 - `docs/planning/README.md`
+
+## Manual OIDC Smoke Checklist (Cutover Gate)
+
+Use a real OIDC provider configuration and verify:
+
+1. Open login UI and trigger OIDC auth (`/auth/oidc/{name}/redirect` route responds with a URL).
+2. Follow redirect to IdP and authenticate successfully.
+3. Callback endpoint (`/auth/oidc/{name}/cb`) completes without `checks.state` or PKCE errors.
+4. App session is established (authenticated API call succeeds).
+5. Logout path behaves as expected when IdP exposes end-session URL.
