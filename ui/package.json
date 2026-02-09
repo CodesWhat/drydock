@@ -12,7 +12,7 @@
     "test:unit:watch": "jest --watch"
   },
   "dependencies": {
-    "@fortawesome/fontawesome-free": "6.7.2",
+    "@fortawesome/fontawesome-free": "7.1.0",
     "core-js": "3.48.0",
     "install": "0.13.0",
     "npm": "11.9.0",

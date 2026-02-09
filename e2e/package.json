@@ -17,11 +17,11 @@
   "repository": "CodesWhat/whatsupdocker-ce",
   "license": "MIT",
   "dependencies": {
-    "@cucumber/cucumber": "^11.3.0",
+    "@cucumber/cucumber": "12.6.0",
     "apickli": "3.0.3"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.14",
-    "@dotenvx/dotenvx": "^1.51.4"
+    "@dotenvx/dotenvx": "1.52.0"
   }
 }
