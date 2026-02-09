@@ -355,6 +355,26 @@ function getContainerName(container: any) {
     return containerName;
 }
 
+function getContainerDisplayName(
+    containerName: string,
+    parsedImagePath: string,
+    displayName?: string,
+) {
+    if (displayName && displayName.trim() !== '') {
+        return displayName;
+    }
+
+    const normalizedImagePath = (parsedImagePath || '').toLowerCase();
+    if (
+        normalizedImagePath === 'whatsupdocker-ce' ||
+        normalizedImagePath.endsWith('/whatsupdocker-ce')
+    ) {
+        return 'wud-ce';
+    }
+
+    return containerName;
+}
+
 /**
  * Get image repo digest.
  * @param containerImage
@@ -1179,7 +1199,11 @@ class Docker extends Watcher {
             excludeTags,
             transformTags,
             linkTemplate,
-            displayName,
+            displayName: getContainerDisplayName(
+                containerName,
+                parsedImage.path,
+                displayName,
+            ),
             displayIcon,
             triggerInclude,
             triggerExclude,

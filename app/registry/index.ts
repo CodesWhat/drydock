@@ -463,10 +463,12 @@ async function registerTriggers(options: RegistrationOptions = {}) {
  */
 async function registerRegistries() {
     const defaultRegistries = {
+        docr: { public: '' },
         ecr: { public: '' },
         gcr: { public: '' },
         ghcr: { public: '' },
         hub: { public: '' },
+        lscr: { public: '' },
         quay: { public: '' },
     };
     const registriesToRegister = {

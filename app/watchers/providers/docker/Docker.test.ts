@@ -1041,6 +1041,99 @@ describe('Docker Watcher', () => {
             expect(result).toBeDefined();
         });
 
+        test('should default display name to wud-ce for CE image', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            const container = {
+                Id: '123',
+                Image: 'ghcr.io/codeswhat/whatsupdocker-ce:latest',
+                Names: ['/wud'],
+                State: 'running',
+                Labels: {},
+            };
+            const imageDetails = {
+                Id: 'image123',
+                Architecture: 'amd64',
+                Os: 'linux',
+                Variant: 'v8',
+                Created: '2023-01-01',
+                RepoDigests: ['ghcr.io/codeswhat/whatsupdocker-ce@sha256:abc123'],
+            };
+            mockImage.inspect.mockResolvedValue(imageDetails);
+            mockParse.mockReturnValue({
+                domain: 'ghcr.io',
+                path: 'codeswhat/whatsupdocker-ce',
+                tag: 'latest',
+            });
+            mockTag.parse.mockReturnValue(null);
+            const mockRegistry = {
+                normalizeImage: jest.fn((img) => img),
+                getId: () => 'ghcr',
+                match: () => true,
+            };
+            registry.getState.mockReturnValue({
+                registry: { ghcr: mockRegistry },
+            });
+
+            const containerModule = await import('../../../model/container');
+            const validateContainer = containerModule.validate;
+            // @ts-ignore
+            validateContainer.mockImplementation((c) => c);
+
+            const result = await docker.addImageDetailsToContainer(container);
+
+            expect(result.displayName).toBe('wud-ce');
+        });
+
+        test('should keep custom display name when provided', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            const container = {
+                Id: '123',
+                Image: 'ghcr.io/codeswhat/whatsupdocker-ce:latest',
+                Names: ['/wud'],
+                State: 'running',
+                Labels: {},
+            };
+            const imageDetails = {
+                Id: 'image123',
+                Architecture: 'amd64',
+                Os: 'linux',
+                Variant: 'v8',
+                Created: '2023-01-01',
+                RepoDigests: ['ghcr.io/codeswhat/whatsupdocker-ce@sha256:abc123'],
+            };
+            mockImage.inspect.mockResolvedValue(imageDetails);
+            mockParse.mockReturnValue({
+                domain: 'ghcr.io',
+                path: 'codeswhat/whatsupdocker-ce',
+                tag: 'latest',
+            });
+            mockTag.parse.mockReturnValue(null);
+            const mockRegistry = {
+                normalizeImage: jest.fn((img) => img),
+                getId: () => 'ghcr',
+                match: () => true,
+            };
+            registry.getState.mockReturnValue({
+                registry: { ghcr: mockRegistry },
+            });
+
+            const containerModule = await import('../../../model/container');
+            const validateContainer = containerModule.validate;
+            // @ts-ignore
+            validateContainer.mockImplementation((c) => c);
+
+            const result = await docker.addImageDetailsToContainer(
+                container,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                'WUD CE Custom',
+            );
+
+            expect(result.displayName).toBe('WUD CE Custom');
+        });
+
         test('should use lookup image label for registry matching', async () => {
             await docker.register('watcher', 'docker', 'test', {});
             const container = {

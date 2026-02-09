@@ -25,6 +25,9 @@ Last updated: 2026-02-09
 | --- | --- | --- |
 | #891 Auth for remote Docker/Podman host API | High | Valid security gap (not user error). Phase 1: add `Basic` + `Bearer` auth for `WUD_WATCHER_{name}_HOST` over HTTPS while keeping existing mTLS options (`CAFILE`/`CERTFILE`/`KEYFILE`). Phase 2: OIDC token acquisition/refresh support. |
 | #875 Support `dhi.io` registry | Medium | Add provider/matcher support and docs |
+| #768 Skip/snooze a specific update version | Medium | Add per-container skip list and optional TTL-based snooze (stored in DB, not labels) |
+| #770 Container name stuck on temporary name | Medium | Refresh container name/labels on existing store entries (watcher update path) |
+| #777 Real-time Docker pull progress logging | Low | Add `followProgress` progress callback; consider rate-limited logging |
 | #896 OIDC `checks.state` intermittent errors | Medium | Needs deeper repro and session/state handling validation |
 | #881 `semverDiff` undefined in templates | Medium | Confirm path/rendering behavior for minor/patch and add tests |
 

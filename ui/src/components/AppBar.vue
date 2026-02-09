@@ -1,6 +1,5 @@
 <template>
   <v-app-bar app flat dark tile clipped-left dense color="primary">
-    <img :src="logo" alt="WUD logo" class="app-logo" />
     <v-toolbar-title
       v-if="viewName && 'home'.toLowerCase() !== viewName.toLowerCase()"
       class="text-body-1 text-capitalize ma-0 pl-4"

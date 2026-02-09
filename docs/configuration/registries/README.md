@@ -6,6 +6,8 @@ WUD supports most registries:
 
 - [**CUSTOM** (Self-hosted Registry)](configuration/registries/custom/)
 
+- [**DOCR** (DigitalOcean Container Registry)](configuration/registries/docr/)
+
 - [**ECR** (Amazon Elastic Container Registry)](configuration/registries/ecr/)
 
 - [**FORGEJO** (Forgejo Container Registry)](configuration/registries/forgejo/)
@@ -28,7 +30,9 @@ WUD supports most registries:
 
 ?> By default, without any further configuration, WUD is handling _out-of-the-box_ public images hosted on \
 ECR (public.ecr.aws) \
+DOCR \
 GCR \
 GHCR \
 HUB \
+LSCR \
 QUAY
