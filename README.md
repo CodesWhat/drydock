@@ -29,6 +29,7 @@ Keep your containers up-to-date.
 - [What's Updated From Original WUD](#whats-updated-from-original-wud)
 - [Moving From Old WUD Image](#moving-from-old-wud-image)
 - [Configuration and Usage Docs](#configuration-and-usage-docs)
+- [Roadmap](#roadmap)
 - [Support](#support)
 - [Build and Tooling](#build-and-tooling)
 - [License](#license)
@@ -112,6 +113,10 @@ Your Docker socket mount and most runtime settings stay the same.
 
 ## Configuration and Usage Docs
 - Upstream docs: [https://getwud.github.io/wud/](https://getwud.github.io/wud/)
+- CE docs: [`docs/README.md`](docs/README.md)
+
+## Roadmap
+- [`docs/planning/README.md`](docs/planning/README.md)
 
 ## Support
 - CE issues and requests: [Project issues](https://github.com/CodesWhat/whatsupdocker-ce/issues)

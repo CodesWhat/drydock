@@ -1,4 +1,4 @@
-# Planning
+# Roadmap
 
 Last updated: 2026-02-09
 
@@ -23,7 +23,7 @@ Last updated: 2026-02-09
 
 | Item | Priority | Notes |
 | --- | --- | --- |
-| #891 Auth for remote Docker/Podman host API | High | Add watcher support for upstream auth headers/tokens behind reverse proxies |
+| #891 Auth for remote Docker/Podman host API | High | Valid security gap (not user error). Phase 1: add `Basic` + `Bearer` auth for `WUD_WATCHER_{name}_HOST` over HTTPS while keeping existing mTLS options (`CAFILE`/`CERTFILE`/`KEYFILE`). Phase 2: OIDC token acquisition/refresh support. |
 | #875 Support `dhi.io` registry | Medium | Add provider/matcher support and docs |
 | #896 OIDC `checks.state` intermittent errors | Medium | Needs deeper repro and session/state handling validation |
 | #881 `semverDiff` undefined in templates | Medium | Confirm path/rendering behavior for minor/patch and add tests |
@@ -33,3 +33,22 @@ Last updated: 2026-02-09
 1. Implement #891 phase 1 (`Basic` + `Bearer` auth support for remote watchers).
 2. Add `dhi.io` registry support (#875).
 3. Triage OIDC state issue (#896) with reproducible test case and logs.
+
+## Roadmap Detail: #891
+
+### Phase 1 (next)
+
+- Add remote watcher HTTP authentication for upstream `WUD_WATCHER_{name}_HOST` endpoints:
+  - `Basic` auth
+  - `Bearer` token auth
+- Scope this to HTTPS remote endpoints.
+- Keep existing mTLS options unchanged:
+  - `WUD_WATCHER_{name}_CAFILE`
+  - `WUD_WATCHER_{name}_CERTFILE`
+  - `WUD_WATCHER_{name}_KEYFILE`
+
+### Phase 2 (later)
+
+- Evaluate/implement full OIDC client flow for remote watcher upstream auth:
+  - token acquisition
+  - token refresh
