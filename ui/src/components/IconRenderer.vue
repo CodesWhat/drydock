@@ -18,6 +18,13 @@
     :alt="icon"
     class="simple-icon"
   />
+  <img
+    v-else-if="isCustomIconUrl"
+    :src="customIconUrl"
+    :style="iconStyle"
+    :alt="icon"
+    class="custom-icon"
+  />
   <v-icon v-else :style="iconStyle">
     {{ normalizedIcon }}
   </v-icon>
@@ -32,5 +39,9 @@
 
 .v-theme--dark .simple-icon {
   filter: brightness(0) saturate(100%) invert(1) opacity(0.87);
+}
+
+.custom-icon {
+  object-fit: contain;
 }
 </style>
