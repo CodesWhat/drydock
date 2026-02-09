@@ -53,7 +53,7 @@ export function init() {
     router.use('/agents', agentRouter.init());
 
     // All other API routes => 404
-    router.get('/*', (req, res) => res.sendStatus(404));
+    router.get('/{*path}', (req, res) => res.sendStatus(404));
 
     return router;
 }
