@@ -7,6 +7,7 @@ import { getPublicUrl } from '../../../configuration/index.js';
 
 const OIDC_CHECKS_TTL_MS = 10 * 60 * 1000;
 const OIDC_MAX_PENDING_CHECKS = 5;
+const oidcSessionLocks = new Map<string, Promise<void>>();
 
 function normalizePendingChecks(rawChecks) {
     const now = Date.now();
@@ -55,6 +56,57 @@ function normalizePendingChecks(rawChecks) {
         .sort(([, c1]: any, [, c2]: any) => c2.createdAt - c1.createdAt)
         .slice(0, OIDC_MAX_PENDING_CHECKS);
     return Object.fromEntries(mostRecentChecks);
+}
+
+async function withOidcSessionLock(sessionId: string, operation: any) {
+    const previousLock = oidcSessionLocks.get(sessionId) || Promise.resolve();
+    let releaseLock: any;
+    const currentLock = new Promise<void>((resolve) => {
+        releaseLock = resolve;
+    });
+    const nextLock = previousLock
+        .catch(() => undefined)
+        .then(() => currentLock);
+    oidcSessionLocks.set(sessionId, nextLock);
+    await previousLock.catch(() => undefined);
+    try {
+        return await operation();
+    } finally {
+        releaseLock();
+        if (oidcSessionLocks.get(sessionId) === nextLock) {
+            oidcSessionLocks.delete(sessionId);
+        }
+    }
+}
+
+async function reloadSessionIfPossible(session: any) {
+    if (!session || typeof session.reload !== 'function') {
+        return;
+    }
+    await new Promise((resolve, reject) => {
+        session.reload((err) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(undefined);
+            }
+        });
+    });
+}
+
+async function saveSessionIfPossible(session: any) {
+    if (!session || typeof session.save !== 'function') {
+        return;
+    }
+    await new Promise((resolve, reject) => {
+        session.save((err) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(undefined);
+            }
+        });
+    });
 }
 
 /**
@@ -161,6 +213,10 @@ class Oidc extends Authentication {
             await openidClient.calculatePKCECodeChallenge(codeVerifier);
         const state = uuid();
         const sessionKey = this.getSessionKey();
+        const sessionLockKey =
+            typeof req.sessionID === 'string' && req.sessionID !== ''
+                ? req.sessionID
+                : undefined;
 
         if (!req.session) {
             this.log.warn(
@@ -169,19 +225,6 @@ class Oidc extends Authentication {
             res.status(500).send('Unable to initialize OIDC session');
             return;
         }
-
-        if (!req.session.oidc || typeof req.session.oidc !== 'object') {
-            req.session.oidc = {};
-        }
-
-        const pendingChecks = normalizePendingChecks(req.session.oidc[sessionKey]);
-        pendingChecks[state] = {
-            codeVerifier,
-            createdAt: Date.now(),
-        };
-        req.session.oidc[sessionKey] = {
-            pending: normalizePendingChecks({ pending: pendingChecks }),
-        };
         const authUrl = openidClient
             .buildAuthorizationUrl(this.client, {
                 redirect_uri: `${getPublicUrl(req)}/auth/oidc/${this.name}/cb`,
@@ -194,16 +237,30 @@ class Oidc extends Authentication {
         this.log.debug(`Build redirection url [${authUrl}]`);
 
         try {
-            if (typeof req.session.save === 'function') {
-                await new Promise((resolve, reject) => {
-                    req.session.save((err) => {
-                        if (err) {
-                            reject(err);
-                        } else {
-                            resolve(undefined);
-                        }
-                    });
-                });
+            const persistOidcChecks = async () => {
+                await reloadSessionIfPossible(req.session);
+
+                if (!req.session.oidc || typeof req.session.oidc !== 'object') {
+                    req.session.oidc = {};
+                }
+                const pendingChecks = normalizePendingChecks(
+                    req.session.oidc[sessionKey],
+                );
+                pendingChecks[state] = {
+                    codeVerifier,
+                    createdAt: Date.now(),
+                };
+                req.session.oidc[sessionKey] = {
+                    pending: normalizePendingChecks({ pending: pendingChecks }),
+                };
+
+                await saveSessionIfPossible(req.session);
+            };
+
+            if (sessionLockKey) {
+                await withOidcSessionLock(sessionLockKey, persistOidcChecks);
+            } else {
+                await persistOidcChecks();
             }
         } catch (e) {
             this.log.warn(`Unable to persist OIDC session checks (${e.message})`);
@@ -221,6 +278,7 @@ class Oidc extends Authentication {
             this.log.debug('Validate callback data');
             const openidClient = await this.getOpenIdClient();
             const sessionKey = this.getSessionKey();
+            await reloadSessionIfPossible(req.session);
             const oidcChecks =
                 req.session && req.session.oidc
                     ? req.session.oidc[sessionKey]
@@ -286,6 +344,7 @@ class Oidc extends Authentication {
                 } else {
                     delete req.session.oidc[sessionKey];
                 }
+                await saveSessionIfPossible(req.session);
             }
             this.log.debug('Get user info');
             const user = await this.getUserFromAccessToken(

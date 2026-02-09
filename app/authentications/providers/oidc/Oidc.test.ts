@@ -160,6 +160,66 @@ test('redirect should persist oidc checks in session before responding', async (
     expect(res.status).not.toHaveBeenCalled();
 });
 
+test('redirect should preserve pending checks from concurrent requests on the same session', async () => {
+    openidClientMock.randomPKCECodeVerifier = jest
+        .fn()
+        .mockReturnValueOnce('code-verifier-1')
+        .mockReturnValueOnce('code-verifier-2');
+
+    const persistedOidcState: any = {};
+    const createSession = () => {
+        const session: any = {
+            oidc: JSON.parse(JSON.stringify(persistedOidcState.oidc || {})),
+        };
+        session.reload = jest.fn((cb) => {
+            setTimeout(() => {
+                session.oidc = JSON.parse(
+                    JSON.stringify(persistedOidcState.oidc || {}),
+                );
+                cb();
+            }, 0);
+        });
+        session.save = jest.fn((cb) => {
+            setTimeout(() => {
+                persistedOidcState.oidc = JSON.parse(
+                    JSON.stringify(session.oidc || {}),
+                );
+                cb();
+            }, 0);
+        });
+        return session;
+    };
+
+    const req1: any = {
+        protocol: 'https',
+        hostname: 'wud.example.com',
+        sessionID: 'shared-session-id',
+        session: createSession(),
+    };
+    const req2: any = {
+        protocol: 'https',
+        hostname: 'wud.example.com',
+        sessionID: 'shared-session-id',
+        session: createSession(),
+    };
+    const res1 = {
+        json: jest.fn(),
+        status: jest.fn().mockReturnThis(),
+        send: jest.fn(),
+    };
+    const res2 = {
+        json: jest.fn(),
+        status: jest.fn().mockReturnThis(),
+        send: jest.fn(),
+    };
+
+    await Promise.all([oidc.redirect(req1, res1), oidc.redirect(req2, res2)]);
+
+    expect(Object.keys(persistedOidcState.oidc.default.pending)).toHaveLength(2);
+    expect(res1.status).not.toHaveBeenCalled();
+    expect(res2.status).not.toHaveBeenCalled();
+});
+
 test('callback should fail with explicit message when callback state is missing', async () => {
     const req = {
         protocol: 'https',
