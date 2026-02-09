@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ValidationError } from 'joi';
+import joi from 'joi';
 import * as event from '../../event/index.js';
 import log from '../../log/index.js';
 import Trigger from './Trigger.js';
@@ -63,7 +63,7 @@ test('validateConfiguration should throw error when invalid', async () => {
     };
     expect(() => {
         trigger.validateConfiguration(configuration);
-    }).toThrowError(ValidationError);
+    }).toThrowError(joi.ValidationError);
 });
 
 test('init should register to container report when simple mode enabled', async () => {

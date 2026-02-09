@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ValidationError } from 'joi';
+import joi from 'joi';
 import axios from 'axios';
 
 jest.mock('axios');
@@ -49,7 +49,7 @@ test('validateConfiguration should throw error when invalid', async () => {
     };
     expect(() => {
         gotify.validateConfiguration(configuration);
-    }).toThrowError(ValidationError);
+    }).toThrowError(joi.ValidationError);
 });
 
 test('maskConfiguration should mask sensitive data', async () => {

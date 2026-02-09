@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ValidationError } from 'joi';
+import joi from 'joi';
 import { WebClient } from '@slack/web-api';
 
 jest.mock('@slack/web-api');
@@ -34,7 +34,7 @@ test('validateConfiguration should return validated configuration when valid', a
 test('validateConfiguration should throw error when invalid', async () => {
     expect(() => {
         slack.validateConfiguration({});
-    }).toThrowError(ValidationError);
+    }).toThrowError(joi.ValidationError);
 });
 
 test('maskConfiguration should mask sensitive data', async () => {

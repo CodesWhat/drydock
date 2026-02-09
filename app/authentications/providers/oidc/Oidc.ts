@@ -83,15 +83,13 @@ class Oidc extends Authentication {
         );
         const strategy = new OidcStrategy(
             {
-                client: this.client,
-                params: {
-                    scope: 'openid email profile',
-                },
+                config: this.client,
+                scope: 'openid email profile',
+                name: 'oidc',
             },
             async (accessToken, done) => this.verify(accessToken, done),
             this.log,
         );
-        strategy.name = 'oidc';
         return strategy;
     }
 

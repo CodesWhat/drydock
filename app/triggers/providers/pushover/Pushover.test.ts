@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ValidationError } from 'joi';
+import joi from 'joi';
 
 jest.mock(
     'pushover-notifications',
@@ -47,7 +47,7 @@ test('validateConfiguration should fail when priority is 2 and no retry set', as
             ...configurationValid,
             priority: 2,
         });
-    }).toThrowError(ValidationError);
+    }).toThrowError(joi.ValidationError);
 });
 
 test('validateConfiguration should fail when priority is 2 and retry too small', async () => {
@@ -57,7 +57,7 @@ test('validateConfiguration should fail when priority is 2 and retry too small',
             priority: 2,
             retry: 10,
         });
-    }).toThrowError(ValidationError);
+    }).toThrowError(joi.ValidationError);
 });
 
 test('validateConfiguration should fail when priority is 2 and no expire', async () => {
@@ -67,7 +67,7 @@ test('validateConfiguration should fail when priority is 2 and no expire', async
             priority: 2,
             retry: 100,
         });
-    }).toThrowError(ValidationError);
+    }).toThrowError(joi.ValidationError);
 });
 
 test('validateConfiguration should succeed when priority is 2 and expire and retry set', async () => {
@@ -96,7 +96,7 @@ test('validateConfiguration should throw error when invalid', async () => {
     const configuration = {};
     expect(() => {
         pushover.validateConfiguration(configuration);
-    }).toThrowError(ValidationError);
+    }).toThrowError(joi.ValidationError);
 });
 
 test('maskConfiguration should mask sensitive data', async () => {

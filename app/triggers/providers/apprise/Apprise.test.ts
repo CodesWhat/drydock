@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ValidationError } from 'joi';
+import joi from 'joi';
 import axios from 'axios';
 
 jest.mock('axios');
@@ -41,7 +41,7 @@ test('validateConfiguration should throw error when invalid', async () => {
     };
     expect(() => {
         apprise.validateConfiguration(configuration);
-    }).toThrowError(ValidationError);
+    }).toThrowError(joi.ValidationError);
 });
 
 test('validateConfiguration should throw error when urls and config are set at the same time', async () => {
@@ -51,7 +51,7 @@ test('validateConfiguration should throw error when urls and config are set at t
     };
     expect(() => {
         apprise.validateConfiguration(configuration);
-    }).toThrowError(ValidationError);
+    }).toThrowError(joi.ValidationError);
 });
 
 test('trigger should send POST http request to notify endpoint', async () => {

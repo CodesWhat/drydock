@@ -15,10 +15,24 @@ module.exports = {
                 },
             },
         ],
+        '^.+\\.m?jsx?$': [
+            'ts-jest',
+            {
+                useESM: false,
+                tsconfig: {
+                    allowJs: true,
+                    module: 'CommonJS',
+                    moduleResolution: 'Node',
+                },
+            },
+        ],
     },
     moduleNameMapper: {
         '^(\\.{1,2}/.*)\\.js$': '$1',
     },
+    transformIgnorePatterns: [
+        '<rootDir>/node_modules/(?!(openid-client|oauth4webapi|jose)/)',
+    ],
     coverageDirectory: 'coverage',
     collectCoverageFrom: [
         '**/*.{js,ts}',

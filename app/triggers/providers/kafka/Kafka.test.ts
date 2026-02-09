@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ValidationError } from 'joi';
+import joi from 'joi';
 const { Kafka: KafkaClient } = require('kafkajs');
 
 jest.mock('kafkajs');
@@ -68,7 +68,7 @@ test('validateConfiguration should throw error when invalid', async () => {
     };
     expect(() => {
         kafka.validateConfiguration(configuration);
-    }).toThrowError(ValidationError);
+    }).toThrowError(joi.ValidationError);
 });
 
 test('maskConfiguration should mask sensitive data', async () => {

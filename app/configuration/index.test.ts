@@ -1,5 +1,18 @@
 // @ts-nocheck
+import path from 'path';
+import { fileURLToPath } from 'url';
 import * as configuration from './index.js';
+
+function getTestDirectory() {
+    try {
+        const moduleUrl = new Function('return import.meta.url')();
+        return path.dirname(fileURLToPath(moduleUrl));
+    } catch {
+        return __dirname;
+    }
+}
+
+const TEST_DIRECTORY = getTestDirectory();
 
 test('getVersion should return wud version', async () => {
     configuration.wudEnvVars.WUD_VERSION = 'x.y.z';
@@ -127,7 +140,7 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
 
 test('replaceSecrets must read secret in file', async () => {
     const vars = {
-        WUD_SERVER_X__FILE: `${__dirname}/secret.txt`,
+        WUD_SERVER_X__FILE: `${TEST_DIRECTORY}/secret.txt`,
     };
     configuration.replaceSecrets(vars);
     expect(vars).toStrictEqual({

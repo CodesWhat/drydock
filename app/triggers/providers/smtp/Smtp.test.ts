@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ValidationError } from 'joi';
+import joi from 'joi';
 import Smtp from './Smtp.js';
 import log from '../../../log/index.js';
 
@@ -97,12 +97,12 @@ test.each([
             let validatedConfiguration;
             expect(() => {
                 validatedConfiguration = smtp.validateConfiguration(config);
-            }).not.toThrow(ValidationError);
+            }).not.toThrow(joi.ValidationError);
             expect(validatedConfiguration.from).toStrictEqual(expectedResult);
         } else {
             expect(() => {
                 smtp.validateConfiguration(config);
-            }).toThrow(ValidationError);
+            }).toThrow(joi.ValidationError);
         }
     },
 );
@@ -133,11 +133,11 @@ test.each([
         if (allowCustomTld) {
             expect(() => {
                 smtp.validateConfiguration(config);
-            }).not.toThrow(ValidationError);
+            }).not.toThrow(joi.ValidationError);
         } else {
             expect(() => {
                 smtp.validateConfiguration(config);
-            }).toThrow(ValidationError);
+            }).toThrow(joi.ValidationError);
         }
     },
 );
@@ -151,7 +151,7 @@ test('validateConfiguration should throw error when invalid', async () => {
     };
     expect(() => {
         smtp.validateConfiguration(configuration);
-    }).toThrow(ValidationError);
+    }).toThrow(joi.ValidationError);
 });
 
 test('init should create a mailer transporter with expected configuration when called', async () => {

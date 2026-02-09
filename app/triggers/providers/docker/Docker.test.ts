@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ValidationError } from 'joi';
+import joi from 'joi';
 import Docker from './Docker.js';
 import log from '../../../log/index.js';
 
@@ -126,7 +126,7 @@ test('validateConfiguration should throw error when invalid', async () => {
     };
     expect(() => {
         docker.validateConfiguration(configuration);
-    }).toThrowError(ValidationError);
+    }).toThrowError(joi.ValidationError);
 });
 
 test('getWatcher should return watcher responsible for a container', async () => {

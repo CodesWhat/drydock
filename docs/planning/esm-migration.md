@@ -55,6 +55,7 @@ Current baseline (2026-02-09):
   - `cd app && npm test`
   - `cd ui && npm run test:unit`
   - Manual OIDC redirect/callback verification.
+  - If no local real IdP is available, delegate OIDC verification to ticket requester and require results/logs on #896.
   - No readiness regressions (`./scripts/esm-readiness.sh --strict`).
 - Rollback plan:
   - Keep migration commits split by concern (tsconfig/runtime paths/OIDC/Jest).
@@ -82,3 +83,4 @@ Use a real OIDC provider configuration and verify:
 3. Callback endpoint (`/auth/oidc/{name}/cb`) completes without `checks.state` or PKCE errors.
 4. App session is established (authenticated API call succeeds).
 5. Logout path behaves as expected when IdP exposes end-session URL.
+6. If this cannot be run locally (no real IdP), request ticket-side QA and capture pass/fail + logs in #896.

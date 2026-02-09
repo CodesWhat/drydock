@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ValidationError } from 'joi';
+import joi from 'joi';
 import axios from 'axios';
 import Ntfy from './Ntfy.js';
 
@@ -41,7 +41,7 @@ test('validateConfiguration should throw error when invalid', async () => {
     };
     expect(() => {
         ntfy.validateConfiguration(configuration);
-    }).toThrowError(ValidationError);
+    }).toThrowError(joi.ValidationError);
 });
 
 test('maskConfiguration should mask sensitive data', async () => {

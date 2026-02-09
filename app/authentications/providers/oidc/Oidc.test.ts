@@ -1,6 +1,7 @@
 // @ts-nocheck
 import express from 'express';
-jest.mock('openid-client', () => ({}));
+import { ClientSecretPost, Configuration } from 'openid-client';
+import Oidc from './Oidc.js';
 
 const app = express();
 
@@ -16,10 +17,8 @@ let oidc;
 
 let openidClientMock;
 
-beforeEach(async () => {
+beforeEach(() => {
     jest.resetAllMocks();
-    jest.resetModules();
-    const { default: Oidc } = await import('./Oidc.js');
     oidc = new Oidc();
     oidc.configuration = configurationValid;
     openidClientMock = {
@@ -38,7 +37,12 @@ beforeEach(async () => {
         buildEndSessionUrl: jest.fn(),
     };
     oidc.openidClient = openidClientMock;
-    oidc.client = { config: 'client' };
+    oidc.client = new Configuration(
+        { issuer: 'https://idp.example.com' },
+        'wud-client',
+        'wud-secret',
+        ClientSecretPost('wud-secret'),
+    );
     oidc.name = '';
     oidc.log = {
         debug: jest.fn(),

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ValidationError } from 'joi';
+import joi from 'joi';
 import mqttClient from 'mqtt';
 import log from '../../../log/index.js';
 import { flatten } from '../../../model/container.js';
@@ -83,7 +83,7 @@ test('validateConfiguration should throw error when invalid', async () => {
     };
     expect(() => {
         mqtt.validateConfiguration(configuration);
-    }).toThrowError(ValidationError);
+    }).toThrowError(joi.ValidationError);
 });
 
 test('maskConfiguration should mask sensitive data', async () => {

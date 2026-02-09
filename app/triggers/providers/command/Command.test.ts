@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { ValidationError } from 'joi';
+import joi from 'joi';
 
 import Command from './Command.js';
 
@@ -44,7 +44,7 @@ test('validateConfiguration should throw error when invalid', async () => {
     };
     expect(() => {
         command.validateConfiguration(configuration);
-    }).toThrowError(ValidationError);
+    }).toThrowError(joi.ValidationError);
 });
 
 test('should trigger with container', async () => {

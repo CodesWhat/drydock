@@ -1,8 +1,23 @@
 // @ts-nocheck
+import { ClientSecretPost, Configuration } from 'openid-client';
 import OidcStrategy from './OidcStrategy.js';
 import log from '../../../log/index.js';
 
-const oidcStrategy = new OidcStrategy({}, () => {}, log);
+const oidcConfig = new Configuration(
+    { issuer: 'https://idp.example.com' },
+    'wud-client',
+    'wud-secret',
+    ClientSecretPost('wud-secret'),
+);
+const oidcStrategy = new OidcStrategy(
+    {
+        config: oidcConfig,
+        scope: 'openid email profile',
+        name: 'oidc',
+    },
+    () => {},
+    log,
+);
 
 beforeEach(async () => {
     oidcStrategy.success = jest.fn();
