@@ -13,9 +13,6 @@
         <v-icon v-if="!mini">mdi-close</v-icon>
         <v-icon v-else>mdi-menu</v-icon>
       </v-app-bar-nav-icon>
-      <v-toolbar-title v-if="!mini" class="text-body-1">
-        <img :src="logo" alt="WUD logo" class="drawer-logo" />
-      </v-toolbar-title>
     </v-toolbar>
     <v-list nav class="pt-0 pb-0">
       <v-fade-transition group hide-on-leave mode="in-out">
@@ -88,10 +85,3 @@
   </v-navigation-drawer>
 </template>
 <script lang="ts" src="./NavigationDrawer.ts"></script>
-<style scoped>
-.drawer-logo {
-  display: block;
-  height: 26px;
-  width: auto;
-}
-</style>

@@ -6,7 +6,6 @@ import { getTriggerIcon } from "@/services/trigger";
 import { getServerIcon } from "@/services/server";
 import { getWatcherIcon } from "@/services/watcher";
 import { getAuthenticationIcon } from "@/services/authentication";
-import logo from "@/assets/whale-logo.png";
 
 export default defineComponent({
   setup() {
@@ -53,7 +52,6 @@ export default defineComponent({
     });
 
     return {
-      logo,
       mini,
       darkMode,
       containerIcon: getContainerIcon(),
