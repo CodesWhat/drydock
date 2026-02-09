@@ -182,6 +182,28 @@ This operation lets you manually run a trigger on the container.
 curl -X POST http://wud:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/triggers/ntfy/one
 ```
 
+## Update container update policy (skip/snooze)
+
+This operation lets you control per-container update suppression policy (stored in WUD DB):
+
+- `skip-current`: skip the currently detected remote tag or digest
+- `clear-skips`: remove `skipTags` and `skipDigests`
+- `snooze`: suppress update notifications until a date (supports `days` or explicit `snoozeUntil`)
+- `unsnooze`: remove `snoozeUntil`
+- `clear`: remove all update policy
+
+```bash
+curl -X PATCH http://wud:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"skip-current"}'
+```
+
+```bash
+curl -X PATCH http://wud:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"snooze","days":7}'
+```
+
 ## Delete a Container
 This operation lets you delete a container by id.
 

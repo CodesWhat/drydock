@@ -92,6 +92,22 @@
               <span class="text-caption">Copy to clipboard</span>
             </v-tooltip>
           </span>
+          <span v-if="smAndUp && updatePolicyChipLabel" class="d-flex align-center">
+            <v-tooltip bottom>
+              <template v-slot:activator="{ props }">
+                <v-chip
+                  label
+                  variant="outlined"
+                  color="warning"
+                  v-bind="props"
+                >
+                  <v-icon start size="small">mdi-bell-off</v-icon>
+                  {{ updatePolicyChipLabel }}
+                </v-chip>
+              </template>
+              <span class="text-caption">{{ updatePolicyDescription }}</span>
+            </v-tooltip>
+          </span>
 
           <span
             v-if="smAndUp && oldestFirst"
@@ -176,6 +192,51 @@
                   Update now
                   <v-icon right>mdi-rocket-launch</v-icon>
                 </v-btn>
+              </v-col>
+              <v-col class="text-center">
+                <v-menu location="top">
+                  <template v-slot:activator="{ props }">
+                    <v-btn
+                      small
+                      color="info"
+                      variant="outlined"
+                      v-bind="props"
+                    >
+                      Policy
+                      <v-icon right>mdi-bell-cog</v-icon>
+                    </v-btn>
+                  </template>
+                  <v-list density="compact">
+                    <v-list-item
+                      :disabled="!container.updateKind || container.updateKind.kind === 'unknown'"
+                      @click="skipCurrentUpdate"
+                    >
+                      <v-list-item-title>Skip current update</v-list-item-title>
+                    </v-list-item>
+                    <v-list-item @click="snoozeUpdates(1)">
+                      <v-list-item-title>Snooze 1 day</v-list-item-title>
+                    </v-list-item>
+                    <v-list-item @click="snoozeUpdates(7)">
+                      <v-list-item-title>Snooze 7 days</v-list-item-title>
+                    </v-list-item>
+                    <v-list-item @click="snoozeUpdates(30)">
+                      <v-list-item-title>Snooze 30 days</v-list-item-title>
+                    </v-list-item>
+                    <v-divider />
+                    <v-list-item
+                      :disabled="!container.updatePolicy || !container.updatePolicy.snoozeUntil"
+                      @click="clearSnooze"
+                    >
+                      <v-list-item-title>Clear snooze</v-list-item-title>
+                    </v-list-item>
+                    <v-list-item
+                      :disabled="!hasAnyUpdatePolicy"
+                      @click="clearUpdatePolicy"
+                    >
+                      <v-list-item-title>Clear all policy</v-list-item-title>
+                    </v-list-item>
+                  </v-list>
+                </v-menu>
               </v-col>
               <v-col class="text-center">
                 <v-dialog

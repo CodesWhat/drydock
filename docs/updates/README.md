@@ -1,5 +1,28 @@
 # Updates
 
+## Per-container Update Policy (February 9, 2026)
+
+This update adds skip/snooze controls per container to reduce noisy repeated notifications for known-bad versions.
+
+### What changed
+
+- Added container-level update policy in store:
+  - `skipTags`
+  - `skipDigests`
+  - `snoozeUntil`
+- Added API endpoint:
+  - `PATCH /api/containers/:id/update-policy`
+  - Actions: `skip-current`, `clear-skips`, `snooze`, `unsnooze`, `clear`
+- Added UI controls on container cards:
+  - Skip current update
+  - Snooze for 1/7/30 days
+  - Clear snooze or all policy
+
+### Behavior
+
+- `updateKind` still reflects the detected remote update.
+- `updateAvailable` is suppressed while policy applies (skip/snooze), and becomes true again when a new unmatched version/digest is detected or snooze expires.
+
 ## Trigger Coordination Improvements (February 9, 2026)
 
 This update improves how triggers can be coordinated when they share the same trigger name (for example `docker.update` and `discord.update`).
@@ -58,4 +81,3 @@ WUD_TRIGGER_DISCORD_UPDATE_URL=<discord_webhook_url>
 WUD_TRIGGER_DISCORD_UPDATE_SIMPLETITLE=Updated ${container.name}
 WUD_TRIGGER_DISCORD_UPDATE_SIMPLEBODY=Container ${container.name} has been updated from ${container.updateKind.localValue} to ${container.updateKind.remoteValue}
 ```
-

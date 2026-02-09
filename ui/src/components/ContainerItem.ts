@@ -6,7 +6,12 @@ import ContainerImage from '@/components/ContainerImage.vue';
 import ContainerTriggers from '@/components/ContainerTriggers.vue';
 import ContainerUpdate from '@/components/ContainerUpdate.vue';
 import IconRenderer from '@/components/IconRenderer.vue';
-import { getContainerTriggers, refreshContainer, runTrigger } from '@/services/container';
+import {
+  getContainerTriggers,
+  refreshContainer,
+  runTrigger,
+  updateContainerPolicy,
+} from '@/services/container';
 import { defineComponent } from 'vue';
 
 export default defineComponent({
@@ -118,9 +123,110 @@ export default defineComponent({
       }
       return color;
     },
+    hasAnyUpdatePolicy() {
+      const updatePolicy = this.container.updatePolicy || {};
+      return Boolean(
+        updatePolicy.snoozeUntil ||
+          (Array.isArray(updatePolicy.skipTags) && updatePolicy.skipTags.length > 0) ||
+          (Array.isArray(updatePolicy.skipDigests) && updatePolicy.skipDigests.length > 0),
+      );
+    },
+    isSnoozed() {
+      const snoozeUntil = this.container.updatePolicy?.snoozeUntil;
+      if (!snoozeUntil) {
+        return false;
+      }
+      const snoozeUntilDate = new Date(snoozeUntil);
+      if (Number.isNaN(snoozeUntilDate.getTime())) {
+        return false;
+      }
+      return snoozeUntilDate.getTime() > Date.now();
+    },
+    isCurrentUpdateSkipped() {
+      const updateKind = this.container.updateKind;
+      const updatePolicy = this.container.updatePolicy || {};
+      if (!updateKind || !updateKind.remoteValue) {
+        return false;
+      }
+      if (updateKind.kind === 'tag') {
+        return (
+          Array.isArray(updatePolicy.skipTags) &&
+          updatePolicy.skipTags.includes(updateKind.remoteValue)
+        );
+      }
+      if (updateKind.kind === 'digest') {
+        return (
+          Array.isArray(updatePolicy.skipDigests) &&
+          updatePolicy.skipDigests.includes(updateKind.remoteValue)
+        );
+      }
+      return false;
+    },
+    updatePolicyChipLabel() {
+      if (this.isSnoozed) {
+        return 'snoozed';
+      }
+      if (this.isCurrentUpdateSkipped) {
+        return 'skipped';
+      }
+      if (this.hasAnyUpdatePolicy) {
+        return 'policy';
+      }
+      return '';
+    },
+    updatePolicyDescription() {
+      if (this.isSnoozed) {
+        return `Snoozed until ${this.container.updatePolicy.snoozeUntil}`;
+      }
+      if (this.isCurrentUpdateSkipped && this.container.updateKind?.remoteValue) {
+        return `Skipping ${this.container.updateKind.kind} update ${this.container.updateKind.remoteValue}`;
+      }
+      if (this.hasAnyUpdatePolicy) {
+        return 'Custom update policy active';
+      }
+      return 'No custom update policy';
+    },
   },
 
   methods: {
+    async applyContainerUpdatePolicy(action: string, payload = {}, successMessage = 'Update policy saved') {
+      try {
+        const containerUpdated = await updateContainerPolicy(this.container.id, action, payload);
+        this.$emit('container-refreshed', containerUpdated);
+        (this as any).$eventBus.emit('notify', successMessage);
+      } catch (e: any) {
+        (this as any).$eventBus.emit(
+          'notify',
+          `Error when trying to update policy (${e.message})`,
+          'error',
+        );
+      }
+    },
+
+    async skipCurrentUpdate() {
+      await this.applyContainerUpdatePolicy(
+        'skip-current',
+        {},
+        'Current update skipped',
+      );
+    },
+
+    async snoozeUpdates(days: number) {
+      await this.applyContainerUpdatePolicy(
+        'snooze',
+        { days },
+        `Updates snoozed for ${days} day${days > 1 ? 's' : ''}`,
+      );
+    },
+
+    async clearSnooze() {
+      await this.applyContainerUpdatePolicy('unsnooze', {}, 'Snooze cleared');
+    },
+
+    async clearUpdatePolicy() {
+      await this.applyContainerUpdatePolicy('clear', {}, 'Update policy cleared');
+    },
+
     async deleteContainer() {
       this.$emit('delete-container');
     },

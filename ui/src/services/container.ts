@@ -73,6 +73,31 @@ async function runTrigger({
   return response.json();
 }
 
+async function updateContainerPolicy(containerId, action, payload = {}) {
+  const response = await fetch(`/api/containers/${containerId}/update-policy`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action,
+      ...payload,
+    }),
+  });
+  if (!response.ok) {
+    let details = "";
+    try {
+      const body = await response.json();
+      details = body?.error ? ` (${body.error})` : "";
+    } catch (e) {
+      // Ignore parsing error and fallback to status text.
+    }
+    throw new Error(
+      `Failed to update container policy ${action}: ${response.statusText}${details}`,
+    );
+  }
+  return response.json();
+}
+
 export {
   getContainerIcon,
   getAllContainers,
@@ -81,4 +106,5 @@ export {
   deleteContainer,
   getContainerTriggers,
   runTrigger,
+  updateContainerPolicy,
 };
