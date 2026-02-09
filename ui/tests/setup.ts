@@ -10,24 +10,24 @@ const vuetify = createVuetify({
 
 // Mock global properties
 const mockEventBus = {
-  emit: jest.fn(),
-  on: jest.fn(),
-  off: jest.fn()
+  emit: vi.fn(),
+  on: vi.fn(),
+  off: vi.fn()
 };
 
 const mockFilters = {
-  date: jest.fn((date) => new Date(date).toLocaleDateString()),
-  dateTime: jest.fn((date) => new Date(date).toLocaleString()),
-  short: jest.fn((str, length) => str?.substring(0, length) + '...')
+  date: vi.fn((date) => new Date(date).toLocaleDateString()),
+  dateTime: vi.fn((date) => new Date(date).toLocaleString()),
+  short: vi.fn((str, length) => str?.substring(0, length) + '...')
 };
 
 // Mock router
 const mockRouter = {
-  push: jest.fn(),
-  replace: jest.fn(),
-  go: jest.fn(),
-  back: jest.fn(),
-  forward: jest.fn()
+  push: vi.fn(),
+  replace: vi.fn(),
+  go: vi.fn(),
+  back: vi.fn(),
+  forward: vi.fn()
 };
 
 // Global test configuration
@@ -72,12 +72,12 @@ config.global.mocks = {
 };
 
 // Mock fetch globally
-global.fetch = jest.fn();
-(global.fetch as any).mockResolvedValue = jest.fn();
-(global.fetch as any).mockResolvedValueOnce = jest.fn();
-(global.fetch as any).mockRejectedValue = jest.fn();
-(global.fetch as any).mockRejectedValueOnce = jest.fn();
-(global.fetch as any).mockClear = jest.fn();
+global.fetch = vi.fn();
+(global.fetch as any).mockResolvedValue = vi.fn();
+(global.fetch as any).mockResolvedValueOnce = vi.fn();
+(global.fetch as any).mockRejectedValue = vi.fn();
+(global.fetch as any).mockRejectedValueOnce = vi.fn();
+(global.fetch as any).mockClear = vi.fn();
 
 
 // Mock Vuetify components with templates
@@ -187,10 +187,10 @@ config.global.provide = {
     params: {}
   },
   'Symbol(router)': {
-    push: jest.fn(),
-    replace: jest.fn(),
-    go: jest.fn(),
-    back: jest.fn(),
-    forward: jest.fn()
+    push: vi.fn(),
+    replace: vi.fn(),
+    go: vi.fn(),
+    back: vi.fn(),
+    forward: vi.fn()
   }
 };

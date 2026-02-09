@@ -1,9 +1,10 @@
 import { mount } from '@vue/test-utils';
 import LoginBasic from '@/components/LoginBasic';
+import { loginBasic } from '@/services/auth';
 
 // Mock the auth service
-jest.mock('@/services/auth', () => ({
-  loginBasic: jest.fn()
+vi.mock('@/services/auth', () => ({
+  loginBasic: vi.fn()
 }));
 
 describe('LoginBasic', () => {
@@ -57,8 +58,7 @@ describe('LoginBasic', () => {
   });
 
   it('calls loginBasic service on form submission', async () => {
-    const { loginBasic } = require('@/services/auth');
-    loginBasic.mockResolvedValue({ username: 'testuser' });
+    vi.mocked(loginBasic).mockResolvedValue({ username: 'testuser' });
 
     wrapper.vm.username = 'testuser';
     wrapper.vm.password = 'testpass';
@@ -69,8 +69,7 @@ describe('LoginBasic', () => {
   });
 
   it('emits authentication-success on successful login', async () => {
-    const { loginBasic } = require('@/services/auth');
-    loginBasic.mockResolvedValue({ username: 'testuser' });
+    vi.mocked(loginBasic).mockResolvedValue({ username: 'testuser' });
 
     wrapper.vm.username = 'testuser';
     wrapper.vm.password = 'testpass';
@@ -81,8 +80,7 @@ describe('LoginBasic', () => {
   });
 
   it('handles login error gracefully', async () => {
-    const { loginBasic } = require('@/services/auth');
-    loginBasic.mockRejectedValue(new Error('Invalid credentials'));
+    vi.mocked(loginBasic).mockRejectedValue(new Error('Invalid credentials'));
 
     wrapper.vm.username = 'testuser';
     wrapper.vm.password = 'wrongpass';
@@ -94,8 +92,7 @@ describe('LoginBasic', () => {
   });
 
   it('shows loading state during login', async () => {
-    const { loginBasic } = require('@/services/auth');
-    loginBasic.mockResolvedValue({ username: 'testuser' });
+    vi.mocked(loginBasic).mockResolvedValue({ username: 'testuser' });
 
     wrapper.vm.username = 'testuser';
     wrapper.vm.password = 'testpass';

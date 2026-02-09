@@ -8,7 +8,7 @@ import {
 } from '@/services/container';
 
 // Mock fetch globally
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 describe('Container Service', () => {
   beforeEach(() => {

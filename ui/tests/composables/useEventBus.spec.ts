@@ -8,7 +8,7 @@ describe('useEventBus', () => {
   });
 
   it('should emit and listen to events', () => {
-    const callback = jest.fn();
+    const callback = vi.fn();
     
     eventBus.on('test-event', callback);
     eventBus.emit('test-event', 'data1', 'data2');
@@ -17,8 +17,8 @@ describe('useEventBus', () => {
   });
 
   it('should handle multiple listeners for same event', () => {
-    const callback1 = jest.fn();
-    const callback2 = jest.fn();
+    const callback1 = vi.fn();
+    const callback2 = vi.fn();
     
     eventBus.on('test-event', callback1);
     eventBus.on('test-event', callback2);
@@ -29,7 +29,7 @@ describe('useEventBus', () => {
   });
 
   it('should remove event listeners', () => {
-    const callback = jest.fn();
+    const callback = vi.fn();
     
     eventBus.on('test-event', callback);
     eventBus.off('test-event', callback);
@@ -45,7 +45,7 @@ describe('useEventBus', () => {
   });
 
   it('should handle off for non-existent event', () => {
-    const callback = jest.fn();
+    const callback = vi.fn();
     expect(() => {
       eventBus.off('non-existent-event', callback);
     }).not.toThrow();

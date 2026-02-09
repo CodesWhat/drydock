@@ -1,7 +1,7 @@
 import { getUser, loginBasic, logout, getStrategies } from '@/services/auth';
 
 // Mock fetch globally
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 describe('Auth Service', () => {
   beforeEach(() => {

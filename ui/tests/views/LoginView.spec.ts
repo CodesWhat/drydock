@@ -5,14 +5,14 @@ import LoginOidc from '@/components/LoginOidc.vue';
 import { getStrategies, getOidcRedirection } from '@/services/auth';
 
 // Mock services
-jest.mock('@/services/auth', () => ({
-  getStrategies: jest.fn(),
-  getOidcRedirection: jest.fn()
+vi.mock('@/services/auth', () => ({
+  getStrategies: vi.fn(),
+  getOidcRedirection: vi.fn()
 }));
 
 // Mock router
 const mockRouter = {
-  push: jest.fn()
+  push: vi.fn()
 };
 const mockRoute = {
     query: {}
@@ -22,8 +22,8 @@ describe('LoginView', () => {
   let wrapper;
 
   beforeEach(() => {
-    (getStrategies as jest.Mock).mockReset();
-    (getOidcRedirection as jest.Mock).mockReset();
+    (getStrategies as any).mockReset();
+    (getOidcRedirection as any).mockReset();
     mockRouter.push.mockReset();
   });
 
@@ -42,7 +42,7 @@ describe('LoginView', () => {
               },
               provide: {
                   eventBus: {
-                      emit: jest.fn()
+                      emit: vi.fn()
                   }
               }
           },
@@ -82,8 +82,8 @@ describe('LoginView', () => {
 
   describe('Route Hook (beforeRouteEnter)', () => {
       it('redirects to home if anonymous auth is enabled', async () => {
-          (getStrategies as jest.Mock).mockResolvedValue([{ type: 'anonymous' }]);
-          const next = jest.fn();
+          (getStrategies as any).mockResolvedValue([{ type: 'anonymous' }]);
+          const next = vi.fn();
           
           await LoginView.beforeRouteEnter.call(LoginView, {}, {}, next);
           
@@ -91,15 +91,15 @@ describe('LoginView', () => {
       });
 
       it('redirects to OIDC url if OIDC redirect is enabled', async () => {
-          (getStrategies as jest.Mock).mockResolvedValue([{ type: 'oidc', redirect: true, name: 'google' }]);
-          (getOidcRedirection as jest.Mock).mockResolvedValue({ url: 'http://google.com' });
+          (getStrategies as any).mockResolvedValue([{ type: 'oidc', redirect: true, name: 'google' }]);
+          (getOidcRedirection as any).mockResolvedValue({ url: 'http://google.com' });
           
           // Mock window.location
           const originalLocation = window.location;
           delete window.location;
           window.location = { href: '' };
           
-          const next = jest.fn();
+          const next = vi.fn();
           await LoginView.beforeRouteEnter.call(LoginView, {}, {}, next);
           
           expect(window.location.href).toBe('http://google.com');
@@ -109,12 +109,12 @@ describe('LoginView', () => {
       });
 
       it('filters supported strategies and populates vm', async () => {
-          (getStrategies as jest.Mock).mockResolvedValue([
+          (getStrategies as any).mockResolvedValue([
               { type: 'basic' },
               { type: 'oidc' },
               { type: 'unsupported' }
           ]);
-          const next = jest.fn();
+          const next = vi.fn();
           
           await LoginView.beforeRouteEnter.call(LoginView, {}, {}, next);
           

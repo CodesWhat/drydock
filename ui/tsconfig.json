@@ -16,7 +16,7 @@
     "baseUrl": ".",
     "types": [
       "webpack-env",
-      "jest",
+      "vitest/globals",
       "node"
     ],
     "paths": {

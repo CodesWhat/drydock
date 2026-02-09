@@ -2,7 +2,7 @@ import { getTriggerIcon, getAllTriggers } from '@/services/trigger';
 
 describe('Trigger Service', () => {
   beforeEach(() => {
-    global.fetch = jest.fn();
+    global.fetch = vi.fn();
   });
 
   it('should return trigger icon', () => {
@@ -12,7 +12,7 @@ describe('Trigger Service', () => {
   it('should get all triggers', async () => {
     const mockResponse = { triggers: [] };
     global.fetch.mockResolvedValue({
-      json: jest.fn().mockResolvedValue(mockResponse)
+      json: vi.fn().mockResolvedValue(mockResponse)
     });
 
     const result = await getAllTriggers();

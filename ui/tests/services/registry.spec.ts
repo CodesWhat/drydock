@@ -1,7 +1,7 @@
 import { getRegistryProviderIcon, getAllRegistries } from '@/services/registry';
 
 // Mock fetch globally
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 describe('Registry Service', () => {
   beforeEach(() => {

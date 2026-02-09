@@ -1,8 +1,8 @@
 import { mount } from '@vue/test-utils';
 import LoginOidc from '@/components/LoginOidc';
 
-jest.mock('@/services/auth', () => ({
-  getOidcRedirection: jest.fn(() => Promise.resolve({ url: 'http://test.com' }))
+vi.mock('@/services/auth', () => ({
+  getOidcRedirection: vi.fn(() => Promise.resolve({ url: 'http://test.com' }))
 }));
 
 describe('LoginOidc', () => {

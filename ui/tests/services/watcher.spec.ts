@@ -2,7 +2,7 @@ import { getWatcherIcon, getAllWatchers } from '@/services/watcher';
 
 describe('Watcher Service', () => {
   beforeEach(() => {
-    global.fetch = jest.fn();
+    global.fetch = vi.fn();
   });
 
   it('should return watcher icon', () => {
@@ -12,7 +12,7 @@ describe('Watcher Service', () => {
   it('should get all watchers', async () => {
     const mockResponse = { watchers: [] };
     global.fetch.mockResolvedValue({
-      json: jest.fn().mockResolvedValue(mockResponse)
+      json: vi.fn().mockResolvedValue(mockResponse)
     });
 
     const result = await getAllWatchers();

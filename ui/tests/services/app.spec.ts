@@ -4,17 +4,17 @@ import { getStoreIcon, getStore } from '@/services/store';
 
 describe('App Service', () => {
   beforeEach(() => {
-    global.fetch = jest.fn();
+    global.fetch = vi.fn();
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should get app infos', async () => {
     const mockResponse = { name: 'WUD', version: '1.0.0' };
     global.fetch.mockResolvedValue({
-      json: jest.fn().mockResolvedValue(mockResponse)
+      json: vi.fn().mockResolvedValue(mockResponse)
     });
 
     const result = await getAppInfos();
@@ -26,7 +26,7 @@ describe('App Service', () => {
 
 describe('Server Service', () => {
   beforeEach(() => {
-    global.fetch = jest.fn();
+    global.fetch = vi.fn();
   });
 
   it('should return server icon', () => {
@@ -36,7 +36,7 @@ describe('Server Service', () => {
   it('should get server data', async () => {
     const mockResponse = { configuration: {} };
     global.fetch.mockResolvedValue({
-      json: jest.fn().mockResolvedValue(mockResponse)
+      json: vi.fn().mockResolvedValue(mockResponse)
     });
 
     const result = await getServer();
@@ -48,7 +48,7 @@ describe('Server Service', () => {
 
 describe('Store Service', () => {
   beforeEach(() => {
-    global.fetch = jest.fn();
+    global.fetch = vi.fn();
   });
 
   it('should return store icon', () => {
@@ -58,7 +58,7 @@ describe('Store Service', () => {
   it('should get store data', async () => {
     const mockResponse = { data: 'store' };
     global.fetch.mockResolvedValue({
-      json: jest.fn().mockResolvedValue(mockResponse)
+      json: vi.fn().mockResolvedValue(mockResponse)
     });
 
     const result = await getStore();

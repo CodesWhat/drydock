@@ -2,8 +2,8 @@ import { mount } from '@vue/test-utils';
 import AppFooter from '@/components/AppFooter';
 
 // Mock the app service
-jest.mock('@/services/app', () => ({
-  getAppInfos: jest.fn(() => Promise.resolve({ version: '1.0.0' }))
+vi.mock('@/services/app', () => ({
+  getAppInfos: vi.fn(() => Promise.resolve({ version: '1.0.0' }))
 }));
 
 describe('AppFooter', () => {

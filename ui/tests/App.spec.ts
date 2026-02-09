@@ -1,10 +1,10 @@
 // Mock services
-jest.mock('@/services/server', () => ({
-  getServer: jest.fn(() => Promise.resolve({ configuration: {} }))
+vi.mock('@/services/server', () => ({
+  getServer: vi.fn(() => Promise.resolve({ configuration: {} }))
 }));
 
 // Mock fetch
-global.fetch = jest.fn();
+global.fetch = vi.fn();
 
 describe('App.vue', () => {
   it('should pass basic test', () => {

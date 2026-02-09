@@ -1,13 +1,14 @@
 import { mount } from '@vue/test-utils';
 import ContainersView from '@/views/ContainersView.vue';
+import { deleteContainer, getAllContainers } from '@/services/container';
 
 // Mock the container service
-jest.mock('@/services/container', () => ({
-  getAllContainers: jest.fn(),
-  deleteContainer: jest.fn()
+vi.mock('@/services/container', () => ({
+  getAllContainers: vi.fn(),
+  deleteContainer: vi.fn()
 }));
-jest.mock('@/services/agent', () => ({
-  getAgents: jest.fn(() => Promise.resolve([])),
+vi.mock('@/services/agent', () => ({
+  getAgents: vi.fn(() => Promise.resolve([])),
 }));
 
 const mockContainers = [
@@ -36,8 +37,7 @@ describe('ContainersView', () => {
   let wrapper;
 
   beforeEach(() => {
-    const { getAllContainers } = require('@/services/container');
-    getAllContainers.mockResolvedValue(mockContainers);
+    vi.mocked(getAllContainers).mockResolvedValue(mockContainers);
 
     wrapper = mount(ContainersView, {
       global: {
@@ -51,7 +51,9 @@ describe('ContainersView', () => {
   });
 
   afterEach(() => {
-    wrapper.unmount();
+    if (wrapper) {
+      wrapper.unmount();
+    }
   });
 
   it('renders container filter and container items', () => {
@@ -184,8 +186,7 @@ describe('ContainersView', () => {
   });
 
   it('deletes container successfully', async () => {
-    const { deleteContainer } = require('@/services/container');
-    deleteContainer.mockResolvedValue();
+    vi.mocked(deleteContainer).mockResolvedValue();
 
     const containerToDelete = mockContainers[0];
     await wrapper.vm.deleteContainer(containerToDelete);
@@ -195,8 +196,7 @@ describe('ContainersView', () => {
   });
 
   it('handles delete container error', async () => {
-    const { deleteContainer } = require('@/services/container');
-    deleteContainer.mockRejectedValue(new Error('Delete failed'));
+    vi.mocked(deleteContainer).mockRejectedValue(new Error('Delete failed'));
 
     const containerToDelete = mockContainers[0];
     await wrapper.vm.deleteContainer(containerToDelete);

@@ -2,24 +2,24 @@ import { mount } from '@vue/test-utils';
 import HomeView from '@/views/HomeView';
 
 // Mock services
-jest.mock('@/services/container', () => ({
-  getContainerIcon: jest.fn(() => 'mdi-docker'),
-  getAllContainers: jest.fn(() => Promise.resolve([
+vi.mock('@/services/container', () => ({
+  getContainerIcon: vi.fn(() => 'mdi-docker'),
+  getAllContainers: vi.fn(() => Promise.resolve([
     { id: 1, updateAvailable: true },
     { id: 2, updateAvailable: false }
   ]))
 }));
-jest.mock('@/services/registry', () => ({
-  getRegistryIcon: jest.fn(() => 'mdi-database'),
-  getAllRegistries: jest.fn(() => Promise.resolve([{}, {}, {}]))
+vi.mock('@/services/registry', () => ({
+  getRegistryIcon: vi.fn(() => 'mdi-database'),
+  getAllRegistries: vi.fn(() => Promise.resolve([{}, {}, {}]))
 }));
-jest.mock('@/services/trigger', () => ({
-  getTriggerIcon: jest.fn(() => 'mdi-bell'),
-  getAllTriggers: jest.fn(() => Promise.resolve([{}]))
+vi.mock('@/services/trigger', () => ({
+  getTriggerIcon: vi.fn(() => 'mdi-bell'),
+  getAllTriggers: vi.fn(() => Promise.resolve([{}]))
 }));
-jest.mock('@/services/watcher', () => ({
-  getWatcherIcon: jest.fn(() => 'mdi-eye'),
-  getAllWatchers: jest.fn(() => Promise.resolve([{}, {}]))
+vi.mock('@/services/watcher', () => ({
+  getWatcherIcon: vi.fn(() => 'mdi-eye'),
+  getAllWatchers: vi.fn(() => Promise.resolve([{}, {}]))
 }));
 
 describe('HomeView', () => {
@@ -97,7 +97,7 @@ describe('HomeView', () => {
 // Separate test block for the route hook logic if needed
 describe('HomeView Route Hook', () => {
     it('fetches data on beforeRouteEnter', async () => {
-        const next = jest.fn();
+        const next = vi.fn();
         const from = {};
         const to = {};
         

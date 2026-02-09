@@ -1,13 +1,13 @@
 import { mount } from '@vue/test-utils';
 import AppBar from '@/components/AppBar';
 
-jest.mock('vue-router', () => ({
-  useRoute: jest.fn(() => ({ name: 'home' })),
-  useRouter: jest.fn(() => ({ push: jest.fn() }))
+vi.mock('vue-router', () => ({
+  useRoute: vi.fn(() => ({ name: 'home' })),
+  useRouter: vi.fn(() => ({ push: vi.fn() }))
 }));
 
-jest.mock('@/services/auth', () => ({
-  logout: jest.fn(() => Promise.resolve({}))
+vi.mock('@/services/auth', () => ({
+  logout: vi.fn(() => Promise.resolve({}))
 }));
 
 const mockUser = {
@@ -26,7 +26,7 @@ describe('AppBar', () => {
         global: {
           provide: {
             eventBus: {
-              emit: jest.fn()
+              emit: vi.fn()
             }
           }
         }

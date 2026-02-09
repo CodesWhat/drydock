@@ -2,7 +2,7 @@ import { getLogIcon, getLog } from '@/services/log';
 
 describe('Log Service', () => {
   beforeEach(() => {
-    global.fetch = jest.fn();
+    global.fetch = vi.fn();
   });
 
   it('should return log icon', () => {
@@ -12,7 +12,7 @@ describe('Log Service', () => {
   it('should get log', async () => {
     const mockResponse = { logs: [] };
     global.fetch.mockResolvedValue({
-      json: jest.fn().mockResolvedValue(mockResponse)
+      json: vi.fn().mockResolvedValue(mockResponse)
     });
 
     const result = await getLog();
