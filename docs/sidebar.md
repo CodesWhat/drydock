@@ -2,6 +2,7 @@
 - [Quick start](quickstart/)
 - [Configuration](configuration/)
 - [Updates](updates/)
+- [Planning](planning/)
 - [Api](api/)
 - [Monitoring](monitoring/)
 - [FAQ](faq/)
