@@ -10,6 +10,42 @@ import { fullName } from '../../../model/container';
 class Docker extends Trigger {
     public strictAgentMatch = true;
 
+    sanitizeEndpointConfig(endpointConfig, currentContainerId) {
+        if (!endpointConfig) {
+            return {};
+        }
+
+        const sanitizedEndpointConfig: Record<string, any> = {};
+
+        if (endpointConfig.IPAMConfig) {
+            sanitizedEndpointConfig.IPAMConfig = endpointConfig.IPAMConfig;
+        }
+        if (endpointConfig.Links) {
+            sanitizedEndpointConfig.Links = endpointConfig.Links;
+        }
+        if (endpointConfig.DriverOpts) {
+            sanitizedEndpointConfig.DriverOpts = endpointConfig.DriverOpts;
+        }
+        if (endpointConfig.MacAddress) {
+            sanitizedEndpointConfig.MacAddress = endpointConfig.MacAddress;
+        }
+        if (endpointConfig.Aliases && endpointConfig.Aliases.length > 0) {
+            sanitizedEndpointConfig.Aliases = endpointConfig.Aliases.filter(
+                (alias) => !currentContainerId.startsWith(alias),
+            );
+        }
+
+        return sanitizedEndpointConfig;
+    }
+
+    getPrimaryNetworkName(containerToCreate, networkNames) {
+        const networkMode = containerToCreate?.HostConfig?.NetworkMode;
+        if (networkMode && networkNames.includes(networkMode)) {
+            return networkMode;
+        }
+        return networkNames[0];
+    }
+
     /**
      * Get the Trigger configuration schema.
      * @returns {*}
@@ -267,8 +303,51 @@ class Docker extends Trigger {
     ) {
         logContainer.info(`Create container ${containerName}`);
         try {
+            let containerToCreatePayload = containerToCreate;
+            const endpointsConfig =
+                containerToCreate.NetworkingConfig?.EndpointsConfig || {};
+            const endpointNetworkNames = Object.keys(endpointsConfig);
+            const additionalNetworkNames = [];
+
+            if (endpointNetworkNames.length > 1) {
+                const primaryNetworkName = this.getPrimaryNetworkName(
+                    containerToCreate,
+                    endpointNetworkNames,
+                );
+
+                containerToCreatePayload = {
+                    ...containerToCreate,
+                    NetworkingConfig: {
+                        EndpointsConfig: {
+                            [primaryNetworkName]:
+                                endpointsConfig[primaryNetworkName],
+                        },
+                    },
+                };
+                additionalNetworkNames.push(
+                    ...endpointNetworkNames.filter(
+                        (networkName) => networkName !== primaryNetworkName,
+                    ),
+                );
+            }
+
             const newContainer =
-                await dockerApi.createContainer(containerToCreate);
+                await dockerApi.createContainer(containerToCreatePayload);
+
+            for (const networkName of additionalNetworkNames) {
+                logContainer.info(
+                    `Connect container ${containerName} to network ${networkName}`,
+                );
+                const network = dockerApi.getNetwork(networkName);
+                await network.connect({
+                    Container: containerName,
+                    EndpointConfig: endpointsConfig[networkName],
+                });
+                logContainer.info(
+                    `Container ${containerName} connected to network ${networkName} with success`,
+                );
+            }
+
             logContainer.info(
                 `Container ${containerName} recreated on new image with success`,
             );
@@ -328,30 +407,28 @@ class Docker extends Trigger {
      */
     cloneContainer(currentContainer, newImage) {
         const containerName = currentContainer.Name.replace('/', '');
+        const currentContainerNetworks =
+            currentContainer.NetworkSettings?.Networks || {};
+        const endpointsConfig = Object.entries(currentContainerNetworks).reduce(
+            (acc: Record<string, any>, [networkName, endpointConfig]) => {
+                acc[networkName] = this.sanitizeEndpointConfig(
+                    endpointConfig,
+                    currentContainer.Id,
+                );
+                return acc;
+            },
+            {},
+        );
+
         const containerClone = {
             ...currentContainer.Config,
             name: containerName,
             Image: newImage,
             HostConfig: currentContainer.HostConfig,
             NetworkingConfig: {
-                EndpointsConfig: currentContainer.NetworkSettings.Networks,
+                EndpointsConfig: endpointsConfig,
             },
         };
-
-        if (containerClone.NetworkingConfig.EndpointsConfig) {
-            Object.values(
-                containerClone.NetworkingConfig.EndpointsConfig,
-            ).forEach((endpointConfig) => {
-                if (
-                    endpointConfig.Aliases &&
-                    endpointConfig.Aliases.length > 0
-                ) {
-                    endpointConfig.Aliases = endpointConfig.Aliases.filter(
-                        (alias) => !currentContainer.Id.startsWith(alias),
-                    );
-                }
-            });
-        }
         // Handle situation when container is using network_mode: service:other_service
         if (
             containerClone.HostConfig &&

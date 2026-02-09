@@ -311,6 +311,62 @@ test('createContainer should throw error when error occurs', async () => {
     ).rejects.toThrowError('Error when creating container');
 });
 
+test('createContainer should connect additional networks after create', async () => {
+    const connect = jest.fn().mockResolvedValue(undefined);
+    const getNetwork = jest.fn().mockReturnValue({ connect });
+    const createContainer = jest.fn().mockResolvedValue({
+        start: () => Promise.resolve(),
+    });
+    const logContainer = {
+        info: jest.fn(),
+        warn: jest.fn(),
+    };
+
+    const containerToCreate = {
+        name: 'container-name',
+        HostConfig: {
+            NetworkMode: 'cloud_default',
+        },
+        NetworkingConfig: {
+            EndpointsConfig: {
+                cloud_default: { Aliases: ['container-name'] },
+                postgres_default: { Aliases: ['container-name'] },
+                valkey_default: { Aliases: ['container-name'] },
+            },
+        },
+    };
+
+    await docker.createContainer(
+        {
+            createContainer,
+            getNetwork,
+        },
+        containerToCreate,
+        'container-name',
+        logContainer,
+    );
+
+    expect(createContainer).toHaveBeenCalledWith({
+        name: 'container-name',
+        HostConfig: {
+            NetworkMode: 'cloud_default',
+        },
+        NetworkingConfig: {
+            EndpointsConfig: {
+                cloud_default: { Aliases: ['container-name'] },
+            },
+        },
+    });
+    expect(getNetwork).toHaveBeenCalledTimes(2);
+    expect(getNetwork).toHaveBeenCalledWith('postgres_default');
+    expect(getNetwork).toHaveBeenCalledWith('valkey_default');
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(connect).toHaveBeenCalledWith({
+        Container: 'container-name',
+        EndpointConfig: { Aliases: ['container-name'] },
+    });
+});
+
 test('pull should pull image from dockerApi', async () => {
     await expect(
         docker.pullImage(
@@ -390,6 +446,45 @@ test('clone should clone an existing container spec', async () => {
                 test: {
                     Aliases: ['9708fc7b44f2', 'test'],
                 },
+            },
+        },
+    });
+});
+
+test('clone should remove dynamic network endpoint fields and stale aliases', async () => {
+    const clone = docker.cloneContainer(
+        {
+            Name: '/test',
+            Id: '123456789abcdef',
+            HostConfig: {
+                NetworkMode: 'cloud_default',
+            },
+            Config: {
+                configA: 'a',
+            },
+            NetworkSettings: {
+                Networks: {
+                    cloud_default: {
+                        Aliases: ['123456789abc', 'nextcloud'],
+                        NetworkID: 'network-id',
+                        EndpointID: 'endpoint-id',
+                        Gateway: '172.18.0.1',
+                        IPAddress: '172.18.0.2',
+                        DriverOpts: {
+                            test: 'value',
+                        },
+                    },
+                },
+            },
+        },
+        'test/test:2.0.0',
+    );
+
+    expect(clone.NetworkingConfig.EndpointsConfig).toEqual({
+        cloud_default: {
+            Aliases: ['nextcloud'],
+            DriverOpts: {
+                test: 'value',
             },
         },
     });
