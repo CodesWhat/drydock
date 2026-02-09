@@ -5,6 +5,8 @@
         <container-filter
           :registries="registries"
           :registry-selected-init="registrySelected"
+          :agents="agents"
+          :agent-selected-init="agentSelected"
           :watchers="watchers"
           :watcher-selected-init="watcherSelected"
           :update-kinds="updateKinds"
@@ -14,6 +16,7 @@
           :groupByLabel="groupByLabel"
           :groupLabels="allContainerLabels"
           @registry-changed="onRegistryChanged"
+          @agent-changed="onAgentChanged"
           @watcher-changed="onWatcherChanged"
           @update-available-changed="onUpdateAvailableChanged"
           @oldest-first-changed="onOldestFirstChanged"
@@ -23,21 +26,24 @@
         />
       </v-col>
     </v-row>
-<v-row
-        v-for="(container, index) in containersFiltered"
-        :key="container.id"
-      >
-        <v-col class="pt-2 pb-2">
-          <container-item
-            :groupingLabel="groupByLabel"
-            :previousContainer="containersFiltered[index - 1]"
-            :container="container"
-            :oldest-first="oldestFirst"
-            @delete-container="deleteContainer(container)"
-            @container-deleted="removeContainerFromList(container)"
-          />
-        </v-col>
-      </v-row>
+    <v-row
+      v-for="(container, index) in containersFiltered"
+      :key="container.id"
+    >
+      <v-col class="pt-2 pb-2">
+        <container-item
+          :groupingLabel="groupByLabel"
+          :previousContainer="containersFiltered[index - 1]"
+          :container="container"
+          :agents="agentsList"
+          :oldest-first="oldestFirst"
+          @delete-container="deleteContainer(container)"
+          @container-refreshed="onContainerRefreshed"
+          @container-missing="removeContainerFromListById"
+          @container-deleted="removeContainerFromList(container)"
+        />
+      </v-col>
+    </v-row>
     <v-row v-if="containersFiltered.length === 0">
       <v-card-subtitle class="text-h6">No containers found</v-card-subtitle>
     </v-row>

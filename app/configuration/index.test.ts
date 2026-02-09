@@ -73,6 +73,17 @@ test('getRegistryConfigurations should return configured registries when overrid
     });
 });
 
+test('getAgentConfigurations should return configured agents when overridden', async () => {
+    configuration.wudEnvVars.WUD_AGENT_NODE1_HOST = '10.0.0.1';
+    configuration.wudEnvVars.WUD_AGENT_NODE1_SECRET = 'secret1';
+    configuration.wudEnvVars.WUD_AGENT_NODE2_HOST = '10.0.0.2';
+    configuration.wudEnvVars.WUD_AGENT_NODE2_SECRET = 'secret2';
+    expect(configuration.getAgentConfigurations()).toStrictEqual({
+        node1: { host: '10.0.0.1', secret: 'secret1' },
+        node2: { host: '10.0.0.2', secret: 'secret2' },
+    });
+});
+
 test('getStoreConfiguration should return configured store', async () => {
     configuration.wudEnvVars.WUD_STORE_X = 'x';
     configuration.wudEnvVars.WUD_STORE_Y = 'y';

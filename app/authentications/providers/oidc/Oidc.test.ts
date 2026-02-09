@@ -23,6 +23,11 @@ oidc.client = client;
 
 beforeEach(async () => {
     jest.resetAllMocks();
+    oidc.name = '';
+    oidc.log = {
+        debug: jest.fn(),
+        warn: jest.fn(),
+    };
 });
 
 test('validateConfiguration should return validated configuration when valid', async () => {
@@ -99,4 +104,58 @@ test('getUserFromAccessToken should return unknown for missing email', async () 
 
     const user = await oidc.getUserFromAccessToken('token');
     expect(user).toEqual({ username: 'unknown' });
+});
+
+test('redirect should persist oidc checks in session before responding', async () => {
+    oidc.client.authorizationUrl = jest.fn().mockReturnValue('https://idp/auth');
+
+    const save = jest.fn((cb) => cb());
+    const req = {
+        protocol: 'https',
+        hostname: 'wud.example.com',
+        session: {
+            save,
+        },
+    };
+    const res = {
+        json: jest.fn(),
+        status: jest.fn().mockReturnThis(),
+        send: jest.fn(),
+    };
+
+    await oidc.redirect(req, res);
+
+    expect(req.session.oidc.default).toBeDefined();
+    expect(req.session.oidc.default.codeVerifier).toBeDefined();
+    expect(req.session.oidc.default.state).toBeDefined();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+    expect(res.status).not.toHaveBeenCalled();
+});
+
+test('callback should return explicit error when oidc checks are missing', async () => {
+    oidc.client.callbackParams = jest.fn().mockReturnValue({
+        code: 'code',
+        state: 'state',
+    });
+    oidc.client.callback = jest.fn();
+
+    const req = {
+        protocol: 'https',
+        hostname: 'wud.example.com',
+        session: {},
+        login: jest.fn(),
+    };
+    const res = {
+        status: jest.fn().mockReturnThis(),
+        send: jest.fn(),
+    };
+
+    await oidc.callback(req, res);
+
+    expect(oidc.client.callback).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.send).toHaveBeenCalledWith(
+        'OIDC session is missing or expired. Please retry authentication.',
+    );
 });

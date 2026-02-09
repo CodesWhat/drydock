@@ -11,6 +11,14 @@ export default defineComponent({
       type: String,
       required: true,
     },
+    agents: {
+      type: Array,
+      required: true,
+    },
+    agentSelectedInit: {
+      type: String,
+      required: true,
+    },
     watchers: {
       type: Array,
       required: true,
@@ -49,6 +57,7 @@ export default defineComponent({
     return {
       isRefreshing: false,
       registrySelected: "",
+      agentSelected: "",
       watcherSelected: "",
       updateKindSelected: "",
       updateAvailableLocal: this.updateAvailable,
@@ -63,6 +72,9 @@ export default defineComponent({
     },
     emitWatcherChanged() {
       this.$emit("watcher-changed", this.watcherSelected ?? "");
+    },
+    emitAgentChanged() {
+      this.$emit("agent-changed", this.agentSelected ?? "");
     },
     emitUpdateKindChanged() {
       this.$emit("update-kind-changed", this.updateKindSelected ?? "");
@@ -96,6 +108,7 @@ export default defineComponent({
 
   async beforeUpdate() {
     this.registrySelected = this.registrySelectedInit;
+    this.agentSelected = this.agentSelectedInit;
     this.watcherSelected = this.watcherSelectedInit;
     this.updateKindSelected = this.updateKindSelectedInit;
     this.updateAvailableLocal = this.updateAvailable;

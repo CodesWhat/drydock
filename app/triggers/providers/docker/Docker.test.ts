@@ -10,6 +10,7 @@ const configurationValid = {
     mode: 'simple',
     once: true,
     auto: true,
+    order: 100,
     autoremovetimeout: 10000,
     simpletitle:
         'New ${container.updateKind.kind} found for container ${container.name}',

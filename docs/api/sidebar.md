@@ -2,6 +2,7 @@
 - [Quick start](quickstart/)
 - [Configuration](configuration/)
 - [Api](api/)
+    - [Agent](api/agent)
     - [Application](api/app)
     - [Container](api/container)
     - [Log](api/log)

@@ -19,6 +19,7 @@ const configurationValid = {
     once: true,
     mode: 'simple',
     auto: true,
+    order: 100,
     simpletitle:
         'New ${container.updateKind.kind} found for container ${container.name}',
 
@@ -76,6 +77,30 @@ test('init should register to container reports when batch mode enabled', async 
     trigger.configuration.mode = 'batch';
     await trigger.init();
     expect(spy).toHaveBeenCalled();
+});
+
+test('init should register handlers with trigger id and order', async () => {
+    const spy = jest.spyOn(event, 'registerContainerReport');
+    trigger.type = 'docker';
+    trigger.name = 'update';
+    trigger.configuration.order = 42;
+    await trigger.init();
+    expect(spy).toHaveBeenCalledWith(expect.any(Function), {
+        id: 'docker.update',
+        order: 42,
+    });
+});
+
+test('deregister should unregister container report handler', async () => {
+    const unregisterHandler = jest.fn();
+    jest.spyOn(event, 'registerContainerReport').mockReturnValue(
+        unregisterHandler,
+    );
+
+    await trigger.init();
+    await trigger.deregister();
+
+    expect(unregisterHandler).toHaveBeenCalled();
 });
 
 const handleContainerReportTestCases = [
@@ -440,6 +465,44 @@ test('parseIncludeOrIncludeTriggerString should parse digest thresholds', async 
         id: 'docker.local',
         threshold: 'patch-no-digest',
     });
+});
+
+test('doesReferenceMatchId should match full trigger id and trigger name', async () => {
+    expect(Trigger.doesReferenceMatchId('docker.update', 'docker.update')).toBe(
+        true,
+    );
+    expect(Trigger.doesReferenceMatchId('update', 'docker.update')).toBe(true);
+    expect(Trigger.doesReferenceMatchId('notify', 'docker.update')).toBe(false);
+});
+
+test('mustTrigger should accept trigger name-only include filters', async () => {
+    trigger.type = 'docker';
+    trigger.name = 'update';
+
+    expect(
+        trigger.mustTrigger({
+            triggerInclude: 'update:minor',
+            updateKind: {
+                kind: 'tag',
+                semverDiff: 'minor',
+            },
+        }),
+    ).toBe(true);
+});
+
+test('mustTrigger should accept trigger name-only exclude filters', async () => {
+    trigger.type = 'docker';
+    trigger.name = 'update';
+
+    expect(
+        trigger.mustTrigger({
+            triggerExclude: 'update',
+            updateKind: {
+                kind: 'tag',
+                semverDiff: 'patch',
+            },
+        }),
+    ).toBe(false);
 });
 
 test('renderSimpleTitle should replace placeholders when called', async () => {

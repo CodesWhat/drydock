@@ -8,8 +8,11 @@
     color="primary"
     theme="dark"
   >
+    <div class="drawer-brand">
+      <img :src="logo" alt="WUD logo" class="drawer-logo" />
+    </div>
     <v-toolbar flat class="ma-0 pa-0" color="primary">
-      <v-app-bar-nav-icon @click.stop="mini = !mini">
+      <v-app-bar-nav-icon class="drawer-toggle" @click.stop="mini = !mini">
         <v-icon v-if="!mini">mdi-close</v-icon>
         <v-icon v-else>mdi-menu</v-icon>
       </v-app-bar-nav-icon>
@@ -85,3 +88,19 @@
   </v-navigation-drawer>
 </template>
 <script lang="ts" src="./NavigationDrawer.ts"></script>
+<style scoped>
+.drawer-brand {
+  display: flex;
+  justify-content: center;
+  padding-top: 10px;
+}
+
+.drawer-logo {
+  height: 30px;
+  width: auto;
+}
+
+.drawer-toggle {
+  margin-inline: auto;
+}
+</style>

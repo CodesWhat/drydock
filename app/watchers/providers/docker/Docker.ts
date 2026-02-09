@@ -61,6 +61,7 @@ const START_WATCHER_DELAY_MS = 1000;
 
 // Debounce delay used when performing a watch after a docker event has been received
 const DEBOUNCED_WATCH_CRON_MS = 5000;
+const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
 
 /**
  * Return all supported registries
@@ -803,12 +804,27 @@ class Docker extends Watcher {
             listContainersOptions,
         );
 
+        const swarmServiceLabelsCache = new Map<
+            string,
+            Promise<Record<string, string>>
+        >();
+        const containersWithResolvedLabels = await Promise.all(
+            containers.map(async (container: any) => ({
+                ...container,
+                Labels: await this.getEffectiveContainerLabels(
+                    container,
+                    swarmServiceLabelsCache,
+                ),
+            })),
+        );
+
         // Filter on containers to watch
-        const filteredContainers = containers.filter((container: any) =>
-            isContainerToWatch(
-                container.Labels[wudWatch],
-                this.configuration.watchbydefault,
-            ),
+        const filteredContainers = containersWithResolvedLabels.filter(
+            (container: any) =>
+                isContainerToWatch(
+                    container.Labels[wudWatch],
+                    this.configuration.watchbydefault,
+                ),
         );
         const containerPromises = filteredContainers.map((container: any) =>
             this.addImageDetailsToContainer(
@@ -859,6 +875,59 @@ class Docker extends Watcher {
         );
 
         return containersToReturn;
+    }
+
+    async getSwarmServiceLabels(
+        serviceId: string,
+        containerId: string,
+    ): Promise<Record<string, string>> {
+        if (typeof this.dockerApi.getService !== 'function') {
+            return {};
+        }
+
+        try {
+            const swarmService = await this.dockerApi
+                .getService(serviceId)
+                .inspect();
+            const serviceLabels = swarmService?.Spec?.Labels || {};
+            const taskContainerLabels =
+                swarmService?.Spec?.TaskTemplate?.ContainerSpec?.Labels || {};
+            return {
+                ...serviceLabels,
+                ...taskContainerLabels,
+            };
+        } catch (e: any) {
+            this.log.debug(
+                `Unable to inspect swarm service ${serviceId} for container ${containerId} (${e.message})`,
+            );
+            return {};
+        }
+    }
+
+    async getEffectiveContainerLabels(
+        container: any,
+        serviceLabelsCache: Map<string, Promise<Record<string, string>>>,
+    ): Promise<Record<string, string>> {
+        const containerLabels = container.Labels || {};
+        const serviceId = containerLabels[SWARM_SERVICE_ID_LABEL];
+
+        if (!serviceId) {
+            return containerLabels;
+        }
+
+        if (!serviceLabelsCache.has(serviceId)) {
+            serviceLabelsCache.set(
+                serviceId,
+                this.getSwarmServiceLabels(serviceId, container.Id),
+            );
+        }
+        const swarmServiceLabels = await serviceLabelsCache.get(serviceId);
+
+        // Keep container labels as highest-priority override.
+        return {
+            ...(swarmServiceLabels || {}),
+            ...containerLabels,
+        };
     }
 
     /**

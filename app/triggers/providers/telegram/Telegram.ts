@@ -1,5 +1,5 @@
 // @ts-nocheck
-import TelegramBot from 'node-telegram-bot-api';
+import axios from 'axios';
 import Trigger from '../Trigger';
 
 /**
@@ -15,6 +15,8 @@ function escapeMarkdown(text) {
  * Telegram Trigger implementation
  */
 class Telegram extends Trigger {
+    private apiUrl: string;
+
     /**
      * Get the Trigger configuration schema.
      * @returns {*}
@@ -45,11 +47,11 @@ class Telegram extends Trigger {
     }
 
     /**
-     * Init trigger (create telegram client).
+     * Init trigger (prepare telegram endpoint).
      * @returns {Promise<void>}
      */
     async initTrigger() {
-        this.telegramBot = new TelegramBot(this.configuration.bottoken);
+        this.apiUrl = `https://api.telegram.org/bot${this.configuration.bottoken}`;
     }
 
     /*
@@ -82,19 +84,18 @@ class Telegram extends Trigger {
     }
 
     /**
-     * Post a message to a Slack channel.
+     * Post a message to a Telegram chat.
      * @param text the text to post
      * @returns {Promise<>}
      */
     async sendMessage(text) {
-        const txtToSend = text;
-        return this.telegramBot.sendMessage(
-            this.configuration.chatid,
-            txtToSend,
-            {
-                parse_mode: this.getParseMode(),
-            },
-        );
+        const response = await axios.post(`${this.apiUrl}/sendMessage`, {
+            chat_id: this.configuration.chatid,
+            text,
+            parse_mode: this.getParseMode(),
+        });
+
+        return response.data;
     }
 
     bold(text) {

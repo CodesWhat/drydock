@@ -7,11 +7,10 @@ import { getServerConfiguration } from '../configuration';
 import { mapComponentsToList } from './component';
 import Trigger from '../triggers/providers/Trigger';
 import logger from '../log';
+import { getAgent } from '../agent/manager';
 const log = logger.child({ component: 'container' });
 
 const router = express.Router();
-
-const serverConfiguration = getServerConfiguration();
 
 /**
  * Return registered watchers.
@@ -68,15 +67,40 @@ function getContainer(req, res) {
  * @param req
  * @param res
  */
-function deleteContainer(req, res) {
+export async function deleteContainer(req, res) {
+    const serverConfiguration = getServerConfiguration();
     if (!serverConfiguration.feature.delete) {
         res.sendStatus(403);
     } else {
         const { id } = req.params;
         const container = storeContainer.getContainer(id);
         if (container) {
-            storeContainer.deleteContainer(id);
-            res.sendStatus(204);
+            if (container.agent) {
+                const agent = getAgent(container.agent);
+                if (agent) {
+                    try {
+                        await agent.deleteContainer(id);
+                        storeContainer.deleteContainer(id);
+                        res.sendStatus(204);
+                    } catch (e) {
+                        if (e.response && e.response.status === 404) {
+                            storeContainer.deleteContainer(id);
+                            res.sendStatus(204);
+                        } else {
+                            res.status(500).json({
+                                error: `Error deleting container on agent (${e.message})`,
+                            });
+                        }
+                    }
+                } else {
+                    res.status(500).json({
+                        error: `Agent ${container.agent} not found`,
+                    });
+                }
+            } else {
+                storeContainer.deleteContainer(id);
+                res.sendStatus(204);
+            }
         } else {
             res.sendStatus(404);
         }
@@ -102,7 +126,7 @@ async function watchContainers(req, res) {
     }
 }
 
-async function getContainerTriggers(req, res) {
+export async function getContainerTriggers(req, res) {
     const { id } = req.params;
 
     const container = storeContainer.getContainer(id);
@@ -128,11 +152,26 @@ async function getContainerTriggers(req, res) {
             : undefined;
         const associatedTriggers = [];
         allTriggers.forEach((trigger) => {
+            if (trigger.agent && trigger.agent !== container.agent) {
+                // Remote triggers can only act on remote containers defined in the same Agent
+                return;
+            }
+            if (
+                container.agent &&
+                !trigger.agent &&
+                ['docker', 'dockercompose'].includes(trigger.type)
+            ) {
+                // Local action triggers cannot run against remote containers.
+                return;
+            }
             const triggerToAssociate = { ...trigger };
+            // Use 'local' trigger id syntax - which is the syntax that will be used in remote Agents
+            // This causes overlap between remote and local agents - a known issue that users must be aware of
+            const triggerId = `${trigger.type}.${trigger.name}`;
             let associated = true;
             if (includedTriggers) {
                 const includedTrigger = includedTriggers.find(
-                    (tr) => tr.id === trigger.id,
+                    (tr) => Trigger.doesReferenceMatchId(tr.id, triggerId),
                 );
                 if (includedTrigger) {
                     triggerToAssociate.configuration.threshold =
@@ -143,9 +182,12 @@ async function getContainerTriggers(req, res) {
             }
             if (
                 excludedTriggers &&
-                excludedTriggers
-                    .map((excludedTrigger) => excludedTrigger.id)
-                    .includes(trigger.id)
+                excludedTriggers.find((excludedTrigger) =>
+                    Trigger.doesReferenceMatchId(
+                        excludedTrigger.id,
+                        triggerId,
+                    ),
+                )
             ) {
                 associated = false;
             }
@@ -165,11 +207,24 @@ async function getContainerTriggers(req, res) {
  * @param {*} res
  */
 async function runTrigger(req, res) {
-    const { id, triggerType, triggerName } = req.params;
+    const { id, triggerAgent, triggerType, triggerName } = req.params;
 
     const containerToTrigger = storeContainer.getContainer(id);
+    const triggerId = triggerAgent
+        ? `${triggerAgent}.${triggerType}.${triggerName}`
+        : `${triggerType}.${triggerName}`;
     if (containerToTrigger) {
-        const triggerToRun = getTriggers()[`${triggerType}.${triggerName}`];
+        if (
+            containerToTrigger.agent &&
+            !triggerAgent &&
+            ['docker', 'dockercompose'].includes(triggerType)
+        ) {
+            res.status(400).json({
+                error: `Cannot execute local ${triggerType} trigger on remote container ${containerToTrigger.agent}.${containerToTrigger.id}`,
+            });
+            return;
+        }
+        const triggerToRun = getTriggers()[triggerId];
         if (triggerToRun) {
             try {
                 await triggerToRun.trigger(containerToTrigger);
@@ -208,22 +263,33 @@ async function watchContainer(req, res) {
 
     const container = storeContainer.getContainer(id);
     if (container) {
-        const watcher = getWatchers()[`docker.${container.watcher}`];
+        let watcherId = `docker.${container.watcher}`;
+        if (container.agent) {
+            watcherId = `${container.agent}.${watcherId}`;
+        }
+        const watcher = getWatchers()[watcherId];
         if (!watcher) {
             res.status(500).json({
-                error: `No provider found for container ${id} and provider ${container.watcher}`,
+                error: `No provider found for container ${id} and provider ${watcherId}`,
             });
         } else {
             try {
-                // Ensure container is still in store
-                // (for cases where it has been removed before running an new watchAll)
-                const containers = await watcher.getContainers();
-                const containerFound = containers.find(
-                    (containerInList) => containerInList.id === container.id,
-                );
+                if (typeof watcher.getContainers === 'function') {
+                    // Ensure container is still in store
+                    // (for cases where it has been removed before running an new watchAll)
+                    const containers = await watcher.getContainers();
+                    const containerFound = containers.find(
+                        (containerInList) => containerInList.id === container.id,
+                    );
 
-                if (!containerFound) {
-                    res.status(404).send();
+                    if (!containerFound) {
+                        res.status(404).send();
+                    } else {
+                        // Run watchContainer from the Provider
+                        const containerReport =
+                            await watcher.watchContainer(container);
+                        res.status(200).json(containerReport.container);
+                    }
                 } else {
                     // Run watchContainer from the Provider
                     const containerReport =
@@ -253,6 +319,10 @@ export function init() {
     router.delete('/:id', deleteContainer);
     router.get('/:id/triggers', getContainerTriggers);
     router.post('/:id/triggers/:triggerType/:triggerName', runTrigger);
+    router.post(
+        '/:id/triggers/:triggerAgent/:triggerType/:triggerName',
+        runTrigger,
+    );
     router.post('/:id/watch', watchContainer);
     return router;
 }

@@ -43,6 +43,11 @@ const routes = [
     name: "watchers",
     component: () => import("../views/ConfigurationWatchersView.vue"),
   },
+  {
+    path: "/configuration/agents",
+    name: "agents",
+    component: () => import("../views/ConfigurationAgentsView.vue"),
+  },
 ];
 
 const router = createRouter({

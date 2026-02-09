@@ -3,7 +3,6 @@ import fs from 'fs';
 import https from 'https';
 import express from 'express';
 import cors from 'cors';
-import bodyParser from 'body-parser';
 import logger from '../log';
 const log = logger.child({ component: 'api' });
 import * as auth from './auth';
@@ -53,7 +52,7 @@ export async function init() {
         auth.init(app);
 
         // Parse json payloads
-        app.use(bodyParser.json());
+        app.use(express.json());
 
         // Mount Healthcheck
         app.use('/health', healthRouter.init());

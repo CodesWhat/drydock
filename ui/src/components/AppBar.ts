@@ -1,7 +1,6 @@
 import { computed, inject, defineComponent } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { logout } from "@/services/auth";
-import logo from "@/assets/whale-logo.png";
 
 export default defineComponent({
   props: {
@@ -39,7 +38,6 @@ export default defineComponent({
     };
 
     return {
-      logo,
       viewName,
       logout: performLogout,
     };

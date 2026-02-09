@@ -189,8 +189,8 @@ To fine-tune the behaviour of WUD _per container_, you can add labels on them.
 | `wud.tag.exclude`     | :white_circle: | Regex to exclude specific tags                     | Valid JavaScript Regex                                                                                                                                                      |                                                                                       |
 | `wud.tag.include`     | :white_circle: | Regex to include specific tags only                | Valid JavaScript Regex                                                                                                                                                      |                                                                                       |
 | `wud.tag.transform`   | :white_circle: | Transform function to apply to the tag             | `$valid_regex => $valid_string_with_placeholders` (see below)                                                                                                               |                                                                                       |
-| `wud.trigger.exclude` | :white_circle: | Optional list of triggers to exclude               | `$trigger_1_id,$trigger_2_id:$threshold`                                                                                                                                    |                                                                                       |
-| `wud.trigger.include` | :white_circle: | Optional list of triggers to include               | `$trigger_1_id,$trigger_2_id:$threshold`                                                                                                                                    |                                                                                       |
+| `wud.trigger.exclude` | :white_circle: | Optional list of triggers to exclude               | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold`                                                                                                                    |                                                                                       |
+| `wud.trigger.include` | :white_circle: | Optional list of triggers to include               | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold`                                                                                                                    |                                                                                       |
 | `wud.watch.digest`    | :white_circle: | Watch this container digest                        | Valid Boolean                                                                                                                                                               | `false`                                                                               |
 | `wud.watch`           | :white_circle: | Watch this container                               | Valid Boolean                                                                                                                                                               | `true` when `WUD_WATCHER_{watcher_name}_WATCHBYDEFAULT` is `true` (`false` otherwise) |
 
@@ -482,6 +482,7 @@ docker run -d --name my_important_service --label 'wud.trigger.include=smtp.gmai
 <!-- tabs:end -->
 
 ?> `wud.trigger.include=smtp.gmail` is a shorthand for `wud.trigger.include=smtp.gmail:all`
+?> `wud.trigger.include=update` (or `wud.trigger.exclude=update`) targets all triggers named `update`, for example `docker.update` and `discord.update`
 
 ?> Threshold `all` means that the trigger will run regardless of the nature of the change
 

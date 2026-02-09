@@ -4,6 +4,8 @@ import ContainerFilter from '@/components/ContainerFilter';
 const mockProps = {
   registries: ['hub', 'ghcr'],
   registrySelectedInit: '',
+  agents: ['node1', 'node2'],
+  agentSelectedInit: '',
   watchers: ['local', 'docker'],
   watcherSelectedInit: '',
   updateKinds: ['major', 'minor', 'patch'],
@@ -50,6 +52,14 @@ describe('ContainerFilter', () => {
     
     expect(wrapper.emitted('watcher-changed')).toBeTruthy();
     expect(wrapper.emitted('watcher-changed')[0]).toEqual(['docker']);
+  });
+
+  it('emits agent-changed event when agent selection changes', async () => {
+    wrapper.vm.agentSelected = 'node1';
+    await wrapper.vm.emitAgentChanged();
+
+    expect(wrapper.emitted('agent-changed')).toBeTruthy();
+    expect(wrapper.emitted('agent-changed')[0]).toEqual(['node1']);
   });
 
   it('emits update-kind-changed event when update kind selection changes', async () => {
@@ -101,6 +111,7 @@ describe('ContainerFilter', () => {
   it('updates local state when props change', async () => {
     await wrapper.setProps({
       registrySelectedInit: 'ghcr',
+      agentSelectedInit: 'node2',
       watcherSelectedInit: 'docker',
       updateAvailable: true,
       oldestFirst: true,
@@ -110,6 +121,7 @@ describe('ContainerFilter', () => {
     await wrapper.vm.$nextTick();
     
     expect(wrapper.vm.registrySelected).toBe('ghcr');
+    expect(wrapper.vm.agentSelected).toBe('node2');
     expect(wrapper.vm.watcherSelected).toBe('docker');
     expect(wrapper.vm.updateAvailableLocal).toBe(true);
     expect(wrapper.vm.oldestFirstLocal).toBe(true);

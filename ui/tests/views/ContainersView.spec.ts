@@ -6,11 +6,15 @@ jest.mock('@/services/container', () => ({
   getAllContainers: jest.fn(),
   deleteContainer: jest.fn()
 }));
+jest.mock('@/services/agent', () => ({
+  getAgents: jest.fn(() => Promise.resolve([])),
+}));
 
 const mockContainers = [
   {
     id: '1',
     displayName: 'Container 1',
+    agent: 'node1',
     watcher: 'local',
     image: { registry: { name: 'hub' }, created: '2023-01-01T00:00:00Z' },
     updateAvailable: true,
@@ -20,6 +24,7 @@ const mockContainers = [
   {
     id: '2',
     displayName: 'Container 2',
+    agent: 'node2',
     watcher: 'docker',
     image: { registry: { name: 'ghcr' }, created: '2023-01-02T00:00:00Z' },
     updateAvailable: false,
@@ -62,6 +67,10 @@ describe('ContainersView', () => {
     expect(wrapper.vm.watchers).toEqual(['docker', 'local']);
   });
 
+  it('computes agents correctly', () => {
+    expect(wrapper.vm.agents).toEqual(['node1', 'node2']);
+  });
+
   it('computes update kinds correctly', () => {
     expect(Array.isArray(wrapper.vm.updateKinds)).toBe(true);
   });
@@ -88,6 +97,15 @@ describe('ContainersView', () => {
     const filtered = wrapper.vm.containersFiltered;
     expect(filtered).toHaveLength(1);
     expect(filtered[0].id).toBe('2');
+  });
+
+  it('filters containers by agent', async () => {
+    wrapper.vm.agentSelected = 'node1';
+    await wrapper.vm.$nextTick();
+
+    const filtered = wrapper.vm.containersFiltered;
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].id).toBe('1');
   });
 
   it('filters containers by update available', async () => {
@@ -128,6 +146,12 @@ describe('ContainersView', () => {
     await wrapper.vm.onWatcherChanged('docker');
 
     expect(wrapper.vm.watcherSelected).toBe('docker');
+  });
+
+  it('handles agent filter change', async () => {
+    await wrapper.vm.onAgentChanged('node1');
+
+    expect(wrapper.vm.agentSelected).toBe('node1');
   });
 
   it('handles update available toggle', async () => {

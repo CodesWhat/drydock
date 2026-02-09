@@ -168,35 +168,26 @@ test('getImageManifestDigest should return digest for application/vnd.docker.dis
 test('getImageManifestDigest should return digest for application/vnd.docker.distribution.manifest.v2+json', async () => {
     const registryMocked = new Registry();
     registryMocked.log = log;
-    registryMocked.callRegistry = (options) => {
-        if (
-            options.headers.Accept ===
-            'application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json'
-        ) {
-            return {
-                schemaVersion: 2,
-                mediaType:
-                    'application/vnd.docker.distribution.manifest.v2+json',
-                config: {
-                    digest: 'digest_x',
-                    mediaType:
-                        'application/vnd.docker.distribution.manifest.v2+json',
-                },
-            };
-        }
-        if (
-            options.headers.Accept ===
-            'application/vnd.docker.distribution.manifest.v2+json'
-        ) {
+    registryMocked.callRegistry = jest.fn((options) => {
+        if (options.method === 'head') {
             return {
                 headers: {
                     'docker-content-digest': '123456789',
                 },
             };
         }
-        throw new Error('Boom!');
-    };
-    expect(
+
+        return {
+            schemaVersion: 2,
+            mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+            config: {
+                digest: 'digest_x',
+                mediaType: 'application/vnd.docker.container.image.v1+json',
+            },
+        };
+    });
+
+    await expect(
         registryMocked.getImageManifestDigest({
             name: 'image',
             architecture: 'amd64',
@@ -212,6 +203,18 @@ test('getImageManifestDigest should return digest for application/vnd.docker.dis
         version: 2,
         digest: '123456789',
     });
+
+    expect(registryMocked.callRegistry).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+            method: 'head',
+            url: 'url/image/manifests/tag',
+            headers: {
+                Accept: 'application/vnd.docker.distribution.manifest.v2+json',
+            },
+            resolveWithFullResponse: true,
+        }),
+    );
 });
 
 test('getImageManifestDigest should return digest for application/vnd.docker.container.image.v1+json', async () => {

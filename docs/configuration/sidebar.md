@@ -1,6 +1,7 @@
 - [Introduction](?id=introduction)
 - [Quick start](quickstart/)
 - [Configuration](configuration/)
+    - [Agents](configuration/agents/)
     - [Authentication](configuration/authentications/)    
     - [Logs](configuration/logs/)
     - [Registries](configuration/registries/)

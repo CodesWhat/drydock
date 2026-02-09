@@ -25,9 +25,7 @@ if (configurationToValidate.error) {
 const configuration = configurationToValidate.value;
 
 // Loki DB
-const db = new Loki(`${configuration.path}/${configuration.file}`, {
-    autosave: true,
-});
+let db;
 
 function createCollections() {
     app.createCollections(db);
@@ -53,9 +51,21 @@ async function loadDb(err, resolve, reject) {
 
 /**
  * Init DB.
+ * @param options
  * @returns {Promise<unknown>}
  */
-export async function init() {
+export async function init(options = {}) {
+    const isMemory = options.memory || false;
+    db = new Loki(`${configuration.path}/${configuration.file}`, {
+        autosave: !isMemory,
+    });
+
+    if (isMemory) {
+        log.info('Init store in memory mode');
+        createCollections();
+        return Promise.resolve();
+    }
+
     log.info(`Load store from (${configuration.path}/${configuration.file})`);
     if (!fs.existsSync(configuration.path)) {
         log.info(`Create folder ${configuration.path}`);

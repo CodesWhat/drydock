@@ -1,7 +1,12 @@
 import IconRenderer from "@/components/IconRenderer.vue";
 import { defineComponent } from "vue";
+import { useDisplay } from "vuetify";
 
 export default defineComponent({
+  setup() {
+    const { smAndUp } = useDisplay();
+    return { smAndUp };
+  },
   components: {
     IconRenderer,
   },
@@ -10,6 +15,11 @@ export default defineComponent({
       type: Object,
       required: true,
     },
+    agents: {
+      type: Array,
+      required: false,
+      default: () => [],
+    },
   },
   data() {
     return {
@@ -17,6 +27,16 @@ export default defineComponent({
     };
   },
   computed: {
+    agentStatusColor() {
+      const agent = (this.agents as any[]).find(
+        (a) => a.name === this.item.agent,
+      );
+      if (agent) {
+        return agent.connected ? "success" : "error";
+      }
+      return "info";
+    },
+
     configurationItems() {
       return Object.keys(this.item.configuration || [])
         .map((key) => ({

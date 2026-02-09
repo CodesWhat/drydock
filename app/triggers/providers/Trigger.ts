@@ -5,6 +5,7 @@ import { fullName, Container } from '../../model/container';
 
 export interface TriggerConfiguration extends ComponentConfiguration {
     auto?: boolean;
+    order?: number;
     threshold?: string;
     mode?: string;
     once?: boolean;
@@ -72,6 +73,9 @@ function renderBatch(template: string, containers: Container[]) {
  */
 class Trigger extends Component {
     public configuration: TriggerConfiguration = {};
+    public strictAgentMatch = false;
+    private unregisterContainerReport?: () => void;
+    private unregisterContainerReports?: () => void;
 
     static getSupportedThresholds() {
         return [
@@ -175,6 +179,38 @@ class Trigger extends Component {
     }
 
     /**
+     * Return true when a trigger reference matches a trigger id.
+     * A reference can be either:
+     * - full trigger id: docker.update
+     * - trigger name only: update
+     * @param triggerReference
+     * @param triggerId
+     */
+    static doesReferenceMatchId(triggerReference: string, triggerId: string) {
+        const triggerReferenceNormalized = triggerReference.toLowerCase();
+        const triggerIdNormalized = triggerId.toLowerCase();
+
+        if (triggerReferenceNormalized === triggerIdNormalized) {
+            return true;
+        }
+
+        const triggerIdParts = triggerIdNormalized.split('.');
+        const triggerName = triggerIdParts[triggerIdParts.length - 1];
+        if (triggerReferenceNormalized === triggerName) {
+            return true;
+        }
+
+        if (triggerIdParts.length >= 2) {
+            const providerAndName = `${triggerIdParts[triggerIdParts.length - 2]}.${triggerName}`;
+            if (triggerReferenceNormalized === providerAndName) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Handle container report (simple mode).
      * @param containerReport
      * @returns {Promise<void>}
@@ -258,6 +294,7 @@ class Trigger extends Component {
     }
 
     isTriggerIncludedOrExcluded(containerResult: Container, trigger: string) {
+        const triggerId = this.getId().toLowerCase();
         const triggers = trigger
             .split(/\s*,\s*/)
             .map((triggerToMatch) =>
@@ -265,7 +302,7 @@ class Trigger extends Component {
             );
         const triggerMatched = triggers.find(
             (triggerToMatch) =>
-                triggerToMatch.id.toLowerCase() === this.getId(),
+                Trigger.doesReferenceMatchId(triggerToMatch.id, triggerId),
         );
         if (!triggerMatched) {
             return false;
@@ -308,6 +345,12 @@ class Trigger extends Component {
      * @returns {boolean}
      */
     mustTrigger(containerResult: Container) {
+        if (this.agent && this.agent !== containerResult.agent) {
+            return false;
+        }
+        if (this.strictAgentMatch && this.agent !== containerResult.agent) {
+            return false;
+        }
         const { triggerInclude, triggerExclude } = containerResult;
         return (
             this.isTriggerIncluded(containerResult, triggerInclude) &&
@@ -326,20 +369,41 @@ class Trigger extends Component {
                 this.configuration.mode &&
                 this.configuration.mode.toLowerCase() === 'simple'
             ) {
-                event.registerContainerReport(async (containerReport) =>
-                    this.handleContainerReport(containerReport),
+                this.unregisterContainerReport = event.registerContainerReport(
+                    async (containerReport) =>
+                        this.handleContainerReport(containerReport),
+                    {
+                        id: this.getId(),
+                        order: this.configuration.order,
+                    },
                 );
             }
             if (
                 this.configuration.mode &&
                 this.configuration.mode.toLowerCase() === 'batch'
             ) {
-                event.registerContainerReports(async (containersReports) =>
-                    this.handleContainerReports(containersReports),
+                this.unregisterContainerReports = event.registerContainerReports(
+                    async (containersReports) =>
+                        this.handleContainerReports(containersReports),
+                    {
+                        id: this.getId(),
+                        order: this.configuration.order,
+                    },
                 );
             }
         } else {
             this.log.info(`Registering for manual execution`);
+        }
+    }
+
+    async deregisterComponent(): Promise<void> {
+        if (this.unregisterContainerReport) {
+            this.unregisterContainerReport();
+            this.unregisterContainerReport = undefined;
+        }
+        if (this.unregisterContainerReports) {
+            this.unregisterContainerReports();
+            this.unregisterContainerReports = undefined;
         }
     }
 
@@ -354,6 +418,7 @@ class Trigger extends Component {
         const schema = this.getConfigurationSchema();
         const schemaWithDefaultOptions = schema.append({
             auto: this.joi.bool().default(true),
+            order: this.joi.number().default(100),
             threshold: this.joi
                 .string()
                 .insensitive()

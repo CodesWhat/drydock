@@ -15,6 +15,7 @@ class Component {
     public kind: string = '';
     public type: string = '';
     public name: string = '';
+    public agent?: string;
     public configuration: ComponentConfiguration = {};
 
     /**
@@ -31,18 +32,21 @@ class Component {
      * @param type the type of the component
      * @param name the name of the component
      * @param configuration the configuration of the component
+     * @param agent the name of the agent if it is a remote component
      */
     async register(
         kind: string,
         type: string,
         name: string,
         configuration: ComponentConfiguration,
+        agent?: string,
     ): Promise<this> {
         // Child log for the component
         this.log = log.child({ component: `${kind}.${type}.${name}` });
         this.kind = kind;
         this.type = type;
         this.name = name;
+        this.agent = agent;
 
         this.configuration = this.validateConfiguration(configuration);
         this.log.info(
@@ -119,7 +123,8 @@ class Component {
      * @returns {string}
      */
     getId(): string {
-        return `${this.type}.${this.name}`;
+        const agentPrefix = this.agent ? `${this.agent}.` : '';
+        return `${agentPrefix}${this.type}.${this.name}`;
     }
 
     /**

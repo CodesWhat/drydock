@@ -31,6 +31,7 @@ export default defineComponent({
           containerId: this.containerId,
           triggerType: this.trigger.type,
           triggerName: this.trigger.name,
+          triggerAgent: this.trigger.agent,
         });
         (this as any).$eventBus.emit("notify", "Trigger executed with success");
       } catch (err: any) {

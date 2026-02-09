@@ -9,12 +9,14 @@ jest.mock('../configuration', () => ({
     getTriggerConfigurations: jest.fn(),
     getWatcherConfigurations: jest.fn(),
     getAuthenticationConfigurations: jest.fn(),
+    getAgentConfigurations: jest.fn(),
 }));
 
 let registries = {};
 let triggers = {};
 let watchers = {};
 let authentications = {};
+let agents = {};
 
 // Override the mocked functions
 // We need to cast to jest.Mock or assume they are mocks because of the factory above
@@ -23,11 +25,13 @@ const mockGetTriggerConfigurations = configuration.getTriggerConfigurations;
 const mockGetWatcherConfigurations = configuration.getWatcherConfigurations;
 const mockGetAuthenticationConfigurations =
     configuration.getAuthenticationConfigurations;
+const mockGetAgentConfigurations = configuration.getAgentConfigurations;
 
 mockGetRegistryConfigurations.mockImplementation(() => registries);
 mockGetTriggerConfigurations.mockImplementation(() => triggers);
 mockGetWatcherConfigurations.mockImplementation(() => watchers);
 mockGetAuthenticationConfigurations.mockImplementation(() => authentications);
+mockGetAgentConfigurations.mockImplementation(() => agents);
 
 import * as registry from './index';
 
@@ -38,6 +42,7 @@ beforeEach(async () => {
     triggers = {};
     watchers = {};
     authentications = {};
+    agents = {};
 
     // Ensure default implementations return the variables
     mockGetRegistryConfigurations.mockImplementation(() => registries);
@@ -46,6 +51,7 @@ beforeEach(async () => {
     mockGetAuthenticationConfigurations.mockImplementation(
         () => authentications,
     );
+    mockGetAgentConfigurations.mockImplementation(() => agents);
 });
 
 afterEach(async () => {
@@ -146,6 +152,59 @@ test('registerTriggers should register all triggers', async () => {
         'mock.mock1',
         'mock.mock2',
     ]);
+});
+
+test('registerTriggers should share threshold across trigger types with the same name', async () => {
+    triggers = {
+        mock: {
+            update: {
+                threshold: 'minor',
+            },
+        },
+        discord: {
+            update: {
+                url: 'https://example.com',
+            },
+        },
+    };
+    await registry.testable_registerTriggers();
+    expect(
+        registry.getState().trigger['mock.update'].configuration.threshold,
+    ).toEqual('minor');
+    expect(
+        registry.getState().trigger['discord.update'].configuration.threshold,
+    ).toEqual('minor');
+});
+
+test('registerTriggers should not share threshold when same-name triggers define different values', async () => {
+    triggers = {
+        mock: {
+            update: {
+                threshold: 'minor',
+            },
+        },
+        discord: {
+            update: {
+                url: 'https://example.com',
+                threshold: 'patch',
+            },
+        },
+        http: {
+            update: {
+                url: 'https://example.net',
+            },
+        },
+    };
+    await registry.testable_registerTriggers();
+    expect(
+        registry.getState().trigger['mock.update'].configuration.threshold,
+    ).toEqual('minor');
+    expect(
+        registry.getState().trigger['discord.update'].configuration.threshold,
+    ).toEqual('patch');
+    expect(
+        registry.getState().trigger['http.update'].configuration.threshold,
+    ).toEqual('all');
 });
 
 test('registerTriggers should warn when registration errors occur', async () => {

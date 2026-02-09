@@ -4,10 +4,24 @@
       <v-col>
         <v-select
           :hide-details="true"
+          v-model="agentSelected"
+          :items="agents"
+          @update:modelValue="emitAgentChanged"
+          :clearable="true"
+          clear-icon="mdi-close"
+          label="Agent"
+          variant="outlined"
+          density="compact"
+        ></v-select>
+      </v-col>
+      <v-col>
+        <v-select
+          :hide-details="true"
           v-model="watcherSelected"
           :items="watchers"
           @update:modelValue="emitWatcherChanged"
           :clearable="true"
+          clear-icon="mdi-close"
           label="Watcher"
           variant="outlined"
           density="compact"
@@ -20,6 +34,7 @@
           :items="registries"
           @update:modelValue="emitRegistryChanged"
           :clearable="true"
+          clear-icon="mdi-close"
           label="Registry"
           variant="outlined"
           density="compact"
@@ -32,6 +47,7 @@
           :items="updateKinds"
           @update:modelValue="emitUpdateKindChanged"
           :clearable="true"
+          clear-icon="mdi-close"
           label="Update kind"
           variant="outlined"
           density="compact"
@@ -45,12 +61,13 @@
           v-model="groupByLabelLocal"
           @update:modelValue="emitGroupByLabelChanged"
           clearable
+          clear-icon="mdi-close"
           variant="outlined"
           density="compact"
         >
         </v-autocomplete>
       </v-col>
-      <v-col>
+      <v-col class="first-switch-col">
         <v-switch
           class="switch-top"
           label="Update available"
@@ -76,7 +93,7 @@
           @click.stop="refreshAllContainers"
           :loading="isRefreshing"
         >
-          Watch now
+          Check updates
           <v-icon> mdi-refresh</v-icon>
         </v-btn>
         <br />
@@ -90,5 +107,9 @@
 <style scoped>
 .switch-top {
   margin-top: 4px;
+}
+
+.first-switch-col {
+  padding-left: 16px;
 }
 </style>

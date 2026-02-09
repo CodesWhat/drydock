@@ -9,6 +9,10 @@ import { getPublicUrl } from '../../../configuration';
  * Htpasswd authentication.
  */
 class Oidc extends Authentication {
+    getSessionKey() {
+        return this.name || 'default';
+    }
+
     /**
      * Get the Trigger configuration schema.
      * @returns {*}
@@ -96,8 +100,20 @@ class Oidc extends Authentication {
         const codeVerifier = generators.codeVerifier();
         const codeChallenge = generators.codeChallenge(codeVerifier);
         const state = uuid();
+        const sessionKey = this.getSessionKey();
 
-        req.session.oidc = {
+        if (!req.session) {
+            this.log.warn(
+                'Unable to initialize OIDC checks because no session is available',
+            );
+            res.status(500).send('Unable to initialize OIDC session');
+            return;
+        }
+
+        if (!req.session.oidc || typeof req.session.oidc !== 'object') {
+            req.session.oidc = {};
+        }
+        req.session.oidc[sessionKey] = {
             codeVerifier,
             state,
         };
@@ -109,6 +125,25 @@ class Oidc extends Authentication {
             state,
         })}`;
         this.log.debug(`Build redirection url [${authUrl}]`);
+
+        try {
+            if (typeof req.session.save === 'function') {
+                await new Promise((resolve, reject) => {
+                    req.session.save((err) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(undefined);
+                        }
+                    });
+                });
+            }
+        } catch (e) {
+            this.log.warn(`Unable to persist OIDC session checks (${e.message})`);
+            res.status(500).send('Unable to initialize OIDC session');
+            return;
+        }
+
         res.json({
             url: authUrl,
         });
@@ -118,17 +153,39 @@ class Oidc extends Authentication {
         try {
             this.log.debug('Validate callback data');
             const params = this.client.callbackParams(req);
-            const oidcChecks = req.session.oidc;
+            const sessionKey = this.getSessionKey();
+            const oidcChecks =
+                req.session && req.session.oidc
+                    ? req.session.oidc[sessionKey]
+                    : undefined;
+
+            if (
+                !oidcChecks ||
+                !oidcChecks.codeVerifier ||
+                !oidcChecks.state
+            ) {
+                this.log.warn(
+                    'OIDC checks are missing from the session; ask user to restart authentication',
+                );
+                res.status(401).send(
+                    'OIDC session is missing or expired. Please retry authentication.',
+                );
+                return;
+            }
 
             const tokenSet = await this.client.callback(
                 `${getPublicUrl(req)}/auth/oidc/${this.name}/cb`,
                 params,
                 {
                     response_type: 'code',
-                    code_verifier: oidcChecks ? oidcChecks.codeVerifier : '',
-                    state: oidcChecks ? oidcChecks.state : '',
+                    code_verifier: oidcChecks.codeVerifier,
+                    state: oidcChecks.state,
                 },
             );
+
+            if (req.session && req.session.oidc) {
+                delete req.session.oidc[sessionKey];
+            }
             this.log.debug('Get user info');
             const user = await this.getUserFromAccessToken(
                 tokenSet.access_token,

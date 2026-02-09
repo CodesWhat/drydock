@@ -6,6 +6,13 @@
       class="pa-3 d-flex align-center bg-surface"
     >
       <div class="text-body-3">
+        <span v-if="smAndUp && item.agent">
+          <v-chip label :color="agentStatusColor" variant="outlined">
+            <v-icon left>mdi-lan</v-icon>
+            {{ item.agent }}
+          </v-chip>
+          /
+        </span>
         <v-chip label color="info" variant="outlined">{{ item.type }}</v-chip>
         /
         <v-chip label color="info" variant="outlined">{{ item.name }}</v-chip>
@@ -16,7 +23,15 @@
     </v-card-title>
     <transition name="expand-transition">
       <v-card-text v-show="showDetail">
-        <v-list density="compact" v-if="configurationItems.length > 0">
+        <v-list density="compact" v-if="configurationItems.length > 0 || item.agent">
+          <v-list-item v-if="item.agent">
+            <v-list-item-title>Agent</v-list-item-title>
+            <v-list-item-subtitle>
+              <router-link to="/configuration/agents">
+                {{ item.agent }}
+              </router-link>
+            </v-list-item-subtitle>
+          </v-list-item>
           <v-list-item
             v-for="configurationItem in configurationItems"
             :key="configurationItem.key"

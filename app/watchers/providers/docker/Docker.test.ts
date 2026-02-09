@@ -42,6 +42,7 @@ describe('Docker Watcher', () => {
             getContainer: jest.fn(),
             getEvents: jest.fn(),
             getImage: jest.fn(),
+            getService: jest.fn(),
         };
         mockDockerode.mockImplementation(() => mockDockerApi);
 
@@ -530,6 +531,126 @@ describe('Docker Watcher', () => {
             const result = await docker.getContainers();
 
             expect(result).toHaveLength(1);
+        });
+
+        test('should apply swarm service deploy labels to container filtering and tag include', async () => {
+            const containers = [
+                {
+                    Id: 'swarm-task-1',
+                    Image: 'authelia/authelia:4.39.15',
+                    Names: ['/authelia_authelia.1.xxxxx'],
+                    Labels: {
+                        'com.docker.swarm.service.id': 'service123',
+                    },
+                },
+            ];
+            mockDockerApi.listContainers.mockResolvedValue(containers);
+            mockDockerApi.getService.mockReturnValue({
+                inspect: jest.fn().mockResolvedValue({
+                    Spec: {
+                        Labels: {
+                            'wud.watch': 'true',
+                            'wud.tag.include': '^\\d+\\.\\d+\\.\\d+$',
+                        },
+                    },
+                }),
+            });
+            docker.addImageDetailsToContainer = jest
+                .fn()
+                .mockResolvedValue({ id: 'swarm-task-1' });
+
+            await docker.register('watcher', 'docker', 'test', {
+                watchbydefault: false,
+            });
+            const result = await docker.getContainers();
+
+            expect(result).toHaveLength(1);
+            expect(mockDockerApi.getService).toHaveBeenCalledWith('service123');
+            expect(docker.addImageDetailsToContainer).toHaveBeenCalledTimes(1);
+            expect(
+                docker.addImageDetailsToContainer.mock.calls[0][1],
+            ).toBe('^\\d+\\.\\d+\\.\\d+$');
+        });
+
+        test('should let container labels override swarm service labels', async () => {
+            const containers = [
+                {
+                    Id: 'swarm-task-2',
+                    Image: 'grafana/alloy:v1.12.2',
+                    Names: ['/monitoring_alloy.1.yyyyy'],
+                    Labels: {
+                        'com.docker.swarm.service.id': 'service456',
+                        'wud.watch': 'true',
+                        'wud.tag.include': '^v\\d+\\.\\d+\\.\\d+$',
+                    },
+                },
+            ];
+            mockDockerApi.listContainers.mockResolvedValue(containers);
+            mockDockerApi.getService.mockReturnValue({
+                inspect: jest.fn().mockResolvedValue({
+                    Spec: {
+                        Labels: {
+                            'wud.watch': 'false',
+                            'wud.tag.include': '^\\d+\\.\\d+\\.\\d+$',
+                        },
+                    },
+                }),
+            });
+            docker.addImageDetailsToContainer = jest
+                .fn()
+                .mockResolvedValue({ id: 'swarm-task-2' });
+
+            await docker.register('watcher', 'docker', 'test', {
+                watchbydefault: false,
+            });
+            const result = await docker.getContainers();
+
+            expect(result).toHaveLength(1);
+            expect(
+                docker.addImageDetailsToContainer.mock.calls[0][1],
+            ).toBe('^v\\d+\\.\\d+\\.\\d+$');
+        });
+
+        test('should cache swarm service label lookups per service', async () => {
+            const containers = [
+                {
+                    Id: 'swarm-task-3a',
+                    Image: 'example/service:1.0.0',
+                    Names: ['/svc.1.a'],
+                    Labels: {
+                        'com.docker.swarm.service.id': 'service789',
+                    },
+                },
+                {
+                    Id: 'swarm-task-3b',
+                    Image: 'example/service:1.0.0',
+                    Names: ['/svc.2.b'],
+                    Labels: {
+                        'com.docker.swarm.service.id': 'service789',
+                    },
+                },
+            ];
+            mockDockerApi.listContainers.mockResolvedValue(containers);
+            mockDockerApi.getService.mockReturnValue({
+                inspect: jest.fn().mockResolvedValue({
+                    Spec: {
+                        Labels: {
+                            'wud.watch': 'true',
+                        },
+                    },
+                }),
+            });
+            docker.addImageDetailsToContainer = jest
+                .fn()
+                .mockResolvedValue({ id: 'ok' });
+
+            await docker.register('watcher', 'docker', 'test', {
+                watchbydefault: false,
+            });
+            await docker.getContainers();
+
+            expect(mockDockerApi.getService).toHaveBeenCalledTimes(1);
+            expect(mockDockerApi.getService).toHaveBeenCalledWith('service789');
         });
 
         test('should prune old containers', async () => {

@@ -49,6 +49,7 @@ export interface Container {
     displayIcon: string;
     status: string;
     watcher: string;
+    agent?: string;
     includeTags?: string;
     excludeTags?: string;
     transformTags?: string;
@@ -67,6 +68,11 @@ export interface Container {
     resultChanged?: (otherContainer: Container | undefined) => boolean;
 }
 
+export interface ContainerReport {
+    container: Container;
+    changed: boolean;
+}
+
 // Container data schema
 const schema = joi.object({
     id: joi.string().min(1).required(),
@@ -75,6 +81,7 @@ const schema = joi.object({
     displayIcon: joi.string().default('mdi:docker'),
     status: joi.string().default('unknown'),
     watcher: joi.string().min(1).required(),
+    agent: joi.string().optional(),
     includeTags: joi.string(),
     excludeTags: joi.string(),
     transformTags: joi.string(),

@@ -34,13 +34,11 @@ jest.mock('./store', () => ({
 jest.mock('./server', () => ({
     init: jest.fn(() => ({ use: jest.fn(), get: jest.fn() })),
 }));
-jest.mock('./auth', () => ({
-    getAllIds: jest.fn(() => ['basic', 'anonymous']),
+jest.mock('./agent', () => ({
+    init: jest.fn(() => ({ use: jest.fn(), get: jest.fn() })),
 }));
-
-// Mock passport
-jest.mock('passport', () => ({
-    authenticate: jest.fn(() => (req, res, next) => next()),
+jest.mock('./auth', () => ({
+    requireAuthentication: jest.fn((req, res, next) => next()),
 }));
 
 import * as api from './api';
@@ -67,6 +65,7 @@ describe('API Router', () => {
         const logRouter = await import('./log');
         const storeRouter = await import('./store');
         const serverRouter = await import('./server');
+        const agentRouter = await import('./agent');
 
         expect(appRouter.init).toHaveBeenCalled();
         expect(containerRouter.init).toHaveBeenCalled();
@@ -77,13 +76,11 @@ describe('API Router', () => {
         expect(logRouter.init).toHaveBeenCalled();
         expect(storeRouter.init).toHaveBeenCalled();
         expect(serverRouter.init).toHaveBeenCalled();
+        expect(agentRouter.init).toHaveBeenCalled();
     });
 
-    test('should use passport authentication middleware', async () => {
-        const passport = await import('passport');
-        expect(passport.authenticate).toHaveBeenCalledWith([
-            'basic',
-            'anonymous',
-        ]);
+    test('should use requireAuthentication middleware', async () => {
+        const auth = await import('./auth');
+        expect(router.use).toHaveBeenCalledWith(auth.requireAuthentication);
     });
 });

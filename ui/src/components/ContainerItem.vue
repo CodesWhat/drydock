@@ -23,6 +23,13 @@
           class="text-body-3 d-flex align-center"
           style="gap: 5px"
         >
+          <span v-if="smAndUp && container.agent">
+            <v-chip label :color="agentStatusColor" variant="outlined" disabled>
+              <v-icon left>mdi-lan</v-icon>
+              {{ container.agent }}
+            </v-chip>
+            /
+          </span>
           <span v-if="smAndUp">
             <v-chip label color="info" variant="outlined" disabled>
               <v-icon left>mdi-update</v-icon>
@@ -157,6 +164,19 @@
 
           <v-card-actions>
             <v-row>
+              <v-col class="text-center">
+                <v-btn
+                  small
+                  color="secondary"
+                  variant="outlined"
+                  :loading="isUpdatingContainer"
+                  :disabled="!container.updateAvailable"
+                  @click="updateContainerNow"
+                >
+                  Update now
+                  <v-icon right>mdi-rocket-launch</v-icon>
+                </v-btn>
+              </v-col>
               <v-col class="text-center">
                 <v-dialog
                   v-model="dialogDelete"

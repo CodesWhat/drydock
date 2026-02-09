@@ -5,6 +5,9 @@
 - :lock: [UI] - Migrate to Vuetify 3
 - :lock: Upgrade to node.js 24
 - :star: Add TrueForge Container Registry support (oci.trueforge.org)
+- :star: [TRIGGER] - Add trigger execution order (`ORDER`) to control trigger sequencing
+- :star: [TRIGGER] - Allow include/exclude labels to match trigger names (example: `update`)
+- :star: [TRIGGER] - Share trigger threshold across same-name triggers when unambiguous
 
 ## 8.1.1
 - :fire: [TELEGRAM] - Fix markdown character escape

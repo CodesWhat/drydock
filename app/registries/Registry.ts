@@ -1,8 +1,12 @@
-import axios, { AxiosRequestConfig, Method, AxiosResponse } from 'axios';
+import axios, {
+    type AxiosRequestConfig,
+    type Method,
+    type AxiosResponse,
+} from 'axios';
 import log from '../log';
 import Component from '../registry/Component';
 import { getSummaryTags } from '../prometheus/registry';
-import { ContainerImage } from '../model/container';
+import type { ContainerImage } from '../model/container';
 
 export interface RegistryImage extends ContainerImage {
     // Add any registry specific properties if needed
@@ -217,11 +221,12 @@ class Registry extends Component {
                     responseManifests.mediaType ===
                         'application/vnd.oci.image.manifest.v1+json'
                 ) {
+                    const manifestReference = manifestDigestFound || tagOrDigest;
                     log.debug(
-                        `Manifest found with [digest=${responseManifests.config.digest}, mediaType=${responseManifests.config.mediaType}]`,
+                        `Manifest found with [reference=${manifestReference}, mediaType=${responseManifests.mediaType}]`,
                     );
-                    manifestDigestFound = responseManifests.config.digest;
-                    manifestMediaType = responseManifests.config.mediaType;
+                    manifestDigestFound = manifestReference;
+                    manifestMediaType = responseManifests.mediaType;
                 }
             } else if (responseManifests.schemaVersion === 1) {
                 log.debug('Manifests found with schemaVersion = 1');
@@ -321,7 +326,7 @@ class Registry extends Component {
         headers?: any;
         resolveWithFullResponse?: boolean;
     }): Promise<T | AxiosResponse<T>> {
-        const start = new Date().getTime();
+        const start = Date.now();
 
         // Request options
         const axiosOptions: AxiosRequestConfig = {
@@ -340,14 +345,14 @@ class Registry extends Component {
             const response = (await axios(
                 axiosOptionsWithAuth,
             )) as AxiosResponse<T>;
-            const end = new Date().getTime();
+            const end = Date.now();
             getSummaryTags().observe(
                 { type: this.type, name: this.name },
                 (end - start) / 1000,
             );
             return resolveWithFullResponse ? response : response.data;
         } catch (error) {
-            const end = new Date().getTime();
+            const end = Date.now();
             getSummaryTags().observe(
                 { type: this.type, name: this.name },
                 (end - start) / 1000,

@@ -8,6 +8,8 @@ import { fullName } from '../../../model/container';
  * Replace a Docker container with an updated one.
  */
 class Docker extends Trigger {
+    public strictAgentMatch = true;
+
     /**
      * Get the Trigger configuration schema.
      * @returns {*}
