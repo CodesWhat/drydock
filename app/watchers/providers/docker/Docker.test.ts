@@ -17,14 +17,18 @@ jest.mock('../../../tag');
 jest.mock('../../../prometheus/watcher');
 jest.mock('parse-docker-image-name');
 jest.mock('fs');
+jest.mock('axios');
 
 import mockDockerode from 'dockerode';
 import mockCron from 'node-cron';
 import mockDebounce from 'just-debounce';
 import mockFs from 'fs';
+import axios from 'axios';
 import mockParse from 'parse-docker-image-name';
 import * as mockTag from '../../../tag/index.js';
 import * as mockPrometheus from '../../../prometheus/watcher.js';
+
+const mockAxios = axios as jest.Mocked<typeof axios>;
 
 describe('Docker Watcher', () => {
     let docker;
@@ -43,6 +47,9 @@ describe('Docker Watcher', () => {
             getEvents: jest.fn(),
             getImage: jest.fn(),
             getService: jest.fn(),
+            modem: {
+                headers: {},
+            },
         };
         mockDockerode.mockImplementation(() => mockDockerApi);
 
@@ -99,6 +106,13 @@ describe('Docker Watcher', () => {
             tag: '1.0.0',
         });
 
+        mockAxios.post.mockResolvedValue({
+            data: {
+                access_token: 'oidc-token',
+                expires_in: 300,
+            },
+        } as any);
+
         // Setup fullName mock
         fullName.mockReturnValue('test_container');
 
@@ -149,6 +163,24 @@ describe('Docker Watcher', () => {
                         link: {
                             template: 'https://example.com/changelog/${major}',
                         },
+                    },
+                },
+            };
+            expect(() => docker.validateConfiguration(config)).not.toThrow();
+        });
+
+        test('should validate configuration with oidc remote auth', async () => {
+            const config = {
+                host: 'docker-proxy.example.com',
+                port: 443,
+                protocol: 'https',
+                auth: {
+                    type: 'oidc',
+                    oidc: {
+                        tokenurl: 'https://idp.example.com/oauth/token',
+                        clientid: 'wud-client',
+                        clientsecret: 'super-secret',
+                        scope: 'docker.read',
                     },
                 },
             };
@@ -233,6 +265,30 @@ describe('Docker Watcher', () => {
                 protocol: 'https',
                 headers: {
                     Authorization: 'Basic am9objpkb2U=',
+                },
+            });
+        });
+
+        test('should initialize with OIDC access token when provided', async () => {
+            await docker.register('watcher', 'docker', 'test', {
+                host: 'localhost',
+                port: 443,
+                protocol: 'https',
+                auth: {
+                    type: 'oidc',
+                    oidc: {
+                        tokenurl: 'https://idp.example.com/oauth/token',
+                        accesstoken: 'seed-access-token',
+                        expiresin: 300,
+                    },
+                },
+            });
+            expect(mockDockerode).toHaveBeenCalledWith({
+                host: 'localhost',
+                port: 443,
+                protocol: 'https',
+                headers: {
+                    Authorization: 'Bearer seed-access-token',
                 },
             });
         });
@@ -322,6 +378,94 @@ describe('Docker Watcher', () => {
             docker.init();
             await docker.deregisterComponent();
             expect(mockSchedule.stop).toHaveBeenCalled();
+        });
+    });
+
+    describe('OIDC Remote Auth', () => {
+        test('should fetch oidc access token before listing containers', async () => {
+            mockDockerApi.listContainers.mockResolvedValue([]);
+            await docker.register('watcher', 'docker', 'test', {
+                host: 'docker-api.example.com',
+                port: 443,
+                protocol: 'https',
+                auth: {
+                    type: 'oidc',
+                    oidc: {
+                        tokenurl: 'https://idp.example.com/oauth/token',
+                        clientid: 'wud-client',
+                        clientsecret: 'wud-secret',
+                        scope: 'docker.read',
+                    },
+                },
+            });
+
+            await docker.getContainers();
+
+            expect(mockAxios.post).toHaveBeenCalledWith(
+                'https://idp.example.com/oauth/token',
+                expect.stringContaining('grant_type=client_credentials'),
+                expect.objectContaining({
+                    headers: {
+                        'Content-Type':
+                            'application/x-www-form-urlencoded',
+                    },
+                }),
+            );
+            expect(mockDockerApi.modem.headers.Authorization).toBe(
+                'Bearer oidc-token',
+            );
+            expect(mockDockerApi.listContainers).toHaveBeenCalled();
+        });
+
+        test('should use refresh_token grant when refresh token is available', async () => {
+            mockDockerApi.listContainers.mockResolvedValue([]);
+            await docker.register('watcher', 'docker', 'test', {
+                host: 'docker-api.example.com',
+                port: 443,
+                protocol: 'https',
+                auth: {
+                    type: 'oidc',
+                    oidc: {
+                        tokenurl: 'https://idp.example.com/oauth/token',
+                        refreshtoken: 'refresh-token-1',
+                    },
+                },
+            });
+
+            await docker.getContainers();
+
+            const tokenRequestBody = mockAxios.post.mock.calls[0][1];
+            expect(tokenRequestBody).toContain('grant_type=refresh_token');
+            expect(tokenRequestBody).toContain(
+                'refresh_token=refresh-token-1',
+            );
+        });
+
+        test('should reuse cached oidc token until close to expiry', async () => {
+            mockDockerApi.listContainers.mockResolvedValue([]);
+            mockAxios.post.mockResolvedValue({
+                data: {
+                    access_token: 'cached-token',
+                    expires_in: 3600,
+                },
+            } as any);
+            await docker.register('watcher', 'docker', 'test', {
+                host: 'docker-api.example.com',
+                port: 443,
+                protocol: 'https',
+                auth: {
+                    type: 'oidc',
+                    oidc: {
+                        tokenurl: 'https://idp.example.com/oauth/token',
+                    },
+                },
+            });
+
+            await docker.getContainers();
+            await docker.getContainers();
+
+            expect(mockAxios.post).toHaveBeenCalledTimes(1);
+            expect(mockDockerApi.listContainers).toHaveBeenCalledTimes(2);
         });
     });
 

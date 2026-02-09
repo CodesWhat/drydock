@@ -1,5 +1,6 @@
 import fs from 'fs';
 import Dockerode from 'dockerode';
+import axios from 'axios';
 import Joi from 'joi';
 import JoiCronExpression from 'joi-cron-expression';
 const joi = JoiCronExpression(Joi);
@@ -48,10 +49,11 @@ export interface DockerWatcherConfiguration extends ComponentConfiguration {
     protocol?: 'http' | 'https' | 'ssh';
     port: number;
     auth?: {
-        type?: 'basic' | 'bearer';
+        type?: 'basic' | 'bearer' | 'oidc';
         user?: string;
         password?: string;
         bearer?: string;
+        oidc?: any;
     };
     cafile?: string;
     certfile?: string;
@@ -72,6 +74,31 @@ const START_WATCHER_DELAY_MS = 1000;
 // Debounce delay used when performing a watch after a docker event has been received
 const DEBOUNCED_WATCH_CRON_MS = 5000;
 const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
+const OIDC_ACCESS_TOKEN_REFRESH_WINDOW_MS = 30 * 1000;
+const OIDC_DEFAULT_ACCESS_TOKEN_TTL_MS = 5 * 60 * 1000;
+const OIDC_DEFAULT_TIMEOUT_MS = 5000;
+const OIDC_TOKEN_ENDPOINT_PATHS = [
+    'tokenurl',
+    'tokenendpoint',
+    'token_url',
+    'token_endpoint',
+    'token.url',
+    'token.endpoint',
+];
+const OIDC_CLIENT_ID_PATHS = ['clientid', 'client_id', 'client.id'];
+const OIDC_CLIENT_SECRET_PATHS = [
+    'clientsecret',
+    'client_secret',
+    'client.secret',
+];
+const OIDC_SCOPE_PATHS = ['scope'];
+const OIDC_RESOURCE_PATHS = ['resource'];
+const OIDC_AUDIENCE_PATHS = ['audience'];
+const OIDC_GRANT_TYPE_PATHS = ['granttype', 'grant_type'];
+const OIDC_ACCESS_TOKEN_PATHS = ['accesstoken', 'access_token'];
+const OIDC_REFRESH_TOKEN_PATHS = ['refreshtoken', 'refresh_token'];
+const OIDC_EXPIRES_IN_PATHS = ['expiresin', 'expires_in'];
+const OIDC_TIMEOUT_PATHS = ['timeout'];
 
 interface ResolvedImgset {
     name: string;
@@ -564,6 +591,29 @@ function getContainerConfigValue(
     );
 }
 
+function normalizeConfigNumberValue(value: any) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+    }
+    if (typeof value === 'string' && value.trim() !== '') {
+        const parsedNumber = Number(value);
+        if (Number.isFinite(parsedNumber)) {
+            return parsedNumber;
+        }
+    }
+    return undefined;
+}
+
+function getFirstConfigNumber(value: any, paths: string[]) {
+    for (const path of paths) {
+        const pathValue = normalizeConfigNumberValue(getNestedValue(value, path));
+        if (pathValue !== undefined) {
+            return pathValue;
+        }
+    }
+    return undefined;
+}
+
 /**
  * Get image repo digest.
  * @param containerImage
@@ -684,6 +734,9 @@ class Docker extends Watcher {
     public watchCronDebounced: any;
     public listenDockerEventsTimeout: any;
     public dockerEventsBuffer = '';
+    public remoteOidcAccessToken?: string;
+    public remoteOidcRefreshToken?: string;
+    public remoteOidcAccessTokenExpiresAt?: number;
 
     ensureLogger() {
         if (!this.log) {
@@ -715,10 +768,14 @@ class Docker extends Watcher {
             protocol: this.joi.string().valid('http', 'https'),
             port: this.joi.number().port().default(2375),
             auth: this.joi.object({
-                type: this.joi.string().valid('basic', 'bearer').insensitive(),
+                type: this.joi
+                    .string()
+                    .valid('basic', 'bearer', 'oidc')
+                    .insensitive(),
                 user: this.joi.string(),
                 password: this.joi.string(),
                 bearer: this.joi.string(),
+                oidc: this.joi.object().unknown(true),
             }),
             cafile: this.joi.string(),
             certfile: this.joi.string(),
@@ -776,6 +833,29 @@ class Docker extends Watcher {
                       user: Docker.mask(this.configuration.auth.user),
                       password: Docker.mask(this.configuration.auth.password),
                       bearer: Docker.mask(this.configuration.auth.bearer),
+                      oidc: this.configuration.auth.oidc
+                          ? {
+                                ...this.configuration.auth.oidc,
+                                clientsecret: Docker.mask(
+                                    getFirstConfigString(
+                                        this.configuration.auth.oidc,
+                                        ['clientsecret'],
+                                    ),
+                                ),
+                                accesstoken: Docker.mask(
+                                    getFirstConfigString(
+                                        this.configuration.auth.oidc,
+                                        ['accesstoken'],
+                                    ),
+                                ),
+                                refreshtoken: Docker.mask(
+                                    getFirstConfigString(
+                                        this.configuration.auth.oidc,
+                                        ['refreshtoken'],
+                                    ),
+                                ),
+                            }
+                          : undefined,
                   }
                 : undefined,
         };
@@ -861,15 +941,237 @@ class Docker extends Watcher {
         return Boolean(options.ca || options.cert || options.key);
     }
 
+    getOidcAuthConfiguration() {
+        return this.configuration.auth?.oidc || {};
+    }
+
+    getOidcAuthString(paths: string[]) {
+        return getFirstConfigString(this.getOidcAuthConfiguration(), paths);
+    }
+
+    getOidcAuthNumber(paths: string[]) {
+        return getFirstConfigNumber(this.getOidcAuthConfiguration(), paths);
+    }
+
+    getRemoteAuthResolution(auth: any) {
+        const hasBearer = Boolean(auth?.bearer);
+        const hasBasic = Boolean(auth?.user && auth?.password);
+        const hasOidcConfig = Boolean(
+            getFirstConfigString(auth?.oidc, OIDC_TOKEN_ENDPOINT_PATHS) ||
+                getFirstConfigString(auth?.oidc, OIDC_ACCESS_TOKEN_PATHS) ||
+                getFirstConfigString(auth?.oidc, OIDC_REFRESH_TOKEN_PATHS),
+        );
+        let authType = `${auth?.type || ''}`.toLowerCase();
+        if (!authType) {
+            if (hasBearer) {
+                authType = 'bearer';
+            } else if (hasBasic) {
+                authType = 'basic';
+            } else if (hasOidcConfig) {
+                authType = 'oidc';
+            }
+        }
+        return { authType, hasBearer, hasBasic, hasOidcConfig };
+    }
+
+    setRemoteAuthorizationHeader(authorizationValue: string) {
+        if (!authorizationValue) {
+            return;
+        }
+        const dockerApiAny = this.dockerApi as any;
+        if (!dockerApiAny.modem) {
+            dockerApiAny.modem = {};
+        }
+        dockerApiAny.modem.headers = {
+            ...(dockerApiAny.modem.headers || {}),
+            Authorization: authorizationValue,
+        };
+    }
+
+    initializeRemoteOidcStateFromConfiguration() {
+        const configuredAccessToken = this.getOidcAuthString(
+            OIDC_ACCESS_TOKEN_PATHS,
+        );
+        const configuredRefreshToken = this.getOidcAuthString(
+            OIDC_REFRESH_TOKEN_PATHS,
+        );
+        const configuredExpiresInSeconds = this.getOidcAuthNumber(
+            OIDC_EXPIRES_IN_PATHS,
+        );
+
+        if (configuredAccessToken && !this.remoteOidcAccessToken) {
+            this.remoteOidcAccessToken = configuredAccessToken;
+        }
+        if (configuredRefreshToken && !this.remoteOidcRefreshToken) {
+            this.remoteOidcRefreshToken = configuredRefreshToken;
+        }
+        if (
+            configuredAccessToken &&
+            configuredExpiresInSeconds !== undefined &&
+            this.remoteOidcAccessTokenExpiresAt === undefined
+        ) {
+            this.remoteOidcAccessTokenExpiresAt =
+                Date.now() + configuredExpiresInSeconds * 1000;
+        }
+    }
+
+    getOidcGrantType() {
+        const configuredGrantType = `${this.getOidcAuthString(OIDC_GRANT_TYPE_PATHS) || ''}`
+            .trim()
+            .toLowerCase();
+        if (configuredGrantType) {
+            return configuredGrantType;
+        }
+        if (this.remoteOidcRefreshToken) {
+            return 'refresh_token';
+        }
+        return 'client_credentials';
+    }
+
+    isRemoteOidcTokenRefreshRequired() {
+        if (!this.remoteOidcAccessToken) {
+            return true;
+        }
+        if (this.remoteOidcAccessTokenExpiresAt === undefined) {
+            return false;
+        }
+        return (
+            this.remoteOidcAccessTokenExpiresAt <=
+            Date.now() + OIDC_ACCESS_TOKEN_REFRESH_WINDOW_MS
+        );
+    }
+
+    async refreshRemoteOidcAccessToken() {
+        const tokenEndpoint = this.getOidcAuthString(OIDC_TOKEN_ENDPOINT_PATHS);
+        if (!tokenEndpoint) {
+            throw new Error(
+                `Unable to refresh OIDC token for ${this.name}: missing auth.oidc token endpoint`,
+            );
+        }
+
+        const oidcClientId = this.getOidcAuthString(OIDC_CLIENT_ID_PATHS);
+        const oidcClientSecret = this.getOidcAuthString(OIDC_CLIENT_SECRET_PATHS);
+        const oidcScope = this.getOidcAuthString(OIDC_SCOPE_PATHS);
+        const oidcAudience = this.getOidcAuthString(OIDC_AUDIENCE_PATHS);
+        const oidcResource = this.getOidcAuthString(OIDC_RESOURCE_PATHS);
+        const oidcTimeout = this.getOidcAuthNumber(OIDC_TIMEOUT_PATHS);
+
+        let grantType = this.getOidcGrantType();
+        if (grantType === 'refresh_token' && !this.remoteOidcRefreshToken) {
+            this.log.warn(
+                `OIDC refresh token is missing for ${this.name}; fallback to client_credentials grant`,
+            );
+            grantType = 'client_credentials';
+        }
+        if (
+            grantType !== 'client_credentials' &&
+            grantType !== 'refresh_token'
+        ) {
+            this.log.warn(
+                `OIDC grant type "${grantType}" is unsupported for ${this.name}; fallback to client_credentials`,
+            );
+            grantType = 'client_credentials';
+        }
+
+        const tokenRequestBody = new URLSearchParams();
+        tokenRequestBody.set('grant_type', grantType);
+        if (grantType === 'refresh_token' && this.remoteOidcRefreshToken) {
+            tokenRequestBody.set('refresh_token', this.remoteOidcRefreshToken);
+        }
+        if (oidcClientId) {
+            tokenRequestBody.set('client_id', oidcClientId);
+        }
+        if (oidcClientSecret) {
+            tokenRequestBody.set('client_secret', oidcClientSecret);
+        }
+        if (oidcScope) {
+            tokenRequestBody.set('scope', oidcScope);
+        }
+        if (oidcAudience) {
+            tokenRequestBody.set('audience', oidcAudience);
+        }
+        if (oidcResource) {
+            tokenRequestBody.set('resource', oidcResource);
+        }
+
+        const tokenResponse = await axios.post(
+            tokenEndpoint,
+            tokenRequestBody.toString(),
+            {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                timeout: oidcTimeout || OIDC_DEFAULT_TIMEOUT_MS,
+            },
+        );
+        const tokenPayload = tokenResponse?.data || {};
+        const accessToken = tokenPayload.access_token;
+        if (!accessToken) {
+            throw new Error(
+                `Unable to refresh OIDC token for ${this.name}: token endpoint response does not contain access_token`,
+            );
+        }
+
+        this.remoteOidcAccessToken = accessToken;
+        if (tokenPayload.refresh_token) {
+            this.remoteOidcRefreshToken = tokenPayload.refresh_token;
+        }
+        const expiresIn = normalizeConfigNumberValue(tokenPayload.expires_in);
+        this.remoteOidcAccessTokenExpiresAt =
+            Date.now() +
+            (expiresIn !== undefined
+                ? expiresIn * 1000
+                : OIDC_DEFAULT_ACCESS_TOKEN_TTL_MS);
+    }
+
+    async ensureRemoteAuthHeaders() {
+        if (!this.configuration.host || !this.configuration.auth) {
+            return;
+        }
+
+        const auth = this.configuration.auth;
+        const { authType } = this.getRemoteAuthResolution(auth);
+        if (authType !== 'oidc') {
+            return;
+        }
+        if (
+            !this.isHttpsRemoteWatcher({
+                protocol: this.configuration.protocol,
+                ca: this.configuration.cafile,
+                cert: this.configuration.certfile,
+                key: this.configuration.keyfile,
+            } as Dockerode.DockerOptions)
+        ) {
+            return;
+        }
+
+        this.initializeRemoteOidcStateFromConfiguration();
+
+        if (this.isRemoteOidcTokenRefreshRequired()) {
+            await this.refreshRemoteOidcAccessToken();
+        }
+        if (!this.remoteOidcAccessToken) {
+            throw new Error(
+                `Unable to authenticate remote watcher ${this.name}: no OIDC access token available`,
+            );
+        }
+        this.setRemoteAuthorizationHeader(`Bearer ${this.remoteOidcAccessToken}`);
+    }
+
     applyRemoteAuthHeaders(options: Dockerode.DockerOptions) {
         const auth = this.configuration.auth;
         if (!auth) {
             return;
         }
 
-        const hasBearer = Boolean(auth.bearer);
-        const hasBasic = Boolean(auth.user && auth.password);
-        if (!hasBearer && !hasBasic) {
+        const { authType, hasBearer, hasBasic, hasOidcConfig } =
+            this.getRemoteAuthResolution(auth);
+        if (
+            !hasBearer &&
+            !hasBasic &&
+            !hasOidcConfig &&
+            authType !== 'oidc'
+        ) {
             this.log.warn(
                 `Skip remote watcher auth for ${this.name} because credentials are incomplete`,
             );
@@ -881,11 +1183,6 @@ class Docker extends Watcher {
                 `Skip remote watcher auth for ${this.name} because HTTPS is required (set protocol=https or TLS certificates)`,
             );
             return;
-        }
-
-        let authType = `${auth.type || ''}`.toLowerCase();
-        if (!authType) {
-            authType = hasBearer ? 'bearer' : 'basic';
         }
 
         if (authType === 'basic') {
@@ -919,6 +1216,17 @@ class Docker extends Watcher {
             return;
         }
 
+        if (authType === 'oidc') {
+            this.initializeRemoteOidcStateFromConfiguration();
+            if (this.remoteOidcAccessToken) {
+                options.headers = {
+                    ...options.headers,
+                    Authorization: `Bearer ${this.remoteOidcAccessToken}`,
+                };
+            }
+            return;
+        }
+
         this.log.warn(
             `Skip remote watcher auth for ${this.name} because auth type "${auth.type}" is unsupported`,
         );
@@ -949,6 +1257,14 @@ class Docker extends Watcher {
     async listenDockerEvents() {
         this.ensureLogger();
         if (!this.log || typeof this.log.info !== 'function') {
+            return;
+        }
+        try {
+            await this.ensureRemoteAuthHeaders();
+        } catch (e: any) {
+            this.log.warn(
+                `Unable to initialize remote watcher auth for docker events (${e.message})`,
+            );
             return;
         }
         this.dockerEventsBuffer = '';
@@ -1024,6 +1340,7 @@ class Docker extends Watcher {
         } else {
             // Update container state in db if so
             try {
+                await this.ensureRemoteAuthHeaders();
                 const container = await this.dockerApi.getContainer(containerId);
                 const containerInspect = await container.inspect();
                 const newStatus = containerInspect.State.Status;
@@ -1255,6 +1572,7 @@ class Docker extends Watcher {
      */
     async getContainers(): Promise<Container[]> {
         this.ensureLogger();
+        await this.ensureRemoteAuthHeaders();
         const listContainersOptions: Dockerode.ContainerListOptions = {};
         if (this.configuration.watchall) {
             listContainersOptions.all = true;
@@ -1487,6 +1805,7 @@ class Docker extends Watcher {
                     container.image.digest.value = digestV2.digest;
                 } else {
                     // Legacy v1 image => take Image digest as reference for comparison
+                    await this.ensureRemoteAuthHeaders();
                     const image = await this.dockerApi
                         .getImage(container.image.id)
                         .inspect();
@@ -1565,6 +1884,7 @@ class Docker extends Watcher {
         // Get container image details
         let image;
         try {
+            await this.ensureRemoteAuthHeaders();
             image = await this.dockerApi.getImage(container.Image).inspect();
         } catch (e: any) {
             throw new Error(
