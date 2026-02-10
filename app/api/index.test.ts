@@ -65,12 +65,6 @@ vi.mock('../configuration', () => ({
     getServerConfiguration: mockGetServerConfiguration,
 }));
 
-import * as authModule from './auth.js';
-import * as apiModule from './api.js';
-import * as uiModule from './ui.js';
-import * as prometheusModule from './prometheus.js';
-import * as healthModule from './health.js';
-
 // The index module reads configuration at module level, so we must
 // re-import after setting the desired mock return value.
 describe('API Index', () => {

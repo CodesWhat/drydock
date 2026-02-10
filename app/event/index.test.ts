@@ -147,7 +147,7 @@ test('handler with non-finite order should default to 100', async () => {
         async () => {
             calls.push('default-order');
         },
-        { order: NaN },
+        { order: Number.NaN },
     );
 
     await event.emitContainerReport({});

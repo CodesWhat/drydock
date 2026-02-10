@@ -93,8 +93,8 @@ class Hub extends Custom {
 
     getImageFullName(image, tagOrDigest) {
         let fullName = super.getImageFullName(image, tagOrDigest);
-        fullName = fullName.replaceAll(/registry-1\.docker\.io\//g, '');
-        fullName = fullName.replaceAll(/library\//g, '');
+        fullName = fullName.replaceAll('registry-1.docker.io/', '');
+        fullName = fullName.replaceAll('library/', '');
         return fullName;
     }
 }

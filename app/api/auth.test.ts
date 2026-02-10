@@ -36,7 +36,7 @@ vi.mock('getmac', () => ({
 
 vi.mock('../store', () => ({
     getConfiguration: vi.fn(() => ({
-        path: '/tmp/store',
+        path: '/test/store',
         file: 'db.json',
     })),
 }));
@@ -70,6 +70,26 @@ function createResponse() {
         json: vi.fn(),
         sendStatus: vi.fn(),
     };
+}
+
+function getRouteHandler(method, path) {
+    const app = createApp();
+    registry.getState.mockReturnValue({
+        authentication: {
+            'oauth.provider': {
+                getId: vi.fn(() => 'oauth.provider'),
+                getStrategy: vi.fn(() => ({})),
+                getStrategyDescription: vi.fn(() => ({
+                    type: 'oauth',
+                    name: 'provider',
+                    logoutUrl: 'https://logout.example.com',
+                })),
+            },
+        },
+    });
+    auth.init(app);
+    const call = mockRouter[method].mock.calls.find((c) => c[0] === path);
+    return call ? call[1] : undefined;
 }
 
 describe('Auth Router', () => {
@@ -204,26 +224,6 @@ describe('Auth Router', () => {
     });
 
     describe('route handlers', () => {
-        function getRouteHandler(method, path) {
-            const app = createApp();
-            registry.getState.mockReturnValue({
-                authentication: {
-                    'oauth.provider': {
-                        getId: vi.fn(() => 'oauth.provider'),
-                        getStrategy: vi.fn(() => ({})),
-                        getStrategyDescription: vi.fn(() => ({
-                            type: 'oauth',
-                            name: 'provider',
-                            logoutUrl: 'https://logout.example.com',
-                        })),
-                    },
-                },
-            });
-            auth.init(app);
-            const call = mockRouter[method].mock.calls.find((c) => c[0] === path);
-            return call ? call[1] : undefined;
-        }
-
         test('getStrategies should return unique sorted strategies', () => {
             const mockAuth1 = {
                 getId: vi.fn(() => 'basic.b'),

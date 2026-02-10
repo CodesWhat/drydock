@@ -5,7 +5,10 @@ on:
     branches: [main]
     tags: ['*']
 
-permissions: read-all
+permissions:
+  contents: read
+  packages: write
+  id-token: write
 
 env:
   DOCKER_PLATFORMS: linux/amd64,linux/arm64
@@ -32,10 +35,10 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to Docker Hub
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
@@ -78,7 +81,7 @@ jobs:
           platforms: ${{ env.DOCKER_PLATFORMS }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: DD_VERSION=${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          build-args: DD_VERSION=${{ steps.meta.outputs.version }}
           no-cache: true
 
       - name: Install cosign

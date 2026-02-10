@@ -52,7 +52,7 @@ describe('Docker image name parsing fuzz tests', () => {
     test.prop([
         fc.record({
             domain: fc.option(
-                fc.stringMatching(/^[a-z0-9.-]{1,30}(\.[a-z]{2,6})?(:[0-9]{1,5})?$/),
+                fc.stringMatching(/^[a-z0-9.-]{1,30}(\.[a-z]{2,6})?(:\d{1,5})?$/),
                 { nil: undefined },
             ),
             path: fc.stringMatching(/^[a-z0-9._/-]{1,40}$/),

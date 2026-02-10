@@ -296,7 +296,7 @@ class Trigger extends Component {
     private unregisterContainerReport?: () => void;
     private unregisterContainerReports?: () => void;
     private unregisterContainerUpdateApplied?: () => void;
-    private notificationResults: Map<string, any> = new Map();
+    private readonly notificationResults: Map<string, any> = new Map();
 
     static getSupportedThresholds() {
         return [

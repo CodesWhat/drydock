@@ -7,7 +7,10 @@ on:
   push:
     branches: [main]
 
-permissions: read-all
+permissions:
+  contents: read
+  security-events: write
+  id-token: write
 
 jobs:
   analysis:
@@ -32,6 +35,6 @@ jobs:
           publish_results: true
 
       - name: Upload to code-scanning
-        uses: github/codeql-action/upload-sarif@ff0a06e83cb2de871e5a09832bc6a81e7276941f # v3.28.18
+        uses: github/codeql-action/upload-sarif@6bc82e05fd0ea64601dd4b465378bbcf57de0314 # v4.32.1
         with:
           sarif_file: results.sarif

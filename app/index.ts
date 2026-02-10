@@ -11,7 +11,7 @@ import * as agentManager from './agent/index.js';
 async function main() {
     const isAgent = process.argv.includes('--agent');
     const mode = isAgent ? 'Agent' : 'Controller';
-    const version = String(getVersion()).replace(/[^a-zA-Z0-9._\-+]/g, '');
+    const version = String(getVersion()).replaceAll(/[^a-zA-Z0-9._\-+]/g, '');
     log.info(`drydock is starting in ${mode} mode (version = ${version})`);
 
     // Init store

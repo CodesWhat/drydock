@@ -36,6 +36,14 @@ function createResponse() {
     return createMockResponse();
 }
 
+function getRemoteTriggerHandler() {
+    triggerRouter.init();
+    const call = mockRouter.post.mock.calls.find(
+        (c) => c[0] === '/:agent/:type/:name',
+    );
+    return call[1];
+}
+
 describe('Trigger Router', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -213,14 +221,6 @@ describe('Trigger Router', () => {
     });
 
     describe('runRemoteTrigger', () => {
-        function getRemoteTriggerHandler() {
-            triggerRouter.init();
-            const call = mockRouter.post.mock.calls.find(
-                (c) => c[0] === '/:agent/:type/:name',
-            );
-            return call[1];
-        }
-
         test('should return 404 when agent not found', async () => {
             agent.getAgent.mockReturnValue(undefined);
 

@@ -8,7 +8,8 @@ on:
   schedule:
     - cron: '0 6 * * 0' # Weekly on Sunday at 06:00 UTC
 
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   fuzz:

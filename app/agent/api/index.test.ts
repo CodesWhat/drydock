@@ -7,7 +7,7 @@ const { mockApp, mockServerConfig } = vi.hoisted(() => {
         get: vi.fn(),
         post: vi.fn(),
         delete: vi.fn(),
-        listen: vi.fn((port, cb) => cb && cb()),
+        listen: vi.fn((port, cb) => cb?.()),
     };
     const mockServerConfig = {
         port: 3000,
@@ -22,7 +22,7 @@ vi.mock('node:fs', () => ({
 }));
 
 vi.mock('node:https', () => ({
-    default: { createServer: vi.fn().mockReturnValue({ listen: vi.fn((port, cb) => cb && cb()) }) },
+    default: { createServer: vi.fn().mockReturnValue({ listen: vi.fn((port, cb) => cb?.()) }) },
 }));
 
 vi.mock('../../log/index.js', () => ({ default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) } }));

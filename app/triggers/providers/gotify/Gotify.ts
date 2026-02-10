@@ -56,7 +56,7 @@ class Gotify extends Trigger {
      * @param triggerResult the result from createMessage containing the message id
      */
     async dismiss(containerId, triggerResult) {
-        if (triggerResult && triggerResult.id) {
+        if (triggerResult?.id) {
             this.log.info(
                 `Deleting Gotify message ${triggerResult.id} for container ${containerId}`,
             );
