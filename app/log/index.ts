@@ -1,9 +1,9 @@
 // @ts-nocheck
-import bunyan from 'bunyan';
+import pino from 'pino';
 import { getLogLevel } from '../configuration/index.js';
 
-// Init Bunyan logger
-const logger = bunyan.createLogger({
+// Init Pino logger
+const logger = pino({
     name: 'drydock',
     level: getLogLevel(),
 });
