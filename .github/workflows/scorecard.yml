@@ -7,10 +7,7 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: read
-  security-events: write
-  id-token: write
+permissions: read-all
 
 jobs:
   analysis:
