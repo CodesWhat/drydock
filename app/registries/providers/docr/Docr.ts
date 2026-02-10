@@ -47,7 +47,7 @@ class Docr extends Custom {
     }
 
     match(image) {
-        return /^.*\.?registry.digitalocean.com$/.test(image.registry.url);
+        return /^([a-zA-Z0-9-]+\.)*registry\.digitalocean\.com$/.test(image.registry.url);
     }
 }
 

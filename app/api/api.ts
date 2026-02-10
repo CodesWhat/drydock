@@ -1,5 +1,6 @@
 // @ts-nocheck
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import * as appRouter from './app.js';
 import * as containerRouter from './container.js';
 import * as watcherRouter from './watcher.js';
@@ -18,6 +19,9 @@ import * as agentRouter from './agent.js';
  */
 export function init() {
     const router = express.Router();
+
+    const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 1000, standardHeaders: true, legacyHeaders: false });
+    router.use(apiLimiter);
 
     // Mount app router
     router.use('/app', appRouter.init());

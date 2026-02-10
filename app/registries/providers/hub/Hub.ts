@@ -52,7 +52,7 @@ class Hub extends Custom {
 
     match(image) {
         return (
-            !image.registry.url || /^.*\.?docker.io$/.test(image.registry.url)
+            !image.registry.url || /^([a-zA-Z0-9-]+\.)*docker\.io$/.test(image.registry.url)
         );
     }
 

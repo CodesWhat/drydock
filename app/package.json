@@ -26,6 +26,7 @@
         "dockerode": "4.0.9",
         "express": "5.2.1",
         "express-healthcheck": "0.1.0",
+        "express-rate-limit": "^8.2.1",
         "express-session": "1.19.0",
         "flat": "^6.0.1",
         "getmac": "6.6.0",

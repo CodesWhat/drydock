@@ -38,6 +38,12 @@ test('match should return false when registry url is not from docr', async () =>
     ).toBeFalsy();
 });
 
+test('match should reject hostnames that bypass unescaped dot in regex', async () => {
+    expect(docr.match({ registry: { url: 'registryXdigitaloceanXcom' } })).toBe(false);
+    expect(docr.match({ registry: { url: 'evil-registry.digitalocean.com.attacker.com' } })).toBe(false);
+    expect(docr.match({ registry: { url: 'notregistry.digitalocean.com' } })).toBe(false);
+});
+
 test('init should map token to password and set default login', async () => {
     await docr.register('registry', 'docr', 'private', {
         token: 'dop_v1_abcdef',

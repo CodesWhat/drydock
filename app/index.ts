@@ -11,7 +11,8 @@ import * as agentManager from './agent/index.js';
 async function main() {
     const isAgent = process.argv.includes('--agent');
     const mode = isAgent ? 'Agent' : 'Controller';
-    log.info(`drydock is starting in ${mode} mode (version = ${getVersion()})`);
+    const version = String(getVersion()).replace(/[^a-zA-Z0-9._\-+]/g, '');
+    log.info(`drydock is starting in ${mode} mode (version = ${version})`);
 
     // Init store
     await store.init({ memory: isAgent });

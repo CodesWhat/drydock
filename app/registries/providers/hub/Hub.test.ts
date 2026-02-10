@@ -33,6 +33,12 @@ describe('Docker Hub Registry', () => {
         );
     });
 
+    test('should reject hostnames that bypass unescaped dot in regex', async () => {
+        expect(hub.match({ registry: { url: 'dockerXio' } })).toBe(false);
+        expect(hub.match({ registry: { url: 'evil-docker.io.attacker.com' } })).toBe(false);
+        expect(hub.match({ registry: { url: 'notdocker.io' } })).toBe(false);
+    });
+
     test('should normalize image name for official images', async () => {
         const image = { name: 'nginx', registry: {} };
         const normalized = hub.normalizeImage(image);

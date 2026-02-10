@@ -53,7 +53,6 @@ export class AgentClient {
                 key: this.config.keyfile
                     ? fs.readFileSync(this.config.keyfile)
                     : undefined,
-                rejectUnauthorized: false,
             });
         }
 

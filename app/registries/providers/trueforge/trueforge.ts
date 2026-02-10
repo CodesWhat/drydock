@@ -26,7 +26,7 @@ class Trueforge extends Quay {
      */
 
     match(image) {
-        return /^.*\.?oci.trueforge.org$/.test(image.registry.url);
+        return /^([a-zA-Z0-9-]+\.)*oci\.trueforge\.org$/.test(image.registry.url);
     }
 
     /**

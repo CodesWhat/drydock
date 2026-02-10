@@ -1,5 +1,6 @@
 // @ts-nocheck
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import ConnectLoki from 'connect-loki';
 const LokiStore = ConnectLoki(session);
@@ -186,6 +187,9 @@ export function init(app) {
     passport.deserializeUser((user, done) => {
         done(null, JSON.parse(user));
     });
+
+    const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
+    router.use(authLimiter);
 
     // Return strategies
     router.get('/strategies', getStrategies);

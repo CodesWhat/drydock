@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { v4 as uuid } from 'uuid';
+import rateLimit from 'express-rate-limit';
 import * as openidClientLibrary from 'openid-client';
 import Authentication from '../Authentication.js';
 import OidcStrategy from './OidcStrategy.js';
@@ -179,6 +180,8 @@ class Oidc extends Authentication {
      * @param app
      */
     getStrategy(app) {
+        const oidcLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 50, standardHeaders: true, legacyHeaders: false });
+        app.use(`/auth/oidc/${this.name}`, oidcLimiter);
         app.get(`/auth/oidc/${this.name}/redirect`, async (req, res) =>
             this.redirect(req, res),
         );

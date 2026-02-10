@@ -81,7 +81,7 @@ export function transform(transformFormula, originalTag) {
                 10,
             );
             transformedTag = transformedTag.replace(
-                new RegExp(placeholder.replace('$', '\\$'), 'g'),
+                new RegExp(placeholder.replace(/\$/g, '\\$'), 'g'),
                 originalTagMatches[placeholderIndex],
             );
         });
