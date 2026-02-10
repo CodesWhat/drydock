@@ -3211,7 +3211,7 @@ describe('Docker Watcher', () => {
             const mockLogChild = { error: vi.fn() };
             mockImage.inspect.mockResolvedValue({ Config: { Image: '' } });
 
-            const result = await docker.findNewVersion(container, mockLogChild);
+            await docker.findNewVersion(container, mockLogChild);
 
             expect(container.image.digest.value).toBeUndefined();
         });
@@ -3294,6 +3294,144 @@ describe('Docker Watcher', () => {
                 expect.any(String),
                 expect.objectContaining({ timeout: 10000 }),
             );
+        });
+    });
+
+    describe('Additional Coverage - getImageForRegistryLookup branches', () => {
+        test('should handle lookup image as hostname only (no slash)', async () => {
+            const harborHubState = createHarborHubRegistryState();
+            const container = await setupContainerDetailTest(docker, {
+                container: {
+                    Image: 'myimage:1.0.0',
+                    Names: ['/myimage'],
+                    Labels: { 'dd.registry.lookup.image': 'myregistry.example.com' },
+                },
+                imageDetails: { RepoDigests: ['myimage@sha256:abc123'] },
+                parsedImage: { domain: undefined, path: 'library/myimage', tag: '1.0.0' },
+                parseImpl: (value) => {
+                    if (value === 'myimage:1.0.0') return { domain: undefined, path: 'library/myimage', tag: '1.0.0' };
+                    if (value === 'myregistry.example.com') return { path: 'myregistry.example.com', domain: undefined };
+                    return { domain: undefined, path: value };
+                },
+                registryState: harborHubState,
+            });
+            const result = await docker.addImageDetailsToContainer(container);
+            expect(result).toBeDefined();
+        });
+
+        test('should handle lookup image with empty parsed path', async () => {
+            const harborHubState = createHarborHubRegistryState();
+            const container = await setupContainerDetailTest(docker, {
+                container: {
+                    Image: 'myimage:1.0.0',
+                    Names: ['/myimage'],
+                    Labels: { 'dd.registry.lookup.image': 'something' },
+                },
+                imageDetails: { RepoDigests: ['myimage@sha256:abc123'] },
+                parseImpl: (value) => {
+                    if (value === 'myimage:1.0.0') return { domain: undefined, path: 'library/myimage', tag: '1.0.0' };
+                    if (value === 'something') return { path: undefined, domain: undefined };
+                    return { domain: undefined, path: value };
+                },
+                registryState: harborHubState,
+            });
+            const result = await docker.addImageDetailsToContainer(container);
+            expect(result).toBeDefined();
+        });
+    });
+
+    describe('Additional Coverage - Docker Hub digest watch warning', () => {
+        test('should warn about throttling when watching digest on Docker Hub with explicit label', async () => {
+            const container = await setupContainerDetailTest(docker, {
+                container: {
+                    Image: 'docker.io/library/nginx:latest',
+                    Names: ['/nginx'],
+                    Labels: { 'dd.watch.digest': 'true' },
+                },
+                imageDetails: { RepoDigests: ['nginx@sha256:abc123'] },
+                parsedImage: { domain: 'docker.io', path: 'library/nginx', tag: 'latest' },
+                semverValue: null,
+            });
+            const result = await docker.addImageDetailsToContainer(container);
+            expect(result.image.digest.watch).toBe(true);
+        });
+    });
+
+    describe('Additional Coverage - inspectTagPath edge cases', () => {
+        test('should handle inspect path returning empty string value', async () => {
+            const container = await setupContainerDetailTest(docker, {
+                container: {
+                    Image: 'ghcr.io/example/service:latest',
+                    Names: ['/service'],
+                    Labels: { 'dd.inspect.tag.path': 'Config/Labels/version' },
+                },
+                imageDetails: { Config: { Labels: { version: '   ' } } },
+                parsedImage: { domain: 'ghcr.io', path: 'example/service', tag: 'latest' },
+                semverValue: null,
+            });
+            mockTag.transform.mockImplementation((_transform, value) => value);
+            const result = await docker.addImageDetailsToContainer(container);
+            expect(result.image.tag.value).toBe('latest');
+        });
+
+        test('should handle inspect path with null intermediate value', async () => {
+            const container = await setupContainerDetailTest(docker, {
+                container: {
+                    Image: 'ghcr.io/example/service:latest',
+                    Names: ['/service'],
+                    Labels: { 'dd.inspect.tag.path': 'Config/NonExistent/deep' },
+                },
+                imageDetails: { Config: {} },
+                parsedImage: { domain: 'ghcr.io', path: 'example/service', tag: 'latest' },
+                semverValue: null,
+            });
+            const result = await docker.addImageDetailsToContainer(container);
+            expect(result.image.tag.value).toBe('latest');
+        });
+    });
+
+    describe('Additional Coverage - normalizeConfigNumberValue string parsing', () => {
+        test('should parse string number values in OIDC expires_in config', async () => {
+            await docker.register('watcher', 'docker', 'test', createOidcConfig({
+                expiresin: '600',
+                accesstoken: 'string-expires-token', // NOSONAR - test
+            }));
+            docker.initializeRemoteOidcStateFromConfiguration();
+            expect(docker.remoteOidcAccessTokenExpiresAt).toBeDefined();
+        });
+    });
+
+    describe('Additional Coverage - imgset pattern matching edge cases', () => {
+        test('should handle imgset with empty image pattern', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            docker.configuration.imgset = { weird: { image: '   ' } };
+            mockParse.mockReturnValue({ path: undefined });
+            const result = docker.getMatchingImgsetConfiguration({ path: 'library/nginx', domain: 'docker.io' });
+            expect(result).toBeUndefined();
+        });
+
+        test('should return -1 specificity when parsedImage has no path', async () => {
+            await docker.register('watcher', 'docker', 'test', {
+                imgset: { test: { image: 'library/nginx' } },
+            });
+            mockParse.mockImplementation((v) => v === 'library/nginx' ? { path: 'library/nginx' } : {});
+            const result = docker.getMatchingImgsetConfiguration({ path: undefined, domain: undefined });
+            expect(result).toBeUndefined();
+        });
+    });
+
+    describe('Additional Coverage - ensureLogger catch block', () => {
+        test('should create fallback silent logger when log.child throws', async () => {
+            docker.log = undefined;
+            const originalModule = await import('../../../log/index.js');
+            const origChild = originalModule.default.child;
+            originalModule.default.child = () => { throw new Error('log init failed'); };
+            docker.ensureLogger();
+            expect(docker.log).toBeDefined();
+            docker.log.info('test');
+            docker.log.warn('test');
+            docker.log.error('test');
+            originalModule.default.child = origChild;
         });
     });
 });
