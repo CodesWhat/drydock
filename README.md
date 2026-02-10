@@ -29,7 +29,7 @@
   <a href="https://app.codacy.com/gh/CodesWhat/drydock/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade"><img src="https://app.codacy.com/project/badge/Grade/7d85925194a545519a07687a9061fb38" alt="Codacy Badge"></a>
   <a href="https://sonarcloud.io/summary/overall?id=CodesWhat_drydock"><img src="https://sonarcloud.io/api/project_badges/measure?project=CodesWhat_drydock&metric=alert_status" alt="SonarCloud"></a>
   <a href="https://snyk.io/test/github/CodesWhat/drydock"><img src="https://snyk.io/test/github/CodesWhat/drydock/badge.svg" alt="Snyk"></a>
-  <a href="https://app.fossa.com/projects/custom%2B60291%2Fgithub.com%2FCodesWhat%2Fdrydock?ref=badge_shield&issueType=license"><img src="https://app.fossa.com/api/projects/custom%2B60291%2Fgithub.com%2FCodesWhat%2Fdrydock.svg?type=shield&issueType=license" alt="FOSSA Status"></a>
+
   <a href="https://qlty.sh/gh/CodesWhat/projects/drydock"><img src="https://qlty.sh/gh/CodesWhat/projects/drydock/maintainability.svg" alt="Maintainability"></a>
 </p>
 
