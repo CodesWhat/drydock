@@ -7,6 +7,14 @@ This changelog covers all changes in **drydock** since forking from [getwud/wud]
 
 ---
 
+## 1.0.2
+
+### Bug Fixes
+
+- **Registry and trigger crashes in agent mode** — `getSummaryTags()` and `getTriggerCounter()` also return `undefined` in agent mode. Added optional chaining to all remaining Prometheus call sites so agent mode doesn't crash when processing containers or firing triggers. (Fixes #33)
+
+---
+
 ## 1.0.1
 
 ### Bug Fixes
