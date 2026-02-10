@@ -37,6 +37,7 @@
 ## Contents
 
 - [Quick Start](#quick-start)
+- [Screenshots](#screenshots)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Supported Registries](#supported-registries)
@@ -97,6 +98,18 @@ docker pull ghcr.io/codeswhat/drydock:latest
 ```
 
 </details>
+
+---
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/assets/drydock-dashboard.png" alt="drydock dashboard" width="700">
+</p>
+
+<p align="center">
+  <img src="docs/assets/drydock-containers.png" alt="drydock containers view" width="700">
+</p>
 
 ---
 

@@ -49,7 +49,7 @@ Many registries are supported.
 
 A Web UI allows to get container insights and to manually run the triggers.
 
-![image](assets/ui.png)
+![drydock containers view](assets/drydock-containers.png)
 
 ## Integration
 
