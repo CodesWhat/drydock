@@ -2063,7 +2063,7 @@ class Docker extends Watcher {
                 `Error when trying to prune the old containers (${e.message})`,
             );
         }
-        getWatchContainerGauge().set(
+        getWatchContainerGauge()?.set(
             {
                 type: this.type,
                 name: this.name,

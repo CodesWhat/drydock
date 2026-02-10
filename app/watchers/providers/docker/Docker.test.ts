@@ -2944,6 +2944,18 @@ describe('Docker Watcher', () => {
         });
     });
 
+    describe('Agent mode - Prometheus gauge not initialized', () => {
+        test('should not crash when getWatchContainerGauge returns undefined', async () => {
+            mockPrometheus.getWatchContainerGauge.mockReturnValue(undefined);
+            mockDockerApi.listContainers.mockResolvedValue([]);
+            storeContainer.getContainers.mockReturnValue([]);
+            await docker.register('watcher', 'docker', 'test', { watchbydefault: true });
+            docker.log = createMockLog(['warn', 'info', 'debug']);
+            const result = await docker.getContainers();
+            expect(result).toHaveLength(0);
+        });
+    });
+
     describe('Additional Coverage - getSwarmServiceLabels', () => {
         test('should return empty when getService is not a function', async () => {
             await docker.register('watcher', 'docker', 'test', {});
