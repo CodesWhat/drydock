@@ -25,11 +25,7 @@ class Gotify extends Trigger {
      * @returns {*}
      */
     maskConfiguration() {
-        return {
-            ...this.configuration,
-            url: this.configuration.url,
-            token: Gotify.mask(this.configuration.token),
-        };
+        return this.maskFields(['token']);
     }
 
     /**

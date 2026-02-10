@@ -39,11 +39,7 @@ class Telegram extends Trigger {
      * @returns {*}
      */
     maskConfiguration() {
-        return {
-            ...this.configuration,
-            bottoken: Telegram.mask(this.configuration.bottoken),
-            chatid: Telegram.mask(this.configuration.chatid),
-        };
+        return this.maskFields(['bottoken', 'chatid']);
     }
 
     /**

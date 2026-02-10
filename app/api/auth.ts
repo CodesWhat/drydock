@@ -166,6 +166,7 @@ export function init(app) {
             saveUninitialized: false,
             cookie: {
                 httpOnly: true,
+                secure: 'auto',
                 maxAge: getCookieMaxAge(7),
             },
         }),

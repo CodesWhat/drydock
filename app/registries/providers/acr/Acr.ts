@@ -1,10 +1,10 @@
 // @ts-nocheck
-import Registry from '../../Registry.js';
+import BaseRegistry from '../../BaseRegistry.js';
 
 /**
  * Azure Container Registry integration.
  */
-class Acr extends Registry {
+class Acr extends BaseRegistry {
     getConfigurationSchema() {
         return this.joi.object().keys({
             clientid: this.joi.string().required(),
@@ -17,11 +17,7 @@ class Acr extends Registry {
      * @returns {*}
      */
     maskConfiguration() {
-        return {
-            ...this.configuration,
-            clientid: this.configuration.clientid,
-            clientsecret: Acr.mask(this.configuration.clientsecret),
-        };
+        return this.maskSensitiveFields(['clientsecret']);
     }
 
     /**
@@ -41,11 +37,7 @@ class Acr extends Registry {
      */
 
     normalizeImage(image) {
-        const imageNormalized = image;
-        if (!imageNormalized.registry.url.startsWith('https://')) {
-            imageNormalized.registry.url = `https://${imageNormalized.registry.url}/v2`;
-        }
-        return imageNormalized;
+        return this.normalizeImageUrl(image);
     }
 
     async authenticate(image, requestOptions) {

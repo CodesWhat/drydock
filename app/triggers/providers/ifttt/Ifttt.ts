@@ -23,11 +23,7 @@ class Ifttt extends Trigger {
      * @returns {*}
      */
     maskConfiguration() {
-        return {
-            ...this.configuration,
-            event: this.configuration.event,
-            key: Ifttt.mask(this.configuration.key),
-        };
+        return this.maskFields(['key']);
     }
 
     /**

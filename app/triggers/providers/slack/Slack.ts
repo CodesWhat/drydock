@@ -23,11 +23,7 @@ class Slack extends Trigger {
      * @returns {*}
      */
     maskConfiguration() {
-        return {
-            ...this.configuration,
-            channel: this.configuration.channel,
-            token: Slack.mask(this.configuration.token),
-        };
+        return this.maskFields(['token']);
     }
 
     /*
@@ -37,31 +33,16 @@ class Slack extends Trigger {
         this.client = new WebClient(this.configuration.token);
     }
 
-    /*
-     * Post a message with new image version details.
-     *
-     * @param image the image
-     * @returns {Promise<void>}
-     */
+    formatTitleAndBody(title, body) {
+        return `*${title}*\n\n${body}`;
+    }
+
     async trigger(container) {
-        const body = this.renderSimpleBody(container);
-
-        if (this.configuration.disabletitle) {
-            return this.sendMessage(body);
-        }
-
-        const title = this.renderSimpleTitle(container);
-        return this.sendMessage(`*${title}*\n\n${body}`);
+        return this.sendMessage(this.composeMessage(container));
     }
 
     async triggerBatch(containers) {
-        const body = this.renderBatchBody(containers);
-        if (this.configuration.disabletitle) {
-            return this.sendMessage(body);
-        }
-
-        const title = this.renderBatchTitle(containers);
-        return this.sendMessage(`*${title}*\n\n${body}`);
+        return this.sendMessage(this.composeBatchMessage(containers));
     }
 
     /**

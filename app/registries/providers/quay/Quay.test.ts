@@ -3,16 +3,19 @@ import axios from 'axios';
 import Quay from './Quay.js';
 import log from '../../../log/index.js';
 
+// Test fixture credentials - not real secrets
+const TEST_TOKEN = 'token'; // NOSONAR
+
 vi.mock('axios');
 axios.mockImplementation(() => ({
-    token: 'token',
+    token: TEST_TOKEN,
 }));
 
 const quay = new Quay();
 quay.configuration = {
     namespace: 'namespace',
     account: 'account',
-    token: 'token',
+    token: TEST_TOKEN,
 };
 quay.log = log;
 
@@ -26,12 +29,12 @@ test('validatedConfiguration should initialize when auth configuration is valid'
         quay.validateConfiguration({
             namespace: 'namespace',
             account: 'account',
-            token: 'token',
+            token: TEST_TOKEN,
         }),
     ).toStrictEqual({
         namespace: 'namespace',
         account: 'account',
-        token: 'token',
+        token: TEST_TOKEN,
     });
 });
 
@@ -102,7 +105,7 @@ test('getAuthCredentials should return base64 encode credentials when auth confi
     quayInstance.configuration = {
         namespace: 'namespace',
         account: 'account',
-        token: 'token',
+        token: TEST_TOKEN,
     };
     expect(quayInstance.getAuthCredentials()).toEqual(
         'bmFtZXNwYWNlK2FjY291bnQ6dG9rZW4=',
@@ -120,10 +123,10 @@ test('getAuthPull should return credentials when auth configuration', async () =
     quayInstance.configuration = {
         namespace: 'namespace',
         account: 'account',
-        token: 'token',
+        token: TEST_TOKEN,
     };
     await expect(quayInstance.getAuthPull()).resolves.toEqual({
-        password: 'token',
+        password: TEST_TOKEN,
         username: 'namespace+account',
     });
 });
@@ -131,7 +134,7 @@ test('getAuthPull should return credentials when auth configuration', async () =
 test('authenticate should populate header with base64 bearer', async () => {
     expect(quay.authenticate({}, { headers: {} })).resolves.toEqual({
         headers: {
-            Authorization: 'Bearer token',
+            Authorization: `Bearer ${TEST_TOKEN}`,
         },
     });
 });
@@ -152,7 +155,7 @@ test('authenticate should log warning when axios throws an error', async () => {
     quayInstance.configuration = {
         namespace: 'namespace',
         account: 'account',
-        token: 'token',
+        token: TEST_TOKEN,
     };
     quayInstance.log = { warn: vi.fn() };
     const result = await quayInstance.authenticate(

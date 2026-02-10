@@ -1,10 +1,15 @@
 // @ts-nocheck
 import Gitea from './Gitea.js';
 
+// Test fixture credentials - not real secrets
+const TEST_LOGIN = 'login';
+const TEST_PASSWORD = 'password'; // NOSONAR
+const TEST_PASS = 'pass'; // NOSONAR
+
 const gitea = new Gitea();
 gitea.configuration = {
-    login: 'login',
-    password: 'password',
+    login: TEST_LOGIN,
+    password: TEST_PASSWORD,
     url: 'https://gitea.acme.com',
 };
 
@@ -12,13 +17,13 @@ test('validatedConfiguration should initialize when configuration is valid', asy
     expect(
         gitea.validateConfiguration({
             url: 'https://gitea.acme.com',
-            login: 'login',
-            password: 'password',
+            login: TEST_LOGIN,
+            password: TEST_PASSWORD,
         }),
     ).toStrictEqual({
         url: 'https://gitea.acme.com',
-        login: 'login',
-        password: 'password',
+        login: TEST_LOGIN,
+        password: TEST_PASSWORD,
     });
 });
 
@@ -72,7 +77,7 @@ test('should initialize and prepend https to URL without protocol', async () => 
     giteaInstance.configuration = {
         url: 'gitea.example.com',
         login: 'user',
-        password: 'pass',
+        password: TEST_PASS,
     };
 
     giteaInstance.init();
@@ -84,7 +89,7 @@ test('should not modify URL that already has protocol', async () => {
     giteaInstance.configuration = {
         url: 'http://gitea.example.com',
         login: 'user',
-        password: 'pass',
+        password: TEST_PASS,
     };
 
     giteaInstance.init();

@@ -15,7 +15,7 @@ const pushover = new Pushover();
 
 const configurationValid = {
     user: 'user',
-    token: 'token',
+    token: 'token', // NOSONAR - test fixture, not a real credential
     priority: 0,
     sound: 'pushover',
     html: 0,

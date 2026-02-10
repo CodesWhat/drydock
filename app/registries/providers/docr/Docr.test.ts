@@ -1,15 +1,18 @@
 // @ts-nocheck
 import Docr from './Docr.js';
 
+// Test fixture credentials - not real secrets
+const TEST_TOKEN = 'dop_v1_abcdef'; // NOSONAR
+
 const docr = new Docr();
 
 test('validatedConfiguration should initialize when configuration is valid', async () => {
     expect(
         docr.validateConfiguration({
-            token: 'dop_v1_abcdef',
+            token: TEST_TOKEN,
         }),
     ).toStrictEqual({
-        token: 'dop_v1_abcdef',
+        token: TEST_TOKEN,
     });
 });
 
@@ -46,14 +49,14 @@ test('match should reject hostnames that bypass unescaped dot in regex', async (
 
 test('init should map token to password and set default login', async () => {
     await docr.register('registry', 'docr', 'private', {
-        token: 'dop_v1_abcdef',
+        token: TEST_TOKEN,
     });
 
     expect(docr.configuration.url).toEqual(
         'https://registry.digitalocean.com',
     );
     expect(docr.configuration.login).toEqual('doctl');
-    expect(docr.configuration.password).toEqual('dop_v1_abcdef');
+    expect(docr.configuration.password).toEqual(TEST_TOKEN);
 });
 
 test('normalizeImage should return the proper registry v2 endpoint', async () => {
@@ -79,12 +82,12 @@ test('normalizeImage should return the proper registry v2 endpoint', async () =>
 test('authenticate should add basic auth from token alias', async () => {
     docr.configuration = {
         login: 'doctl',
-        password: 'dop_v1_abcdef',
+        password: TEST_TOKEN,
     };
 
     expect(docr.authenticate(undefined, { headers: {} })).resolves.toEqual({
         headers: {
-            Authorization: 'Basic ZG9jdGw6ZG9wX3YxX2FiY2RlZg==',
+            Authorization: 'Basic ZG9jdGw6ZG9wX3YxX2FiY2RlZg==', // NOSONAR - test fixture, not a real credential
         },
     });
 });

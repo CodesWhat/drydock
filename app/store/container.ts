@@ -3,8 +3,6 @@
  * Container store.
  */
 import { byString, byValues } from 'sort-es';
-import logger from '../log/index.js';
-const log = logger.child({ component: 'store' });
 import * as container from '../model/container.js';
 const { validate: validateContainer } = container;
 import {
@@ -12,6 +10,7 @@ import {
     emitContainerUpdated,
     emitContainerRemoved,
 } from '../event/index.js';
+import { initCollection } from './util.js';
 
 let containers;
 
@@ -20,11 +19,7 @@ let containers;
  * @param db
  */
 export function createCollections(db) {
-    containers = db.getCollection('containers');
-    if (containers === null) {
-        log.info('Create Collection containers');
-        containers = db.addCollection('containers');
-    }
+    containers = initCollection(db, 'containers');
 }
 
 /**

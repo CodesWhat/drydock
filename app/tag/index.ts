@@ -80,8 +80,8 @@ export function transform(transformFormula, originalTag) {
                 placeholder.substring(1),
                 10,
             );
-            transformedTag = transformedTag.replace(
-                new RegExp(placeholder.replace(/\$/g, '\\$'), 'g'),
+            transformedTag = transformedTag.replaceAll(
+                placeholder,
                 originalTagMatches[placeholderIndex],
             );
         });

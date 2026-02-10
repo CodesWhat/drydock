@@ -2,6 +2,11 @@
 // Force v8 coverage to pick up the Forgejo module by importing directly
 import Forgejo from './Forgejo.js';
 
+// Test fixture credentials - not real secrets
+const TEST_LOGIN = 'login';
+const TEST_PASSWORD = 'password'; // NOSONAR
+const TEST_PASS = 'pass'; // NOSONAR
+
 // Verify the Forgejo class is properly a subclass of Gitea
 test('Forgejo should be an instance of Gitea', async () => {
     const { default: Gitea } = await import('../gitea/Gitea.js');
@@ -11,8 +16,8 @@ test('Forgejo should be an instance of Gitea', async () => {
 
 const forgejo = new Forgejo();
 forgejo.configuration = {
-    login: 'login',
-    password: 'password',
+    login: TEST_LOGIN,
+    password: TEST_PASSWORD,
     url: 'https://forgejo.acme.com',
 };
 
@@ -20,13 +25,13 @@ test('validatedConfiguration should initialize when configuration is valid', asy
     expect(
         forgejo.validateConfiguration({
             url: 'https://forgejo.acme.com',
-            login: 'login',
-            password: 'password',
+            login: TEST_LOGIN,
+            password: TEST_PASSWORD,
         }),
     ).toStrictEqual({
         url: 'https://forgejo.acme.com',
-        login: 'login',
-        password: 'password',
+        login: TEST_LOGIN,
+        password: TEST_PASSWORD,
     });
 });
 
@@ -80,7 +85,7 @@ test('should initialize and prepend https to URL without protocol', async () => 
     forgejoInstance.configuration = {
         url: 'forgejo.example.com',
         login: 'user',
-        password: 'pass',
+        password: TEST_PASS,
     };
 
     forgejoInstance.init();
@@ -92,7 +97,7 @@ test('should not modify URL that already has protocol', async () => {
     forgejoInstance.configuration = {
         url: 'http://forgejo.example.com',
         login: 'user',
-        password: 'pass',
+        password: TEST_PASS,
     };
 
     forgejoInstance.init();

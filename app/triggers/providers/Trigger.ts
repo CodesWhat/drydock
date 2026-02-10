@@ -762,6 +762,55 @@ class Trigger extends Component {
     }
 
     /**
+     * Compose a single-container message with optional title.
+     * Providers needing custom formatting should override formatTitleAndBody().
+     */
+    protected composeMessage(container: Container): string {
+        const body = this.renderSimpleBody(container);
+        if ((this.configuration as any).disabletitle) {
+            return body;
+        }
+        const title = this.renderSimpleTitle(container);
+        return this.formatTitleAndBody(title, body);
+    }
+
+    /**
+     * Compose a batch message with optional title.
+     * Providers needing custom formatting should override formatTitleAndBody().
+     */
+    protected composeBatchMessage(containers: Container[]): string {
+        const body = this.renderBatchBody(containers);
+        if ((this.configuration as any).disabletitle) {
+            return body;
+        }
+        const title = this.renderBatchTitle(containers);
+        return this.formatTitleAndBody(title, body);
+    }
+
+    /**
+     * Format title and body into a single message string.
+     * Override in subclasses for custom formatting (e.g. bold, markdown).
+     */
+    protected formatTitleAndBody(title: string, body: string): string {
+        return `${title}\n\n${body}`;
+    }
+
+    /**
+     * Mask the specified fields in the configuration, returning a copy.
+     * For simple flat-field masking; providers with nested fields should
+     * override maskConfiguration() directly.
+     */
+    protected maskFields(fieldsToMask: string[]): Record<string, any> {
+        const masked = { ...this.configuration };
+        for (const field of fieldsToMask) {
+            if ((masked as any)[field]) {
+                (masked as any)[field] = (this.constructor as typeof Trigger).mask((masked as any)[field]);
+            }
+        }
+        return masked;
+    }
+
+    /**
      * Render trigger title simple.
      * @param container
      * @returns {*}

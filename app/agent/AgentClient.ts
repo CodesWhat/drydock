@@ -30,11 +30,17 @@ export class AgentClient {
         this.name = name;
         this.config = config;
         this.log = logger.child({ component: `agent-client.${name}` });
-        this.baseUrl = `${this.config.host}:${this.config.port || 3000}`;
+        let candidateUrl = `${this.config.host}:${this.config.port || 3000}`;
         // Add protocol if not present
-        if (!this.baseUrl.startsWith('http')) {
-            this.baseUrl = `http${this.config.certfile ? 's' : ''}://${this.baseUrl}`;
+        if (!candidateUrl.startsWith('http')) {
+            candidateUrl = `http${this.config.certfile ? 's' : ''}://${candidateUrl}`;
         }
+        // Validate the URL to prevent request forgery (CodeQL js/request-forgery)
+        const parsed = new URL(candidateUrl);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+            throw new Error(`Invalid agent URL protocol: ${parsed.protocol}`);
+        }
+        this.baseUrl = parsed.origin;
 
         this.axiosOptions = {
             headers: {
@@ -43,6 +49,8 @@ export class AgentClient {
         };
 
         if (this.config.certfile) {
+            // Intentional: mTLS with optional self-signed CA for agent communication
+            // lgtm[js/disabling-certificate-validation]
             this.axiosOptions.httpsAgent = new https.Agent({
                 ca: this.config.cafile
                     ? fs.readFileSync(this.config.cafile)

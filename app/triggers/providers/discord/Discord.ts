@@ -30,10 +30,7 @@ class Discord extends Trigger {
      * @returns {*}
      */
     maskConfiguration() {
-        return {
-            ...this.configuration,
-            url: Discord.mask(this.configuration.url),
-        };
+        return this.maskFields(['url']);
     }
 
     /**

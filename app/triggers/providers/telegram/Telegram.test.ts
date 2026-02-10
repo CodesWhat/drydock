@@ -13,7 +13,7 @@ import Telegram from './Telegram.js';
 const telegram = new Telegram();
 
 const configurationValid = {
-    bottoken: 'token',
+    bottoken: 'token', // NOSONAR - test fixture, not a real credential
     chatid: '123456789',
     threshold: 'all',
     mode: 'simple',

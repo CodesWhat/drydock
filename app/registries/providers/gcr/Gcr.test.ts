@@ -1,27 +1,31 @@
 // @ts-nocheck
 import Gcr from './Gcr.js';
 
+// Test fixture credentials - not real secrets
+const TEST_CLIENT_EMAIL = 'accesskeyid';
+const TEST_PRIVATE_KEY = 'secretaccesskey'; // NOSONAR
+
 vi.mock('axios', () => ({
     default: vi.fn().mockImplementation(() => ({
-        data: { token: 'xxxxx' },
+        data: { token: 'xxxxx' }, // NOSONAR
     })),
 }));
 
 const gcr = new Gcr();
 gcr.configuration = {
-    clientemail: 'accesskeyid',
-    privatekey: 'secretaccesskey',
+    clientemail: TEST_CLIENT_EMAIL,
+    privatekey: TEST_PRIVATE_KEY,
 };
 
 test('validatedConfiguration should initialize when configuration is valid', async () => {
     expect(
         gcr.validateConfiguration({
-            clientemail: 'accesskeyid',
-            privatekey: 'secretaccesskey',
+            clientemail: TEST_CLIENT_EMAIL,
+            privatekey: TEST_PRIVATE_KEY,
         }),
     ).toStrictEqual({
-        clientemail: 'accesskeyid',
-        privatekey: 'secretaccesskey',
+        clientemail: TEST_CLIENT_EMAIL,
+        privatekey: TEST_PRIVATE_KEY,
     });
 });
 
@@ -33,7 +37,7 @@ test('validatedConfiguration should throw error when configuration is missing', 
 
 test('maskConfiguration should mask configuration secrets', async () => {
     expect(gcr.maskConfiguration()).toEqual({
-        clientemail: 'accesskeyid',
+        clientemail: TEST_CLIENT_EMAIL,
         privatekey: 's*************y',
     });
 });
@@ -113,7 +117,7 @@ test('authenticate should return unchanged options when no clientemail configure
 test('getAuthPull should return credentials', async () => {
     const result = await gcr.getAuthPull();
     expect(result).toEqual({
-        username: 'accesskeyid',
-        password: 'secretaccesskey',
+        username: TEST_CLIENT_EMAIL,
+        password: TEST_PRIVATE_KEY,
     });
 });

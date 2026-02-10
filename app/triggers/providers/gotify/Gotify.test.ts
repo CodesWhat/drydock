@@ -9,7 +9,7 @@ const gotify = new Gotify();
 
 const configurationValid = {
     url: 'http://xxx.com',
-    token: 'xxx',
+    token: 'xxx', // NOSONAR - test fixture, not a real credential
     priority: 2,
     mode: 'simple',
     threshold: 'all',
@@ -99,7 +99,7 @@ test('should initialize Gotify client on register', async () => {
     const gotifyInstance = new Gotify();
     await gotifyInstance.register('trigger', 'gotify', 'test', {
         url: 'http://gotify.example.com',
-        token: 'test-token',
+        token: 'test-token', // NOSONAR - test fixture, not a real credential
     });
 
     expect(gotifyInstance.client).toBeDefined();

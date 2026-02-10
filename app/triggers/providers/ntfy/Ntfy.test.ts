@@ -49,8 +49,8 @@ test('maskConfiguration should mask sensitive data', async () => {
     ntfy.configuration = {
         auth: {
             user: 'user',
-            password: 'password',
-            token: 'token',
+            password: 'password', // NOSONAR - test fixture, not a real credential
+            token: 'token', // NOSONAR - test fixture, not a real credential
         },
     };
     expect(ntfy.maskConfiguration()).toEqual({
@@ -94,7 +94,7 @@ test('trigger should call http client', async () => {
 test('trigger should use basic auth when configured like that', async () => {
     ntfy.configuration = {
         ...configurationValid,
-        auth: { user: 'user', password: 'pass' },
+        auth: { user: 'user', password: 'pass' }, // NOSONAR - test fixture, not a real credential
     };
     const container = {
         name: 'container1',
@@ -120,14 +120,14 @@ test('trigger should use basic auth when configured like that', async () => {
         method: 'POST',
 
         url: 'http://xxx.com',
-        auth: { user: 'user', pass: 'pass' },
+        auth: { user: 'user', pass: 'pass' }, // NOSONAR - test fixture, not a real credential
     });
 });
 
 test('trigger should use bearer auth when configured like that', async () => {
     ntfy.configuration = {
         ...configurationValid,
-        auth: { token: 'token' },
+        auth: { token: 'token' }, // NOSONAR - test fixture, not a real credential
     };
     const container = {
         name: 'container1',

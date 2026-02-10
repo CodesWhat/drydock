@@ -1,11 +1,11 @@
 // @ts-nocheck
 import axios from 'axios';
-import Registry from '../../Registry.js';
+import BaseRegistry from '../../BaseRegistry.js';
 
 /**
  * Quay.io Registry integration.
  */
-class Quay extends Registry {
+class Quay extends BaseRegistry {
     getConfigurationSchema() {
         return this.joi.alternatives([
             // Anonymous configuration
@@ -25,12 +25,7 @@ class Quay extends Registry {
      * @returns {*}
      */
     maskConfiguration() {
-        return {
-            ...this.configuration,
-            namespace: this.configuration.namespace,
-            account: this.configuration.account,
-            token: Quay.mask(this.configuration.token),
-        };
+        return this.maskSensitiveFields(['token']);
     }
 
     /**
@@ -50,11 +45,7 @@ class Quay extends Registry {
      */
 
     normalizeImage(image) {
-        const imageNormalized = image;
-        if (!imageNormalized.registry.url.startsWith('https://')) {
-            imageNormalized.registry.url = `https://${imageNormalized.registry.url}/v2`;
-        }
-        return imageNormalized;
+        return this.normalizeImageUrl(image);
     }
 
     async authenticate(image, requestOptions) {

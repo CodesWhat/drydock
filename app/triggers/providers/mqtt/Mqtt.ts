@@ -80,14 +80,7 @@ class Mqtt extends Trigger {
      * @returns {*}
      */
     maskConfiguration() {
-        return {
-            ...this.configuration,
-            url: this.configuration.url,
-            topic: this.configuration.topic,
-            user: this.configuration.user,
-            password: Mqtt.mask(this.configuration.password),
-            hass: this.configuration.hass,
-        };
+        return this.maskFields(['password']);
     }
 
     async initTrigger() {

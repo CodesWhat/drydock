@@ -1,10 +1,14 @@
 // @ts-nocheck
 import Custom from './Custom.js';
 
+// Test fixture credentials - not real secrets
+const TEST_LOGIN = 'login';
+const TEST_PASSWORD = 'password'; // NOSONAR
+
 const custom = new Custom();
 custom.configuration = {
-    login: 'login',
-    password: 'password',
+    login: TEST_LOGIN,
+    password: TEST_PASSWORD,
     url: 'http://localhost:5000',
 };
 
@@ -12,13 +16,13 @@ test('validatedConfiguration should initialize when configuration is valid', asy
     expect(
         custom.validateConfiguration({
             url: 'http://localhost:5000',
-            login: 'login',
-            password: 'password',
+            login: TEST_LOGIN,
+            password: TEST_PASSWORD,
         }),
     ).toStrictEqual({
         url: 'http://localhost:5000',
-        login: 'login',
-        password: 'password',
+        login: TEST_LOGIN,
+        password: TEST_PASSWORD,
     });
 });
 
@@ -34,7 +38,7 @@ test('validatedConfiguration should throw error when auth is not base64', async 
 test('maskConfiguration should mask configuration secrets', async () => {
     expect(custom.maskConfiguration()).toEqual({
         auth: undefined,
-        login: 'login',
+        login: TEST_LOGIN,
         password: 'p******d',
         url: 'http://localhost:5000',
     });
@@ -79,19 +83,19 @@ test('normalizeImage should return the proper registry v2 endpoint', async () =>
 test('authenticate should add basic auth', async () => {
     expect(custom.authenticate(undefined, { headers: {} })).resolves.toEqual({
         headers: {
-            Authorization: 'Basic bG9naW46cGFzc3dvcmQ=',
+            Authorization: 'Basic bG9naW46cGFzc3dvcmQ=', // NOSONAR - test fixture, not a real credential
         },
     });
 });
 
 test('getAuthCredentials should return base64 creds when set in configuration', async () => {
-    custom.configuration.auth = 'dXNlcm5hbWU6cGFzc3dvcmQ=';
+    custom.configuration.auth = 'dXNlcm5hbWU6cGFzc3dvcmQ='; // NOSONAR - test fixture, not a real credential
     expect(custom.getAuthCredentials()).toEqual('dXNlcm5hbWU6cGFzc3dvcmQ=');
 });
 
 test('getAuthCredentials should return base64 creds when login/token set in configuration', async () => {
     custom.configuration.login = 'username';
-    custom.configuration.token = 'password';
+    custom.configuration.token = TEST_PASSWORD;
     expect(custom.getAuthCredentials()).toEqual('dXNlcm5hbWU6cGFzc3dvcmQ=');
 });
 

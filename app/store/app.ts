@@ -2,11 +2,10 @@
 /**
  * App store.
  */
-import logger from '../log/index.js';
-const log = logger.child({ component: 'store' });
 import * as migrate from './migrate.js';
 const { migrate: migrateData } = migrate;
 import { getVersion } from '../configuration/index.js';
+import { initCollection } from './util.js';
 
 let app;
 
@@ -28,11 +27,7 @@ function saveAppInfosAndMigrate() {
 }
 
 export function createCollections(db) {
-    app = db.getCollection('app');
-    if (app === null) {
-        log.info('Create Collection app');
-        app = db.addCollection('app');
-    }
+    app = initCollection(db, 'app');
     saveAppInfosAndMigrate();
 }
 

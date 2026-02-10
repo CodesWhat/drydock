@@ -2,11 +2,14 @@
 import axios from 'axios';
 import Gitlab from './Gitlab.js';
 
+// Test fixture credentials - not real secrets
+const TEST_TOKEN = 'abcdef'; // NOSONAR
+
 const gitlab = new Gitlab();
 gitlab.configuration = {
     url: 'https://registry.gitlab.com',
     authurl: 'https://gitlab.com',
-    token: 'abcdef',
+    token: TEST_TOKEN,
 };
 
 vi.mock('axios');
@@ -14,23 +17,23 @@ vi.mock('axios');
 test('validatedConfiguration should initialize when configuration is valid', async () => {
     expect(
         gitlab.validateConfiguration({
-            token: 'abcdef',
+            token: TEST_TOKEN,
         }),
     ).toStrictEqual({
         url: 'https://registry.gitlab.com',
         authurl: 'https://gitlab.com',
-        token: 'abcdef',
+        token: TEST_TOKEN,
     });
     expect(
         gitlab.validateConfiguration({
             url: 'https://registry.custom.com',
             authurl: 'https://custom.com',
-            token: 'abcdef',
+            token: TEST_TOKEN,
         }),
     ).toStrictEqual({
         url: 'https://registry.custom.com',
         authurl: 'https://custom.com',
-        token: 'abcdef',
+        token: TEST_TOKEN,
     });
 });
 
@@ -63,7 +66,7 @@ test('match should return true when registry url is from custom gitlab', async (
     gitlabCustom.configuration = {
         url: 'https://registry.custom.com',
         authurl: 'https://custom.com',
-        token: 'abcdef',
+        token: TEST_TOKEN,
     };
     expect(
         gitlabCustom.match({
@@ -77,7 +80,7 @@ test('match should return true when registry url is from custom gitlab', async (
 test('authenticate should perform authenticate request', async () => {
     axios.mockImplementation(() => ({
         data: {
-            token: 'token',
+            token: 'token', // NOSONAR - test fixture, not a real credential
         },
     }));
     expect(

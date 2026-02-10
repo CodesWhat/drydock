@@ -50,14 +50,14 @@ test('validateConfiguration should validate_optional_authentication', async () =
         ...configurationValid,
         authentication: {
             user: 'user',
-            password: 'password',
+            password: 'password', // NOSONAR - test fixture, not a real credential
         },
     });
     expect(validatedConfiguration).toStrictEqual({
         ...configurationValid,
         authentication: {
             user: 'user',
-            password: 'password',
+            password: 'password', // NOSONAR - test fixture, not a real credential
             type: 'PLAIN',
         },
     });
@@ -81,7 +81,7 @@ test('maskConfiguration should mask sensitive data', async () => {
         authentication: {
             type: 'PLAIN',
             user: 'user',
-            password: 'password',
+            password: 'password', // NOSONAR - test fixture, not a real credential
         },
     };
     expect(kafka.maskConfiguration()).toEqual({
@@ -136,7 +136,7 @@ test('initTrigger should init kafka client with auth when configured', async () 
         authentication: {
             type: 'PLAIN',
             user: 'user',
-            password: 'password',
+            password: 'password', // NOSONAR - test fixture, not a real credential
         },
     };
     await kafka.initTrigger();
@@ -146,7 +146,7 @@ test('initTrigger should init kafka client with auth when configured', async () 
         ssl: false,
         sasl: {
             mechanism: 'PLAIN',
-            password: 'password',
+            password: 'password', // NOSONAR - test fixture, not a real credential
             username: 'user',
         },
     });

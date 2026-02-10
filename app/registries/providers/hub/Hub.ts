@@ -34,14 +34,7 @@ class Hub extends Custom {
      * @returns {*}
      */
     maskConfiguration() {
-        return {
-            ...this.configuration,
-            url: this.configuration.url,
-            login: this.configuration.login,
-            password: Hub.mask(this.configuration.password),
-            token: Hub.mask(this.configuration.token),
-            auth: Hub.mask(this.configuration.auth),
-        };
+        return this.maskSensitiveFields(['password', 'token', 'auth']);
     }
 
     /**
@@ -52,7 +45,7 @@ class Hub extends Custom {
 
     match(image) {
         return (
-            !image.registry.url || /^([a-zA-Z0-9-]+\.)*docker\.io$/.test(image.registry.url)
+            !image.registry.url || image.registry.url === 'docker.io' || (image.registry.url.endsWith('.docker.io') && /^[a-zA-Z0-9.-]+$/.test(image.registry.url))
         );
     }
 
@@ -100,8 +93,8 @@ class Hub extends Custom {
 
     getImageFullName(image, tagOrDigest) {
         let fullName = super.getImageFullName(image, tagOrDigest);
-        fullName = fullName.replace(/registry-1.docker.io\//, '');
-        fullName = fullName.replace(/library\//, '');
+        fullName = fullName.replaceAll(/registry-1\.docker\.io\//g, '');
+        fullName = fullName.replaceAll(/library\//g, '');
         return fullName;
     }
 }

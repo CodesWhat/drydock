@@ -69,11 +69,7 @@ class Pushover extends Trigger {
      * @returns {*}
      */
     maskConfiguration() {
-        return {
-            ...this.configuration,
-            user: Pushover.mask(this.configuration.user),
-            token: Pushover.mask(this.configuration.token),
-        };
+        return this.maskFields(['user', 'token']);
     }
 
     /**

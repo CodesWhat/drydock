@@ -50,49 +50,12 @@ class Rocketchat extends Trigger {
         };
     }
 
-    /**
-     * Notify Rocket Chat with new image version details.
-     *
-     * @param container the container
-     * @returns {Promise<*>}
-     */
     async trigger(container) {
-        const message = this.composeMessage(container);
-        return this.postMessage(message);
+        return this.postMessage(this.composeMessage(container));
     }
 
-    composeMessage(container) {
-        const body = this.renderSimpleBody(container);
-
-        if (this.configuration.disabletitle) {
-            return body;
-        }
-
-        const title = this.renderSimpleTitle(container);
-        return `${title}\n\n${body}`;
-    }
-
-    /**
-     * Notify Rocket Chat with new image versions details for a batch of
-     * containers.
-     *
-     * @param containers
-     * @returns {Promise<*>}
-     */
     async triggerBatch(containers) {
-        const message = this.composeBatchMessage(containers);
-        return this.postMessage(message);
-    }
-
-    composeBatchMessage(containers) {
-        const body = this.renderBatchBody(containers);
-
-        if (this.configuration.disabletitle) {
-            return body;
-        }
-
-        const title = this.renderBatchTitle(containers);
-        return `${title}\n\n${body}`;
+        return this.postMessage(this.composeBatchMessage(containers));
     }
 
     /**

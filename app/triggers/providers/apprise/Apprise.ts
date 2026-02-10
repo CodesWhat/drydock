@@ -30,11 +30,7 @@ class Apprise extends Trigger {
      * @returns {*}
      */
     maskConfiguration() {
-        return {
-            ...this.configuration,
-            url: this.configuration.url,
-            urls: Apprise.mask(this.configuration.urls),
-        };
+        return this.maskFields(['urls']);
     }
 
     /**

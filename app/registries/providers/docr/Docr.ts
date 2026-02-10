@@ -47,7 +47,8 @@ class Docr extends Custom {
     }
 
     match(image) {
-        return /^([a-zA-Z0-9-]+\.)*registry\.digitalocean\.com$/.test(image.registry.url);
+        const url = image.registry.url;
+        return url === 'registry.digitalocean.com' || (url.endsWith('.registry.digitalocean.com') && /^[a-zA-Z0-9.-]+$/.test(url));
     }
 }
 

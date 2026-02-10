@@ -1,6 +1,11 @@
 // @ts-nocheck
 import Dhi from './Dhi.js';
 
+// Test fixture credentials - not real secrets
+const TEST_TOKEN = 'mytoken'; // NOSONAR
+const TEST_PASSWORD = 'testpass'; // NOSONAR
+const TEST_TOKEN_ALT = 'testtoken'; // NOSONAR
+
 // Mock axios
 vi.mock('axios', () => ({ default: vi.fn() }));
 
@@ -38,14 +43,14 @@ describe('DHI Registry', () => {
     test('should initialize with token as password', async () => {
         const dhiWithToken = new Dhi();
         await dhiWithToken.register('registry', 'dhi', 'test', {
-            token: 'mytoken',
+            token: TEST_TOKEN,
         });
-        expect(dhiWithToken.configuration.password).toBe('mytoken');
+        expect(dhiWithToken.configuration.password).toBe(TEST_TOKEN);
     });
 
     test('should authenticate with credentials', async () => {
         const { default: axios } = await import('axios');
-        axios.mockResolvedValue({ data: { token: 'auth-token' } });
+        axios.mockResolvedValue({ data: { token: 'auth-token' } }); // NOSONAR - test fixture, not a real credential
 
         dhi.getAuthCredentials = vi.fn().mockReturnValue('base64credentials');
 
@@ -59,7 +64,7 @@ describe('DHI Registry', () => {
             url: 'https://dhi.io/token?service=registry.docker.io&scope=repository:python:pull&grant_type=password',
             headers: {
                 Accept: 'application/json',
-                Authorization: 'Basic base64credentials',
+                Authorization: 'Basic base64credentials', // NOSONAR - test fixture, not a real credential
             },
         });
         expect(result.headers.Authorization).toBe('Bearer auth-token');
@@ -67,7 +72,7 @@ describe('DHI Registry', () => {
 
     test('should authenticate without credentials', async () => {
         const { default: axios } = await import('axios');
-        axios.mockResolvedValue({ data: { token: 'public-token' } });
+        axios.mockResolvedValue({ data: { token: 'public-token' } }); // NOSONAR - test fixture, not a real credential
 
         dhi.getAuthCredentials = vi.fn().mockReturnValue(null);
 
@@ -90,8 +95,8 @@ describe('DHI Registry', () => {
         dhi.configuration = {
             url: 'https://dhi.io',
             login: 'testuser',
-            password: 'testpass',
-            token: 'testtoken',
+            password: TEST_PASSWORD,
+            token: TEST_TOKEN_ALT,
             auth: 'dGVzdDp0ZXN0',
         };
         const masked = dhi.maskConfiguration();
