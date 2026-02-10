@@ -93,6 +93,11 @@ function getLabel(labels: Record<string, string>, ddKey: string, wudKey?: string
  * Returns null (and logs a warning) when the pattern is invalid.
  */
 function safeRegExp(pattern: string, logger: any): RegExp | null {
+    const MAX_PATTERN_LENGTH = 1024;
+    if (pattern.length > MAX_PATTERN_LENGTH) {
+        logger.warn(`Regex pattern exceeds maximum length of ${MAX_PATTERN_LENGTH} characters`);
+        return null;
+    }
     try {
         return new RegExp(pattern);
     } catch (e: any) {
@@ -804,6 +809,64 @@ function isDigestToWatch(
     }
 
     return !isDockerHub;
+}
+
+function resolveLabelsFromContainer(
+    containerLabels: Record<string, string>,
+    includeTags: string,
+    excludeTags: string,
+    transformTags: string,
+    linkTemplate: string,
+    displayName: string,
+    displayIcon: string,
+    triggerInclude: string,
+    triggerExclude: string,
+    registryLookupImage: string,
+    registryLookupUrl: string,
+) {
+    return {
+        includeTags: includeTags || getLabel(containerLabels, ddTagInclude, wudTagInclude),
+        excludeTags: excludeTags || getLabel(containerLabels, ddTagExclude, wudTagExclude),
+        transformTags: transformTags || getLabel(containerLabels, ddTagTransform, wudTagTransform),
+        linkTemplate: linkTemplate || getLabel(containerLabels, ddLinkTemplate, wudLinkTemplate),
+        displayName: displayName || getLabel(containerLabels, ddDisplayName, wudDisplayName),
+        displayIcon: displayIcon || getLabel(containerLabels, ddDisplayIcon, wudDisplayIcon),
+        triggerInclude: triggerInclude || getLabel(containerLabels, ddTriggerInclude, wudTriggerInclude),
+        triggerExclude: triggerExclude || getLabel(containerLabels, ddTriggerExclude, wudTriggerExclude),
+        lookupImage: registryLookupImage ||
+            getLabel(containerLabels, ddRegistryLookupImage, wudRegistryLookupImage) ||
+            registryLookupUrl ||
+            getLabel(containerLabels, ddRegistryLookupUrl, wudRegistryLookupUrl),
+    };
+}
+
+function mergeConfigWithImgset(
+    labelOverrides: ReturnType<typeof resolveLabelsFromContainer>,
+    matchingImgset: ResolvedImgset | undefined,
+    containerLabels: Record<string, string>,
+) {
+    return {
+        includeTags: getContainerConfigValue(labelOverrides.includeTags, matchingImgset?.includeTags),
+        excludeTags: getContainerConfigValue(labelOverrides.excludeTags, matchingImgset?.excludeTags),
+        transformTags: getContainerConfigValue(labelOverrides.transformTags, matchingImgset?.transformTags),
+        linkTemplate: getContainerConfigValue(labelOverrides.linkTemplate, matchingImgset?.linkTemplate),
+        displayName: getContainerConfigValue(labelOverrides.displayName, matchingImgset?.displayName),
+        displayIcon: getContainerConfigValue(labelOverrides.displayIcon, matchingImgset?.displayIcon),
+        triggerInclude: getContainerConfigValue(labelOverrides.triggerInclude, matchingImgset?.triggerInclude),
+        triggerExclude: getContainerConfigValue(labelOverrides.triggerExclude, matchingImgset?.triggerExclude),
+        lookupImage: getContainerConfigValue(
+            labelOverrides.lookupImage,
+            matchingImgset?.registryLookupImage,
+        ) || getContainerConfigValue(undefined, matchingImgset?.registryLookupUrl),
+        inspectTagPath: getContainerConfigValue(
+            getLabel(containerLabels, ddInspectTagPath, wudInspectTagPath),
+            matchingImgset?.inspectTagPath,
+        ),
+        watchDigest: getContainerConfigValue(
+            getLabel(containerLabels, ddWatchDigest, wudWatchDigest),
+            matchingImgset?.watchDigest,
+        ),
+    };
 }
 
 function shouldUpdateDisplayNameFromContainerName(
@@ -2197,14 +2260,6 @@ class Docker extends Watcher {
 
     /**
      * Add image detail to Container.
-     * @param container
-     * @param includeTags
-     * @param excludeTags
-     * @param transformTags
-     * @param linkTemplate
-     * @param displayName
-     * @param displayIcon
-     * @returns {Promise<Image>}
      */
     async addImageDetailsToContainer(
         container: any,
@@ -2221,25 +2276,6 @@ class Docker extends Watcher {
     ) {
         const containerId = container.Id;
         const containerLabels = container.Labels || {};
-        const includeTagsFromLabel = includeTags || getLabel(containerLabels, ddTagInclude, wudTagInclude);
-        const excludeTagsFromLabel = excludeTags || getLabel(containerLabels, ddTagExclude, wudTagExclude);
-        const transformTagsFromLabel =
-            transformTags || getLabel(containerLabels, ddTagTransform, wudTagTransform);
-        const linkTemplateFromLabel =
-            linkTemplate || getLabel(containerLabels, ddLinkTemplate, wudLinkTemplate);
-        const displayNameFromLabel =
-            displayName || getLabel(containerLabels, ddDisplayName, wudDisplayName);
-        const displayIconFromLabel =
-            displayIcon || getLabel(containerLabels, ddDisplayIcon, wudDisplayIcon);
-        const triggerIncludeFromLabel =
-            triggerInclude || getLabel(containerLabels, ddTriggerInclude, wudTriggerInclude);
-        const triggerExcludeFromLabel =
-            triggerExclude || getLabel(containerLabels, ddTriggerExclude, wudTriggerExclude);
-        const lookupImageFromLabel =
-            registryLookupImage ||
-            getLabel(containerLabels, ddRegistryLookupImage, wudRegistryLookupImage) ||
-            registryLookupUrl ||
-            getLabel(containerLabels, ddRegistryLookupUrl, wudRegistryLookupUrl);
 
         // Is container already in store? just return it :)
         const containerInStore = storeContainer.getContainer(containerId);
@@ -2263,30 +2299,25 @@ class Docker extends Watcher {
             );
         }
 
-        // Get useful properties
-        const containerName = getContainerName(container);
-        const status = container.State;
-        const architecture = image.Architecture;
-        const os = image.Os;
-        const variant = image.Variant;
-        const created = image.Created;
-        const repoDigest = getRepoDigest(image);
-        const imageId = image.Id;
-
-        // Parse image to get registry, organization...
-        let imageNameToParse = container.Image;
-        if (imageNameToParse.includes('sha256:')) {
-            if (!image.RepoTags || image.RepoTags.length === 0) {
-                this.ensureLogger();
-                this.log.warn(
-                    `Cannot get a reliable tag for this image [${imageNameToParse}]`,
-                );
-                return Promise.resolve();
-            }
-            // Get the first repo tag (better than nothing ;)
-            [imageNameToParse] = image.RepoTags;
+        const parsedImage = this.resolveImageName(container.Image, image);
+        if (!parsedImage) {
+            return Promise.resolve();
         }
-        const parsedImage = parse(imageNameToParse);
+
+        const labelOverrides = resolveLabelsFromContainer(
+            containerLabels,
+            includeTags,
+            excludeTags,
+            transformTags,
+            linkTemplate,
+            displayName,
+            displayIcon,
+            triggerInclude,
+            triggerExclude,
+            registryLookupImage,
+            registryLookupUrl,
+        );
+
         const matchingImgset = this.getMatchingImgsetConfiguration(parsedImage);
         if (matchingImgset) {
             this.ensureLogger();
@@ -2294,10 +2325,101 @@ class Docker extends Watcher {
                 `Apply imgset "${matchingImgset.name}" to container ${containerId}`,
             );
         }
-        const inspectTagPath = getContainerConfigValue(
-            getLabel(containerLabels, ddInspectTagPath, wudInspectTagPath),
-            matchingImgset?.inspectTagPath,
+
+        const resolvedConfig = mergeConfigWithImgset(labelOverrides, matchingImgset, containerLabels);
+
+        const tagName = this.resolveTagName(
+            parsedImage,
+            image,
+            resolvedConfig.inspectTagPath,
+            labelOverrides.transformTags,
+            containerId,
         );
+
+        const isSemver = parseSemver(
+            transformTag(resolvedConfig.transformTags, tagName),
+        ) != null;
+        const watchDigest = isDigestToWatch(
+            resolvedConfig.watchDigest,
+            parsedImage,
+            isSemver,
+        );
+        if (!isSemver && !watchDigest) {
+            this.ensureLogger();
+            this.log.warn(
+                "Image is not a semver and digest watching is disabled so drydock won't report any update. Please review the configuration to enable digest watching for this container or exclude this container from being watched",
+            );
+        }
+        const containerName = getContainerName(container);
+        return normalizeContainer({
+            id: containerId,
+            name: containerName,
+            status: container.State,
+            watcher: this.name,
+            includeTags: resolvedConfig.includeTags,
+            excludeTags: resolvedConfig.excludeTags,
+            transformTags: resolvedConfig.transformTags,
+            linkTemplate: resolvedConfig.linkTemplate,
+            displayName: getContainerDisplayName(
+                containerName,
+                parsedImage.path,
+                resolvedConfig.displayName,
+            ),
+            displayIcon: resolvedConfig.displayIcon,
+            triggerInclude: resolvedConfig.triggerInclude,
+            triggerExclude: resolvedConfig.triggerExclude,
+            image: {
+                id: image.Id,
+                registry: {
+                    name: 'unknown', // Will be overwritten by normalizeContainer
+                    url: parsedImage.domain,
+                    lookupImage: resolvedConfig.lookupImage,
+                },
+                name: parsedImage.path,
+                tag: {
+                    value: tagName,
+                    semver: isSemver,
+                },
+                digest: {
+                    watch: watchDigest,
+                    repo: getRepoDigest(image),
+                },
+                architecture: image.Architecture,
+                os: image.Os,
+                variant: image.Variant,
+                created: image.Created,
+            },
+            labels: containerLabels,
+            result: {
+                tag: tagName,
+            },
+            updateAvailable: false,
+            updateKind: { kind: 'unknown' },
+        } as Container);
+    }
+
+    private resolveImageName(imageName: string, image: any) {
+        let imageNameToParse = imageName;
+        if (imageNameToParse.includes('sha256:')) {
+            if (!image.RepoTags || image.RepoTags.length === 0) {
+                this.ensureLogger();
+                this.log.warn(
+                    `Cannot get a reliable tag for this image [${imageNameToParse}]`,
+                );
+                return undefined;
+            }
+            [imageNameToParse] = image.RepoTags;
+        }
+        return parse(imageNameToParse);
+    }
+
+    private resolveTagName(
+        parsedImage: any,
+        image: any,
+        inspectTagPath: string | undefined,
+        transformTagsFromLabel: string | undefined,
+        containerId: string,
+    ) {
         let tagName = parsedImage.tag || 'latest';
         if (inspectTagPath) {
             const semverTagFromInspect = getSemverTagFromInspectPath(
@@ -2314,110 +2436,7 @@ class Docker extends Watcher {
                 );
             }
         }
-
-        const includeTagsValue = getContainerConfigValue(
-            includeTagsFromLabel,
-            matchingImgset?.includeTags,
-        );
-        const excludeTagsValue = getContainerConfigValue(
-            excludeTagsFromLabel,
-            matchingImgset?.excludeTags,
-        );
-        const transformTagsValue = getContainerConfigValue(
-            transformTagsFromLabel,
-            matchingImgset?.transformTags,
-        );
-        const linkTemplateValue = getContainerConfigValue(
-            linkTemplateFromLabel,
-            matchingImgset?.linkTemplate,
-        );
-        const displayNameValue = getContainerConfigValue(
-            displayNameFromLabel,
-            matchingImgset?.displayName,
-        );
-        const displayIconValue = getContainerConfigValue(
-            displayIconFromLabel,
-            matchingImgset?.displayIcon,
-        );
-        const triggerIncludeValue = getContainerConfigValue(
-            triggerIncludeFromLabel,
-            matchingImgset?.triggerInclude,
-        );
-        const triggerExcludeValue = getContainerConfigValue(
-            triggerExcludeFromLabel,
-            matchingImgset?.triggerExclude,
-        );
-        const lookupImageValue =
-            getContainerConfigValue(
-                lookupImageFromLabel,
-                matchingImgset?.registryLookupImage,
-            ) ||
-            getContainerConfigValue(undefined, matchingImgset?.registryLookupUrl);
-
-        const parsedTag = parseSemver(
-            transformTag(transformTagsValue, tagName),
-        );
-        const isSemver = parsedTag !== null && parsedTag !== undefined;
-        const watchDigestLabelValue = getContainerConfigValue(
-            getLabel(containerLabels, ddWatchDigest, wudWatchDigest),
-            matchingImgset?.watchDigest,
-        );
-        const watchDigest = isDigestToWatch(
-            watchDigestLabelValue,
-            parsedImage,
-            isSemver,
-        );
-        if (!isSemver && !watchDigest) {
-            this.ensureLogger();
-            this.log.warn(
-                "Image is not a semver and digest watching is disabled so drydock won't report any update. Please review the configuration to enable digest watching for this container or exclude this container from being watched",
-            );
-        }
-        return normalizeContainer({
-            id: containerId,
-            name: containerName,
-            status,
-            watcher: this.name,
-            includeTags: includeTagsValue,
-            excludeTags: excludeTagsValue,
-            transformTags: transformTagsValue,
-            linkTemplate: linkTemplateValue,
-            displayName: getContainerDisplayName(
-                containerName,
-                parsedImage.path,
-                displayNameValue,
-            ),
-            displayIcon: displayIconValue,
-            triggerInclude: triggerIncludeValue,
-            triggerExclude: triggerExcludeValue,
-            image: {
-                id: imageId,
-                registry: {
-                    name: 'unknown', // Will be overwritten by normalizeContainer
-                    url: parsedImage.domain,
-                    lookupImage: lookupImageValue,
-                },
-                name: parsedImage.path,
-                tag: {
-                    value: tagName,
-                    semver: isSemver,
-                },
-                digest: {
-                    watch: watchDigest,
-                    repo: repoDigest,
-                },
-                architecture,
-                os,
-                variant,
-                created,
-            },
-            labels: containerLabels,
-            result: {
-                tag: tagName,
-            },
-            updateAvailable: false,
-            updateKind: { kind: 'unknown' },
-        } as Container);
+        return tagName;
     }
 
     /**

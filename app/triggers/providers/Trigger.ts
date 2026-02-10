@@ -32,6 +32,50 @@ function resolvePath(obj: any, path: string): any {
     }, obj);
 }
 
+/** Simple identifier segment test — no nested groups, linear time. */
+const IDENT_RE = /^[a-zA-Z_]\w*$/;
+
+/**
+ * Validate a dotted property path (e.g. "container.updateKind.kind")
+ * by splitting on '.' and checking each segment individually.
+ * This avoids a regex with nested repetition that is vulnerable to ReDoS.
+ */
+function isValidPropertyPath(str: string): boolean {
+    const parts = str.split('.');
+    return parts.length > 0 && parts.every((p) => IDENT_RE.test(p));
+}
+
+/**
+ * Parse a method call expression like "obj.path.method(args)" by splitting
+ * on the parentheses and the last dot, rather than using a single complex regex.
+ * Returns null if the string is not a valid method call expression.
+ */
+function parseMethodCall(
+    str: string,
+): { objPath: string; method: string; rawArgs: string } | null {
+    // Must end with ')' and contain '('
+    if (!str.endsWith(')')) return null;
+    const openParen = str.indexOf('(');
+    if (openParen === -1) return null;
+
+    const rawArgs = str.slice(openParen + 1, -1);
+    // Args must not contain unmatched parens (original regex used [^)]*)
+    if (rawArgs.includes(')')) return null;
+
+    const pathPart = str.slice(0, openParen);
+    // Split on last '.' to separate object path from method name
+    const lastDot = pathPart.lastIndexOf('.');
+    if (lastDot === -1) return null;
+
+    const objPath = pathPart.slice(0, lastDot);
+    const method = pathPart.slice(lastDot + 1);
+
+    // Validate that objPath is a valid dotted identifier path and method is an identifier
+    if (!isValidPropertyPath(objPath) || !IDENT_RE.test(method)) return null;
+
+    return { objPath, method, rawArgs };
+}
+
 /**
  * Safely evaluate a template expression against a known set of variables.
  *
@@ -103,13 +147,12 @@ function safeEvalExpr(
     }
 
     // --- method call: path.method(args) ---
-    const methodMatch = trimmed.match( // NOSONAR - regex operates on bounded template expressions, not arbitrary user input
-        /^([a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*?)\.([a-zA-Z_]\w*)\(([^)]*)\)$/,
-    );
+    // Use string splitting instead of a complex regex to avoid ReDoS
+    const methodMatch = parseMethodCall(trimmed);
     if (methodMatch) {
-        const objPath = methodMatch[1];
-        const method = methodMatch[2];
-        const rawArgs = methodMatch[3];
+        const objPath = methodMatch.objPath;
+        const method = methodMatch.method;
+        const rawArgs = methodMatch.rawArgs;
         const target = safeEvalExpr(objPath, vars);
         if (target != null && typeof target[method] === 'function') {
             // Only allow safe string/array methods
@@ -146,7 +189,8 @@ function safeEvalExpr(
     }
 
     // --- simple property path: container.updateKind.kind ---
-    if (/^[a-zA-Z_]\w*(\.[a-zA-Z_]\w*)*$/.test(trimmed)) {
+    // Use split-and-validate instead of a nested-group regex to avoid ReDoS
+    if (isValidPropertyPath(trimmed)) {
         const val = resolvePath(vars, trimmed);
         return val != null ? val : '';
     }

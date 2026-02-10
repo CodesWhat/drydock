@@ -1,11 +1,17 @@
-import { getRegistryProviderIcon, getAllRegistries } from '@/services/registry';
+import { getRegistryIcon, getRegistryProviderIcon, getAllRegistries } from '@/services/registry';
 
 // Mock fetch globally
 global.fetch = vi.fn();
 
 describe('Registry Service', () => {
   beforeEach(() => {
-    fetch.mockClear();
+    vi.mocked(fetch).mockClear();
+  });
+
+  describe('getRegistryIcon', () => {
+    it('returns the registry icon', () => {
+      expect(getRegistryIcon()).toBe('mdi-database-search');
+    });
   });
 
   describe('getRegistryProviderIcon', () => {
@@ -13,11 +19,18 @@ describe('Registry Service', () => {
       expect(getRegistryProviderIcon('acr.example.com')).toBe('si-microsoftazure');
       expect(getRegistryProviderIcon('custom.registry.com')).toBe('si-opencontainersinitiative');
       expect(getRegistryProviderIcon('ecr.amazonaws.com')).toBe('si-amazonaws');
+      expect(getRegistryProviderIcon('forgejo.example.com')).toBe('si-forgejo');
       expect(getRegistryProviderIcon('gcr.io')).toBe('si-googlecloud');
       expect(getRegistryProviderIcon('ghcr.io')).toBe('si-github');
+      expect(getRegistryProviderIcon('gitea.example.com')).toBe('si-gitea');
       expect(getRegistryProviderIcon('gitlab.com')).toBe('si-gitlab');
       expect(getRegistryProviderIcon('hub.docker.com')).toBe('si-docker');
       expect(getRegistryProviderIcon('quay.io')).toBe('si-redhat');
+      expect(getRegistryProviderIcon('lscr.io')).toBe('si-linuxserver');
+      expect(getRegistryProviderIcon('trueforge.example')).toBe('si-linuxcontainers');
+    });
+
+    it('returns default icon for unknown providers', () => {
       expect(getRegistryProviderIcon('unknown.registry')).toBe('si-linuxcontainers');
     });
 
@@ -33,10 +46,10 @@ describe('Registry Service', () => {
         { name: 'hub', type: 'docker' },
         { name: 'ghcr', type: 'github' }
       ];
-      fetch.mockResolvedValueOnce({
+      vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
         json: async () => mockRegistries
-      });
+      } as any);
 
       const registries = await getAllRegistries();
 

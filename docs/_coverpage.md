@@ -2,8 +2,8 @@
 
 ![logo](assets/drydock.png)
 
-# **[drydock](#introduction)**
+# **[drydock](#/?id=introduction)**
 
 > Keep your containers up-to-date!
 
-[Getting Started](#introduction)
+[Getting Started](#/?id=introduction)

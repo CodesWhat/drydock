@@ -2720,6 +2720,587 @@ describe('Docker Watcher', () => {
             expect([].filter(() => false)).toEqual([]);
         });
     });
+
+    describe('Additional Coverage - safeRegExp', () => {
+        test('should warn when includeTags regex is invalid', async () => {
+            const container = {
+                includeTags: '[invalid',
+                image: { registry: { name: 'hub' }, tag: { value: '1.0.0', semver: true }, digest: { watch: false } },
+            };
+            registry.getState.mockReturnValue({ registry: { hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } } });
+            const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+            const result = await docker.findNewVersion(container, logChild);
+            expect(logChild.warn).toHaveBeenCalledWith(expect.stringContaining('Invalid regex pattern'));
+            expect(result.tag).toBe('1.0.0');
+        });
+
+        test('should warn when excludeTags regex is invalid', async () => {
+            const container = {
+                excludeTags: '(unclosed',
+                image: { registry: { name: 'hub' }, tag: { value: '1.0.0', semver: true }, digest: { watch: false } },
+            };
+            registry.getState.mockReturnValue({ registry: { hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } } });
+            mockTag.isGreater.mockReturnValue(true);
+            const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+            await docker.findNewVersion(container, logChild);
+            expect(logChild.warn).toHaveBeenCalledWith(expect.stringContaining('Invalid regex pattern'));
+        });
+    });
+
+    describe('Additional Coverage - filterByCurrentPrefix', () => {
+        test('should warn when no tags match prefix', async () => {
+            const container = { image: { registry: { name: 'hub' }, tag: { value: 'v1.0.0', semver: true }, digest: { watch: false } } };
+            registry.getState.mockReturnValue({ registry: { hub: { getTags: vi.fn().mockResolvedValue(['2.0.0']) } } });
+            const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+            await docker.findNewVersion(container, logChild);
+            expect(logChild.warn).toHaveBeenCalledWith(expect.stringContaining('No tags found with existing prefix'));
+        });
+
+        test('should warn when no tags start with a number', async () => {
+            const container = { image: { registry: { name: 'hub' }, tag: { value: '1.0.0', semver: true }, digest: { watch: false } } };
+            registry.getState.mockReturnValue({ registry: { hub: { getTags: vi.fn().mockResolvedValue(['latest', 'stable']) } } });
+            const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+            await docker.findNewVersion(container, logChild);
+            expect(logChild.warn).toHaveBeenCalledWith(expect.stringContaining('No tags found starting with a number'));
+        });
+    });
+
+    describe('Additional Coverage - getTagCandidates empty', () => {
+        test('should warn when no tags after include filter', async () => {
+            const container = {
+                includeTags: '^nonexistent$',
+                image: { registry: { name: 'hub' }, tag: { value: '1.0.0', semver: true }, digest: { watch: false } },
+            };
+            registry.getState.mockReturnValue({ registry: { hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } } });
+            const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+            await docker.findNewVersion(container, logChild);
+            expect(logChild.warn).toHaveBeenCalledWith(expect.stringContaining('No tags found after filtering'));
+        });
+    });
+
+    describe('Additional Coverage - applyRemoteAuthHeaders', () => {
+        test('should warn when credentials are incomplete', async () => {
+            // Bypass validation by setting configuration directly after register
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 443, protocol: 'https' });
+            docker.configuration.auth = { type: '' };
+            const logMock = createMockLog(['warn', 'info', 'debug']);
+            docker.log = logMock;
+            docker.initWatcher();
+            expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining('credentials are incomplete'));
+        });
+
+        test('should warn when basic auth declared but credentials missing', async () => {
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 443, protocol: 'https' });
+            // Need hasOidcConfig to bypass first guard, but authType=basic to reach the basic-incomplete path
+            docker.configuration.auth = { type: 'basic', oidc: { tokenurl: 'https://idp/token' } };
+            const logMock = createMockLog(['warn', 'info', 'debug']);
+            docker.log = logMock;
+            docker.initWatcher();
+            expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining('basic credentials are incomplete'));
+        });
+
+        test('should warn when bearer auth declared but token missing', async () => {
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 443, protocol: 'https' });
+            // Need hasOidcConfig to bypass first guard, but authType=bearer to reach the bearer-missing path
+            docker.configuration.auth = { type: 'bearer', oidc: { tokenurl: 'https://idp/token' } };
+            const logMock = createMockLog(['warn', 'info', 'debug']);
+            docker.log = logMock;
+            docker.initWatcher();
+            expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining('bearer token is missing'));
+        });
+
+        test('should warn when auth type is unsupported', async () => {
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 443, protocol: 'https' });
+            docker.configuration.auth = { type: 'custom', user: 'x', password: 'y' }; // NOSONAR
+            const logMock = createMockLog(['warn', 'info', 'debug']);
+            docker.log = logMock;
+            docker.initWatcher();
+            expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining('unsupported'));
+        });
+    });
+
+    describe('Additional Coverage - getRemoteAuthResolution auto-detect', () => {
+        test('should auto-detect bearer, basic, and oidc auth types', async () => {
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 443, protocol: 'https', auth: { bearer: 'tok' } }); // NOSONAR
+            expect(docker.getRemoteAuthResolution(docker.configuration.auth).authType).toBe('bearer');
+
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 443, protocol: 'https', auth: { user: 'j', password: 'd' } }); // NOSONAR
+            expect(docker.getRemoteAuthResolution(docker.configuration.auth).authType).toBe('basic');
+
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 443, protocol: 'https', auth: { oidc: { tokenurl: 'https://idp/token' } } });
+            expect(docker.getRemoteAuthResolution(docker.configuration.auth).authType).toBe('oidc');
+        });
+    });
+
+    describe('Additional Coverage - OIDC edge cases', () => {
+        test('should throw when token endpoint missing', async () => {
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 443, protocol: 'https', auth: { type: 'oidc', oidc: {} } });
+            await expect(docker.refreshRemoteOidcAccessToken()).rejects.toThrow('missing auth.oidc token endpoint');
+        });
+
+        test('should fallback for missing refresh token and unsupported grant', async () => {
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 443, protocol: 'https', auth: { type: 'oidc', oidc: { tokenurl: 'https://idp/token', granttype: 'refresh_token' } } });
+            const logMock = createMockLog(['warn', 'info', 'debug']);
+            docker.log = logMock;
+            await docker.refreshRemoteOidcAccessToken();
+            expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining('refresh token is missing'));
+        });
+
+        test('should throw when token response has no access_token', async () => {
+            mockAxios.post.mockResolvedValue({ data: {} } as any);
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 443, protocol: 'https', auth: { type: 'oidc', oidc: { tokenurl: 'https://idp/token' } } });
+            await expect(docker.refreshRemoteOidcAccessToken()).rejects.toThrow('does not contain access_token');
+        });
+
+        test('should fallback when grant type is unsupported', async () => {
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 443, protocol: 'https', auth: { type: 'oidc', oidc: { tokenurl: 'https://idp/token', granttype: 'custom_grant' } } });
+            const logMock = createMockLog(['warn', 'info', 'debug']);
+            docker.log = logMock;
+            await docker.refreshRemoteOidcAccessToken();
+            expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining('unsupported'));
+        });
+
+        test('should include resource in token request', async () => {
+            mockDockerApi.listContainers.mockResolvedValue([]);
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 443, protocol: 'https', auth: { type: 'oidc', oidc: { tokenurl: 'https://idp/token', clientid: 'c1', resource: 'https://api.example.com' } } });
+            await docker.getContainers();
+            expect(mockAxios.post.mock.calls[0][1]).toContain('resource=https%3A%2F%2Fapi.example.com');
+        });
+    });
+
+    describe('Additional Coverage - ensureRemoteAuthHeaders and listenDockerEvents', () => {
+        test('should skip auth when protocol is not HTTPS', async () => {
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 2375, protocol: 'http', auth: { type: 'oidc', oidc: { tokenurl: 'https://idp/token' } } });
+            await docker.ensureRemoteAuthHeaders();
+            expect(mockAxios.post).not.toHaveBeenCalled();
+        });
+
+        test('should warn when ensureRemoteAuthHeaders fails in listenDockerEvents', async () => {
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 443, protocol: 'https', auth: { type: 'oidc', oidc: { tokenurl: 'https://idp/token' } } });
+            mockAxios.post.mockRejectedValue(new Error('Network error'));
+            const logMock = createMockLog(['warn', 'info', 'debug']);
+            docker.log = logMock;
+            await docker.listenDockerEvents();
+            expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining('Unable to initialize remote watcher auth'));
+        });
+
+        test('should return early when ensureLogger produces a non-functional log', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            // Override ensureLogger to set a log that lacks info()
+            docker.ensureLogger = () => { docker.log = {}; };
+            await docker.listenDockerEvents();
+            expect(mockDockerApi.getEvents).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Additional Coverage - processDockerEventPayload', () => {
+        test('should treat empty payload as processed', async () => {
+            docker.log = createMockLog(['debug']);
+            expect(await docker.processDockerEventPayload('   ')).toBe(true);
+        });
+
+        test('should return false for recoverable partial JSON when flag is set', async () => {
+            docker.log = createMockLog(['debug']);
+            // Use a payload that gives "Unexpected end of JSON input"
+            const result = await docker.processDockerEventPayload('{"Action":"cre', true);
+            expect(result).toBe(false);
+        });
+
+        test('should return true for non-recoverable JSON error', async () => {
+            docker.log = createMockLog(['debug']);
+            expect(await docker.processDockerEventPayload('not-json-at-all', true)).toBe(true);
+        });
+    });
+
+    describe('Additional Coverage - updateContainerFromInspect', () => {
+        test('should update labels and custom display name on events', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            docker.log = createMockLogWithChild(['info']);
+            const existing = { id: 'c1', name: 'mycontainer', displayName: 'mycontainer', status: 'running', labels: { old: 'label' }, image: { name: 'library/nginx' } };
+            storeContainer.getContainer.mockReturnValue(existing);
+            mockContainer.inspect.mockResolvedValue({ Name: '/mycontainer', State: { Status: 'running' }, Config: { Labels: { 'dd.display.name': 'Custom Name', new: 'label' } } });
+            await docker.onDockerEvent(Buffer.from('{"Action":"update","id":"c1"}\n'));
+            expect(existing.labels).toEqual({ 'dd.display.name': 'Custom Name', new: 'label' });
+            expect(existing.displayName).toBe('Custom Name');
+            expect(storeContainer.updateContainer).toHaveBeenCalledWith(existing);
+        });
+    });
+
+    describe('Additional Coverage - watchFromCron and getContainers', () => {
+        test('should return empty when log is missing', async () => {
+            await docker.register('watcher', 'docker', 'test', { cron: '0 * * * *' });
+            docker.log = null;
+            expect(await docker.watchFromCron()).toEqual([]);
+        });
+
+        test('should filter out containers when addImageDetailsToContainer throws', async () => {
+            mockDockerApi.listContainers.mockResolvedValue([{ Id: '1', Labels: { 'dd.watch': 'true' }, Names: ['/test1'] }]);
+            docker.addImageDetailsToContainer = vi.fn().mockRejectedValue(new Error('Image inspect failed'));
+            await docker.register('watcher', 'docker', 'test', { watchbydefault: true });
+            docker.log = createMockLog(['warn', 'info', 'debug']);
+            const result = await docker.getContainers();
+            expect(docker.log.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to fetch image detail'));
+            expect(result).toHaveLength(0);
+        });
+    });
+
+    describe('Additional Coverage - getSwarmServiceLabels', () => {
+        test('should return empty when getService is not a function', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            docker.log = createMockLog(['debug', 'warn', 'info']);
+            docker.dockerApi.getService = 'not-a-function';
+            expect(await docker.getSwarmServiceLabels('svc1', 'c1')).toEqual({});
+            expect(docker.log.debug).toHaveBeenCalledWith(expect.stringContaining('does not support getService'));
+        });
+
+        test('should log debug when service has no labels', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            docker.log = createMockLog(['debug', 'warn', 'info']);
+            mockDockerApi.getService.mockReturnValue({ inspect: vi.fn().mockResolvedValue({ Spec: {} }) });
+            expect(await docker.getSwarmServiceLabels('svc1', 'c1')).toEqual({});
+            expect(docker.log.debug).toHaveBeenCalledWith(expect.stringContaining('has no labels'));
+        });
+    });
+
+    describe('Additional Coverage - getMatchingImgsetConfiguration', () => {
+        test('should return undefined when no imgset configured', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            expect(docker.getMatchingImgsetConfiguration({ path: 'library/nginx', domain: 'docker.io' })).toBeUndefined();
+        });
+
+        test('should break ties by alphabetical name', async () => {
+            await docker.register('watcher', 'docker', 'test', { imgset: { zebra: { image: 'library/nginx', display: { name: 'Z' } }, alpha: { image: 'library/nginx', display: { name: 'A' } } } });
+            mockParse.mockImplementation((v) => v === 'library/nginx' ? { path: 'library/nginx' } : { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' });
+            const result = docker.getMatchingImgsetConfiguration({ path: 'library/nginx', domain: 'docker.io' });
+            expect(result).toBeDefined();
+            expect(result.name).toBe('alpha');
+        });
+    });
+
+    describe('Additional Coverage - maskConfiguration and ensureLogger', () => {
+        test('should mask auth credentials', async () => {
+            await docker.register('watcher', 'docker', 'test', { host: 'localhost', port: 443, protocol: 'https', auth: { type: 'oidc', oidc: { tokenurl: 'https://idp/token', clientsecret: 'super-secret', accesstoken: 'initial-token' } } }); // NOSONAR
+            const masked = docker.maskConfiguration();
+            expect(masked.auth.oidc.tokenurl).toBe('https://idp/token');
+            expect(masked.auth.oidc.clientsecret).not.toBe('super-secret');
+        });
+
+        test('should create fallback logger', async () => {
+            docker.log = undefined;
+            docker.name = undefined;
+            docker.ensureLogger();
+            expect(docker.log).toBeDefined();
+        });
+    });
+
+    describe('Additional Coverage - safeRegExp max length', () => {
+        test('should warn when regex pattern exceeds max length', async () => {
+            const longPattern = 'a'.repeat(1025);
+            const container = {
+                includeTags: longPattern,
+                image: { registry: { name: 'hub' }, tag: { value: '1.0.0', semver: true }, digest: { watch: false } },
+            };
+            registry.getState.mockReturnValue({ registry: { hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } } });
+            mockTag.isGreater.mockReturnValue(true);
+            const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+            await docker.findNewVersion(container, logChild);
+            expect(logChild.warn).toHaveBeenCalledWith(expect.stringContaining('exceeds maximum length'));
+        });
+
+        test('should warn when exclude regex exceeds max length', async () => {
+            const longPattern = 'b'.repeat(1025);
+            const container = {
+                excludeTags: longPattern,
+                image: { registry: { name: 'hub' }, tag: { value: '1.0.0', semver: true }, digest: { watch: false } },
+            };
+            registry.getState.mockReturnValue({ registry: { hub: { getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']) } } });
+            mockTag.isGreater.mockReturnValue(true);
+            const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+            await docker.findNewVersion(container, logChild);
+            expect(logChild.warn).toHaveBeenCalledWith(expect.stringContaining('exceeds maximum length'));
+        });
+    });
+
+    describe('Additional Coverage - filterBySegmentCount no numeric part', () => {
+        test('should return all tags when current tag has no numeric part', async () => {
+            const container = {
+                image: { registry: { name: 'hub' }, tag: { value: 'latest', semver: true }, digest: { watch: false } },
+                includeTags: '.*',
+            };
+            registry.getState.mockReturnValue({ registry: { hub: { getTags: vi.fn().mockResolvedValue(['latest', 'stable', '1.0.0']) } } });
+            // Make transform return 'nonnumeric' for the current tag to hit numericPart === null
+            mockTag.transform.mockImplementation((_transform, tag) => tag === 'latest' ? 'nonnumeric' : tag);
+            mockTag.parse.mockReturnValue({ major: 1, minor: 0, patch: 0 });
+            mockTag.isGreater.mockReturnValue(true);
+            const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+            await docker.findNewVersion(container, logChild);
+            // Should not crash; tags pass through
+            expect(logChild.error).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Additional Coverage - normalizeContainer no registry', () => {
+        test('should set registry name to unknown when no registry provider found', async () => {
+            const container = await setupContainerDetailTest(docker, {
+                container: { Image: 'custom.registry/myimage:1.0.0', Names: ['/myimage'] },
+                parsedImage: { domain: 'custom.registry', path: 'myimage', tag: '1.0.0' },
+                registryState: {},
+            });
+            const result = await docker.addImageDetailsToContainer(container);
+            expect(result.image.registry.name).toBe('unknown');
+        });
+    });
+
+    describe('Additional Coverage - setRemoteAuthorizationHeader', () => {
+        test('should do nothing when authorization value is empty', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            docker.setRemoteAuthorizationHeader('');
+            // modem headers should not be set
+            expect(docker.dockerApi.modem.headers.Authorization).toBeUndefined();
+        });
+
+        test('should create modem object when missing', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            docker.dockerApi.modem = undefined;
+            docker.setRemoteAuthorizationHeader('Bearer test-token'); // NOSONAR - test
+            expect(docker.dockerApi.modem.headers.Authorization).toBe('Bearer test-token');
+        });
+    });
+
+    describe('Additional Coverage - isRemoteOidcTokenRefreshRequired', () => {
+        test('should return false when expiresAt is undefined but token exists', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            docker.remoteOidcAccessToken = 'some-token'; // NOSONAR - test
+            docker.remoteOidcAccessTokenExpiresAt = undefined;
+            expect(docker.isRemoteOidcTokenRefreshRequired()).toBe(false);
+        });
+    });
+
+    describe('Additional Coverage - OIDC token refresh additional params', () => {
+        test('should include audience in token request', async () => {
+            mockDockerApi.listContainers.mockResolvedValue([]);
+            await docker.register('watcher', 'docker', 'test', createOidcConfig({
+                clientid: 'c1',
+                audience: 'https://api.example.com',
+            }));
+            await docker.getContainers();
+            expect(mockAxios.post.mock.calls[0][1]).toContain('audience=https%3A%2F%2Fapi.example.com');
+        });
+
+        test('should store refresh token from token response', async () => {
+            mockDockerApi.listContainers.mockResolvedValue([]);
+            mockAxios.post.mockResolvedValue({
+                data: createTokenResponse({
+                    access_token: 'new-token', // NOSONAR - test
+                    refresh_token: 'new-refresh', // NOSONAR - test
+                    expires_in: 3600,
+                }),
+            } as any);
+            await docker.register('watcher', 'docker', 'test', createOidcConfig());
+            await docker.getContainers();
+            expect(docker.remoteOidcRefreshToken).toBe('new-refresh');
+        });
+
+        test('should use default TTL when expires_in is not in response', async () => {
+            mockDockerApi.listContainers.mockResolvedValue([]);
+            mockAxios.post.mockResolvedValue({
+                data: { access_token: 'no-expiry-token' }, // NOSONAR - test
+            } as any);
+            await docker.register('watcher', 'docker', 'test', createOidcConfig());
+            await docker.getContainers();
+            expect(docker.remoteOidcAccessToken).toBe('no-expiry-token');
+            expect(docker.remoteOidcAccessTokenExpiresAt).toBeDefined();
+        });
+    });
+
+    describe('Additional Coverage - device code flow resource param', () => {
+        test('should send resource in device authorization request', async () => {
+            mockDockerApi.listContainers.mockResolvedValue([]);
+            mockAxios.post.mockImplementation((url) => {
+                if (url === 'https://idp.example.com/oauth/device/code') {
+                    return Promise.resolve({ data: createDeviceCodeResponse() });
+                }
+                return Promise.resolve({ data: createTokenResponse() });
+            });
+            await docker.register('watcher', 'docker', 'test', createDeviceFlowConfig({
+                resource: 'https://resource.example.com',
+            }));
+            docker.sleep = vi.fn().mockResolvedValue(undefined);
+            await docker.getContainers();
+            const deviceCall = mockAxios.post.mock.calls.find((call) => call[0] === 'https://idp.example.com/oauth/device/code');
+            expect(deviceCall[1]).toContain('resource=https%3A%2F%2Fresource.example.com');
+        });
+
+        test('should send client_secret in device code token poll', async () => {
+            mockDockerApi.listContainers.mockResolvedValue([]);
+            mockAxios.post.mockImplementation((url) => {
+                if (url === 'https://idp.example.com/oauth/device/code') {
+                    return Promise.resolve({ data: createDeviceCodeResponse() });
+                }
+                return Promise.resolve({ data: createTokenResponse() });
+            });
+            await docker.register('watcher', 'docker', 'test', createDeviceFlowConfig({
+                clientsecret: 'device-secret', // NOSONAR - test
+            }));
+            docker.sleep = vi.fn().mockResolvedValue(undefined);
+            await docker.getContainers();
+            const tokenCall = mockAxios.post.mock.calls.find((call) => call[0] === 'https://idp.example.com/oauth/token');
+            expect(tokenCall[1]).toContain('client_secret=device-secret');
+        });
+    });
+
+    describe('Additional Coverage - device code flow timeout', () => {
+        test('should throw when polling times out', async () => {
+            mockDockerApi.listContainers.mockResolvedValue([]);
+            mockAxios.post.mockImplementation((url) => {
+                if (url === 'https://idp.example.com/oauth/device/code') {
+                    return Promise.resolve({
+                        data: createDeviceCodeResponse({ expires_in: 0 }),
+                    });
+                }
+                return Promise.reject({ response: { data: { error: 'authorization_pending' } } });
+            });
+            await docker.register('watcher', 'docker', 'test', createDeviceFlowConfig());
+            docker.sleep = vi.fn().mockResolvedValue(undefined);
+            await expect(docker.getContainers()).rejects.toThrow('polling timed out');
+        });
+    });
+
+    describe('Additional Coverage - device code unknown error', () => {
+        test('should throw with error description for unknown token errors', async () => {
+            mockDockerApi.listContainers.mockResolvedValue([]);
+            mockAxios.post.mockImplementation((url) => {
+                if (url === 'https://idp.example.com/oauth/device/code') {
+                    return Promise.resolve({ data: createDeviceCodeResponse() });
+                }
+                return Promise.reject({
+                    response: { data: { error: 'server_error', error_description: 'Internal server error' } },
+                });
+            });
+            await docker.register('watcher', 'docker', 'test', createDeviceFlowConfig());
+            docker.sleep = vi.fn().mockResolvedValue(undefined);
+            await expect(docker.getContainers()).rejects.toThrow('Internal server error');
+        });
+    });
+
+    describe('Additional Coverage - ensureRemoteAuthHeaders no token', () => {
+        test('should throw when no OIDC access token available after refresh', async () => {
+            await docker.register('watcher', 'docker', 'test', createOidcConfig());
+            // Mock refreshRemoteOidcAccessToken to succeed but leave token undefined
+            docker.refreshRemoteOidcAccessToken = vi.fn().mockResolvedValue(undefined);
+            docker.remoteOidcAccessToken = undefined;
+            await expect(docker.ensureRemoteAuthHeaders()).rejects.toThrow('no OIDC access token available');
+        });
+    });
+
+    describe('Additional Coverage - v1 manifest with empty Config.Image', () => {
+        test('should set digest value to undefined when Config.Image is empty string', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            const container = {
+                image: {
+                    id: 'image123',
+                    registry: { name: 'hub' },
+                    tag: { value: '1.0.0' },
+                    digest: { watch: true, repo: 'sha256:abc123' },
+                },
+            };
+            const mockRegistry = {
+                getTags: vi.fn().mockResolvedValue(['1.0.0']),
+                getImageManifestDigest: vi.fn().mockResolvedValue({
+                    digest: 'sha256:def456',
+                    created: '2023-01-01',
+                    version: 1,
+                }),
+            };
+            registry.getState.mockReturnValue({ registry: { hub: mockRegistry } });
+            const mockLogChild = { error: vi.fn() };
+            mockImage.inspect.mockResolvedValue({ Config: { Image: '' } });
+
+            const result = await docker.findNewVersion(container, mockLogChild);
+
+            expect(container.image.digest.value).toBeUndefined();
+        });
+    });
+
+    describe('Additional Coverage - getMatchingImgsetConfiguration with no image pattern', () => {
+        test('should skip imgset entries without image/match key', async () => {
+            await docker.register('watcher', 'docker', 'test', {
+                imgset: {
+                    noimage: { display: { name: 'No Image Entry' } },
+                },
+            });
+            const result = docker.getMatchingImgsetConfiguration({ path: 'library/nginx', domain: 'docker.io' });
+            expect(result).toBeUndefined();
+        });
+    });
+
+    describe('Additional Coverage - getSwarmServiceLabels with dd labels', () => {
+        test('should log debug with dd label names from service', async () => {
+            await docker.register('watcher', 'docker', 'test', {});
+            const logMock = createMockLog(['debug', 'warn', 'info']);
+            docker.log = logMock;
+            mockDockerApi.getService.mockReturnValue({
+                inspect: vi.fn().mockResolvedValue({
+                    Spec: {
+                        Labels: { 'dd.watch': 'true', 'dd.tag.include': '^v' },
+                        TaskTemplate: { ContainerSpec: { Labels: { 'wud.display.name': 'Test' } } },
+                    },
+                }),
+            });
+            const labels = await docker.getSwarmServiceLabels('svc1', 'c1');
+            expect(labels['dd.watch']).toBe('true');
+            expect(labels['wud.display.name']).toBe('Test');
+            expect(logMock.debug).toHaveBeenCalledWith(expect.stringContaining('deploy labels=dd.watch,dd.tag.include'));
+        });
+    });
+
+    describe('Additional Coverage - device code flow log fallback', () => {
+        test('should log generic info when verification_uri and user_code are missing', async () => {
+            mockDockerApi.listContainers.mockResolvedValue([]);
+            mockAxios.post.mockImplementation((url) => {
+                if (url === 'https://idp.example.com/oauth/device/code') {
+                    return Promise.resolve({
+                        data: {
+                            device_code: 'code-no-uri',
+                            // No user_code, no verification_uri
+                        },
+                    });
+                }
+                return Promise.resolve({ data: createTokenResponse() });
+            });
+            await docker.register('watcher', 'docker', 'test', createDeviceFlowConfig());
+            const mockLog = createMockLogWithChild();
+            mockLog.child.mockReturnThis();
+            docker.log = mockLog;
+            docker.sleep = vi.fn().mockResolvedValue(undefined);
+            await docker.ensureRemoteAuthHeaders();
+            expect(mockLog.info).toHaveBeenCalledWith(expect.stringContaining('user_code=N/A'));
+        });
+    });
+
+    describe('Additional Coverage - watchFromCron ensureLogger guard', () => {
+        test('should return empty array when ensureLogger produces non-functional log', async () => {
+            await docker.register('watcher', 'docker', 'test', { cron: '0 * * * *' });
+            docker.ensureLogger = () => { docker.log = {}; };
+            const result = await docker.watchFromCron();
+            expect(result).toEqual([]);
+        });
+    });
+
+    describe('Additional Coverage - OIDC custom timeout', () => {
+        test('should use custom timeout in token request', async () => {
+            mockDockerApi.listContainers.mockResolvedValue([]);
+            await docker.register('watcher', 'docker', 'test', createOidcConfig({
+                timeout: 10000,
+            }));
+            await docker.getContainers();
+            expect(mockAxios.post).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.any(String),
+                expect.objectContaining({ timeout: 10000 }),
+            );
+        });
+    });
 });
 
 describe('isDigestToWatch Logic', () => {

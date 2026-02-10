@@ -187,79 +187,74 @@ async function watchContainers(req, res) {
     }
 }
 
+function parseTriggerList(triggerString) {
+    if (!triggerString) {
+        return undefined;
+    }
+    return triggerString
+        .split(/\s*,\s*/)
+        .map((entry) => Trigger.parseIncludeOrIncludeTriggerString(entry));
+}
+
+function isTriggerAgentCompatible(trigger, container) {
+    if (trigger.agent && trigger.agent !== container.agent) {
+        return false;
+    }
+    if (
+        container.agent &&
+        !trigger.agent &&
+        ['docker', 'dockercompose'].includes(trigger.type)
+    ) {
+        return false;
+    }
+    return true;
+}
+
+function resolveTriggerAssociation(trigger, includedTriggers, excludedTriggers) {
+    const triggerId = `${trigger.type}.${trigger.name}`;
+    const triggerToAssociate = { ...trigger };
+
+    if (includedTriggers) {
+        const includedTrigger = includedTriggers.find(
+            (tr) => Trigger.doesReferenceMatchId(tr.id, triggerId),
+        );
+        if (!includedTrigger) {
+            return undefined;
+        }
+        triggerToAssociate.configuration.threshold = includedTrigger.threshold;
+    }
+
+    if (
+        excludedTriggers &&
+        excludedTriggers.some((excludedTrigger) =>
+            Trigger.doesReferenceMatchId(excludedTrigger.id, triggerId),
+        )
+    ) {
+        return undefined;
+    }
+
+    return triggerToAssociate;
+}
+
 export async function getContainerTriggers(req, res) {
     const { id } = req.params;
 
     const container = storeContainer.getContainer(id);
-    if (container) {
-        const allTriggers = mapComponentsToList(getTriggers());
-        const includedTriggers = container.triggerInclude
-            ? container.triggerInclude
-                  .split(/\s*,\s*/)
-                  .map((includedTrigger) =>
-                      Trigger.parseIncludeOrIncludeTriggerString(
-                          includedTrigger,
-                      ),
-                  )
-            : undefined;
-        const excludedTriggers = container.triggerExclude
-            ? container.triggerExclude
-                  .split(/\s*,\s*/)
-                  .map((excludedTrigger) =>
-                      Trigger.parseIncludeOrIncludeTriggerString(
-                          excludedTrigger,
-                      ),
-                  )
-            : undefined;
-        const associatedTriggers = [];
-        allTriggers.forEach((trigger) => {
-            if (trigger.agent && trigger.agent !== container.agent) {
-                // Remote triggers can only act on remote containers defined in the same Agent
-                return;
-            }
-            if (
-                container.agent &&
-                !trigger.agent &&
-                ['docker', 'dockercompose'].includes(trigger.type)
-            ) {
-                // Local action triggers cannot run against remote containers.
-                return;
-            }
-            const triggerToAssociate = { ...trigger };
-            // Use 'local' trigger id syntax - which is the syntax that will be used in remote Agents
-            // This causes overlap between remote and local agents - a known issue that users must be aware of
-            const triggerId = `${trigger.type}.${trigger.name}`;
-            let associated = true;
-            if (includedTriggers) {
-                const includedTrigger = includedTriggers.find(
-                    (tr) => Trigger.doesReferenceMatchId(tr.id, triggerId),
-                );
-                if (includedTrigger) {
-                    triggerToAssociate.configuration.threshold =
-                        includedTrigger.threshold;
-                } else {
-                    associated = false;
-                }
-            }
-            if (
-                excludedTriggers &&
-                excludedTriggers.some((excludedTrigger) =>
-                    Trigger.doesReferenceMatchId(
-                        excludedTrigger.id,
-                        triggerId,
-                    ),
-                )
-            ) {
-                associated = false;
-            }
-            if (associated) {
-                associatedTriggers.push(triggerToAssociate);
-            }
-        });
-        res.status(200).json(associatedTriggers);
-    } else {
+    if (!container) {
         res.sendStatus(404);
+        return;
     }
+
+    const allTriggers = mapComponentsToList(getTriggers());
+    const includedTriggers = parseTriggerList(container.triggerInclude);
+    const excludedTriggers = parseTriggerList(container.triggerExclude);
+
+    const associatedTriggers = allTriggers
+        .filter((trigger) => isTriggerAgentCompatible(trigger, container))
+        .map((trigger) => resolveTriggerAssociation(trigger, includedTriggers, excludedTriggers))
+        .filter((trigger) => trigger !== undefined);
+
+    res.status(200).json(associatedTriggers);
 }
 
 /**
@@ -368,6 +363,50 @@ async function watchContainer(req, res) {
  * @param req
  * @param res
  */
+function applySkipCurrentAction(container, updatePolicy) {
+    const updateKind = container.updateKind?.kind;
+    if (!['tag', 'digest'].includes(updateKind)) {
+        return { error: 'No current update available to skip' };
+    }
+    const updateValue = getCurrentUpdateValue(container, updateKind);
+    if (!updateValue) {
+        return { error: 'No update value available to skip' };
+    }
+    if (updateKind === 'tag') {
+        updatePolicy.skipTags = uniqStrings([
+            ...(updatePolicy.skipTags || []),
+            updateValue,
+        ]);
+    } else {
+        updatePolicy.skipDigests = uniqStrings([
+            ...(updatePolicy.skipDigests || []),
+            updateValue,
+        ]);
+    }
+    return { policy: updatePolicy };
+}
+
+function applyPolicyAction(action, container, updatePolicy, body) {
+    switch (action) {
+        case 'skip-current':
+            return applySkipCurrentAction(container, updatePolicy);
+        case 'clear-skips':
+            delete updatePolicy.skipTags;
+            delete updatePolicy.skipDigests;
+            return { policy: updatePolicy };
+        case 'snooze':
+            updatePolicy.snoozeUntil = getSnoozeUntilFromActionPayload(body || {});
+            return { policy: updatePolicy };
+        case 'unsnooze':
+            delete updatePolicy.snoozeUntil;
+            return { policy: updatePolicy };
+        case 'clear':
+            return { policy: {} };
+        default:
+            return { error: `Unknown action ${action}` };
+    }
+}
+
 function patchContainerUpdatePolicy(req, res) {
     const { id } = req.params;
     const { action } = req.body || {};
@@ -379,80 +418,26 @@ function patchContainerUpdatePolicy(req, res) {
     }
 
     if (!action) {
-        res.status(400).json({
-            error: 'Action is required',
-        });
+        res.status(400).json({ error: 'Action is required' });
         return;
     }
 
     try {
         let updatePolicy = normalizeUpdatePolicy(container.updatePolicy || {});
+        const result = applyPolicyAction(action, container, updatePolicy, req.body);
 
-        switch (action) {
-            case 'skip-current': {
-                const updateKind = container.updateKind?.kind;
-                if (!['tag', 'digest'].includes(updateKind)) {
-                    res.status(400).json({
-                        error: 'No current update available to skip',
-                    });
-                    return;
-                }
-                const updateValue = getCurrentUpdateValue(container, updateKind);
-                if (!updateValue) {
-                    res.status(400).json({
-                        error: 'No update value available to skip',
-                    });
-                    return;
-                }
-                if (updateKind === 'tag') {
-                    updatePolicy.skipTags = uniqStrings([
-                        ...(updatePolicy.skipTags || []),
-                        updateValue,
-                    ]);
-                } else {
-                    updatePolicy.skipDigests = uniqStrings([
-                        ...(updatePolicy.skipDigests || []),
-                        updateValue,
-                    ]);
-                }
-                break;
-            }
-            case 'clear-skips': {
-                delete updatePolicy.skipTags;
-                delete updatePolicy.skipDigests;
-                break;
-            }
-            case 'snooze': {
-                updatePolicy.snoozeUntil = getSnoozeUntilFromActionPayload(
-                    req.body || {},
-                );
-                break;
-            }
-            case 'unsnooze': {
-                delete updatePolicy.snoozeUntil;
-                break;
-            }
-            case 'clear': {
-                updatePolicy = {};
-                break;
-            }
-            default: {
-                res.status(400).json({
-                    error: `Unknown action ${action}`,
-                });
-                return;
-            }
+        if (result.error) {
+            res.status(400).json({ error: result.error });
+            return;
         }
 
-        updatePolicy = normalizeUpdatePolicy(updatePolicy);
+        updatePolicy = normalizeUpdatePolicy(result.policy);
         container.updatePolicy =
             Object.keys(updatePolicy).length > 0 ? updatePolicy : undefined;
         const containerUpdated = storeContainer.updateContainer(container);
         res.status(200).json(containerUpdated);
     } catch (e) {
-        res.status(400).json({
-            error: e.message,
-        });
+        res.status(400).json({ error: e.message });
     }
 }
 

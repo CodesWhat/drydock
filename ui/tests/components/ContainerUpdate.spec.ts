@@ -11,7 +11,8 @@ const mockUpdateKind = {
 const mockResult = {
   tag: '2.0.0',
   created: '2023-01-02T00:00:00Z',
-  digest: 'sha256:abcdef123456'
+  digest: 'sha256:abcdef123456',
+  link: 'https://hub.docker.com/r/library/nginx/tags/2.0.0',
 };
 
 describe('ContainerUpdate', () => {
@@ -21,99 +22,117 @@ describe('ContainerUpdate', () => {
     wrapper = mount(ContainerUpdate, {
       props: {
         updateKind: mockUpdateKind,
-        result: mockResult
+        result: mockResult,
+        updateAvailable: true,
+        semver: true,
       }
     });
   });
 
   afterEach(() => {
-    if (wrapper) {
-      wrapper.unmount();
-    }
+    if (wrapper) wrapper.unmount();
   });
 
-  it('renders update information correctly', () => {
-    expect(wrapper.vm.updateKind.remoteValue).toBe('2.0.0');
-    expect(wrapper.vm.updateKind.localValue).toBe('1.0.0');
-  });
-
-  it('shows semver diff information', () => {
-    expect(wrapper.vm.updateKind.semverDiff).toBe('major');
-  });
-
-  it('displays creation date', () => {
-    expect(wrapper.vm.result.created).toBe('2023-01-02T00:00:00Z');
-  });
-
-  it('shows digest information', () => {
-    expect(wrapper.vm.result.digest).toBe('sha256:abcdef123456');
-  });
-
-  it('handles non-semver updates', async () => {
-    await wrapper.setProps({
-      updateKind: {
-        kind: 'digest',
-        localValue: 'sha256:old123',
-        remoteValue: 'sha256:new456'
-      }
+  describe('updateKindFormatted computed', () => {
+    it('returns semverDiff when present', () => {
+      expect(wrapper.vm.updateKindFormatted).toBe('major');
     });
 
-    expect(wrapper.vm.updateKind.kind).toBe('digest');
-  });
-
-  it('shows no update available message when update is not available', async () => {
-    await wrapper.setProps({
-      updateKind: null
+    it('returns kind when no semverDiff', async () => {
+      await wrapper.setProps({
+        updateKind: { kind: 'digest' },
+      });
+      expect(wrapper.vm.updateKindFormatted).toBe('digest');
     });
 
-    expect(wrapper.vm.updateKind).toBeNull();
-  });
-
-  it('handles different update kinds', async () => {
-    await wrapper.setProps({
-      updateKind: {
-        kind: 'tag',
-        localValue: '1.0.0',
-        remoteValue: '1.1.0',
-        semverDiff: 'minor'
-      }
+    it('returns "Unknown" when updateKind is null', async () => {
+      await wrapper.setProps({ updateKind: null });
+      expect(wrapper.vm.updateKindFormatted).toBe('Unknown');
     });
 
-    expect(wrapper.vm.updateKind.semverDiff).toBe('minor');
-
-    await wrapper.setProps({
-      updateKind: {
-        kind: 'tag',
-        localValue: '1.0.0',
-        remoteValue: '1.0.1',
-        semverDiff: 'patch'
-      }
+    it('returns "Unknown" when updateKind is undefined', async () => {
+      await wrapper.setProps({ updateKind: undefined });
+      expect(wrapper.vm.updateKindFormatted).toBe('Unknown');
     });
 
-    expect(wrapper.vm.updateKind.semverDiff).toBe('patch');
+    it('returns minor for minor semverDiff', async () => {
+      await wrapper.setProps({
+        updateKind: { kind: 'tag', semverDiff: 'minor' },
+      });
+      expect(wrapper.vm.updateKindFormatted).toBe('minor');
+    });
+
+    it('returns patch for patch semverDiff', async () => {
+      await wrapper.setProps({
+        updateKind: { kind: 'tag', semverDiff: 'patch' },
+      });
+      expect(wrapper.vm.updateKindFormatted).toBe('patch');
+    });
   });
 
-  it('displays correct severity colors', () => {
-    // Test that component has access to update kind data
-    expect(wrapper.vm.updateKind.semverDiff).toBe('major');
+  describe('copyToClipboard', () => {
+    it('copies value to clipboard and emits notify', () => {
+      const writeTextMock = vi.fn();
+      Object.assign(navigator, { clipboard: { writeText: writeTextMock } });
+
+      wrapper.vm.copyToClipboard('update tag', '2.0.0');
+
+      expect(writeTextMock).toHaveBeenCalledWith('2.0.0');
+      expect(wrapper.vm.$eventBus.emit).toHaveBeenCalledWith('notify', 'update tag copied to clipboard');
+    });
+
+    it('copies digest to clipboard', () => {
+      const writeTextMock = vi.fn();
+      Object.assign(navigator, { clipboard: { writeText: writeTextMock } });
+
+      wrapper.vm.copyToClipboard('update digest', 'sha256:abcdef123456');
+
+      expect(writeTextMock).toHaveBeenCalledWith('sha256:abcdef123456');
+    });
   });
 
-  it('formats version information correctly', () => {
-    expect(wrapper.vm.updateKind.localValue).toBe('1.0.0');
-    expect(wrapper.vm.updateKind.remoteValue).toBe('2.0.0');
+  describe('rendering with updateAvailable=true', () => {
+    it('shows tag info', () => {
+      expect(wrapper.text()).toContain('2.0.0');
+    });
+
+    it('shows digest info', () => {
+      expect(wrapper.text()).toContain('sha256:abcdef123456');
+    });
+
+    it('shows link', () => {
+      const link = wrapper.find('a[href="https://hub.docker.com/r/library/nginx/tags/2.0.0"]');
+      expect(link.exists()).toBe(true);
+    });
+
+    it('shows semver chip when semver is true', () => {
+      expect(wrapper.text()).toContain('semver');
+    });
+
+    it('shows update kind', () => {
+      expect(wrapper.text()).toContain('Update kind');
+    });
   });
 
-  it('handles missing updateKind gracefully', async () => {
-    await wrapper.setProps({ updateKind: null });
+  describe('rendering with updateAvailable=false', () => {
+    it('shows "No update available"', async () => {
+      await wrapper.setProps({ updateAvailable: false });
+      expect(wrapper.text()).toContain('No update available');
+    });
+  });
+
+  it('handles missing result.tag', async () => {
+    await wrapper.setProps({ result: { digest: 'sha256:abc' } });
     expect(wrapper.exists()).toBe(true);
   });
 
-  it('handles missing result gracefully', async () => {
-    await wrapper.setProps({ result: null });
+  it('handles missing result.link', async () => {
+    await wrapper.setProps({ result: { tag: '2.0.0' } });
     expect(wrapper.exists()).toBe(true);
   });
 
-  it('computes correct update type', () => {
-    expect(wrapper.vm.updateKind.kind).toBe('tag');
+  it('handles missing result.digest', async () => {
+    await wrapper.setProps({ result: { tag: '2.0.0' } });
+    expect(wrapper.exists()).toBe(true);
   });
 });

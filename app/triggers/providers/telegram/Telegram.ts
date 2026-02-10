@@ -12,6 +12,20 @@ function escapeMarkdown(text) {
 }
 
 /**
+ * Escape HTML special characters to prevent XSS.
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+/**
  * Telegram Trigger implementation
  */
 class Telegram extends Trigger {
@@ -97,7 +111,7 @@ class Telegram extends Trigger {
     bold(text) {
         return this.configuration.messageformat.toLowerCase() === 'markdown'
             ? `*${escapeMarkdown(text)}*`
-            : `<b>${text}</b>`;
+            : `<b>${escapeHtml(text)}</b>`;
     }
 
     getParseMode() {
