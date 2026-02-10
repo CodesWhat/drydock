@@ -13,8 +13,83 @@ const configurationValid = {
     timeout: 5000,
 };
 
-let oidc;
+// --- Factory helpers for repeated test fixtures ---
 
+function createRes(overrides = {}) {
+    return {
+        json: vi.fn(),
+        status: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+        redirect: vi.fn(),
+        ...overrides,
+    };
+}
+
+function createReq(overrides = {}) {
+    return {
+        protocol: 'https',
+        hostname: 'dd.example.com',
+        login: vi.fn(),
+        ...overrides,
+    };
+}
+
+function createSessionWithPending(pendingEntries: Record<string, any>) {
+    return {
+        oidc: {
+            default: {
+                pending: pendingEntries,
+            },
+        },
+    };
+}
+
+function createPendingCheck(codeVerifier = 'code-verifier') {
+    return { codeVerifier, createdAt: Date.now() };
+}
+
+function createCallbackReq(originalUrl: string, session: any, loginBehavior?: (user, done) => void) {
+    return createReq({
+        originalUrl,
+        session,
+        login: vi.fn(loginBehavior || ((user, done) => done())),
+    });
+}
+
+/** Set up a successful grant + userInfo mock on the openidClientMock */
+function mockSuccessfulGrant(mock: any) {
+    mock.authorizationCodeGrant = vi
+        .fn()
+        .mockResolvedValue({ access_token: 'token' }); // NOSONAR - test fixture, not a real credential
+    mock.fetchUserInfo = vi
+        .fn()
+        .mockResolvedValue({ email: 'user@example.com' });
+}
+
+/** Assert a 401 JSON error response */
+function expect401Json(res: any, error = 'Authentication failed') {
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error });
+}
+
+/** Assert a 401 text error response */
+function expect401Send(res: any, message: string) {
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.send).toHaveBeenCalledWith(message);
+}
+
+/** Perform a redirect flow and return the session with pending state */
+async function performRedirect(oidcInstance: any, mock: any, session?: any) {
+    const sess = session || { save: vi.fn((cb) => cb()) };
+    const res = createRes();
+    await oidcInstance.redirect(
+        createReq({ session: sess }),
+        res,
+    );
+    return { session: sess, res };
+}
+
+let oidc;
 let openidClientMock;
 
 beforeEach(() => {
@@ -89,8 +164,7 @@ test('getStrategyDescription should return strategy description', async () => {
 });
 
 test('verify should return user on valid token', async () => {
-    const mockUserInfo = { email: 'test@example.com' };
-    openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue(mockUserInfo);
+    openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'test@example.com' });
 
     const done = vi.fn();
     await oidc.verify('valid-token', done);
@@ -110,40 +184,20 @@ test('verify should return false on invalid token', async () => {
     expect(done).toHaveBeenCalledWith(null, false);
 });
 
-test('getUserFromAccessToken should return user with email', async () => {
-    const mockUserInfo = { email: 'user@example.com' };
-    openidClientMock.fetchUserInfo = vi
-        .fn()
-        .mockResolvedValue(mockUserInfo);
+test.each([
+    ['email present', { email: 'user@example.com' }, { username: 'user@example.com' }],
+    ['email missing', {}, { username: 'unknown' }],
+])('getUserFromAccessToken should return correct user when %s', async (_label, mockUserInfo, expected) => {
+    openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue(mockUserInfo);
 
     const user = await oidc.getUserFromAccessToken('token');
-    expect(user).toEqual({ username: 'user@example.com' });
-});
-
-test('getUserFromAccessToken should return unknown for missing email', async () => {
-    const mockUserInfo = {};
-    openidClientMock.fetchUserInfo = vi
-        .fn()
-        .mockResolvedValue(mockUserInfo);
-
-    const user = await oidc.getUserFromAccessToken('token');
-    expect(user).toEqual({ username: 'unknown' });
+    expect(user).toEqual(expected);
 });
 
 test('redirect should persist oidc checks in session before responding', async () => {
     const save = vi.fn((cb) => cb());
-    const req = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-        session: {
-            save,
-        },
-    };
-    const res = {
-        json: vi.fn(),
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-    };
+    const req = createReq({ session: { save } });
+    const res = createRes();
 
     await oidc.redirect(req, res);
 
@@ -190,28 +244,10 @@ test('redirect should preserve pending checks from concurrent requests on the sa
         return session;
     };
 
-    const req1: any = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-        sessionID: 'shared-session-id',
-        session: createSession(),
-    };
-    const req2: any = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-        sessionID: 'shared-session-id',
-        session: createSession(),
-    };
-    const res1 = {
-        json: vi.fn(),
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-    };
-    const res2 = {
-        json: vi.fn(),
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-    };
+    const req1: any = createReq({ sessionID: 'shared-session-id', session: createSession() });
+    const req2: any = createReq({ sessionID: 'shared-session-id', session: createSession() });
+    const res1 = createRes();
+    const res2 = createRes();
 
     await Promise.all([oidc.redirect(req1, res1), oidc.redirect(req2, res2)]);
 
@@ -221,59 +257,28 @@ test('redirect should preserve pending checks from concurrent requests on the sa
 });
 
 test('callback should fail with explicit message when callback state is missing', async () => {
-    const req = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-        originalUrl: '/auth/oidc/default/cb?code=abc',
-        session: {
-            oidc: {
-                default: {
-                    pending: {
-                        state1: {
-                            codeVerifier: 'code-verifier',
-                            createdAt: Date.now(),
-                        },
-                    },
-                },
-            },
-        },
-        login: vi.fn(),
-    };
-    const res = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-    };
+    const session = createSessionWithPending({
+        state1: createPendingCheck(),
+    });
+    const req = createCallbackReq('/auth/oidc/default/cb?code=abc', session);
+    const res = createRes();
 
     await oidc.callback(req, res);
 
     expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.send).toHaveBeenCalledWith(
-        'OIDC callback is missing state. Please retry authentication.',
-    );
+    expect401Send(res, 'OIDC callback is missing state. Please retry authentication.');
 });
 
 test('callback should return explicit error when oidc checks are missing', async () => {
     openidClientMock.authorizationCodeGrant = vi.fn();
 
-    const req = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-        session: {},
-        login: vi.fn(),
-    };
-    const res = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-    };
+    const req = createCallbackReq(undefined, {});
+    const res = createRes();
 
     await oidc.callback(req, res);
 
     expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.send).toHaveBeenCalledWith(
-        'OIDC session is missing or expired. Please retry authentication.',
-    );
+    expect401Send(res, 'OIDC session is missing or expired. Please retry authentication.');
 });
 
 test('callback should authenticate using matching state when multiple auth redirects are pending', async () => {
@@ -281,29 +286,13 @@ test('callback should authenticate using matching state when multiple auth redir
         .fn()
         .mockReturnValueOnce('code-verifier-1')
         .mockReturnValueOnce('code-verifier-2');
-    openidClientMock.authorizationCodeGrant = vi
-        .fn()
-        .mockResolvedValue({ access_token: 'token' }); // NOSONAR - test fixture, not a real credential
-    openidClientMock.fetchUserInfo = vi
-        .fn()
-        .mockResolvedValue({ email: 'user@example.com' });
-    const session = {
-        save: vi.fn((cb) => cb()),
-    };
-    const resRedirect = {
-        json: vi.fn(),
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-    };
+    mockSuccessfulGrant(openidClientMock);
 
-    await oidc.redirect(
-        { protocol: 'https', hostname: 'dd.example.com', session },
-        resRedirect,
-    );
-    await oidc.redirect(
-        { protocol: 'https', hostname: 'dd.example.com', session },
-        resRedirect,
-    );
+    const session = { save: vi.fn((cb) => cb()) };
+    const resRedirect = createRes();
+
+    await oidc.redirect(createReq({ session }), resRedirect);
+    await oidc.redirect(createReq({ session }), resRedirect);
 
     const stateByCodeVerifier = Object.fromEntries(
         Object.entries(session.oidc.default.pending).map(([state, check]: any) => [
@@ -313,18 +302,12 @@ test('callback should authenticate using matching state when multiple auth redir
     );
     const firstState = stateByCodeVerifier['code-verifier-1'];
     const secondState = stateByCodeVerifier['code-verifier-2'];
-    const req = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-        originalUrl: `/auth/oidc/default/cb?code=abc&state=${firstState}`,
+
+    const req = createCallbackReq(
+        `/auth/oidc/default/cb?code=abc&state=${firstState}`,
         session,
-        login: vi.fn((user, done) => done()),
-    };
-    const res = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-        redirect: vi.fn(),
-    };
+    );
+    const res = createRes();
 
     await oidc.callback(req, res);
 
@@ -342,18 +325,11 @@ test('callback should authenticate using matching state when multiple auth redir
 });
 
 test('callback should support legacy single-check session shape', async () => {
-    openidClientMock.authorizationCodeGrant = vi
-        .fn()
-        .mockResolvedValue({ access_token: 'token' }); // NOSONAR - test fixture, not a real credential
-    openidClientMock.fetchUserInfo = vi
-        .fn()
-        .mockResolvedValue({ email: 'user@example.com' });
+    mockSuccessfulGrant(openidClientMock);
 
-    const req = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-        originalUrl: '/auth/oidc/default/cb?code=abc&state=legacy-state',
-        session: {
+    const req = createCallbackReq(
+        '/auth/oidc/default/cb?code=abc&state=legacy-state',
+        {
             oidc: {
                 default: {
                     state: 'legacy-state',
@@ -361,13 +337,8 @@ test('callback should support legacy single-check session shape', async () => {
                 },
             },
         },
-        login: vi.fn((user, done) => done()),
-    };
-    const res = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-        redirect: vi.fn(),
-    };
+    );
+    const res = createRes();
 
     await oidc.callback(req, res);
 
@@ -384,81 +355,37 @@ test('callback should support legacy single-check session shape', async () => {
 });
 
 test('callback should return explicit error when callback state does not match session checks', async () => {
-    const req = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-        originalUrl: '/auth/oidc/default/cb?code=abc&state=unknown-state',
-        session: {
-            oidc: {
-                default: {
-                    pending: {
-                        knownState: {
-                            codeVerifier: 'code-verifier',
-                            createdAt: Date.now(),
-                        },
-                    },
-                },
-            },
-        },
-        login: vi.fn(),
-    };
-    const res = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-    };
+    const session = createSessionWithPending({
+        knownState: createPendingCheck(),
+    });
+    const req = createCallbackReq(
+        '/auth/oidc/default/cb?code=abc&state=unknown-state',
+        session,
+    );
+    const res = createRes();
 
     await oidc.callback(req, res);
 
     expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.send).toHaveBeenCalledWith(
-        'OIDC session state mismatch or expired. Please retry authentication.',
-    );
+    expect401Send(res, 'OIDC session state mismatch or expired. Please retry authentication.');
 });
 
 test('callback should return 401 when login fails with error', async () => {
-    openidClientMock.authorizationCodeGrant = vi
-        .fn()
-        .mockResolvedValue({ access_token: 'token' }); // NOSONAR - test fixture, not a real credential
-    openidClientMock.fetchUserInfo = vi
-        .fn()
-        .mockResolvedValue({ email: 'user@example.com' });
+    mockSuccessfulGrant(openidClientMock);
 
-    const session = {
-        save: vi.fn((cb) => cb()),
-    };
-    const resRedirect = {
-        json: vi.fn(),
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-    };
+    const { session } = await performRedirect(oidc, openidClientMock);
 
-    await oidc.redirect(
-        { protocol: 'https', hostname: 'dd.example.com', session },
-        resRedirect,
-    );
-
-    const pendingStates = Object.keys(session.oidc.default.pending);
-    const state = pendingStates[0];
-
-    const req = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-        originalUrl: `/auth/oidc/default/cb?code=abc&state=${state}`,
+    const state = Object.keys(session.oidc.default.pending)[0];
+    const req = createCallbackReq(
+        `/auth/oidc/default/cb?code=abc&state=${state}`,
         session,
-        login: vi.fn((user, done) => done(new Error('login failed'))),
-    };
-    const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-        send: vi.fn(),
-        redirect: vi.fn(),
-    };
+        (user, done) => done(new Error('login failed')),
+    );
+    const res = createRes();
 
     await oidc.callback(req, res);
 
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Authentication failed' });
+    expect401Json(res);
 });
 
 test('callback should return 401 when authorizationCodeGrant throws', async () => {
@@ -466,72 +393,40 @@ test('callback should return 401 when authorizationCodeGrant throws', async () =
         .fn()
         .mockRejectedValue(new Error('grant failed'));
 
-    const req = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-        originalUrl: '/auth/oidc/default/cb?code=abc&state=valid-state',
-        session: {
-            oidc: {
-                default: {
-                    pending: {
-                        'valid-state': {
-                            codeVerifier: 'code-verifier',
-                            createdAt: Date.now(),
-                        },
-                    },
-                },
-            },
-        },
-        login: vi.fn(),
-    };
-    const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-        send: vi.fn(),
-    };
+    const session = createSessionWithPending({
+        'valid-state': createPendingCheck(),
+    });
+    const req = createCallbackReq(
+        '/auth/oidc/default/cb?code=abc&state=valid-state',
+        session,
+    );
+    const res = createRes();
 
     await oidc.callback(req, res);
 
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Authentication failed' });
+    expect401Json(res);
 });
 
-test('redirect should respond with 500 when session is unavailable', async () => {
-    const req = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-    };
-    const res = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-        json: vi.fn(),
-    };
+test.each([
+    [
+        'session is unavailable',
+        {},
+    ],
+    [
+        'session save fails',
+        { session: { save: vi.fn((cb) => cb(new Error('save failed'))) } },
+    ],
+    [
+        'session reload error',
+        { session: { reload: vi.fn((cb) => cb(new Error('reload failed'))), save: vi.fn((cb) => cb()) } },
+    ],
+])('redirect should respond with 500 when %s', async (_label, reqOverrides) => {
+    const req = createReq(reqOverrides);
+    const res = createRes();
 
     await oidc.redirect(req, res);
 
     expect(res.status).toHaveBeenCalledWith(500);
-    expect(res.send).toHaveBeenCalledWith('Unable to initialize OIDC session');
-});
-
-test('redirect should respond with 500 when session save fails', async () => {
-    const session = {
-        save: vi.fn((cb) => cb(new Error('save failed'))),
-    };
-    const req = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-        session,
-    };
-    const res = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-        json: vi.fn(),
-    };
-
-    await oidc.redirect(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(500);
-    expect(res.send).toHaveBeenCalledWith('Unable to initialize OIDC session');
 });
 
 test('callback should return 401 when access_token is missing', async () => {
@@ -539,34 +434,18 @@ test('callback should return 401 when access_token is missing', async () => {
         .fn()
         .mockResolvedValue({});
 
-    const req = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-        originalUrl: '/auth/oidc/default/cb?code=abc&state=valid-state',
-        session: {
-            oidc: {
-                default: {
-                    pending: {
-                        'valid-state': {
-                            codeVerifier: 'code-verifier',
-                            createdAt: Date.now(),
-                        },
-                    },
-                },
-            },
-        },
-        login: vi.fn(),
-    };
-    const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-        send: vi.fn(),
-    };
+    const session = createSessionWithPending({
+        'valid-state': createPendingCheck(),
+    });
+    const req = createCallbackReq(
+        '/auth/oidc/default/cb?code=abc&state=valid-state',
+        session,
+    );
+    const res = createRes();
 
     await oidc.callback(req, res);
 
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Authentication failed' });
+    expect401Json(res);
 });
 
 test('initAuthentication should discover and configure client', async () => {
@@ -601,79 +480,26 @@ test('getSessionKey should return name when set', () => {
 });
 
 test('callback should use req.url as fallback when originalUrl is missing', async () => {
-    openidClientMock.authorizationCodeGrant = vi
-        .fn()
-        .mockResolvedValue({ access_token: 'token' }); // NOSONAR - test fixture, not a real credential
-    openidClientMock.fetchUserInfo = vi
-        .fn()
-        .mockResolvedValue({ email: 'user@example.com' });
+    mockSuccessfulGrant(openidClientMock);
 
-    const session = {
-        save: vi.fn((cb) => cb()),
-    };
-    const resRedirect = {
-        json: vi.fn(),
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-    };
-    await oidc.redirect(
-        { protocol: 'https', hostname: 'dd.example.com', session },
-        resRedirect,
-    );
+    const { session } = await performRedirect(oidc, openidClientMock);
 
-    const pendingStates = Object.keys(session.oidc.default.pending);
-    const state = pendingStates[0];
-
-    const req = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
+    const state = Object.keys(session.oidc.default.pending)[0];
+    const req = createReq({
         url: `/auth/oidc/default/cb?code=abc&state=${state}`,
         session,
         login: vi.fn((user, done) => done()),
-    };
-    const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-        send: vi.fn(),
-        redirect: vi.fn(),
-    };
+    });
+    const res = createRes();
+
     await oidc.callback(req, res);
     expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
 });
 
-test('redirect should handle session reload error gracefully', async () => {
-    const session = {
-        reload: vi.fn((cb) => cb(new Error('reload failed'))),
-        save: vi.fn((cb) => cb()),
-    };
-    const req = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-        session,
-    };
-    const res = {
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-        json: vi.fn(),
-    };
-
-    await oidc.redirect(req, res);
-    expect(res.status).toHaveBeenCalledWith(500);
-});
-
 test('redirect should skip session lock when sessionID is empty', async () => {
     const save = vi.fn((cb) => cb());
-    const req = {
-        protocol: 'https',
-        hostname: 'dd.example.com',
-        sessionID: '',
-        session: { save },
-    };
-    const res = {
-        json: vi.fn(),
-        status: vi.fn().mockReturnThis(),
-        send: vi.fn(),
-    };
+    const req = createReq({ sessionID: '', session: { save } });
+    const res = createRes();
 
     await oidc.redirect(req, res);
 

@@ -6,7 +6,7 @@
   "scripts": {
     "doc": "docsify serve"
   },
-  "author": "fmartinou",
+  "author": "CodesWhat",
   "repository": "CodesWhat/drydock",
   "license": "MIT",
   "devDependencies": {

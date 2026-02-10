@@ -13,7 +13,7 @@ echo "🧪 Running complete e2e test suite..."
 "$SCRIPT_DIR/setup-test-containers.sh"
 
 # Start drydock
-"$SCRIPT_DIR/start-wud.sh"
+"$SCRIPT_DIR/start-drydock.sh"
 
 # Run e2e tests
 echo "🏃 Running cucumber tests..."

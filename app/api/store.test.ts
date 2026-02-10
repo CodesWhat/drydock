@@ -13,7 +13,7 @@ vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
 vi.mock('../store', () => ({
     getConfiguration: vi.fn(() => ({
-        path: '/tmp/store',
+        path: '/test/store',
         file: 'db.json',
     })),
 }));
@@ -47,7 +47,7 @@ describe('Store Router', () => {
         expect(res.status).toHaveBeenCalledWith(200);
         expect(res.json).toHaveBeenCalledWith({
             configuration: {
-                path: '/tmp/store',
+                path: '/test/store',
                 file: 'db.json',
             },
         });
