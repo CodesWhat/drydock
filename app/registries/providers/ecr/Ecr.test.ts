@@ -125,7 +125,7 @@ test('getAuthPull should return decoded ECR credentials', async () => {
 
 test('authenticate should fetch public ECR gallery token for public images', async () => {
     const { default: axios } = await import('axios');
-    axios.mockResolvedValueOnce({ data: { token: 'public-token-123' } });
+    axios.mockResolvedValueOnce({ data: { token: 'public-token-123' } }); // NOSONAR - test fixture, not a real credential
 
     const ecrPublic = new Ecr();
     ecrPublic.configuration = {};

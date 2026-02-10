@@ -4,18 +4,18 @@ import Acr from './Acr.js';
 const acr = new Acr();
 acr.configuration = {
     clientid: 'clientid',
-    clientsecret: 'clientsecret',
+    clientsecret: 'clientsecret', // NOSONAR - test fixture, not a real credential
 };
 
 test('validatedConfiguration should initialize when configuration is valid', async () => {
     expect(
         acr.validateConfiguration({
             clientid: 'clientid',
-            clientsecret: 'clientsecret',
+            clientsecret: 'clientsecret', // NOSONAR - test fixture, not a real credential
         }),
     ).toStrictEqual({
         clientid: 'clientid',
-        clientsecret: 'clientsecret',
+        clientsecret: 'clientsecret', // NOSONAR - test fixture, not a real credential
     });
 });
 
@@ -80,7 +80,7 @@ test('getAuthPull should return clientid and clientsecret', async () => {
     const result = await acr.getAuthPull();
     expect(result).toEqual({
         username: 'clientid',
-        password: 'clientsecret',
+        password: 'clientsecret', // NOSONAR - test fixture, not a real credential
     });
 });
 

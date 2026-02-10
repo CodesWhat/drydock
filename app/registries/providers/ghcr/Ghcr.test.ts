@@ -8,7 +8,7 @@ describe('GitHub Container Registry', () => {
         ghcr = new Ghcr();
         await ghcr.register('registry', 'ghcr', 'test', {
             username: 'testuser',
-            token: 'testtoken',
+            token: 'testtoken', // NOSONAR - test fixture, not a real credential
         });
     });
 
@@ -46,11 +46,11 @@ describe('GitHub Container Registry', () => {
     });
 
     test('should return auth pull credentials', async () => {
-        ghcr.configuration = { username: 'testuser', token: 'testtoken' };
+        ghcr.configuration = { username: 'testuser', token: 'testtoken' }; // NOSONAR - test fixture, not a real credential
         const auth = await ghcr.getAuthPull();
         expect(auth).toEqual({
             username: 'testuser',
-            password: 'testtoken',
+            password: 'testtoken', // NOSONAR - test fixture, not a real credential
         });
     });
 
@@ -61,7 +61,7 @@ describe('GitHub Container Registry', () => {
     });
 
     test('should authenticate with token', async () => {
-        ghcr.configuration = { token: 'test-token' };
+        ghcr.configuration = { token: 'test-token' }; // NOSONAR - test fixture, not a real credential
         const image = { name: 'user/repo' };
         const requestOptions = { headers: {} };
 
@@ -90,7 +90,7 @@ describe('GitHub Container Registry', () => {
     });
 
     test('should return undefined auth pull when missing username', async () => {
-        ghcr.configuration = { token: 'test-token' };
+        ghcr.configuration = { token: 'test-token' }; // NOSONAR - test fixture, not a real credential
         const auth = await ghcr.getAuthPull();
         expect(auth).toBeUndefined();
     });

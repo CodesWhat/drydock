@@ -283,7 +283,7 @@ test('callback should authenticate using matching state when multiple auth redir
         .mockReturnValueOnce('code-verifier-2');
     openidClientMock.authorizationCodeGrant = vi
         .fn()
-        .mockResolvedValue({ access_token: 'token' });
+        .mockResolvedValue({ access_token: 'token' }); // NOSONAR - test fixture, not a real credential
     openidClientMock.fetchUserInfo = vi
         .fn()
         .mockResolvedValue({ email: 'user@example.com' });
@@ -344,7 +344,7 @@ test('callback should authenticate using matching state when multiple auth redir
 test('callback should support legacy single-check session shape', async () => {
     openidClientMock.authorizationCodeGrant = vi
         .fn()
-        .mockResolvedValue({ access_token: 'token' });
+        .mockResolvedValue({ access_token: 'token' }); // NOSONAR - test fixture, not a real credential
     openidClientMock.fetchUserInfo = vi
         .fn()
         .mockResolvedValue({ email: 'user@example.com' });
@@ -419,7 +419,7 @@ test('callback should return explicit error when callback state does not match s
 test('callback should return 401 when login fails with error', async () => {
     openidClientMock.authorizationCodeGrant = vi
         .fn()
-        .mockResolvedValue({ access_token: 'token' });
+        .mockResolvedValue({ access_token: 'token' }); // NOSONAR - test fixture, not a real credential
     openidClientMock.fetchUserInfo = vi
         .fn()
         .mockResolvedValue({ email: 'user@example.com' });
@@ -603,7 +603,7 @@ test('getSessionKey should return name when set', () => {
 test('callback should use req.url as fallback when originalUrl is missing', async () => {
     openidClientMock.authorizationCodeGrant = vi
         .fn()
-        .mockResolvedValue({ access_token: 'token' });
+        .mockResolvedValue({ access_token: 'token' }); // NOSONAR - test fixture, not a real credential
     openidClientMock.fetchUserInfo = vi
         .fn()
         .mockResolvedValue({ email: 'user@example.com' });

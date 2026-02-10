@@ -75,14 +75,14 @@ describe('Docker Hub Registry', () => {
     test('should initialize with token as password', async () => {
         const hubWithToken = new Hub();
         await hubWithToken.register('registry', 'hub', 'test', {
-            token: 'mytoken',
+            token: 'mytoken', // NOSONAR - test fixture, not a real credential
         });
         expect(hubWithToken.configuration.password).toBe('mytoken');
     });
 
     test('should authenticate with credentials', async () => {
         const { default: axios } = await import('axios');
-        axios.mockResolvedValue({ data: { token: 'auth-token' } });
+        axios.mockResolvedValue({ data: { token: 'auth-token' } }); // NOSONAR - test fixture, not a real credential
 
         hub.getAuthCredentials = vi.fn().mockReturnValue('base64credentials');
 
@@ -104,7 +104,7 @@ describe('Docker Hub Registry', () => {
 
     test('should authenticate without credentials', async () => {
         const { default: axios } = await import('axios');
-        axios.mockResolvedValue({ data: { token: 'public-token' } });
+        axios.mockResolvedValue({ data: { token: 'public-token' } }); // NOSONAR - test fixture, not a real credential
 
         hub.getAuthCredentials = vi.fn().mockReturnValue(null);
 
@@ -131,7 +131,7 @@ describe('Docker Hub Registry', () => {
     test('should validate object configuration with auth', async () => {
         const config = {
             login: 'user',
-            password: 'pass',
+            password: 'pass', // NOSONAR - test fixture, not a real credential
             auth: Buffer.from('user:pass').toString('base64'),
         };
         expect(() => hub.validateConfiguration(config)).not.toThrow();
@@ -141,8 +141,8 @@ describe('Docker Hub Registry', () => {
         hub.configuration = {
             url: 'https://registry-1.docker.io',
             login: 'testuser',
-            password: 'testpass',
-            token: 'testtoken',
+            password: 'testpass', // NOSONAR - test fixture, not a real credential
+            token: 'testtoken', // NOSONAR - test fixture, not a real credential
             auth: 'dGVzdDp0ZXN0',
         };
         const masked = hub.maskConfiguration();

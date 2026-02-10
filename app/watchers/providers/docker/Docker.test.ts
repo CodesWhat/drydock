@@ -110,7 +110,7 @@ describe('Docker Watcher', () => {
 
         mockAxios.post.mockResolvedValue({
             data: {
-                access_token: 'oidc-token',
+                access_token: 'oidc-token', // NOSONAR - test fixture, not a real credential
                 expires_in: 300,
             },
         } as any);
@@ -429,7 +429,7 @@ describe('Docker Watcher', () => {
                     type: 'oidc',
                     oidc: {
                         tokenurl: 'https://idp.example.com/oauth/token',
-                        refreshtoken: 'refresh-token-1',
+                        refreshtoken: 'refresh-token-1', // NOSONAR - test fixture, not a real credential
                     },
                 },
             });
@@ -447,7 +447,7 @@ describe('Docker Watcher', () => {
             mockDockerApi.listContainers.mockResolvedValue([]);
             mockAxios.post.mockResolvedValue({
                 data: {
-                    access_token: 'cached-token',
+                    access_token: 'cached-token', // NOSONAR - test fixture, not a real credential
                     expires_in: 3600,
                 },
             } as any);
@@ -525,7 +525,7 @@ describe('Docker Watcher', () => {
                         deviceurl:
                             'https://idp.example.com/oauth/device/code',
                         clientid: 'dd-device-client',
-                        refreshtoken: 'existing-refresh-token',
+                        refreshtoken: 'existing-refresh-token', // NOSONAR - test fixture, not a real credential
                     },
                 },
             });
@@ -571,8 +571,8 @@ describe('Docker Watcher', () => {
                 }
                 return Promise.resolve({
                     data: {
-                        access_token: 'device-flow-token',
-                        refresh_token: 'device-flow-refresh',
+                        access_token: 'device-flow-token', // NOSONAR - test fixture, not a real credential
+                        refresh_token: 'device-flow-refresh', // NOSONAR - test fixture, not a real credential
                         expires_in: 3600,
                     },
                 });
@@ -664,7 +664,7 @@ describe('Docker Watcher', () => {
                 }
                 return Promise.resolve({
                     data: {
-                        access_token: 'slow-down-token',
+                        access_token: 'slow-down-token', // NOSONAR - test fixture, not a real credential
                         expires_in: 3600,
                     },
                 });
@@ -836,7 +836,7 @@ describe('Docker Watcher', () => {
             mockDockerApi.listContainers.mockResolvedValue([]);
             mockAxios.post.mockResolvedValue({
                 data: {
-                    access_token: 'fallback-cc-token',
+                    access_token: 'fallback-cc-token', // NOSONAR - test fixture, not a real credential
                     expires_in: 300,
                 },
             } as any);
@@ -890,7 +890,7 @@ describe('Docker Watcher', () => {
                 }
                 return Promise.resolve({
                     data: {
-                        access_token: 'complete-uri-token',
+                        access_token: 'complete-uri-token', // NOSONAR - test fixture, not a real credential
                         expires_in: 3600,
                     },
                 });
@@ -949,7 +949,7 @@ describe('Docker Watcher', () => {
                 }
                 return Promise.resolve({
                     data: {
-                        access_token: 'scoped-token',
+                        access_token: 'scoped-token', // NOSONAR - test fixture, not a real credential
                         expires_in: 3600,
                     },
                 });
@@ -1014,8 +1014,8 @@ describe('Docker Watcher', () => {
                 }
                 return Promise.resolve({
                     data: {
-                        access_token: 'device-token-1',
-                        refresh_token: 'device-refresh-1',
+                        access_token: 'device-token-1', // NOSONAR - test fixture, not a real credential
+                        refresh_token: 'device-refresh-1', // NOSONAR - test fixture, not a real credential
                         expires_in: 1, // Expires almost immediately
                     },
                 });
@@ -1051,8 +1051,8 @@ describe('Docker Watcher', () => {
             // Reset mock for the refresh call
             mockAxios.post.mockResolvedValue({
                 data: {
-                    access_token: 'refreshed-token-2',
-                    refresh_token: 'refreshed-refresh-2',
+                    access_token: 'refreshed-token-2', // NOSONAR - test fixture, not a real credential
+                    refresh_token: 'refreshed-refresh-2', // NOSONAR - test fixture, not a real credential
                     expires_in: 3600,
                 },
             } as any);
