@@ -346,14 +346,14 @@ class Registry extends Component {
                 axiosOptionsWithAuth,
             )) as AxiosResponse<T>;
             const end = Date.now();
-            getSummaryTags().observe(
+            getSummaryTags()?.observe(
                 { type: this.type, name: this.name },
                 (end - start) / 1000,
             );
             return resolveWithFullResponse ? response : response.data;
         } catch (error) {
             const end = Date.now();
-            getSummaryTags().observe(
+            getSummaryTags()?.observe(
                 { type: this.type, name: this.name },
                 (end - start) / 1000,
             );

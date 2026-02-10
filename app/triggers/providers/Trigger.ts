@@ -516,7 +516,7 @@ class Trigger extends Component {
                 logContainer.warn(`Error (${e.message})`);
                 logContainer.debug(e);
             } finally {
-                getTriggerCounter().inc({
+                getTriggerCounter()?.inc({
                     type: this.type,
                     name: this.name,
                     status,
