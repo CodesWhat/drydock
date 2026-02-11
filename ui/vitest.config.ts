@@ -31,6 +31,12 @@ export default mergeConfig(
         reporter: ['text', 'lcov', 'html'],
         include: ['src/**/*.{js,ts,vue}'],
         exclude: ['src/main.ts', 'src/registerServiceWorker.ts', '**/node_modules/**'],
+        thresholds: {
+          lines: 75,
+          branches: 65,
+          functions: 73,
+          statements: 75,
+        },
       },
     },
   }),

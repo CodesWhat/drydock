@@ -9,3 +9,12 @@ pre-push:
     test:
       root: app/
       run: npm test
+    ui-lint:
+      root: ui/
+      run: npm run lint
+    ui-build:
+      root: ui/
+      run: npm run build
+    ui-test:
+      root: ui/
+      run: npm run test:unit

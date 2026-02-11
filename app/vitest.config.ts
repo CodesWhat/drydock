@@ -20,6 +20,12 @@ export default defineConfig({
         '**/coverage/**',
         'vitest.config.ts',
       ],
+      thresholds: {
+        lines: 80,
+        branches: 75,
+        functions: 80,
+        statements: 80,
+      },
     },
   },
 });
