@@ -2,7 +2,7 @@
 
 <img src="docs/assets/whale-logo.png" alt="drydock" width="220">
 
-<h1>drydock &nbsp;<img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="32"></h1>
+<h1>drydock</h1>
 
 **Open source container update monitoring — built in TypeScript with modern tooling.**
 
@@ -342,6 +342,10 @@ drydock is a drop-in replacement for [What's Up Docker (WUD)](https://github.com
 ---
 
 **[MIT License](LICENSE)**
+
+<br>
+
+<a href="https://github.com/CodesWhat"><img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="28"></a>
 
 <a href="#drydock">Back to top</a>
 
