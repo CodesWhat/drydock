@@ -45,7 +45,6 @@ describe('Discord Trigger', () => {
   });
 
   test('should trigger with container', async () => {
-    const { default: axios } = await import('axios');
     discord.configuration = {
       url: 'https://discord.com/api/webhooks/123/abc',
     };
@@ -59,7 +58,6 @@ describe('Discord Trigger', () => {
   });
 
   test('should trigger batch with containers', async () => {
-    const { default: axios } = await import('axios');
     discord.configuration = {
       url: 'https://discord.com/api/webhooks/123/abc',
     };

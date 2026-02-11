@@ -1,4 +1,4 @@
-const { Given, When, Then } = require('@cucumber/cucumber');
+const { When, Then } = require('@cucumber/cucumber');
 const assert = require('node:assert');
 const config = require('../../config');
 

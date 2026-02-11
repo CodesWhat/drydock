@@ -1737,7 +1737,7 @@ describe('Docker Watcher', () => {
       const mockImageInspect = { Config: { Image: 'sha256:legacy123' } };
       mockImage.inspect.mockResolvedValue(mockImageInspect);
 
-      const result = await docker.findNewVersion(container, mockLogChild);
+      await docker.findNewVersion(container, mockLogChild);
 
       expect(mockImage.inspect).toHaveBeenCalled();
       expect(container.image.digest.value).toBe('sha256:legacy123');
@@ -1952,20 +1952,6 @@ describe('Docker Watcher', () => {
   });
 
   describe('Container Details', () => {
-    const setupContainerForDigestWatch = async ({ labels, parsedImage, semverValue }) => {
-      const container = await setupContainerDetailTest(docker, {
-        container: {
-          Image: `${parsedImage.domain ? `${parsedImage.domain}/` : ''}${parsedImage.path}:${parsedImage.tag}`,
-          Labels: labels || {},
-        },
-        imageDetails: { RepoDigests: ['repo/image@sha256:abc123'] },
-        parsedImage,
-        semverValue,
-      });
-
-      return docker.addImageDetailsToContainer(container);
-    };
-
     test('should return existing container from store', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.log = createMockLog(['debug']);

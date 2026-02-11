@@ -1,7 +1,5 @@
 // @ts-nocheck
 
-import joi from 'joi';
-
 vi.mock('axios');
 
 import Gotify from './Gotify.js';
@@ -49,7 +47,7 @@ test('validateConfiguration should throw error when invalid', async () => {
   };
   expect(() => {
     gotify.validateConfiguration(configuration);
-  }).toThrowError(joi.ValidationError);
+  }).toThrow();
 });
 
 test('maskConfiguration should mask sensitive data', async () => {

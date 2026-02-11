@@ -92,7 +92,6 @@ describe('Rocketchat Trigger', () => {
   });
 
   test('should trigger with container', async () => {
-    const { default: axios } = await import('axios');
     rocketchat.configuration = {
       url: 'https://open.rocket.chat',
       user: { id: 'jDdn8oh9BfJKnWdDY' },
@@ -109,7 +108,6 @@ describe('Rocketchat Trigger', () => {
   });
 
   test('should trigger batch with containers', async () => {
-    const { default: axios } = await import('axios');
     rocketchat.configuration = {
       url: 'https://open.rocket.chat',
       user: { id: 'jDdn8oh9BfJKnWdDY' },
