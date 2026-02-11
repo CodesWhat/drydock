@@ -43,6 +43,7 @@ export function init() {
         name: 'dd_containers',
         help: 'The watched containers',
         labelNames: [
+            'agent',
             'display_icon',
             'display_name',
             'error_message',
