@@ -5,7 +5,7 @@
       style="cursor: pointer"
       class="pa-3 d-flex align-center bg-surface"
     >
-      <div class="text-body-3">
+      <div class="text-body-2">
         <span v-if="smAndUp && item.agent">
           <v-chip label :color="agentStatusColor" variant="outlined">
             <v-icon start>fas fa-robot</v-icon>

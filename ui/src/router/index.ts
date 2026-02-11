@@ -58,6 +58,10 @@ const routes = [
     name: "history",
     component: () => import("../views/MonitoringHistoryView.vue"),
   },
+  {
+    path: "/:pathMatch(.*)*",
+    redirect: "/",
+  },
 ];
 
 const router = createRouter({

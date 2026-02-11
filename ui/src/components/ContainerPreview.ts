@@ -29,6 +29,17 @@ export default defineComponent({
         this.$emit('update:modelValue', value);
       },
     },
+    updateKindColor(): string {
+      const updateKind = this.preview?.updateKind;
+      if (!updateKind) return 'info';
+      if (updateKind.kind === 'digest') return 'info';
+      switch (updateKind.semverDiff) {
+        case 'major': return 'error';
+        case 'minor': return 'warning';
+        case 'patch': return 'success';
+        default: return 'info';
+      }
+    },
   },
   watch: {
     modelValue(open: boolean) {

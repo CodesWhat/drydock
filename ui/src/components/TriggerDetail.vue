@@ -5,7 +5,7 @@
       style="cursor: pointer"
       class="pa-3 d-flex align-center bg-surface"
     >
-      <div class="text-body-3">
+      <div class="text-body-2">
         <v-chip label color="info" variant="outlined">{{ trigger.type }}</v-chip>
         /
         <v-chip label color="info" variant="outlined">{{ trigger.name }}</v-chip>

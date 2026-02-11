@@ -44,8 +44,14 @@
         <div v-if="preview.updateKind" class="mb-4">
           <div class="text-subtitle-2 text-medium-emphasis mb-1">Update Kind</div>
           <v-chip label :color="updateKindColor" size="small">
-            {{ preview.updateKind }}
+            {{ preview.updateKind.kind }}
           </v-chip>
+          <div
+            v-if="preview.updateKind.localValue && preview.updateKind.remoteValue"
+            class="mt-1 text-body-2 text-medium-emphasis"
+          >
+            {{ preview.updateKind.localValue }} &rarr; {{ preview.updateKind.remoteValue }}
+          </div>
         </div>
 
         <div v-if="preview.networks && preview.networks.length > 0" class="mb-4">
