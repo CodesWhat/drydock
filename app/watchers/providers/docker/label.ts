@@ -80,3 +80,9 @@ export const wudTriggerInclude = 'wud.trigger.include';
  */
 export const ddTriggerExclude = 'dd.trigger.exclude';
 export const wudTriggerExclude = 'wud.trigger.exclude';
+
+/**
+ * Optional group name for container grouping / stack views.
+ */
+export const ddGroup = 'dd.group';
+export const wudGroup = 'wud.group';

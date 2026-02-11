@@ -9,6 +9,7 @@ import * as authenticationRouter from './authentication.js';
 import * as backupRouter from './backup.js';
 import * as containerRouter from './container.js';
 import * as containerActionsRouter from './container-actions.js';
+import * as groupRouter from './group.js';
 import * as logRouter from './log.js';
 import * as previewRouter from './preview.js';
 import * as registryRouter from './registry.js';
@@ -62,6 +63,9 @@ export function init() {
 
   // Mount container actions router (start/stop/restart)
   router.use('/containers', containerActionsRouter.init());
+
+  // Mount container groups router (grouping / stack views)
+  router.use('/containers', groupRouter.init());
 
   // Mount trigger router
   router.use('/triggers', triggerRouter.init());

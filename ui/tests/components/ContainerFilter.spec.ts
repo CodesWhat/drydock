@@ -134,4 +134,18 @@ describe('ContainerFilter', () => {
     await wrapper.vm.emitGroupByLabelChanged(null);
     expect(wrapper.emitted('group-by-label-changed')[0]).toEqual(['']);
   });
+
+  it('computes groupLabelItems with Smart group prepended', () => {
+    const items = wrapper.vm.groupLabelItems;
+    expect(items[0]).toEqual({ title: 'Smart group', value: '__smart__' });
+    expect(items.slice(1)).toEqual(['app', 'env', 'version']);
+  });
+
+  it('includes all group labels after Smart group option', () => {
+    const items = wrapper.vm.groupLabelItems;
+    expect(items).toHaveLength(4);
+    expect(items[1]).toBe('app');
+    expect(items[2]).toBe('env');
+    expect(items[3]).toBe('version');
+  });
 });

@@ -108,7 +108,7 @@
         />
         <v-autocomplete
           v-model="groupByLabelLocal"
-          :items="groupLabels"
+          :items="groupLabelItems"
           @update:modelValue="emitGroupByLabelChanged"
           label="Group by label"
           variant="outlined"

@@ -211,4 +211,102 @@ describe('ContainersView', () => {
 
     expect(wrapper.vm.containersFiltered).toHaveLength(0);
   });
+
+  it('computes isGrouped as true when groupByLabel is set', async () => {
+    wrapper.vm.groupByLabel = 'app';
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.vm.isGrouped).toBe(true);
+  });
+
+  it('computes isGrouped as false when groupByLabel is empty', () => {
+    expect(wrapper.vm.isGrouped).toBe(false);
+  });
+
+  it('computes groups by label value', async () => {
+    wrapper.vm.groupByLabel = 'app';
+    await wrapper.vm.$nextTick();
+
+    const groups = wrapper.vm.computedGroups;
+    expect(groups).toHaveLength(2);
+    expect(groups[0].name).toBe('api');
+    expect(groups[0].containers).toHaveLength(1);
+    expect(groups[1].name).toBe('web');
+    expect(groups[1].containers).toHaveLength(1);
+  });
+
+  it('puts ungrouped containers last in computedGroups', async () => {
+    const containersWithMissing = [
+      ...mockContainers,
+      {
+        id: '3',
+        displayName: 'Container 3',
+        agent: '',
+        watcher: 'local',
+        image: { registry: { name: 'hub' }, created: '2023-01-03T00:00:00Z' },
+        updateAvailable: false,
+        labels: {}
+      }
+    ];
+    wrapper.vm.containers = containersWithMissing;
+    wrapper.vm.groupByLabel = 'app';
+    await wrapper.vm.$nextTick();
+
+    const groups = wrapper.vm.computedGroups;
+    const lastGroup = groups[groups.length - 1];
+    expect(lastGroup.name).toBeNull();
+    expect(lastGroup.containers).toHaveLength(1);
+  });
+
+  it('computes smart groups using label priority', async () => {
+    const smartContainers = [
+      {
+        id: 's1',
+        displayName: 'Smart 1',
+        agent: '',
+        watcher: 'local',
+        image: { registry: { name: 'hub' }, created: '2023-01-01T00:00:00Z' },
+        updateAvailable: false,
+        labels: { 'dd.group': 'my-stack' }
+      },
+      {
+        id: 's2',
+        displayName: 'Smart 2',
+        agent: '',
+        watcher: 'local',
+        image: { registry: { name: 'hub' }, created: '2023-01-02T00:00:00Z' },
+        updateAvailable: false,
+        labels: { 'wud.group': 'wud-stack' }
+      },
+      {
+        id: 's3',
+        displayName: 'Smart 3',
+        agent: '',
+        watcher: 'local',
+        image: { registry: { name: 'hub' }, created: '2023-01-03T00:00:00Z' },
+        updateAvailable: false,
+        labels: { 'com.docker.compose.project': 'compose-proj' }
+      },
+      {
+        id: 's4',
+        displayName: 'Smart 4',
+        agent: '',
+        watcher: 'local',
+        image: { registry: { name: 'hub' }, created: '2023-01-04T00:00:00Z' },
+        updateAvailable: false,
+        labels: {}
+      }
+    ];
+    wrapper.vm.containers = smartContainers;
+    wrapper.vm.groupByLabel = '__smart__';
+    await wrapper.vm.$nextTick();
+
+    const groups = wrapper.vm.computedGroups;
+    expect(groups).toHaveLength(4);
+    // Named groups alphabetically, ungrouped last
+    expect(groups[0].name).toBe('compose-proj');
+    expect(groups[1].name).toBe('my-stack');
+    expect(groups[2].name).toBe('wud-stack');
+    expect(groups[3].name).toBeNull();
+  });
 });

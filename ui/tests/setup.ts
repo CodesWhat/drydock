@@ -155,6 +155,7 @@ config.global.stubs = {
     name: 'container-filter'
   },
   'container-item': { template: '<div class="container-item"><slot /></div>' },
+  'container-group': { template: '<div class="container-group"><slot /></div>' },
   'container-image': { template: '<div class="container-image"><slot /></div>' },
   'container-detail': { template: '<div class="container-detail"><slot /></div>' },
   'container-update': { template: '<div class="container-update"><slot /></div>' },

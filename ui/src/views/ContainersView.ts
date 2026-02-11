@@ -1,5 +1,6 @@
 import { defineComponent } from 'vue';
 import ContainerFilter from '@/components/ContainerFilter.vue';
+import ContainerGroup from '@/components/ContainerGroup.vue';
 import ContainerItem from '@/components/ContainerItem.vue';
 import agentService from '@/services/agent';
 import { deleteContainer, getAllContainers } from '@/services/container';
@@ -30,6 +31,7 @@ export default defineComponent({
   components: {
     ContainerItem,
     ContainerFilter,
+    ContainerGroup,
   },
 
   data() {
@@ -101,6 +103,41 @@ export default defineComponent({
         .filter(byUpdateAvailable);
 
       return filtered.sort(this.sortContainers.bind(this));
+    },
+    isGrouped(): boolean {
+      return Boolean(this.groupByLabel);
+    },
+    computedGroups(): Array<{ name: string | null; containers: any[] }> {
+      const grouped = new Map<string | null, any[]>();
+
+      for (const container of this.containersFiltered) {
+        let labelValue: string | null = null;
+
+        if (this.groupByLabel === '__smart__') {
+          labelValue =
+            container.labels?.['dd.group'] ??
+            container.labels?.['wud.group'] ??
+            container.labels?.['com.docker.compose.project'] ??
+            null;
+        } else {
+          labelValue = container.labels?.[this.groupByLabel] ?? null;
+        }
+
+        if (!grouped.has(labelValue)) {
+          grouped.set(labelValue, []);
+        }
+        grouped.get(labelValue)!.push(container);
+      }
+
+      const entries = [...grouped.entries()];
+      entries.sort((a, b) => {
+        if (a[0] === null && b[0] === null) return 0;
+        if (a[0] === null) return 1;
+        if (b[0] === null) return -1;
+        return a[0].localeCompare(b[0]);
+      });
+
+      return entries.map(([name, containers]) => ({ name, containers }));
     },
   },
 

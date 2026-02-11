@@ -68,6 +68,12 @@ export default defineComponent({
   },
 
   computed: {
+    groupLabelItems(): Array<{ title: string; value: string } | string> {
+      return [
+        { title: 'Smart group', value: '__smart__' },
+        ...(this.groupLabels as string[]),
+      ];
+    },
     activeFilterCount(): number {
       let count = 0;
       if (this.agentSelected) count++;
