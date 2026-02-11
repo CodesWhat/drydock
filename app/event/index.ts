@@ -30,6 +30,7 @@ interface OrderedEventHandler {
 const containerReportHandlers: OrderedEventHandler[] = [];
 const containerReportsHandlers: OrderedEventHandler[] = [];
 const containerUpdateAppliedHandlers: OrderedEventHandler[] = [];
+const containerUpdateFailedHandlers: OrderedEventHandler[] = [];
 let handlerRegistrationSequence = 0;
 
 function registerOrderedEventHandler(
@@ -145,6 +146,29 @@ export function registerContainerUpdateApplied(
 }
 
 /**
+ * Emit ContainerUpdateFailed event.
+ * @param payload
+ */
+export async function emitContainerUpdateFailed(payload: { containerName: string; error: string }) {
+    await emitOrderedHandlers(containerUpdateFailedHandlers, payload);
+}
+
+/**
+ * Register to ContainerUpdateFailed event.
+ * @param handler
+ */
+export function registerContainerUpdateFailed(
+    handler: (payload: { containerName: string; error: string }) => any,
+    options: EventHandlerRegistrationOptions = {},
+) {
+    return registerOrderedEventHandler(
+        containerUpdateFailedHandlers,
+        handler,
+        options,
+    );
+}
+
+/**
  * Emit container added.
  * @param containerAdded
  */
@@ -210,6 +234,7 @@ export function registerWatcherStop(handler) {
 
 // Audit log integration
 import * as auditStore from '../store/audit.js';
+import { getAuditCounter } from '../prometheus/audit.js';
 
 registerContainerReport(async (containerReport) => {
     if (containerReport?.container?.updateAvailable) {
@@ -223,6 +248,7 @@ registerContainerReport(async (containerReport) => {
             toVersion: containerReport.container.updateKind?.remoteValue,
             status: 'info',
         });
+        getAuditCounter()?.inc({ action: 'update-available' });
     }
 }, { id: 'audit', order: 200 });
 
@@ -234,7 +260,44 @@ registerContainerUpdateApplied(async (containerId: string) => {
         containerName: containerId,
         status: 'success',
     });
+    getAuditCounter()?.inc({ action: 'update-applied' });
 }, { id: 'audit', order: 200 });
+
+registerContainerUpdateFailed(async (payload) => {
+    auditStore.insertAudit({
+        id: '',
+        timestamp: new Date().toISOString(),
+        action: 'update-failed',
+        containerName: payload.containerName,
+        status: 'error',
+        details: payload.error,
+    });
+    getAuditCounter()?.inc({ action: 'update-failed' });
+}, { id: 'audit', order: 200 });
+
+registerContainerAdded((containerAdded) => {
+    auditStore.insertAudit({
+        id: '',
+        timestamp: new Date().toISOString(),
+        action: 'container-added',
+        containerName: containerAdded.name || containerAdded.id || '',
+        containerImage: containerAdded.image?.name,
+        status: 'info',
+    });
+    getAuditCounter()?.inc({ action: 'container-added' });
+});
+
+registerContainerRemoved((containerRemoved) => {
+    auditStore.insertAudit({
+        id: '',
+        timestamp: new Date().toISOString(),
+        action: 'container-removed',
+        containerName: containerRemoved.name || containerRemoved.id || '',
+        containerImage: containerRemoved.image?.name,
+        status: 'info',
+    });
+    getAuditCounter()?.inc({ action: 'container-removed' });
+});
 
 // Testing helper.
 export function clearAllListenersForTests() {
@@ -242,5 +305,6 @@ export function clearAllListenersForTests() {
     containerReportHandlers.length = 0;
     containerReportsHandlers.length = 0;
     containerUpdateAppliedHandlers.length = 0;
+    containerUpdateFailedHandlers.length = 0;
     handlerRegistrationSequence = 0;
 }

@@ -8,6 +8,7 @@ import * as container from './container.js';
 import * as trigger from './trigger.js';
 import * as watcher from './watcher.js';
 import * as registry from './registry.js';
+import * as audit from './audit.js';
 
 /**
  * Start the Prometheus registry.
@@ -24,6 +25,7 @@ export function init() {
     registry.init();
     trigger.init();
     watcher.init();
+    audit.init();
 }
 
 /**

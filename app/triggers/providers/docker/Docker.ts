@@ -4,7 +4,7 @@ import parse from 'parse-docker-image-name';
 import Trigger from '../Trigger.js';
 import { getState } from '../../../registry/index.js';
 import { fullName } from '../../../model/container.js';
-import { emitContainerUpdateApplied } from '../../../event/index.js';
+import { emitContainerUpdateApplied, emitContainerUpdateFailed } from '../../../event/index.js';
 import * as backupStore from '../../../store/backup.js';
 
 const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
@@ -695,105 +695,113 @@ class Docker extends Trigger {
         // Child logger for the container to process
         const logContainer = this.log.child({ container: fullName(container) });
 
-        // Get watcher
-        const watcher = this.getWatcher(container);
+        try {
+            // Get watcher
+            const watcher = this.getWatcher(container);
 
-        // Get dockerApi from watcher
-        const { dockerApi } = watcher;
+            // Get dockerApi from watcher
+            const { dockerApi } = watcher;
 
-        // Get registry configuration
-        logContainer.debug(
-            `Get ${container.image.registry.name} registry manager`,
-        );
-        const registry = getState().registry[container.image.registry.name];
-
-        logContainer.debug(
-            `Get ${container.image.registry.name} registry credentials`,
-        );
-        const auth = await registry.getAuthPull();
-
-        // Rebuild image definition string
-        const newImage = this.getNewImageFullName(registry, container);
-
-        // Get current container
-        const currentContainer = await this.getCurrentContainer(
-            dockerApi,
-            container,
-        );
-
-        if (!currentContainer) {
-            logContainer.warn(
-                'Unable to update the container because it does not exist',
+            // Get registry configuration
+            logContainer.debug(
+                `Get ${container.image.registry.name} registry manager`,
             );
-            return;
-        }
+            const registry = getState().registry[container.image.registry.name];
 
-        const currentContainerSpec = await this.inspectContainer(
-            currentContainer,
-            logContainer,
-        );
+            logContainer.debug(
+                `Get ${container.image.registry.name} registry credentials`,
+            );
+            const auth = await registry.getAuthPull();
 
-        // Try to remove previous pulled images
-        if (this.configuration.prune) {
-            await this.pruneImages(
+            // Rebuild image definition string
+            const newImage = this.getNewImageFullName(registry, container);
+
+            // Get current container
+            const currentContainer = await this.getCurrentContainer(
+                dockerApi,
+                container,
+            );
+
+            if (!currentContainer) {
+                logContainer.warn(
+                    'Unable to update the container because it does not exist',
+                );
+                return;
+            }
+
+            const currentContainerSpec = await this.inspectContainer(
+                currentContainer,
+                logContainer,
+            );
+
+            // Try to remove previous pulled images
+            if (this.configuration.prune) {
+                await this.pruneImages(
+                    dockerApi,
+                    registry,
+                    container,
+                    logContainer,
+                );
+            }
+
+            // Save a backup of the current image before updating
+            backupStore.insertBackup({
+                id: crypto.randomUUID(),
+                containerId: container.id,
+                containerName: container.name,
+                imageName: `${container.image.registry.name}/${container.image.name}`,
+                imageTag: container.image.tag.value,
+                imageDigest: container.image.digest?.repo,
+                timestamp: new Date().toISOString(),
+                triggerName: this.getId(),
+            });
+
+            // Pull new image ahead of time
+            await this.pullImage(dockerApi, auth, newImage, logContainer);
+
+            // Dry-run?
+            if (this.configuration.dryrun) {
+                logContainer.info(
+                    'Do not replace the existing container because dry-run mode is enabled',
+                );
+                return;
+            }
+
+            await this.stopAndRemoveContainer(
+                currentContainer,
+                currentContainerSpec,
+                container,
+                logContainer,
+            );
+
+            await this.recreateContainer(
+                dockerApi,
+                currentContainerSpec,
+                newImage,
+                container,
+                logContainer,
+            );
+
+            await this.cleanupOldImages(
                 dockerApi,
                 registry,
                 container,
                 logContainer,
             );
+
+            // Notify that this container has been updated so notification
+            // triggers can dismiss previously sent messages.
+            await emitContainerUpdateApplied(fullName(container));
+
+            // Prune old backups, keeping only the configured number
+            backupStore.pruneOldBackups(container.id, this.configuration.backupcount);
+        } catch (e: any) {
+            await emitContainerUpdateFailed({
+                containerName: fullName(container),
+                error: e.message,
+            });
+            throw e;
         }
-
-        // Save a backup of the current image before updating
-        backupStore.insertBackup({
-            id: crypto.randomUUID(),
-            containerId: container.id,
-            containerName: container.name,
-            imageName: `${container.image.registry.name}/${container.image.name}`,
-            imageTag: container.image.tag.value,
-            imageDigest: container.image.digest?.repo,
-            timestamp: new Date().toISOString(),
-            triggerName: this.getId(),
-        });
-
-        // Pull new image ahead of time
-        await this.pullImage(dockerApi, auth, newImage, logContainer);
-
-        // Dry-run?
-        if (this.configuration.dryrun) {
-            logContainer.info(
-                'Do not replace the existing container because dry-run mode is enabled',
-            );
-            return;
-        }
-
-        await this.stopAndRemoveContainer(
-            currentContainer,
-            currentContainerSpec,
-            container,
-            logContainer,
-        );
-
-        await this.recreateContainer(
-            dockerApi,
-            currentContainerSpec,
-            newImage,
-            container,
-            logContainer,
-        );
-
-        await this.cleanupOldImages(
-            dockerApi,
-            registry,
-            container,
-            logContainer,
-        );
-
-        // Notify that this container has been updated so notification
-        // triggers can dismiss previously sent messages.
-        await emitContainerUpdateApplied(fullName(container));
-
-        // Prune old backups, keeping only the configured number
-        backupStore.pruneOldBackups(container.id, this.configuration.backupcount);
     }
 
     /**

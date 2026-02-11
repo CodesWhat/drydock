@@ -4,6 +4,8 @@ import nocache from 'nocache';
 import * as storeContainer from '../store/container.js';
 import * as storeBackup from '../store/backup.js';
 import * as registry from '../registry/index.js';
+import * as auditStore from '../store/audit.js';
+import { getAuditCounter } from '../prometheus/audit.js';
 import logger from '../log/index.js';
 
 const log = logger.child({ component: 'backup' });
@@ -115,12 +117,36 @@ async function rollbackContainer(req, res) {
         // Recreate with backup image
         await trigger.recreateContainer(dockerApi, currentContainerSpec, backupImage, container, log);
 
+        auditStore.insertAudit({
+            id: '',
+            timestamp: new Date().toISOString(),
+            action: 'rollback',
+            containerName: container.name,
+            containerImage: container.image?.name,
+            fromVersion: container.image?.tag?.value,
+            toVersion: latestBackup.imageTag,
+            status: 'success',
+        });
+        getAuditCounter()?.inc({ action: 'rollback' });
+
         res.status(200).json({
             message: 'Container rolled back successfully',
             backup: latestBackup,
         });
     } catch (e) {
         log.warn(`Error rolling back container ${id} (${e.message})`);
+
+        auditStore.insertAudit({
+            id: '',
+            timestamp: new Date().toISOString(),
+            action: 'rollback',
+            containerName: container.name,
+            containerImage: container.image?.name,
+            status: 'error',
+            details: e.message,
+        });
+        getAuditCounter()?.inc({ action: 'rollback' });
+
         res.status(500).json({
             error: `Error rolling back container (${e.message})`,
         });

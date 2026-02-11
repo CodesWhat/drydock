@@ -3,6 +3,8 @@ import express from 'express';
 import nocache from 'nocache';
 import * as storeContainer from '../store/container.js';
 import * as registry from '../registry/index.js';
+import * as auditStore from '../store/audit.js';
+import { getAuditCounter } from '../prometheus/audit.js';
 import logger from '../log/index.js';
 
 const log = logger.child({ component: 'preview' });
@@ -56,9 +58,32 @@ async function previewContainer(req, res) {
 
     try {
         const preview = await trigger.preview(container);
+
+        auditStore.insertAudit({
+            id: '',
+            timestamp: new Date().toISOString(),
+            action: 'preview',
+            containerName: container.name,
+            containerImage: container.image?.name,
+            status: 'info',
+        });
+        getAuditCounter()?.inc({ action: 'preview' });
+
         res.status(200).json(preview);
     } catch (e) {
         log.warn(`Error previewing container ${id} (${e.message})`);
+
+        auditStore.insertAudit({
+            id: '',
+            timestamp: new Date().toISOString(),
+            action: 'preview',
+            containerName: container.name,
+            containerImage: container.image?.name,
+            status: 'error',
+            details: e.message,
+        });
+        getAuditCounter()?.inc({ action: 'preview' });
+
         res.status(500).json({
             error: `Error previewing container update (${e.message})`,
         });
