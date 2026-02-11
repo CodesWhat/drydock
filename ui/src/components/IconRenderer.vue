@@ -1,15 +1,21 @@
 <template>
+  <!-- Fallback: show font icon when image failed to load -->
+  <v-icon v-if="imgFailed" :style="iconStyle">
+    {{ fallbackIcon }}
+  </v-icon>
   <img
-    v-if="isHomarrIcon"
+    v-else-if="isHomarrIcon"
     :src="homarrIconUrl"
     :style="imageStyle"
     :alt="icon"
+    @error="onImgError"
   />
   <img
     v-else-if="isSelfhstIcon"
     :src="selfhstIconUrl"
     :style="imageStyle"
     :alt="icon"
+    @error="onImgError"
   />
   <img
     v-else-if="isSimpleIcon"
@@ -17,6 +23,7 @@
     :style="imageStyle"
     :alt="icon"
     class="simple-icon"
+    @error="onImgError"
   />
   <img
     v-else-if="isCustomIconUrl"
@@ -24,6 +31,7 @@
     :style="imageStyle"
     :alt="icon"
     class="custom-icon"
+    @error="onImgError"
   />
   <v-icon v-else :style="iconStyle">
     {{ normalizedIcon }}

@@ -2,7 +2,7 @@
   <v-card variant="outlined">
     <v-list-item>
       <template v-slot:prepend>
-        <v-icon>fas fa-bell</v-icon>
+        <v-icon>fas fa-bolt</v-icon>
       </template>
       <v-list-item-title class="text-capitalize">
         <router-link to="/configuration/triggers">

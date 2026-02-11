@@ -1,5 +1,5 @@
 <template>
-  <v-app-bar app flat dark tile clipped-left dense color="primary">
+  <v-app-bar app flat dense color="surface" elevation="1">
     <v-app-bar-nav-icon v-if="showMenuToggle" @click.stop="$emit('toggle-drawer')">
       <v-icon>fas fa-bars</v-icon>
     </v-app-bar-nav-icon>
@@ -9,6 +9,15 @@
       >{{ viewName }}</v-toolbar-title
     >
     <v-spacer />
+
+    <v-tooltip :text="'Theme: ' + themeLabel" location="bottom">
+      <template v-slot:activator="{ props }">
+        <v-btn icon variant="text" size="small" v-bind="props" @click="cycleTheme">
+          <v-icon size="small">{{ themeIcon }}</v-icon>
+        </v-btn>
+      </template>
+    </v-tooltip>
+
     <v-menu v-if="user && user.username !== 'anonymous'">
       <template v-slot:activator="{ props }">
         <v-btn

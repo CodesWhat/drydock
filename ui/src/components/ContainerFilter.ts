@@ -56,6 +56,7 @@ export default defineComponent({
   data() {
     return {
       isRefreshing: false,
+      showFilters: false,
       registrySelected: "",
       agentSelected: "",
       watcherSelected: "",
@@ -64,6 +65,37 @@ export default defineComponent({
       oldestFirstLocal: this.oldestFirst,
       groupByLabelLocal: this.groupByLabel,
     };
+  },
+
+  computed: {
+    activeFilterCount(): number {
+      let count = 0;
+      if (this.agentSelected) count++;
+      if (this.watcherSelected) count++;
+      if (this.registrySelected) count++;
+      if (this.updateKindSelected) count++;
+      if (this.groupByLabelLocal) count++;
+      return count;
+    },
+    activeFilters(): Array<{ label: string; value: string; clear: () => void }> {
+      const filters: Array<{ label: string; value: string; clear: () => void }> = [];
+      if (this.agentSelected) {
+        filters.push({ label: "Agent", value: this.agentSelected, clear: () => { this.agentSelected = ""; this.emitAgentChanged(); } });
+      }
+      if (this.watcherSelected) {
+        filters.push({ label: "Watcher", value: this.watcherSelected, clear: () => { this.watcherSelected = ""; this.emitWatcherChanged(); } });
+      }
+      if (this.registrySelected) {
+        filters.push({ label: "Registry", value: this.registrySelected, clear: () => { this.registrySelected = ""; this.emitRegistryChanged(); } });
+      }
+      if (this.updateKindSelected) {
+        filters.push({ label: "Kind", value: this.updateKindSelected, clear: () => { this.updateKindSelected = ""; this.emitUpdateKindChanged(); } });
+      }
+      if (this.groupByLabelLocal) {
+        filters.push({ label: "Group", value: this.groupByLabelLocal, clear: () => { this.groupByLabelLocal = ""; this.emitGroupByLabelChanged(""); } });
+      }
+      return filters;
+    },
   },
 
   methods: {

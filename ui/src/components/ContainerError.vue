@@ -2,7 +2,7 @@
   <v-list density="compact">
     <v-list-item>
       <template v-slot:prepend>
-        <v-icon color="secondary">fas fa-tag</v-icon>
+        <v-icon>fas fa-triangle-exclamation</v-icon>
       </template>
       <v-list-item-title>Error</v-list-item-title>
       <v-list-item-subtitle>

@@ -1,5 +1,5 @@
 <template>
-  <v-card>
+  <v-card variant="outlined" rounded="lg">
     <v-card-title
       @click="collapse()"
       style="cursor: pointer"
@@ -36,7 +36,7 @@
           <v-col cols="4" class="text-right">
             <v-btn variant="outlined" size="small" color="accent" @click="openTestForm">
               Test
-              <v-icon right>fas fa-flask</v-icon>
+              <v-icon end>fas fa-flask</v-icon>
             </v-btn>
 
             <v-navigation-drawer

@@ -9,10 +9,12 @@
     color="primary"
     theme="dark"
   >
-    <div class="drawer-brand">
+    <div class="drawer-brand" :class="{ 'drawer-brand--rail': !smAndDown && mini }">
       <img :src="logo" alt="drydock logo" class="drawer-logo" />
-      <span v-if="!mini || smAndDown" class="drawer-brand-text">DRYDOCK</span>
-      <v-spacer />
+      <template v-if="!mini || smAndDown">
+        <span class="drawer-brand-text">DRYDOCK</span>
+        <v-spacer />
+      </template>
       <v-btn
         v-if="!smAndDown"
         icon
@@ -27,7 +29,7 @@
 
     <v-divider />
 
-    <v-list nav density="compact" class="pt-1 pb-0">
+    <v-list nav density="compact" class="pt-1 pb-1">
       <v-list-item to="/" prepend-icon="fas fa-house">
         <v-list-item-title>Home</v-list-item-title>
       </v-list-item>
@@ -38,7 +40,7 @@
 
     <v-divider />
 
-    <v-list nav density="compact" class="pt-0 pb-0">
+    <v-list nav density="compact" class="pt-2 pb-1">
       <v-list-subheader v-if="!mini || smAndDown" class="text-uppercase">
         Monitoring
       </v-list-subheader>
@@ -54,7 +56,7 @@
 
     <v-divider />
 
-    <v-list nav density="compact" class="pt-0 pb-0">
+    <v-list nav density="compact" class="pt-2 pb-1">
       <v-list-subheader v-if="!mini || smAndDown" class="text-uppercase">
         Configuration
       </v-list-subheader>
@@ -69,21 +71,9 @@
     </v-list>
 
     <template v-slot:append v-if="!mini || smAndDown">
-      <v-divider />
-      <v-list density="compact">
-        <v-list-item class="d-flex justify-center mb-1">
-          <v-btn-toggle
-            v-model="themeMode"
-            mandatory
-            density="compact"
-            @update:model-value="onThemeModeChange"
-          >
-            <v-btn value="light" size="small"><v-icon>fas fa-sun</v-icon></v-btn>
-            <v-btn value="system" size="small"><v-icon>fas fa-desktop</v-icon></v-btn>
-            <v-btn value="dark" size="small"><v-icon>fas fa-moon</v-icon></v-btn>
-          </v-btn-toggle>
-        </v-list-item>
-      </v-list>
+      <div class="drawer-version">
+        v{{ version }}
+      </div>
     </template>
   </v-navigation-drawer>
 </template>
@@ -97,10 +87,21 @@
   min-height: 48px;
 }
 
+.drawer-brand--rail {
+  flex-direction: column;
+  padding: 8px 4px;
+  gap: 4px;
+  justify-content: center;
+}
+
 .drawer-logo {
   height: 28px;
   width: auto;
   flex-shrink: 0;
+}
+
+.drawer-brand--rail .drawer-logo {
+  height: 24px;
 }
 
 .drawer-brand-text {
@@ -114,5 +115,12 @@
 .drawer-collapse-btn {
   color: rgba(255, 255, 255, 0.7);
   flex-shrink: 0;
+}
+
+.drawer-version {
+  padding: 8px 16px 12px;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
 }
 </style>

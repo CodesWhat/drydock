@@ -1,5 +1,5 @@
 function getTriggerIcon() {
-  return "fas fa-bell";
+  return "fas fa-bolt";
 }
 
 async function getAllTriggers() {

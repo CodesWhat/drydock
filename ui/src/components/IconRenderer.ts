@@ -1,4 +1,4 @@
-import { defineComponent } from 'vue';
+import { defineComponent, ref } from 'vue';
 
 export default defineComponent({
   props: {
@@ -13,6 +13,22 @@ export default defineComponent({
     marginRight: {
       type: [String, Number],
       default: 8,
+    },
+    fallbackIcon: {
+      type: String,
+      default: 'fab fa-docker',
+    },
+  },
+
+  setup() {
+    const imgFailed = ref(false);
+    const onImgError = () => { imgFailed.value = true; };
+    return { imgFailed, onImgError };
+  },
+
+  watch: {
+    icon() {
+      this.imgFailed = false;
     },
   },
 
@@ -42,6 +58,8 @@ export default defineComponent({
 
     isCustomIconUrl() {
       if (!this.icon) return false;
+      // Relative paths (e.g. /drydock-logo.png)
+      if (this.icon.startsWith('/')) return true;
       try {
         const iconUrl = new URL(this.icon);
         return iconUrl.protocol === 'http:' || iconUrl.protocol === 'https:';

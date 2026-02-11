@@ -1,5 +1,5 @@
 function getLogIcon() {
-  return "fas fa-terminal";
+  return "fas fa-scroll";
 }
 
 async function getLog() {

@@ -2,12 +2,12 @@
   <v-list density="compact">
     <v-list-item>
       <template v-slot:prepend>
-        <v-icon color="secondary">fas fa-fingerprint</v-icon>
+        <v-icon>fas fa-fingerprint</v-icon>
       </template>
       <v-list-item-title>Id</v-list-item-title>
       <v-list-item-subtitle>
         {{ container.id }}
-        <v-tooltip bottom>
+        <v-tooltip location="bottom">
           <template v-slot:activator="{ props }">
             <v-btn
               variant="text"
@@ -25,21 +25,21 @@
     </v-list-item>
     <v-list-item>
       <template v-slot:prepend>
-        <v-icon color="secondary">fas fa-pen</v-icon>
+        <v-icon>fas fa-pen</v-icon>
       </template>
       <v-list-item-title>Name</v-list-item-title>
       <v-list-item-subtitle>{{ container.name }}</v-list-item-subtitle>
     </v-list-item>
     <v-list-item>
       <template v-slot:prepend>
-        <v-icon color="secondary">fas fa-rotate-right</v-icon>
+        <v-icon>fas fa-rotate-right</v-icon>
       </template>
       <v-list-item-title>Status</v-list-item-title>
       <v-list-item-subtitle>{{ container.status }}</v-list-item-subtitle>
     </v-list-item>
     <v-list-item>
       <template v-slot:prepend>
-        <v-icon color="secondary">fas fa-arrows-rotate</v-icon>
+        <v-icon>fas fa-eye</v-icon>
       </template>
       <v-list-item-title>Watcher</v-list-item-title>
       <v-list-item-subtitle>
@@ -50,14 +50,14 @@
     </v-list-item>
     <v-list-item v-if="container.includeTags">
       <template v-slot:prepend>
-        <v-icon color="secondary">fas fa-tag</v-icon>
+        <v-icon>fas fa-tag</v-icon>
       </template>
       <v-list-item-title>
         Include tags
-        <v-tooltip bottom>
+        <v-tooltip location="bottom">
           <template v-slot:activator="{ props }">
             <v-btn
-              x-small
+              size="x-small"
               icon
               v-bind="props"
               href="https://regex101.com"
@@ -73,14 +73,14 @@
     </v-list-item>
     <v-list-item v-if="container.excludeTags">
       <template v-slot:prepend>
-        <v-icon color="secondary">fas fa-tags</v-icon>
+        <v-icon>fas fa-tags</v-icon>
       </template>
       <v-list-item-title>
         Exclude tags
-        <v-tooltip bottom>
+        <v-tooltip location="bottom">
           <template v-slot:activator="{ props }">
             <v-btn
-              x-small
+              size="x-small"
               icon
               v-bind="props"
               href="https://regex101.com"
@@ -96,7 +96,7 @@
     </v-list-item>
     <v-list-item v-if="container.transformTags">
       <template v-slot:prepend>
-        <v-icon color="secondary">fas fa-right-left</v-icon>
+        <v-icon>fas fa-right-left</v-icon>
       </template>
       <v-list-item-title>Transform tags</v-list-item-title>
       <v-list-item-subtitle>{{
@@ -105,7 +105,7 @@
     </v-list-item>
     <v-list-item v-if="container.linkTemplate">
       <template v-slot:prepend>
-        <v-icon color="secondary">fas fa-file-pen</v-icon>
+        <v-icon>fas fa-file-pen</v-icon>
       </template>
       <v-list-item-title>Link template</v-list-item-title>
       <v-list-item-subtitle>{{
@@ -114,7 +114,7 @@
     </v-list-item>
     <v-list-item v-if="container.link">
       <template v-slot:prepend>
-        <v-icon color="secondary">fas fa-link</v-icon>
+        <v-icon>fas fa-link</v-icon>
       </template>
       <v-list-item-title>Link</v-list-item-title>
       <v-list-item-subtitle

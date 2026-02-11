@@ -14,6 +14,7 @@ import {
   runTrigger,
   updateContainerPolicy,
 } from '@/services/container';
+import { getEffectiveDisplayIcon } from '@/services/image-icon';
 import { defineComponent } from 'vue';
 
 export default defineComponent({
@@ -75,6 +76,10 @@ export default defineComponent({
         return agent.connected ? "success" : "error";
       }
       return "info";
+    },
+
+    effectiveDisplayIcon() {
+      return getEffectiveDisplayIcon(this.container.displayIcon, this.container.image.name);
     },
 
     registryIcon() {

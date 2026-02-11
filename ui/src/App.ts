@@ -12,7 +12,6 @@ import { useDisplay } from "vuetify";
 import NavigationDrawer from "@/components/NavigationDrawer.vue";
 import AppBar from "@/components/AppBar.vue";
 import SnackBar from "@/components/SnackBar.vue";
-import AppFooter from "@/components/AppFooter.vue";
 import { getServer } from "@/services/server";
 import { useRoute } from "vue-router";
 
@@ -66,7 +65,6 @@ export default defineComponent({
     NavigationDrawer,
     AppBar,
     SnackBar,
-    AppFooter,
   },
   setup() {
     const route = useRoute();

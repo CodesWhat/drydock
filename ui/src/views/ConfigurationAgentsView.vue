@@ -1,13 +1,12 @@
 <template>
-  <v-container fluid>
-    <v-row v-for="agent in agents" :key="agent.name">
-      <v-col :cols="12" class="pt-2 pb-2">
-        <configuration-item :item="agent" :agents="rawAgents" />
-      </v-col>
-    </v-row>
-    <v-row v-if="agents.length === 0">
-      <v-card-subtitle class="text-h6">No agents configured</v-card-subtitle>
-    </v-row>
+  <v-container fluid class="pa-4">
+    <div v-for="agent in agents" :key="agent.name" class="mb-2">
+      <configuration-item :item="agent" :agents="rawAgents" />
+    </div>
+    <div v-if="agents.length === 0" class="text-center text-medium-emphasis py-8">
+      <v-icon size="36" color="grey">fas fa-robot</v-icon>
+      <div class="mt-3 text-body-2">No agents configured</div>
+    </div>
   </v-container>
 </template>
 

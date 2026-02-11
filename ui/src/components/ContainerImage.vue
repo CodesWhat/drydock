@@ -2,11 +2,11 @@
   <v-list density="compact">
     <v-list-item>
       <template v-slot:prepend>
-        <v-icon color="secondary">fas fa-fingerprint</v-icon>
+        <v-icon>fas fa-fingerprint</v-icon>
       </template>
       <v-list-item-title>
         Id
-        <v-tooltip bottom>
+        <v-tooltip location="bottom">
           <template v-slot:activator="{ props }">
             <v-btn
               variant="text"
@@ -25,14 +25,14 @@
     </v-list-item>
     <v-list-item>
       <template v-slot:prepend>
-        <v-icon color="secondary">fas fa-pen</v-icon>
+        <v-icon>fas fa-pen</v-icon>
       </template>
       <v-list-item-title>Name</v-list-item-title>
       <v-list-item-subtitle>{{ image.name }}</v-list-item-subtitle>
     </v-list-item>
     <v-list-item>
       <template v-slot:prepend>
-        <v-icon color="secondary">{{ registryIcon }}</v-icon>
+        <v-icon>{{ registryIcon }}</v-icon>
       </template>
       <v-list-item-title>Registry</v-list-item-title>
       <v-list-item-subtitle>{{ image.registry.name }}</v-list-item-subtitle>
@@ -42,7 +42,7 @@
     </v-list-item>
     <v-list-item>
       <template v-slot:prepend>
-        <v-icon color="secondary">fas fa-tag</v-icon>
+        <v-icon>fas fa-tag</v-icon>
       </template>
       <v-list-item-title>
         Tag &nbsp;<v-chip v-if="image.tag.semver" size="x-small" variant="outlined" color="success" label
@@ -55,11 +55,11 @@
     </v-list-item>
     <v-list-item v-if="image.digest.value">
       <template v-slot:prepend>
-        <v-icon color="secondary">fas fa-hashtag</v-icon>
+        <v-icon>fas fa-hashtag</v-icon>
       </template>
       <v-list-item-title>
         Digest
-        <v-tooltip bottom>
+        <v-tooltip location="bottom">
           <template v-slot:activator="{ props }">
             <v-btn
               variant="text"
@@ -80,7 +80,7 @@
     </v-list-item>
     <v-list-item>
       <template v-slot:prepend>
-        <v-icon color="secondary">{{ osIcon }}</v-icon>
+        <v-icon>{{ osIcon }}</v-icon>
       </template>
       <v-list-item-title>OS / Architecture</v-list-item-title>
       <v-list-item-subtitle
@@ -89,7 +89,7 @@
     </v-list-item>
     <v-list-item v-if="image.created">
       <template v-slot:prepend>
-        <v-icon color="secondary">far fa-calendar</v-icon>
+        <v-icon>far fa-calendar</v-icon>
       </template>
       <v-list-item-title>Created</v-list-item-title>
       <v-list-item-subtitle>{{

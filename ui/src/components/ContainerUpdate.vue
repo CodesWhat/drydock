@@ -3,7 +3,7 @@
     <v-list density="compact" v-if="updateAvailable">
       <v-list-item v-if="result.tag">
         <template v-slot:prepend>
-          <v-icon color="secondary">fas fa-tag</v-icon>
+          <v-icon>fas fa-tag</v-icon>
         </template>
         <v-list-item-title>
           Tag
@@ -13,7 +13,7 @@
         </v-list-item-title>
         <v-list-item-subtitle>
           {{ result.tag }}
-          <v-tooltip bottom>
+          <v-tooltip location="bottom">
             <template v-slot:activator="{ props }">
               <v-btn
                 variant="text"
@@ -31,7 +31,7 @@
       </v-list-item>
       <v-list-item v-if="result.link">
         <template v-slot:prepend>
-          <v-icon color="secondary">fas fa-link</v-icon>
+          <v-icon>fas fa-link</v-icon>
         </template>
         <v-list-item-title>Link</v-list-item-title>
         <v-list-item-subtitle
@@ -40,12 +40,12 @@
       </v-list-item>
       <v-list-item v-if="result.digest">
         <template v-slot:prepend>
-          <v-icon color="secondary">fas fa-hashtag</v-icon>
+          <v-icon>fas fa-hashtag</v-icon>
         </template>
         <v-list-item-title> Digest </v-list-item-title>
         <v-list-item-subtitle>
           {{ result.digest }}
-          <v-tooltip bottom>
+          <v-tooltip location="bottom">
             <template v-slot:activator="{ props }">
               <v-btn
                 variant="text"

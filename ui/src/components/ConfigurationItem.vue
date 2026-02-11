@@ -1,5 +1,5 @@
 <template>
-  <v-card>
+  <v-card variant="outlined" rounded="lg">
     <v-card-title
       @click="collapse()"
       style="cursor: pointer"
@@ -8,7 +8,7 @@
       <div class="text-body-3">
         <span v-if="smAndUp && item.agent">
           <v-chip label :color="agentStatusColor" variant="outlined">
-            <v-icon left>fas fa-network-wired</v-icon>
+            <v-icon start>fas fa-robot</v-icon>
             {{ item.agent }}
           </v-chip>
           /

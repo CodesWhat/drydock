@@ -1,13 +1,12 @@
 <template>
-  <v-container fluid>
-    <v-row v-for="trigger in triggers" :key="trigger.id">
-      <v-col :cols="12" class="pt-2 pb-2">
-        <trigger-detail :trigger="trigger" />
-      </v-col>
-    </v-row>
-    <v-row v-if="triggers.length === 0">
-      <v-card-subtitle class="text-h6">No triggers configured</v-card-subtitle>
-    </v-row>
+  <v-container fluid class="pa-4">
+    <div v-for="trigger in triggers" :key="trigger.id" class="mb-2">
+      <trigger-detail :trigger="trigger" />
+    </div>
+    <div v-if="triggers.length === 0" class="text-center text-medium-emphasis py-8">
+      <v-icon size="36" color="grey">fas fa-bolt</v-icon>
+      <div class="mt-3 text-body-2">No triggers configured</div>
+    </div>
   </v-container>
 </template>
 

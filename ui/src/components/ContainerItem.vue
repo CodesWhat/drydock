@@ -19,53 +19,30 @@
         style="cursor: pointer"
         class="pa-3 d-flex align-center bg-surface"
       >
-        <div
-          class="text-body-3 d-flex align-center"
-          style="gap: 5px"
-        >
-          <span v-if="smAndUp && container.agent">
-            <v-chip label :color="agentStatusColor" variant="outlined" disabled>
-              <v-icon left>fas fa-network-wired</v-icon>
-              {{ container.agent }}
-            </v-chip>
-            /
-          </span>
-          <span v-if="smAndUp">
-            <v-chip label color="info" variant="outlined" disabled>
-              <v-icon left>fas fa-arrows-rotate</v-icon>
-              {{ container.watcher }}
-            </v-chip>
-            /
-          </span>
-          <span v-if="mdAndUp">
-            <v-chip label color="info" variant="outlined" disabled>
-              <IconRenderer 
-                v-if="smAndUp" 
-                :icon="registryIcon"
-                :size="24"
-                :margin-right="8"
-              />
-              {{ container.image.registry.name }}
-            </v-chip>
-            /
-          </span>
-          <v-chip label color="info" variant="outlined" disabled>
-            <IconRenderer 
-              v-if="smAndUp" 
-              :icon="container.displayIcon"
-              :size="24"
-              :margin-right="8"
+        <div class="d-flex align-center" style="gap: 16px">
+          <div class="d-flex align-center justify-center flex-shrink-0" :style="{ width: smAndUp ? '40px' : '28px' }">
+            <IconRenderer
+              :icon="effectiveDisplayIcon"
+              :size="smAndUp ? 32 : 24"
+              :margin-right="0"
             />
-            <span style="overflow: hidden; text-overflow: ellipsis">
-              {{ container.displayName }}
-            </span>
-          </v-chip>
-          <span>
-            :
-            <v-chip label variant="outlined" color="info" disabled>
-              {{ container.image.tag.value }}
-            </v-chip>
-          </span>
+          </div>
+          <div class="d-flex flex-column" style="min-width: 0">
+            <div class="d-flex align-center" style="gap: 6px">
+              <span class="text-body-2 font-weight-medium text-truncate">
+                {{ container.displayName }}
+              </span>
+              <v-chip label size="x-small" variant="tonal" color="info" class="flex-shrink-0">
+                {{ container.image.tag.value }}
+              </v-chip>
+            </div>
+            <div v-if="smAndUp" class="text-caption text-medium-emphasis d-flex align-center" style="gap: 4px">
+              <v-icon v-if="container.agent" size="x-small" :color="agentStatusColor">fas fa-circle</v-icon>
+              <span v-if="container.agent">{{ container.agent }} &middot;</span>
+              <span>{{ container.watcher }}</span>
+              <span v-if="mdAndUp">&middot; {{ container.image.registry.name }}</span>
+            </div>
+          </div>
         </div>
         
         <v-spacer />
@@ -73,11 +50,11 @@
         <div class="d-flex align-center" style="gap: 8px">
           <span v-if="smAndUp && container.updateAvailable" class="d-flex align-center" style="gap: 4px">
             <v-icon>fas fa-arrow-right</v-icon>
-            <v-tooltip bottom>
+            <v-tooltip location="bottom">
               <template v-slot:activator="{ props }">
                 <v-chip
                   label
-                  variant="outlined"
+                  variant="tonal"
                   :color="newVersionClass"
                   v-bind="props"
                   @click="
@@ -93,7 +70,7 @@
             </v-tooltip>
           </span>
           <span v-if="smAndUp && updatePolicyChipLabel" class="d-flex align-center">
-            <v-tooltip bottom>
+            <v-tooltip location="bottom">
               <template v-slot:activator="{ props }">
                 <v-chip
                   label
@@ -123,71 +100,36 @@
       </v-card-title>
       <transition name="expand-transition">
         <div v-show="showDetail">
-          <v-tabs
-            :stacked="smAndUp"
-            fixed-tabs
-            v-model="tab"
-            ref="tabs"
-          >
-            <v-tab v-if="container.result">
-              <span v-if="smAndUp">Update</span>
-              <v-icon>fas fa-box-archive</v-icon>
-            </v-tab>
-            <v-tab>
-              <span v-if="smAndUp">Triggers</span>
-              <v-icon>fas fa-bell</v-icon>
-            </v-tab>
-            <v-tab>
-              <span v-if="smAndUp">Image</span>
-              <v-icon>fas fa-cube</v-icon>
-            </v-tab>
-            <v-tab>
-              <span v-if="smAndUp">Container</span>
-              <IconRenderer
-                :icon="container.displayIcon"
-                :size="24"
-                :margin-right="8"
-              />
-            </v-tab>
-            <v-tab>
-              <span v-if="smAndUp">Logs</span>
-              <v-icon>fas fa-file-lines</v-icon>
-            </v-tab>
-            <v-tab v-if="container.error">
-              <span v-if="smAndUp">Error</span>
-              <v-icon>fas fa-triangle-exclamation</v-icon>
-            </v-tab>
-          </v-tabs>
+          <div class="d-flex align-center" style="border-bottom: thin solid rgba(var(--v-border-color), var(--v-border-opacity));">
+            <v-tabs v-model="tab" ref="tabs" density="compact" color="primary" class="flex-grow-1">
+              <v-tab v-if="container.result">
+                <v-icon size="small" class="mr-1">fas fa-code-compare</v-icon>
+                <span>Update</span>
+              </v-tab>
+              <v-tab>
+                <v-icon size="small" class="mr-1">fas fa-bolt</v-icon>
+                <span>Triggers</span>
+              </v-tab>
+              <v-tab>
+                <v-icon size="small" class="mr-1">fas fa-cube</v-icon>
+                <span>Image</span>
+              </v-tab>
+              <v-tab>
+                <v-icon size="small" class="mr-1">fas fa-server</v-icon>
+                <span>Container</span>
+              </v-tab>
+              <v-tab>
+                <v-icon size="small" class="mr-1">fas fa-scroll</v-icon>
+                <span>Logs</span>
+              </v-tab>
+              <v-tab v-if="container.error">
+                <v-icon size="small" class="mr-1">fas fa-triangle-exclamation</v-icon>
+                <span>Error</span>
+              </v-tab>
+            </v-tabs>
 
-          <v-window v-model="tab">
-            <v-window-item v-if="container.result">
-              <container-update
-                :result="container.result"
-                :semver="container.image.tag.semver"
-                :update-kind="container.updateKind"
-                :update-available="container.updateAvailable"
-              />
-            </v-window-item>
-            <v-window-item>
-              <container-triggers :container="container" />
-            </v-window-item>
-            <v-window-item>
-              <container-image :image="container.image" />
-            </v-window-item>
-            <v-window-item>
-              <container-detail :container="container" />
-            </v-window-item>
-            <v-window-item>
-              <container-logs :container="container" />
-            </v-window-item>
-            <v-window-item v-if="container.error">
-              <container-error :error="container.error" />
-            </v-window-item>
-          </v-window>
-
-          <v-card-actions>
-            <!-- Desktop: icon-button toolbar -->
-            <div v-if="smAndUp" class="d-flex justify-center align-center w-100" style="gap: 4px;">
+            <!-- Desktop action buttons -->
+            <div v-if="smAndUp" class="d-flex align-center flex-shrink-0 px-2" style="gap: 2px;">
               <!-- Preview -->
               <v-tooltip text="Preview update" location="top">
                 <template v-slot:activator="{ props }">
@@ -291,7 +233,7 @@
                 </template>
 
                 <v-card class="text-center">
-                  <v-app-bar color="error" dark flat dense>
+                  <v-app-bar color="error" theme="dark" flat dense>
                     <v-toolbar-title class="text-body-1">
                       Delete the container?
                     </v-toolbar-title>
@@ -300,7 +242,7 @@
                     <v-row class="mt-2" no-gutters>
                       <v-col>
                         Delete
-                        <span class="font-weight-bold error--text">{{
+                        <span class="font-weight-bold text-error">{{
                           container.name
                         }}</span>
                         from the list?
@@ -312,13 +254,13 @@
                     </v-row>
                     <v-row>
                       <v-col class="text-center">
-                        <v-btn variant="outlined" @click="dialogDelete = false" small>
+                        <v-btn variant="outlined" @click="dialogDelete = false" size="small">
                           Cancel
                         </v-btn>
                         &nbsp;
                         <v-btn
                           color="error"
-                          small
+                          size="small"
                           @click="
                             dialogDelete = false;
                             deleteContainer();
@@ -333,11 +275,11 @@
               </v-dialog>
             </div>
 
-            <!-- Mobile: overflow menu -->
-            <div v-else class="d-flex justify-center w-100">
+            <!-- Mobile: overflow menu button -->
+            <div v-else class="d-flex align-center flex-shrink-0 px-2">
               <v-menu location="top">
                 <template v-slot:activator="{ props }">
-                  <v-btn icon variant="text" v-bind="props">
+                  <v-btn icon variant="text" size="small" v-bind="props">
                     <v-icon>fas fa-ellipsis-vertical</v-icon>
                   </v-btn>
                 </template>
@@ -385,7 +327,7 @@
                     :disabled="!container.updatePolicy || !container.updatePolicy.snoozeUntil"
                     @click="clearSnooze"
                   >
-                    <template v-slot:prepend><v-icon>fas fa-bell</v-icon></template>
+                    <template v-slot:prepend><v-icon>fas fa-clock-rotate-left</v-icon></template>
                     <v-list-item-title>Clear snooze</v-list-item-title>
                   </v-list-item>
                   <v-list-item
@@ -414,7 +356,7 @@
                 v-if="deleteEnabled"
               >
                 <v-card class="text-center">
-                  <v-app-bar color="error" dark flat dense>
+                  <v-app-bar color="error" theme="dark" flat dense>
                     <v-toolbar-title class="text-body-1">
                       Delete the container?
                     </v-toolbar-title>
@@ -423,7 +365,7 @@
                     <v-row class="mt-2" no-gutters>
                       <v-col>
                         Delete
-                        <span class="font-weight-bold error--text">{{
+                        <span class="font-weight-bold text-error">{{
                           container.name
                         }}</span>
                         from the list?
@@ -435,13 +377,13 @@
                     </v-row>
                     <v-row>
                       <v-col class="text-center">
-                        <v-btn variant="outlined" @click="dialogDelete = false" small>
+                        <v-btn variant="outlined" @click="dialogDelete = false" size="small">
                           Cancel
                         </v-btn>
                         &nbsp;
                         <v-btn
                           color="error"
-                          small
+                          size="small"
                           @click="
                             dialogDelete = false;
                             deleteContainer();
@@ -455,7 +397,34 @@
                 </v-card>
               </v-dialog>
             </div>
-          </v-card-actions>
+          </div>
+
+          <v-window v-model="tab">
+            <v-window-item v-if="container.result">
+              <container-update
+                :result="container.result"
+                :semver="container.image.tag.semver"
+                :update-kind="container.updateKind"
+                :update-available="container.updateAvailable"
+              />
+            </v-window-item>
+            <v-window-item>
+              <container-triggers :container="container" />
+            </v-window-item>
+            <v-window-item>
+              <container-image :image="container.image" />
+            </v-window-item>
+            <v-window-item>
+              <container-detail :container="container" />
+            </v-window-item>
+            <v-window-item>
+              <container-logs :container="container" />
+            </v-window-item>
+            <v-window-item v-if="container.error">
+              <container-error :error="container.error" />
+            </v-window-item>
+          </v-window>
+
         </div>
       </transition>
       <container-preview

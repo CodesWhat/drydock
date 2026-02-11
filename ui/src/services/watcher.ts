@@ -1,5 +1,5 @@
 function getWatcherIcon() {
-  return "fas fa-arrows-rotate";
+  return "fas fa-eye";
 }
 
 async function getAllWatchers() {

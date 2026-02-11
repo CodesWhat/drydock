@@ -15,16 +15,9 @@
       @toggle-drawer="toggleDrawer"
     />
 
-    <!-- Sizes your content based upon application components -->
-    <v-main>
-      <v-row>
-        <v-col>
-          <router-view></router-view>
-        </v-col>
-      </v-row>
+    <v-main scrollable>
+      <router-view></router-view>
     </v-main>
-
-    <app-footer v-if="authenticated" />
   </v-app>
 </template>
 

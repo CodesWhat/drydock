@@ -103,4 +103,43 @@ describe('SnackBar', () => {
     const snackbar = wrapper.find('.v-snackbar');
     expect(snackbar.exists()).toBe(true);
   });
+
+  it('uses flat variant on snackbar', () => {
+    const wrapper = mount(SnackBar, {
+      props: {
+        message: 'Test message',
+        show: true,
+        level: 'info'
+      }
+    });
+
+    const snackbar = wrapper.findComponent({ name: 'v-snackbar' });
+    expect(snackbar.props('variant')).toBe('flat');
+  });
+
+  it('renders close button with uppercase CLOSE text', () => {
+    const wrapper = mount(SnackBar, {
+      props: {
+        message: 'Test message',
+        show: true,
+        level: 'info'
+      }
+    });
+
+    const btn = wrapper.findComponent({ name: 'v-btn' });
+    expect(btn.text()).toBe('CLOSE');
+  });
+
+  it('renders close button with white color', () => {
+    const wrapper = mount(SnackBar, {
+      props: {
+        message: 'Test message',
+        show: true,
+        level: 'info'
+      }
+    });
+
+    const btn = wrapper.findComponent({ name: 'v-btn' });
+    expect(btn.props('color')).toBe('white');
+  });
 });

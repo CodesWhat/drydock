@@ -1,115 +1,153 @@
 <template>
-  <v-container fluid class="ma-0 mb-3 pa-md-0">
-    <v-row dense>
-      <v-col>
+  <div class="filter-bar">
+    <!-- Action row: always visible -->
+    <div class="filter-toolbar">
+      <div class="d-flex align-center" style="gap: 6px; flex-wrap: wrap">
+        <v-btn
+          variant="tonal"
+          size="small"
+          @click="showFilters = !showFilters"
+        >
+          <v-icon start size="small">fas fa-filter</v-icon>
+          Filters
+          <v-badge
+            v-if="activeFilterCount > 0"
+            :content="activeFilterCount"
+            color="primary"
+            inline
+            class="ml-1"
+          />
+          <v-icon end size="x-small">{{ showFilters ? 'fas fa-chevron-up' : 'fas fa-chevron-down' }}</v-icon>
+        </v-btn>
+
+        <!-- Active filter chips -->
+        <v-chip
+          v-for="filter in activeFilters"
+          :key="filter.label"
+          size="small"
+          variant="tonal"
+          color="primary"
+          closable
+          @click:close="filter.clear()"
+        >
+          {{ filter.label }}: {{ filter.value }}
+        </v-chip>
+
+        <v-divider vertical class="mx-1" style="height: 24px" />
+
+        <v-checkbox
+          v-model="updateAvailableLocal"
+          @update:modelValue="emitUpdateAvailableChanged()"
+          label="Updates available"
+          density="compact"
+          hide-details
+          class="flex-shrink-0"
+        />
+
+        <v-divider vertical class="mx-1" style="height: 24px" />
+
+        <v-btn
+          variant="text"
+          size="small"
+          @click="oldestFirstLocal = !oldestFirstLocal; emitOldestFirstChanged()"
+        >
+          <v-icon start size="small">{{ oldestFirstLocal ? 'fas fa-arrow-up-1-9' : 'fas fa-arrow-down-9-1' }}</v-icon>
+          {{ oldestFirstLocal ? 'Oldest first' : 'Newest first' }}
+        </v-btn>
+      </div>
+
+      <v-btn
+        variant="outlined"
+        size="small"
+        @click.stop="refreshAllContainers"
+        :loading="isRefreshing"
+      >
+        <v-icon start size="small">fas fa-arrows-rotate</v-icon>
+        Check updates
+      </v-btn>
+    </div>
+
+    <!-- Collapsible filter panel -->
+    <v-expand-transition>
+      <div v-show="showFilters" class="filter-panel">
         <v-select
-          :hide-details="true"
           v-model="agentSelected"
           :items="agents"
           @update:modelValue="emitAgentChanged"
-          :clearable="true"
-          clear-icon="fas fa-xmark"
           label="Agent"
           variant="outlined"
           density="compact"
-        ></v-select>
-      </v-col>
-      <v-col>
+          hide-details
+        />
         <v-select
-          :hide-details="true"
           v-model="watcherSelected"
           :items="watchers"
           @update:modelValue="emitWatcherChanged"
-          :clearable="true"
-          clear-icon="fas fa-xmark"
           label="Watcher"
           variant="outlined"
           density="compact"
-        ></v-select>
-      </v-col>
-      <v-col>
+          hide-details
+        />
         <v-select
-          :hide-details="true"
           v-model="registrySelected"
           :items="registries"
           @update:modelValue="emitRegistryChanged"
-          :clearable="true"
-          clear-icon="fas fa-xmark"
           label="Registry"
           variant="outlined"
           density="compact"
-        ></v-select>
-      </v-col>
-      <v-col>
+          hide-details
+        />
         <v-select
-          :hide-details="true"
           v-model="updateKindSelected"
           :items="updateKinds"
           @update:modelValue="emitUpdateKindChanged"
-          :clearable="true"
-          clear-icon="fas fa-xmark"
           label="Update kind"
           variant="outlined"
           density="compact"
-        ></v-select>
-      </v-col>
-
-      <v-col>
+          hide-details
+        />
         <v-autocomplete
-          label="Group by label"
-          :items="groupLabels"
           v-model="groupByLabelLocal"
+          :items="groupLabels"
           @update:modelValue="emitGroupByLabelChanged"
-          clearable
-          clear-icon="fas fa-xmark"
+          label="Group by label"
           variant="outlined"
           density="compact"
-        >
-        </v-autocomplete>
-      </v-col>
-      <v-col class="first-switch-col">
-        <v-switch
-          class="switch-top"
-          label="Update available"
-          v-model="updateAvailableLocal"
-          @update:modelValue="emitUpdateAvailableChanged"
-          :hide-details="true"
-          density="compact"
+          hide-details
         />
-      </v-col>
-      <v-col>
-        <v-switch
-          class="switch-top"
-          label="Oldest first"
-          v-model="oldestFirstLocal"
-          @update:modelValue="emitOldestFirstChanged"
-          :hide-details="true"
-          density="compact"
-        />
-      </v-col>
-      <v-col class="text-right">
-        <v-btn
-          color="secondary"
-          @click.stop="refreshAllContainers"
-          :loading="isRefreshing"
-        >
-          Check updates
-          <v-icon>fas fa-arrows-rotate</v-icon>
-        </v-btn>
-        <br />
-      </v-col>
-    </v-row>
-  </v-container>
+      </div>
+    </v-expand-transition>
+  </div>
 </template>
 
 <script lang="ts" src="./ContainerFilter.ts"></script>
 
 <style scoped>
-.switch-top {
-  margin-top: 4px;
+.filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.first-switch-col {
-  padding-left: 16px;
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
+
+.filter-panel > * {
+  flex: 1 1 180px;
+  max-width: 240px;
 }
 </style>
