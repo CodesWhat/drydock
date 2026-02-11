@@ -48,6 +48,32 @@
         </v-card>
       </v-col>
     </v-row>
+    <v-row class="d-md-flex pa-md-15 ma-md-15" style="margin-top: -40px !important;">
+      <v-col cols="12" md="6">
+        <v-card variant="outlined" class="h-100">
+          <v-card-title class="d-flex align-center">
+            <v-icon class="mr-2" color="secondary">fas fa-clock-rotate-left</v-icon>
+            Recent Activity
+          </v-card-title>
+          <v-card-text class="text-center text-medium-emphasis py-8">
+            <v-icon size="48" color="grey">fas fa-clock-rotate-left</v-icon>
+            <div class="mt-4">No activity recorded yet</div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+      <v-col cols="12" md="6">
+        <v-card variant="outlined" class="h-100">
+          <v-card-title class="d-flex align-center">
+            <v-icon class="mr-2" color="secondary">fas fa-calendar-check</v-icon>
+            Maintenance Windows
+          </v-card-title>
+          <v-card-text class="text-center text-medium-emphasis py-8">
+            <v-icon size="48" color="grey">fas fa-calendar-check</v-icon>
+            <div class="mt-4">No maintenance windows configured</div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
   </v-container>
 </template>
 
