@@ -7,6 +7,16 @@ This changelog covers all changes in **drydock** since forking from [getwud/wud]
 
 ---
 
+## 1.1.1
+
+### Bug Fixes
+
+- **Read-only Docker socket support** — Drydock's privilege drop prevented non-root users from connecting to `:ro` socket mounts. Added `DD_RUN_AS_ROOT=true` env var to skip the drop, improved EACCES error messages with actionable guidance, and documented socket proxy as the recommended secure alternative. ([#38](https://github.com/CodesWhat/drydock/issues/38))
+- **Prometheus container gauge crash with agent containers** — The container gauge used a blacklist filter that let unknown properties (like `agent`) slip through and crash prom-client. Switched to a whitelist of known label names so unknown properties are silently ignored. ([#39](https://github.com/CodesWhat/drydock/issues/39))
+- **Container filter layout broken on narrow viewports** — Filter columns rendered text vertically when the nav drawer was open because all 8 `v-col` elements had no width constraints. Added responsive breakpoints (`cols`/`sm`/`md`) so filters wrap properly across screen sizes. ([#40](https://github.com/CodesWhat/drydock/issues/40))
+
+---
+
 ## 1.1.0
 
 ### Features

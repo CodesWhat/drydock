@@ -9,7 +9,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.1.0-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.1.1-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/GHCR-image-2ea44f?logo=docker&logoColor=white" alt="GHCR package"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-C9A227" alt="License MIT"></a>
@@ -318,6 +318,7 @@ drydock is a drop-in replacement for [What's Up Docker (WUD)](https://github.com
 
 | Resource | Link |
 |----------|------|
+| Website | [drydock.codeswhat.com](https://drydock.codeswhat.com/) |
 | Docs | [`docs/README.md`](docs/README.md) |
 | Configuration | [`docs/configuration/README.md`](docs/configuration/README.md) |
 | Quick Start | [`docs/quickstart/README.md`](docs/quickstart/README.md) |
