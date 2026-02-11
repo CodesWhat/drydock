@@ -1,6 +1,5 @@
 // @ts-nocheck
-import { Writable } from 'node:stream';
-import { addEntry, getEntries } from './buffer.js';
+import { getEntries } from './buffer.js';
 
 vi.mock('../configuration', () => ({
     getLogLevel: vi.fn(() => 'info'),

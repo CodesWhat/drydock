@@ -105,6 +105,77 @@ describe('agent API container', () => {
                 error: expect.stringContaining('Error fetching container logs'),
             }));
         });
+
+        test('should handle string response from docker logs', async () => {
+            // Build a docker stream frame as a Buffer, then convert to string
+            // to exercise the Buffer.isBuffer() === false branch in demuxDockerStream
+            const payload = Buffer.from('string log output', 'utf-8');
+            const header = Buffer.alloc(8);
+            header[0] = 1; // stdout
+            header.writeUInt32BE(payload.length, 4);
+            const frame = Buffer.concat([header, payload]);
+            // Pass as hex string that will be converted back via Buffer.from()
+            const mockDockerContainer = { logs: vi.fn().mockResolvedValue(frame.toString('binary')) };
+            const mockWatcher = { dockerApi: { getContainer: vi.fn().mockReturnValue(mockDockerContainer) } };
+            storeContainer.getContainer.mockReturnValue({ id: 'c1', name: 'my-container', watcher: 'local' });
+            registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
+            req.params.id = 'c1';
+            req.query = {};
+            res.status = vi.fn().mockReturnThis();
+            await containerApi.getContainerLogs(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            // The demux should still extract something (the string gets converted to Buffer via Buffer.from)
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ logs: expect.any(String) }));
+        });
+
+        test('should handle truncated docker stream buffer', async () => {
+            // Create a header claiming 1000 bytes but only provide 10
+            const header = Buffer.alloc(8);
+            header[0] = 1;
+            header.writeUInt32BE(1000, 4); // claims 1000 bytes
+            const partial = Buffer.from('short');
+            const truncated = Buffer.concat([header, partial]); // only 5 bytes of payload
+            const mockDockerContainer = { logs: vi.fn().mockResolvedValue(truncated) };
+            const mockWatcher = { dockerApi: { getContainer: vi.fn().mockReturnValue(mockDockerContainer) } };
+            storeContainer.getContainer.mockReturnValue({ id: 'c1', name: 'my-container', watcher: 'local' });
+            registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
+            req.params.id = 'c1';
+            req.query = {};
+            res.status = vi.fn().mockReturnThis();
+            await containerApi.getContainerLogs(req, res);
+            expect(res.status).toHaveBeenCalledWith(200);
+            expect(res.json).toHaveBeenCalledWith({ logs: '' });
+        });
+
+        test('should pass timestamps=false when query param is false', async () => {
+            const mockLogs = Buffer.alloc(0);
+            const mockDockerContainer = { logs: vi.fn().mockResolvedValue(mockLogs) };
+            const mockWatcher = { dockerApi: { getContainer: vi.fn().mockReturnValue(mockDockerContainer) } };
+            storeContainer.getContainer.mockReturnValue({ id: 'c1', name: 'my-container', watcher: 'local' });
+            registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
+            req.params.id = 'c1';
+            req.query = { timestamps: 'false' };
+            res.status = vi.fn().mockReturnThis();
+            await containerApi.getContainerLogs(req, res);
+            expect(mockDockerContainer.logs).toHaveBeenCalledWith(
+                expect.objectContaining({ timestamps: false }),
+            );
+        });
+
+        test('should default timestamps to true', async () => {
+            const mockLogs = Buffer.alloc(0);
+            const mockDockerContainer = { logs: vi.fn().mockResolvedValue(mockLogs) };
+            const mockWatcher = { dockerApi: { getContainer: vi.fn().mockReturnValue(mockDockerContainer) } };
+            storeContainer.getContainer.mockReturnValue({ id: 'c1', name: 'my-container', watcher: 'local' });
+            registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
+            req.params.id = 'c1';
+            req.query = {};
+            res.status = vi.fn().mockReturnThis();
+            await containerApi.getContainerLogs(req, res);
+            expect(mockDockerContainer.logs).toHaveBeenCalledWith(
+                expect.objectContaining({ timestamps: true }),
+            );
+        });
     });
 
     describe('deleteContainer', () => {

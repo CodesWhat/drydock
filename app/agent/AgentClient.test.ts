@@ -562,4 +562,57 @@ describe('AgentClient', () => {
             ).rejects.toThrow('watch failed');
         });
     });
+
+    describe('getLogEntries', () => {
+        test('should fetch log entries with all params', async () => {
+            axios.get.mockResolvedValue({ data: [{ msg: 'test' }] });
+            const result = await client.getLogEntries({ level: 'error', component: 'docker', tail: 100, since: 12345 });
+            expect(axios.get).toHaveBeenCalledWith(
+                expect.stringContaining('/api/log/entries?level=error&component=docker&tail=100&since=12345'),
+                expect.any(Object),
+            );
+            expect(result).toEqual([{ msg: 'test' }]);
+        });
+
+        test('should fetch log entries with no params', async () => {
+            axios.get.mockResolvedValue({ data: [] });
+            const result = await client.getLogEntries();
+            expect(axios.get).toHaveBeenCalledWith(
+                expect.stringMatching(/\/api\/log\/entries$/),
+                expect.any(Object),
+            );
+            expect(result).toEqual([]);
+        });
+
+        test('should throw on failure', async () => {
+            axios.get.mockRejectedValue(new Error('log fetch failed'));
+            await expect(client.getLogEntries()).rejects.toThrow('log fetch failed');
+        });
+    });
+
+    describe('getContainerLogs', () => {
+        test('should fetch container logs with correct params', async () => {
+            axios.get.mockResolvedValue({ data: { logs: 'hello world' } });
+            const result = await client.getContainerLogs('c1', { tail: 100, since: 0, timestamps: true });
+            expect(axios.get).toHaveBeenCalledWith(
+                expect.stringContaining('/api/containers/c1/logs?tail=100&since=0&timestamps=true'),
+                expect.any(Object),
+            );
+            expect(result).toEqual({ logs: 'hello world' });
+        });
+
+        test('should throw on failure', async () => {
+            axios.get.mockRejectedValue(new Error('logs failed'));
+            await expect(
+                client.getContainerLogs('c1', { tail: 100, since: 0, timestamps: true }),
+            ).rejects.toThrow('logs failed');
+        });
+
+        test('should encode containerId to prevent path traversal', async () => {
+            axios.get.mockResolvedValue({ data: { logs: '' } });
+            await client.getContainerLogs('../../etc/passwd', { tail: 100, since: 0, timestamps: true });
+            const url = axios.get.mock.calls[0][0];
+            expect(url).toContain(encodeURIComponent('../../etc/passwd'));
+        });
+    });
 });

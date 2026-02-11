@@ -58,6 +58,9 @@ vi.mock('./event.js', () => ({
     initEvents: vi.fn(),
     subscribeEvents: vi.fn(),
 }));
+vi.mock('../../log/buffer.js', () => ({
+    getEntries: vi.fn().mockReturnValue([]),
+}));
 
 import { authenticate, init } from './index.js';
 
@@ -203,6 +206,43 @@ describe('Agent API index', () => {
             authenticate(req, res, next);
             expect(res.status).toHaveBeenCalledWith(401);
             expect(next).not.toHaveBeenCalled();
+        });
+
+        describe('/api/log/entries route handler', () => {
+            let logEntriesHandler;
+
+            beforeEach(async () => {
+                process.env.DD_AGENT_SECRET = 'secret'; // NOSONAR - test fixture
+                await init();
+                const getCalls = mockApp.get.mock.calls;
+                const logRoute = getCalls.find(([path]) => path === '/api/log/entries');
+                logEntriesHandler = logRoute[1];
+            });
+
+            test('should register /api/log/entries route', () => {
+                expect(logEntriesHandler).toBeTypeOf('function');
+            });
+
+            test('should return entries with empty query', async () => {
+                const { getEntries } = await import('../../log/buffer.js');
+                getEntries.mockReturnValue([{ msg: 'test' }]);
+                const req = { query: {} };
+                const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+                logEntriesHandler(req, res);
+                expect(getEntries).toHaveBeenCalledWith({ level: undefined, component: undefined, tail: undefined, since: undefined });
+                expect(res.status).toHaveBeenCalledWith(200);
+                expect(res.json).toHaveBeenCalledWith([{ msg: 'test' }]);
+            });
+
+            test('should parse all query params', async () => {
+                const { getEntries } = await import('../../log/buffer.js');
+                getEntries.mockReturnValue([]);
+                const req = { query: { level: 'error', component: 'docker', tail: '50', since: '99999' } };
+                const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+                logEntriesHandler(req, res);
+                expect(getEntries).toHaveBeenCalledWith({ level: 'error', component: 'docker', tail: 50, since: 99999 });
+                expect(res.status).toHaveBeenCalledWith(200);
+            });
         });
     });
 });

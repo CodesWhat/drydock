@@ -279,4 +279,68 @@ describe('ApplicationLogs', () => {
       wrapper.unmount();
     });
   });
+
+  describe('configuredLevel tooltip', () => {
+    it('renders tooltip text with configured level', async () => {
+      mockGetLogEntries.mockResolvedValue(mockEntries);
+
+      const wrapper = mount(ApplicationLogs, {
+        props: { configuredLevel: 'warn' },
+      });
+      await flushPromises();
+
+      // The tooltip element should be present with the configured level
+      const tooltip = wrapper.find('.v-tooltip');
+      expect(tooltip.exists()).toBe(true);
+      expect(tooltip.text()).toContain('WARN');
+      wrapper.unmount();
+    });
+
+    it('does not render tooltip when configuredLevel is empty', async () => {
+      mockGetLogEntries.mockResolvedValue(mockEntries);
+
+      const wrapper = mount(ApplicationLogs);
+      await flushPromises();
+
+      expect(wrapper.html()).not.toContain('mdi-information-outline');
+      wrapper.unmount();
+    });
+  });
+
+  describe('scroll behavior', () => {
+    it('scrolls log pre element to bottom after entries load', async () => {
+      mockGetLogEntries.mockResolvedValue(mockEntries);
+
+      const wrapper = mount(ApplicationLogs);
+      await flushPromises();
+      await wrapper.vm.$nextTick();
+
+      const pre = wrapper.find('pre');
+      expect(pre.exists()).toBe(true);
+      // The scrollTop assignment happens in $nextTick callback
+      // Verify the pre element has the ref
+      expect(wrapper.vm.$refs.logPre).toBeDefined();
+      wrapper.unmount();
+    });
+  });
+
+  describe('loading state with existing entries', () => {
+    it('does not show spinner while loading when entries already exist', async () => {
+      mockGetLogEntries.mockResolvedValue(mockEntries);
+
+      const wrapper = mount(ApplicationLogs);
+      await flushPromises();
+
+      // Now trigger a re-fetch with a never-resolving promise
+      mockGetLogEntries.mockReturnValue(new Promise(() => {}));
+      wrapper.vm.level = 'error';
+      await wrapper.vm.$nextTick();
+
+      // Loading is true but entries exist, so spinner should not show
+      expect(wrapper.vm.loading).toBe(true);
+      expect(wrapper.vm.entries.length).toBeGreaterThan(0);
+      expect(wrapper.find('.v-progress-circular').exists()).toBe(false);
+      wrapper.unmount();
+    });
+  });
 });

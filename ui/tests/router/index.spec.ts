@@ -25,6 +25,7 @@ describe('Router', () => {
     expect(routeNames).toContain('triggers');
     expect(routeNames).toContain('watchers');
     expect(routeNames).toContain('agents');
+    expect(routeNames).toContain('logs');
   });
 
   it('has correct route paths', () => {
@@ -50,6 +51,7 @@ describe('Router', () => {
     expect(paths).toContain('/configuration/triggers');
     expect(paths).toContain('/configuration/watchers');
     expect(paths).toContain('/configuration/agents');
+    expect(paths).toContain('/configuration/logs');
   });
 
   describe('navigation guard - beforeEach', () => {
@@ -85,6 +87,7 @@ describe('Router', () => {
       expect(router.resolve('/configuration/server').name).toBe('server');
       expect(router.resolve('/configuration/agents').name).toBe('agents');
       expect(router.resolve('/configuration/authentications').name).toBe('authentications');
+      expect(router.resolve('/configuration/logs').name).toBe('logs');
     });
   });
 });
