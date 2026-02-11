@@ -1781,12 +1781,28 @@ class Docker extends Watcher {
                     this.log.warn(
                         `Unable to listen to Docker events [${err.message}]`,
                     );
+                    this.logSocketPermissionHint(err);
                     this.log.debug(err);
                 }
             } else {
                 stream.on('data', (chunk: any) => this.onDockerEvent(chunk));
             }
         });
+    }
+
+    /**
+     * Log actionable guidance when a socket permission error (EACCES) is detected.
+     */
+    logSocketPermissionHint(error: any) {
+        const code = error?.code || error?.reason?.code;
+        const message = `${error?.message || ''}`.toLowerCase();
+        if (code === 'EACCES' || message.includes('permission denied')) {
+            this.log.warn(
+                'Socket permission error — if you mounted the Docker socket with :ro, ' +
+                    'the non-root Drydock process cannot connect. Quick fix: set DD_RUN_AS_ROOT=true. ' +
+                    'Recommended: use a socket proxy (see https://drydock.dev/configuration/watchers/#docker-socket-security)',
+            );
+        }
     }
 
     isRecoverableDockerEventParseError(error: any) {
@@ -2005,6 +2021,7 @@ class Docker extends Watcher {
             this.log.warn(
                 `Error when trying to get the list of the containers to watch (${e.message})`,
             );
+            this.logSocketPermissionHint(e);
         }
         try {
             const containerReports = await Promise.all(

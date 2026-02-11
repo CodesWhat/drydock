@@ -4,7 +4,39 @@
 The easiest way to start is to deploy the official _**drydock**_ image.
 
 <!-- tabs:start -->
-#### **Docker Compose**
+#### **Socket Proxy (Recommended)**
+Using a socket proxy is the most secure way to expose the Docker API. The proxy limits which endpoints Drydock can access.
+
+```yaml
+services:
+  drydock:
+    image: ghcr.io/codeswhat/drydock
+    container_name: drydock
+    depends_on:
+      - socket-proxy
+    environment:
+      - DD_WATCHER_LOCAL_HOST=socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+    ports:
+      - 3000:3000
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: drydock-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - SERVICES=1
+      # Add POST=1 and NETWORKS=1 if using the Docker trigger for auto-updates
+    restart: unless-stopped
+```
+
+#### **Direct Mount**
+The simplest setup — mount the Docker socket directly. Works out of the box on most systems.
+
 ```yaml
 services:
   drydock:
@@ -15,7 +47,10 @@ services:
     ports:
       - 3000:3000
 ```
-#### **Docker**
+
+?> If you need a **read-only** socket mount (`:ro`), set `DD_RUN_AS_ROOT=true` to skip Drydock's privilege drop. See the [Docker Socket Security](configuration/watchers/#docker-socket-security) section for details.
+
+#### **Docker CLI**
 ```bash
 docker run -d --name drydock \
   -v "/var/run/docker.sock:/var/run/docker.sock" \
