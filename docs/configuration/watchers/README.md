@@ -276,6 +276,8 @@ docker run \
 
 Use `IMGSET` to define reusable defaults by image reference. This is useful when many containers need the same tag filters, link template, icon, or trigger routing.
 
+Looking for ready-to-copy presets for common containers? See [Popular IMGSET Presets](popular-imgsets.md).
+
 ### Supported imgset keys
 
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_IMAGE`
