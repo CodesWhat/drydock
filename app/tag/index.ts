@@ -5,12 +5,31 @@
 import semver from 'semver';
 import log from '../log/index.js';
 
+function normalizeNumericMultiSegmentTag(rawVersion) {
+  if (!/^v?\d+(?:\.\d+){3,}$/.test(rawVersion)) {
+    return null;
+  }
+
+  const numericParts = rawVersion
+    .replace(/^v/, '')
+    .split('.')
+    .map((part) => String(Number.parseInt(part, 10)));
+  const [major, minor, patch, ...prereleaseParts] = numericParts;
+
+  return `${major}.${minor}.${patch}-${prereleaseParts.join('.')}`;
+}
+
 /**
  * Parse a string to a semver (return null is it cannot be parsed as a valid semver).
  * @param rawVersion
  * @returns {*|SemVer}
  */
 export function parse(rawVersion) {
+    const normalizedMultiSegment = normalizeNumericMultiSegmentTag(rawVersion);
+    if (normalizedMultiSegment !== null) {
+        return semver.parse(normalizedMultiSegment);
+    }
+
     const rawVersionCleaned = semver.clean(rawVersion, { loose: true });
     const rawVersionSemver = semver.parse(
         rawVersionCleaned !== null ? rawVersionCleaned : rawVersion,

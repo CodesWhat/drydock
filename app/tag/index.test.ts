@@ -31,6 +31,14 @@ describe('parse', () => {
             input: 'v2.0.6.3-2.0.6.3_beta_2021-06-17-ls112',
             expected: { major: 2, minor: 0, patch: 6, prerelease: [] },
         },
+        {
+            input: '24.04.13.3.1',
+            expected: { major: 24, minor: 4, patch: 13, prerelease: [3, 1] },
+        },
+        {
+            input: '25.04.2.1.1',
+            expected: { major: 25, minor: 4, patch: 2, prerelease: [1, 1] },
+        },
     ];
 
     test.each(validVersions)(
@@ -125,6 +133,18 @@ describe('isGreater', () => {
             v2: '1.2.3-alpha1',
             expected: true,
             desc: 'beta vs alpha prerelease',
+        },
+        {
+            v1: '25.04.2.1.1',
+            v2: '24.04.13.3.1',
+            expected: true,
+            desc: 'higher major from five-part numeric tag',
+        },
+        {
+            v1: '24.04.13.3.1',
+            v2: '25.04.2.1.1',
+            expected: false,
+            desc: 'lower major from five-part numeric tag',
         },
 
         // Invalid versions
