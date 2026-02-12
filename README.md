@@ -99,6 +99,21 @@ docker pull ghcr.io/codeswhat/drydock:latest
 
 </details>
 
+<details>
+<summary><strong>Behind a reverse proxy (Traefik, nginx, Caddy, etc.)</strong></summary>
+
+If drydock sits behind a reverse proxy, set `DD_SERVER_TRUSTPROXY` so Express correctly resolves the client IP from `X-Forwarded-For` headers. This is required for rate limiting to work per-client instead of per-proxy.
+
+```yaml
+environment:
+  # Number of trusted hops (1 = single reverse proxy)
+  - DD_SERVER_TRUSTPROXY=1
+```
+
+Accepted values: `false` (default — no proxy), `true` (trust all), a number (hop count), or an IP/CIDR string. See the [Express trust proxy docs](https://expressjs.com/en/guide/behind-proxies.html) for details.
+
+</details>
+
 ---
 
 ## Screenshots
@@ -182,6 +197,7 @@ Browse container and application logs in the web UI with level filtering, agent 
 | **OIDC token lifecycle** | Bearer/Basic auth for remote watcher HTTPS connections |
 | **Container update policy** | Skip/snooze specific versions per container via API and UI |
 | **Metrics auth toggle** | `DD_SERVER_METRICS_AUTH=false` to expose `/metrics` without auth |
+| **Trust proxy config** | `DD_SERVER_TRUSTPROXY` — set to `1` (hop count) behind a reverse proxy, or `false` (default) for direct exposure |
 | **NTFY provider-level threshold** | Set threshold at the ntfy provider level, not just per-trigger |
 | **Docker pull progress logging** | Rate-limited pull progress during compose updates |
 | **Registry lookup image override** | `lookupImage` field to override tag lookup image |

@@ -118,6 +118,7 @@ test('getServerConfiguration should return configured api (new vars)', async () 
         metrics: {},
         port: 4000,
         tls: {},
+        trustproxy: false,
     });
 });
 
@@ -135,7 +136,22 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
         },
         port: 3000,
         tls: {},
+        trustproxy: false,
     });
+});
+
+test('getServerConfiguration should accept trustproxy as number', async () => {
+    configuration.ddEnvVars.DD_SERVER_TRUSTPROXY = '1';
+    const config = configuration.getServerConfiguration();
+    expect(config.trustproxy).toBe(1);
+    delete configuration.ddEnvVars.DD_SERVER_TRUSTPROXY;
+});
+
+test('getServerConfiguration should accept trustproxy as boolean string', async () => {
+    configuration.ddEnvVars.DD_SERVER_TRUSTPROXY = 'true';
+    const config = configuration.getServerConfiguration();
+    expect(config.trustproxy).toBe(true);
+    delete configuration.ddEnvVars.DD_SERVER_TRUSTPROXY;
 });
 
 test('getPrometheusConfiguration should result in enabled by default', async () => {

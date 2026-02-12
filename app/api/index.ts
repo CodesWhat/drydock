@@ -29,7 +29,9 @@ export async function init() {
         const app = express();
 
         // Trust proxy (helpful to resolve public facing hostname & protocol)
-        app.set('trust proxy', true); // NOSONAR - intentional: app runs behind a reverse proxy
+        if (configuration.trustproxy !== false) {
+            app.set('trust proxy', configuration.trustproxy);
+        }
 
         // Replace undefined values by null to prevent them from being removed from json responses
         app.set('json replacer', (key, value) =>

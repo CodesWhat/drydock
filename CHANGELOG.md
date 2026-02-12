@@ -7,6 +7,14 @@ This changelog covers all changes in **drydock** since forking from [getwud/wud]
 
 ---
 
+## 1.1.3
+
+### Bug Fixes
+
+- **ERR_ERL_PERMISSIVE_TRUST_PROXY on startup** — Express `trust proxy` was hard-coded to `true`, which triggers a validation error in `express-rate-limit` v8+ when the default key generator infers client IP from `X-Forwarded-For`. Replaced with a configurable `DD_SERVER_TRUSTPROXY` env var (default: `false`). Set to `1` (hop count) when behind a single reverse proxy, or a specific IP/CIDR for tighter control. ([#43](https://github.com/CodesWhat/drydock/issues/43))
+
+---
+
 ## 1.1.2
 
 ### Bug Fixes

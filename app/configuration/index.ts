@@ -157,6 +157,14 @@ export function getServerConfiguration() {
             .default({
                 delete: true,
             }),
+        trustproxy: joi
+            .alternatives()
+            .try(
+                joi.boolean(),
+                joi.number().integer().min(0),
+                joi.string(),
+            )
+            .default(false),
         metrics: joi
             .object({
                 auth: joi.boolean().default(true),
