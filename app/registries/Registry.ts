@@ -253,8 +253,9 @@ class Registry extends Component {
       log.debug(
         `Filter manifest for [arch=${image.architecture}, os=${image.os}, variant=${image.variant}]`,
       );
+      const manifests = response.manifests ?? [];
       const matched = filterManifestByPlatform(
-        response.manifests!,
+        manifests,
         image.architecture,
         image.os,
         image.variant,

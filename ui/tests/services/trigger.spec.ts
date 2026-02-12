@@ -1,4 +1,9 @@
-import { getTriggerIcon, getAllTriggers, runTrigger } from '@/services/trigger';
+import {
+  getTriggerIcon,
+  getTriggerProviderIcon,
+  getAllTriggers,
+  runTrigger,
+} from '@/services/trigger';
 
 global.fetch = vi.fn();
 
@@ -10,6 +15,30 @@ describe('Trigger Service', () => {
   describe('getTriggerIcon', () => {
     it('returns the trigger icon', () => {
       expect(getTriggerIcon()).toBe('fas fa-bolt');
+    });
+  });
+
+  describe('getTriggerProviderIcon', () => {
+    it.each([
+      ['http', 'fas fa-globe'],
+      ['smtp', 'fas fa-envelope'],
+      ['slack', 'fab fa-slack'],
+      ['discord', 'fab fa-discord'],
+      ['telegram', 'fab fa-telegram'],
+      ['mqtt', 'fas fa-tower-broadcast'],
+      ['kafka', 'fas fa-bars-staggered'],
+      ['pushover', 'fas fa-bell'],
+      ['gotify', 'fas fa-bell'],
+      ['ntfy', 'fas fa-bell'],
+      ['ifttt', 'fas fa-wand-magic-sparkles'],
+      ['apprise', 'fas fa-paper-plane'],
+      ['command', 'fas fa-terminal'],
+      ['dockercompose', 'fab fa-docker'],
+      ['rocketchat', 'fas fa-comment'],
+      ['docker', 'fab fa-docker'],
+      ['unknown', 'fas fa-bolt'],
+    ])('returns %s icon', (type, icon) => {
+      expect(getTriggerProviderIcon(type)).toBe(icon);
     });
   });
 

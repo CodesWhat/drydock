@@ -1,4 +1,9 @@
-import { getRegistryIcon, getRegistryProviderIcon, getAllRegistries } from '@/services/registry';
+import {
+  getRegistryIcon,
+  getRegistryProviderIcon,
+  getRegistryProviderColor,
+  getAllRegistries,
+} from '@/services/registry';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -27,6 +32,9 @@ describe('Registry Service', () => {
       expect(getRegistryProviderIcon('hub.docker.com')).toBe('fab fa-docker');
       expect(getRegistryProviderIcon('quay.io')).toBe('fab fa-redhat');
       expect(getRegistryProviderIcon('lscr.io')).toBe('fab fa-linux');
+      expect(getRegistryProviderIcon('codeberg.org')).toBe('fas fa-mountain');
+      expect(getRegistryProviderIcon('dhi.example.com')).toBe('fab fa-docker');
+      expect(getRegistryProviderIcon('docr.digitalocean.com')).toBe('fab fa-digital-ocean');
       expect(getRegistryProviderIcon('trueforge.example')).toBe('fas fa-cube');
     });
 
@@ -37,6 +45,29 @@ describe('Registry Service', () => {
     it('handles provider names with dots correctly', () => {
       expect(getRegistryProviderIcon('hub.docker.com')).toBe('fab fa-docker');
       expect(getRegistryProviderIcon('gcr.io')).toBe('fab fa-google');
+    });
+  });
+
+  describe('getRegistryProviderColor', () => {
+    it.each([
+      ['acr.example.com', '#0078D4'],
+      ['ecr.amazonaws.com', '#FF9900'],
+      ['forgejo.example.com', '#FB923C'],
+      ['gcr.io', '#4285F4'],
+      ['ghcr.io', '#8B5CF6'],
+      ['gitea.example.com', '#609926'],
+      ['gitlab.com', '#FC6D26'],
+      ['hub.docker.com', '#2496ED'],
+      ['quay.io', '#EE0000'],
+      ['lscr.io', '#DA3B8A'],
+      ['codeberg.org', '#2185D0'],
+      ['dhi.example.com', '#2496ED'],
+      ['docr.digitalocean.com', '#0080FF'],
+      ['custom.registry.com', '#6B7280'],
+      ['trueforge.example', '#6B7280'],
+      ['unknown.registry', '#6B7280'],
+    ])('returns %s color', (provider, color) => {
+      expect(getRegistryProviderColor(provider)).toBe(color);
     });
   });
 
