@@ -13,7 +13,6 @@ class SseService {
   connect(eventBus: SseEventBus): void {
     this.eventBus = eventBus;
     this.doConnect();
-    return;
   }
 
   private doConnect(): void {
@@ -42,15 +41,12 @@ class SseService {
       } else {
         this.scheduleReconnect();
       }
-      return;
     };
-    return;
   }
 
   private scheduleReconnect(delayMs = 5000): void {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = setTimeout(() => this.doConnect(), delayMs);
-    return;
   }
 
   disconnect(): void {
@@ -64,7 +60,6 @@ class SseService {
     }
     this.eventBus = undefined;
     this.selfUpdateMode = false;
-    return;
   }
 }
 
