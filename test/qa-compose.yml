@@ -38,6 +38,10 @@ services:
       - DD_AGENT_PRODUCTION_HOST=10.0.0.100
       - DD_AGENT_PRODUCTION_PORT=3000
       - DD_AGENT_PRODUCTION_SECRET=production-shared-secret-key
+      # --- Maintenance window (QA) ---
+      # Uncomment to test; adjust cron to match/not-match current time
+      # - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=0 2-6 * * *
+      # - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ=UTC
 
   # Container with updates available and lifecycle hooks
   nginx-hooked:

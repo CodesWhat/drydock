@@ -3,7 +3,9 @@
 **/node_modules/
 **/tests/
 **/*.test.js
+**/*.test.ts
 **/*.spec.js
+**/*.spec.ts
 **/test/
 docs/
 e2e/

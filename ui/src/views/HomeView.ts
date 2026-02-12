@@ -21,6 +21,7 @@ export default defineComponent({
   data() {
     return {
       containers: [] as any[],
+      watchers: [] as any[],
       containersCount: 0,
       triggersCount: 0,
       watchersCount: 0,
@@ -31,6 +32,8 @@ export default defineComponent({
       watcherIcon: getWatcherIcon(),
       recentActivity: [] as any[],
       updateTab: 0,
+      maintenanceCountdownNow: Date.now(),
+      maintenanceCountdownTimer: undefined as number | undefined,
     };
   },
 
@@ -64,10 +67,61 @@ export default defineComponent({
           (c.updateKind?.kind === 'tag' && c.updateKind?.semverDiff === 'unknown'),
       );
     },
+    maintenanceWindowWatchers(): any[] {
+      return this.watchers.filter((watcher: any) => watcher.configuration?.maintenancewindow);
+    },
+    maintenanceWindowOpenCount(): number {
+      return this.maintenanceWindowWatchers.filter(
+        (watcher: any) => watcher.configuration?.maintenancewindowopen,
+      ).length;
+    },
+    nextMaintenanceWindowAt(): number | undefined {
+      const nextWindows = this.maintenanceWindowWatchers
+        .map((watcher: any) => watcher.configuration?.maintenancenextwindow)
+        .map((value: string | undefined) => {
+          if (!value) return undefined;
+          const parsedTime = Date.parse(value);
+          return Number.isNaN(parsedTime) ? undefined : parsedTime;
+        })
+        .filter((value: number | undefined) => value !== undefined);
+      if (nextWindows.length === 0) {
+        return undefined;
+      }
+      return Math.min(...nextWindows);
+    },
+    maintenanceCountdownLabel(): string {
+      if (this.maintenanceWindowWatchers.length === 0) {
+        return '';
+      }
+      if (this.maintenanceWindowOpenCount > 0) {
+        return 'Open now';
+      }
+      if (!this.nextMaintenanceWindowAt) {
+        return 'Scheduled';
+      }
+      const remainingMs = this.nextMaintenanceWindowAt - this.maintenanceCountdownNow;
+      if (remainingMs <= 0) {
+        return 'Opening soon';
+      }
+      return this.formatDuration(remainingMs);
+    },
   },
 
   methods: {
     getEffectiveDisplayIcon,
+    formatDuration(durationMs: number): string {
+      const totalMinutes = Math.max(1, Math.ceil(durationMs / 60000));
+      const days = Math.floor(totalMinutes / (24 * 60));
+      const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+      const minutes = totalMinutes % 60;
+      if (days > 0) {
+        return `${days}d ${hours}h`;
+      }
+      if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+      }
+      return `${minutes}m`;
+    },
     updateKindColor(container: any): string {
       if (container.updateKind?.kind === 'digest') return 'info';
       switch (container.updateKind?.semverDiff) {
@@ -132,6 +186,7 @@ export default defineComponent({
 
       next((vm: any) => {
         vm.containers = containers;
+        vm.watchers = watchers;
         vm.containersCount = containers.length;
         vm.triggersCount = triggers.length;
         vm.watchersCount = watchers.length;
@@ -142,6 +197,19 @@ export default defineComponent({
       next(() => {
         console.log(e);
       });
+    }
+  },
+
+  mounted() {
+    this.maintenanceCountdownTimer = window.setInterval(() => {
+      this.maintenanceCountdownNow = Date.now();
+    }, 30 * 1000);
+  },
+
+  beforeUnmount() {
+    if (this.maintenanceCountdownTimer !== undefined) {
+      clearInterval(this.maintenanceCountdownTimer);
+      this.maintenanceCountdownTimer = undefined;
     }
   },
 });

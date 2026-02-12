@@ -47,6 +47,18 @@
               <div class="text-h5 font-weight-bold stat-number">{{ watchersCount }}</div>
               <div class="text-caption text-medium-emphasis">Watchers</div>
             </div>
+            <v-spacer />
+            <div v-if="maintenanceCountdownLabel" class="text-right">
+              <v-chip
+                size="x-small"
+                :color="maintenanceWindowOpenCount > 0 ? 'success' : 'warning'"
+                variant="tonal"
+                label
+              >
+                <v-icon start size="x-small">fas fa-clock</v-icon>
+                {{ maintenanceCountdownLabel }}
+              </v-chip>
+            </div>
           </div>
         </v-card>
       </v-col>

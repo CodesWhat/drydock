@@ -1,5 +1,4 @@
-// @ts-nocheck
-
+import type { AuditEntry } from '../model/audit.js';
 import { getAuditCounter } from '../prometheus/audit.js';
 import * as auditStore from '../store/audit.js';
 
@@ -16,7 +15,7 @@ export function recordAuditEvent({
   fromVersion,
   toVersion,
 }) {
-  const entry: Record<string, any> = {
+  var entry: Partial<AuditEntry> = {
     id: '',
     timestamp: new Date().toISOString(),
     action,
@@ -35,6 +34,6 @@ export function recordAuditEvent({
     entry.toVersion = toVersion;
   }
 
-  auditStore.insertAudit(entry);
+  auditStore.insertAudit(entry as AuditEntry);
   getAuditCounter()?.inc({ action });
 }
