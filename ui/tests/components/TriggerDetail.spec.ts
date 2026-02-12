@@ -36,6 +36,7 @@ describe('TriggerDetail', () => {
     wrapper = mount(TriggerDetail, {
       props: { trigger: mockTrigger },
     });
+    wrapper.vm.$eventBus.emit.mockClear();
   });
 
   afterEach(() => {
@@ -187,7 +188,7 @@ describe('TriggerDetail', () => {
       await wrapper.vm.runTrigger();
       expect(wrapper.vm.$eventBus.emit).toHaveBeenCalledWith(
         'notify',
-        'Trigger executed with error (send failed})',
+        'Trigger executed with error (send failed)',
         'error'
       );
     });

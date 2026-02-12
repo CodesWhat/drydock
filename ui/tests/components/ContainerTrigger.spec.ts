@@ -30,6 +30,7 @@ describe('ContainerTrigger', () => {
         },
       },
     });
+    wrapper.vm.$eventBus.emit.mockClear();
   });
 
   afterEach(() => {
@@ -79,7 +80,7 @@ describe('ContainerTrigger', () => {
     await wrapper.vm.runTrigger();
     expect(wrapper.vm.$eventBus.emit).toHaveBeenCalledWith(
       'notify',
-      'Trigger executed with error (network error})',
+      'Trigger executed with error (network error)',
       'error'
     );
   });

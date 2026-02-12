@@ -1,6 +1,8 @@
 import { mount } from '@vue/test-utils';
 import SelfUpdateOverlay from '@/components/SelfUpdateOverlay';
 
+const UINT32_MAX_PLUS_ONE = 0x1_0000_0000;
+
 // Mock vuetify useDisplay — default to desktop (smAndDown = false)
 const mockSmAndDown = { value: false };
 vi.mock('vuetify', async () => {
@@ -27,6 +29,16 @@ describe('SelfUpdateOverlay', () => {
   let rafMock: ReturnType<typeof vi.fn>;
   let cafMock: ReturnType<typeof vi.fn>;
   let rafId: number;
+  let cryptoRandomSpy: ReturnType<typeof vi.spyOn> | null;
+
+  function queueSecureRandomValues(values: number[]) {
+    let callIdx = 0;
+    cryptoRandomSpy?.mockImplementation(((typedArray: Uint32Array) => {
+      const next = values[callIdx++] ?? 0.5;
+      typedArray[0] = Math.min(0xffff_ffff, Math.floor(next * UINT32_MAX_PLUS_ONE));
+      return typedArray;
+    }) as any);
+  }
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -38,6 +50,12 @@ describe('SelfUpdateOverlay', () => {
     cafMock = vi.fn();
     window.requestAnimationFrame = rafMock as any;
     window.cancelAnimationFrame = cafMock as any;
+    cryptoRandomSpy = vi.spyOn(globalThis.crypto, 'getRandomValues').mockImplementation(
+      ((typedArray: Uint32Array) => {
+        typedArray[0] = 0x8000_0000;
+        return typedArray;
+      }) as any,
+    );
 
     eventHandlers = {};
     mockEventBus = {
@@ -74,6 +92,8 @@ describe('SelfUpdateOverlay', () => {
 
   afterEach(() => {
     if (wrapper) wrapper.unmount();
+    cryptoRandomSpy?.mockRestore();
+    cryptoRandomSpy = null;
     vi.useRealTimers();
   });
 
@@ -242,13 +262,10 @@ describe('SelfUpdateOverlay', () => {
         0.0,    // angle = 0 -> dx=2, dy=0... we need positive dy too
         0.5,    // hue = 180
       ];
-      let callIdx = 0;
-      const origRandom = Math.random;
-      Math.random = () => randomValues[callIdx++] ?? origRandom();
+      queueSecureRandomValues(randomValues);
 
       eventHandlers['self-update']();
       await wrapper.vm.$nextTick();
-      Math.random = origRandom;
 
       const xBefore = wrapper.vm.x;
       const hueBefore = wrapper.vm.hue;
@@ -271,13 +288,10 @@ describe('SelfUpdateOverlay', () => {
         0.5,    // angle = PI -> dx = cos(PI)*2 = -2, dy = sin(PI)*2 ~ 0
         0.5,    // hue
       ];
-      let callIdx = 0;
-      const origRandom = Math.random;
-      Math.random = () => randomValues[callIdx++] ?? origRandom();
+      queueSecureRandomValues(randomValues);
 
       eventHandlers['self-update']();
       await wrapper.vm.$nextTick();
-      Math.random = origRandom;
 
       const hueBefore = wrapper.vm.hue;
       runAnimateFrame();
@@ -296,13 +310,10 @@ describe('SelfUpdateOverlay', () => {
         0.75,   // angle = 0.75 * 2PI = 1.5PI -> dx ~ 0, dy = -2
         0.5,    // hue
       ];
-      let callIdx = 0;
-      const origRandom = Math.random;
-      Math.random = () => randomValues[callIdx++] ?? origRandom();
+      queueSecureRandomValues(randomValues);
 
       eventHandlers['self-update']();
       await wrapper.vm.$nextTick();
-      Math.random = origRandom;
 
       const hueBefore = wrapper.vm.hue;
       runAnimateFrame();
@@ -322,13 +333,10 @@ describe('SelfUpdateOverlay', () => {
         0.25,   // angle = 0.25 * 2PI = PI/2 -> dx ~ 0, dy = +2
         0.5,    // hue
       ];
-      let callIdx = 0;
-      const origRandom = Math.random;
-      Math.random = () => randomValues[callIdx++] ?? origRandom();
+      queueSecureRandomValues(randomValues);
 
       eventHandlers['self-update']();
       await wrapper.vm.$nextTick();
-      Math.random = origRandom;
 
       const hueBefore = wrapper.vm.hue;
       runAnimateFrame();
@@ -377,13 +385,10 @@ describe('SelfUpdateOverlay', () => {
         0.125,  // angle = PI/4 -> dx = ~1.06, dy = ~1.06
         0.0,    // hue = 0
       ];
-      let callIdx = 0;
-      const origRandom = Math.random;
-      Math.random = () => randomValues[callIdx++] ?? origRandom();
+      queueSecureRandomValues(randomValues);
 
       eventHandlers['self-update']();
       await wrapper.vm.$nextTick();
-      Math.random = origRandom;
 
       const xBefore = wrapper.vm.x;
       const yBefore = wrapper.vm.y;

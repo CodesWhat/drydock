@@ -12,6 +12,7 @@ describe('LoginBasic', () => {
 
   beforeEach(() => {
     wrapper = mount(LoginBasic);
+    wrapper.vm.$eventBus.emit.mockClear();
   });
 
   afterEach(() => {
@@ -88,7 +89,7 @@ describe('LoginBasic', () => {
     await wrapper.vm.login();
 
     expect(wrapper.emitted('authentication-success')).toBeFalsy();
-    expect(wrapper.vm.$eventBus.emit).toHaveBeenCalledWith('notify', 'Username or password error', 'error');
+    expect(wrapper.vm.$eventBus.emit).toHaveBeenCalledWith('notify', 'Invalid credentials', 'error');
   });
 
   it('shows loading state during login', async () => {

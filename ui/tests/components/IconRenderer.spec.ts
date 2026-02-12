@@ -108,9 +108,9 @@ describe('IconRenderer', () => {
       props: { icon: '' },
     });
 
-    expect(wrapper.vm.isHomarrIcon).toBe('');
-    expect(wrapper.vm.isSelfhstIcon).toBe('');
-    expect(wrapper.vm.isSimpleIcon).toBe('');
+    expect(wrapper.vm.isHomarrIcon).toBe(false);
+    expect(wrapper.vm.isSelfhstIcon).toBe(false);
+    expect(wrapper.vm.isSimpleIcon).toBe(false);
     expect(wrapper.vm.normalizedIcon).toBe('');
   });
 
@@ -119,9 +119,9 @@ describe('IconRenderer', () => {
       props: { icon: '' },
     });
 
-    expect(wrapper.vm.isHomarrIcon).toBe('');
-    expect(wrapper.vm.isSelfhstIcon).toBe('');
-    expect(wrapper.vm.isSimpleIcon).toBe('');
+    expect(wrapper.vm.isHomarrIcon).toBe(false);
+    expect(wrapper.vm.isSelfhstIcon).toBe(false);
+    expect(wrapper.vm.isSimpleIcon).toBe(false);
     expect(wrapper.vm.normalizedIcon).toBe('');
   });
 
