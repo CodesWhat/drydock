@@ -187,6 +187,65 @@ docker run \
 
 !> Don't forget to mount the certificates into the container!
 
+## Docker Socket Security
+
+Drydock runs as a non-root user by default for security. This means a **read-only** Docker socket mount (`:ro`) will fail with a permission error because the Linux VFS denies `connect()` on a read-only bind mount for non-root users.
+
+There are two ways to resolve this:
+
+### Option 1: `DD_RUN_AS_ROOT=true` (quick fix)
+
+Set the `DD_RUN_AS_ROOT` environment variable to skip Drydock's privilege drop and run as root — the same approach used by Portainer, Watchtower, and other Docker management tools.
+
+```yaml
+services:
+  drydock:
+    image: ghcr.io/codeswhat/drydock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DD_RUN_AS_ROOT=true
+    ports:
+      - 3000:3000
+```
+
+!> Running as root trades the privilege-drop security boundary for `:ro` socket compatibility. This is safe for most home-lab and single-host setups but may not meet your security requirements in multi-tenant or production environments.
+
+### Option 2: Socket proxy (recommended)
+
+A socket proxy runs as a separate container with access to the Docker socket and exposes only the API endpoints Drydock needs. Drydock connects to the proxy over HTTP, so no socket mount is required at all.
+
+```yaml
+services:
+  drydock:
+    image: ghcr.io/codeswhat/drydock
+    depends_on:
+      - socket-proxy
+    environment:
+      - DD_WATCHER_LOCAL_HOST=socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+    ports:
+      - 3000:3000
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - SERVICES=1
+    restart: unless-stopped
+```
+
+#### Proxy permissions by feature
+
+| Feature | Required proxy env vars |
+|---|---|
+| Watch containers (default) | `CONTAINERS=1`, `IMAGES=1`, `EVENTS=1`, `SERVICES=1` |
+| Docker trigger (auto-updates) | All of the above **plus** `POST=1`, `NETWORKS=1` |
+
 ### Watch 1 local Docker host and 2 remote docker hosts at the same time
 
 <!-- tabs:start -->

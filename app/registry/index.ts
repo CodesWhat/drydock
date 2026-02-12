@@ -190,6 +190,7 @@ export async function registerComponent(options: RegisterComponentOptions): Prom
       ? componentFileByConvention
       : componentFileLowercase;
   const componentModuleSpecifier = resolveComponentModuleSpecifier(componentFileBase);
+  log.debug(`Resolving ${kind}.${providerLowercase}.${nameLowercase} from ${componentFileBase}`);
   try {
     const componentModule = await import(componentModuleSpecifier);
     const ComponentClass = componentModule.default || componentModule;

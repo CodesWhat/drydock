@@ -153,12 +153,46 @@ describe('API Index', () => {
     expect(mockApp.use).toHaveBeenCalledWith('/', 'ui-router');
   });
 
-  test('should set trust proxy and json replacer', async () => {
+  test('should not set trust proxy when default (false)', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
       port: 3000,
       cors: {},
       tls: {},
+      trustproxy: false,
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockApp.set).not.toHaveBeenCalledWith('trust proxy', expect.anything());
+    expect(mockApp.set).toHaveBeenCalledWith('json replacer', expect.any(Function));
+  });
+
+  test('should set trust proxy when configured as hop count', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      trustproxy: 1,
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockApp.set).toHaveBeenCalledWith('trust proxy', 1);
+  });
+
+  test('should set trust proxy when configured as true', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      trustproxy: true,
     });
 
     vi.resetModules();
@@ -166,6 +200,21 @@ describe('API Index', () => {
     await indexRouter.init();
 
     expect(mockApp.set).toHaveBeenCalledWith('trust proxy', true);
+  });
+
+  test('should set json replacer', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      trustproxy: false,
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
     expect(mockApp.set).toHaveBeenCalledWith('json replacer', expect.any(Function));
 
     // Test the json replacer function

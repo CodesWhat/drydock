@@ -2,7 +2,7 @@
 
 <img src="docs/assets/whale-logo.png" alt="drydock" width="220">
 
-<h1>drydock &nbsp;<img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="32"></h1>
+<h1>drydock</h1>
 
 **Open source container update monitoring — built in TypeScript with modern tooling.**
 
@@ -96,6 +96,21 @@ open http://localhost:3000
 echo '<GITHUB_PAT>' | docker login ghcr.io -u <github-username> --password-stdin
 docker pull ghcr.io/codeswhat/drydock:latest
 ```
+
+</details>
+
+<details>
+<summary><strong>Behind a reverse proxy (Traefik, nginx, Caddy, etc.)</strong></summary>
+
+If drydock sits behind a reverse proxy, set `DD_SERVER_TRUSTPROXY` so Express correctly resolves the client IP from `X-Forwarded-For` headers. This is required for rate limiting to work per-client instead of per-proxy.
+
+```yaml
+environment:
+  # Number of trusted hops (1 = single reverse proxy)
+  - DD_SERVER_TRUSTPROXY=1
+```
+
+Accepted values: `false` (default — no proxy), `true` (trust all), a number (hop count), or an IP/CIDR string. See the [Express trust proxy docs](https://expressjs.com/en/guide/behind-proxies.html) for details.
 
 </details>
 
@@ -210,6 +225,7 @@ Token-authenticated HTTP endpoints for CI/CD integration to trigger watch cycles
 | **OIDC token lifecycle** | Bearer/Basic auth for remote watcher HTTPS connections |
 | **Container update policy** | Skip/snooze specific versions per container via API and UI |
 | **Metrics auth toggle** | `DD_SERVER_METRICS_AUTH=false` to expose `/metrics` without auth |
+| **Trust proxy config** | `DD_SERVER_TRUSTPROXY` — set to `1` (hop count) behind a reverse proxy, or `false` (default) for direct exposure |
 | **NTFY provider-level threshold** | Set threshold at the ntfy provider level, not just per-trigger |
 | **Docker pull progress logging** | Rate-limited pull progress during compose updates |
 | **Registry lookup image override** | `lookupImage` field to override tag lookup image |
@@ -367,6 +383,7 @@ drydock is a drop-in replacement for [What's Up Docker (WUD)](https://github.com
 
 | Resource | Link |
 |----------|------|
+| Website | [drydock.codeswhat.com](https://drydock.codeswhat.com/) |
 | Docs | [`docs/README.md`](docs/README.md) |
 | Configuration | [`docs/configuration/README.md`](docs/configuration/README.md) |
 | Quick Start | [`docs/quickstart/README.md`](docs/quickstart/README.md) |
@@ -390,6 +407,10 @@ drydock is a drop-in replacement for [What's Up Docker (WUD)](https://github.com
 ---
 
 **[MIT License](LICENSE)**
+
+<br>
+
+<a href="https://github.com/CodesWhat"><img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="28"></a>
 
 <a href="#drydock">Back to top</a>
 

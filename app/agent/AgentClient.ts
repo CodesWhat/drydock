@@ -86,12 +86,15 @@ export class AgentClient {
 
   private async registerAgentComponents(kind: 'watcher' | 'trigger', remoteComponents: any[]) {
     for (const remoteComponent of remoteComponents) {
+      this.log.debug(
+        `Registering agent ${kind} ${remoteComponent.type}.${remoteComponent.name}`,
+      );
       await registry.registerComponent({
         kind,
         provider: remoteComponent.type,
         name: remoteComponent.name,
         configuration: remoteComponent.configuration,
-        componentPath: '../agent/components',
+        componentPath: 'agent/components',
         agent: this.name,
       });
     }

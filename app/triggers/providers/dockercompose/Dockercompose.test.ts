@@ -859,13 +859,28 @@ describe('Dockercompose Trigger', () => {
 
   test('triggerBatch should skip containers when compose file does not exist', async () => {
     trigger.configuration.file = '/nonexistent/compose.yml';
-    fs.access.mockRejectedValueOnce(new Error('ENOENT'));
+    const err = new Error('ENOENT');
+    err.code = 'ENOENT';
+    fs.access.mockRejectedValueOnce(err);
 
     const container = { name: 'test-container', watcher: 'local' };
 
     await trigger.triggerBatch([container]);
 
     expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('does not exist'));
+  });
+
+  test('triggerBatch should log permission denied when compose file has EACCES', async () => {
+    trigger.configuration.file = '/restricted/compose.yml';
+    const err = new Error('EACCES');
+    err.code = 'EACCES';
+    fs.access.mockRejectedValueOnce(err);
+
+    const container = { name: 'test-container', watcher: 'local' };
+
+    await trigger.triggerBatch([container]);
+
+    expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('permission denied'));
   });
 
   test('triggerBatch should group containers by compose file and process each', async () => {
@@ -960,11 +975,24 @@ describe('Dockercompose Trigger', () => {
 
   test('initTrigger should throw when configured file does not exist', async () => {
     trigger.configuration.file = '/nonexistent/compose.yml';
-    fs.access.mockRejectedValueOnce(new Error('ENOENT'));
+    const err = new Error('ENOENT');
+    err.code = 'ENOENT';
+    fs.access.mockRejectedValueOnce(err);
 
     await expect(trigger.initTrigger()).rejects.toThrow('ENOENT');
 
     expect(mockLog.error).toHaveBeenCalledWith(expect.stringContaining('does not exist'));
+  });
+
+  test('initTrigger should log permission denied when configured file has EACCES', async () => {
+    trigger.configuration.file = '/restricted/compose.yml';
+    const err = new Error('EACCES');
+    err.code = 'EACCES';
+    fs.access.mockRejectedValueOnce(err);
+
+    await expect(trigger.initTrigger()).rejects.toThrow('EACCES');
+
+    expect(mockLog.error).toHaveBeenCalledWith(expect.stringContaining('permission denied'));
   });
 
   test('trigger should delegate to triggerBatch with single container', async () => {

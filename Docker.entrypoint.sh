@@ -3,7 +3,10 @@ set -e
 
 # ── Privilege-drop logic (runs only on first invocation as root) ──
 if [ "$(id -u)" = "0" ]; then
-  if [ -S /var/run/docker.sock ]; then
+  # Allow opting out of privilege drop for :ro socket compatibility
+  if [ "${DD_RUN_AS_ROOT}" = "true" ]; then
+    echo "DD_RUN_AS_ROOT is set — skipping privilege drop (running as root)"
+  elif [ -S /var/run/docker.sock ]; then
     DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
     if [ "$DOCKER_GID" != "0" ]; then
       # Non-root GID (e.g. Linux docker group): add node to socket group, drop to node

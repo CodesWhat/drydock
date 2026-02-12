@@ -29,6 +29,38 @@ The trigger will:
 
 !> Do not forget to mount the docker-compose.yml file in the drydock container.
 
+### Troubleshooting: `permission denied` (`EACCES`)
+
+If logs show an error like:
+
+```text
+EACCES: permission denied, access '/drydock/.../docker-compose.yml'
+```
+
+the mounted compose file (or parent directory) is not readable by the Drydock process.
+
+Ways to fix:
+
+- Grant read access on the mounted path for the user/group used by the Drydock container.
+- Add the host group that owns the compose files with `group_add` so Drydock can read them.
+- Quick workaround: set `DD_RUN_AS_ROOT=true` to skip privilege drop (less secure).
+
+Example using `group_add`:
+
+```yaml
+services:
+  drydock:
+    image: ghcr.io/codeswhat/drydock
+    group_add:
+      - "${COMPOSE_FILES_GID}"
+    volumes:
+      - /var/lib/docker/volumes/portainer_data/_data/compose:/drydock:ro
+    environment:
+      - DD_TRIGGER_DOCKERCOMPOSE_EXAMPLE_FILE=/drydock/5/docker-compose.yml
+```
+
+?> `COMPOSE_FILES_GID` should match the GID that owns the mounted compose files on the host.
+
 ### Examples
 
 <!-- tabs:start -->

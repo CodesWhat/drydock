@@ -215,6 +215,9 @@ describe('AgentClient', () => {
       expect(storeContainer.insertContainer).toHaveBeenCalledTimes(2);
       expect(registry.deregisterAgentComponents).toHaveBeenCalledWith('test-agent');
       expect(registry.registerComponent).toHaveBeenCalledTimes(2);
+      expect(registry.registerComponent).toHaveBeenCalledWith(
+        expect.objectContaining({ componentPath: 'agent/components' }),
+      );
       expect(client.isConnected).toBe(true);
     });
 

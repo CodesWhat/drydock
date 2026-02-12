@@ -68,13 +68,17 @@ test('gauge must be populated when containers are in the store', async () => {
   );
 });
 
-test("gauge must warn when data don't match expected labels", async () => {
+test('gauge must silently ignore labels not in the initial labelset', async () => {
+  vi.useFakeTimers();
   store.getContainers = () => [
     {
       extra: 'extra',
     },
   ];
   const spyLog = vi.spyOn(log, 'warn');
-  container.init();
-  expect(spyLog).toHaveBeenCalled();
+  const gauge = container.init();
+  const spySet = vi.spyOn(gauge, 'set');
+  vi.runOnlyPendingTimers();
+  expect(spyLog).not.toHaveBeenCalled();
+  expect(spySet).toHaveBeenCalledWith({}, 1);
 });
