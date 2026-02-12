@@ -62,8 +62,7 @@ describe('AgentClient', () => {
         port: 4000,
         secret: 's', // NOSONAR - test fixture, not a real credential
       });
-      // host does not start with http, so it prepends http://
-      expect(c).toBeDefined();
+      expect(c.baseUrl).toBe('http://myhost:4000');
     });
 
     test('should build baseUrl with https when certfile is provided', () => {
@@ -75,7 +74,16 @@ describe('AgentClient', () => {
         keyfile: '/path/to/key.pem',
         cafile: '/path/to/ca.pem',
       });
-      expect(c).toBeDefined();
+      expect(c.baseUrl).toBe('https://myhost:4000');
+    });
+
+    test('should build baseUrl with https when using port 443', () => {
+      const c = new AgentClient('a', {
+        host: 'agent.example.com',
+        port: 443,
+        secret: 's', // NOSONAR - test fixture, not a real credential
+      });
+      expect(c.baseUrl).toBe('https://agent.example.com');
     });
 
     test('should handle host that already starts with http', () => {
@@ -85,7 +93,7 @@ describe('AgentClient', () => {
         port: 4000,
         secret: 's', // NOSONAR - test fixture, not a real credential
       });
-      expect(c).toBeDefined();
+      expect(c.baseUrl).toBe('http://myhost:4000');
     });
 
     test('should default port to 3000 when not provided', () => {
@@ -94,7 +102,7 @@ describe('AgentClient', () => {
         port: 0,
         secret: 's', // NOSONAR - test fixture, not a real credential
       });
-      expect(c).toBeDefined();
+      expect(c.baseUrl).toBe('http://myhost:3000');
     });
 
     test('should create https agent when certfile without cafile', () => {
@@ -104,7 +112,8 @@ describe('AgentClient', () => {
         secret: 's', // NOSONAR - test fixture, not a real credential
         certfile: '/path/to/cert.pem',
       });
-      expect(c).toBeDefined();
+      expect(c.baseUrl).toBe('https://myhost:4000');
+      expect(c.axiosOptions.httpsAgent).toBeDefined();
     });
 
     test('should throw when host uses an unsupported protocol', () => {

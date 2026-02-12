@@ -30,10 +30,12 @@ export class AgentClient {
     this.name = name;
     this.config = config;
     this.log = logger.child({ component: `agent-client.${name}` });
-    let candidateUrl = `${this.config.host}:${this.config.port || 3000}`;
+    const port = this.config.port || 3000;
+    let candidateUrl = `${this.config.host}:${port}`;
     // Add protocol if not present
     if (!candidateUrl.startsWith('http')) {
-      candidateUrl = `http${this.config.certfile ? 's' : ''}://${candidateUrl}`;
+      const useHttps = Boolean(this.config.certfile) || port === 443;
+      candidateUrl = `http${useHttps ? 's' : ''}://${candidateUrl}`;
     }
     // Validate the URL to prevent request forgery (CodeQL js/request-forgery)
     const parsed = new URL(candidateUrl);
