@@ -46,9 +46,10 @@ test.each(
   register(handlerMock);
 
   // Emit the event
-  await emitter();
+  const emitResult = await emitter();
 
   // Ensure handler is called
+  expect([undefined, true, false]).toContain(emitResult);
   expect(handlerMock).toHaveBeenCalledTimes(1);
 });
 

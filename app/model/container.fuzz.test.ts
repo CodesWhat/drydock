@@ -69,6 +69,20 @@ describe('model/container fuzz tests', () => {
     expect(result.image_registry_name).toBe('hub');
   });
 
+  it('renders link template placeholders for semver tags', () => {
+    const container = {
+      ...minimalValidContainer(),
+      linkTemplate:
+        'https://example.test/${major}.${minor}.${patch}?raw=${raw}&original=${original}&transformed=${transformed}',
+      transformTags: '',
+    };
+
+    const link = testable_getLink(container as any, '1.2.3');
+    expect(link).toBe(
+      'https://example.test/1.2.3?raw=1.2.3&original=1.2.3&transformed=1.2.3',
+    );
+  });
+
   test.prop([fc.anything()])('validate handles arbitrary input without crashing', (input) => {
     try {
       validate(input);

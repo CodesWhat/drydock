@@ -4,11 +4,14 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import { getWebhookConfiguration } from '../configuration/index.js';
+import { recordAuditEvent } from './audit-events.js';
+import {
+  findDockerTriggerForContainer,
+  NO_DOCKER_TRIGGER_FOUND_ERROR,
+} from './docker-trigger.js';
 import logger from '../log/index.js';
-import { getAuditCounter } from '../prometheus/audit.js';
 import { getWebhookCounter } from '../prometheus/webhook.js';
 import * as registry from '../registry/index.js';
-import * as auditStore from '../store/audit.js';
 import * as storeContainer from '../store/container.js';
 
 const log = logger.child({ component: 'webhook' });
@@ -61,26 +64,6 @@ function findContainerByName(containerName) {
 }
 
 /**
- * Find a docker trigger that can handle this container.
- */
-function findDockerTrigger(container) {
-  const triggers = registry.getState().trigger;
-  for (const trigger of Object.values(triggers)) {
-    if (trigger.type !== 'docker') {
-      continue;
-    }
-    if (trigger.agent && trigger.agent !== container.agent) {
-      continue;
-    }
-    if (container.agent && !trigger.agent) {
-      continue;
-    }
-    return trigger;
-  }
-  return undefined;
-}
-
-/**
  * POST /watch — trigger full watch cycle on ALL watchers.
  */
 async function watchAll(req, res) {
@@ -90,15 +73,12 @@ async function watchAll(req, res) {
   try {
     await Promise.all(watcherEntries.map(([, watcher]) => watcher.watch()));
 
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
+    recordAuditEvent({
       action: 'webhook-watch',
       containerName: '*',
       status: 'success',
       details: `Triggered ${watcherEntries.length} watcher(s)`,
     });
-    getAuditCounter()?.inc({ action: 'webhook-watch' });
     getWebhookCounter()?.inc({ action: 'watch-all' });
 
     res.status(200).json({
@@ -108,15 +88,12 @@ async function watchAll(req, res) {
   } catch (e) {
     log.warn(`Error triggering watch cycle (${e.message})`);
 
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
+    recordAuditEvent({
       action: 'webhook-watch',
       containerName: '*',
       status: 'error',
       details: e.message,
     });
-    getAuditCounter()?.inc({ action: 'webhook-watch' });
     getWebhookCounter()?.inc({ action: 'watch-all' });
 
     res.status(500).json({ error: 'Error triggering watch cycle' });
@@ -140,15 +117,11 @@ async function watchContainer(req, res) {
   try {
     await Promise.all(Object.values(watchers).map((watcher) => watcher.watchContainer(container)));
 
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
+    recordAuditEvent({
       action: 'webhook-watch-container',
-      containerName: container.name,
-      containerImage: container.image?.name,
+      container,
       status: 'success',
     });
-    getAuditCounter()?.inc({ action: 'webhook-watch-container' });
     getWebhookCounter()?.inc({ action: 'watch-container' });
 
     res.status(200).json({
@@ -158,16 +131,12 @@ async function watchContainer(req, res) {
   } catch (e) {
     log.warn(`Error watching container ${containerName} (${e.message})`);
 
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
+    recordAuditEvent({
       action: 'webhook-watch-container',
-      containerName: container.name,
-      containerImage: container.image?.name,
+      container,
       status: 'error',
       details: e.message,
     });
-    getAuditCounter()?.inc({ action: 'webhook-watch-container' });
     getWebhookCounter()?.inc({ action: 'watch-container' });
 
     res.status(500).json({ error: `Error watching container ${containerName}` });
@@ -186,24 +155,20 @@ async function updateContainer(req, res) {
     return;
   }
 
-  const trigger = findDockerTrigger(container);
+  const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
   if (!trigger) {
-    res.status(404).json({ error: 'No docker trigger found for this container' });
+    res.status(404).json({ error: NO_DOCKER_TRIGGER_FOUND_ERROR });
     return;
   }
 
   try {
     await trigger.trigger(container);
 
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
+    recordAuditEvent({
       action: 'webhook-update',
-      containerName: container.name,
-      containerImage: container.image?.name,
+      container,
       status: 'success',
     });
-    getAuditCounter()?.inc({ action: 'webhook-update' });
     getWebhookCounter()?.inc({ action: 'update-container' });
 
     res.status(200).json({
@@ -213,16 +178,12 @@ async function updateContainer(req, res) {
   } catch (e) {
     log.warn(`Error updating container ${containerName} (${e.message})`);
 
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
+    recordAuditEvent({
       action: 'webhook-update',
-      containerName: container.name,
-      containerImage: container.image?.name,
+      container,
       status: 'error',
       details: e.message,
     });
-    getAuditCounter()?.inc({ action: 'webhook-update' });
     getWebhookCounter()?.inc({ action: 'update-container' });
 
     res.status(500).json({ error: `Error updating container ${containerName}` });

@@ -1,43 +1,19 @@
 // @ts-nocheck
 import express from 'express';
 import nocache from 'nocache';
+import { recordAuditEvent } from './audit-events.js';
+import {
+  findDockerTriggerForContainer,
+  NO_DOCKER_TRIGGER_FOUND_ERROR,
+} from './docker-trigger.js';
 import logger from '../log/index.js';
-import { getAuditCounter } from '../prometheus/audit.js';
 import * as registry from '../registry/index.js';
-import * as auditStore from '../store/audit.js';
 import * as storeBackup from '../store/backup.js';
 import * as storeContainer from '../store/container.js';
 
 const log = logger.child({ component: 'backup' });
 
 const router = express.Router();
-
-/**
- * Return registered triggers.
- */
-function getTriggers() {
-  return registry.getState().trigger;
-}
-
-/**
- * Find a docker trigger that can handle this container.
- */
-function findDockerTrigger(container) {
-  const triggers = getTriggers();
-  for (const trigger of Object.values(triggers)) {
-    if (trigger.type !== 'docker') {
-      continue;
-    }
-    if (trigger.agent && trigger.agent !== container.agent) {
-      continue;
-    }
-    if (container.agent && !trigger.agent) {
-      continue;
-    }
-    return trigger;
-  }
-  return undefined;
-}
 
 /**
  * Get all backups, optionally filtered by containerId query param.
@@ -96,9 +72,9 @@ async function rollbackContainer(req, res) {
     backup = backups[0];
   }
 
-  const trigger = findDockerTrigger(container);
+  const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
   if (!trigger) {
-    res.status(404).json({ error: 'No docker trigger found for this container' });
+    res.status(404).json({ error: NO_DOCKER_TRIGGER_FOUND_ERROR });
     return;
   }
 
@@ -129,17 +105,13 @@ async function rollbackContainer(req, res) {
     // Recreate with backup image
     await trigger.recreateContainer(dockerApi, currentContainerSpec, backupImage, container, log);
 
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
+    recordAuditEvent({
       action: 'rollback',
-      containerName: container.name,
-      containerImage: container.image?.name,
+      container,
       fromVersion: container.image?.tag?.value,
       toVersion: latestBackup.imageTag,
       status: 'success',
     });
-    getAuditCounter()?.inc({ action: 'rollback' });
 
     res.status(200).json({
       message: 'Container rolled back successfully',
@@ -148,16 +120,12 @@ async function rollbackContainer(req, res) {
   } catch (e) {
     log.warn(`Error rolling back container ${id} (${e.message})`);
 
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
+    recordAuditEvent({
       action: 'rollback',
-      containerName: container.name,
-      containerImage: container.image?.name,
+      container,
       status: 'error',
       details: e.message,
     });
-    getAuditCounter()?.inc({ action: 'rollback' });
 
     res.status(500).json({
       error: `Error rolling back container (${e.message})`,

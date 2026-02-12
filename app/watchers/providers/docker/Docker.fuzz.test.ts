@@ -22,6 +22,15 @@ describe('Docker image name parsing fuzz tests', () => {
     });
   });
 
+  it('parses a canonical image reference without an explicit tag', () => {
+    const result = parse('ghcr.io/codeswhat/drydock');
+    expect(result).toMatchObject({
+      domain: 'ghcr.io',
+      path: 'codeswhat/drydock',
+    });
+    expect(result.tag).toBeUndefined();
+  });
+
   fcTest.prop([fc.string()])('parse-docker-image-name never throws on arbitrary strings', (input) => {
     const result = parse(input);
     expect(typeof result).toBe('object');

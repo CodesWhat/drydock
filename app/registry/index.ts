@@ -317,23 +317,30 @@ function collectSharedValuesForTrigger(
   }
 }
 
+function collectValuesForProvider(
+  valuesByName: Record<string, Record<string, Set<any>>>,
+  providerConfigurations: unknown,
+) {
+  if (!isRecord(providerConfigurations)) {
+    return;
+  }
+
+  for (const triggerName of Object.keys(providerConfigurations)) {
+    const triggerConfiguration = providerConfigurations[triggerName];
+    if (!isRecord(triggerConfiguration)) {
+      continue;
+    }
+    collectSharedValuesForTrigger(valuesByName, triggerName, triggerConfiguration);
+  }
+}
+
 function collectValuesByName(
   configurations: Record<string, any>,
 ): Record<string, Record<string, Set<any>>> {
   const valuesByName: Record<string, Record<string, Set<any>>> = {};
 
-  for (const provider of Object.keys(configurations || {})) {
-    const providerConfigurations = configurations[provider];
-    if (!isRecord(providerConfigurations)) {
-      continue;
-    }
-    for (const triggerName of Object.keys(providerConfigurations)) {
-      const triggerConfiguration = providerConfigurations[triggerName];
-      if (!isRecord(triggerConfiguration)) {
-        continue;
-      }
-      collectSharedValuesForTrigger(valuesByName, triggerName, triggerConfiguration);
-    }
+  for (const providerConfigurations of Object.values(configurations || {})) {
+    collectValuesForProvider(valuesByName, providerConfigurations);
   }
 
   return valuesByName;
@@ -470,6 +477,24 @@ function mergeTriggerConfigurationWithDefaults(
   };
 }
 
+function applyDefaultsToProviderConfiguration(
+  providerConfig: unknown,
+  triggerGroupDefaults: Record<string, Record<string, any>>,
+) {
+  if (!isRecord(providerConfig)) {
+    return providerConfig;
+  }
+
+  const providerResult: Record<string, any> = {};
+  for (const triggerName of Object.keys(providerConfig)) {
+    const triggerConfig = providerConfig[triggerName];
+    const groupDefaults = triggerGroupDefaults[triggerName.toLowerCase()];
+    providerResult[triggerName] = mergeTriggerConfigurationWithDefaults(triggerConfig, groupDefaults);
+  }
+
+  return providerResult;
+}
+
 function applyDefaultsToProviderConfigurations(
   providerConfigurations: Record<string, any>,
   triggerGroupDefaults: Record<string, Record<string, any>>,
@@ -477,22 +502,10 @@ function applyDefaultsToProviderConfigurations(
   const result: Record<string, any> = {};
 
   for (const provider of Object.keys(providerConfigurations)) {
-    const providerConfig = providerConfigurations[provider];
-    if (!isRecord(providerConfig)) {
-      result[provider] = providerConfig;
-      continue;
-    }
-
-    const providerResult: Record<string, any> = {};
-    for (const triggerName of Object.keys(providerConfig)) {
-      const triggerConfig = providerConfig[triggerName];
-      const groupDefaults = triggerGroupDefaults[triggerName.toLowerCase()];
-      providerResult[triggerName] = mergeTriggerConfigurationWithDefaults(
-        triggerConfig,
-        groupDefaults,
-      );
-    }
-    result[provider] = providerResult;
+    result[provider] = applyDefaultsToProviderConfiguration(
+      providerConfigurations[provider],
+      triggerGroupDefaults,
+    );
   }
 
   return result;

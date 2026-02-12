@@ -13,6 +13,10 @@ describe('registry/Component fuzz tests', () => {
     expect(component.validateConfiguration({})).toEqual({});
   });
 
+  test('Component.mask preserves edges and masks middle characters', () => {
+    expect(Component.mask('token-value', 2, '#')).toBe('to#######ue');
+  });
+
   fcTest.prop([fc.string()])('Component.mask never throws on arbitrary strings', (input) => {
     const result = Component.mask(input);
     expect(result === undefined || typeof result === 'string').toBe(true);

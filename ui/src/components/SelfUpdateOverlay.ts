@@ -1,7 +1,7 @@
 import { defineComponent, inject, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useDisplay } from 'vuetify';
 
-const UINT32_MAX_PLUS_ONE = 0x1_0000_0000;
+const UINT32_MAX_PLUS_ONE = 2 ** 32;
 
 function getSecureRandomFloat(): number {
   if (!globalThis.crypto?.getRandomValues) {

@@ -1,42 +1,18 @@
 // @ts-nocheck
 import express from 'express';
 import nocache from 'nocache';
+import { recordAuditEvent } from './audit-events.js';
+import {
+  findDockerTriggerForContainer,
+  NO_DOCKER_TRIGGER_FOUND_ERROR,
+} from './docker-trigger.js';
 import logger from '../log/index.js';
-import { getAuditCounter } from '../prometheus/audit.js';
 import * as registry from '../registry/index.js';
-import * as auditStore from '../store/audit.js';
 import * as storeContainer from '../store/container.js';
 
 const log = logger.child({ component: 'preview' });
 
 const router = express.Router();
-
-/**
- * Return registered triggers.
- */
-function getTriggers() {
-  return registry.getState().trigger;
-}
-
-/**
- * Find a docker trigger that can handle this container.
- */
-function findDockerTrigger(container) {
-  const triggers = getTriggers();
-  for (const trigger of Object.values(triggers)) {
-    if (trigger.type !== 'docker') {
-      continue;
-    }
-    if (trigger.agent && trigger.agent !== container.agent) {
-      continue;
-    }
-    if (container.agent && !trigger.agent) {
-      continue;
-    }
-    return trigger;
-  }
-  return undefined;
-}
 
 /**
  * Preview what an update would do for a container.
@@ -50,39 +26,31 @@ async function previewContainer(req, res) {
     return;
   }
 
-  const trigger = findDockerTrigger(container);
+  const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
   if (!trigger) {
-    res.status(404).json({ error: 'No docker trigger found for this container' });
+    res.status(404).json({ error: NO_DOCKER_TRIGGER_FOUND_ERROR });
     return;
   }
 
   try {
     const preview = await trigger.preview(container);
 
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
+    recordAuditEvent({
       action: 'preview',
-      containerName: container.name,
-      containerImage: container.image?.name,
+      container,
       status: 'info',
     });
-    getAuditCounter()?.inc({ action: 'preview' });
 
     res.status(200).json(preview);
   } catch (e) {
     log.warn(`Error previewing container ${id} (${e.message})`);
 
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
+    recordAuditEvent({
       action: 'preview',
-      containerName: container.name,
-      containerImage: container.image?.name,
+      container,
       status: 'error',
       details: e.message,
     });
-    getAuditCounter()?.inc({ action: 'preview' });
 
     res.status(500).json({
       error: `Error previewing container update (${e.message})`,

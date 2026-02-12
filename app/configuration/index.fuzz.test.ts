@@ -25,6 +25,23 @@ describe('configuration/index fuzz tests', () => {
     });
   });
 
+  it('maps deeper nested paths for server configuration', () => {
+    const result = get('dd.server', {
+      DD_SERVER_TLS_ENABLED: 'true',
+      DD_SERVER_TLS_CERT: '/etc/cert.pem',
+      DD_SERVER_TLS_KEY: '/etc/key.pem',
+      DD_TRIGGER_HOOK_ENABLED: 'true',
+    });
+
+    expect(result).toStrictEqual({
+      tls: {
+        enabled: 'true',
+        cert: '/etc/cert.pem',
+        key: '/etc/key.pem',
+      },
+    });
+  });
+
   fcTest.prop([fc.string({ minLength: 1, maxLength: 50 })])(
     'get never throws on arbitrary property paths with empty env',
     (prop) => {

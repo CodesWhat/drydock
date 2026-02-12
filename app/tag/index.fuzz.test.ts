@@ -19,6 +19,11 @@ describe('tag/index fuzz tests', () => {
     expect(transform('invalid-formula', '1.2.3')).toBe('1.2.3');
   });
 
+  it('detects a higher semver and a major diff deterministically', () => {
+    expect(isGreater('2.0.0', '1.9.9')).toBe(true);
+    expect(diff('1.0.0', '2.0.0')).toBe('major');
+  });
+
   fcTest.prop([fc.string()])('parse never throws on arbitrary strings', (input) => {
     const result = parse(input);
     // Result is either a valid SemVer object or null

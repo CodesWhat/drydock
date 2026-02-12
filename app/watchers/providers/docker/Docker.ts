@@ -181,6 +181,38 @@ interface ContainerLabelOverrides {
   registryLookupUrl?: string;
 }
 
+type ContainerLabelOverrideKey = Exclude<
+  keyof ContainerLabelOverrides,
+  'registryLookupImage' | 'registryLookupUrl'
+>;
+
+interface ResolvedContainerLabelOverrides {
+  includeTags?: string;
+  excludeTags?: string;
+  transformTags?: string;
+  linkTemplate?: string;
+  displayName?: string;
+  displayIcon?: string;
+  triggerInclude?: string;
+  triggerExclude?: string;
+  lookupImage?: string;
+}
+
+const containerLabelOverrideMappings = [
+  { key: 'includeTags', ddKey: ddTagInclude, wudKey: wudTagInclude },
+  { key: 'excludeTags', ddKey: ddTagExclude, wudKey: wudTagExclude },
+  { key: 'transformTags', ddKey: ddTagTransform, wudKey: wudTagTransform },
+  { key: 'linkTemplate', ddKey: ddLinkTemplate, wudKey: wudLinkTemplate },
+  { key: 'displayName', ddKey: ddDisplayName, wudKey: wudDisplayName },
+  { key: 'displayIcon', ddKey: ddDisplayIcon, wudKey: wudDisplayIcon },
+  { key: 'triggerInclude', ddKey: ddTriggerInclude, wudKey: wudTriggerInclude },
+  { key: 'triggerExclude', ddKey: ddTriggerExclude, wudKey: wudTriggerExclude },
+] as const satisfies ReadonlyArray<{
+  key: ContainerLabelOverrideKey;
+  ddKey: string;
+  wudKey: string;
+}>;
+
 interface DeviceCodeFlowOptions {
   tokenEndpoint: string;
   clientId?: string;
@@ -807,40 +839,31 @@ function resolveLabelsFromContainer(
   containerLabels: Record<string, string>,
   overrides: ContainerLabelOverrides = {},
 ) {
-  const {
-    includeTags,
-    excludeTags,
-    transformTags,
-    linkTemplate,
-    displayName,
-    displayIcon,
-    triggerInclude,
-    triggerExclude,
-    registryLookupImage,
-    registryLookupUrl,
-  } = overrides;
-
-  return {
-    includeTags: includeTags || getLabel(containerLabels, ddTagInclude, wudTagInclude),
-    excludeTags: excludeTags || getLabel(containerLabels, ddTagExclude, wudTagExclude),
-    transformTags: transformTags || getLabel(containerLabels, ddTagTransform, wudTagTransform),
-    linkTemplate: linkTemplate || getLabel(containerLabels, ddLinkTemplate, wudLinkTemplate),
-    displayName: displayName || getLabel(containerLabels, ddDisplayName, wudDisplayName),
-    displayIcon: displayIcon || getLabel(containerLabels, ddDisplayIcon, wudDisplayIcon),
-    triggerInclude:
-      triggerInclude || getLabel(containerLabels, ddTriggerInclude, wudTriggerInclude),
-    triggerExclude:
-      triggerExclude || getLabel(containerLabels, ddTriggerExclude, wudTriggerExclude),
-    lookupImage:
-      registryLookupImage ||
-      getLabel(containerLabels, ddRegistryLookupImage, wudRegistryLookupImage) ||
-      registryLookupUrl ||
-      getLabel(containerLabels, ddRegistryLookupUrl, wudRegistryLookupUrl),
+  const resolvedOverrides: ResolvedContainerLabelOverrides = {
+    lookupImage: resolveLookupImageFromContainerLabels(containerLabels, overrides),
   };
+
+  for (const { key, ddKey, wudKey } of containerLabelOverrideMappings) {
+    resolvedOverrides[key] = overrides[key] || getLabel(containerLabels, ddKey, wudKey);
+  }
+
+  return resolvedOverrides;
+}
+
+function resolveLookupImageFromContainerLabels(
+  containerLabels: Record<string, string>,
+  overrides: ContainerLabelOverrides,
+) {
+  return (
+    overrides.registryLookupImage ||
+    getLabel(containerLabels, ddRegistryLookupImage, wudRegistryLookupImage) ||
+    overrides.registryLookupUrl ||
+    getLabel(containerLabels, ddRegistryLookupUrl, wudRegistryLookupUrl)
+  );
 }
 
 function mergeConfigWithImgset(
-  labelOverrides: ReturnType<typeof resolveLabelsFromContainer>,
+  labelOverrides: ResolvedContainerLabelOverrides,
   matchingImgset: ResolvedImgset | undefined,
   containerLabels: Record<string, string>,
 ) {
@@ -2135,9 +2158,7 @@ class Docker extends Watcher {
     }
 
     let bestMatch: ImgsetMatchCandidate | undefined;
-    for (const [imgsetName, imgsetConfiguration] of Object.entries(
-      configuredImgsets as Record<string, any>,
-    )) {
+    for (const [imgsetName, imgsetConfiguration] of Object.entries(configuredImgsets)) {
       const candidate = this.getImgsetMatchCandidate(imgsetName, imgsetConfiguration, parsedImage);
       if (!candidate) {
         continue;
@@ -2190,26 +2211,27 @@ class Docker extends Watcher {
 
   async findNewVersion(container: Container, logContainer: any) {
     const registryProvider = getRegistry(container.image.registry.name);
-    const result: any = { tag: container.image.tag.value };
     if (!registryProvider) {
       logContainer.error(`Unsupported registry (${container.image.registry.name})`);
-      return result;
-    } else {
-      // Get all available tags
-      const tags = await registryProvider.getTags(container.image);
+      return { tag: container.image.tag.value };
+    }
 
-      // Get candidate tags (based on tag name)
-      const tagsCandidates = getTagCandidates(container, tags, logContainer);
+    const result: any = { tag: container.image.tag.value };
 
-      // Must watch digest? => Find local/remote digests on registry
-      if (container.image.digest.watch && container.image.digest.repo) {
-        await this.handleDigestWatch(container, registryProvider, tagsCandidates, result);
-      }
+    // Get all available tags
+    const tags = await registryProvider.getTags(container.image);
 
-      // The first one in the array is the highest
-      if (tagsCandidates && tagsCandidates.length > 0) {
-        [result.tag] = tagsCandidates;
-      }
+    // Get candidate tags (based on tag name)
+    const tagsCandidates = getTagCandidates(container, tags, logContainer);
+
+    // Must watch digest? => Find local/remote digests on registry
+    if (container.image.digest.watch && container.image.digest.repo) {
+      await this.handleDigestWatch(container, registryProvider, tagsCandidates, result);
+    }
+
+    // The first one in the array is the highest
+    if (tagsCandidates && tagsCandidates.length > 0) {
+      [result.tag] = tagsCandidates;
     }
     return result;
   }

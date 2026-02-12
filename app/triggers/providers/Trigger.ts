@@ -22,14 +22,16 @@ export interface ContainerReport {
   changed: boolean;
 }
 
+type TemplateVars = Record<string, unknown>;
+
 /**
  * Safely resolve a dotted property path on an object.
  * Returns undefined when any segment along the path is nullish.
  */
-function resolvePath(obj: any, path: string): any {
-  return path.split('.').reduce((cur, key) => {
+function resolvePath(obj: unknown, path: string): unknown {
+  return path.split('.').reduce<unknown>((cur, key) => {
     if (cur == null) return undefined;
-    return cur[key];
+    return Reflect.get(Object(cur), key);
   }, obj);
 }
 
@@ -98,7 +100,7 @@ const ALLOWED_METHODS = new Set([
   'toString',
 ]);
 
-function evalTernary(trimmed: string, vars: Record<string, any>): string | undefined {
+function evalTernary(trimmed: string, vars: TemplateVars): unknown | undefined {
   const ternaryIdx = findTopLevelOperator(trimmed, isOperator('?'));
   if (ternaryIdx === -1) return undefined;
   const condition = trimmed.slice(0, ternaryIdx);
@@ -108,10 +110,10 @@ function evalTernary(trimmed: string, vars: Record<string, any>): string | undef
   const consequent = rest.slice(0, colonIdx);
   const alternate = rest.slice(colonIdx + 1);
   const condVal = safeEvalExpr(condition, vars);
-  return condVal ? String(safeEvalExpr(consequent, vars)) : String(safeEvalExpr(alternate, vars));
+  return condVal ? safeEvalExpr(consequent, vars) : safeEvalExpr(alternate, vars);
 }
 
-function evalLogicalAnd(trimmed: string, vars: Record<string, any>): string | undefined {
+function evalLogicalAnd(trimmed: string, vars: TemplateVars): unknown | undefined {
   const andIdx = findTopLevelOperator(trimmed, isOperator('&&'));
   if (andIdx === -1) return undefined;
   const left = trimmed.slice(0, andIdx);
@@ -121,7 +123,7 @@ function evalLogicalAnd(trimmed: string, vars: Record<string, any>): string | un
   return safeEvalExpr(right, vars);
 }
 
-function evalConcat(trimmed: string, vars: Record<string, any>): string | undefined {
+function evalConcat(trimmed: string, vars: TemplateVars): string | undefined {
   const plusIdx = findTopLevelOperator(trimmed, isPlusOperator);
   if (plusIdx === -1) return undefined;
   const left = trimmed.slice(0, plusIdx);
@@ -151,22 +153,23 @@ function evalNumberLiteral(trimmed: string): string | undefined {
   return undefined;
 }
 
-function evalMethodCall(trimmed: string, vars: Record<string, any>): string | undefined {
+function evalMethodCall(trimmed: string, vars: TemplateVars): unknown | undefined {
   const methodMatch = parseMethodCall(trimmed);
   if (!methodMatch) return undefined;
   const { objPath, method, rawArgs } = methodMatch;
   const target = safeEvalExpr(objPath, vars);
-  if (target != null && typeof target[method] === 'function') {
-    if (!ALLOWED_METHODS.has(method)) {
-      return '';
-    }
-    const args = rawArgs?.split(',').map((a: string) => safeEvalExpr(a, vars)) ?? [];
-    return target[method](...args);
+  if (target == null || !ALLOWED_METHODS.has(method)) {
+    return '';
   }
-  return '';
+  const methodFn = Reflect.get(Object(target), method);
+  if (typeof methodFn !== 'function') {
+    return '';
+  }
+  const args: unknown[] = rawArgs?.split(',').map((a: string) => safeEvalExpr(a, vars)) ?? [];
+  return methodFn.apply(target, args);
 }
 
-function evalPropertyPath(trimmed: string, vars: Record<string, any>): string | undefined {
+function evalPropertyPath(trimmed: string, vars: TemplateVars): unknown | undefined {
   if (isValidPropertyPath(trimmed)) {
     const val = resolvePath(vars, trimmed);
     return val ?? '';
@@ -185,23 +188,22 @@ function evalPropertyPath(trimmed: string, vars: Record<string, any>): string | 
  *   - string literals:   "hello"  or  "hello" + var
  *   - string concat:     expr + expr
  */
-function safeEvalExpr(expr: string, vars: Record<string, any>): string {
+function safeEvalExpr(expr: string, vars: TemplateVars): unknown {
   const trimmed = expr.trim();
-
-  const evaluators = [
-    evalTernary,
-    evalLogicalAnd,
-    evalConcat,
-    evalStringLiteral,
-    evalNumberLiteral,
-    evalMethodCall,
-    evalPropertyPath,
-  ];
-
-  for (const evaluator of evaluators) {
-    const result = evaluator(trimmed, vars);
-    if (result !== undefined) return result;
-  }
+  const ternary = evalTernary(trimmed, vars);
+  if (ternary !== undefined) return ternary;
+  const logicalAnd = evalLogicalAnd(trimmed, vars);
+  if (logicalAnd !== undefined) return logicalAnd;
+  const concat = evalConcat(trimmed, vars);
+  if (concat !== undefined) return concat;
+  const stringLiteral = evalStringLiteral(trimmed);
+  if (stringLiteral !== undefined) return stringLiteral;
+  const numberLiteral = evalNumberLiteral(trimmed);
+  if (numberLiteral !== undefined) return numberLiteral;
+  const methodCall = evalMethodCall(trimmed, vars);
+  if (methodCall !== undefined) return methodCall;
+  const propertyPath = evalPropertyPath(trimmed, vars);
+  if (propertyPath !== undefined) return propertyPath;
 
   // Unsupported expression – return empty string for safety
   return '';
@@ -254,6 +256,26 @@ type TopLevelOperatorScanState = {
   inSingle: boolean;
 };
 
+function updateQuoteStateAndCheckInsideQuote(
+  ch: string,
+  state: TopLevelOperatorScanState,
+): boolean {
+  const quoteState = toggleQuoteState(ch, state.inDouble, state.inSingle);
+  state.inDouble = quoteState.inDouble;
+  state.inSingle = quoteState.inSingle;
+  return quoteState.didToggle || state.inDouble || state.inSingle;
+}
+
+function isTopLevelPredicateMatch(
+  str: string,
+  i: number,
+  predicate: (str: string, i: number) => boolean,
+  state: TopLevelOperatorScanState,
+): boolean {
+  state.depth = updateParenDepth(state.depth, str[i]);
+  return state.depth === 0 && predicate(str, i);
+}
+
 function scanTopLevelOperatorStep(
   str: string,
   i: number,
@@ -265,19 +287,14 @@ function scanTopLevelOperatorStep(
     return { found: false, skipNext: true };
   }
 
-  const quoteState = toggleQuoteState(ch, state.inDouble, state.inSingle);
-  state.inDouble = quoteState.inDouble;
-  state.inSingle = quoteState.inSingle;
-  if (quoteState.didToggle || state.inDouble || state.inSingle) {
+  if (updateQuoteStateAndCheckInsideQuote(ch, state)) {
     return { found: false, skipNext: false };
   }
 
-  state.depth = updateParenDepth(state.depth, ch);
-  if (state.depth === 0 && predicate(str, i)) {
-    return { found: true, skipNext: false };
-  }
-
-  return { found: false, skipNext: false };
+  return {
+    found: isTopLevelPredicateMatch(str, i, predicate, state),
+    skipNext: false,
+  };
 }
 
 /**
@@ -305,7 +322,7 @@ function findTopLevelOperator(str: string, predicate: (str: string, i: number) =
  * Safely interpolate a template string with ${...} placeholders.
  * Replaces eval()-based template literal evaluation with a secure approach.
  */
-function safeInterpolate(template: string | undefined, vars: Record<string, any>): string {
+function safeInterpolate(template: string | undefined, vars: TemplateVars): string {
   if (template == null) {
     return '';
   }
@@ -323,7 +340,7 @@ function safeInterpolate(template: string | undefined, vars: Record<string, any>
  * @returns {*}
  */
 function renderSimple(template: string, container: Container) {
-  const vars: Record<string, any> = {
+  const vars: TemplateVars = {
     container,
     // Deprecated vars for backward compatibility
     id: container.id,
@@ -339,7 +356,7 @@ function renderSimple(template: string, container: Container) {
 }
 
 function renderBatch(template: string, containers: Container[]) {
-  const vars: Record<string, any> = {
+  const vars: TemplateVars = {
     containers,
     // Deprecated var for backward compatibility
     count: containers.length,
@@ -441,10 +458,10 @@ class Trigger extends Component {
    * @returns
    */
   static parseIncludeOrIncludeTriggerString(includeOrExcludeTriggerString: string) {
-    const separatorIndex = includeOrExcludeTriggerString.indexOf(':');
-    const hasThresholdSeparator = separatorIndex !== -1;
+    const hasThresholdSeparator = includeOrExcludeTriggerString.includes(':');
+    const separatorIndex = hasThresholdSeparator ? includeOrExcludeTriggerString.indexOf(':') : -1;
     const hasMultipleSeparators =
-      hasThresholdSeparator && includeOrExcludeTriggerString.indexOf(':', separatorIndex + 1) !== -1;
+      hasThresholdSeparator && includeOrExcludeTriggerString.slice(separatorIndex + 1).includes(':');
 
     const triggerId = hasThresholdSeparator
       ? includeOrExcludeTriggerString.slice(0, separatorIndex).trim()
