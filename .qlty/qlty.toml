@@ -64,7 +64,7 @@ name = "actionlint"
 
 [[plugin]]
 name = "biome"
-version = "2.3.14"
+version = "2.3.7"
 
 [[plugin]]
 name = "checkov"
