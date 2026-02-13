@@ -44,11 +44,10 @@
 - [Quick Start](#quick-start)
 - [Screenshots](#screenshots)
 - [Features](#features)
-- [How drydock Compares](#how-drydock-compares)
+- [Migrating from WUD](#migrating-from-wud)
 - [Supported Registries](#supported-registries)
 - [Supported Triggers](#supported-triggers)
 - [Authentication](#authentication)
-- Migrating from WUD
 - [Documentation](#documentation)
 - [Built With](#built-with)
 
@@ -244,94 +243,6 @@ Available on GHCR, Docker Hub, and Quay.io for flexible deployment
 
 ---
 
-## How drydock Compares
-
-> For the full itemized changelog, see [CHANGELOG.md](CHANGELOG.md).
-
-| Feature | drydock | Watchtower | WUD | Diun | Ouroboros |
-| --- | --- | --- | --- | --- | --- |
-| Web UI / Dashboard | ✅ | ❌ | ✅ | ❌ | ❌ |
-| Auto-update containers | ✅ | ✅ | ✅ | ❌ | ✅ |
-| Docker Compose updates | ✅ | ⚠️ | ✅ | ❌ | ❌ |
-| Notification triggers | 16 | ~18 (via Shoutrrr) | 14 | 17 | ~6 |
-| Registry providers | 15 | ⚠️ (any via Docker auth) | 8 | ⚠️ (any via regopts) | ⚠️ (any via Docker auth) |
-| OIDC / SSO authentication | ✅ | ❌ | ❌ | ❌ | ❌ |
-| REST API | ✅ | ⚠️ (update + metrics only) | ✅ | ⚠️ (gRPC) | ❌ |
-| Prometheus metrics | ✅ | ✅ | ✅ | ❌ | ✅ |
-| MQTT / Home Assistant | ✅ | ❌ | ✅ | ✅ | ❌ |
-| Image backup & rollback | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Container grouping / stacks | ✅ | ⚠️ (linked containers) | ✅ | ❌ | ❌ |
-| Lifecycle hooks (pre/post) | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Webhook API for CI/CD | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Container start/stop/restart | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Distributed agents (remote hosts) | ✅ | ⚠️ (single remote host) | ❌ | ✅ (Docker/K8s/Swarm/Nomad) | ❌ |
-| Audit log | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Semver-aware updates | ✅ | ❌ | ✅ | ✅ | ❌ |
-| Digest watching | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Multi-arch image (amd64/arm64) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Actively maintained | ✅ | ❌ (archived Dec 2025) | ✅ | ✅ | ❌ (unmaintained) |
-
-> Data based on publicly available documentation as of February 2026.
-> Contributions welcome if any information is inaccurate.
-
-### Additional Features vs WUD
-
-| Feature | Description |
-| --- | --- |
-| **Agent mode** | Distributed monitoring with remote agents over SSE |
-| **OIDC token lifecycle** | Bearer/Basic auth for remote watcher HTTPS connections |
-| **Container update policy** | Skip/snooze specific versions per container via API and UI |
-| **Metrics auth toggle** | `DD_SERVER_METRICS_AUTH=false` to expose `/metrics` without auth |
-| **Trust proxy config** | `DD_SERVER_TRUSTPROXY` — set to `1` (hop count) behind a reverse proxy, or `false` (default) for direct exposure |
-| **NTFY provider-level threshold** | Set threshold at the ntfy provider level, not just per-trigger |
-| **Docker pull progress logging** | Rate-limited pull progress during compose updates |
-| **Registry lookup image override** | `lookupImage` field to override tag lookup image |
-| **DHI registry** | `dhi.io` registry provider |
-| **Custom URL icons** | URL-based icons via `dd.display.icon` label |
-| **Version skip UI** | Skip specific versions from the web interface |
-| **In-app log viewer** | View container stdout/stderr logs and application runtime logs with level filtering and agent source selection |
-| **Semver tag recovery** | Recover mismatched semver tags from include filters |
-| **Per-image config presets** | `imgset` defaults for per-image configuration |
-| **Audit log** | Event-based audit trail with LokiJS storage, REST API, and Prometheus counter |
-| **Dry-run preview** | Preview what a container update would do without performing it |
-| **Image backup & rollback** | Automatic pre-update image backup with configurable retention and rollback API |
-| **Grafana dashboard** | Importable JSON template for Prometheus metrics overview |
-| **Font Awesome 6 icons** | Migrated from MDI to FA6 with support for `fab:`/`far:`/`fas:` prefix syntax |
-| **Icon CDN** | Auto-resolve container icons via selfhst/icons (`sh-` prefix) with homarr-labs fallback, plus `hl-`/`si-` and custom URL support |
-| **Mobile responsive UI** | Optimized mobile breakpoints for dashboard, containers, and self-update overlay |
-| **Container actions** | Start/stop/restart containers via API and UI, gated by `DD_SERVER_FEATURE_CONTAINERACTIONS` |
-| **Webhook API** | Token-authenticated HTTP endpoints for CI/CD integration to trigger watch cycles and updates, gated by `DD_SERVER_WEBHOOK_ENABLED` and `DD_SERVER_WEBHOOK_TOKEN` |
-| **Lifecycle hooks** | Pre/post-update shell command hooks with configurable timeout |
-| **Auto rollback on health failure** | Monitors container health after updates and rolls back if unhealthy, configured via `dd.rollback.auto=true` |
-| **Graceful self-update** | Full-screen animated overlay during drydock's own container update with SSE-based reconnect |
-| **Container grouping / stacks** | Smart stack detection via `dd.group` label or compose project, with collapsible UI groups and batch-update |
-
-### Bug Fixes (not in WUD)
-
-| Fix | Impact |
-| --- | --- |
-| `eval()` code injection | Replaced with safe `String.replace()` interpolation |
-| OIDC session state races | Serialized redirect checks, multiple pending states |
-| Docker event stream crash | Buffered split payloads before JSON parse |
-| Multi-network container recreate | Reconnects additional networks after recreation |
-| docker-compose post_start hooks | Hooks now execute after updates |
-| Express 5 wildcard routes | Named wildcard params for Express 5 compat |
-
-<details>
-<summary><strong>Tech stack: drydock vs WUD</strong></summary>
-
-| | WUD | drydock |
-| --- | --- | --- |
-| **Language** | JavaScript | TypeScript (ESM, `NodeNext`) |
-| **Test runner** | Jest | Vitest 4 |
-| **Linter** | ESLint + Prettier | Biome |
-| **Express** | 4.x | 5.x |
-| **Build system** | Babel | `tsc` (no transpiler) |
-
-</details>
-
----
-
 ## Supported Registries
 
 <details>
@@ -438,6 +349,113 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 | Health endpoint `/health` | Health endpoint `/health` | Unchanged — same path, same port (default 3000). |
 
 **In short:** swap the image, restart the container, done. Your watchers, triggers, registries, and authentication config all carry over with zero changes.
+
+<details>
+<summary><strong>Feature comparison</strong></summary>
+
+> For the full itemized changelog, see [CHANGELOG.md](CHANGELOG.md).
+
+<table>
+<thead>
+<tr>
+<th width="28%">Feature</th>
+<th width="14%" align="center">drydock</th>
+<th width="16%" align="center">Watchtower</th>
+<th width="14%" align="center">WUD</th>
+<th width="14%" align="center">Diun</th>
+<th width="14%" align="center">Ouroboros</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>Web UI / Dashboard</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Auto-update containers</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+<tr><td>Docker Compose updates</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Notification triggers</td><td align="center">16</td><td align="center">~18 (Shoutrrr)</td><td align="center">14</td><td align="center">17</td><td align="center">~6</td></tr>
+<tr><td>Registry providers</td><td align="center">15</td><td align="center">⚠️ (Docker auth)</td><td align="center">8</td><td align="center">⚠️ (regopts)</td><td align="center">⚠️ (Docker auth)</td></tr>
+<tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>REST API</td><td align="center">✅</td><td align="center">⚠️ (limited)</td><td align="center">✅</td><td align="center">⚠️ (gRPC)</td><td align="center">❌</td></tr>
+<tr><td>Prometheus metrics</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+<tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>Image backup & rollback</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Container grouping / stacks</td><td align="center">✅</td><td align="center">⚠️ (linked)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Lifecycle hooks (pre/post)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Webhook API for CI/CD</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Container start/stop/restart</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Distributed agents (remote)</td><td align="center">✅</td><td align="center">⚠️ (single host)</td><td align="center">❌</td><td align="center">✅ (multi-orch)</td><td align="center">❌</td></tr>
+<tr><td>Audit log</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Semver-aware updates</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>Digest watching</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Multi-arch (amd64/arm64)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Actively maintained</td><td align="center">✅</td><td align="center">❌ (archived)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌ (dead)</td></tr>
+</tbody>
+</table>
+
+> Data based on publicly available documentation as of February 2026.
+> Contributions welcome if any information is inaccurate.
+
+</details>
+
+<details>
+<summary><strong>Additional features over WUD</strong></summary>
+
+| Feature | Description |
+| --- | --- |
+| **Agent mode** | Distributed monitoring with remote agents over SSE |
+| **OIDC token lifecycle** | Bearer/Basic auth for remote watcher HTTPS connections |
+| **Container update policy** | Skip/snooze specific versions per container via API and UI |
+| **Metrics auth toggle** | `DD_SERVER_METRICS_AUTH=false` to expose `/metrics` without auth |
+| **Trust proxy config** | `DD_SERVER_TRUSTPROXY` — set to `1` (hop count) behind a reverse proxy, or `false` (default) for direct exposure |
+| **NTFY provider-level threshold** | Set threshold at the ntfy provider level, not just per-trigger |
+| **Docker pull progress logging** | Rate-limited pull progress during compose updates |
+| **Registry lookup image override** | `lookupImage` field to override tag lookup image |
+| **DHI registry** | `dhi.io` registry provider |
+| **Custom URL icons** | URL-based icons via `dd.display.icon` label |
+| **Version skip UI** | Skip specific versions from the web interface |
+| **In-app log viewer** | View container stdout/stderr logs and application runtime logs with level filtering and agent source selection |
+| **Semver tag recovery** | Recover mismatched semver tags from include filters |
+| **Per-image config presets** | `imgset` defaults for per-image configuration |
+| **Audit log** | Event-based audit trail with LokiJS storage, REST API, and Prometheus counter |
+| **Dry-run preview** | Preview what a container update would do without performing it |
+| **Image backup & rollback** | Automatic pre-update image backup with configurable retention and rollback API |
+| **Grafana dashboard** | Importable JSON template for Prometheus metrics overview |
+| **Font Awesome 6 icons** | Migrated from MDI to FA6 with support for `fab:`/`far:`/`fas:` prefix syntax |
+| **Icon CDN** | Auto-resolve container icons via selfhst/icons (`sh-` prefix) with homarr-labs fallback, plus `hl-`/`si-` and custom URL support |
+| **Mobile responsive UI** | Optimized mobile breakpoints for dashboard, containers, and self-update overlay |
+| **Container actions** | Start/stop/restart containers via API and UI, gated by `DD_SERVER_FEATURE_CONTAINERACTIONS` |
+| **Webhook API** | Token-authenticated HTTP endpoints for CI/CD integration to trigger watch cycles and updates, gated by `DD_SERVER_WEBHOOK_ENABLED` and `DD_SERVER_WEBHOOK_TOKEN` |
+| **Lifecycle hooks** | Pre/post-update shell command hooks with configurable timeout |
+| **Auto rollback on health failure** | Monitors container health after updates and rolls back if unhealthy, configured via `dd.rollback.auto=true` |
+| **Graceful self-update** | Full-screen animated overlay during drydock's own container update with SSE-based reconnect |
+| **Container grouping / stacks** | Smart stack detection via `dd.group` label or compose project, with collapsible UI groups and batch-update |
+
+</details>
+
+<details>
+<summary><strong>Bug fixes over WUD</strong></summary>
+
+| Fix | Impact |
+| --- | --- |
+| `eval()` code injection | Replaced with safe `String.replace()` interpolation |
+| OIDC session state races | Serialized redirect checks, multiple pending states |
+| Docker event stream crash | Buffered split payloads before JSON parse |
+| Multi-network container recreate | Reconnects additional networks after recreation |
+| docker-compose post_start hooks | Hooks now execute after updates |
+| Express 5 wildcard routes | Named wildcard params for Express 5 compat |
+
+</details>
+
+<details>
+<summary><strong>Tech stack comparison</strong></summary>
+
+| | WUD | drydock |
+| --- | --- | --- |
+| **Language** | JavaScript | TypeScript (ESM, `NodeNext`) |
+| **Test runner** | Jest | Vitest 4 |
+| **Linter** | ESLint + Prettier | Biome |
+| **Express** | 4.x | 5.x |
+| **Build system** | Babel | `tsc` (no transpiler) |
+
+</details>
 
 ---
 
