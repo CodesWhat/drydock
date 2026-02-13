@@ -1,7 +1,7 @@
 <template>
   <v-card class="mb-3" rounded="lg" elevation="1">
     <v-card-title
-      class="pa-3 d-flex align-center bg-surface"
+      class="pa-4 d-flex align-center bg-surface"
       style="cursor: pointer"
       @click="toggleExpand"
     >
@@ -51,7 +51,7 @@
         <div
           v-for="container in containers"
           :key="container.id"
-          class="mb-2"
+          class="mb-3"
         >
           <container-item
             :groupingLabel="''"

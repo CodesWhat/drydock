@@ -21,7 +21,40 @@ export default defineComponent({
       strategies: [] as any[],
       strategySelected: 0,
       showDialog: true,
+      themeMode: (localStorage.themeMode || 'system') as string,
     };
+  },
+
+  computed: {
+    currentTheme(): string {
+      if (this.themeMode === 'system') {
+        return globalThis.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      return this.themeMode;
+    },
+    isDark(): boolean {
+      return this.currentTheme === 'dark';
+    },
+    themeIcon(): string {
+      switch (this.themeMode) {
+        case 'light':
+          return 'fas fa-sun';
+        case 'dark':
+          return 'fas fa-moon';
+        default:
+          return 'fas fa-circle-half-stroke';
+      }
+    },
+    themeIconColor(): string | undefined {
+      switch (this.themeMode) {
+        case 'light':
+          return '#F59E0B';
+        case 'dark':
+          return '#60A5FA';
+        default:
+          return undefined;
+      }
+    },
   },
 
   methods: {
@@ -39,6 +72,13 @@ export default defineComponent({
         default:
           return false;
       }
+    },
+
+    cycleTheme() {
+      const modes = ['light', 'system', 'dark'];
+      const idx = modes.indexOf(this.themeMode);
+      this.themeMode = modes[(idx + 1) % modes.length];
+      localStorage.themeMode = this.themeMode;
     },
 
     /**

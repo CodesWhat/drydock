@@ -14,6 +14,7 @@
     "test:unit:watch": "vitest"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fortawesome/fontawesome-free": "7.1.0",
     "register-service-worker": "1.7.2",
     "vue": "^3.5.27",
@@ -22,7 +23,6 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.7",
-    "@fontsource/roboto": "5.2.9",
     "@types/node": "^25.2.2",
     "@vitejs/plugin-vue": "^6.0.4",
     "@vitest/coverage-v8": "^4.0.18",

@@ -1,6 +1,6 @@
 import { defineComponent } from 'vue';
 import ConfigurationItem from '@/components/ConfigurationItem.vue';
-import { getAllWatchers, getWatcherProviderIcon } from '@/services/watcher';
+import { getAllWatchers, getWatcherProviderIcon, getWatcherProviderColor } from '@/services/watcher';
 
 export default defineComponent({
   data() {
@@ -17,6 +17,7 @@ export default defineComponent({
       const watchersWithIcons = watchers.map((w) => ({
         ...w,
         icon: getWatcherProviderIcon(w.type),
+        iconColor: getWatcherProviderColor(w.type),
       }));
       next((vm: any) => {
         vm.watchers = watchersWithIcons;

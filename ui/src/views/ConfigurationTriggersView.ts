@@ -1,6 +1,6 @@
 import { defineComponent } from 'vue';
 import TriggerDetail from '@/components/TriggerDetail.vue';
-import { getAllTriggers, getTriggerProviderIcon } from '@/services/trigger';
+import { getAllTriggers, getTriggerProviderIcon, getTriggerProviderColor } from '@/services/trigger';
 
 export default defineComponent({
   data() {
@@ -18,6 +18,7 @@ export default defineComponent({
       const triggersWithIcons = triggers.map((t) => ({
         ...t,
         icon: getTriggerProviderIcon(t.type),
+        iconColor: getTriggerProviderColor(t.type),
       }));
       next((vm: any) => (vm.triggers = triggersWithIcons));
     } catch (e: any) {

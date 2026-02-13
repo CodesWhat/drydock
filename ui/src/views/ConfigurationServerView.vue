@@ -1,14 +1,14 @@
 <template>
   <v-container fluid class="pa-4">
     <div class="mb-3">
-      <configuration-item :item="serverConfiguration" />
+      <configuration-item :item="serverConfiguration" :icon-color="serverConfiguration.iconColor" />
     </div>
     <webhook-info :enabled="webhookEnabled" :base-url="webhookBaseUrl" />
     <div class="mb-3">
-      <configuration-item :item="logConfiguration" />
+      <configuration-item :item="logConfiguration" :icon-color="logConfiguration.iconColor" />
     </div>
     <div class="mb-3">
-      <configuration-item :item="storeConfiguration" />
+      <configuration-item :item="storeConfiguration" :icon-color="storeConfiguration.iconColor" />
     </div>
   </v-container>
 </template>

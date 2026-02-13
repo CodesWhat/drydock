@@ -41,6 +41,44 @@ function getTriggerProviderIcon(type) {
   }
 }
 
+function getTriggerProviderColor(type) {
+  switch (type) {
+    case 'slack':
+      return '#4A154B';
+    case 'discord':
+      return '#5865F2';
+    case 'telegram':
+      return '#26A5E4';
+    case 'smtp':
+      return '#EA4335';
+    case 'mqtt':
+      return '#660066';
+    case 'kafka':
+      return '#231F20';
+    case 'http':
+      return '#0096C7';
+    case 'pushover':
+      return '#249DF1';
+    case 'gotify':
+      return '#00BCD4';
+    case 'ntfy':
+      return '#57A143';
+    case 'ifttt':
+      return '#33CCFF';
+    case 'apprise':
+      return '#3B82F6';
+    case 'command':
+      return '#10B981';
+    case 'docker':
+    case 'dockercompose':
+      return '#2496ED';
+    case 'rocketchat':
+      return '#F5455C';
+    default:
+      return '#6B7280';
+  }
+}
+
 async function getAllTriggers() {
   const response = await fetch('/api/triggers', { credentials: 'include' });
   return response.json();
@@ -60,4 +98,4 @@ async function runTrigger({ triggerType, triggerName, container }) {
   return json;
 }
 
-export { getTriggerIcon, getTriggerProviderIcon, getAllTriggers, runTrigger };
+export { getTriggerIcon, getTriggerProviderIcon, getTriggerProviderColor, getAllTriggers, runTrigger };

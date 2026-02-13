@@ -3,7 +3,7 @@
     <v-card-title
       @click="collapse()"
       style="cursor: pointer"
-      class="pa-3 d-flex align-center bg-surface"
+      class="pa-4 d-flex align-center bg-surface"
     >
       <div class="d-flex align-center" style="gap: 12px">
         <div

@@ -22,6 +22,7 @@ export default defineComponent({
         agent: agent.name,
         connected: agent.connected,
         icon: agent.connected ? 'fas fa-network-wired' : 'fas fa-plug-circle-xmark',
+        iconColor: agent.connected ? '#10B981' : '#EF4444',
         configuration: {
           host: agent.host,
           port: agent.port,

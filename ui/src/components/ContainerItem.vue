@@ -17,7 +17,7 @@
       <v-card-title
         @click="collapseDetail()"
         style="cursor: pointer"
-        class="pa-3 d-flex align-center bg-surface"
+        class="pa-4 d-flex align-center bg-surface"
       >
         <div class="d-flex align-center" style="gap: 16px">
           <div class="d-flex align-center justify-center flex-shrink-0" :style="{ width: smAndUp ? '40px' : '28px' }">

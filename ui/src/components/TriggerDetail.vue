@@ -3,11 +3,11 @@
     <v-card-title
       @click="collapse()"
       style="cursor: pointer"
-      class="pa-3 d-flex align-center bg-surface"
+      class="pa-4 d-flex align-center bg-surface"
     >
       <div class="d-flex align-center" style="gap: 12px">
         <div class="d-flex align-center justify-center flex-shrink-0" style="width: 32px">
-          <v-icon :size="24">{{ trigger.icon }}</v-icon>
+          <v-icon :size="24" :color="trigger.iconColor || undefined">{{ trigger.icon }}</v-icon>
         </div>
         <div class="d-flex flex-column" style="min-width: 0">
           <span class="text-body-2 font-weight-medium text-truncate">{{ trigger.name }}</span>

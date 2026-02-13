@@ -2,6 +2,12 @@ import { defineComponent } from 'vue';
 import { loginBasic } from '@/services/auth';
 
 export default defineComponent({
+  props: {
+    dark: {
+      type: Boolean,
+      default: false,
+    },
+  },
   data() {
     return {
       username: '',

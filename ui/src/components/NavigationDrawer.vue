@@ -89,9 +89,10 @@
 
 .drawer-brand--rail {
   flex-direction: column;
-  padding: 8px 4px;
+  padding: 8px 0;
   gap: 4px;
   justify-content: center;
+  align-items: center;
 }
 
 .drawer-logo {
@@ -101,7 +102,7 @@
 }
 
 .drawer-brand--rail .drawer-logo {
-  height: 24px;
+  height: 32px;
 }
 
 .drawer-brand-text {
@@ -115,6 +116,31 @@
 .drawer-collapse-btn {
   color: rgba(255, 255, 255, 0.7);
   flex-shrink: 0;
+}
+
+/* Override Vuetify grid to reduce icon-to-text gap */
+::v-deep(.v-list-item) {
+  grid-template-columns: 42px 1fr auto !important;
+  padding-inline-start: 16px !important;
+}
+
+::v-deep(.v-list-item .v-list-item__prepend) {
+  justify-content: center;
+}
+
+::v-deep(.v-list-item .v-list-item__prepend > .v-icon) {
+  margin-inline-end: 0 !important;
+}
+
+/* Rail mode: center icons */
+::v-deep(.v-navigation-drawer--rail .v-list-item) {
+  grid-template-columns: 1fr !important;
+  justify-items: center;
+  padding-inline: 0 !important;
+}
+
+::v-deep(.v-navigation-drawer--rail .v-list-item .v-list-item__prepend) {
+  margin-inline-end: 0 !important;
 }
 
 .drawer-version {

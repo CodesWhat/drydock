@@ -24,3 +24,9 @@
 </template>
 
 <script lang="ts" src="./App.ts"></script>
+
+<style>
+.v-application {
+  font-family: 'IBM Plex Mono', monospace !important;
+}
+</style>

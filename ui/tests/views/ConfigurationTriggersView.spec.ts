@@ -18,6 +18,7 @@ vi.mock('@/services/trigger', () => ({
         return 'fas fa-bolt';
     }
   }),
+  getTriggerProviderColor: vi.fn(() => '#6B7280'),
 }));
 
 describe('ConfigurationTriggersView', () => {

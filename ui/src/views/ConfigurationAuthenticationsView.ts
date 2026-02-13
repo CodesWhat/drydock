@@ -1,6 +1,6 @@
 import { defineComponent } from 'vue';
 import ConfigurationItem from '@/components/ConfigurationItem.vue';
-import { getAllAuthentications, getAuthProviderIcon } from '@/services/authentication';
+import { getAllAuthentications, getAuthProviderIcon, getAuthProviderColor } from '@/services/authentication';
 
 export default defineComponent({
   data() {
@@ -18,6 +18,7 @@ export default defineComponent({
       const authsWithIcons = authentications.map((a) => ({
         ...a,
         icon: getAuthProviderIcon(a.type),
+        iconColor: getAuthProviderColor(a.type),
       }));
       next((vm: any) => (vm.authentications = authsWithIcons));
     } catch (e: any) {

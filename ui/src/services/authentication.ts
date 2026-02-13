@@ -15,9 +15,22 @@ function getAuthProviderIcon(type) {
   }
 }
 
+function getAuthProviderColor(type) {
+  switch (type) {
+    case 'basic':
+      return '#F59E0B';
+    case 'oidc':
+      return '#F97316';
+    case 'anonymous':
+      return '#6B7280';
+    default:
+      return '#6B7280';
+  }
+}
+
 async function getAllAuthentications() {
   const response = await fetch('/api/authentications', { credentials: 'include' });
   return response.json();
 }
 
-export { getAuthenticationIcon, getAuthProviderIcon, getAllAuthentications };
+export { getAuthenticationIcon, getAuthProviderIcon, getAuthProviderColor, getAllAuthentications };

@@ -81,7 +81,7 @@
     <v-row class="mb-2">
       <v-col cols="12">
         <v-card rounded="lg" elevation="1">
-          <div class="d-flex align-center px-4 pt-3 pb-0">
+          <div class="d-flex align-center px-4 pt-3 pb-2">
             <v-icon size="small" class="mr-2">fas fa-code-compare</v-icon>
             <span class="text-subtitle-2 font-weight-medium">Container Updates</span>
             <v-spacer />
@@ -98,63 +98,27 @@
           >
             <v-tab>
               All
-              <v-badge
-                v-if="containersWithUpdates.length > 0"
-                :content="containersWithUpdates.length"
-                color="primary"
-                inline
-                class="ml-1"
-              />
+              <span v-if="containersWithUpdates.length > 0" class="tab-count tab-count--primary ml-2">{{ containersWithUpdates.length }}</span>
             </v-tab>
             <v-tab :disabled="majorUpdates.length === 0">
               Major
-              <v-badge
-                v-if="majorUpdates.length > 0"
-                :content="majorUpdates.length"
-                color="error"
-                inline
-                class="ml-1"
-              />
+              <span v-if="majorUpdates.length > 0" class="tab-count tab-count--error ml-2">{{ majorUpdates.length }}</span>
             </v-tab>
             <v-tab :disabled="minorUpdates.length === 0">
               Minor
-              <v-badge
-                v-if="minorUpdates.length > 0"
-                :content="minorUpdates.length"
-                color="warning"
-                inline
-                class="ml-1"
-              />
+              <span v-if="minorUpdates.length > 0" class="tab-count tab-count--warning ml-2">{{ minorUpdates.length }}</span>
             </v-tab>
             <v-tab :disabled="patchUpdates.length === 0">
               Patch
-              <v-badge
-                v-if="patchUpdates.length > 0"
-                :content="patchUpdates.length"
-                color="success"
-                inline
-                class="ml-1"
-              />
+              <span v-if="patchUpdates.length > 0" class="tab-count tab-count--success ml-2">{{ patchUpdates.length }}</span>
             </v-tab>
             <v-tab :disabled="digestUpdates.length === 0">
               Digest
-              <v-badge
-                v-if="digestUpdates.length > 0"
-                :content="digestUpdates.length"
-                color="info"
-                inline
-                class="ml-1"
-              />
+              <span v-if="digestUpdates.length > 0" class="tab-count tab-count--info ml-2">{{ digestUpdates.length }}</span>
             </v-tab>
             <v-tab :disabled="unknownUpdates.length === 0">
               Other
-              <v-badge
-                v-if="unknownUpdates.length > 0"
-                :content="unknownUpdates.length"
-                color="grey"
-                inline
-                class="ml-1"
-              />
+              <span v-if="unknownUpdates.length > 0" class="tab-count tab-count--grey ml-2">{{ unknownUpdates.length }}</span>
             </v-tab>
           </v-tabs>
 
@@ -166,12 +130,12 @@
                 <v-icon size="36" color="success">fas fa-circle-check</v-icon>
                 <div class="mt-3 text-body-2">All containers are up to date</div>
               </div>
-              <v-list v-else density="compact" class="py-0">
+              <v-list v-else class="py-0">
                 <v-list-item
                   v-for="container in list"
                   :key="container.id"
                   to="/containers"
-                  class="update-row"
+                  class="update-row py-2"
                 >
                   <template v-slot:prepend>
                     <div class="d-flex align-center justify-center flex-shrink-0" style="width: 32px; margin-right: 8px">
@@ -216,25 +180,25 @@
             <v-icon size="36" color="grey">fas fa-clock-rotate-left</v-icon>
             <div class="mt-3 text-body-2">No activity recorded yet</div>
           </v-card-text>
-          <v-list v-else density="compact" class="py-0">
+          <v-list v-else class="py-0">
             <v-list-item
               v-for="entry in recentActivity"
               :key="entry.id"
+              class="activity-row py-2"
             >
               <template v-slot:prepend>
                 <div class="d-flex align-center justify-center flex-shrink-0" style="width: 32px; margin-right: 8px">
                   <v-icon :color="actionColor(entry.action)" size="small">{{ actionIcon(entry.action) }}</v-icon>
                 </div>
               </template>
-              <v-list-item-title class="text-body-2">
-                {{ entry.containerName }}
-                <v-chip :color="actionColor(entry.action)" size="x-small" label variant="tonal" class="ml-1">
+              <v-list-item-title class="text-body-2 d-flex align-center">
+                <span class="activity-name">{{ entry.containerName }}</span>
+                <v-chip :color="actionColor(entry.action)" size="x-small" label variant="tonal">
                   {{ entry.action }}
                 </v-chip>
+                <v-spacer />
+                <span class="text-caption text-medium-emphasis">{{ formatTime(entry.timestamp) }}</span>
               </v-list-item-title>
-              <v-list-item-subtitle class="text-caption">
-                {{ formatTime(entry.timestamp) }}
-              </v-list-item-subtitle>
             </v-list-item>
           </v-list>
         </v-card>
@@ -291,11 +255,42 @@
   background: linear-gradient(135deg, #6a1b9a, #8e24aa);
 }
 
-.update-row {
+.update-row,
+.activity-row {
   border-bottom: thin solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 
-.update-row:last-child {
+.update-row:last-child,
+.activity-row:last-child {
   border-bottom: none;
+}
+
+/* Tab count circles */
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: white;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.tab-count--primary { background: rgb(var(--v-theme-primary)); }
+.tab-count--error { background: rgb(var(--v-theme-error)); }
+.tab-count--warning { background: rgb(var(--v-theme-warning)); }
+.tab-count--success { background: rgb(var(--v-theme-success)); }
+.tab-count--info { background: rgb(var(--v-theme-info)); }
+.tab-count--grey { background: #9e9e9e; }
+
+/* Fixed-width container name column for alignment */
+.activity-name {
+  display: inline-block;
+  min-width: 160px;
+  flex-shrink: 0;
 }
 </style>

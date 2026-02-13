@@ -159,6 +159,19 @@ Clean up warnings and reduce bundle risk while keeping current feature behavior 
 - Production build emits no new large-chunk regressions above defined budget
 - Smoke test passes in CI on every PR touching `ui/`
 
+### 3.4 UI Personalization
+
+User-facing appearance settings to make drydock feel at home in any setup.
+
+- Configurable font family (default: IBM Plex Mono) via UI settings panel or env var
+- Persist preference in localStorage, respect system default as fallback
+- Candidate presets: IBM Plex Mono, JetBrains Mono, Fira Code, Inter, system default
+
+#### Success criteria
+
+- Font preference persists across sessions and applies globally
+- Bundle selected fonts locally (no external CDN calls) — ship presets as optional npm packages, lazy-import on selection
+
 ## Phase 4: Real-Time Detection
 
 **Goal:** Detect updates instantly instead of waiting for poll intervals.

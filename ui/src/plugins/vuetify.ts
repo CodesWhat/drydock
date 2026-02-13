@@ -1,5 +1,7 @@
-// Google fonts
-import '@fontsource/roboto';
+// Fonts
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/500.css';
+import '@fontsource/ibm-plex-mono/700.css';
 
 // Font-awesome
 import '@fortawesome/fontawesome-free/css/all.css';

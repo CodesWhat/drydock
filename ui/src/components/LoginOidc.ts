@@ -7,6 +7,10 @@ export default defineComponent({
       type: String,
       required: true,
     },
+    dark: {
+      type: Boolean,
+      default: false,
+    },
   },
   data() {
     return {};

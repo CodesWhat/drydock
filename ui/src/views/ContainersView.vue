@@ -41,7 +41,7 @@
       <div
         v-for="(container, index) in containersFiltered"
         :key="container.id"
-        class="mb-2"
+        class="mb-3"
       >
         <container-item
           :groupingLabel="''"

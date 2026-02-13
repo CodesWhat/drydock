@@ -16,6 +16,7 @@ vi.mock('@/services/watcher', () => ({
         return 'fas fa-eye';
     }
   }),
+  getWatcherProviderColor: vi.fn(() => '#6B7280'),
 }));
 
 describe('ConfigurationWatchersView', () => {

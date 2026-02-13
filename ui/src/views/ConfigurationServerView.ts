@@ -23,6 +23,7 @@ export default defineComponent({
         type: 'server',
         name: 'configuration',
         icon: 'fas fa-gear',
+        iconColor: '#6B7280',
         configuration: this.server.configuration,
       };
     },
@@ -31,6 +32,7 @@ export default defineComponent({
         type: 'logs',
         name: 'configuration',
         icon: 'fas fa-file-lines',
+        iconColor: '#8B5CF6',
         configuration: this.log,
       };
     },
@@ -39,6 +41,7 @@ export default defineComponent({
         type: 'store',
         name: 'configuration',
         icon: 'fas fa-copy',
+        iconColor: '#0096C7',
         configuration: this.store.configuration,
       };
     },

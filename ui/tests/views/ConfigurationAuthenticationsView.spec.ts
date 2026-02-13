@@ -16,6 +16,7 @@ vi.mock('@/services/authentication', () => ({
         return 'fas fa-lock';
     }
   }),
+  getAuthProviderColor: vi.fn(() => '#6B7280'),
 }));
 
 describe('ConfigurationAuthenticationsView', () => {

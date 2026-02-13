@@ -88,7 +88,7 @@
 }
 
 .app-logs__terminal pre {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Roboto Mono', 'Courier New', monospace;
+  font-family: 'IBM Plex Mono', monospace;
   font-size: 0.8rem;
   line-height: 1.5;
   white-space: pre-wrap;

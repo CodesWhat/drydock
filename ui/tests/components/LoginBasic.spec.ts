@@ -22,7 +22,7 @@ describe('LoginBasic', () => {
 
   it('renders login form with username and password fields', () => {
     expect(wrapper.find('.v-text-field').exists()).toBe(true);
-    expect(wrapper.text()).toContain('Login');
+    expect(wrapper.text()).toContain('Sign in');
   });
 
   it('has proper autocomplete attributes', () => {
