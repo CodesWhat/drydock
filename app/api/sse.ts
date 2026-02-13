@@ -32,7 +32,6 @@ function eventsHandler(req: Request, res: Response): void {
     clients.delete(res);
     logger.debug(`SSE client disconnected (${clients.size} total)`);
   });
-
 }
 
 function broadcastSelfUpdate(): void {

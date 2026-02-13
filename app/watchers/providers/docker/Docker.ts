@@ -3,6 +3,7 @@ import axios from 'axios';
 import Dockerode from 'dockerode';
 import Joi from 'joi';
 import JoiCronExpression from 'joi-cron-expression';
+import RE2 from 're2';
 
 const joi = JoiCronExpression(Joi);
 
@@ -99,15 +100,16 @@ function getLabel(labels: Record<string, string>, ddKey: string, wudKey?: string
 /**
  * Safely compile a user-supplied regex pattern.
  * Returns null (and logs a warning) when the pattern is invalid.
+ * Uses RE2, which is inherently immune to ReDoS backtracking attacks.
  */
-function safeRegExp(pattern: string, logger: any): RegExp | null {
+function safeRegExp(pattern: string, logger: any): RE2 | null {
   const MAX_PATTERN_LENGTH = 1024;
   if (pattern.length > MAX_PATTERN_LENGTH) {
     logger.warn(`Regex pattern exceeds maximum length of ${MAX_PATTERN_LENGTH} characters`);
     return null;
   }
   try {
-    return new RegExp(pattern);
+    return new RE2(pattern);
   } catch (e: any) {
     logger.warn(`Invalid regex pattern "${pattern}": ${e.message}`);
     return null;

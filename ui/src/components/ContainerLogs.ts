@@ -20,8 +20,8 @@ export default defineComponent({
   props: {
     container: {
       type: Object as PropType<ContainerLogTarget>,
-      required: true
-    }
+      required: true,
+    },
   },
   setup: function setup(props) {
     const logs = ref('');
@@ -35,7 +35,7 @@ export default defineComponent({
       try {
         const result = (await getContainerLogs(
           props.container.id,
-          tail.value
+          tail.value,
         )) as ContainerLogsResponse;
         logs.value = typeof result.logs === 'string' ? result.logs : '';
       } catch (e: unknown) {
@@ -58,7 +58,7 @@ export default defineComponent({
       loading,
       error,
       tail,
-      fetchLogs
+      fetchLogs,
     };
-  }
+  },
 });

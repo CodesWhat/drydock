@@ -128,7 +128,11 @@ describe('coverage callbacks', () => {
     const maintenance = await import('./maintenance.js');
     expect(maintenance.isInMaintenanceWindow('* * * * *')).toBe(true);
     expect(
-      maintenance.getNextMaintenanceWindow('* * * * *', 'UTC', new Date('2024-06-15T00:00:00.000Z')),
+      maintenance.getNextMaintenanceWindow(
+        '* * * * *',
+        'UTC',
+        new Date('2024-06-15T00:00:00.000Z'),
+      ),
     ).toEqual(new Date('2024-06-16T00:00:00.000Z'));
   });
 
@@ -148,7 +152,11 @@ describe('coverage callbacks', () => {
 
     const maintenance = await import('./maintenance.js');
     expect(
-      maintenance.getNextMaintenanceWindow('* * * * *', 'UTC', new Date('2024-06-15T00:00:00.000Z')),
+      maintenance.getNextMaintenanceWindow(
+        '* * * * *',
+        'UTC',
+        new Date('2024-06-15T00:00:00.000Z'),
+      ),
     ).toBeUndefined();
   });
 });

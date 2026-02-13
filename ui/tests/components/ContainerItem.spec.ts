@@ -139,7 +139,9 @@ describe('ContainerItem', () => {
     mockGetEffectiveDisplayIcon.mockReset();
     mockGetRegistryProviderIcon.mockReset();
 
-    mockGetEffectiveDisplayIcon.mockImplementation((displayIcon: string) => displayIcon || 'fas fa-cube');
+    mockGetEffectiveDisplayIcon.mockImplementation(
+      (displayIcon: string) => displayIcon || 'fas fa-cube',
+    );
     mockGetRegistryProviderIcon.mockImplementation((provider: string) =>
       provider === 'hub' ? 'fab fa-docker' : 'fas fa-cube',
     );
@@ -456,7 +458,9 @@ describe('ContainerItem', () => {
   });
 
   it('delegates skip/snooze/clear helpers to applyContainerUpdatePolicy', async () => {
-    const applySpy = vi.spyOn(wrapper.vm, 'applyContainerUpdatePolicy').mockResolvedValue(undefined);
+    const applySpy = vi
+      .spyOn(wrapper.vm, 'applyContainerUpdatePolicy')
+      .mockResolvedValue(undefined);
 
     await wrapper.vm.skipCurrentUpdate();
     await wrapper.vm.snoozeUpdates(1);
@@ -550,13 +554,18 @@ describe('ContainerItem', () => {
       triggerName: 'primary',
       triggerAgent: 'node1',
     });
-    expect(wrapper.vm.$eventBus.emit).toHaveBeenCalledWith('notify', 'Update triggered (2 triggers)');
+    expect(wrapper.vm.$eventBus.emit).toHaveBeenCalledWith(
+      'notify',
+      'Update triggered (2 triggers)',
+    );
     expect(refreshSpy).toHaveBeenCalledWith(false);
     expect(wrapper.vm.isUpdatingContainer).toBe(false);
   });
 
   it('reports trigger failures while updating container', async () => {
-    mockGetContainerTriggers.mockResolvedValueOnce([{ type: 'slack', name: 'primary', agent: 'node1' }]);
+    mockGetContainerTriggers.mockResolvedValueOnce([
+      { type: 'slack', name: 'primary', agent: 'node1' },
+    ]);
     mockRunTrigger.mockResolvedValueOnce({ error: 'failed' });
 
     await wrapper.vm.updateContainerNow();
@@ -707,7 +716,9 @@ describe('ContainerItem', () => {
   });
 
   it('collapses detail when no text selection and resizes tabs', () => {
-    const selectionSpy = vi.spyOn(globalThis, 'getSelection').mockReturnValue({ type: 'None' } as any);
+    const selectionSpy = vi
+      .spyOn(globalThis, 'getSelection')
+      .mockReturnValue({ type: 'None' } as any);
     const onResize = vi.fn();
     const collapseDetail = (wrapper.vm.$options as any).methods.collapseDetail;
     const context = {
@@ -725,7 +736,9 @@ describe('ContainerItem', () => {
   });
 
   it('does not collapse when selecting text', () => {
-    const selectionSpy = vi.spyOn(globalThis, 'getSelection').mockReturnValue({ type: 'Range' } as any);
+    const selectionSpy = vi
+      .spyOn(globalThis, 'getSelection')
+      .mockReturnValue({ type: 'Range' } as any);
     const onResize = vi.fn();
     const collapseDetail = (wrapper.vm.$options as any).methods.collapseDetail;
     const context = {

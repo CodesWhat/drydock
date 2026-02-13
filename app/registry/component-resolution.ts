@@ -1,23 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import {
-  resolveConfiguredPathWithinBase,
-  resolveRuntimeRoot,
-} from '../runtime/paths.js';
+import { resolveConfiguredPathWithinBase, resolveRuntimeRoot } from '../runtime/paths.js';
 
-export type RegistryComponentKind =
-  | 'trigger'
-  | 'watcher'
-  | 'registry'
-  | 'authentication'
-  | 'agent';
+export type RegistryComponentKind = 'trigger' | 'watcher' | 'registry' | 'authentication' | 'agent';
 
 const DOCUMENTATION_LINKS: Record<RegistryComponentKind, string> = {
   trigger: 'https://github.com/CodesWhat/drydock/tree/main/docs/configuration/triggers',
   watcher: 'https://github.com/CodesWhat/drydock/tree/main/docs/configuration/watchers',
   registry: 'https://github.com/CodesWhat/drydock/tree/main/docs/configuration/registries',
-  authentication: 'https://github.com/CodesWhat/drydock/tree/main/docs/configuration/authentications',
+  authentication:
+    'https://github.com/CodesWhat/drydock/tree/main/docs/configuration/authentications',
   agent: 'https://github.com/CodesWhat/drydock/tree/main/docs/configuration/agents',
 };
 
@@ -55,9 +48,13 @@ export function getAvailableProviders(
 export function resolveComponentModuleSpecifier(componentFileBase: string): string {
   const runtimeRoot = resolveRuntimeRoot();
   const componentFileRelative = path.relative(runtimeRoot, componentFileBase);
-  const safeComponentFileBase = resolveConfiguredPathWithinBase(runtimeRoot, componentFileRelative, {
-    label: 'Component module path',
-  });
+  const safeComponentFileBase = resolveConfiguredPathWithinBase(
+    runtimeRoot,
+    componentFileRelative,
+    {
+      label: 'Component module path',
+    },
+  );
   const jsCandidate = `${safeComponentFileBase}.js`;
   if (fs.existsSync(jsCandidate)) {
     return pathToFileURL(jsCandidate).href;

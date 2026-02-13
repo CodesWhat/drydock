@@ -30,7 +30,10 @@ function evaluateSemverThreshold(thresholdBase: string, semverDiff: string): boo
   return SEMVER_THRESHOLD_PREDICATES[thresholdBase]?.(semverDiff) ?? true;
 }
 
-function shouldFilterDigestOnlyUpdate(nonDigestOnly: boolean, updateKind: string | undefined): boolean {
+function shouldFilterDigestOnlyUpdate(
+  nonDigestOnly: boolean,
+  updateKind: string | undefined,
+): boolean {
   return nonDigestOnly && updateKind === 'digest';
 }
 
@@ -42,7 +45,10 @@ function isAllThreshold(thresholdBase: string): boolean {
   return thresholdBase === 'all';
 }
 
-function hasKnownTagSemver(updateKind: string | undefined, semverDiff: string | undefined): boolean {
+function hasKnownTagSemver(
+  updateKind: string | undefined,
+  semverDiff: string | undefined,
+): boolean {
   return updateKind === 'tag' && Boolean(semverDiff) && semverDiff !== 'unknown';
 }
 

@@ -73,6 +73,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Audit event wiring** — Wired audit log entries and Prometheus counter increments for rollback, preview, container-added, container-removed, update-applied, and update-failed events. Registered `ContainerUpdateFailed` event with try/catch in Docker trigger.
 - **Test updates** — 20+ test files updated for v1.2.0 icon changes, CSS selectors, HomeView data model, theme toggle relocation, and audit module wiring. Removed obsolete specs.
 - **Updated doc icon examples** — Switched icon examples to prefer `hl:` and `si:` prefixes over deprecated `mdi:`.
+- **Code quality tooling consolidation** — Replaced Codacy + SonarCloud with Qlty + Snyk. Rewrote `lefthook.yml` pre-push hooks to run `qlty check`, `snyk test`, `snyk code test` (informational), builds, and tests. Added `scripts/snyk-code-gate.sh` wrapper.
+- **Biome formatting** — Applied `biome format` across entire codebase for consistent code style.
+- **README badges** — Replaced Codacy/SonarCloud badges with CI status, Qlty maintainability, and Snyk badges.
 - **ConfigurationItem redesign** — Icon moved to the left with name as prominent text and type as subtitle, replacing the old badge/chip pattern across all configuration pages.
 - **TriggerDetail redesign** — Same modern layout treatment as ConfigurationItem (icon left, name prominent, type subtitle).
 - **Registry page brand colors** — Added brand-colored icon backgrounds for each registry provider (Docker blue, GitHub purple, AWS orange, Google blue, etc.) via `getRegistryProviderColor()` helper and new `iconColor` prop on ConfigurationItem.
@@ -83,10 +86,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Self-update overlay responsive** — Mobile-responsive self-update overlay uses static top-center positioning with fade-in animation on small screens instead of DVD bounce.
 - **QA compose enhancements** — Added HTTP trigger, basic auth, and webhook configuration to `test/qa-compose.yml` for integration testing.
 
+### Security
+
+- **RE2 regex engine** — Replaced native `RegExp` with Google's RE2 (`re2` npm package) for all user-supplied regex patterns (includeTags, excludeTags, transformTags). RE2 uses a linear-time matching algorithm that is inherently immune to ReDoS catastrophic backtracking.
+- **Docs dependency vulnerability fixes** — Fixed 9 CVEs in docs/ transitive dependencies via npm overrides (dompurify 2→3, marked 1→4, got 9→11).
+
 ### Removed
 
 - **Dead code removal** — Deleted unused `AppFooter` and `ConfigurationStateView` components, dead computed props (`filteredUpdates`, `upToDateCount`), duplicate `isTriggering` reset, dead `mdi:` prefix replacement in IconRenderer, dead `container-deleted` listener, and Maintenance Windows placeholder.
 - **Removed `@mdi/font` dependency** — Dropped unused Material Design Icons package.
+- **Removed Codacy and SonarCloud** — Replaced with Qlty (local code quality) and Snyk (dependency + SAST scanning) for a unified local-first quality gate.
+- **Removed stale tracking docs** — Deleted `SONARQUBE-ISSUES.md`, `docs/sonar-smells-tracking.md`, and `docs/codacy-high-findings-tracking.md`.
 
 ## [1.1.1] - 2026-02-11
 

@@ -3,6 +3,7 @@
  * Semver utils.
  */
 import semver from 'semver';
+import RE2 from 're2';
 import log from '../log/index.js';
 
 function hasOnlyDigits(value) {
@@ -94,6 +95,25 @@ export function diff(version1, version2) {
 }
 
 /**
+ * Safely compile a user-supplied regex pattern.
+ * Returns null (and logs a warning) when the pattern is invalid.
+ * Uses RE2, which is inherently immune to ReDoS backtracking attacks.
+ */
+function safeRegExp(pattern: string): RE2 | null {
+  const MAX_PATTERN_LENGTH = 1024;
+  if (pattern.length > MAX_PATTERN_LENGTH) {
+    log.warn(`Regex pattern exceeds maximum length of ${MAX_PATTERN_LENGTH} characters`);
+    return null;
+  }
+  try {
+    return new RE2(pattern);
+  } catch (e: any) {
+    log.warn(`Invalid regex pattern "${pattern}": ${e.message}`);
+    return null;
+  }
+}
+
+/**
  * Transform a tag using a formula.
  * @param transformFormula
  * @param originalTag
@@ -111,15 +131,12 @@ export function transform(transformFormula, originalTag) {
     }
     const pattern = transformFormula.slice(0, separatorIndex).trim();
     const replacement = transformFormula.slice(separatorIndex + 2).trim();
-    const MAX_PATTERN_LENGTH = 1024;
-    if (pattern.length > MAX_PATTERN_LENGTH) {
-      log.warn(
-        `Transform regex pattern exceeds maximum length of ${MAX_PATTERN_LENGTH} characters`,
-      );
+    const compiledPattern = safeRegExp(pattern);
+    if (!compiledPattern) {
       return originalTag;
     }
     const placeholders = replacement.match(/\$\d+/g) || [];
-    const originalTagMatches = originalTag.match(pattern);
+    const originalTagMatches = originalTag.match(compiledPattern);
     if (!originalTagMatches) {
       return originalTag;
     }

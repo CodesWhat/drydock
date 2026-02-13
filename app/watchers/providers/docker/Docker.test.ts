@@ -3385,9 +3385,7 @@ describe('Docker Watcher', () => {
 
     test('getEffectiveContainerLabels should merge container labels when cached service labels are undefined', async () => {
       const serviceId = 'svc-1';
-      const serviceLabelsCache = new Map([
-        [serviceId, Promise.resolve(undefined as any)],
-      ]);
+      const serviceLabelsCache = new Map([[serviceId, Promise.resolve(undefined as any)]]);
 
       const labels = await docker.getEffectiveContainerLabels(
         {
@@ -4012,9 +4010,9 @@ describe('Docker Watcher', () => {
     });
 
     test('helper should return -1 specificity when pattern produces no candidates', () => {
-      expect(testable_getImgsetSpecificity('   ', { path: 'library/nginx', domain: 'docker.io' })).toBe(
-        -1,
-      );
+      expect(
+        testable_getImgsetSpecificity('   ', { path: 'library/nginx', domain: 'docker.io' }),
+      ).toBe(-1);
     });
   });
 
@@ -4047,17 +4045,14 @@ describe('Docker Watcher', () => {
     });
 
     test('filterBySegmentCount should drop tags without numeric groups', () => {
-      const filtered = testable_filterBySegmentCount(
-        ['latest', '1.2.4', '1.3.0'],
-        {
-          transformTags: undefined,
-          image: {
-            tag: {
-              value: '1.2.3',
-            },
+      const filtered = testable_filterBySegmentCount(['latest', '1.2.4', '1.3.0'], {
+        transformTags: undefined,
+        image: {
+          tag: {
+            value: '1.2.3',
           },
         },
-      );
+      });
 
       expect(filtered).toEqual(['1.2.4', '1.3.0']);
     });
@@ -4324,22 +4319,20 @@ describe('Docker Watcher', () => {
 
     test('handleTokenErrorResponse should fallback to error.message when response payload is missing', () => {
       docker.name = 'test';
-      expect(() =>
-        docker.handleTokenErrorResponse(new Error('network down'), 1000),
-      ).toThrow('failed: network down');
+      expect(() => docker.handleTokenErrorResponse(new Error('network down'), 1000)).toThrow(
+        'failed: network down',
+      );
     });
 
     test('pollDeviceCodeToken should continue when first token response is undefined', async () => {
       docker.name = 'test';
       docker.sleep = vi.fn().mockResolvedValue(undefined);
-      mockAxios.post
-        .mockResolvedValueOnce(undefined as any)
-        .mockResolvedValueOnce({
-          data: {
-            access_token: 'device-token-2', // NOSONAR - test fixture
-            expires_in: 60,
-          },
-        });
+      mockAxios.post.mockResolvedValueOnce(undefined as any).mockResolvedValueOnce({
+        data: {
+          access_token: 'device-token-2', // NOSONAR - test fixture
+          expires_in: 60,
+        },
+      });
 
       await docker.pollDeviceCodeToken({
         tokenEndpoint: 'https://idp.example.com/token',

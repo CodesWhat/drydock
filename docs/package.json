@@ -11,5 +11,10 @@
   "license": "MIT",
   "devDependencies": {
     "docsify-cli": "4.4.4"
+  },
+  "overrides": {
+    "dompurify": "^3.2.4",
+    "marked": "^4.3.0",
+    "got": "^11.8.5"
   }
 }

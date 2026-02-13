@@ -88,7 +88,9 @@ describe('HookRunner', () => {
       callback: (...args: unknown[]) => void,
     ) => {
       var fakeChild = { exitCode: null };
-      setImmediate(() => callback(null, Buffer.from('binary-stdout'), Buffer.from('binary-stderr')));
+      setImmediate(() =>
+        callback(null, Buffer.from('binary-stdout'), Buffer.from('binary-stderr')),
+      );
       return fakeChild;
     };
 

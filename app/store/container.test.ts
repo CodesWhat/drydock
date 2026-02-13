@@ -163,7 +163,10 @@ test('getContainers should sort by tag when watcher and name are equal', async (
         ...containerExample,
         watcher: 'same-watcher',
         name: 'same-name',
-        image: { ...containerExample.image, tag: { ...containerExample.image.tag, value: '2.0.0' } },
+        image: {
+          ...containerExample.image,
+          tag: { ...containerExample.image.tag, value: '2.0.0' },
+        },
       },
     },
     {
@@ -171,7 +174,10 @@ test('getContainers should sort by tag when watcher and name are equal', async (
         ...containerExample,
         watcher: 'same-watcher',
         name: 'same-name',
-        image: { ...containerExample.image, tag: { ...containerExample.image.tag, value: '1.0.0' } },
+        image: {
+          ...containerExample.image,
+          tag: { ...containerExample.image.tag, value: '1.0.0' },
+        },
       },
     },
   ];

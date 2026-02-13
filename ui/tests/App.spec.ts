@@ -1,9 +1,5 @@
 import { mount } from '@vue/test-utils';
-import App, {
-  loadServerConfig,
-  setupAuthStateManagement,
-  setupEventBusListeners,
-} from '@/App';
+import App, { loadServerConfig, setupAuthStateManagement, setupEventBusListeners } from '@/App';
 import { getServer } from '@/services/server';
 
 // Mock services

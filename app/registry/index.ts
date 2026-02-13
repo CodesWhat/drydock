@@ -116,7 +116,9 @@ export async function registerComponent(options: RegisterComponentOptions): Prom
     (state[kind] as any)[component.getId()] = component;
     return componentRegistered;
   } catch (e: any) {
-    const availableProviders = getAvailableProviders(componentPath, (message) => log.debug(message));
+    const availableProviders = getAvailableProviders(componentPath, (message) =>
+      log.debug(message),
+    );
     const helpfulMessage = getHelpfulErrorMessage(
       kind,
       providerLowercase,
@@ -176,15 +178,11 @@ function applyTriggerGroupDefaults(
   providerPath: string,
 ): Record<string, any> | null | undefined {
   const knownProviderSet = getKnownProviderSet(providerPath);
-  return applyTriggerGroupDefaultsHelper(
-    configurations,
-    knownProviderSet,
-    (groupName, value) => {
-      log.info(
-        `Detected trigger group '${groupName}' with shared configuration: ${JSON.stringify(value)}`,
-      );
-    },
-  );
+  return applyTriggerGroupDefaultsHelper(configurations, knownProviderSet, (groupName, value) => {
+    log.info(
+      `Detected trigger group '${groupName}' with shared configuration: ${JSON.stringify(value)}`,
+    );
+  });
 }
 
 /**

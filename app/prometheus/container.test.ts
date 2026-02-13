@@ -89,11 +89,9 @@ test('gauge should warn when flattening a container throws', async () => {
   const circular: any = { id: 'broken-container' };
   circular.self = circular;
   store.getContainers = () => [circular];
-  const spyFlatten = vi
-    .spyOn(containerModel, 'flatten')
-    .mockImplementation(() => {
-      throw new Error('flatten failed');
-    });
+  const spyFlatten = vi.spyOn(containerModel, 'flatten').mockImplementation(() => {
+    throw new Error('flatten failed');
+  });
   const spyWarn = vi.spyOn(log, 'warn');
   const spyDebug = vi.spyOn(log, 'debug');
 

@@ -1438,5 +1438,4 @@ describe('additional docker trigger coverage', () => {
     expect(getCurrentContainerSpy).toHaveBeenCalled();
     expect(inspectContainerSpy).not.toHaveBeenCalled();
   });
-
 });

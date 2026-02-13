@@ -97,9 +97,7 @@ function applyFilters(entries: LogEntry[], options?: GetEntriesOptions): LogEntr
   const since = options?.since;
   const filtered = entries.filter(
     (entry) =>
-      meetsMinLevel(entry, minLevel) &&
-      matchesComponent(entry, component) &&
-      isSince(entry, since),
+      meetsMinLevel(entry, minLevel) && matchesComponent(entry, component) && isSince(entry, since),
   );
   return applyTail(filtered, options?.tail ?? 100);
 }

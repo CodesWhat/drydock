@@ -1,9 +1,0 @@
-config_version = "0"
-
-[[source]]
-name = "default"
-default = true
-
-[[plugin]]
-name = "biome"
-version = "2.3.14"

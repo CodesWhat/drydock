@@ -1,9 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import {
-  findDockerTriggerForContainer,
-  NO_DOCKER_TRIGGER_FOUND_ERROR,
-} from './docker-trigger.js';
+import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
 
 describe('docker-trigger helper', () => {
   test('exports the not-found error constant', () => {

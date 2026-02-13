@@ -1,17 +1,19 @@
+---
 pre-push:
   commands:
-    lint:
+    qlty:
+      run: qlty check --all
+    snyk-deps:
       root: app/
-      run: npm run lint
+      run: snyk test --severity-threshold=high
+    snyk-code:
+      run: scripts/snyk-code-gate.sh
     build:
       root: app/
       run: npm run build
     test:
       root: app/
       run: npm test
-    ui-lint:
-      root: ui/
-      run: npm run lint
     ui-build:
       root: ui/
       run: npm run build

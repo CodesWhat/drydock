@@ -150,7 +150,7 @@ async function doGet(path) {
   const url = `${baseUrl}${path}`;
   const res = await fetch(url, {
     method: 'GET',
-    headers: { Authorization: authHeader }
+    headers: { Authorization: authHeader },
   });
   this.responseStatus = res.status;
   this.responseHeaders = res.headers;
@@ -166,7 +166,7 @@ async function doPost(path) {
   const url = `${baseUrl}${path}`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { Authorization: authHeader }
+    headers: { Authorization: authHeader },
   });
   this.responseStatus = res.status;
   this.responseHeaders = res.headers;
@@ -202,7 +202,7 @@ Then(/^response body path (.+) should be (?!of type )(.+)$/, function (path, exp
   if (isDynamicPattern(expected)) {
     assert.ok(
       matchesDynamicPattern(actualStr, expected),
-      `Expected "${actualStr}" to match pattern ${expected}`
+      `Expected "${actualStr}" to match pattern ${expected}`,
     );
   } else {
     assert.strictEqual(actualStr, expected);
@@ -219,7 +219,7 @@ Then(/^response header (.+) should be (.+)$/, function (header, expected) {
   if (isDynamicPattern(expected)) {
     assert.ok(
       matchesDynamicPattern(actual, expected),
-      `Expected header "${header}" value "${actual}" to match "${expected}"`
+      `Expected header "${header}" value "${actual}" to match "${expected}"`,
     );
   } else {
     assert.strictEqual(actual, expected);

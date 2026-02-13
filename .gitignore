@@ -113,3 +113,6 @@ dist/
 
 # Playwright MCP
 .playwright-mcp/
+
+# SonarCloud scanner working directory
+.scannerwork/

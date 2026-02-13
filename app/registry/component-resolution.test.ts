@@ -28,7 +28,9 @@ describe('component-resolution', () => {
   });
 
   test('resolveComponentRoot should resolve component path within runtime root', () => {
-    expect(resolveComponentRoot('trigger', 'triggers/providers')).toBe('/runtime/triggers/providers');
+    expect(resolveComponentRoot('trigger', 'triggers/providers')).toBe(
+      '/runtime/triggers/providers',
+    );
   });
 
   test('getAvailableProviders should return sorted provider directories', () => {

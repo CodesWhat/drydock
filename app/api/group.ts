@@ -11,12 +11,15 @@ const router = express.Router();
  */
 function getGroups(req: Request, res: Response) {
   const containers = storeContainer.getContainers();
-  const groups: Record<string, {
-    name: string | null;
-    containers: { id: string; name: string; displayName: string; updateAvailable: boolean }[];
-    containerCount: number;
-    updatesAvailable: number;
-  }> = {};
+  const groups: Record<
+    string,
+    {
+      name: string | null;
+      containers: { id: string; name: string; displayName: string; updateAvailable: boolean }[];
+      containerCount: number;
+      updatesAvailable: number;
+    }
+  > = {};
 
   for (const container of containers) {
     const groupName =

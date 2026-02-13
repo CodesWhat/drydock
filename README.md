@@ -23,13 +23,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/CodesWhat/drydock/actions/workflows/ci.yml"><img src="https://github.com/CodesWhat/drydock/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://www.bestpractices.dev/projects/11915"><img src="https://www.bestpractices.dev/projects/11915/badge" alt="OpenSSF Best Practices"></a>
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/drydock"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/drydock?label=openssf+scorecard&style=flat" alt="OpenSSF Scorecard"></a>
   <a href="https://app.codecov.io/gh/CodesWhat/drydock"><img src="https://codecov.io/gh/CodesWhat/drydock/graph/badge.svg?token=b90d4863-46c5-40d2-bf00-f6e4a79c8656" alt="Codecov"></a>
-  <a href="https://app.codacy.com/gh/CodesWhat/drydock/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade"><img src="https://app.codacy.com/project/badge/Grade/7d85925194a545519a07687a9061fb38" alt="Codacy Badge"></a>
-  <a href="https://sonarcloud.io/summary/overall?id=CodesWhat_drydock"><img src="https://sonarcloud.io/api/project_badges/measure?project=CodesWhat_drydock&metric=alert_status" alt="SonarCloud"></a>
-  <a href="https://snyk.io/test/github/CodesWhat/drydock"><img src="https://snyk.io/test/github/CodesWhat/drydock/badge.svg" alt="Snyk"></a>
   <a href="https://qlty.sh/gh/CodesWhat/projects/drydock"><img src="https://qlty.sh/gh/CodesWhat/projects/drydock/maintainability.svg" alt="Maintainability"></a>
+  <a href="https://snyk.io/test/github/CodesWhat/drydock"><img src="https://snyk.io/test/github/CodesWhat/drydock/badge.svg" alt="Snyk"></a>
 </p>
 
 ---
@@ -182,6 +181,24 @@ Start, stop, and restart containers from the UI or API with feature-flag control
 <h3>Webhook API</h3>
 Token-authenticated HTTP endpoints for CI/CD integration to trigger watch cycles and updates
 </td>
+<td align="center" width="33%">
+<h3>Container Grouping</h3>
+Smart stack detection via compose project or labels with collapsible groups and batch-update
+</td>
+</tr>
+<tr>
+<td align="center" width="33%">
+<h3>Lifecycle Hooks</h3>
+Pre/post-update shell commands via container labels with configurable timeout and abort control
+</td>
+<td align="center" width="33%">
+<h3>Auto Rollback</h3>
+Automatic rollback on health check failure with configurable monitoring window and interval
+</td>
+<td align="center" width="33%">
+<h3>Graceful Self-Update</h3>
+DVD-style animated overlay during drydock's own container update with auto-reconnect
+</td>
 </tr>
 </table>
 
@@ -243,6 +260,9 @@ Token-authenticated HTTP endpoints for CI/CD integration to trigger watch cycles
 | **Container actions** | Start/stop/restart containers via API and UI, gated by `DD_SERVER_FEATURE_CONTAINERACTIONS` |
 | **Webhook API** | Token-authenticated HTTP endpoints for CI/CD integration to trigger watch cycles and updates, gated by `DD_SERVER_WEBHOOK_ENABLED` and `DD_SERVER_WEBHOOK_TOKEN` |
 | **Lifecycle hooks** | Pre/post-update shell command hooks with configurable timeout |
+| **Auto rollback on health failure** | Monitors container health after updates and rolls back if unhealthy, configured via `dd.rollback.auto=true` |
+| **Graceful self-update** | Full-screen animated overlay during drydock's own container update with SSE-based reconnect |
+| **Container grouping / stacks** | Smart stack detection via `dd.group` label or compose project, with collapsible UI groups and batch-update |
 
 ### Bug Fixes (not in WUD)
 

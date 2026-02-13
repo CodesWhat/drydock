@@ -351,7 +351,6 @@ describe('getServerConfiguration errors', () => {
       configuration.ddEnvVars.dd = originalDd;
     }
   });
-
 });
 
 describe('getPublicUrl edge cases', () => {
@@ -478,7 +477,6 @@ describe('getPrometheusConfiguration null fallback', () => {
       configuration.ddEnvVars.dd = originalDd;
     }
   });
-
 });
 
 describe('module bootstrap env mapping', () => {

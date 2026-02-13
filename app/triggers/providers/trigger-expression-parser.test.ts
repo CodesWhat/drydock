@@ -24,14 +24,11 @@ describe('trigger-expression-parser', () => {
 
   test('renderSimple should evaluate simple expressions and concat', () => {
     expect(
-      renderSimple(
-        '${container.name.toUpperCase()}-${container.num + container.enabled}',
-        {
-          ...baseContainer,
-          num: 12,
-          enabled: true,
-        },
-      ),
+      renderSimple('${container.name.toUpperCase()}-${container.num + container.enabled}', {
+        ...baseContainer,
+        num: 12,
+        enabled: true,
+      }),
     ).toBe('DEMO-12true');
   });
 
@@ -54,15 +51,12 @@ describe('trigger-expression-parser', () => {
   test('renderSimple should stringify symbols and fallback to empty string for circular objects', () => {
     const circular = {};
     circular.self = circular;
-    const output = renderSimple(
-      '${container.sym}-${container.big}-${container.circular}',
-      {
-        ...baseContainer,
-        sym: Symbol('value'),
-        big: 1n,
-        circular,
-      },
-    );
+    const output = renderSimple('${container.sym}-${container.big}-${container.circular}', {
+      ...baseContainer,
+      sym: Symbol('value'),
+      big: 1n,
+      circular,
+    });
 
     expect(output.startsWith('Symbol(value)-1-')).toBe(true);
     expect(output.endsWith('-')).toBe(true);
