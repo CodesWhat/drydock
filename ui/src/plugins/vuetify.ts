@@ -32,6 +32,8 @@ export function createVuetify() {
         light: {
           dark: false,
           colors: {
+            background: '#f5f5f5',
+            surface: '#ffffff',
             primary: '#00355E',
             secondary: '#0096C7',
             accent: '#06D6A0',

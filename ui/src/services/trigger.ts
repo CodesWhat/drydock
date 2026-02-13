@@ -98,4 +98,10 @@ async function runTrigger({ triggerType, triggerName, container }) {
   return json;
 }
 
-export { getTriggerIcon, getTriggerProviderIcon, getTriggerProviderColor, getAllTriggers, runTrigger };
+export {
+  getTriggerIcon,
+  getTriggerProviderIcon,
+  getTriggerProviderColor,
+  getAllTriggers,
+  runTrigger,
+};

@@ -2,7 +2,7 @@
   <div class="filter-bar">
     <!-- Action row: always visible -->
     <div class="filter-toolbar">
-      <div class="d-flex align-center" style="gap: 6px; flex-wrap: wrap">
+      <div class="d-flex align-center filter-actions">
         <v-btn
           variant="tonal"
           size="small"
@@ -33,7 +33,7 @@
           {{ filter.label }}: {{ filter.value }}
         </v-chip>
 
-        <v-divider vertical class="mx-1 align-self-center" style="height: 24px" />
+        <v-divider vertical class="mx-1 align-self-center filter-divider" style="height: 24px" />
 
         <v-btn
           variant="text"
@@ -41,10 +41,11 @@
           @click="updateAvailableLocal = !updateAvailableLocal; emitUpdateAvailableChanged()"
         >
           <v-icon start size="small">{{ updateAvailableLocal ? 'fas fa-square-check' : 'far fa-square' }}</v-icon>
-          Updates available
+          <span class="filter-label">Has updates</span>
+          <span class="filter-label-short">Updates</span>
         </v-btn>
 
-        <v-divider vertical class="mx-1 align-self-center" style="height: 24px" />
+        <v-divider vertical class="mx-1 align-self-center filter-divider" style="height: 24px" />
 
         <v-btn
           variant="text"
@@ -52,18 +53,20 @@
           @click="oldestFirstLocal = !oldestFirstLocal; emitOldestFirstChanged()"
         >
           <v-icon start size="small">{{ oldestFirstLocal ? 'fas fa-arrow-up-1-9' : 'fas fa-arrow-down-9-1' }}</v-icon>
-          {{ oldestFirstLocal ? 'Oldest first' : 'Newest first' }}
+          <span class="filter-label">{{ oldestFirstLocal ? 'Oldest first' : 'Newest first' }}</span>
+          <span class="filter-label-short">Time</span>
         </v-btn>
       </div>
 
       <v-btn
         variant="outlined"
         size="small"
+        class="flex-shrink-0"
         @click.stop="refreshAllContainers"
         :loading="isRefreshing"
       >
         <v-icon start size="small">fas fa-arrows-rotate</v-icon>
-        Check updates
+        <span class="filter-label">Check updates</span>
       </v-btn>
     </div>
 
@@ -149,5 +152,32 @@
 .filter-panel > * {
   flex: 1 1 180px;
   max-width: 240px;
+}
+
+.filter-actions {
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.filter-label-short {
+  display: none;
+}
+
+@media (max-width: 599px) {
+  .filter-label {
+    display: none;
+  }
+
+  .filter-label-short {
+    display: inline;
+  }
+
+  .filter-divider {
+    display: none;
+  }
+
+  .filter-toolbar {
+    flex-wrap: nowrap;
+  }
 }
 </style>

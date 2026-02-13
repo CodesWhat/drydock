@@ -7,7 +7,8 @@
       v-if="showMenuToggle"
       :src="logo"
       alt="drydock"
-      style="height: 24px; width: auto; margin-left: 4px"
+      class="appbar-logo"
+      :class="{ 'appbar-logo--invert': isDark }"
     />
     <v-toolbar-title
       v-if="viewName && 'home'.toLowerCase() !== viewName.toLowerCase()"
@@ -46,3 +47,16 @@
   </v-app-bar>
 </template>
 <script lang="ts" src="./AppBar.ts"></script>
+
+<style scoped>
+.appbar-logo {
+  height: 24px;
+  width: auto;
+  margin-left: 4px;
+  transition: filter 0.3s ease;
+}
+
+.appbar-logo--invert {
+  filter: invert(1);
+}
+</style>

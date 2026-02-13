@@ -10,10 +10,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 1.2.0
+
+### Added
+
+- **Grafana dashboard template** — Importable Grafana JSON dashboard with panels for overview stats, watcher activity, trigger execution, registry response times, and audit entries. Uses datasource templating for portable Prometheus configuration.
+- **Audit log backend** — `AuditEntry` model, LokiJS-backed store with pagination and pruning, `GET /api/audit` endpoint with filtering, `dd_audit_entries_total` Prometheus counter, and automatic logging of container lifecycle events (update-available, update-applied, update-failed, rollback, preview, container-added, container-removed).
+- **Font Awesome 6 migration** — Replaced all Material Design Icons (`mdi-*`) with Font Awesome 6 equivalents. Configured Vuetify FA icon set, updated all service icon getters, component templates, and 54 test files.
+- **Dry-run preview API** — `POST /api/containers/:id/preview` returns what an update would do (current/new image, update kind, running state, networks) without performing it.
+- **Pre-update image backup and rollback** — LokiJS-backed backup store records container image state before each Docker trigger update. `GET /api/backups`, `GET /api/:id/backups`, and `POST /api/:id/rollback` endpoints. Configurable retention via `DD_TRIGGER_DOCKER_{name}_BACKUP_COUNT` (default 3).
+- **Frontend wiring** — Preview dialog with loading/error/success states wired to dry-run API. Full audit log table with filtering, pagination, and responsive column hiding replacing the MonitoringHistory placeholder. Recent Activity dashboard card showing latest 5 audit entries.
+- **Container action bar refactor** — Replaced 3-column text button layout with compact icon-button toolbar and tooltips (desktop) or overflow menu (mobile).
+- **Dashboard second row** — Added Recent Activity and stats cards as a second row on the dashboard.
+- **UI modernization** — Consistent `pa-4` padding, outlined/rounded cards, tonal chips, styled empty states, and Font Awesome icons across all views and components.
+- **Container actions (start/stop/restart)** — New API endpoints and UI buttons to start, stop, and restart Docker containers directly from the dashboard. Gated by `DD_SERVER_FEATURE_CONTAINERACTIONS` (default: enabled). Includes audit logging, Prometheus counter (`dd_container_actions_total`), desktop toolbar buttons with disabled-state awareness, and mobile overflow menu integration.
+- **Webhook API for on-demand triggers** — Token-authenticated HTTP endpoints (`POST /api/webhook/watch`, `/watch/:name`, `/update/:name`) for CI/CD integration. Gated by `DD_SERVER_WEBHOOK_ENABLED` and `DD_SERVER_WEBHOOK_TOKEN`. Includes rate limiting (30 req/15min), audit logging, Prometheus counter (`dd_webhook_total`), and a configuration info panel on the Server settings page.
+- **Container grouping / stack views** — New `GET /api/containers/groups` endpoint returns containers grouped by stack. Supports explicit group assignment via `dd.group` / `wud.group` labels with automatic fallback to `com.docker.compose.project`. Collapsible `ContainerGroup` component with group header showing name, container count, and update badges. "Smart group" filter option for automatic stack detection (`dd.group` > `wud.group` > compose project). "Update all in group" action to batch-update all containers in a group.
+- **Graceful self-update UI** — Self-update detection when drydock updates its own container. Server-Sent Events (SSE) endpoint at `/api/events/ui` for real-time browser push. Full-screen DVD-style bouncing whale logo overlay during self-updates with smooth phase transitions (updating, restarting, reconnecting, ready). Automatic health polling and page reload after restart.
+- **Lifecycle hooks (pre/post-update commands)** — Execute shell commands before and after container updates via `dd.hook.pre` and `dd.hook.post` labels. Pre-hook failures abort the update by default (`dd.hook.pre.abort=true`). Configurable timeout via `dd.hook.timeout` (default 60s). Environment variables exposed: `DD_CONTAINER_NAME`, `DD_IMAGE_NAME`, `DD_TAG_OLD`, `DD_TAG_NEW`, etc. Includes audit logging for hook success/failure and UI display in ContainerDetail panel.
+- **Automatic rollback on health check failure** — Monitors container health after updates and automatically rolls back to the previous image if the container becomes unhealthy. Configured via `dd.rollback.auto=true`, `dd.rollback.window` (default 300s), and `dd.rollback.interval` (default 10s). Requires Docker HEALTHCHECK on the container. Uses existing backup store for rollback images. Includes audit logging and UI display in ContainerDetail panel.
+- **selfhst/icons as primary icon CDN** — Switched to selfhst/icons as the primary icon CDN with homarr-labs as fallback, improving icon availability and coverage.
+
 ### Fixed
 
+- **Navigation drawer not visible** — Used computed model for permanent/temporary modes; passing `model-value=undefined` caused Vuetify to treat the drawer as closed.
+- **Dark theme missing colors** — Added `info`, `success`, and `warning` color definitions to the dark theme.
+- **ContainerPreview updateKind display** — Fixed structured `updateKind` object rendering with semver-diff color coding.
+- **Invalid `text-body-3` CSS class** — Replaced with valid `text-body-2` in ConfigurationItem and TriggerDetail.
+- **404 catch-all route** — Added catch-all redirect to home for unknown routes.
 - **False downgrade suggestion for multi-segment tags** — Fixed semver parsing/comparison for numeric tags like `25.04.2.1.1` so newer major tags are no longer suggested as downgrades. ([#47](https://github.com/CodesWhat/drydock/issues/47))
 - **Configured path hardening for filesystem reads** — Added validated path resolution helpers and applied them to store paths, watcher TLS files, and MQTT TLS files before filesystem access.
+
+### Changed
+
+- **Audit event wiring** — Wired audit log entries and Prometheus counter increments for rollback, preview, container-added, container-removed, update-applied, and update-failed events. Registered `ContainerUpdateFailed` event with try/catch in Docker trigger.
+- **Test updates** — 20+ test files updated for v1.2.0 icon changes, CSS selectors, HomeView data model, theme toggle relocation, and audit module wiring. Removed obsolete specs.
+- **Updated doc icon examples** — Switched icon examples to prefer `hl:` and `si:` prefixes over deprecated `mdi:`.
+- **Code quality tooling consolidation** — Replaced Codacy + SonarCloud with Qlty + Snyk. Rewrote `lefthook.yml` pre-push hooks to run `qlty check`, `snyk test`, `snyk code test` (informational), builds, and tests. Added `scripts/snyk-code-gate.sh` wrapper.
+- **Biome formatting** — Applied `biome format` across entire codebase for consistent code style.
+- **README badges** — Replaced Codacy/SonarCloud badges with CI status, Qlty maintainability, and Snyk badges.
+- **ConfigurationItem redesign** — Icon moved to the left with name as prominent text and type as subtitle, replacing the old badge/chip pattern across all configuration pages.
+- **TriggerDetail redesign** — Same modern layout treatment as ConfigurationItem (icon left, name prominent, type subtitle).
+- **Registry page brand colors** — Added brand-colored icon backgrounds for each registry provider (Docker blue, GitHub purple, AWS orange, Google blue, etc.) via `getRegistryProviderColor()` helper and new `iconColor` prop on ConfigurationItem.
+- **Consistent card styling** — Unified `variant="outlined" rounded="lg"` across ContainerItem, ContainerGroup, ContainerTrigger, and WebhookInfo cards for a cohesive look.
+- **Home page severity badges removed** — Removed redundant MAJOR/MINOR severity badges from the container updates list; version chip color already indicates severity.
+- **History page filter bar** — Removed redundant "Update History" heading (already in app bar) and added a collapsible filter bar with active filter chips.
+- **Logs page spacing** — Fixed spacing between the config item and logs card.
+- **Self-update overlay responsive** — Mobile-responsive self-update overlay uses static top-center positioning with fade-in animation on small screens instead of DVD bounce.
+- **QA compose enhancements** — Added HTTP trigger, basic auth, and webhook configuration to `test/qa-compose.yml` for integration testing.
+- **Login page redesign** — Redesigned login page with new font, icon colors, and layout polish.
+- **Docker Hub and Quay.io multi-registry publishing** — Container images now published to Docker Hub and Quay.io alongside GHCR for broader registry availability.
+- **Mobile responsive dashboard** — Per-type colored update badges (major=red, minor=warning, patch=success, digest=info) and icon-only tabs on mobile viewports.
+- **Dark mode app bar logo inversion** — App bar logo now inverts correctly in dark mode for improved visibility.
+- **History page mobile improvements** — Shorter timestamps, hidden status column, and truncated container names on mobile viewports.
+- **Container filter mobile labels** — Short labels ("Updates", "Time") on mobile breakpoint for compact filter display.
+- **Biome and Qlty config alignment** — Aligned Biome and Qlty configurations for consistent code quality enforcement.
+
+### Security
+
+- **RE2 regex engine** — Replaced native `RegExp` with Google's RE2 (`re2` npm package) for all user-supplied regex patterns (includeTags, excludeTags, transformTags). RE2 uses a linear-time matching algorithm that is inherently immune to ReDoS catastrophic backtracking.
+- **Docs dependency vulnerability fixes** — Fixed 9 CVEs in docs/ transitive dependencies via npm overrides (dompurify 2→3, marked 1→4, got 9→11).
+
+### Removed
+
+- **Dead code removal** — Deleted unused `AppFooter` and `ConfigurationStateView` components, dead computed props (`filteredUpdates`, `upToDateCount`), duplicate `isTriggering` reset, dead `mdi:` prefix replacement in IconRenderer, dead `container-deleted` listener, and Maintenance Windows placeholder.
+- **Removed `@mdi/font` dependency** — Dropped unused Material Design Icons package.
+- **Removed Codacy and SonarCloud** — Replaced with Qlty (local code quality) and Snyk (dependency + SAST scanning) for a unified local-first quality gate.
+- **Removed stale tracking docs** — Deleted `SONARQUBE-ISSUES.md`, `docs/sonar-smells-tracking.md`, and `docs/codacy-high-findings-tracking.md`.
 
 ### Documentation
 
@@ -39,64 +102,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Debug logging for component registration** — Added debug-level logging showing resolved module paths during component registration and agent component registration attempts, making path resolution issues easier to diagnose.
 
 ---
-
-## 1.2.0
-
-### Added
-
-- **Grafana dashboard template** — Importable Grafana JSON dashboard with panels for overview stats, watcher activity, trigger execution, registry response times, and audit entries. Uses datasource templating for portable Prometheus configuration.
-- **Audit log backend** — `AuditEntry` model, LokiJS-backed store with pagination and pruning, `GET /api/audit` endpoint with filtering, `dd_audit_entries_total` Prometheus counter, and automatic logging of container lifecycle events (update-available, update-applied, update-failed, rollback, preview, container-added, container-removed).
-- **Font Awesome 6 migration** — Replaced all Material Design Icons (`mdi-*`) with Font Awesome 6 equivalents. Configured Vuetify FA icon set, updated all service icon getters, component templates, and 54 test files.
-- **Dry-run preview API** — `POST /api/containers/:id/preview` returns what an update would do (current/new image, update kind, running state, networks) without performing it.
-- **Pre-update image backup and rollback** — LokiJS-backed backup store records container image state before each Docker trigger update. `GET /api/backups`, `GET /api/:id/backups`, and `POST /api/:id/rollback` endpoints. Configurable retention via `DD_TRIGGER_DOCKER_{name}_BACKUP_COUNT` (default 3).
-- **Frontend wiring** — Preview dialog with loading/error/success states wired to dry-run API. Full audit log table with filtering, pagination, and responsive column hiding replacing the MonitoringHistory placeholder. Recent Activity dashboard card showing latest 5 audit entries.
-- **Container action bar refactor** — Replaced 3-column text button layout with compact icon-button toolbar and tooltips (desktop) or overflow menu (mobile).
-- **Dashboard second row** — Added Recent Activity and stats cards as a second row on the dashboard.
-- **UI modernization** — Consistent `pa-4` padding, outlined/rounded cards, tonal chips, styled empty states, and Font Awesome icons across all views and components.
-- **Container actions (start/stop/restart)** — New API endpoints and UI buttons to start, stop, and restart Docker containers directly from the dashboard. Gated by `DD_SERVER_FEATURE_CONTAINERACTIONS` (default: enabled). Includes audit logging, Prometheus counter (`dd_container_actions_total`), desktop toolbar buttons with disabled-state awareness, and mobile overflow menu integration.
-- **Webhook API for on-demand triggers** — Token-authenticated HTTP endpoints (`POST /api/webhook/watch`, `/watch/:name`, `/update/:name`) for CI/CD integration. Gated by `DD_SERVER_WEBHOOK_ENABLED` and `DD_SERVER_WEBHOOK_TOKEN`. Includes rate limiting (30 req/15min), audit logging, Prometheus counter (`dd_webhook_total`), and a configuration info panel on the Server settings page.
-- **Container grouping / stack views** — New `GET /api/containers/groups` endpoint returns containers grouped by stack. Supports explicit group assignment via `dd.group` / `wud.group` labels with automatic fallback to `com.docker.compose.project`. Collapsible `ContainerGroup` component with group header showing name, container count, and update badges. "Smart group" filter option for automatic stack detection (`dd.group` > `wud.group` > compose project). "Update all in group" action to batch-update all containers in a group.
-- **Graceful self-update UI** — Self-update detection when drydock updates its own container. Server-Sent Events (SSE) endpoint at `/api/events/ui` for real-time browser push. Full-screen DVD-style bouncing whale logo overlay during self-updates with smooth phase transitions (updating, restarting, reconnecting, ready). Automatic health polling and page reload after restart.
-- **Lifecycle hooks (pre/post-update commands)** — Execute shell commands before and after container updates via `dd.hook.pre` and `dd.hook.post` labels. Pre-hook failures abort the update by default (`dd.hook.pre.abort=true`). Configurable timeout via `dd.hook.timeout` (default 60s). Environment variables exposed: `DD_CONTAINER_NAME`, `DD_IMAGE_NAME`, `DD_TAG_OLD`, `DD_TAG_NEW`, etc. Includes audit logging for hook success/failure and UI display in ContainerDetail panel.
-- **Automatic rollback on health check failure** — Monitors container health after updates and automatically rolls back to the previous image if the container becomes unhealthy. Configured via `dd.rollback.auto=true`, `dd.rollback.window` (default 300s), and `dd.rollback.interval` (default 10s). Requires Docker HEALTHCHECK on the container. Uses existing backup store for rollback images. Includes audit logging and UI display in ContainerDetail panel.
-
-### Fixed
-
-- **Navigation drawer not visible** — Used computed model for permanent/temporary modes; passing `model-value=undefined` caused Vuetify to treat the drawer as closed.
-- **Dark theme missing colors** — Added `info`, `success`, and `warning` color definitions to the dark theme.
-- **ContainerPreview updateKind display** — Fixed structured `updateKind` object rendering with semver-diff color coding.
-- **Invalid `text-body-3` CSS class** — Replaced with valid `text-body-2` in ConfigurationItem and TriggerDetail.
-- **404 catch-all route** — Added catch-all redirect to home for unknown routes.
-
-### Changed
-
-- **Audit event wiring** — Wired audit log entries and Prometheus counter increments for rollback, preview, container-added, container-removed, update-applied, and update-failed events. Registered `ContainerUpdateFailed` event with try/catch in Docker trigger.
-- **Test updates** — 20+ test files updated for v1.2.0 icon changes, CSS selectors, HomeView data model, theme toggle relocation, and audit module wiring. Removed obsolete specs.
-- **Updated doc icon examples** — Switched icon examples to prefer `hl:` and `si:` prefixes over deprecated `mdi:`.
-- **Code quality tooling consolidation** — Replaced Codacy + SonarCloud with Qlty + Snyk. Rewrote `lefthook.yml` pre-push hooks to run `qlty check`, `snyk test`, `snyk code test` (informational), builds, and tests. Added `scripts/snyk-code-gate.sh` wrapper.
-- **Biome formatting** — Applied `biome format` across entire codebase for consistent code style.
-- **README badges** — Replaced Codacy/SonarCloud badges with CI status, Qlty maintainability, and Snyk badges.
-- **ConfigurationItem redesign** — Icon moved to the left with name as prominent text and type as subtitle, replacing the old badge/chip pattern across all configuration pages.
-- **TriggerDetail redesign** — Same modern layout treatment as ConfigurationItem (icon left, name prominent, type subtitle).
-- **Registry page brand colors** — Added brand-colored icon backgrounds for each registry provider (Docker blue, GitHub purple, AWS orange, Google blue, etc.) via `getRegistryProviderColor()` helper and new `iconColor` prop on ConfigurationItem.
-- **Consistent card styling** — Unified `variant="outlined" rounded="lg"` across ContainerItem, ContainerGroup, ContainerTrigger, and WebhookInfo cards for a cohesive look.
-- **Home page severity badges removed** — Removed redundant MAJOR/MINOR severity badges from the container updates list; version chip color already indicates severity.
-- **History page filter bar** — Removed redundant "Update History" heading (already in app bar) and added a collapsible filter bar with active filter chips.
-- **Logs page spacing** — Fixed spacing between the config item and logs card.
-- **Self-update overlay responsive** — Mobile-responsive self-update overlay uses static top-center positioning with fade-in animation on small screens instead of DVD bounce.
-- **QA compose enhancements** — Added HTTP trigger, basic auth, and webhook configuration to `test/qa-compose.yml` for integration testing.
-
-### Security
-
-- **RE2 regex engine** — Replaced native `RegExp` with Google's RE2 (`re2` npm package) for all user-supplied regex patterns (includeTags, excludeTags, transformTags). RE2 uses a linear-time matching algorithm that is inherently immune to ReDoS catastrophic backtracking.
-- **Docs dependency vulnerability fixes** — Fixed 9 CVEs in docs/ transitive dependencies via npm overrides (dompurify 2→3, marked 1→4, got 9→11).
-
-### Removed
-
-- **Dead code removal** — Deleted unused `AppFooter` and `ConfigurationStateView` components, dead computed props (`filteredUpdates`, `upToDateCount`), duplicate `isTriggering` reset, dead `mdi:` prefix replacement in IconRenderer, dead `container-deleted` listener, and Maintenance Windows placeholder.
-- **Removed `@mdi/font` dependency** — Dropped unused Material Design Icons package.
-- **Removed Codacy and SonarCloud** — Replaced with Qlty (local code quality) and Snyk (dependency + SAST scanning) for a unified local-first quality gate.
-- **Removed stale tracking docs** — Deleted `SONARQUBE-ISSUES.md`, `docs/sonar-smells-tracking.md`, and `docs/codacy-high-findings-tracking.md`.
 
 ## [1.1.1] - 2026-02-11
 
@@ -297,7 +302,7 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/1.1.3...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.2.0...HEAD
 [1.1.1]: https://github.com/CodesWhat/drydock/compare/v1.1.0...1.1.1
 [1.1.0]: https://github.com/CodesWhat/drydock/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/CodesWhat/drydock/compare/v1.0.1...v1.0.2

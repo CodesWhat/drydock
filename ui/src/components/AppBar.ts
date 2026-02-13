@@ -78,6 +78,8 @@ export default defineComponent({
       }
     });
 
+    const isDark = computed(() => theme.global.name.value === 'dark');
+
     const themeIconColor = computed(() => {
       switch (themeMode.value) {
         case 'light':
@@ -115,6 +117,7 @@ export default defineComponent({
 
     return {
       logo,
+      isDark,
       viewName,
       logout: performLogout,
       themeMode,

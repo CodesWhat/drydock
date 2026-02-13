@@ -8,17 +8,18 @@
             <div class="stat-icon stat-icon--containers">
               <v-icon size="18" color="white">{{ containerIcon }}</v-icon>
             </div>
-            <div>
+            <div class="flex-grow-1 overflow-hidden">
               <div class="text-h5 font-weight-bold stat-number">{{ containersCount }}</div>
-              <div class="text-caption text-medium-emphasis">Containers</div>
+              <div class="text-caption text-medium-emphasis stat-label">Containers</div>
             </div>
-            <v-spacer />
-            <div v-if="containersWithUpdates.length > 0" class="text-right">
-              <v-chip size="x-small" color="warning" variant="tonal" label>
-                {{ containersWithUpdates.length }} update{{ containersWithUpdates.length === 1 ? '' : 's' }}
-              </v-chip>
+            <div v-if="containersWithUpdates.length > 0" class="d-flex flex-shrink-0" style="gap: 4px">
+              <span v-if="majorUpdates.length > 0" class="stat-badge stat-badge--error">{{ majorUpdates.length }}</span>
+              <span v-if="minorUpdates.length > 0" class="stat-badge stat-badge--warning">{{ minorUpdates.length }}</span>
+              <span v-if="patchUpdates.length > 0" class="stat-badge stat-badge--success">{{ patchUpdates.length }}</span>
+              <span v-if="digestUpdates.length > 0" class="stat-badge stat-badge--info">{{ digestUpdates.length }}</span>
+              <span v-if="unknownUpdates.length > 0" class="stat-badge stat-badge--grey">{{ unknownUpdates.length }}</span>
             </div>
-            <div v-else class="text-right">
+            <div v-else class="flex-shrink-0">
               <v-icon size="small" color="success">fas fa-circle-check</v-icon>
             </div>
           </div>
@@ -32,7 +33,7 @@
             </div>
             <div>
               <div class="text-h5 font-weight-bold stat-number">{{ triggersCount }}</div>
-              <div class="text-caption text-medium-emphasis">Triggers</div>
+              <div class="text-caption text-medium-emphasis stat-label">Triggers</div>
             </div>
           </div>
         </v-card>
@@ -43,12 +44,11 @@
             <div class="stat-icon stat-icon--watchers">
               <v-icon size="18" color="white">{{ watcherIcon }}</v-icon>
             </div>
-            <div>
+            <div class="flex-grow-1 overflow-hidden">
               <div class="text-h5 font-weight-bold stat-number">{{ watchersCount }}</div>
-              <div class="text-caption text-medium-emphasis">Watchers</div>
+              <div class="text-caption text-medium-emphasis stat-label">Watchers</div>
             </div>
-            <v-spacer />
-            <div v-if="maintenanceCountdownLabel" class="text-right">
+            <div v-if="maintenanceCountdownLabel" class="flex-shrink-0">
               <v-chip
                 size="x-small"
                 :color="maintenanceWindowOpenCount > 0 ? 'success' : 'warning'"
@@ -70,7 +70,7 @@
             </div>
             <div>
               <div class="text-h5 font-weight-bold stat-number">{{ registriesCount }}</div>
-              <div class="text-caption text-medium-emphasis">Registries</div>
+              <div class="text-caption text-medium-emphasis stat-label">Registries</div>
             </div>
           </div>
         </v-card>
@@ -97,27 +97,33 @@
             class="mt-1"
           >
             <v-tab>
-              All
+              <v-icon size="small" class="tab-icon" color="primary">fas fa-layer-group</v-icon>
+              <span class="tab-text">All</span>
               <span v-if="containersWithUpdates.length > 0" class="tab-count tab-count--primary ml-2">{{ containersWithUpdates.length }}</span>
             </v-tab>
             <v-tab :disabled="majorUpdates.length === 0">
-              Major
+              <v-icon size="small" class="tab-icon" color="error">fas fa-angles-up</v-icon>
+              <span class="tab-text">Major</span>
               <span v-if="majorUpdates.length > 0" class="tab-count tab-count--error ml-2">{{ majorUpdates.length }}</span>
             </v-tab>
             <v-tab :disabled="minorUpdates.length === 0">
-              Minor
+              <v-icon size="small" class="tab-icon" color="warning">fas fa-angle-up</v-icon>
+              <span class="tab-text">Minor</span>
               <span v-if="minorUpdates.length > 0" class="tab-count tab-count--warning ml-2">{{ minorUpdates.length }}</span>
             </v-tab>
             <v-tab :disabled="patchUpdates.length === 0">
-              Patch
+              <v-icon size="small" class="tab-icon" color="success">fas fa-wrench</v-icon>
+              <span class="tab-text">Patch</span>
               <span v-if="patchUpdates.length > 0" class="tab-count tab-count--success ml-2">{{ patchUpdates.length }}</span>
             </v-tab>
             <v-tab :disabled="digestUpdates.length === 0">
-              Digest
+              <v-icon size="small" class="tab-icon" color="info">fas fa-fingerprint</v-icon>
+              <span class="tab-text">Digest</span>
               <span v-if="digestUpdates.length > 0" class="tab-count tab-count--info ml-2">{{ digestUpdates.length }}</span>
             </v-tab>
             <v-tab :disabled="unknownUpdates.length === 0">
-              Other
+              <v-icon size="small" class="tab-icon" color="grey">fas fa-question</v-icon>
+              <span class="tab-text">Other</span>
               <span v-if="unknownUpdates.length > 0" class="tab-count tab-count--grey ml-2">{{ unknownUpdates.length }}</span>
             </v-tab>
           </v-tabs>
@@ -146,15 +152,16 @@
                       />
                     </div>
                   </template>
-                  <v-list-item-title class="text-body-2 d-flex align-center" style="gap: 8px">
-                    <span class="font-weight-medium">{{ container.displayName }}</span>
-                    <span class="text-medium-emphasis text-caption">{{ container.image.tag.value }}</span>
-                    <v-icon size="x-small" class="text-medium-emphasis">fas fa-arrow-right</v-icon>
+                  <v-list-item-title class="text-body-2 d-flex align-center update-row-content">
+                    <span class="font-weight-medium text-truncate">{{ container.displayName }}</span>
+                    <span class="text-medium-emphasis text-caption flex-shrink-0">{{ container.image.tag.value }}</span>
+                    <v-icon size="x-small" class="text-medium-emphasis flex-shrink-0">fas fa-arrow-right</v-icon>
                     <v-chip
                       :color="updateKindColor(container)"
                       size="x-small"
                       label
                       variant="tonal"
+                      class="flex-shrink-0"
                     >
                       {{ container.updateKind?.remoteValue || 'unknown' }}
                     </v-chip>
@@ -191,13 +198,13 @@
                   <v-icon :color="actionColor(entry.action)" size="small">{{ actionIcon(entry.action) }}</v-icon>
                 </div>
               </template>
-              <v-list-item-title class="text-body-2 d-flex align-center">
-                <span class="activity-name">{{ entry.containerName }}</span>
-                <v-chip :color="actionColor(entry.action)" size="x-small" label variant="tonal">
+              <v-list-item-title class="text-body-2 d-flex align-center activity-row-content">
+                <span class="activity-name text-truncate">{{ entry.containerName }}</span>
+                <v-chip :color="actionColor(entry.action)" size="x-small" label variant="tonal" class="flex-shrink-0">
                   {{ entry.action }}
                 </v-chip>
                 <v-spacer />
-                <span class="text-caption text-medium-emphasis">{{ formatTime(entry.timestamp) }}</span>
+                <span class="text-caption text-medium-emphasis flex-shrink-0 activity-time">{{ formatTime(entry.timestamp) }}</span>
               </v-list-item-title>
             </v-list-item>
           </v-list>
@@ -214,14 +221,14 @@
 }
 
 .stat-card {
-  background: rgba(var(--v-theme-on-surface), 0.03);
-  transition: background 0.15s ease;
+  background: rgb(var(--v-theme-surface));
+  transition: background 0.15s ease, box-shadow 0.15s ease;
   cursor: pointer;
   text-decoration: none;
 }
 
 .stat-card:hover {
-  background: rgba(var(--v-theme-on-surface), 0.06);
+  background: rgba(var(--v-theme-on-surface), 0.04);
 }
 
 .stat-number {
@@ -265,6 +272,27 @@
   border-bottom: none;
 }
 
+/* Stat card update badge (circle with count) */
+.stat-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: white;
+  padding: 0 5px;
+  line-height: 1;
+}
+
+.stat-badge--error { background: rgb(var(--v-theme-error)); }
+.stat-badge--warning { background: rgb(var(--v-theme-warning)); }
+.stat-badge--success { background: rgb(var(--v-theme-success)); }
+.stat-badge--info { background: rgb(var(--v-theme-info)); }
+.stat-badge--grey { background: #9e9e9e; }
+
 /* Tab count circles */
 .tab-count {
   display: inline-flex;
@@ -287,10 +315,48 @@
 .tab-count--info { background: rgb(var(--v-theme-info)); }
 .tab-count--grey { background: #9e9e9e; }
 
-/* Fixed-width container name column for alignment */
+/* Update row content */
+.update-row-content {
+  gap: 8px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+/* Activity row content */
+.activity-row-content {
+  gap: 8px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+/* Container name column for alignment */
 .activity-name {
   display: inline-block;
-  min-width: 160px;
-  flex-shrink: 0;
+  min-width: 120px;
+  flex-shrink: 1;
+}
+
+/* Tab icons hidden on desktop, shown on mobile */
+.tab-icon {
+  display: none;
+}
+
+/* Mobile: icon-only tabs, hide activity timestamps */
+@media (max-width: 599px) {
+  .tab-text {
+    display: none;
+  }
+
+  .tab-icon {
+    display: inline-flex;
+  }
+
+  .activity-name {
+    min-width: 80px;
+  }
+
+  .activity-time {
+    display: none;
+  }
 }
 </style>

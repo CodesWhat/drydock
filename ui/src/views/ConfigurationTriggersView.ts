@@ -1,6 +1,10 @@
 import { defineComponent } from 'vue';
 import TriggerDetail from '@/components/TriggerDetail.vue';
-import { getAllTriggers, getTriggerProviderIcon, getTriggerProviderColor } from '@/services/trigger';
+import {
+  getAllTriggers,
+  getTriggerProviderColor,
+  getTriggerProviderIcon,
+} from '@/services/trigger';
 
 export default defineComponent({
   data() {

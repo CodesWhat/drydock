@@ -103,7 +103,7 @@
                 <th>Container</th>
                 <th v-if="mdAndUp">From</th>
                 <th v-if="mdAndUp">To</th>
-                <th>Status</th>
+                <th v-if="smAndUp">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -114,10 +114,10 @@
                     {{ entry.action }}
                   </v-chip>
                 </td>
-                <td>{{ entry.containerName }}</td>
+                <td class="text-truncate" style="max-width: 120px">{{ entry.containerName }}</td>
                 <td v-if="mdAndUp">{{ entry.fromVersion || '-' }}</td>
                 <td v-if="mdAndUp">{{ entry.toVersion || '-' }}</td>
-                <td>
+                <td v-if="smAndUp">
                   <v-chip :color="statusColor(entry.status)" size="small" label variant="tonal">
                     {{ entry.status }}
                   </v-chip>
@@ -201,5 +201,13 @@
 .filter-panel > * {
   flex: 1 1 180px;
   max-width: 240px;
+}
+
+@media (max-width: 599px) {
+  .audit-table th,
+  .audit-table td {
+    padding: 8px 8px;
+    font-size: 0.8rem;
+  }
 }
 </style>

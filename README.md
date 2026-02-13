@@ -136,13 +136,20 @@ Accepted values: `false` (default — no proxy), `true` (trust all), a number (h
 
 ## Screenshots
 
-<p align="center">
-  <img src="docs/assets/drydock-dashboard.png" alt="drydock dashboard" width="700">
-</p>
-
-<p align="center">
-  <img src="docs/assets/drydock-containers.png" alt="drydock containers view" width="700">
-</p>
+<table>
+<tr>
+<td><img src="docs/assets/drydock-login.png" alt="Login" width="400"></td>
+<td><img src="docs/assets/drydock-dashboard-light.png" alt="Dashboard (light)" width="400"></td>
+</tr>
+<tr>
+<td><img src="docs/assets/drydock-dashboard-dark.png" alt="Dashboard (dark)" width="400"></td>
+<td><img src="docs/assets/drydock-containers.png" alt="Containers" width="400"></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/assets/drydock-mobile-dashboard.png" alt="Mobile dashboard" width="200"></td>
+<td align="center"><img src="docs/assets/drydock-mobile-containers.png" alt="Mobile containers" width="200"></td>
+</tr>
+</table>
 
 ---
 
@@ -219,6 +226,20 @@ Automatic rollback on health check failure with configurable monitoring window a
 DVD-style animated overlay during drydock's own container update with auto-reconnect
 </td>
 </tr>
+<tr>
+<td align="center" width="33%">
+<h3>Icon CDN</h3>
+Auto-resolved container icons via selfhst/icons with homarr-labs fallback
+</td>
+<td align="center" width="33%">
+<h3>Mobile Responsive</h3>
+Fully responsive dashboard with optimized mobile breakpoints for all views
+</td>
+<td align="center" width="33%">
+<h3>Multi-Registry Publishing</h3>
+Available on GHCR, Docker Hub, and Quay.io for flexible deployment
+</td>
+</tr>
 </table>
 
 ---
@@ -276,6 +297,8 @@ DVD-style animated overlay during drydock's own container update with auto-recon
 | **Image backup & rollback** | Automatic pre-update image backup with configurable retention and rollback API |
 | **Grafana dashboard** | Importable JSON template for Prometheus metrics overview |
 | **Font Awesome 6 icons** | Migrated from MDI to FA6 with support for `fab:`/`far:`/`fas:` prefix syntax |
+| **Icon CDN** | Auto-resolve container icons via selfhst/icons (`sh-` prefix) with homarr-labs fallback, plus `hl-`/`si-` and custom URL support |
+| **Mobile responsive UI** | Optimized mobile breakpoints for dashboard, containers, and self-update overlay |
 | **Container actions** | Start/stop/restart containers via API and UI, gated by `DD_SERVER_FEATURE_CONTAINERACTIONS` |
 | **Webhook API** | Token-authenticated HTTP endpoints for CI/CD integration to trigger watch cycles and updates, gated by `DD_SERVER_WEBHOOK_ENABLED` and `DD_SERVER_WEBHOOK_TOKEN` |
 | **Lifecycle hooks** | Pre/post-update shell command hooks with configurable timeout |

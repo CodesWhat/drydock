@@ -24,8 +24,8 @@ interface AuditLogParams {
 
 export default defineComponent({
   setup() {
-    const { mdAndUp } = useDisplay();
-    return { mdAndUp };
+    const { smAndUp, mdAndUp } = useDisplay();
+    return { smAndUp, mdAndUp };
   },
   data() {
     return {
@@ -95,7 +95,15 @@ export default defineComponent({
     },
     formatTimestamp(ts: string): string {
       if (!ts) return '-';
-      return new Date(ts).toLocaleString();
+      const d = new Date(ts);
+      if (!this.smAndUp) {
+        // Short format for mobile: "Feb 13 11:44"
+        const month = d.toLocaleString('en', { month: 'short' });
+        const day = d.getDate();
+        const time = d.toLocaleTimeString('en', { hour: 'numeric', minute: '2-digit' });
+        return `${month} ${day} ${time}`;
+      }
+      return d.toLocaleString();
     },
     actionColor(action: string): string {
       const map: Record<string, string> = {

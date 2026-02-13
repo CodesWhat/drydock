@@ -1,6 +1,10 @@
 import { defineComponent } from 'vue';
 import ConfigurationItem from '@/components/ConfigurationItem.vue';
-import { getAllWatchers, getWatcherProviderIcon, getWatcherProviderColor } from '@/services/watcher';
+import {
+  getAllWatchers,
+  getWatcherProviderColor,
+  getWatcherProviderIcon,
+} from '@/services/watcher';
 
 export default defineComponent({
   data() {

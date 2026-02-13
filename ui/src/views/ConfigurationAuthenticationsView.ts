@@ -1,6 +1,10 @@
 import { defineComponent } from 'vue';
 import ConfigurationItem from '@/components/ConfigurationItem.vue';
-import { getAllAuthentications, getAuthProviderIcon, getAuthProviderColor } from '@/services/authentication';
+import {
+  getAllAuthentications,
+  getAuthProviderColor,
+  getAuthProviderIcon,
+} from '@/services/authentication';
 
 export default defineComponent({
   data() {

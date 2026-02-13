@@ -11,7 +11,8 @@ services:
       - DD_RUN_AS_ROOT=true
       - DD_LOG_FORMAT=text
       - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
-      - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
+      # Disabled for screenshots — prevents auto-updating test containers
+      # - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
       - DD_TRIGGER_HTTP_MYWEBHOOK_URL=http://httpbin.org/post
       - DD_TRIGGER_HTTP_MYWEBHOOK_METHOD=POST
       - DD_AUTH_BASIC_ADMIN_USER=admin
