@@ -16,6 +16,7 @@ const {
 
   function createLokiMock(loadDbCallback = (options, callback) => callback(null)) {
     return {
+      // biome-ignore lint/complexity/useArrowFunction: mock constructor requires function expression
       default: vi.fn().mockImplementation(function () {
         return { loadDatabase: vi.fn(loadDbCallback) };
       }),
@@ -147,6 +148,37 @@ describe('Store Module', () => {
     vi.doMock('../log', createLogMock);
 
     await expect(import('./index.js')).rejects.toThrow();
+  });
+
+  test('should fall back to schema defaults when store configuration is null', async () => {
+    vi.resetModules();
+    vi.doMock('lokijs', () => createLokiMock());
+    vi.doMock('node:fs', () => createFsMock({ renameSync: vi.fn() }));
+    vi.doMock('../configuration', () => ({ getStoreConfiguration: vi.fn(() => null) }));
+    vi.doMock('./app', createCollectionsMock);
+    vi.doMock('./audit', createCollectionsMock);
+    vi.doMock('./backup', createCollectionsMock);
+    vi.doMock('./container', createCollectionsMock);
+    vi.doMock('../log', createLogMock);
+
+    const storeDefault = await import('./index.js');
+    expect(storeDefault.getConfiguration()).toEqual({
+      path: '/store',
+      file: 'dd.json',
+    });
+  });
+
+  test('should throw when DD_STORE_FILE resolves to the configured directory', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      config: { path: '/test/store', file: '.' },
+      fs: { renameSync: vi.fn() },
+    });
+
+    const storeFileIsDir = await import('./index.js');
+    await expect(storeFileIsDir.init()).rejects.toThrow(
+      'DD_STORE_FILE must reference a file path, not a directory',
+    );
   });
 
   test('should migrate from wud.json when dd.json does not exist', async () => {

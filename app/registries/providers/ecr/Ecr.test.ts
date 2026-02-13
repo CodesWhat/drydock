@@ -2,6 +2,7 @@
 import Ecr from './Ecr.js';
 
 vi.mock('@aws-sdk/client-ecr', () => ({
+  // biome-ignore lint/complexity/useArrowFunction: mock constructor requires function expression
   ECRClient: vi.fn().mockImplementation(function () {
     return {
       send: vi.fn().mockResolvedValue({
@@ -9,6 +10,7 @@ vi.mock('@aws-sdk/client-ecr', () => ({
       }),
     };
   }),
+  // biome-ignore lint/complexity/useArrowFunction: mock constructor requires function expression
   GetAuthorizationTokenCommand: vi.fn().mockImplementation(function () {
     return {};
   }),
@@ -98,6 +100,22 @@ test('normalizeImage should return the proper registry v2 endpoint', async () =>
       name: 'test/image',
       registry: {
         url: '123456789.dkr.ecr.eu-west-1.amazonaws.com/test/image',
+      },
+    }),
+  ).toStrictEqual({
+    name: 'test/image',
+    registry: {
+      url: 'https://123456789.dkr.ecr.eu-west-1.amazonaws.com/test/image/v2',
+    },
+  });
+});
+
+test('normalizeImage should keep already-https urls unchanged', async () => {
+  expect(
+    ecr.normalizeImage({
+      name: 'test/image',
+      registry: {
+        url: 'https://123456789.dkr.ecr.eu-west-1.amazonaws.com/test/image/v2',
       },
     }),
   ).toStrictEqual({

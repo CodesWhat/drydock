@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { getAuditCounter } from '../../../prometheus/audit.js';
 import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
@@ -23,7 +22,7 @@ export interface HealthMonitorOptions {
  * Returns an AbortController that can be used to cancel monitoring.
  */
 export function startHealthMonitor(options: HealthMonitorOptions): AbortController {
-  const {
+  var {
     dockerApi,
     containerId,
     containerName,
@@ -34,11 +33,11 @@ export function startHealthMonitor(options: HealthMonitorOptions): AbortControll
     log,
   } = options;
 
-  const abortController = new AbortController();
-  const { signal } = abortController;
+  var abortController = new AbortController();
+  var { signal } = abortController;
 
-  let pollTimer: ReturnType<typeof setInterval> | undefined;
-  let windowTimer: ReturnType<typeof setTimeout> | undefined;
+  var pollTimer: ReturnType<typeof setInterval> | undefined;
+  var windowTimer: ReturnType<typeof setTimeout> | undefined;
 
   function cleanup() {
     if (pollTimer !== undefined) {

@@ -1,6 +1,7 @@
 // @ts-nocheck
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 vi.mock('node:fs', () => ({
   default: {
@@ -127,6 +128,20 @@ describe('runtime/paths', () => {
     expect(() => resolveConfiguredPath('\0bad')).toThrow('contains invalid null byte');
   });
 
+  test('resolveConfiguredPath should reject non-string values', async () => {
+    const { resolveConfiguredPath } = await import('./paths.js');
+    expect(() => resolveConfiguredPath(123)).toThrow('must be a string');
+  });
+
+  test('resolveConfiguredPath should reject absolute paths when allowAbsolute is false', async () => {
+    const { resolveConfiguredPath } = await import('./paths.js');
+    expect(() =>
+      resolveConfiguredPath(path.resolve('/tmp/certs/client.pem'), {
+        allowAbsolute: false,
+      }),
+    ).toThrow('must be a relative path');
+  });
+
   test('resolveConfiguredPathWithinBase should keep paths inside base directory', async () => {
     const { resolveConfiguredPathWithinBase } = await import('./paths.js');
     const baseDir = path.resolve(process.cwd(), 'store');
@@ -135,5 +150,69 @@ describe('runtime/paths', () => {
     expect(() => resolveConfiguredPathWithinBase(baseDir, '../outside.json')).toThrow(
       'must stay inside',
     );
+  });
+
+  test('resolveConfiguredPathWithinBase should accept base directories already ending with separator', async () => {
+    const { resolveConfiguredPathWithinBase } = await import('./paths.js');
+    const baseDirWithSeparator = `${path.resolve(process.cwd(), 'store')}${path.sep}`;
+    const resolved = resolveConfiguredPathWithinBase(baseDirWithSeparator, 'dd.json');
+    expect(resolved).toBe(path.resolve(baseDirWithSeparator, 'dd.json'));
+  });
+
+  test('resolveConfiguredPathWithinBase should allow root base directory', async () => {
+    const { resolveConfiguredPathWithinBase } = await import('./paths.js');
+    const resolved = resolveConfiguredPathWithinBase(path.parse(process.cwd()).root, 'tmp');
+    expect(resolved).toBe(path.resolve(path.parse(process.cwd()).root, 'tmp'));
+  });
+
+  test('resolveRuntimeRoot should include module-directory candidate when import.meta.url is available', async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+
+    const originalFunction = globalThis.Function;
+    const fakeModuleFile = path.resolve(process.cwd(), 'runtime', 'paths.ts');
+    const fakeModuleUrl = pathToFileURL(fakeModuleFile).href;
+    let importMetaFunctionCalled = false;
+
+    // biome-ignore lint/complexity/useArrowFunction: mock constructor requires function expression
+    (globalThis as any).Function = function (...args: string[]) {
+      if (args.length === 1 && args[0] === 'return import.meta.url') {
+        importMetaFunctionCalled = true;
+        return () => fakeModuleUrl;
+      }
+      return originalFunction(...args);
+    };
+
+    try {
+      fs.statSync.mockImplementation(() => ({
+        isDirectory: () => true,
+      }));
+
+      const { resolveRuntimeRoot } = await import('./paths.js');
+      const runtimeRoot = resolveRuntimeRoot();
+      expect(typeof runtimeRoot).toBe('string');
+      expect(importMetaFunctionCalled).toBe(true);
+    } finally {
+      (globalThis as any).Function = originalFunction;
+    }
+  });
+
+  test('resolveRuntimeRoot should ignore argv candidate when process.argv[1] is missing', async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+
+    const originalArgv1 = process.argv[1];
+    process.argv[1] = undefined as any;
+
+    try {
+      fs.statSync.mockImplementation(() => {
+        throw new Error('not found');
+      });
+
+      const { resolveRuntimeRoot } = await import('./paths.js');
+      expect(resolveRuntimeRoot()).toBe(process.cwd());
+    } finally {
+      process.argv[1] = originalArgv1;
+    }
   });
 });
