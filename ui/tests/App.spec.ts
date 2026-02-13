@@ -1,5 +1,10 @@
 import { mount } from '@vue/test-utils';
-import App from '@/App';
+import App, {
+  loadServerConfig,
+  setupAuthStateManagement,
+  setupEventBusListeners,
+} from '@/App';
+import { getServer } from '@/services/server';
 
 // Mock services
 vi.mock('@/services/server', () => ({
@@ -34,6 +39,7 @@ describe('App.vue', () => {
 
   beforeEach(() => {
     vi.mocked(fetch).mockClear();
+    vi.mocked(getServer).mockClear();
     mockEventBus.emit.mockClear();
     mockEventBus.on.mockClear();
 
@@ -143,5 +149,128 @@ describe('App.vue', () => {
 
     expect(wrapper.find('.nav-drawer').exists()).toBe(true);
     expect(wrapper.find('.app-bar').exists()).toBe(true);
+  });
+
+  it('toggles drawer visibility', () => {
+    expect(wrapper.vm.drawerVisible).toBe(false);
+    wrapper.vm.toggleDrawer();
+    expect(wrapper.vm.drawerVisible).toBe(true);
+  });
+});
+
+describe('App helper functions', () => {
+  beforeEach(() => {
+    vi.mocked(fetch).mockClear();
+    vi.mocked(getServer).mockReset();
+    vi.mocked(getServer).mockResolvedValue({ configuration: { feature: { delete: true } } } as any);
+  });
+
+  it('setupEventBusListeners wires all expected listeners', () => {
+    const eventBus = { on: vi.fn() };
+    const onAuthenticated = vi.fn();
+    const notify = vi.fn();
+    const notifyClose = vi.fn();
+
+    setupEventBusListeners(eventBus, onAuthenticated, notify, notifyClose);
+
+    expect(eventBus.on).toHaveBeenCalledWith('authenticated', onAuthenticated);
+    expect(eventBus.on).toHaveBeenCalledWith('notify', notify);
+    expect(eventBus.on).toHaveBeenCalledWith('notify:close', notifyClose);
+  });
+
+  it('setupAuthStateManagement clears user when navigating to login', async () => {
+    const user = { value: { username: 'existing' } };
+    const onAuthenticated = vi.fn();
+    const handler = setupAuthStateManagement(user, onAuthenticated);
+
+    await handler({ name: 'login' });
+
+    expect(user.value).toBeUndefined();
+    expect(onAuthenticated).not.toHaveBeenCalled();
+  });
+
+  it('setupAuthStateManagement fetches and authenticates user when missing', async () => {
+    const user = { value: undefined };
+    const onAuthenticated = vi.fn();
+    const handler = setupAuthStateManagement(user, onAuthenticated);
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ username: 'fetched-user' }),
+    } as any);
+
+    await handler({ name: 'containers' });
+
+    expect(fetch).toHaveBeenCalledWith('/auth/user', {
+      credentials: 'include',
+    });
+    expect(onAuthenticated).toHaveBeenCalledWith({ username: 'fetched-user' });
+  });
+
+  it('setupAuthStateManagement ignores fetch results without username', async () => {
+    const user = { value: undefined };
+    const onAuthenticated = vi.fn();
+    const handler = setupAuthStateManagement(user, onAuthenticated);
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'anonymous' }),
+    } as any);
+
+    await handler({ name: 'containers' });
+
+    expect(onAuthenticated).not.toHaveBeenCalled();
+  });
+
+  it('setupAuthStateManagement handles fetch errors', async () => {
+    const user = { value: undefined };
+    const onAuthenticated = vi.fn();
+    const handler = setupAuthStateManagement(user, onAuthenticated);
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('network down'));
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      await handler({ name: 'containers' });
+      expect(onAuthenticated).not.toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalled();
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it('loadServerConfig fetches and stores server config when authenticated', async () => {
+    const authenticated = { value: true };
+    const instance: any = {
+      appContext: {
+        config: {
+          globalProperties: {},
+        },
+      },
+    };
+    vi.mocked(getServer).mockResolvedValueOnce({
+      configuration: { feature: { delete: true } },
+    } as any);
+
+    await loadServerConfig(authenticated, instance);
+
+    expect(getServer).toHaveBeenCalled();
+    expect(instance.appContext.config.globalProperties.$serverConfig).toEqual({
+      feature: { delete: true },
+    });
+  });
+
+  it('loadServerConfig is a no-op when already configured or unauthenticated', async () => {
+    const instance: any = {
+      appContext: {
+        config: {
+          globalProperties: {
+            $serverConfig: { existing: true },
+          },
+        },
+      },
+    };
+
+    await loadServerConfig({ value: false }, instance);
+    await loadServerConfig({ value: true }, instance);
+
+    expect(getServer).not.toHaveBeenCalled();
   });
 });

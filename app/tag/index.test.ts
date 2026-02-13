@@ -294,6 +294,14 @@ describe('transform', () => {
       expect(semver.transform('^nomatch$ => $1', '1.2.3')).toBe('1.2.3');
     });
 
+    test('should handle replacement with no placeholders', async () => {
+      expect(semver.transform('^v(.+)$ => stable', 'v1.2.3')).toBe('stable');
+    });
+
+    test('should replace missing capture placeholders with empty values', async () => {
+      expect(semver.transform('^(\\d+)$ => $2', '123')).toBe('');
+    });
+
     test('should handle malformed regex', async () => {
       expect(semver.transform('[invalid-regex => $1', '1.2.3')).toBe('1.2.3');
     });

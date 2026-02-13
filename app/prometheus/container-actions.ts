@@ -1,7 +1,6 @@
-// @ts-nocheck
 import { Counter, register } from 'prom-client';
 
-let containerActionsCounter;
+var containerActionsCounter;
 
 export function init() {
   if (containerActionsCounter) {

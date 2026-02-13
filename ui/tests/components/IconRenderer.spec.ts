@@ -77,6 +77,15 @@ describe('IconRenderer', () => {
     expect(wrapper.vm.customIconUrl).toBe(iconUrl);
   });
 
+  it('treats absolute root-relative paths as custom icon URLs', () => {
+    const wrapper = mount(IconRenderer, {
+      props: { icon: '/assets/custom-logo.png' },
+    });
+
+    expect(wrapper.vm.isCustomIconUrl).toBe(true);
+    expect(wrapper.vm.customIconUrl).toBe('/assets/custom-logo.png');
+  });
+
   it('does not treat non-http values as custom URL icons', () => {
     const wrapper = mount(IconRenderer, {
       props: { icon: 'not-a-url' },
@@ -123,6 +132,19 @@ describe('IconRenderer', () => {
     expect(wrapper.vm.isSelfhstIcon).toBe(false);
     expect(wrapper.vm.isSimpleIcon).toBe(false);
     expect(wrapper.vm.normalizedIcon).toBe('');
+  });
+
+  it('sets image fallback state on image error and resets on icon change', async () => {
+    const wrapper = mount(IconRenderer, {
+      props: { icon: 'si-docker' },
+    });
+
+    expect(wrapper.vm.imgFailed).toBe(false);
+    wrapper.vm.onImgError();
+    expect(wrapper.vm.imgFailed).toBe(true);
+
+    await wrapper.setProps({ icon: 'si-github' });
+    expect(wrapper.vm.imgFailed).toBe(false);
   });
 
   it('applies correct styling based on props', () => {

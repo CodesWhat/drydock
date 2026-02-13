@@ -3,7 +3,11 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import { getState } from '../../../registry/index.js';
 import Docker from '../docker/Docker.js';
-import Dockercompose from './Dockercompose.js';
+import Dockercompose, {
+  testable_normalizeImplicitLatest,
+  testable_normalizePostStartEnvironmentValue,
+  testable_normalizePostStartHooks,
+} from './Dockercompose.js';
 
 vi.mock('../../../registry', () => ({
   getState: vi.fn(),
@@ -819,6 +823,17 @@ describe('Dockercompose Trigger', () => {
     expect(mockLog.error).toHaveBeenCalledWith(expect.stringContaining('Error when parsing'));
   });
 
+  test('getComposeFileAsObject should log default file path when called without explicit file argument', async () => {
+    trigger.configuration.file = '/opt/drydock/test/default-compose.yml';
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from('invalid: yaml: [[['));
+
+    await expect(trigger.getComposeFileAsObject()).rejects.toThrow();
+
+    expect(mockLog.error).toHaveBeenCalledWith(
+      expect.stringContaining('/opt/drydock/test/default-compose.yml'),
+    );
+  });
+
   test('getComposeFile should use default configuration file when no argument', () => {
     trigger.configuration.file = '/opt/drydock/test/default-compose.yml';
 
@@ -924,6 +939,32 @@ describe('Dockercompose Trigger', () => {
     expect(processComposeFileSpy).toHaveBeenCalledWith('/opt/drydock/test/b.yml', [container2]);
   });
 
+  test('triggerBatch should group multiple containers under the same compose file', async () => {
+    trigger.configuration.file = '/opt/drydock/test/compose.yml';
+    fs.access.mockResolvedValue(undefined);
+
+    const container1 = {
+      name: 'app1',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/opt/drydock/test/shared.yml' },
+    };
+    const container2 = {
+      name: 'app2',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/opt/drydock/test/shared.yml' },
+    };
+
+    const processComposeFileSpy = vi.spyOn(trigger, 'processComposeFile').mockResolvedValue();
+
+    await trigger.triggerBatch([container1, container2]);
+
+    expect(processComposeFileSpy).toHaveBeenCalledTimes(1);
+    expect(processComposeFileSpy).toHaveBeenCalledWith('/opt/drydock/test/shared.yml', [
+      container1,
+      container2,
+    ]);
+  });
+
   // -----------------------------------------------------------------------
   // getComposeFileForContainer
   // -----------------------------------------------------------------------
@@ -975,6 +1016,30 @@ describe('Dockercompose Trigger', () => {
     const result = trigger.getComposeFileForContainer(container);
 
     expect(result).toBe('/default/compose.yml');
+  });
+
+  test('getComposeFileForContainer should return null and warn when label value is invalid', () => {
+    const container = {
+      name: 'broken',
+      labels: { 'dd.compose.file': '\0bad' },
+    };
+
+    const result = trigger.getComposeFileForContainer(container);
+
+    expect(result).toBeNull();
+    expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('is invalid'));
+  });
+
+  test('getComposeFileForContainer should return null and warn when default path is invalid', () => {
+    trigger.configuration.file = '\0broken';
+    const container = { labels: {} };
+
+    const result = trigger.getComposeFileForContainer(container);
+
+    expect(result).toBeNull();
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Default compose file path is invalid'),
+    );
   });
 
   // -----------------------------------------------------------------------
@@ -1033,5 +1098,25 @@ describe('Dockercompose Trigger', () => {
       composeFileLabel: 'dd.compose.file',
     });
     expect(error).toBeUndefined();
+  });
+
+  test('normalizeImplicitLatest should return input when image is empty or already digest/tag qualified', () => {
+    expect(testable_normalizeImplicitLatest('')).toBe('');
+    expect(testable_normalizeImplicitLatest('alpine@sha256:abc')).toBe('alpine@sha256:abc');
+    expect(testable_normalizeImplicitLatest('nginx:1.0.0')).toBe('nginx:1.0.0');
+  });
+
+  test('normalizeImplicitLatest should append latest even when image path ends with slash', () => {
+    expect(testable_normalizeImplicitLatest('repo/')).toBe('repo/:latest');
+  });
+
+  test('normalizePostStartHooks should return empty array when post_start is missing', () => {
+    expect(testable_normalizePostStartHooks(undefined)).toEqual([]);
+  });
+
+  test('normalizePostStartEnvironmentValue should return empty string on json serialization errors', () => {
+    const circular: any = {};
+    circular.self = circular;
+    expect(testable_normalizePostStartEnvironmentValue(circular)).toBe('');
   });
 });

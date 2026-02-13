@@ -42,6 +42,10 @@ describe('Registry Service', () => {
       expect(getRegistryProviderIcon('unknown.registry')).toBe('fas fa-cube');
     });
 
+    it('returns default icon when provider is missing', () => {
+      expect(getRegistryProviderIcon(undefined)).toBe('fas fa-cube');
+    });
+
     it('handles provider names with dots correctly', () => {
       expect(getRegistryProviderIcon('hub.docker.com')).toBe('fab fa-docker');
       expect(getRegistryProviderIcon('gcr.io')).toBe('fab fa-google');

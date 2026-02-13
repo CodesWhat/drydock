@@ -49,6 +49,13 @@ describe('Docker Hub Registry', () => {
     expect(normalized.registry.url).toBe('https://registry-1.docker.io/v2');
   });
 
+  test('should keep undefined image name when normalizing', async () => {
+    const image = { registry: {} };
+    const normalized = hub.normalizeImage(image);
+    expect(normalized.name).toBeUndefined();
+    expect(normalized.registry.url).toBe('https://registry-1.docker.io/v2');
+  });
+
   test('should mask configuration with token', async () => {
     hub.configuration = { login: 'testuser', token: 'secret_token' }; // NOSONAR - test fixture, not a real credential
     const masked = hub.maskConfiguration();

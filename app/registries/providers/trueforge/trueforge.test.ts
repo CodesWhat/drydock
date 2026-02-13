@@ -47,6 +47,16 @@ test('match should return true when registry url is from trueforge', async () =>
   ).toBeTruthy();
 });
 
+test('match should return true for valid trueforge subdomains', async () => {
+  expect(
+    trueforge.match({
+      registry: {
+        url: 'team.oci.trueforge.org',
+      },
+    }),
+  ).toBe(true);
+});
+
 test('match should return false when registry url is not from trueforge', async () => {
   expect(
     trueforge.match({
@@ -75,6 +85,22 @@ test('normalizeImage should return the proper registry v2 endpoint', async () =>
     name: 'test/image',
     registry: {
       url: 'https://oci.trueforge.org/test/image/v2',
+    },
+  });
+});
+
+test('normalizeImage should preserve already-https registry urls', async () => {
+  expect(
+    trueforge.normalizeImage({
+      name: 'test/image',
+      registry: {
+        url: 'https://oci.trueforge.org/v2',
+      },
+    }),
+  ).toStrictEqual({
+    name: 'test/image',
+    registry: {
+      url: 'https://oci.trueforge.org/v2',
     },
   });
 });

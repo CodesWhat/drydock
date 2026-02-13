@@ -75,7 +75,7 @@ describe('SelfUpdateOverlay', () => {
         stubs: {
           'v-overlay': {
             template:
-              '<div class="v-overlay" :class="{ active: modelValue }"><slot v-if="modelValue" /></div>',
+              '<div class="v-overlay" :class="{ active: modelValue }" @click="$emit(\'update:modelValue\', false)"><slot v-if="modelValue" /></div>',
             props: ['modelValue', 'persistent', 'scrim', 'opacity', 'zIndex'],
           },
           'v-progress-linear': {
@@ -217,11 +217,68 @@ describe('SelfUpdateOverlay', () => {
     expect(wrapper.vm.phase).toBe('ready');
   });
 
+  it('handles successful health response after timer is cleared mid-request', async () => {
+    let resolveFetch: ((value: Response) => void) | undefined;
+    const fetchPromise = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+    (global.fetch as any).mockReturnValue(fetchPromise);
+
+    eventHandlers['self-update']();
+    await wrapper.vm.$nextTick();
+    eventHandlers['connection-lost']();
+    await wrapper.vm.$nextTick();
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+    resolveFetch?.({ ok: true } as Response);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(1500);
+
+    expect(reloadMock).toHaveBeenCalled();
+  });
+
   it('starts bounce animation on self-update', async () => {
     eventHandlers['self-update']();
     await wrapper.vm.$nextTick();
 
     expect(rafMock).toHaveBeenCalled();
+  });
+
+  it('deactivates when overlay emits model update', async () => {
+    eventHandlers['self-update']();
+    await wrapper.vm.$nextTick();
+
+    await wrapper.find('.v-overlay').trigger('click');
+
+    expect(wrapper.vm.active).toBe(false);
+  });
+
+  it('uses deterministic fallback when secure crypto is unavailable', async () => {
+    const originalCrypto = globalThis.crypto;
+    Object.defineProperty(globalThis, 'crypto', {
+      value: undefined,
+      configurable: true,
+    });
+
+    try {
+      eventHandlers['self-update']();
+      await wrapper.vm.$nextTick();
+
+      const maxX = window.innerWidth - wrapper.vm.logoSize;
+      const maxY = window.innerHeight - wrapper.vm.logoSize;
+
+      expect(wrapper.vm.x).toBe(maxX * 0.5);
+      expect(wrapper.vm.y).toBe(maxY * 0.5);
+      expect(wrapper.vm.hue).toBe(180);
+    } finally {
+      Object.defineProperty(globalThis, 'crypto', {
+        value: originalCrypto,
+        configurable: true,
+      });
+    }
   });
 
   it('cleans up on unmount', () => {

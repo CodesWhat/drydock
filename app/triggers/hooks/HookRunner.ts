@@ -1,8 +1,8 @@
 import { execFile } from 'node:child_process';
 import log from '../../log/index.js';
 
-const MAX_OUTPUT_BYTES = 10 * 1024; // 10 KB
-const DEFAULT_TIMEOUT_MS = 60_000; // 1 minute
+var MAX_OUTPUT_BYTES = 10 * 1024; // 10 KB
+var DEFAULT_TIMEOUT_MS = 60_000; // 1 minute
 
 export interface HookRunnerOptions {
   timeout?: number;
@@ -24,13 +24,13 @@ export interface HookResult {
  * unescaped arguments while still supporting shell syntax in the command.
  */
 export async function runHook(command: string, options: HookRunnerOptions): Promise<HookResult> {
-  const hookLog = log.child({ hook: options.label });
-  const timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
+  var hookLog = log.child({ hook: options.label });
+  var timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
 
   hookLog.info(`Running ${options.label} hook: ${command}`);
 
   return new Promise<HookResult>((resolve) => {
-    const child = execFile(
+    var child = execFile(
       '/bin/sh',
       ['-c', command],
       {
@@ -39,10 +39,10 @@ export async function runHook(command: string, options: HookRunnerOptions): Prom
         env: { ...process.env, ...options.env },
       },
       (error, stdout, stderr) => {
-        const timedOut = error !== null && 'killed' in error && error.killed === true;
-        const exitCode = timedOut ? 1 : (error?.code ?? child.exitCode ?? 0);
+        var timedOut = error !== null && 'killed' in error && error.killed === true;
+        var exitCode = timedOut ? 1 : (error?.code ?? child.exitCode ?? 0);
 
-        const result: HookResult = {
+        var result: HookResult = {
           exitCode: typeof exitCode === 'number' ? exitCode : 1,
           stdout: typeof stdout === 'string' ? stdout.slice(0, MAX_OUTPUT_BYTES) : '',
           stderr: typeof stderr === 'string' ? stderr.slice(0, MAX_OUTPUT_BYTES) : '',

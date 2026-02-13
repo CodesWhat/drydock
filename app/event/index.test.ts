@@ -123,6 +123,15 @@ test('deregistration function should remove handler', async () => {
   expect(handler).not.toHaveBeenCalled();
 });
 
+test('deregistration function should be idempotent', async () => {
+  const handler = vi.fn();
+  const deregister = event.registerContainerReport(handler, { order: 10 });
+  deregister();
+  deregister();
+  await event.emitContainerReport({});
+  expect(handler).not.toHaveBeenCalled();
+});
+
 test('emitContainerUpdateApplied should call registered handlers', async () => {
   const handler = vi.fn();
   event.registerContainerUpdateApplied(handler, { order: 10 });
@@ -156,4 +165,63 @@ test('handler with non-finite order should default to 100', async () => {
   await event.emitContainerReport({});
 
   expect(calls).toEqual(['low-order', 'default-order']);
+});
+
+test('container-added audit handler should fall back to id when name is missing', async () => {
+  vi.resetModules();
+  const insertAudit = vi.fn();
+  const inc = vi.fn();
+
+  vi.doMock('../store/audit.js', () => ({
+    insertAudit,
+  }));
+  vi.doMock('../prometheus/audit.js', () => ({
+    getAuditCounter: () => ({
+      inc,
+    }),
+  }));
+
+  const freshEvent = await import('./index.js');
+  freshEvent.emitContainerAdded({
+    id: 'container-id-only',
+    image: {
+      name: 'nginx',
+    },
+  });
+
+  expect(insertAudit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      action: 'container-added',
+      containerName: 'container-id-only',
+      containerImage: 'nginx',
+    }),
+  );
+  expect(inc).toHaveBeenCalledWith({ action: 'container-added' });
+});
+
+test('container-added audit handler should fallback to empty string when name and id are missing', async () => {
+  vi.resetModules();
+  const insertAudit = vi.fn();
+
+  vi.doMock('../store/audit.js', () => ({
+    insertAudit,
+  }));
+  vi.doMock('../prometheus/audit.js', () => ({
+    getAuditCounter: () => undefined,
+  }));
+
+  const freshEvent = await import('./index.js');
+  freshEvent.emitContainerAdded({
+    image: {
+      name: 'nginx',
+    },
+  });
+
+  expect(insertAudit).toHaveBeenCalledWith(
+    expect.objectContaining({
+      action: 'container-added',
+      containerName: '',
+      containerImage: 'nginx',
+    }),
+  );
 });

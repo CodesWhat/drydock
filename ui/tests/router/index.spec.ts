@@ -4,7 +4,14 @@ vi.mock('@/services/auth', () => ({
 }));
 
 // Import router after mocking
-import router from '@/router';
+import { nextTick } from 'vue';
+import router, {
+  applyAuthNavigationGuard,
+  createLazyRoute,
+  createLoginRedirect,
+  validateAndGetNextRoute,
+  viewLoaders,
+} from '@/router';
 import { getUser } from '@/services/auth';
 
 describe('Router', () => {
@@ -96,6 +103,107 @@ describe('Router', () => {
       // Exercise the lazy import function
       const component = await logsRoute.components.default();
       expect(component).toBeDefined();
+    });
+
+    it('view loaders resolve each lazy view component', async () => {
+      for (const loader of Object.values(viewLoaders)) {
+        const component = await loader();
+        expect(component).toBeDefined();
+      }
+    });
+  });
+
+  describe('router helper functions', () => {
+    it('createLazyRoute builds route records from path and loader key', () => {
+      const route = createLazyRoute('/test', 'home');
+      expect(route.path).toBe('/test');
+      expect(route.name).toBe('home');
+      expect(typeof route.component).toBe('function');
+    });
+
+    it('validateAndGetNextRoute allows safe local next path', () => {
+      expect(validateAndGetNextRoute({ query: { next: '/containers' } })).toBe('/containers');
+    });
+
+    it('validateAndGetNextRoute blocks protocol-relative and missing next', () => {
+      expect(validateAndGetNextRoute({ query: { next: '//evil.example' } })).toBe(true);
+      expect(validateAndGetNextRoute({ query: {} })).toBe(true);
+    });
+
+    it('createLoginRedirect preserves original destination path', () => {
+      expect(createLoginRedirect({ path: '/configuration/watchers' })).toEqual({
+        name: 'login',
+        query: {
+          next: '/configuration/watchers',
+        },
+      });
+    });
+
+    it('applyAuthNavigationGuard allows login route without auth check', async () => {
+      vi.mocked(getUser).mockResolvedValue(undefined);
+
+      const result = await applyAuthNavigationGuard({ name: 'login', query: {} });
+
+      expect(result).toBe(true);
+      expect(getUser).not.toHaveBeenCalled();
+    });
+
+    it('applyAuthNavigationGuard redirects unauthenticated users to login', async () => {
+      vi.mocked(getUser).mockResolvedValue(undefined);
+
+      const result = await applyAuthNavigationGuard({ name: 'containers', path: '/containers' });
+
+      expect(getUser).toHaveBeenCalled();
+      expect(result).toEqual({
+        name: 'login',
+        query: {
+          next: '/containers',
+        },
+      });
+    });
+
+    it('applyAuthNavigationGuard emits authenticated event and supports safe next redirect', async () => {
+      const emit = vi.fn();
+      (router as any).app = {
+        config: {
+          globalProperties: {
+            $eventBus: { emit },
+          },
+        },
+      };
+      vi.mocked(getUser).mockResolvedValue({ username: 'demo' });
+
+      const result = await applyAuthNavigationGuard({
+        name: 'containers',
+        path: '/containers',
+        query: { next: '/monitoring/history' },
+      });
+      await nextTick();
+
+      expect(result).toBe('/monitoring/history');
+      expect(emit).toHaveBeenCalledWith('authenticated', { username: 'demo' });
+    });
+
+    it('applyAuthNavigationGuard returns true for invalid next redirect values', async () => {
+      vi.mocked(getUser).mockResolvedValue({ username: 'demo' });
+
+      const result = await applyAuthNavigationGuard({
+        name: 'containers',
+        path: '/containers',
+        query: { next: '//external.example' },
+      });
+
+      expect(result).toBe(true);
+    });
+
+    it('beforeEach guard runs during real router navigation', async () => {
+      vi.mocked(getUser).mockResolvedValue(undefined);
+      await router.push('/login');
+
+      await router.push('/containers');
+      await nextTick();
+
+      expect(router.currentRoute.value.name).toBe('login');
     });
   });
 });

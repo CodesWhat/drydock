@@ -19,6 +19,8 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 | `DD_WATCHER_{watcher_name}_HOST`                         | :white_circle: | Docker hostname or ip of the host to watch                                                                             |                                                |                                                                 |
 | `DD_WATCHER_{watcher_name}_JITTER`                       | :white_circle: | Jitter in ms applied to the CRON to better distribute the load on the registries (on the Hub at the first place) | > 0 | `60000` (1 minute)                                              |
 | `DD_WATCHER_{watcher_name}_KEYFILE`                      | :white_circle: | Key pem file path (only for TLS connection)                                                                            |                                                |                                                                 |
+| `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW`           | :white_circle: | Allowed update schedule (checks outside this window are skipped)                                                       | [Valid CRON expression](https://crontab.guru/) |                                                                 |
+| `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_TZ`        | :white_circle: | Timezone used to evaluate `MAINTENANCE_WINDOW`                                                                         | IANA timezone (e.g. `UTC`, `Europe/Paris`)    | `UTC`                                                           |
 | `DD_WATCHER_{watcher_name}_PORT`                         | :white_circle: | Docker port of the host to watch                                                                                       |                                                | `2375`                                                          |
 | `DD_WATCHER_{watcher_name}_PROTOCOL`                     | :white_circle: | Docker remote API protocol                                                                                              | `http`, `https`                                | `http`                                                          |
 | `DD_WATCHER_{watcher_name}_SOCKET`                       | :white_circle: | Docker socket to watch                                                                                                 | Valid unix socket                              | `/var/run/docker.sock`                                          |
@@ -44,6 +46,8 @@ You just need to give them different names.
 [See dockerd documentation](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket)
 
 !> Remote watcher auth (`AUTH_*`) is only applied on HTTPS connections (`PROTOCOL=https`) or TLS certificate-based connections.
+
+?> When `MAINTENANCE_WINDOW` is configured and a check is skipped outside the allowed schedule, drydock queues one pending check and runs it automatically when the next maintenance window opens.
 
 !> Watching image digests causes an extensive usage of _Docker Registry Pull API_ which is restricted by [**Quotas on the Docker Hub**](https://docs.docker.com/docker-hub/download-rate-limit/). \
 By default, drydock enables it only for **non semver** image tags. \

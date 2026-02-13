@@ -565,4 +565,32 @@ describe('ContainersView', () => {
     expect(filtered[0].id).toBe('2');
     expect(filtered[1].id).toBe('1');
   });
+
+  it('handles non-string sortable values in helper comparisons', async () => {
+    wrapper.vm.containers = [
+      {
+        id: 'n1',
+        displayName: 'A',
+        agent: 7,
+        watcher: true,
+        image: { registry: { name: null }, created: '2023-01-01T00:00:00Z' },
+        updateAvailable: false,
+        labels: {},
+      },
+      {
+        id: 'n2',
+        displayName: 'B',
+        agent: false,
+        watcher: {},
+        image: { registry: { name: 'hub' }, created: '2023-01-02T00:00:00Z' },
+        updateAvailable: false,
+        labels: {},
+      },
+    ];
+    await wrapper.vm.$nextTick();
+
+    expect(Array.isArray(wrapper.vm.watchers)).toBe(true);
+    expect(Array.isArray(wrapper.vm.agents)).toBe(true);
+    expect(Array.isArray(wrapper.vm.registries)).toBe(true);
+  });
 });

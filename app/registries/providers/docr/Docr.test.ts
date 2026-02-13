@@ -31,6 +31,16 @@ test('match should return true when registry url is from docr', async () => {
   ).toBeTruthy();
 });
 
+test('match should return true for valid digitalocean subdomains', async () => {
+  expect(
+    docr.match({
+      registry: {
+        url: 'team.registry.digitalocean.com',
+      },
+    }),
+  ).toBe(true);
+});
+
 test('match should return false when registry url is not from docr', async () => {
   expect(
     docr.match({

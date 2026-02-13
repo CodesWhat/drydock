@@ -592,6 +592,47 @@ describe('Container Router', () => {
       expect(res.json).toHaveBeenCalledWith({ logs: logText });
     });
 
+    test('should demux logs when docker API returns a non-Buffer payload', async () => {
+      const logText = 'plain logs';
+      const mockLogs = new Uint8Array(dockerStreamBuffer(logText));
+      const mockDockerContainer = { logs: vi.fn().mockResolvedValue(mockLogs) };
+      const mockWatcher = {
+        dockerApi: { getContainer: vi.fn().mockReturnValue(mockDockerContainer) },
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'my-container',
+        watcher: 'local',
+      });
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
+
+      const res = await callGetContainerLogs('c1');
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ logs: logText });
+    });
+
+    test('should ignore truncated docker stream frames', async () => {
+      const truncatedHeader = Buffer.alloc(8);
+      truncatedHeader[0] = 1;
+      truncatedHeader.writeUInt32BE(20, 4);
+      const truncatedFrame = Buffer.concat([truncatedHeader, Buffer.from('short')]);
+
+      const mockDockerContainer = { logs: vi.fn().mockResolvedValue(truncatedFrame) };
+      const mockWatcher = {
+        dockerApi: { getContainer: vi.fn().mockReturnValue(mockDockerContainer) },
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'my-container',
+        watcher: 'local',
+      });
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
+
+      const res = await callGetContainerLogs('c1');
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ logs: '' });
+    });
+
     test('should pass query params to docker logs', async () => {
       const mockLogs = dockerStreamBuffer('log');
       const mockDockerContainer = { logs: vi.fn().mockResolvedValue(mockLogs) };
@@ -881,6 +922,21 @@ describe('Container Router', () => {
     test('should ignore invalid snoozeUntil in existing policy', () => {
       callUpdatePolicy(
         { id: 'c1', updatePolicy: { snoozeUntil: 'not-a-date' } },
+        { action: 'unsnooze' },
+      );
+      expect(getUpdatedPolicy()).toBeUndefined();
+    });
+
+    test('should normalize empty skip arrays out of update policy', () => {
+      callUpdatePolicy(
+        {
+          id: 'c1',
+          updatePolicy: {
+            skipTags: [],
+            skipDigests: [],
+            snoozeUntil: '2099-01-01T00:00:00.000Z',
+          },
+        },
         { action: 'unsnooze' },
       );
       expect(getUpdatedPolicy()).toBeUndefined();

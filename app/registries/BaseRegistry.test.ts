@@ -1,6 +1,10 @@
 // @ts-nocheck
 import BaseRegistry from './BaseRegistry.js';
 
+vi.mock('axios', () => ({
+  default: vi.fn(),
+}));
+
 let baseRegistry;
 
 beforeEach(() => {
@@ -121,4 +125,39 @@ test('maskSensitiveFields should skip fields not in configuration', () => {
   const result = baseRegistry.maskSensitiveFields(['password']);
   expect(result.login).toBe('user');
   expect(result.password).toBeUndefined();
+});
+
+test('authenticateBearerFromAuthUrl should set bearer token using default extractor', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } }); // NOSONAR - test fixture
+
+  const result = await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {} },
+    'https://auth.example.com/token',
+    'dXNlcjpwYXNz',
+  );
+
+  expect(axios).toHaveBeenCalledWith({
+    method: 'GET',
+    url: 'https://auth.example.com/token',
+    headers: {
+      Accept: 'application/json',
+      Authorization: 'Basic dXNlcjpwYXNz',
+    },
+  });
+  expect(result.headers.Authorization).toBe('Bearer abc123');
+});
+
+test('authenticateBearerFromAuthUrl should not set header when token is missing', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: {} });
+
+  const result = await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {} },
+    'https://auth.example.com/token',
+    undefined,
+    (response) => response.data.accessToken,
+  );
+
+  expect(result.headers.Authorization).toBeUndefined();
 });

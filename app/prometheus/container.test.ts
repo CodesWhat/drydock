@@ -3,6 +3,7 @@ vi.mock('../store/container');
 vi.mock('../log');
 
 import log from '../log/index.js';
+import * as containerModel from '../model/container.js';
 import * as store from '../store/container.js';
 import * as container from './container.js';
 
@@ -81,4 +82,27 @@ test('gauge must silently ignore labels not in the initial labelset', async () =
   vi.runOnlyPendingTimers();
   expect(spyLog).not.toHaveBeenCalled();
   expect(spySet).toHaveBeenCalledWith({}, 1);
+});
+
+test('gauge should warn when flattening a container throws', async () => {
+  vi.useFakeTimers();
+  const circular: any = { id: 'broken-container' };
+  circular.self = circular;
+  store.getContainers = () => [circular];
+  const spyFlatten = vi
+    .spyOn(containerModel, 'flatten')
+    .mockImplementation(() => {
+      throw new Error('flatten failed');
+    });
+  const spyWarn = vi.spyOn(log, 'warn');
+  const spyDebug = vi.spyOn(log, 'debug');
+
+  container.init();
+  vi.runOnlyPendingTimers();
+
+  expect(spyWarn).toHaveBeenCalledWith(
+    expect.stringContaining('broken-container - Error when adding container to the metrics'),
+  );
+  expect(spyDebug).toHaveBeenCalled();
+  spyFlatten.mockRestore();
 });

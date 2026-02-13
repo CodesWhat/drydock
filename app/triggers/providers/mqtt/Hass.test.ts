@@ -487,6 +487,20 @@ test('addContainerSensor should pass release_url undefined when result is absent
   expect(discoveryPayload.release_url).toBeUndefined();
 });
 
+test('addContainerSensor should include release_url when result link is present', async () => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+    result: {
+      link: 'https://example.com/changelog',
+    },
+  });
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.release_url).toBe('https://example.com/changelog');
+});
+
 test('publishDiscoveryMessage should use default icon when none provided', async () => {
   await hass.publishDiscoveryMessage({
     discoveryTopic: 'my/discovery',

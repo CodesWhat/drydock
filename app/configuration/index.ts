@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import joi from 'joi';
 import setValue from 'set-value';
+import { resolveConfiguredPath } from '../runtime/paths.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
 
@@ -33,7 +34,9 @@ export function replaceSecrets(ddEnvVars) {
   );
   secretFileEnvVars.forEach((secretFileEnvVar) => {
     const secretKey = secretFileEnvVar.replaceAll(VAR_FILE_SUFFIX, '');
-    const secretFilePath = ddEnvVars[secretFileEnvVar];
+    const secretFilePath = resolveConfiguredPath(ddEnvVars[secretFileEnvVar], {
+      label: `${secretFileEnvVar} path`,
+    });
     const secretFileValue = fs.readFileSync(secretFilePath, 'utf-8');
     delete ddEnvVars[secretFileEnvVar];
     ddEnvVars[secretKey] = secretFileValue;
@@ -68,11 +71,65 @@ export function getVersion() {
 export function getLogLevel() {
   return ddEnvVars.DD_LOG_LEVEL || 'info';
 }
+
+function parseWatcherMaintenanceEnvAlias(envKey: string) {
+  const envKeyUpper = envKey.toUpperCase();
+  const prefix = 'DD_WATCHER_';
+  const tzSuffix = '_MAINTENANCE_WINDOW_TZ';
+  const windowSuffix = '_MAINTENANCE_WINDOW';
+
+  if (!envKeyUpper.startsWith(prefix)) {
+    return undefined;
+  }
+
+  if (envKeyUpper.endsWith(tzSuffix)) {
+    const watcherName = envKeyUpper.slice(prefix.length, -tzSuffix.length);
+    if (!watcherName) {
+      return undefined;
+    }
+    return { watcherName: watcherName.toLowerCase(), key: 'maintenancewindowtz' };
+  }
+
+  if (envKeyUpper.endsWith(windowSuffix)) {
+    const watcherName = envKeyUpper.slice(prefix.length, -windowSuffix.length);
+    if (!watcherName) {
+      return undefined;
+    }
+    return { watcherName: watcherName.toLowerCase(), key: 'maintenancewindow' };
+  }
+
+  return undefined;
+}
+
+function normalizeWatcherMaintenanceEnvAliases(watcherConfigurations: Record<string, any>) {
+  Object.entries(ddEnvVars).forEach(([envKey, envValue]) => {
+    const parsedEnvAlias = parseWatcherMaintenanceEnvAlias(envKey);
+    if (!parsedEnvAlias || envValue === undefined) {
+      return;
+    }
+    if (!watcherConfigurations[parsedEnvAlias.watcherName]) {
+      watcherConfigurations[parsedEnvAlias.watcherName] = {};
+    }
+    watcherConfigurations[parsedEnvAlias.watcherName][parsedEnvAlias.key] = envValue;
+  });
+
+  Object.values(watcherConfigurations).forEach((watcherConfiguration) => {
+    if (
+      watcherConfiguration &&
+      typeof watcherConfiguration === 'object' &&
+      Object.hasOwn(watcherConfiguration, 'maintenance')
+    ) {
+      delete watcherConfiguration.maintenance;
+    }
+  });
+}
 /**
  * Get watcher configuration.
  */
 export function getWatcherConfigurations() {
-  return get('dd.watcher', ddEnvVars);
+  const watcherConfigurations = get('dd.watcher', ddEnvVars);
+  normalizeWatcherMaintenanceEnvAliases(watcherConfigurations);
+  return watcherConfigurations;
 }
 
 /**
@@ -166,7 +223,7 @@ export function getServerConfiguration() {
   });
 
   // Validate Configuration
-  const configurationToValidate = configurationSchema.validate(configurationFromEnv || {}, {
+  const configurationToValidate = configurationSchema.validate(configurationFromEnv, {
     allowUnknown: true,
     stripUnknown: true,
   });
@@ -185,7 +242,7 @@ export function getPrometheusConfiguration() {
     enabled: joi.boolean().default(true),
   });
 
-  const configurationToValidate = configurationSchema.validate(configurationFromEnv || {});
+  const configurationToValidate = configurationSchema.validate(configurationFromEnv);
   if (configurationToValidate.error) {
     throw configurationToValidate.error;
   }
@@ -205,7 +262,7 @@ export function getWebhookConfiguration() {
       otherwise: joi.string().allow('').default(''),
     }),
   });
-  const configurationToValidate = configurationSchema.validate(configurationFromEnv || {});
+  const configurationToValidate = configurationSchema.validate(configurationFromEnv);
   if (configurationToValidate.error) {
     throw configurationToValidate.error;
   }

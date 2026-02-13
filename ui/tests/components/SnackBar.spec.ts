@@ -51,6 +51,37 @@ describe('SnackBar', () => {
     expect(wrapper.vm.$eventBus.emit).toHaveBeenCalledWith('notify:close');
   });
 
+  it('invokes close handler when showLocal setter receives false', async () => {
+    const wrapper = mount(SnackBar, {
+      props: {
+        message: 'Test message',
+        show: true,
+        level: 'info',
+      },
+    });
+
+    wrapper.vm.showLocal = false;
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.vm.$eventBus.emit).toHaveBeenCalledWith('notify:close');
+  });
+
+  it('does not close when showLocal setter receives true', async () => {
+    const wrapper = mount(SnackBar, {
+      props: {
+        message: 'Test message',
+        show: true,
+        level: 'info',
+      },
+    });
+
+    wrapper.vm.$eventBus.emit.mockClear();
+    wrapper.vm.showLocal = true;
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.vm.$eventBus.emit).not.toHaveBeenCalled();
+  });
+
   it('updates local show state when prop changes', async () => {
     const wrapper = mount(SnackBar, {
       props: {

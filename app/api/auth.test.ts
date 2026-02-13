@@ -296,7 +296,11 @@ describe('Auth Router', () => {
 
     test('logout should call req.logout and return logoutUrl', () => {
       const handler = getRouteHandler('post', '/logout');
-      const req = { logout: vi.fn() };
+      const req = {
+        logout: vi.fn((done) => {
+          done();
+        }),
+      };
       const res = createResponse();
       handler(req, res);
       expect(req.logout).toHaveBeenCalled();

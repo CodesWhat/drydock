@@ -1,9 +1,8 @@
-// @ts-nocheck
 import express from 'express';
 import nocache from 'nocache';
 import * as storeAudit from '../store/audit.js';
 
-const router = express.Router();
+var router = express.Router();
 
 /**
  * Get audit log entries.
@@ -11,13 +10,13 @@ const router = express.Router();
  * @param res
  */
 function getAuditEntries(req, res) {
-  const parsedPage = Number.parseInt(req.query.page, 10);
-  const parsedLimit = Number.parseInt(req.query.limit, 10);
-  const page = Math.max(1, Number.isFinite(parsedPage) ? parsedPage : 1);
-  const limit = Math.min(200, Math.max(1, Number.isFinite(parsedLimit) ? parsedLimit : 50));
-  const skip = (page - 1) * limit;
+  var parsedPage = Number.parseInt(req.query.page, 10);
+  var parsedLimit = Number.parseInt(req.query.limit, 10);
+  var page = Math.max(1, Number.isFinite(parsedPage) ? parsedPage : 1);
+  var limit = Math.min(200, Math.max(1, Number.isFinite(parsedLimit) ? parsedLimit : 50));
+  var skip = (page - 1) * limit;
 
-  const query: Record<string, any> = { skip, limit };
+  var query: Record<string, any> = { skip, limit };
   if (req.query.action) {
     query.action = req.query.action;
   }
@@ -31,7 +30,7 @@ function getAuditEntries(req, res) {
     query.to = req.query.to;
   }
 
-  const result = storeAudit.getAuditEntries(query);
+  var result = storeAudit.getAuditEntries(query);
   res.status(200).json({
     entries: result.entries,
     total: result.total,

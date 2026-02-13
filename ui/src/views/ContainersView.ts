@@ -27,6 +27,20 @@ function compareStringLikeValues(a: unknown, b: unknown) {
   return stringCollator.compare(toComparableString(a), toComparableString(b));
 }
 
+function getImageTimestamp(item: any) {
+  return new Date(item.image.created).getTime();
+}
+
+function compareLabelPresence(aLabel: string | undefined, bLabel: string | undefined) {
+  if (aLabel && !bLabel) {
+    return -1;
+  }
+  if (!aLabel && bLabel) {
+    return 1;
+  }
+  return 0;
+}
+
 function parseQueryParams(query: any) {
   return {
     registrySelected: query.registry,
@@ -175,22 +189,26 @@ export default defineComponent({
 
   methods: {
     sortContainers(a: any, b: any) {
-      const getImageTimestamp = (item: any) => new Date(item.image.created).getTime();
-
       if (this.groupByLabel) {
         const aLabel = a.labels?.[this.groupByLabel];
         const bLabel = b.labels?.[this.groupByLabel];
+        const labelPresenceComparison = compareLabelPresence(aLabel, bLabel);
 
-        if (aLabel && !bLabel) return -1;
-        if (!aLabel && bLabel) return 1;
+        if (labelPresenceComparison !== 0) {
+          return labelPresenceComparison;
+        }
 
         if (aLabel && bLabel) {
-          if (this.oldestFirst) return getImageTimestamp(a) - getImageTimestamp(b);
+          if (this.oldestFirst) {
+            return getImageTimestamp(a) - getImageTimestamp(b);
+          }
           return aLabel.localeCompare(bLabel);
         }
       }
 
-      if (this.oldestFirst) return getImageTimestamp(a) - getImageTimestamp(b);
+      if (this.oldestFirst) {
+        return getImageTimestamp(a) - getImageTimestamp(b);
+      }
       return a.displayName.localeCompare(b.displayName);
     },
     onRegistryChanged(registrySelected: string) {

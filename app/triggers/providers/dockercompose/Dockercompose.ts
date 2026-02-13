@@ -1,8 +1,8 @@
 // @ts-nocheck
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import yaml from 'yaml';
 import { getState } from '../../../registry/index.js';
+import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import Docker from '../docker/Docker.js';
 
 function getServiceKey(compose, container, currentImage) {
@@ -152,12 +152,30 @@ class Dockercompose extends Docker {
     const wudFallbackLabel = composeFileLabel.replace(/^dd\./, 'wud.');
     const labelValue = container.labels?.[composeFileLabel] || container.labels?.[wudFallbackLabel];
     if (labelValue) {
-      // Convert relative paths to absolute paths
-      return path.isAbsolute(labelValue) ? labelValue : path.resolve(labelValue);
+      try {
+        return resolveConfiguredPath(labelValue, {
+          label: `Compose file label ${composeFileLabel}`,
+        });
+      } catch (e) {
+        this.log.warn(
+          `Compose file label ${composeFileLabel} on container ${container.name} is invalid (${e.message})`,
+        );
+        return null;
+      }
     }
 
     // Fall back to default configuration file
-    return this.configuration.file || null;
+    if (!this.configuration.file) {
+      return null;
+    }
+    try {
+      return resolveConfiguredPath(this.configuration.file, {
+        label: 'Default compose file path',
+      });
+    } catch (e) {
+      this.log.warn(`Default compose file path is invalid (${e.message})`);
+      return null;
+    }
   }
 
   /**
@@ -445,10 +463,13 @@ class Dockercompose extends Docker {
    * @returns {Promise<void>}
    */
   async writeComposeFile(file, data) {
+    const filePath = resolveConfiguredPath(file, {
+      label: 'Compose file path',
+    });
     try {
-      await fs.writeFile(file, data);
+      await fs.writeFile(filePath, data);
     } catch (e) {
-      this.log.error(`Error when writing ${file} (${e.message})`);
+      this.log.error(`Error when writing ${filePath} (${e.message})`);
       this.log.debug(e);
     }
   }
@@ -459,7 +480,9 @@ class Dockercompose extends Docker {
    * @returns {Promise<any>}
    */
   getComposeFile(file = null) {
-    const filePath = file || this.configuration.file;
+    const filePath = resolveConfiguredPath(file || this.configuration.file, {
+      label: 'Compose file path',
+    });
     try {
       return fs.readFile(filePath);
     } catch (e) {
@@ -485,3 +508,10 @@ class Dockercompose extends Docker {
 }
 
 export default Dockercompose;
+
+export {
+  getServiceKey as testable_getServiceKey,
+  normalizeImplicitLatest as testable_normalizeImplicitLatest,
+  normalizePostStartHooks as testable_normalizePostStartHooks,
+  normalizePostStartEnvironmentValue as testable_normalizePostStartEnvironmentValue,
+};

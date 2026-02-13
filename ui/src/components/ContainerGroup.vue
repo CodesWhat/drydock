@@ -23,6 +23,7 @@
       >
         {{ updateCount }} update{{ updateCount > 1 ? 's' : '' }}
       </v-chip>
+      <span v-else class="d-none" aria-hidden="true" />
 
       <v-spacer />
 
@@ -42,6 +43,7 @@
         </template>
         <span class="text-caption">Update all in group</span>
       </v-tooltip>
+      <span v-else class="d-none" aria-hidden="true" />
     </v-card-title>
 
     <v-expand-transition>

@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils';
 import ContainerError from '@/components/ContainerError';
+import ContainerErrorOptions from '@/components/ContainerError.ts';
 
 const mockError = {
   message: 'Test error message',
@@ -32,5 +33,9 @@ describe('ContainerError', () => {
   it('handles missing error message', async () => {
     await wrapper.setProps({ error: {} });
     expect(wrapper.exists()).toBe(true);
+  });
+
+  it('exposes error prop definition from script options', () => {
+    expect((ContainerErrorOptions as any).props.error.type).toBe(Object);
   });
 });

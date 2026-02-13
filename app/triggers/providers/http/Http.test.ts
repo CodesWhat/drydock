@@ -156,6 +156,22 @@ describe('HTTP Trigger', () => {
     });
   });
 
+  test('should omit data and params for non-GET/POST methods', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    http.configuration = {
+      url: 'https://example.com/webhook',
+      method: 'PUT',
+    };
+    const container = { name: 'test' };
+
+    await http.trigger(container);
+    expect(axios).toHaveBeenCalledWith({
+      method: 'PUT',
+      url: 'https://example.com/webhook',
+    });
+  });
+
   test('should use proxy', async () => {
     const { default: axios } = await import('axios');
     axios.mockResolvedValue({ data: {} });

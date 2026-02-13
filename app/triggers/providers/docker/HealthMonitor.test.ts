@@ -1,19 +1,20 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { startHealthMonitor } from './HealthMonitor.js';
 
-const mockInsertAudit = vi.hoisted(() => vi.fn());
+var mockInsertAudit = vi.hoisted(() => vi.fn());
 vi.mock('../../../store/audit.js', () => ({
   insertAudit: mockInsertAudit,
 }));
 
-const mockGetBackups = vi.hoisted(() => vi.fn());
+var mockGetBackups = vi.hoisted(() => vi.fn());
 vi.mock('../../../store/backup.js', () => ({
   getBackups: mockGetBackups,
 }));
 
-const mockAuditCounterInc = vi.hoisted(() => vi.fn());
+var mockAuditCounterInc = vi.hoisted(() => vi.fn());
+var mockGetAuditCounter = vi.hoisted(() => vi.fn());
 vi.mock('../../../prometheus/audit.js', () => ({
-  getAuditCounter: () => ({ inc: mockAuditCounterInc }),
+  getAuditCounter: mockGetAuditCounter,
 }));
 
 function createMockLog() {
@@ -57,6 +58,7 @@ function createMockTriggerInstance() {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.resetAllMocks();
+  mockGetAuditCounter.mockReturnValue({ inc: mockAuditCounterInc });
 });
 
 afterEach(() => {
@@ -65,12 +67,12 @@ afterEach(() => {
 
 describe('HealthMonitor', () => {
   test('should stop monitoring with warning when container has no HEALTHCHECK', async () => {
-    const log = createMockLog();
-    const dockerApi = createMockDockerApi({
+    var log = createMockLog();
+    var dockerApi = createMockDockerApi({
       State: { Running: true },
     });
 
-    const abortController = startHealthMonitor({
+    var abortController = startHealthMonitor({
       dockerApi,
       containerId: 'container-123',
       containerName: 'test-container',
@@ -89,12 +91,12 @@ describe('HealthMonitor', () => {
   });
 
   test('should stop monitoring after window expires when container stays healthy', async () => {
-    const log = createMockLog();
-    const dockerApi = createMockDockerApi({
+    var log = createMockLog();
+    var dockerApi = createMockDockerApi({
       State: { Running: true, Health: { Status: 'healthy' } },
     });
 
-    const abortController = startHealthMonitor({
+    var abortController = startHealthMonitor({
       dockerApi,
       containerId: 'container-123',
       containerName: 'test-container',
@@ -117,12 +119,12 @@ describe('HealthMonitor', () => {
   });
 
   test('should trigger rollback when container becomes unhealthy', async () => {
-    const log = createMockLog();
-    const triggerInstance = createMockTriggerInstance();
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
 
     // First poll: healthy, second poll: unhealthy
-    let pollCount = 0;
-    const dockerApi = {
+    var pollCount = 0;
+    var dockerApi = {
       getContainer: vi.fn().mockReturnValue({
         inspect: vi.fn().mockImplementation(async () => {
           pollCount++;
@@ -146,7 +148,7 @@ describe('HealthMonitor', () => {
       },
     ]);
 
-    const abortController = startHealthMonitor({
+    var abortController = startHealthMonitor({
       dockerApi,
       containerId: 'container-123',
       containerName: 'test-container',
@@ -178,9 +180,9 @@ describe('HealthMonitor', () => {
   });
 
   test('should create audit entry on successful auto-rollback', async () => {
-    const log = createMockLog();
-    const triggerInstance = createMockTriggerInstance();
-    const dockerApi = createMockDockerApi({
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    var dockerApi = createMockDockerApi({
       State: { Running: true, Health: { Status: 'unhealthy' } },
     });
 
@@ -196,7 +198,7 @@ describe('HealthMonitor', () => {
       },
     ]);
 
-    const abortController = startHealthMonitor({
+    var abortController = startHealthMonitor({
       dockerApi,
       containerId: 'container-123',
       containerName: 'test-container',
@@ -223,9 +225,9 @@ describe('HealthMonitor', () => {
   });
 
   test('should use correct backup image for rollback', async () => {
-    const log = createMockLog();
-    const triggerInstance = createMockTriggerInstance();
-    const dockerApi = createMockDockerApi({
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    var dockerApi = createMockDockerApi({
       State: { Running: true, Health: { Status: 'unhealthy' } },
     });
 
@@ -250,7 +252,7 @@ describe('HealthMonitor', () => {
       },
     ]);
 
-    const abortController = startHealthMonitor({
+    var abortController = startHealthMonitor({
       dockerApi,
       containerId: 'container-123',
       containerName: 'test-container',
@@ -276,12 +278,12 @@ describe('HealthMonitor', () => {
   });
 
   test('should respect custom window and interval', async () => {
-    const log = createMockLog();
-    const dockerApi = createMockDockerApi({
+    var log = createMockLog();
+    var dockerApi = createMockDockerApi({
       State: { Running: true, Health: { Status: 'healthy' } },
     });
 
-    const abortController = startHealthMonitor({
+    var abortController = startHealthMonitor({
       dockerApi,
       containerId: 'container-123',
       containerName: 'test-container',
@@ -312,12 +314,12 @@ describe('HealthMonitor', () => {
   });
 
   test('should stop monitoring when aborted via AbortController', async () => {
-    const log = createMockLog();
-    const dockerApi = createMockDockerApi({
+    var log = createMockLog();
+    var dockerApi = createMockDockerApi({
       State: { Running: true, Health: { Status: 'healthy' } },
     });
 
-    const abortController = startHealthMonitor({
+    var abortController = startHealthMonitor({
       dockerApi,
       containerId: 'container-123',
       containerName: 'test-container',
@@ -339,16 +341,65 @@ describe('HealthMonitor', () => {
     expect(dockerApi.getContainer).toHaveBeenCalledTimes(1);
   });
 
+  test('should no-op poll and window callbacks after abort', async () => {
+    var log = createMockLog();
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'healthy' } },
+    });
+    var triggerInstance = createMockTriggerInstance();
+
+    var intervalCallback;
+    var windowCallback;
+    var intervalHandle = Symbol('interval');
+    var timeoutHandle = Symbol('timeout');
+
+    var setIntervalSpy = vi.spyOn(globalThis, 'setInterval').mockImplementation((fn) => {
+      intervalCallback = fn;
+      return intervalHandle as ReturnType<typeof setInterval>;
+    });
+    var setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn) => {
+      windowCallback = fn;
+      return timeoutHandle as ReturnType<typeof setTimeout>;
+    });
+    var clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval').mockImplementation(() => {});
+    var clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout').mockImplementation(() => {});
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '1.0.0',
+      window: 300000,
+      interval: 10000,
+      triggerInstance,
+      log,
+    });
+
+    abortController.abort();
+    await intervalCallback();
+    windowCallback();
+
+    expect(dockerApi.getContainer).not.toHaveBeenCalled();
+    expect(log.info).not.toHaveBeenCalledWith(expect.stringContaining('window expired'));
+    expect(clearIntervalSpy).toHaveBeenCalledWith(intervalHandle);
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(timeoutHandle);
+
+    setIntervalSpy.mockRestore();
+    setTimeoutSpy.mockRestore();
+    clearIntervalSpy.mockRestore();
+    clearTimeoutSpy.mockRestore();
+  });
+
   test('should warn when no backups found for auto-rollback', async () => {
-    const log = createMockLog();
-    const triggerInstance = createMockTriggerInstance();
-    const dockerApi = createMockDockerApi({
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    var dockerApi = createMockDockerApi({
       State: { Running: true, Health: { Status: 'unhealthy' } },
     });
 
     mockGetBackups.mockReturnValue([]);
 
-    const abortController = startHealthMonitor({
+    var abortController = startHealthMonitor({
       dockerApi,
       containerId: 'container-123',
       containerName: 'test-container',
@@ -367,15 +418,57 @@ describe('HealthMonitor', () => {
     abortController.abort();
   });
 
+  test('should warn when current container is missing during auto-rollback', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    triggerInstance.getCurrentContainer.mockResolvedValue(undefined);
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+
+    mockGetBackups.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-123',
+        containerName: 'test-container',
+        imageName: 'registry/test-image',
+        imageTag: '1.0.0',
+        timestamp: new Date().toISOString(),
+        triggerName: 'docker.update',
+      },
+    ]);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '2.0.0',
+      window: 300000,
+      interval: 10000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(10000);
+
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('not found'));
+    expect(triggerInstance.inspectContainer).not.toHaveBeenCalled();
+    expect(triggerInstance.stopAndRemoveContainer).not.toHaveBeenCalled();
+    expect(triggerInstance.recreateContainer).not.toHaveBeenCalled();
+    expect(mockInsertAudit).not.toHaveBeenCalled();
+
+    abortController.abort();
+  });
+
   test('should handle inspect error gracefully during health check', async () => {
-    const log = createMockLog();
-    const dockerApi = {
+    var log = createMockLog();
+    var dockerApi = {
       getContainer: vi.fn().mockReturnValue({
         inspect: vi.fn().mockRejectedValue(new Error('connection refused')),
       }),
     };
 
-    const abortController = startHealthMonitor({
+    var abortController = startHealthMonitor({
       dockerApi,
       containerId: 'container-123',
       containerName: 'test-container',
@@ -394,11 +487,11 @@ describe('HealthMonitor', () => {
   });
 
   test('should create error audit entry when rollback fails', async () => {
-    const log = createMockLog();
-    const triggerInstance = createMockTriggerInstance();
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
     triggerInstance.stopAndRemoveContainer.mockRejectedValue(new Error('stop failed'));
 
-    const dockerApi = createMockDockerApi({
+    var dockerApi = createMockDockerApi({
       State: { Running: true, Health: { Status: 'unhealthy' } },
     });
 
@@ -414,7 +507,7 @@ describe('HealthMonitor', () => {
       },
     ]);
 
-    const abortController = startHealthMonitor({
+    var abortController = startHealthMonitor({
       dockerApi,
       containerId: 'container-123',
       containerName: 'test-container',
@@ -435,6 +528,96 @@ describe('HealthMonitor', () => {
       }),
     );
     expect(mockAuditCounterInc).toHaveBeenCalledWith({ action: 'auto-rollback' });
+
+    abortController.abort();
+  });
+
+  test('should succeed when audit counter is unavailable during rollback success', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+
+    mockGetAuditCounter.mockReturnValue(undefined);
+    mockGetBackups.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-123',
+        containerName: 'test-container',
+        imageName: 'registry/test-image',
+        imageTag: '1.0.0',
+        timestamp: new Date().toISOString(),
+        triggerName: 'docker.update',
+      },
+    ]);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '2.0.0',
+      window: 300000,
+      interval: 10000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(10000);
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auto-rollback',
+        status: 'success',
+      }),
+    );
+    expect(mockAuditCounterInc).not.toHaveBeenCalled();
+
+    abortController.abort();
+  });
+
+  test('should record rollback error when audit counter is unavailable', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    triggerInstance.stopAndRemoveContainer.mockRejectedValue(new Error('stop failed'));
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+
+    mockGetAuditCounter.mockReturnValue(undefined);
+    mockGetBackups.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-123',
+        containerName: 'test-container',
+        imageName: 'registry/test-image',
+        imageTag: '1.0.0',
+        timestamp: new Date().toISOString(),
+        triggerName: 'docker.update',
+      },
+    ]);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '2.0.0',
+      window: 300000,
+      interval: 10000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(10000);
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auto-rollback',
+        status: 'error',
+      }),
+    );
+    expect(log.error).toHaveBeenCalledWith(expect.stringContaining('Auto-rollback failed'));
+    expect(mockAuditCounterInc).not.toHaveBeenCalled();
 
     abortController.abort();
   });

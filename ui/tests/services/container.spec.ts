@@ -282,6 +282,18 @@ describe('Container Service', () => {
       );
     });
 
+    it('throws without detail when response body has no error field', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Bad Request',
+        json: async () => ({}),
+      } as any);
+
+      await expect(updateContainerPolicy('c1', 'invalid')).rejects.toThrow(
+        'Failed to update container policy invalid: Bad Request',
+      );
+    });
+
     it('throws without detail when response body parsing fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,

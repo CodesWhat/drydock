@@ -18,7 +18,7 @@ import SnackBar from '@/components/SnackBar.vue';
 import { getServer } from '@/services/server';
 import sseService from '@/services/sse';
 
-function setupAuthStateManagement(user: any, onAuthenticated: (userData: any) => void) {
+export function setupAuthStateManagement(user: any, onAuthenticated: (userData: any) => void) {
   return async (newRoute: any) => {
     if (newRoute.name === 'login') {
       user.value = undefined;
@@ -40,7 +40,7 @@ function setupAuthStateManagement(user: any, onAuthenticated: (userData: any) =>
   };
 }
 
-function setupEventBusListeners(
+export function setupEventBusListeners(
   eventBus: any,
   onAuthenticated: (userData: any) => void,
   notify: (message: string, level?: string) => void,
@@ -51,7 +51,7 @@ function setupEventBusListeners(
   eventBus.on('notify:close', notifyClose);
 }
 
-async function loadServerConfig(authenticated: any, instance: any) {
+export async function loadServerConfig(authenticated: any, instance: any) {
   if (
     authenticated.value &&
     instance &&

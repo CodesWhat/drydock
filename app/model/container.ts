@@ -506,4 +506,10 @@ export function fullName(container: Container) {
 }
 
 // The following exports are meant for testing only
-export { getLink as testable_getLink, addUpdateKindProperty as testable_addUpdateKindProperty };
+export {
+  getLink as testable_getLink,
+  addUpdateKindProperty as testable_addUpdateKindProperty,
+  addLinkProperty as testable_addLinkProperty,
+  getRawTagUpdate as testable_getRawTagUpdate,
+  getRawDigestUpdate as testable_getRawDigestUpdate,
+};

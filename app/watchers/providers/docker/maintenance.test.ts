@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isInMaintenanceWindow } from './maintenance.js';
+import { getNextMaintenanceWindow, isInMaintenanceWindow } from './maintenance.js';
 
 describe('isInMaintenanceWindow', () => {
   afterEach(() => {
@@ -85,5 +85,70 @@ describe('isInMaintenanceWindow', () => {
     expect(isInMaintenanceWindow('30 14 * 6 *', 'UTC')).toBe(true);
     // January only
     expect(isInMaintenanceWindow('30 14 * 1 *', 'UTC')).toBe(false);
+  });
+});
+
+describe('getNextMaintenanceWindow', () => {
+  it('should return the next matching date in UTC by default', () => {
+    const fromDate = new Date('2024-06-15T14:30:00Z');
+    const next = getNextMaintenanceWindow('0 15 * * *', 'UTC', fromDate);
+    expect(next?.toISOString()).toBe('2024-06-15T15:00:00.000Z');
+  });
+
+  it('should return undefined for invalid cron expression', () => {
+    expect(getNextMaintenanceWindow('not-a-cron')).toBeUndefined();
+  });
+
+  it('should return undefined for invalid timezone', () => {
+    const next = getNextMaintenanceWindow('0 15 * * *', 'Invalid/Timezone', new Date());
+    expect(next).toBeUndefined();
+  });
+});
+
+describe('coverage callbacks', () => {
+  it('should execute cron callback functions passed to createTask', async () => {
+    vi.resetModules();
+    const createTask = vi.fn((_expr, callback) => {
+      callback();
+      return {
+        timeMatcher: {
+          match: () => true,
+          getNextMatch: () => new Date('2024-06-16T00:00:00.000Z'),
+        },
+      };
+    });
+
+    vi.doMock('node-cron', () => ({
+      default: {
+        validate: () => true,
+        createTask,
+      },
+    }));
+
+    const maintenance = await import('./maintenance.js');
+    expect(maintenance.isInMaintenanceWindow('* * * * *')).toBe(true);
+    expect(
+      maintenance.getNextMaintenanceWindow('* * * * *', 'UTC', new Date('2024-06-15T00:00:00.000Z')),
+    ).toEqual(new Date('2024-06-16T00:00:00.000Z'));
+  });
+
+  it('should return undefined when getNextMatch does not return a Date instance', async () => {
+    vi.resetModules();
+    vi.doMock('node-cron', () => ({
+      default: {
+        validate: () => true,
+        createTask: () => ({
+          timeMatcher: {
+            match: () => true,
+            getNextMatch: () => 'not-a-date',
+          },
+        }),
+      },
+    }));
+
+    const maintenance = await import('./maintenance.js');
+    expect(
+      maintenance.getNextMaintenanceWindow('* * * * *', 'UTC', new Date('2024-06-15T00:00:00.000Z')),
+    ).toBeUndefined();
   });
 });

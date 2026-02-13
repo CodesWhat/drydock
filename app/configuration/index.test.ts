@@ -48,6 +48,74 @@ test('getWatcherConfiguration should return configured watchers when overridden'
   });
 });
 
+test('getWatcherConfiguration should map MAINTENANCE_WINDOW aliases', async () => {
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW = '0 2 * * *';
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ = 'Europe/Paris';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+  expect(watcherConfigurations.local.maintenancewindow).toStrictEqual('0 2 * * *');
+  expect(watcherConfigurations.local.maintenancewindowtz).toStrictEqual('Europe/Paris');
+  expect(watcherConfigurations.local.maintenance).toBeUndefined();
+
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW;
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ;
+});
+
+test('getWatcherConfiguration should map MAINTENANCE_WINDOW aliases regardless of insertion order', async () => {
+  configuration.ddEnvVars.DD_WATCHER_REVERSE_MAINTENANCE_WINDOW_TZ = 'UTC';
+  configuration.ddEnvVars.DD_WATCHER_REVERSE_MAINTENANCE_WINDOW = '30 1 * * *';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+  expect(watcherConfigurations.reverse.maintenancewindow).toStrictEqual('30 1 * * *');
+  expect(watcherConfigurations.reverse.maintenancewindowtz).toStrictEqual('UTC');
+  expect(watcherConfigurations.reverse.maintenance).toBeUndefined();
+
+  delete configuration.ddEnvVars.DD_WATCHER_REVERSE_MAINTENANCE_WINDOW;
+  delete configuration.ddEnvVars.DD_WATCHER_REVERSE_MAINTENANCE_WINDOW_TZ;
+});
+
+test('getWatcherConfiguration should preserve MAINTENANCEWINDOW legacy env vars', async () => {
+  configuration.ddEnvVars.DD_WATCHER_LEGACY_MAINTENANCEWINDOW = '15 3 * * *';
+  configuration.ddEnvVars.DD_WATCHER_LEGACY_MAINTENANCEWINDOWTZ = 'America/New_York';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+  expect(watcherConfigurations.legacy.maintenancewindow).toStrictEqual('15 3 * * *');
+  expect(watcherConfigurations.legacy.maintenancewindowtz).toStrictEqual('America/New_York');
+
+  delete configuration.ddEnvVars.DD_WATCHER_LEGACY_MAINTENANCEWINDOW;
+  delete configuration.ddEnvVars.DD_WATCHER_LEGACY_MAINTENANCEWINDOWTZ;
+});
+
+test('getWatcherConfiguration should ignore MAINTENANCE_WINDOW aliases without watcher name', async () => {
+  configuration.ddEnvVars.DD_WATCHER_MAINTENANCE_WINDOW = '*/5 * * * *';
+  configuration.ddEnvVars.DD_WATCHER_MAINTENANCE_WINDOW_TZ = 'UTC';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+  expect(watcherConfigurations['']).toBeUndefined();
+
+  delete configuration.ddEnvVars.DD_WATCHER_MAINTENANCE_WINDOW;
+  delete configuration.ddEnvVars.DD_WATCHER_MAINTENANCE_WINDOW_TZ;
+});
+
+test('getWatcherConfiguration should create watcher entry from alias when watcher has no other keys', async () => {
+  configuration.ddEnvVars.DD_WATCHER_ALIASONLY_MAINTENANCE_WINDOW = '0 6 * * *';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+  expect(watcherConfigurations.aliasonly).toEqual({ maintenancewindow: '0 6 * * *' });
+  expect(watcherConfigurations.aliasonly.maintenance).toBeUndefined();
+
+  delete configuration.ddEnvVars.DD_WATCHER_ALIASONLY_MAINTENANCE_WINDOW;
+});
+
+test('getWatcherConfiguration should create watcher entry for lowercase alias keys', async () => {
+  configuration.ddEnvVars.dd_watcher_lowercase_maintenance_window = '*/10 * * * *';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+  expect(watcherConfigurations.lowercase).toEqual({ maintenancewindow: '*/10 * * * *' });
+
+  delete configuration.ddEnvVars.dd_watcher_lowercase_maintenance_window;
+});
+
 test('getTriggerConfigurations should return empty object by default', async () => {
   delete configuration.ddEnvVars.DD_TRIGGER_TRIGGER1_X;
   delete configuration.ddEnvVars.DD_TRIGGER_TRIGGER1_Y;
@@ -265,6 +333,25 @@ describe('getServerConfiguration errors', () => {
     expect(() => configuration.getServerConfiguration()).toThrow();
     delete configuration.ddEnvVars.DD_SERVER_PORT;
   });
+
+  test('should fallback to defaults when nested server config is null', () => {
+    const originalDd = configuration.ddEnvVars.dd;
+    configuration.ddEnvVars.dd = {
+      ...(originalDd || {}),
+      server: null,
+    };
+
+    const result = configuration.getServerConfiguration();
+    expect(result.port).toBe(3000);
+    expect(result.enabled).toBe(true);
+
+    if (originalDd === undefined) {
+      delete configuration.ddEnvVars.dd;
+    } else {
+      configuration.ddEnvVars.dd = originalDd;
+    }
+  });
+
 });
 
 describe('getPublicUrl edge cases', () => {
@@ -324,6 +411,74 @@ describe('getWebhookConfiguration', () => {
 
     expect(() => configuration.getWebhookConfiguration()).toThrow();
   });
+
+  test('should fallback to default webhook configuration when nested value is null', () => {
+    const originalDd = configuration.ddEnvVars.dd;
+    configuration.ddEnvVars.dd = {
+      ...(originalDd || {}),
+      server: {
+        ...(originalDd?.server || {}),
+        webhook: null,
+      },
+    };
+
+    expect(configuration.getWebhookConfiguration()).toStrictEqual({
+      enabled: false,
+      token: '',
+    });
+
+    if (originalDd === undefined) {
+      delete configuration.ddEnvVars.dd;
+    } else {
+      configuration.ddEnvVars.dd = originalDd;
+    }
+  });
+
+  test('should validate nested webhook configuration when dd.server.webhook object is present', () => {
+    const originalDd = configuration.ddEnvVars.dd;
+    configuration.ddEnvVars.dd = {
+      ...(originalDd || {}),
+      server: {
+        ...(originalDd?.server || {}),
+        webhook: {
+          enabled: false,
+          token: '',
+        },
+      },
+    };
+
+    expect(configuration.getWebhookConfiguration()).toStrictEqual({
+      enabled: false,
+      token: '',
+    });
+
+    if (originalDd === undefined) {
+      delete configuration.ddEnvVars.dd;
+    } else {
+      configuration.ddEnvVars.dd = originalDd;
+    }
+  });
+});
+
+describe('getPrometheusConfiguration null fallback', () => {
+  test('should fallback to defaults when nested prometheus config is null', () => {
+    const originalDd = configuration.ddEnvVars.dd;
+    configuration.ddEnvVars.dd = {
+      ...(originalDd || {}),
+      prometheus: null,
+    };
+
+    expect(configuration.getPrometheusConfiguration()).toStrictEqual({
+      enabled: true,
+    });
+
+    if (originalDd === undefined) {
+      delete configuration.ddEnvVars.dd;
+    } else {
+      configuration.ddEnvVars.dd = originalDd;
+    }
+  });
+
 });
 
 describe('module bootstrap env mapping', () => {

@@ -127,5 +127,41 @@ describe('LoginView', () => {
       expect(vm.strategies[0].type).toBe('basic');
       expect(vm.strategies[1].type).toBe('oidc');
     });
+
+    it('emits notify through event bus when strategy fetch fails', async () => {
+      (getStrategies as any).mockRejectedValue(new Error('fetch failed'));
+      const next = vi.fn();
+
+      await LoginView.beforeRouteEnter.call(LoginView, {}, {}, next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(Function));
+      const emit = vi.fn();
+      const callback = next.mock.calls[0][0];
+      callback({ eventBus: { emit } });
+
+      expect(emit).toHaveBeenCalledWith(
+        'notify',
+        'Error when trying to get the authentication strategies (fetch failed)',
+        'error',
+      );
+    });
+
+    it('logs to console when strategy fetch fails without injected event bus', async () => {
+      (getStrategies as any).mockRejectedValue(new Error('fetch failed'));
+      const next = vi.fn();
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        await LoginView.beforeRouteEnter.call(LoginView, {}, {}, next);
+        const callback = next.mock.calls[0][0];
+        callback({});
+
+        expect(consoleSpy).toHaveBeenCalledWith(
+          'Error when trying to get the authentication strategies (fetch failed)',
+        );
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
   });
 });

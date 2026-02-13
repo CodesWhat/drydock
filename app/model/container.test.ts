@@ -1132,3 +1132,87 @@ test('model should handle digest watch mode with matching digests returning unkn
   addUpdateKindProperty(containerObject);
   expect(containerObject.updateKind.kind).toBe('unknown');
 });
+
+test('model should keep semverDiff unknown when semver diff cannot be classified', async () => {
+  const { testable_addUpdateKindProperty: addUpdateKindProperty } = container;
+  const containerObject = {
+    image: {
+      tag: { value: '1.0.0+build1', semver: true },
+    },
+    result: {
+      tag: '1.0.0+build2',
+    },
+  };
+  addUpdateKindProperty(containerObject);
+  expect(containerObject.updateKind).toEqual({
+    kind: 'tag',
+    localValue: '1.0.0+build1',
+    remoteValue: '1.0.0+build2',
+    semverDiff: 'unknown',
+  });
+});
+
+test('testable_getRawTagUpdate should return unknown when image/result are missing', () => {
+  expect(container.testable_getRawTagUpdate({})).toEqual({
+    kind: 'unknown',
+    localValue: undefined,
+    remoteValue: undefined,
+    semverDiff: 'unknown',
+  });
+});
+
+test('testable_getRawDigestUpdate should return unknown when image/result are missing', () => {
+  expect(container.testable_getRawDigestUpdate({})).toEqual({
+    kind: 'unknown',
+    localValue: undefined,
+    remoteValue: undefined,
+    semverDiff: 'unknown',
+  });
+});
+
+test('addLinkProperty should fallback to empty result tag when result tag is missing', () => {
+  const containerObject = {
+    linkTemplate: 'https://release/${transformed}',
+    image: {
+      tag: {
+        value: '1.0.0',
+        semver: false,
+      },
+    },
+    result: {},
+  };
+
+  container.testable_addLinkProperty(containerObject);
+  expect(containerObject.result.link).toBe('https://release/');
+});
+
+test('getLink should expose prerelease token when semver has prerelease parts', () => {
+  const link = container.testable_getLink(
+    {
+      linkTemplate: 'https://release/${prerelease}',
+      image: {
+        tag: {
+          semver: true,
+        },
+      },
+    },
+    '1.2.3-rc.1',
+  );
+  expect(link).toBe('https://release/rc');
+});
+
+test('addLinkProperty should skip result link definition when container.result is missing', () => {
+  const containerObject = {
+    linkTemplate: 'https://release/${transformed}',
+    image: {
+      tag: {
+        value: '1.0.0',
+        semver: false,
+      },
+    },
+  };
+
+  container.testable_addLinkProperty(containerObject);
+  expect(containerObject.link).toBe('https://release/1.0.0');
+  expect(containerObject.result).toBeUndefined();
+});

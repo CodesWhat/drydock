@@ -11,6 +11,7 @@ describe('LoginBasic', () => {
   let wrapper;
 
   beforeEach(() => {
+    vi.mocked(loginBasic).mockReset();
     wrapper = mount(LoginBasic);
     wrapper.vm.$eventBus.emit.mockClear();
   });
@@ -41,6 +42,12 @@ describe('LoginBasic', () => {
     // Form should not submit without username and password
     expect(wrapper.vm.username).toBe('');
     expect(wrapper.vm.password).toBe('');
+  });
+
+  it('required rule returns validation message for empty values', () => {
+    expect(wrapper.vm.rules.required('')).toBe('Required');
+    expect(wrapper.vm.rules.required(undefined)).toBe('Required');
+    expect(wrapper.vm.rules.required('value')).toBe(true);
   });
 
   it('updates username and password when typed', async () => {
@@ -94,6 +101,31 @@ describe('LoginBasic', () => {
       'Invalid credentials',
       'error',
     );
+  });
+
+  it('shows default login error message when exception has no message', async () => {
+    vi.mocked(loginBasic).mockRejectedValue({});
+
+    wrapper.vm.username = 'testuser';
+    wrapper.vm.password = 'wrongpass';
+
+    await wrapper.vm.login();
+
+    expect(wrapper.vm.$eventBus.emit).toHaveBeenCalledWith(
+      'notify',
+      'Username or password error',
+      'error',
+    );
+  });
+
+  it('does not call login service when form is invalid', async () => {
+    wrapper.vm.username = '';
+    wrapper.vm.password = '';
+
+    await wrapper.vm.login();
+
+    expect(loginBasic).not.toHaveBeenCalled();
+    expect(wrapper.emitted('authentication-success')).toBeFalsy();
   });
 
   it('shows loading state during login', async () => {

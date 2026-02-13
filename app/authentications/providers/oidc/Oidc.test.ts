@@ -1,6 +1,7 @@
 // @ts-nocheck
 import express from 'express';
 import { ClientSecretPost, Configuration } from 'openid-client';
+import * as configuration from '../../../configuration/index.js';
 import Oidc from './Oidc.js';
 
 const app = express();
@@ -403,6 +404,110 @@ test('callback should reject malformed pending checks from session storage', asy
 
   expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
   expect401Send(res, 'OIDC session state mismatch or expired. Please retry authentication.');
+});
+
+test('callback should accept pending checks without numeric createdAt', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const session = {
+    save: vi.fn((cb) => cb()),
+    oidc: {
+      default: {
+        pending: {
+          'valid-state': {
+            codeVerifier: 'code-verifier-without-created-at',
+          },
+        },
+      },
+    },
+  };
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.authorizationCodeGrant).toHaveBeenCalledWith(
+    oidc.client,
+    expect.any(URL),
+    {
+      pkceCodeVerifier: 'code-verifier-without-created-at',
+      expectedState: 'valid-state',
+    },
+  );
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+test('redirect should recover when a stale rejected lock promise exists', async () => {
+  const originalMapGet = Map.prototype.get;
+  let injectedRejectedLock = false;
+  const mapGetSpy = vi.spyOn(Map.prototype, 'get').mockImplementation(function (key) {
+    if (!injectedRejectedLock && key === 'stale-session-lock') {
+      injectedRejectedLock = true;
+      return Promise.reject(new Error('stale lock'));
+    }
+    return originalMapGet.call(this, key);
+  });
+
+  try {
+    const req = createReq({
+      sessionID: 'stale-session-lock',
+      session: {
+        reload: vi.fn((cb) => cb()),
+        save: vi.fn((cb) => cb()),
+      },
+    });
+    const res = createRes();
+
+    await oidc.redirect(req, res);
+
+    expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+    expect(res.status).not.toHaveBeenCalled();
+  } finally {
+    mapGetSpy.mockRestore();
+  }
+});
+
+test('callback should proceed when session object disappears before cleanup', async () => {
+  openidClientMock.authorizationCodeGrant = vi.fn().mockResolvedValue({ access_token: 'token' });
+  openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'user@example.com' });
+
+  const session = createSessionWithPending({
+    'valid-state': createPendingCheck(),
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  openidClientMock.authorizationCodeGrant.mockImplementation(async () => {
+    req.session = undefined;
+    return { access_token: 'token' };
+  });
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(req.session).toBeUndefined();
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+test('callback should fall back to slash redirect when public url is empty', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const getPublicUrlSpy = vi
+    .spyOn(configuration, 'getPublicUrl')
+    .mockReturnValueOnce('https://dd.example.com')
+    .mockReturnValueOnce('');
+
+  try {
+    const session = createSessionWithPending({
+      'valid-state': createPendingCheck(),
+    });
+    const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+    const res = createRes();
+
+    await oidc.callback(req, res);
+
+    expect(res.redirect).toHaveBeenCalledWith('/');
+  } finally {
+    getPublicUrlSpy.mockRestore();
+  }
 });
 
 test('callback should return 401 when login fails with error', async () => {

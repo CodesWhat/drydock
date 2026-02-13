@@ -4,6 +4,7 @@ import https from 'node:https';
 import cors from 'cors';
 import express from 'express';
 import logger from '../log/index.js';
+import { resolveConfiguredPath } from '../runtime/paths.js';
 
 const log = logger.child({ component: 'api' });
 
@@ -69,16 +70,22 @@ export async function init() {
     if (configuration.tls.enabled) {
       let serverKey;
       let serverCert;
+      const keyPath = resolveConfiguredPath(configuration.tls.key, {
+        label: 'TLS key path',
+      });
+      const certPath = resolveConfiguredPath(configuration.tls.cert, {
+        label: 'TLS cert path',
+      });
       try {
-        serverKey = fs.readFileSync(configuration.tls.key);
+        serverKey = fs.readFileSync(keyPath);
       } catch (e) {
-        log.error(`Unable to read the key file under ${configuration.tls.key} (${e.message})`);
+        log.error(`Unable to read the key file under ${keyPath} (${e.message})`);
         throw e;
       }
       try {
-        serverCert = fs.readFileSync(configuration.tls.cert);
+        serverCert = fs.readFileSync(certPath);
       } catch (e) {
-        log.error(`Unable to read the cert file under ${configuration.tls.cert} (${e.message})`);
+        log.error(`Unable to read the cert file under ${certPath} (${e.message})`);
         throw e;
       }
       https

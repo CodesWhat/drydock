@@ -17,6 +17,45 @@ import { startHealthMonitor } from './HealthMonitor.js';
 
 const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
 
+function hasRepoTags(image) {
+  return Array.isArray(image.RepoTags) && image.RepoTags.length > 0;
+}
+
+function normalizeListedImage(registry, image) {
+  const imageParsed = parse(image.RepoTags[0]);
+  return registry.normalizeImage({
+    registry: {
+      url: imageParsed.domain ? imageParsed.domain : '',
+    },
+    tag: {
+      value: imageParsed.tag,
+    },
+    name: imageParsed.path,
+  });
+}
+
+function shouldKeepImage(imageNormalized, container) {
+  if (imageNormalized.registry.name !== container.image.registry.name) {
+    return true;
+  }
+  if (imageNormalized.name !== container.image.name) {
+    return true;
+  }
+  if (imageNormalized.tag.value === container.updateKind.localValue) {
+    return true;
+  }
+  if (imageNormalized.tag.value === container.updateKind.remoteValue) {
+    return true;
+  }
+  if (
+    container.updateKind.kind === 'digest' &&
+    imageNormalized.tag.value === container.image.tag.value
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Replace a Docker container with an updated one.
  */
@@ -129,52 +168,13 @@ class Docker extends Trigger {
 
       // Find all pulled images to remove
       const imagesToRemove = images
-        .filter((image) => {
-          // Exclude images without repo tags
-          if (!image.RepoTags || image.RepoTags.length === 0) {
-            return false;
-          }
-          const imageParsed = parse(image.RepoTags[0]);
-          const imageNormalized = registry.normalizeImage({
-            registry: {
-              url: imageParsed.domain ? imageParsed.domain : '',
-            },
-            tag: {
-              value: imageParsed.tag,
-            },
-            name: imageParsed.path,
-          });
-
-          // Exclude different registries
-          if (imageNormalized.registry.name !== container.image.registry.name) {
-            return false;
-          }
-
-          // Exclude different names
-          if (imageNormalized.name !== container.image.name) {
-            return false;
-          }
-
-          // Exclude current container image
-          if (imageNormalized.tag.value === container.updateKind.localValue) {
-            return false;
-          }
-
-          // Exclude candidate image
-          if (imageNormalized.tag.value === container.updateKind.remoteValue) {
-            return false;
-          }
-
-          // For digest-only updates, also exclude the current tag
-          // (localValue/remoteValue are digests, not tags)
-          if (
-            container.updateKind.kind === 'digest' &&
-            imageNormalized.tag.value === container.image.tag.value
-          ) {
-            return false;
-          }
-          return true;
-        })
+        .filter((image) => hasRepoTags(image))
+        .map((image) => ({
+          image,
+          normalizedImage: normalizeListedImage(registry, image),
+        }))
+        .filter(({ normalizedImage }) => !shouldKeepImage(normalizedImage, container))
+        .map(({ image }) => image)
         .map((imageToRemove) => dockerApi.getImage(imageToRemove.Id));
       await Promise.all(
         imagesToRemove.map((imageToRemove) => {

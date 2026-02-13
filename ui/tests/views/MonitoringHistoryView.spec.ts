@@ -118,11 +118,61 @@ describe('MonitoringHistoryView', () => {
     expect(wrapper.vm.currentPage).toBe(1);
   });
 
+  it('resets page to 1 when container filter changes', async () => {
+    (getAuditLog as any).mockResolvedValue({ entries: mockEntries, total: 50 });
+    wrapper = mount(MonitoringHistoryView);
+    await new Promise((r) => setTimeout(r, 10));
+
+    wrapper.vm.currentPage = 2;
+    wrapper.vm.filterContainer = 'nginx';
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(wrapper.vm.currentPage).toBe(1);
+  });
+
   it('computes totalPages correctly', async () => {
     (getAuditLog as any).mockResolvedValue({ entries: mockEntries, total: 50 });
     wrapper = mount(MonitoringHistoryView);
     await new Promise((r) => setTimeout(r, 10));
 
     expect(wrapper.vm.totalPages).toBe(3); // 50 / 20 = 2.5, ceil = 3
+  });
+
+  it('computes activeFilterCount based on filter fields', async () => {
+    (getAuditLog as any).mockResolvedValue({ entries: [], total: 0 });
+    wrapper = mount(MonitoringHistoryView);
+    await new Promise((r) => setTimeout(r, 10));
+
+    wrapper.vm.filterAction = 'update-applied';
+    wrapper.vm.filterContainer = 'nginx';
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.vm.activeFilterCount).toBe(2);
+  });
+
+  it('passes action and container filters to audit API', async () => {
+    (getAuditLog as any).mockResolvedValue({ entries: [], total: 0 });
+    wrapper = mount(MonitoringHistoryView);
+    await new Promise((r) => setTimeout(r, 10));
+    (getAuditLog as any).mockClear();
+
+    wrapper.vm.filterAction = 'update-applied';
+    wrapper.vm.filterContainer = 'nginx';
+    await wrapper.vm.fetchEntries();
+
+    expect(getAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'update-applied',
+        container: 'nginx',
+      }),
+    );
+  });
+
+  it('uses fallback error message when fetch throws without message', async () => {
+    (getAuditLog as any).mockRejectedValueOnce({});
+    wrapper = mount(MonitoringHistoryView);
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(wrapper.vm.error).toBe('Failed to fetch audit log');
   });
 });

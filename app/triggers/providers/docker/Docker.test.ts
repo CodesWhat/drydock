@@ -541,6 +541,20 @@ test('cloneContainer should remove Hostname and ExposedPorts when NetworkMode st
   expect(clone.HostConfig.NetworkMode).toBe('container:mainapp');
 });
 
+test('cloneContainer should handle missing NetworkSettings by using empty endpoint config', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/no-network',
+      Id: 'abc123',
+      HostConfig: {},
+      Config: { configA: 'a' },
+    },
+    'test/test:2.0.0',
+  );
+
+  expect(clone.NetworkingConfig).toEqual({ EndpointsConfig: {} });
+});
+
 // --- trigger ---
 
 test('trigger should not throw when all is ok', async () => {
@@ -762,6 +776,31 @@ describe('pruneImages edge cases', () => {
 
     expect(logContainer.warn).toHaveBeenCalledWith(expect.stringContaining('list failed'));
   });
+
+  test('should normalize listed images when parser returns no domain', async () => {
+    const mockDockerApi = createPruneDockerApi([
+      { Id: 'image-no-domain', RepoTags: ['repo:0.9.0'] },
+    ]);
+    const normalizeImage = vi.fn((img) => ({
+      ...img,
+      registry: { name: 'ecr', url: img.registry.url || '' },
+      name: img.name,
+      tag: { value: img.tag.value },
+    }));
+
+    await docker.pruneImages(
+      mockDockerApi,
+      { normalizeImage },
+      createPruneContainer(),
+      createMockLog('info', 'warn'),
+    );
+
+    expect(normalizeImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registry: expect.objectContaining({ url: '' }),
+      }),
+    );
+  });
 });
 
 // --- Duplicate pruneImages tests (longer-form, kept for backward compatibility) ---
@@ -891,6 +930,15 @@ test('createPullProgressLogger onDone should force log regardless of interval', 
   });
   logger.onDone({ status: 'Download complete', id: 'l1' });
   expect(logContainer.debug).toHaveBeenCalledTimes(2);
+});
+
+test('createPullProgressLogger should use default status when progress event has no status', () => {
+  const logContainer = createMockLog('debug');
+  const logger = docker.createPullProgressLogger(logContainer, 'test:1.0');
+
+  logger.onProgress({});
+
+  expect(logContainer.debug).toHaveBeenCalledWith('Pull progress for test:1.0: progress');
 });
 
 // --- formatPullProgress ---
@@ -1221,4 +1269,174 @@ describe('auto-rollback health monitor integration', () => {
       }),
     );
   });
+});
+
+describe('additional docker trigger coverage', () => {
+  beforeEach(() => {
+    docker.configuration = { ...configurationValid, dryrun: false, prune: false };
+    docker.log = {
+      child: vi.fn().mockReturnValue(createMockLog('info', 'warn', 'debug')),
+    };
+  });
+
+  test('preview should return details when current container exists', async () => {
+    const container = createTriggerContainer();
+    vi.spyOn(docker, 'getCurrentContainer').mockResolvedValue({ id: container.id });
+    vi.spyOn(docker, 'inspectContainer').mockResolvedValue({
+      State: { Running: true },
+      NetworkSettings: { Networks: { bridge: {}, appnet: {} } },
+    });
+
+    const preview = await docker.preview(container);
+
+    expect(preview).toMatchObject({
+      containerName: 'container-name',
+      newImage: 'my-registry/test/test:4.5.6',
+      isRunning: true,
+      networks: ['bridge', 'appnet'],
+    });
+  });
+
+  test('preview should return an explicit error when container is not found', async () => {
+    vi.spyOn(docker, 'getCurrentContainer').mockResolvedValue(undefined);
+    const preview = await docker.preview(createTriggerContainer());
+    expect(preview).toEqual({ error: 'Container not found in Docker' });
+  });
+
+  test('preview should fallback to empty network list when NetworkSettings are missing', async () => {
+    const container = createTriggerContainer();
+    vi.spyOn(docker, 'getCurrentContainer').mockResolvedValue({ id: container.id });
+    vi.spyOn(docker, 'inspectContainer').mockResolvedValue({
+      State: { Running: true },
+    });
+
+    const preview = await docker.preview(container);
+    expect(preview.networks).toEqual([]);
+  });
+
+  test('maybeNotifySelfUpdate should wait before proceeding for drydock image', async () => {
+    vi.useFakeTimers();
+    try {
+      const logContainer = createMockLog('info');
+      const notifyPromise = docker.maybeNotifySelfUpdate(
+        {
+          image: {
+            name: 'drydock',
+          },
+        },
+        logContainer,
+      );
+      await vi.advanceTimersByTimeAsync(500);
+      await notifyPromise;
+      expect(logContainer.info).toHaveBeenCalledWith(
+        'Self-update detected — notifying UI before proceeding',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('cleanupOldImages should remove digest image when prune is enabled and digest repo exists', async () => {
+    docker.configuration.prune = true;
+    const removeImageSpy = vi.spyOn(docker, 'removeImage').mockResolvedValue(undefined);
+    const registryProvider = {
+      getImageFullName: vi.fn(() => 'my-registry/test/test:sha256:old'),
+    };
+
+    await docker.cleanupOldImages(
+      {},
+      registryProvider,
+      {
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/test',
+          tag: { value: '1.0.0' },
+          digest: { repo: 'sha256:old' },
+        },
+        updateKind: {
+          kind: 'digest',
+        },
+      },
+      createMockLog('debug'),
+    );
+
+    expect(removeImageSpy).toHaveBeenCalledWith(
+      {},
+      'my-registry/test/test:sha256:old',
+      expect.any(Object),
+    );
+  });
+
+  test('cleanupOldImages should skip digest pruning when digest repo is missing', async () => {
+    docker.configuration.prune = true;
+    const removeImageSpy = vi.spyOn(docker, 'removeImage').mockResolvedValue(undefined);
+
+    await docker.cleanupOldImages(
+      {},
+      {
+        getImageFullName: vi.fn(() => 'unused'),
+      },
+      {
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/test',
+          tag: { value: '1.0.0' },
+          digest: {},
+        },
+        updateKind: {
+          kind: 'digest',
+        },
+      },
+      createMockLog('debug'),
+    );
+
+    expect(removeImageSpy).not.toHaveBeenCalled();
+  });
+
+  test('buildHookConfig should default update env values to empty strings when missing', () => {
+    const hookConfig = docker.buildHookConfig({
+      id: 'container-id',
+      name: 'container-name',
+      image: {
+        name: 'repo/name',
+        tag: {
+          value: '1.0.0',
+        },
+      },
+      updateKind: {
+        kind: 'unknown',
+      },
+      labels: {},
+    });
+
+    expect(hookConfig.hookEnv.DD_UPDATE_FROM).toBe('');
+    expect(hookConfig.hookEnv.DD_UPDATE_TO).toBe('');
+  });
+
+  test('maybeStartAutoRollbackMonitor should return early when recreated container is missing', async () => {
+    const getCurrentContainerSpy = vi.spyOn(docker, 'getCurrentContainer').mockResolvedValue(null);
+    const inspectContainerSpy = vi.spyOn(docker, 'inspectContainer');
+
+    await docker.maybeStartAutoRollbackMonitor(
+      {},
+      {
+        id: 'container-id',
+        name: 'container-name',
+        image: {
+          tag: { value: '1.0.0' },
+          digest: { repo: 'sha256:old' },
+        },
+      },
+      {
+        autoRollback: true,
+        rollbackWindow: 10_000,
+        rollbackInterval: 1_000,
+      },
+      createMockLog('info', 'warn'),
+    );
+
+    expect(getCurrentContainerSpy).toHaveBeenCalled();
+    expect(inspectContainerSpy).not.toHaveBeenCalled();
+  });
+
 });

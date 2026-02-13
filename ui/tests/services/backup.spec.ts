@@ -99,5 +99,15 @@ describe('Backup Service', () => {
         'Rollback failed: Internal Server Error',
       );
     });
+
+    it('throws without error detail when body has no error field', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Bad Request',
+        json: async () => ({}),
+      } as any);
+
+      await expect(rollback('container-1')).rejects.toThrow('Rollback failed: Bad Request');
+    });
   });
 });

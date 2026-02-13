@@ -91,6 +91,17 @@ describe('ContainerRollback', () => {
     expect(wrapper.vm.backups).toEqual([]);
   });
 
+  it('uses default fetch error when rejection is not an Error', async () => {
+    (getBackups as any).mockRejectedValue({});
+    wrapper = createWrapper({ modelValue: false });
+
+    await wrapper.setProps({ modelValue: true });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(wrapper.vm.error).toBe('Failed to load backups');
+    expect(wrapper.vm.loading).toBe(false);
+  });
+
   it('allows selecting a backup', async () => {
     (getBackups as any).mockResolvedValue(mockBackups);
     wrapper = createWrapper({ modelValue: false });
@@ -144,6 +155,22 @@ describe('ContainerRollback', () => {
 
     expect(wrapper.vm.error).toBe('Rollback failed');
     expect(wrapper.emitted('rollback-error')).toBeTruthy();
+  });
+
+  it('uses default rollback error when rejection is not an Error', async () => {
+    (getBackups as any).mockResolvedValue(mockBackups);
+    (rollback as any).mockRejectedValue({});
+    wrapper = createWrapper({ modelValue: false });
+
+    await wrapper.setProps({ modelValue: true });
+    await new Promise((r) => setTimeout(r, 10));
+
+    wrapper.vm.selectBackup('backup-1');
+    await wrapper.vm.confirmRollback();
+
+    expect(wrapper.vm.error).toBe('Rollback failed');
+    expect(wrapper.emitted('rollback-error')?.[0]).toEqual(['Rollback failed']);
+    expect(wrapper.vm.rolling).toBe(false);
   });
 
   it('does not call rollback without a selected backup', async () => {

@@ -34,39 +34,74 @@ interface GetEntriesOptions {
   since?: number;
 }
 
-function drainBuffer(): LogEntry[] {
-  const start = (head - count + MAX_SIZE) % MAX_SIZE;
+function getStartIndex(currentHead: number, currentCount: number, maxSize: number): number {
+  return (currentHead - currentCount + maxSize) % maxSize;
+}
+
+function readRingBuffer(
+  entriesBuffer: LogEntry[],
+  start: number,
+  currentCount: number,
+  maxSize: number,
+): LogEntry[] {
   const entries: LogEntry[] = [];
-  for (let i = 0; i < count; i++) {
-    entries.push(buffer[(start + i) % MAX_SIZE]);
+  for (let i = 0; i < currentCount; i++) {
+    entries.push(entriesBuffer[(start + i) % maxSize]);
+  }
+  return entries;
+}
+
+function drainBuffer(): LogEntry[] {
+  const start = getStartIndex(head, count, MAX_SIZE);
+  return readRingBuffer(buffer, start, count, MAX_SIZE);
+}
+
+function getMinLevel(level?: string): number {
+  if (!level) {
+    return 0;
+  }
+  return LEVEL_ORDER[level] ?? 0;
+}
+
+function meetsMinLevel(entry: LogEntry, minLevel: number): boolean {
+  if (minLevel <= 0) {
+    return true;
+  }
+  return (LEVEL_ORDER[entry.level] ?? 0) >= minLevel;
+}
+
+function matchesComponent(entry: LogEntry, component?: string): boolean {
+  if (!component) {
+    return true;
+  }
+  return entry.component.includes(component);
+}
+
+function isSince(entry: LogEntry, since?: number): boolean {
+  if (since === undefined) {
+    return true;
+  }
+  return entry.timestamp >= since;
+}
+
+function applyTail(entries: LogEntry[], tail: number): LogEntry[] {
+  if (entries.length > tail) {
+    return entries.slice(entries.length - tail);
   }
   return entries;
 }
 
 function applyFilters(entries: LogEntry[], options?: GetEntriesOptions): LogEntry[] {
-  let result = entries;
-
-  const minLevel = options?.level ? (LEVEL_ORDER[options.level] ?? 0) : 0;
-  if (minLevel > 0) {
-    result = result.filter((e) => (LEVEL_ORDER[e.level] ?? 0) >= minLevel);
-  }
-
-  if (options?.component) {
-    const comp = options.component;
-    result = result.filter((e) => e.component.includes(comp));
-  }
-
-  if (options?.since !== undefined) {
-    const since = options.since;
-    result = result.filter((e) => e.timestamp >= since);
-  }
-
-  const tail = options?.tail ?? 100;
-  if (result.length > tail) {
-    result = result.slice(result.length - tail);
-  }
-
-  return result;
+  const minLevel = getMinLevel(options?.level);
+  const component = options?.component;
+  const since = options?.since;
+  const filtered = entries.filter(
+    (entry) =>
+      meetsMinLevel(entry, minLevel) &&
+      matchesComponent(entry, component) &&
+      isSince(entry, since),
+  );
+  return applyTail(filtered, options?.tail ?? 100);
 }
 
 export function getEntries(options?: GetEntriesOptions): LogEntry[] {

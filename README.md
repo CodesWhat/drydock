@@ -43,7 +43,7 @@
 - [Supported Registries](#supported-registries)
 - [Supported Triggers](#supported-triggers)
 - [Authentication](#authentication)
-- [Migrating from WUD](#migrating-from-wud)
+- Migrating from WUD
 - [Documentation](#documentation)
 - [Built With](#built-with)
 
@@ -358,7 +358,7 @@ All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) 
 
 ## Migrating from WUD
 
-drydock is a drop-in replacement for [What's Up Docker (WUD)](https://github.com/getwud/wud). Switch only the image reference — everything else stays the same:
+drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the image reference — everything else stays the same:
 
 ```diff
 - image: getwud/wud:8.1.1
@@ -407,6 +407,8 @@ drydock is a drop-in replacement for [What's Up Docker (WUD)](https://github.com
 ---
 
 **[MIT License](LICENSE)**
+
+<sub>Unofficial, unauthorized-ish WUD fork. We ship fixes instead of forum drama.</sub>
 
 <br>
 

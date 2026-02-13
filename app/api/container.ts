@@ -360,10 +360,10 @@ async function watchContainer(req, res) {
  */
 function applySkipCurrentAction(container, updatePolicy) {
   const updateKind = container.updateKind?.kind;
+  const updateValue = getCurrentUpdateValue(container, updateKind);
   if (!['tag', 'digest'].includes(updateKind)) {
     return { error: 'No current update available to skip' };
   }
-  const updateValue = getCurrentUpdateValue(container, updateKind);
   if (!updateValue) {
     return { error: 'No update value available to skip' };
   }
@@ -375,7 +375,7 @@ function applySkipCurrentAction(container, updatePolicy) {
   return { policy: updatePolicy };
 }
 
-function applyPolicyAction(action, container, updatePolicy, body) {
+function applyPolicyAction(action, container, updatePolicy, body = {}) {
   switch (action) {
     case 'skip-current':
       return applySkipCurrentAction(container, updatePolicy);
@@ -384,7 +384,7 @@ function applyPolicyAction(action, container, updatePolicy, body) {
       delete updatePolicy.skipDigests;
       return { policy: updatePolicy };
     case 'snooze':
-      updatePolicy.snoozeUntil = getSnoozeUntilFromActionPayload(body || {});
+      updatePolicy.snoozeUntil = getSnoozeUntilFromActionPayload(body);
       return { policy: updatePolicy };
     case 'unsnooze':
       delete updatePolicy.snoozeUntil;

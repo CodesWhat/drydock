@@ -1,4 +1,4 @@
-import { getStrategies, getUser, loginBasic, logout } from '@/services/auth';
+import { getOidcRedirection, getStrategies, getUser, loginBasic, logout } from '@/services/auth';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -119,6 +119,23 @@ describe('Auth Service', () => {
         credentials: 'include',
       });
       expect(strategies).toEqual(mockStrategies);
+    });
+  });
+
+  describe('getOidcRedirection', () => {
+    it('returns oidc redirection payload', async () => {
+      const mockRedirection = { url: 'https://idp.example.com/authorize?code=abc' };
+      fetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockRedirection,
+      });
+
+      const result = await getOidcRedirection('main');
+
+      expect(fetch).toHaveBeenCalledWith('/auth/oidc/main/redirect', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockRedirection);
     });
   });
 });

@@ -234,6 +234,26 @@ describe('getImageManifestDigest', () => {
     });
   });
 
+  test('should return undefined digest for schemaVersion 1 without config image field', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = () => ({
+      schemaVersion: 1,
+      history: [
+        {
+          v1Compatibility: JSON.stringify({
+            created: '2024-01-01T00:00:00.000Z',
+          }),
+        },
+      ],
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+      version: 1,
+      digest: undefined,
+      created: '2024-01-01T00:00:00.000Z',
+    });
+  });
+
   test('should use digest parameter when provided', async () => {
     const registryMocked = createMockedRegistry();
     registryMocked.callRegistry = headDigestThenBody('digest-result', {
@@ -303,6 +323,18 @@ describe('getImageManifestDigest', () => {
           'application/vnd.docker.distribution.manifest.v2+json',
         ),
       ]);
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow(
+      'Unexpected error; no manifest found',
+    );
+  });
+
+  test('should handle schemaVersion 2 manifest list payload without manifests array', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = () => ({
+      schemaVersion: 2,
+      mediaType: 'application/vnd.docker.distribution.manifest.list.v2+json',
+    });
+
     await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow(
       'Unexpected error; no manifest found',
     );

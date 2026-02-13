@@ -5,8 +5,27 @@
 import semver from 'semver';
 import log from '../log/index.js';
 
+function hasOnlyDigits(value) {
+  if (typeof value !== 'string' || value.length === 0) {
+    return false;
+  }
+  for (let i = 0; i < value.length; i += 1) {
+    const charCode = value.charCodeAt(i);
+    if (charCode < 48 || charCode > 57) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function normalizeNumericMultiSegmentTag(rawVersion) {
-  if (!/^v?\d+(?:\.\d+){3,}$/.test(rawVersion)) {
+  if (typeof rawVersion !== 'string' || rawVersion.length === 0) {
+    return null;
+  }
+
+  const versionWithoutPrefix = rawVersion.startsWith('v') ? rawVersion.slice(1) : rawVersion;
+  const versionParts = versionWithoutPrefix.split('.');
+  if (versionParts.length < 4 || versionParts.some((part) => !hasOnlyDigits(part))) {
     return null;
   }
 
@@ -99,14 +118,17 @@ export function transform(transformFormula, originalTag) {
       );
       return originalTag;
     }
-    const transformRegex = new RegExp(pattern);
-    const placeholders = replacement.match(/\$\d+/g);
-    const originalTagMatches = originalTag.match(transformRegex);
+    const placeholders = replacement.match(/\$\d+/g) || [];
+    const originalTagMatches = originalTag.match(pattern);
+    if (!originalTagMatches) {
+      return originalTag;
+    }
 
     let transformedTag = replacement;
     placeholders.forEach((placeholder) => {
       const placeholderIndex = Number.parseInt(placeholder.substring(1), 10);
-      transformedTag = transformedTag.replaceAll(placeholder, originalTagMatches[placeholderIndex]);
+      const replacementValue = originalTagMatches[placeholderIndex];
+      transformedTag = transformedTag.replaceAll(placeholder, replacementValue ?? '');
     });
     return transformedTag;
   } catch (e) {

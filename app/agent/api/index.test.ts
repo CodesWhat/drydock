@@ -173,6 +173,22 @@ describe('Agent API index', () => {
       expect(getCallOrder[healthGetIdx]).toBeLessThan(useCallOrder[authUseIndex]);
     });
 
+    test('health handler should return uptime payload', async () => {
+      process.env.DD_AGENT_SECRET = 'secret'; // NOSONAR - test fixture, not a real credential
+      await init();
+
+      const getCalls = mockApp.get.mock.calls;
+      const healthCall = getCalls.find(([path]) => path === '/health');
+      const handler = healthCall?.[1];
+      const res = { json: vi.fn() };
+
+      handler({}, res);
+
+      expect(res.json).toHaveBeenCalledWith({
+        uptime: expect.any(Number),
+      });
+    });
+
     test('should start HTTPS server when TLS is enabled', async () => {
       process.env.DD_AGENT_SECRET = 'secret'; // NOSONAR - test fixture, not a real credential
       Object.assign(mockServerConfig, {

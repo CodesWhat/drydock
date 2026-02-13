@@ -1,41 +1,64 @@
-import { defineComponent } from 'vue';
-import { getContainerLogs } from '@/services/container';
+import { defineComponent, onMounted, ref, watch, type PropType } from 'vue';
+import { getContainerLogs } from '../services/container';
+
+type ContainerLogTarget = {
+  id: string;
+};
+
+type ContainerLogsResponse = {
+  logs?: unknown;
+};
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
 
 export default defineComponent({
   props: {
     container: {
-      type: Object,
-      required: true,
-    },
+      type: Object as PropType<ContainerLogTarget>,
+      required: true
+    }
   },
-  data() {
-    return {
-      logs: '',
-      loading: false,
-      error: null as string | null,
-      tail: 100,
-    };
-  },
-  methods: {
-    async fetchLogs() {
-      this.loading = true;
-      this.error = null;
+  setup: function setup(props) {
+    const logs = ref('');
+    const loading = ref(false);
+    const error = ref('');
+    const tail = ref(100);
+
+    const fetchLogs = async function fetchLogs(): Promise<void> {
+      loading.value = true;
+      error.value = '';
       try {
-        const result = await getContainerLogs(this.container.id, this.tail);
-        this.logs = result.logs;
-      } catch (e: any) {
-        this.error = e.message;
+        const result = (await getContainerLogs(
+          props.container.id,
+          tail.value
+        )) as ContainerLogsResponse;
+        logs.value = typeof result.logs === 'string' ? result.logs : '';
+      } catch (e: unknown) {
+        error.value = toErrorMessage(e);
       } finally {
-        this.loading = false;
+        loading.value = false;
       }
-    },
-  },
-  mounted() {
-    this.fetchLogs();
-  },
-  watch: {
-    tail() {
-      this.fetchLogs();
-    },
-  },
+    };
+
+    onMounted(function loadLogsOnMount() {
+      void fetchLogs();
+    });
+
+    watch(tail, function reloadLogsOnTailChange() {
+      void fetchLogs();
+    });
+
+    return {
+      logs,
+      loading,
+      error,
+      tail,
+      fetchLogs
+    };
+  }
 });

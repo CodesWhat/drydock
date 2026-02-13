@@ -1,5 +1,7 @@
 import { mount } from '@vue/test-utils';
 import NavigationDrawer from '@/components/NavigationDrawer';
+import { useDisplay } from 'vuetify';
+import { getAppInfos } from '@/services/app';
 
 // Mock all icon services
 vi.mock('@/services/container', () => ({ getContainerIcon: vi.fn(() => 'fab fa-docker') }));
@@ -10,6 +12,9 @@ vi.mock('@/services/watcher', () => ({ getWatcherIcon: vi.fn(() => 'fas fa-arrow
 vi.mock('@/services/authentication', () => ({ getAuthenticationIcon: vi.fn(() => 'fas fa-lock') }));
 vi.mock('@/services/agent', () => ({ getAgentIcon: vi.fn(() => 'fas fa-network-wired') }));
 vi.mock('@/services/log', () => ({ getLogIcon: vi.fn(() => 'fas fa-terminal') }));
+vi.mock('@/services/app', () => ({
+  getAppInfos: vi.fn(() => Promise.resolve({ version: '1.2.3' })),
+}));
 
 // Mock vuetify useTheme and useDisplay
 vi.mock('vuetify', async () => {
@@ -54,6 +59,10 @@ describe('NavigationDrawer', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    vi.mocked(useDisplay as any).mockReturnValue({
+      smAndDown: { value: false },
+    } as any);
+    vi.mocked(getAppInfos).mockClear();
     wrapper = mount(NavigationDrawer, {
       global: { stubs },
     });
@@ -97,5 +106,96 @@ describe('NavigationDrawer', () => {
     const routes = items.map((i) => i.to);
     expect(routes).toContain('/monitoring/history');
     expect(routes).toContain('/configuration/logs');
+  });
+
+  it('loads app version on mount', async () => {
+    await wrapper.vm.$nextTick();
+    await Promise.resolve();
+    expect(getAppInfos).toHaveBeenCalled();
+    expect(wrapper.vm.version).toBe('1.2.3');
+  });
+
+  it('falls back to unknown version when API returns no version field', async () => {
+    if (wrapper) wrapper.unmount();
+    vi.mocked(getAppInfos).mockResolvedValueOnce({} as any);
+
+    wrapper = mount(NavigationDrawer, {
+      global: { stubs },
+    });
+    await Promise.resolve();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.vm.version).toBe('unknown');
+  });
+
+  it('falls back to unknown version when app info call fails', async () => {
+    if (wrapper) wrapper.unmount();
+    vi.mocked(getAppInfos).mockRejectedValueOnce(new Error('fetch failed'));
+
+    wrapper = mount(NavigationDrawer, {
+      global: { stubs },
+    });
+    await Promise.resolve();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.vm.version).toBe('unknown');
+  });
+
+  it('toggleDrawer toggles mini mode on desktop', async () => {
+    expect(wrapper.vm.mini).toBe(false);
+    wrapper.vm.toggleDrawer();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.vm.mini).toBe(true);
+  });
+
+  it('toggleDrawer emits model update on mobile', async () => {
+    if (wrapper) wrapper.unmount();
+    vi.mocked(useDisplay as any).mockReturnValue({
+      smAndDown: { value: true },
+    } as any);
+
+    wrapper = mount(NavigationDrawer, {
+      props: {
+        modelValue: true,
+      },
+      global: { stubs },
+    });
+
+    wrapper.vm.toggleDrawer();
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.emitted('update:modelValue')).toBeTruthy();
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false]);
+  });
+
+  it('drawerModel getter follows modelValue on mobile and forces open on desktop', async () => {
+    if (wrapper) wrapper.unmount();
+    vi.mocked(useDisplay as any).mockReturnValue({
+      smAndDown: { value: true },
+    } as any);
+    wrapper = mount(NavigationDrawer, {
+      props: {
+        modelValue: false,
+      },
+      global: { stubs },
+    });
+    expect(wrapper.vm.drawerModel).toBe(false);
+
+    if (wrapper) wrapper.unmount();
+    vi.mocked(useDisplay as any).mockReturnValue({
+      smAndDown: { value: false },
+    } as any);
+    wrapper = mount(NavigationDrawer, {
+      props: {
+        modelValue: false,
+      },
+      global: { stubs },
+    });
+    expect(wrapper.vm.drawerModel).toBe(true);
+  });
+
+  it('drawerModel setter emits update:modelValue', () => {
+    wrapper.vm.drawerModel = false;
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([false]);
   });
 });

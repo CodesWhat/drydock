@@ -11,16 +11,16 @@ vi.mock('./buffer.js', () => ({
 }));
 
 describe('parseLogChunk', () => {
-  let parseLogChunk;
+  var parseLogChunk;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    const mod = await import('./index.js');
+    var mod = await import('./index.js');
     parseLogChunk = mod.parseLogChunk;
   });
 
   test('should use Date.now() when time is missing', () => {
-    const now = Date.now();
+    var now = Date.now();
     vi.spyOn(Date, 'now').mockReturnValue(now);
     parseLogChunk(JSON.stringify({ level: 30, msg: 'test' }));
     expect(addEntry).toHaveBeenCalledWith(

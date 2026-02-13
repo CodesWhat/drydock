@@ -6,6 +6,7 @@ import { emitContainerReport } from '../event/index.js';
 import logger from '../log/index.js';
 import type { Container, ContainerReport } from '../model/container.js';
 import * as registry from '../registry/index.js';
+import { resolveConfiguredPath } from '../runtime/paths.js';
 import * as storeContainer from '../store/container.js';
 
 export interface AgentClientConfig {
@@ -51,12 +52,21 @@ export class AgentClient {
     };
 
     if (this.config.certfile) {
+      const caPath = this.config.cafile
+        ? resolveConfiguredPath(this.config.cafile, { label: `${name} ca file` })
+        : undefined;
+      const certPath = resolveConfiguredPath(this.config.certfile, {
+        label: `${name} cert file`,
+      });
+      const keyPath = this.config.keyfile
+        ? resolveConfiguredPath(this.config.keyfile, { label: `${name} key file` })
+        : undefined;
       // Intentional: mTLS with optional self-signed CA for agent communication
       // lgtm[js/disabling-certificate-validation]
       this.axiosOptions.httpsAgent = new https.Agent({
-        ca: this.config.cafile ? fs.readFileSync(this.config.cafile) : undefined,
-        cert: this.config.certfile ? fs.readFileSync(this.config.certfile) : undefined,
-        key: this.config.keyfile ? fs.readFileSync(this.config.keyfile) : undefined,
+        ca: caPath ? fs.readFileSync(caPath) : undefined,
+        cert: certPath ? fs.readFileSync(certPath) : undefined,
+        key: keyPath ? fs.readFileSync(keyPath) : undefined,
       });
     }
 

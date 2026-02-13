@@ -79,6 +79,13 @@ describe('TriggerDetail', () => {
     expect(wrapper.vm.configurationItems).toEqual([]);
   });
 
+  it('returns empty configurationItems when configuration is missing', async () => {
+    await wrapper.setProps({
+      trigger: { ...mockTrigger, configuration: undefined },
+    });
+    expect(wrapper.vm.configurationItems).toEqual([]);
+  });
+
   it('formatValue returns value for non-empty values', () => {
     expect(wrapper.vm.formatValue('hello')).toBe('hello');
     expect(wrapper.vm.formatValue(42)).toBe(42);

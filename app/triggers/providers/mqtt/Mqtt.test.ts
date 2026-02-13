@@ -1,6 +1,11 @@
 // @ts-nocheck
 import joi from 'joi';
 import mqttClient from 'mqtt';
+import {
+  clearAllListenersForTests,
+  emitContainerAdded,
+  emitContainerUpdated,
+} from '../../../event/index.js';
 import log from '../../../log/index.js';
 import { flatten } from '../../../model/container.js';
 
@@ -66,6 +71,7 @@ const containerData = [
 
 beforeEach(async () => {
   vi.resetAllMocks();
+  clearAllListenersForTests();
   mqtt.client = {
     publish: vi.fn(() => {}),
   };
@@ -82,6 +88,13 @@ test('validateConfiguration should apply_default_configuration', async () => {
     clientid: 'wud',
   });
   expect(validatedConfiguration).toStrictEqual(configurationValid);
+});
+
+test('validateConfiguration should generate a default client id when not provided', async () => {
+  const validatedConfiguration = mqtt.validateConfiguration({
+    url: configurationValid.url,
+  });
+  expect(validatedConfiguration.clientid).toMatch(/^dd_[0-9a-f]{8}$/);
 });
 
 test('validateConfiguration should default hass.discovery to true when hass.enabled is true', async () => {
@@ -228,4 +241,36 @@ test('initTrigger should read TLS files when configured', async () => {
 
 test('triggerBatch should throw error', async () => {
   await expect(mqtt.triggerBatch()).rejects.toThrow('This trigger does not support "batch" mode');
+});
+
+test('handleContainerEvent should log when trigger fails', async () => {
+  const warnSpy = vi.spyOn(mqtt.log, 'warn');
+  const debugSpy = vi.spyOn(mqtt.log, 'debug');
+  vi.spyOn(mqtt, 'trigger').mockRejectedValue(new Error('boom'));
+
+  mqtt.handleContainerEvent({ name: 'broken', watcher: 'local' });
+  await Promise.resolve();
+
+  expect(warnSpy).toHaveBeenCalledWith('Error (boom)');
+  expect(debugSpy).toHaveBeenCalledWith(expect.any(Error));
+});
+
+test('initTrigger should execute registered container event callbacks', async () => {
+  mqtt.configuration = {
+    ...configurationValid,
+    clientid: 'wud',
+    hass: { enabled: false, discovery: false, prefix: 'homeassistant' },
+  };
+  vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({
+    publish: vi.fn().mockResolvedValue(undefined),
+  });
+  const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+
+  await mqtt.initTrigger();
+
+  emitContainerAdded({ name: 'container-a', watcher: 'local' });
+  emitContainerUpdated({ name: 'container-b', watcher: 'local' });
+  await Promise.resolve();
+
+  expect(triggerSpy).toHaveBeenCalledTimes(2);
 });

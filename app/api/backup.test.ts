@@ -265,6 +265,57 @@ describe('Backup Router', () => {
       );
     });
 
+    test('should rollback successfully when a valid backupId is provided', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { registry: { name: 'hub' } },
+      };
+      const selectedBackup = {
+        id: 'b2',
+        containerId: 'c1',
+        imageName: 'library/nginx',
+        imageTag: '1.25',
+      };
+
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackup.mockReturnValue(selectedBackup);
+
+      const mockCurrentContainer = {};
+      const mockContainerSpec = { State: { Running: true } };
+      const mockTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi: {} })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        getCurrentContainer: vi.fn().mockResolvedValue(mockCurrentContainer),
+        inspectContainer: vi.fn().mockResolvedValue(mockContainerSpec),
+        stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
+        recreateContainer: vi.fn().mockResolvedValue(undefined),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' }, body: { backupId: 'b2' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockGetBackup).toHaveBeenCalledWith('b2');
+      expect(mockGetBackups).not.toHaveBeenCalled();
+      expect(mockTrigger.pullImage).toHaveBeenCalled();
+      expect(mockTrigger.stopAndRemoveContainer).toHaveBeenCalled();
+      expect(mockTrigger.recreateContainer).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Container rolled back successfully',
+          backup: selectedBackup,
+        }),
+      );
+    });
+
     test('should return 500 when current container cannot be found in Docker', async () => {
       const handler = getHandler('post', '/:id/rollback');
       const container = {

@@ -286,4 +286,18 @@ describe('Backup Store', () => {
     const result = freshBackup.deleteBackup('b1');
     expect(result).toBe(false);
   });
+
+  test('insertBackup should return generated values when collection not initialized', async () => {
+    vi.resetModules();
+    const freshBackup = await import('./backup.js');
+    const result = freshBackup.insertBackup({
+      containerId: 'c1',
+      containerName: 'nginx',
+      imageName: 'library/nginx',
+      imageTag: '1.24',
+      triggerName: 'docker.default',
+    });
+    expect(result.id).toBeDefined();
+    expect(result.timestamp).toBeDefined();
+  });
 });

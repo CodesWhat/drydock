@@ -65,6 +65,14 @@ test.each([
     expectedResult: '"This is a display name" <from@xx.com>',
   },
   {
+    fromValue: '"" <from@xx.com>',
+    expectedResult: 'from@xx.com',
+  },
+  {
+    fromValue: 'Display "Name" <from@xx.com>',
+    expectedResult: null,
+  },
+  {
     fromValue: 'from@xx.com',
     expectedResult: 'from@xx.com',
   },

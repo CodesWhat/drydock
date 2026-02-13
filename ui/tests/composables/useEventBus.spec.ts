@@ -50,4 +50,16 @@ describe('useEventBus', () => {
       eventBus.off('non-existent-event', callback);
     }).not.toThrow();
   });
+
+  it('should ignore off when callback is not registered for an existing event', () => {
+    const callback = vi.fn();
+    const otherCallback = vi.fn();
+
+    eventBus.on('test-event', callback);
+    eventBus.off('test-event', otherCallback);
+    eventBus.emit('test-event', 'payload');
+
+    expect(callback).toHaveBeenCalledWith('payload');
+    expect(otherCallback).not.toHaveBeenCalled();
+  });
 });

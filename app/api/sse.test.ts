@@ -1,5 +1,4 @@
-// @ts-nocheck
-const { mockRouter, mockRegisterSelfUpdateStarting } = vi.hoisted(() => ({
+var { mockRouter, mockRegisterSelfUpdateStarting } = vi.hoisted(() => ({
   mockRouter: { get: vi.fn() },
   mockRegisterSelfUpdateStarting: vi.fn(),
 }));
@@ -20,7 +19,7 @@ import * as sseRouter from './sse.js';
 
 function getHandler() {
   sseRouter.init();
-  const call = mockRouter.get.mock.calls.find((c) => c[0] === '/');
+  var call = mockRouter.get.mock.calls.find((c) => c[0] === '/');
   return call[1];
 }
 
@@ -32,7 +31,7 @@ function createSSEResponse() {
 }
 
 function createSSERequest() {
-  const listeners = {};
+  var listeners = {};
   return {
     on: vi.fn((event, handler) => {
       listeners[event] = handler;
@@ -67,9 +66,9 @@ describe('SSE Router', () => {
 
   describe('eventsHandler', () => {
     test('should set correct SSE headers', () => {
-      const handler = getHandler();
-      const req = createSSERequest();
-      const res = createSSEResponse();
+      var handler = getHandler();
+      var req = createSSERequest();
+      var res = createSSEResponse();
 
       handler(req, res);
 
@@ -81,9 +80,9 @@ describe('SSE Router', () => {
     });
 
     test('should send initial dd:connected event', () => {
-      const handler = getHandler();
-      const req = createSSERequest();
-      const res = createSSEResponse();
+      var handler = getHandler();
+      var req = createSSERequest();
+      var res = createSSEResponse();
 
       handler(req, res);
 
@@ -91,9 +90,9 @@ describe('SSE Router', () => {
     });
 
     test('should add client to clients set', () => {
-      const handler = getHandler();
-      const req = createSSERequest();
-      const res = createSSEResponse();
+      var handler = getHandler();
+      var req = createSSERequest();
+      var res = createSSEResponse();
 
       handler(req, res);
 
@@ -102,9 +101,9 @@ describe('SSE Router', () => {
     });
 
     test('should remove client on connection close', () => {
-      const handler = getHandler();
-      const req = createSSERequest();
-      const res = createSSEResponse();
+      var handler = getHandler();
+      var req = createSSERequest();
+      var res = createSSEResponse();
 
       handler(req, res);
       expect(sseRouter._clients.size).toBe(1);
@@ -117,9 +116,9 @@ describe('SSE Router', () => {
     });
 
     test('should set up heartbeat interval', () => {
-      const handler = getHandler();
-      const req = createSSERequest();
-      const res = createSSEResponse();
+      var handler = getHandler();
+      var req = createSSERequest();
+      var res = createSSEResponse();
 
       handler(req, res);
 
@@ -133,9 +132,9 @@ describe('SSE Router', () => {
     });
 
     test('should clear heartbeat interval on disconnect', () => {
-      const handler = getHandler();
-      const req = createSSERequest();
-      const res = createSSEResponse();
+      var handler = getHandler();
+      var req = createSSERequest();
+      var res = createSSEResponse();
 
       handler(req, res);
       res.write.mockClear();
@@ -151,8 +150,8 @@ describe('SSE Router', () => {
 
   describe('broadcastSelfUpdate', () => {
     test('should send dd:self-update to all connected clients', () => {
-      const res1 = createSSEResponse();
-      const res2 = createSSEResponse();
+      var res1 = createSSEResponse();
+      var res2 = createSSEResponse();
       sseRouter._clients.add(res1);
       sseRouter._clients.add(res2);
 
@@ -170,9 +169,9 @@ describe('SSE Router', () => {
     test('should be triggered when self-update event fires', () => {
       sseRouter.init();
       // The registerSelfUpdateStarting callback should call broadcastSelfUpdate
-      const registeredCallback = mockRegisterSelfUpdateStarting.mock.calls[0][0];
+      var registeredCallback = mockRegisterSelfUpdateStarting.mock.calls[0][0];
 
-      const res = createSSEResponse();
+      var res = createSSEResponse();
       sseRouter._clients.add(res);
 
       registeredCallback();

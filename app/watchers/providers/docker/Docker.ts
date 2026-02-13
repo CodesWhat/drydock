@@ -60,7 +60,7 @@ import {
   wudWatch,
   wudWatchDigest,
 } from './label.js';
-import { isInMaintenanceWindow } from './maintenance.js';
+import { getNextMaintenanceWindow, isInMaintenanceWindow } from './maintenance.js';
 
 export interface DockerWatcherConfiguration extends ComponentConfiguration {
   socket: string;
@@ -119,6 +119,7 @@ const START_WATCHER_DELAY_MS = 1000;
 
 // Debounce delay used when performing a watch after a docker event has been received
 const DEBOUNCED_WATCH_CRON_MS = 5000;
+const MAINTENANCE_WINDOW_QUEUE_POLL_MS = 60 * 1000;
 const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
 const OIDC_ACCESS_TOKEN_REFRESH_WINDOW_MS = 30 * 1000;
 const OIDC_DEFAULT_ACCESS_TOKEN_TTL_MS = 5 * 60 * 1000;
@@ -296,30 +297,44 @@ function applyIncludeExcludeFilters(
 /**
  * Filter tags by prefix to match the current tag's prefix convention.
  */
-function filterByCurrentPrefix(tags: string[], container: Container, logContainer: any): string[] {
-  const currentTag = container.image.tag.value;
-  let firstDigitIndex = -1;
-  for (let i = 0; i < currentTag.length; i += 1) {
-    const charCode = currentTag.codePointAt(i);
-    if (charCode !== undefined && charCode >= 48 && charCode <= 57) {
-      firstDigitIndex = i;
-      break;
+function isDigitCode(charCode: number | undefined): boolean {
+  return charCode !== undefined && charCode >= 48 && charCode <= 57;
+}
+
+function getFirstDigitIndex(value: string): number {
+  for (let i = 0; i < value.length; i += 1) {
+    if (isDigitCode(value.codePointAt(i))) {
+      return i;
     }
   }
-  const currentPrefix = firstDigitIndex >= 0 ? currentTag.slice(0, firstDigitIndex) : '';
+  return -1;
+}
 
-  const filtered = currentPrefix
-    ? tags.filter((tag) => tag.startsWith(currentPrefix))
-    : tags.filter((tag) => {
-        const firstCharCode = tag.codePointAt(0);
-        return firstCharCode !== undefined && firstCharCode >= 48 && firstCharCode <= 57;
-      });
+function getCurrentPrefix(value: string): string {
+  const firstDigitIndex = getFirstDigitIndex(value);
+  return firstDigitIndex >= 0 ? value.slice(0, firstDigitIndex) : '';
+}
+
+function startsWithDigit(value: string): boolean {
+  return isDigitCode(value.codePointAt(0));
+}
+
+function getPrefixFilterWarning(currentPrefix: string): string {
+  if (currentPrefix) {
+    return `No tags found with existing prefix: '${currentPrefix}'; check your regex filters`;
+  }
+  return 'No tags found starting with a number (no prefix); check your regex filters';
+}
+
+function filterByCurrentPrefix(tags: string[], container: Container, logContainer: any): string[] {
+  const currentTag = container.image.tag.value;
+  const currentPrefix = getCurrentPrefix(currentTag);
+  const filtered = tags.filter((tag) =>
+    currentPrefix ? tag.startsWith(currentPrefix) : startsWithDigit(tag),
+  );
 
   if (filtered.length === 0) {
-    const msg = currentPrefix
-      ? `No tags found with existing prefix: '${currentPrefix}'; check your regex filters`
-      : 'No tags found starting with a number (no prefix); check your regex filters';
-    logContainer.warn(msg);
+    logContainer.warn(getPrefixFilterWarning(currentPrefix));
   }
 
   return filtered;
@@ -929,6 +944,8 @@ class Docker extends Watcher {
   public watchCronTimeout: any;
   public watchCronDebounced: any;
   public listenDockerEventsTimeout: any;
+  public maintenanceWindowQueueTimeout: any;
+  public maintenanceWindowWatchQueued: boolean = false;
   public dockerEventsBuffer = '';
   public remoteOidcAccessToken?: string;
   public remoteOidcRefreshToken?: string;
@@ -1026,8 +1043,16 @@ class Docker extends Watcher {
   }
 
   maskConfiguration() {
+    const hasMaintenanceWindow = !!this.configuration.maintenancewindow;
+    const nextMaintenanceWindow = hasMaintenanceWindow
+      ? this.getNextMaintenanceWindowDate()?.toISOString()
+      : undefined;
+
     return {
       ...this.configuration,
+      maintenancewindowopen: hasMaintenanceWindow ? this.isMaintenanceWindowOpen() : undefined,
+      maintenancewindowqueued: hasMaintenanceWindow ? this.maintenanceWindowWatchQueued : false,
+      maintenancenextwindow: nextMaintenanceWindow,
       auth: this.configuration.auth
         ? {
             type: this.configuration.auth.type,
@@ -1051,6 +1076,74 @@ class Docker extends Watcher {
           }
         : undefined,
     };
+  }
+
+  isMaintenanceWindowOpen() {
+    if (!this.configuration.maintenancewindow) {
+      return true;
+    }
+    return isInMaintenanceWindow(
+      this.configuration.maintenancewindow,
+      this.configuration.maintenancewindowtz,
+    );
+  }
+
+  getNextMaintenanceWindowDate(fromDate: Date = new Date()) {
+    if (!this.configuration.maintenancewindow) {
+      return undefined;
+    }
+    return getNextMaintenanceWindow(
+      this.configuration.maintenancewindow,
+      this.configuration.maintenancewindowtz,
+      fromDate,
+    );
+  }
+
+  clearMaintenanceWindowQueue() {
+    if (this.maintenanceWindowQueueTimeout) {
+      clearTimeout(this.maintenanceWindowQueueTimeout);
+      this.maintenanceWindowQueueTimeout = undefined;
+    }
+    this.maintenanceWindowWatchQueued = false;
+  }
+
+  queueMaintenanceWindowWatch() {
+    this.maintenanceWindowWatchQueued = true;
+    if (this.maintenanceWindowQueueTimeout) {
+      return;
+    }
+    this.maintenanceWindowQueueTimeout = setTimeout(
+      () => this.checkQueuedMaintenanceWindowWatch(),
+      MAINTENANCE_WINDOW_QUEUE_POLL_MS,
+    );
+  }
+
+  async checkQueuedMaintenanceWindowWatch() {
+    this.maintenanceWindowQueueTimeout = undefined;
+    if (!this.configuration.maintenancewindow || !this.maintenanceWindowWatchQueued) {
+      this.clearMaintenanceWindowQueue();
+      return;
+    }
+
+    if (!this.isMaintenanceWindowOpen()) {
+      this.queueMaintenanceWindowWatch();
+      return;
+    }
+
+    try {
+      this.ensureLogger();
+      if (this.log && typeof this.log.info === 'function') {
+        this.log.info('Maintenance window opened - running queued update check');
+      }
+      await this.watchFromCron({
+        ignoreMaintenanceWindow: true,
+      });
+    } catch (e: any) {
+      this.ensureLogger();
+      if (this.log && typeof this.log.warn === 'function') {
+        this.log.warn(`Unable to run queued maintenance watch (${e.message})`);
+      }
+    }
   }
 
   /**
@@ -1680,6 +1773,7 @@ class Docker extends Watcher {
       clearTimeout(this.listenDockerEventsTimeout);
       delete this.watchCronDebounced;
     }
+    this.clearMaintenanceWindowQueue();
   }
 
   /**
@@ -1849,7 +1943,7 @@ class Docker extends Watcher {
     this.dockerEventsBuffer += dockerEventChunk.toString();
     const dockerEventPayloads = this.dockerEventsBuffer.split('\n');
     const lastPayload = dockerEventPayloads.pop();
-    this.dockerEventsBuffer = lastPayload === undefined ? '' : lastPayload;
+    this.dockerEventsBuffer = lastPayload || '';
 
     for (const dockerEventPayload of dockerEventPayloads) {
       await this.processDockerEventPayload(dockerEventPayload);
@@ -1872,7 +1966,8 @@ class Docker extends Watcher {
    * Watch containers (called by cron scheduled tasks).
    * @returns {Promise<*[]>}
    */
-  async watchFromCron() {
+  async watchFromCron(options: { ignoreMaintenanceWindow?: boolean } = {}) {
+    const { ignoreMaintenanceWindow = false } = options;
     this.ensureLogger();
     if (!this.log || typeof this.log.info !== 'function') {
       return [];
@@ -1880,12 +1975,11 @@ class Docker extends Watcher {
 
     // Check maintenance window before proceeding
     if (
+      !ignoreMaintenanceWindow &&
       this.configuration.maintenancewindow &&
-      !isInMaintenanceWindow(
-        this.configuration.maintenancewindow,
-        this.configuration.maintenancewindowtz,
-      )
+      !this.isMaintenanceWindowOpen()
     ) {
+      this.queueMaintenanceWindowWatch();
       this.log.info('Skipping update check - outside maintenance window');
       const counter = getMaintenanceSkipCounter();
       if (counter) {
@@ -1893,6 +1987,7 @@ class Docker extends Watcher {
       }
       return [];
     }
+    this.clearMaintenanceWindowQueue();
 
     this.log.info(`Cron started (${this.configuration.cron})`);
 
@@ -2219,8 +2314,10 @@ class Docker extends Watcher {
   }
 
   async findNewVersion(container: Container, logContainer: any) {
-    const registryProvider = getRegistry(container.image.registry.name);
-    if (!registryProvider) {
+    let registryProvider;
+    try {
+      registryProvider = getRegistry(container.image.registry.name);
+    } catch {
       logContainer.error(`Unsupported registry (${container.image.registry.name})`);
       return { tag: container.image.tag.value };
     }
@@ -2424,3 +2521,20 @@ class Docker extends Watcher {
 }
 
 export default Docker;
+
+export {
+  getLabel as testable_getLabel,
+  getCurrentPrefix as testable_getCurrentPrefix,
+  filterBySegmentCount as testable_filterBySegmentCount,
+  getContainerName as testable_getContainerName,
+  getContainerDisplayName as testable_getContainerDisplayName,
+  normalizeConfigNumberValue as testable_normalizeConfigNumberValue,
+  shouldUpdateDisplayNameFromContainerName as testable_shouldUpdateDisplayNameFromContainerName,
+  getFirstDigitIndex as testable_getFirstDigitIndex,
+  getImageForRegistryLookup as testable_getImageForRegistryLookup,
+  getOldContainers as testable_getOldContainers,
+  pruneOldContainers as testable_pruneOldContainers,
+  getImageReferenceCandidatesFromPattern as testable_getImageReferenceCandidatesFromPattern,
+  getImgsetSpecificity as testable_getImgsetSpecificity,
+  getInspectValueByPath as testable_getInspectValueByPath,
+};

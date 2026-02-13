@@ -68,12 +68,14 @@ test('validateConfiguration should fail when priority is 2 and no expire', async
 });
 
 test('validateConfiguration should succeed when priority is 2 and expire and retry set', async () => {
-  expect({
-    ...configurationValid,
-    priority: 2,
-    retry: 100,
-    expire: 200,
-  }).toStrictEqual({
+  expect(
+    pushover.validateConfiguration({
+      ...configurationValid,
+      priority: 2,
+      retry: 100,
+      expire: 200,
+    }),
+  ).toStrictEqual({
     ...configurationValid,
     priority: 2,
     retry: 100,

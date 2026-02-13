@@ -155,6 +155,42 @@ test('getContainers should return all containers sorted by name', async () => {
   expect(results[2].name).toEqual('container3');
 });
 
+test('getContainers should sort by tag when watcher and name are equal', async () => {
+  const containerExample = createContainerFixture();
+  const containers = [
+    {
+      data: {
+        ...containerExample,
+        watcher: 'same-watcher',
+        name: 'same-name',
+        image: { ...containerExample.image, tag: { ...containerExample.image.tag, value: '2.0.0' } },
+      },
+    },
+    {
+      data: {
+        ...containerExample,
+        watcher: 'same-watcher',
+        name: 'same-name',
+        image: { ...containerExample.image, tag: { ...containerExample.image.tag, value: '1.0.0' } },
+      },
+    },
+  ];
+  const collection = {
+    find: () => containers,
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({
+      findOne: () => {},
+      insert: () => {},
+    }),
+  };
+  container.createCollections(db);
+  const results = container.getContainers();
+  expect(results[0].image.tag.value).toEqual('1.0.0');
+  expect(results[1].image.tag.value).toEqual('2.0.0');
+});
+
 test('getContainer should return 1 container by id', async () => {
   const containerExample = { data: createContainerFixture() };
   const collection = {

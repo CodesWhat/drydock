@@ -1,12 +1,17 @@
 // @ts-nocheck
 
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
 import axios from 'axios';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 vi.mock('axios');
 vi.mock('node:fs', () => ({
   default: { readFileSync: vi.fn().mockReturnValue(Buffer.from('cert-data')) },
+}));
+const mockResolveConfiguredPath = vi.hoisted(() => vi.fn((path) => path));
+vi.mock('../runtime/paths.js', () => ({
+  resolveConfiguredPath: mockResolveConfiguredPath,
 }));
 vi.mock('../log/index.js', () => ({
   default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
@@ -36,6 +41,7 @@ describe('AgentClient', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResolveConfiguredPath.mockImplementation((path) => path);
     vi.useFakeTimers();
     client = new AgentClient('test-agent', {
       host: 'localhost',
@@ -114,6 +120,25 @@ describe('AgentClient', () => {
       });
       expect(c.baseUrl).toBe('https://myhost:4000');
       expect(c.axiosOptions.httpsAgent).toBeDefined();
+    });
+
+    test('should skip cert file read when resolved cert path is empty', () => {
+      mockResolveConfiguredPath.mockImplementation((path, options) => {
+        if (options?.label === 'a cert file') {
+          return '';
+        }
+        return path;
+      });
+
+      const c = new AgentClient('a', {
+        host: 'myhost',
+        port: 4000,
+        secret: 's', // NOSONAR - test fixture, not a real credential
+        certfile: '/path/to/cert.pem',
+      });
+
+      expect(c.axiosOptions.httpsAgent).toBeDefined();
+      expect(fs.readFileSync).not.toHaveBeenCalled();
     });
 
     test('should throw when host uses an unsupported protocol', () => {
