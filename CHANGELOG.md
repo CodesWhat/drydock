@@ -10,8 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **OIDC session resilience for WUD migrations** — Corrupt or incompatible session data (e.g. from WUD's connect-loki store) no longer causes 500 errors. Sessions that fail to reload are automatically regenerated. All OIDC error responses now return JSON instead of plain text, preventing frontend parse errors. Added a global Express error handler to ensure unhandled exceptions return JSON.
+
+### Added
+
+- **Snyk vulnerability monitoring** — Integrated Snyk for continuous dependency scanning of `app/package.json` and `ui/package.json`. Added Snyk badge to README with `targetFile` parameter for monorepo support.
+
 ### Changed
 
+- **README badge layout** — Added line breaks to badge rows for a cleaner two-line layout across all three badge sections.
 - **Grafana dashboard overhaul** — Updated overview dashboard with standard datasource naming (`DS_PROMETHEUS`), added bar chart and pie chart panels, and restructured panel layout for better monitoring coverage.
 - **Mobile responsive dashboard** — Stat cards now stack full-width on small screens with tighter vertical spacing for a cleaner mobile layout.
 - **Self-update overlay rendering** — Switched logo images from `v-if` to `v-show` to avoid re-mount flicker during self-update phase transitions.
