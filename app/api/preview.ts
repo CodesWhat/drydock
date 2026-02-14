@@ -1,11 +1,11 @@
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import logger from '../log/index.js';
-import { sanitizeLogParam } from '../log/sanitize.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
+import { handleContainerActionError } from './helpers.js';
 
 const log = logger.child({ component: 'preview' });
 
@@ -40,18 +40,14 @@ async function previewContainer(req: Request, res: Response) {
 
     res.status(200).json(preview);
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
-    log.warn(`Error previewing container ${sanitizeLogParam(id)} (${sanitizeLogParam(message)})`);
-
-    recordAuditEvent({
+    handleContainerActionError({
+      error: e,
       action: 'preview',
+      actionLabel: 'previewing',
+      id,
       container,
-      status: 'error',
-      details: message,
-    });
-
-    res.status(500).json({
-      error: `Error previewing container update (${message})`,
+      log,
+      res,
     });
   }
 }

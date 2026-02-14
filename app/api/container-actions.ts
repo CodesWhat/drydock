@@ -2,12 +2,12 @@ import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
-import { sanitizeLogParam } from '../log/sanitize.js';
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
+import { handleContainerActionError } from './helpers.js';
 
 const log = logger.child({ component: 'container-actions' });
 
@@ -68,20 +68,16 @@ async function executeAction(req: Request, res: Response, action: string, method
 
     res.status(200).json({ message: ACTION_MESSAGES[method], container: updatedContainer });
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
-    log.warn(`Error performing ${sanitizeLogParam(method)} on container ${sanitizeLogParam(id)} (${sanitizeLogParam(message)})`);
-
-    recordAuditEvent({
+    handleContainerActionError({
+      error: e,
       action,
+      actionLabel: `performing ${method} on`,
+      id,
       container,
-      status: 'error',
-      details: message,
+      log,
+      res,
     });
     getContainerActionsCounter()?.inc({ action });
-
-    res.status(500).json({
-      error: `Error performing ${method} on container (${message})`,
-    });
   }
 }
 
