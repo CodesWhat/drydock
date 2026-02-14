@@ -59,6 +59,15 @@ test_patterns = [
 [smells]
 mode = "comment"
 
+# Disabled: guard clauses, switch dispatches, and icon/color maps produce many returns by design
+[smells.return_statements]
+enabled = false
+
+# Disabled: core domain files (watchers, triggers, API routes) are inherently complex;
+# splitting them would hurt cohesion without improving readability
+[smells.file_complexity]
+enabled = false
+
 [[source]]
 name = "default"
 default = true
