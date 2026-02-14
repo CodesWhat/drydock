@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Container sort simplification** — Simplified null-group sorting in ContainersView using sentinel value instead of multi-branch conditionals.
 - **Test coverage improvements** — Expanded app test coverage for API routes (backup, container-actions, preview, webhook), OIDC authentication, registry component resolution, tag parsing, and log sanitization. Expanded UI test coverage across 38 spec files with improved Vuetify stub fidelity (v-tooltip activator slot, v-list-item slots, app-bar-nav-icon events).
 - **Vitest coverage config** — Narrowed coverage to `.js`/`.ts` files only (excluding `.vue` SFCs) to avoid non-actionable template branch noise.
+- **Prometheus counter deduplication** — Extracted shared `createCounter` factory in `app/prometheus/counter-factory.ts`, reducing boilerplate across audit, webhook, trigger, and container-actions counter modules.
+- **API error handler deduplication** — Extracted shared `handleContainerActionError` helper in `app/api/helpers.ts`, consolidating duplicate catch-block logic across backup, preview, and container-actions routes.
+- **Lint and code quality fixes** — Fixed biome `noPrototypeBuiltins` warning in OIDC tests, added `id` attributes to README HTML headings to resolve markdownlint MD051, and tuned qlty smell thresholds.
 
 ### Security
 
