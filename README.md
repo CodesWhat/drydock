@@ -26,6 +26,7 @@
   <a href="https://github.com/CodesWhat/drydock/commits/main"><img src="https://img.shields.io/github/commit-activity/m/CodesWhat/drydock?style=flat" alt="Commit activity"></a>
   <a href="https://github.com/CodesWhat/drydock/discussions"><img src="https://img.shields.io/github/discussions/CodesWhat/drydock?style=flat" alt="Discussions"></a>
   <a href="https://github.com/CodesWhat/drydock"><img src="https://img.shields.io/github/repo-size/CodesWhat/drydock?style=flat" alt="Repo size"></a>
+  <img src="https://komarev.com/ghpvc/?username=CodesWhat-drydock&label=repo+views&style=flat" alt="Repo views">
 </p>
 
 <p align="center">
@@ -39,7 +40,7 @@
 
 ---
 
-## Contents
+<h2 align="center">Contents</h2>
 
 - [Quick Start](#quick-start)
 - [Screenshots](#screenshots)
@@ -49,18 +50,19 @@
 - [Supported Triggers](#supported-triggers)
 - [Authentication](#authentication)
 - [Documentation](#documentation)
+- [Star History](#star-history)
 - [Built With](#built-with)
 
 ---
 
-## Quick Start
+<h2 align="center">Quick Start</h2>
 
 ```bash
 docker run -d \
   --name drydock \
   -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  ghcr.io/codeswhat/drydock:latest
+  codeswhat/drydock:latest
 ```
 
 <details>
@@ -69,7 +71,7 @@ docker run -d \
 ```yaml
 services:
   drydock:
-    image: ghcr.io/codeswhat/drydock:latest
+    image: codeswhat/drydock:latest
     container_name: drydock
     ports:
       - "3000:3000"
@@ -84,8 +86,8 @@ services:
 <summary><strong>Alternative registries</strong></summary>
 
 ```bash
-# Docker Hub
-docker pull codeswhat/drydock:latest
+# GHCR
+docker pull ghcr.io/codeswhat/drydock:latest
 
 # Quay.io
 docker pull quay.io/codeswhat/drydock:latest
@@ -133,7 +135,7 @@ Accepted values: `false` (default — no proxy), `true` (trust all), a number (h
 
 ---
 
-## Screenshots
+<h2 align="center">Screenshots</h2>
 
 <table>
 <tr>
@@ -152,7 +154,7 @@ Accepted values: `false` (default — no proxy), `true` (trust all), a number (h
 
 ---
 
-## Features
+<h2 align="center">Features</h2>
 
 <table>
 <tr>
@@ -243,7 +245,7 @@ Available on GHCR, Docker Hub, and Quay.io for flexible deployment
 
 ---
 
-## Supported Registries
+<h2 align="center">Supported Registries</h2>
 
 <details>
 <summary><strong>Public registries</strong> (auto-registered, no config needed)</summary>
@@ -282,7 +284,7 @@ See [Registry docs](docs/configuration/registries/README.md) for full configurat
 
 ---
 
-## Supported Triggers
+<h2 align="center">Supported Triggers</h2>
 
 <details>
 <summary><strong>Notification triggers</strong> (16 providers)</summary>
@@ -314,7 +316,7 @@ All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) 
 
 ---
 
-## Authentication
+<h2 align="center">Authentication</h2>
 
 <details>
 <summary><strong>Supported auth methods</strong></summary>
@@ -329,13 +331,13 @@ All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) 
 
 ---
 
-## Migrating from WUD
+<h2 align="center">Migrating from WUD</h2>
 
 drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the image reference — everything else stays the same:
 
 ```diff
 - image: getwud/wud:8.1.1
-+ image: ghcr.io/codeswhat/drydock:latest
++ image: codeswhat/drydock:latest
 ```
 
 **Full backwards compatibility is built in.** You do not need to rename anything in your compose file, environment, or labels:
@@ -459,7 +461,7 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 
 ---
 
-## Documentation
+<h2 align="center">Documentation</h2>
 
 | Resource | Link |
 | --- | --- |
@@ -471,6 +473,20 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 | Roadmap | [`docs/planning/ROADMAP.md`](docs/planning/ROADMAP.md) |
 | Issues | [GitHub Issues](https://github.com/CodesWhat/drydock/issues) |
 | Discussions | [GitHub Discussions](https://github.com/CodesWhat/drydock/discussions) — feature requests & ideas welcome |
+
+---
+
+<h2 align="center">Star History</h2>
+
+<div align="center">
+  <a href="https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&theme=dark&legend=top-left" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
+      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
+    </picture>
+  </a>
+</div>
 
 ---
 
