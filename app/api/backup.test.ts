@@ -388,5 +388,42 @@ describe('Backup Router', () => {
         expect.objectContaining({ error: expect.stringContaining('Pull failed') }),
       );
     });
+
+    test('should stringify non-Error rollback failures', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { registry: { name: 'hub' } },
+      };
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackups.mockReturnValue([
+        {
+          id: 'b1',
+          containerId: 'c1',
+          imageName: 'library/nginx',
+          imageTag: '1.24',
+        },
+      ]);
+
+      const mockTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi: {} })),
+        pullImage: vi.fn().mockRejectedValue('pull failed as string'),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.stringContaining('pull failed as string') }),
+      );
+    });
   });
 });

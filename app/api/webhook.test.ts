@@ -245,6 +245,26 @@ describe('Webhook Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Error triggering watch cycle' });
     });
 
+    test('should stringify non-Error watch-all failures for audit details', async () => {
+      mockGetState.mockReturnValue({
+        watcher: {
+          'docker.local': { watch: vi.fn().mockRejectedValue('watch failed as string') },
+        },
+        trigger: {},
+      });
+
+      const handler = getHandler('post', '/watch');
+      const req = createMockRequest();
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error triggering watch cycle' });
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({ details: 'watch failed as string' }),
+      );
+    });
+
     test('should insert audit entry on successful watch', async () => {
       mockGetState.mockReturnValue({
         watcher: { 'docker.local': { watch: vi.fn().mockResolvedValue(undefined) } },
@@ -359,6 +379,30 @@ describe('Webhook Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Error watching container my-nginx' });
+    });
+
+    test('should stringify non-Error watch-container failures for audit details', async () => {
+      const container = { name: 'my-nginx', image: { name: 'nginx' } };
+      mockGetContainers.mockReturnValue([container]);
+      mockGetState.mockReturnValue({
+        watcher: {
+          'docker.local': {
+            watchContainer: vi.fn().mockRejectedValue('container watch failed as string'),
+          },
+        },
+        trigger: {},
+      });
+
+      const handler = getHandler('post', '/watch/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error watching container my-nginx' });
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({ details: 'container watch failed as string' }),
+      );
     });
 
     test('should insert audit entry for container watch', async () => {
@@ -496,6 +540,31 @@ describe('Webhook Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Error updating container my-nginx' });
+    });
+
+    test('should stringify non-Error update failures for audit details', async () => {
+      const container = { name: 'my-nginx', image: { name: 'nginx' } };
+      mockGetContainers.mockReturnValue([container]);
+      mockGetState.mockReturnValue({
+        watcher: {},
+        trigger: {
+          'docker.default': {
+            type: 'docker',
+            trigger: vi.fn().mockRejectedValue('trigger failed as string'),
+          },
+        },
+      });
+
+      const handler = getHandler('post', '/update/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error updating container my-nginx' });
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({ details: 'trigger failed as string' }),
+      );
     });
 
     test('should insert audit entry for successful update', async () => {

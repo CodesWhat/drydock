@@ -126,6 +126,23 @@ describe('Preview Router', () => {
       );
     });
 
+    test('should stringify non-Error preview failures', async () => {
+      const mockTrigger = {
+        type: 'docker',
+        preview: vi.fn().mockRejectedValue('preview failed as string'),
+      };
+      storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local' });
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+      });
+
+      const res = await callPreview();
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.stringContaining('preview failed as string') }),
+      );
+    });
+
     test('should skip docker triggers with mismatched agent', async () => {
       const mockTrigger = {
         type: 'docker',

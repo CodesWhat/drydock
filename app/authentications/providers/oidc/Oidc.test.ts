@@ -382,6 +382,29 @@ test('callback should return explicit error when callback state does not match s
   expect401Send(res, 'OIDC session state mismatch or expired. Please retry authentication.');
 });
 
+test('callback should reject when pending check guard reports a missing entry', async () => {
+  const session = createSessionWithPending({
+    knownState: createPendingCheck(),
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=unknown-state', session);
+  const res = createRes();
+  const hasOwnSpy = vi.spyOn(Object, 'hasOwn').mockImplementation((value: any, key: PropertyKey) => {
+    if (key === 'unknown-state') {
+      return true;
+    }
+    return Object.prototype.hasOwnProperty.call(value, key);
+  });
+
+  try {
+    await oidc.callback(req, res);
+  } finally {
+    hasOwnSpy.mockRestore();
+  }
+
+  expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
+  expect401Send(res, 'OIDC session state mismatch or expired. Please retry authentication.');
+});
+
 test('callback should reject malformed pending checks from session storage', async () => {
   const session = {
     oidc: {
@@ -484,6 +507,33 @@ test('callback should proceed when session object disappears before cleanup', as
   await oidc.callback(req, res);
 
   expect(req.session).toBeUndefined();
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+test('callback should proceed when session key is removed before cleanup', async () => {
+  openidClientMock.authorizationCodeGrant = vi.fn().mockResolvedValue({ access_token: 'token' });
+  openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'user@example.com' });
+
+  const session = {
+    save: vi.fn((cb) => cb()),
+    oidc: {
+      default: {
+        pending: {
+          'valid-state': createPendingCheck(),
+        },
+      },
+    },
+  };
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  openidClientMock.authorizationCodeGrant.mockImplementation(async () => {
+    delete req.session.oidc.default;
+    return { access_token: 'token' };
+  });
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(req.session.oidc.default).toBeUndefined();
   expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
 });
 

@@ -55,6 +55,18 @@ describe('component-resolution', () => {
     );
   });
 
+  test('getAvailableProviders should stringify non-Error exceptions', () => {
+    fs.readdirSync.mockImplementation(() => {
+      throw 'cannot read as string';
+    });
+    const onError = vi.fn();
+
+    expect(getAvailableProviders('triggers/providers', onError)).toEqual([]);
+    expect(onError).toHaveBeenCalledWith(
+      expect.stringContaining('cannot read as string'),
+    );
+  });
+
   test('resolveComponentModuleSpecifier should prefer .js files when available', () => {
     fs.existsSync.mockImplementation((candidate) => `${candidate}`.endsWith('.js'));
     const base = '/runtime/triggers/providers/docker/Docker';

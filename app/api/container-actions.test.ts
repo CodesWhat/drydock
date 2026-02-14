@@ -179,6 +179,24 @@ describe('Container Actions Router', () => {
       );
     });
 
+    test('should stringify non-Error Docker API failures', async () => {
+      const container = { id: 'c1', name: 'nginx', image: { name: 'nginx' } };
+      mockGetContainer.mockReturnValue(container);
+      const { trigger, dockerContainer } = createDockerTrigger();
+      dockerContainer.start.mockRejectedValue('start failed as string');
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+
+      const handler = getHandler('post', '/:id/start');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.stringContaining('start failed as string') }),
+      );
+    });
+
     test('should insert audit entry on success', async () => {
       const container = { id: 'c1', name: 'nginx', image: { name: 'nginx' } };
       mockGetContainer.mockReturnValue(container);
