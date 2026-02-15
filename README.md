@@ -338,40 +338,44 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Swap the image and 
 <table>
 <thead>
 <tr>
-<th width="24%">Feature</th>
-<th width="13%" align="center">drydock</th>
-<th width="13%" align="center">DockPeek</th>
-<th width="13%" align="center">Watchtower</th>
-<th width="13%" align="center">WUD</th>
-<th width="12%" align="center">Diun</th>
-<th width="12%" align="center">Ouroboros</th>
+<th width="20%">Feature</th>
+<th width="10%" align="center">drydock</th>
+<th width="10%" align="center">Portainer</th>
+<th width="10%" align="center">Dockhand</th>
+<th width="10%" align="center">DockPeek</th>
+<th width="10%" align="center">Watchtower</th>
+<th width="10%" align="center">WUD</th>
+<th width="10%" align="center">Diun</th>
+<th width="10%" align="center">Ouroboros</th>
 </tr>
 </thead>
 <tbody>
-<tr><td>Web UI / Dashboard</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Auto-update containers</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>Docker Compose updates</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Notification triggers</td><td align="center">16</td><td align="center">❌</td><td align="center">~18 (Shoutrrr)</td><td align="center">14</td><td align="center">17</td><td align="center">~6</td></tr>
-<tr><td>Registry providers</td><td align="center">15</td><td align="center">⚠️ (templates)</td><td align="center">⚠️ (Docker auth)</td><td align="center">8</td><td align="center">⚠️ (regopts)</td><td align="center">⚠️ (Docker auth)</td></tr>
-<tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>REST API</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️ (limited)</td><td align="center">✅</td><td align="center">⚠️ (gRPC)</td><td align="center">❌</td></tr>
-<tr><td>Prometheus metrics</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>Image backup & rollback</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Security scanning (Trivy)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Clickable port links</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Traefik integration</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Real-time log viewer</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Image prune from UI</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Docker Swarm support</td><td align="center">❌</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>JSON / CSV export</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Container tagging / labels</td><td align="center">⚠️ (groups)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Dependent container recreation</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Distributed agents</td><td align="center">✅</td><td align="center">⚠️ (multi-host)</td><td align="center">⚠️ (single host)</td><td align="center">❌</td><td align="center">✅ (multi-orch)</td><td align="center">❌</td></tr>
-<tr><td>Actively maintained</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌ (archived)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌ (dead)</td></tr>
+<tr><td>Web UI / Dashboard</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Auto-update containers</td><td align="center">✅</td><td align="center">⚠️ (Git stacks)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+<tr><td>Docker Compose updates</td><td align="center">✅</td><td align="center">✅ (stacks)</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Notification triggers</td><td align="center">16</td><td align="center">⚠️ (webhooks)</td><td align="center">4</td><td align="center">❌</td><td align="center">~18 (Shoutrrr)</td><td align="center">14</td><td align="center">17</td><td align="center">~6</td></tr>
+<tr><td>Registry providers</td><td align="center">15</td><td align="center">✅ (many)</td><td align="center">⚠️ (custom)</td><td align="center">⚠️ (templates)</td><td align="center">⚠️ (Docker auth)</td><td align="center">8</td><td align="center">⚠️ (regopts)</td><td align="center">⚠️ (Docker auth)</td></tr>
+<tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>REST API</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">⚠️ (limited)</td><td align="center">✅</td><td align="center">⚠️ (gRPC)</td><td align="center">❌</td></tr>
+<tr><td>Prometheus metrics</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+<tr><td>Image backup & rollback</td><td align="center">✅</td><td align="center">⚠️ (Swarm)</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Security scanning</td><td align="center">✅ (Trivy)</td><td align="center">❌</td><td align="center">✅ (Grype/Trivy)</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Web terminal</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>File browser</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Clickable port links</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Traefik integration</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Real-time log viewer</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Image prune from UI</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Docker Swarm support</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>RBAC / team permissions</td><td align="center">❌</td><td align="center">✅ (BE)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Semver-aware updates</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">⚠️ (floating)</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>Distributed agents</td><td align="center">✅</td><td align="center">✅ (Edge)</td><td align="center">✅ (Hawser)</td><td align="center">⚠️ (multi-host)</td><td align="center">⚠️ (single host)</td><td align="center">❌</td><td align="center">✅ (multi-orch)</td><td align="center">❌</td></tr>
+<tr><td>Actively maintained</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌ (archived)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌ (dead)</td></tr>
 </tbody>
 </table>
 
 > Data based on publicly available documentation as of February 2026.
+> Contributions welcome if any information is inaccurate.
 
 </details>
 
