@@ -47,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **CodeQL alert fixes** — Fixed log injection vulnerabilities by sanitizing user-controlled input before logging. Removed unused variables flagged by static analysis.
+- **CodeQL alert fixes** — Fixed log injection vulnerabilities by sanitizing user-controlled input before logging. Removed unused variables flagged by static analysis. Added rate limiting to the on-demand scan endpoint.
 - **Build provenance and SBOM attestations** — Added supply chain attestations to release workflow for verifiable build provenance.
 
 ## 1.2.0
