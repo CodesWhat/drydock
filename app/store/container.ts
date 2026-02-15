@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Container store.
  */
@@ -95,20 +94,22 @@ export function updateContainer(container) {
  * @param query
  * @returns {*}
  */
-export function getContainers(query = {}) {
-  const filter = {};
+export function getContainers(query: Record<string, any> = {}) {
+  const filter: Record<string, any> = {};
   Object.keys(query).forEach((key) => {
     filter[`data.${key}`] = query[key];
   });
   if (!containers) {
     return [];
   }
-  const containerList = containers.find(filter).map((item) => validateContainer(item.data));
+  const containerList = (containers.find(filter) as Array<{ data: any }>).map((item) =>
+    validateContainer(item.data),
+  );
   return containerList.sort(
     byValues([
-      [(container) => container.watcher, byString()],
-      [(container) => container.name, byString()],
-      [(container) => container.image.tag.value, byString()],
+      [(container: any) => container.watcher, byString()],
+      [(container: any) => container.name, byString()],
+      [(container: any) => container.image.tag.value, byString()],
     ]),
   );
 }

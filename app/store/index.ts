@@ -1,4 +1,3 @@
-// @ts-nocheck
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -61,7 +60,7 @@ async function loadDb(err, resolve, reject) {
  * @param options
  * @returns {Promise<unknown>}
  */
-export async function init(options = {}) {
+export async function init(options: { memory?: boolean } = {}) {
   const isMemory = options.memory || false;
   const storeDirectory = resolveConfiguredPath(configuration.path, {
     label: 'DD_STORE_PATH',

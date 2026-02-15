@@ -1,4 +1,3 @@
-// @ts-nocheck
 import logger from '../log/index.js';
 
 const log = logger.child({ component: 'store' });
