@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as container from './container.js';
 
 test('model should be validated when compliant', async () => {
