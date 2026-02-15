@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { beforeEach, describe, expect, test } from 'vitest';
 import * as configuration from '../../configuration/index.js';
 import * as registry from '../../registry/index.js';

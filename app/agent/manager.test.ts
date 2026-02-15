@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { beforeEach, describe, expect, test } from 'vitest';
 
 // We need to reset module state between tests

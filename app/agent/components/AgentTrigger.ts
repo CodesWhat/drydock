@@ -1,4 +1,3 @@
-// @ts-nocheck
 
 import type { Container } from '../../model/container.js';
 import Trigger from '../../triggers/providers/Trigger.js';

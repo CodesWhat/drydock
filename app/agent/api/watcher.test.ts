@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { beforeEach, describe, expect, test } from 'vitest';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';

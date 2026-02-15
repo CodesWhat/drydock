@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const { mockApp, mockServerConfig } = vi.hoisted(() => {

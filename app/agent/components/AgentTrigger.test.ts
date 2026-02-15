@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { beforeEach, describe, expect, test } from 'vitest';
 import * as manager from '../manager.js';
 import AgentTrigger from './AgentTrigger.js';
