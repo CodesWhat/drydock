@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Release SBOM generation for multi-arch images** — Replaced `anchore/sbom-action` (which fails on manifest list digests from multi-platform builds) with Docker buildx native SBOM generation (`sbom: true`), producing per-platform SBOMs embedded in image attestations.
+
 ### Security
 
 - **Pin Trivy install script by commit hash** — Replaced mutable `main` branch reference in Dockerfile `curl | sh` with a pinned commit SHA to satisfy OpenSSF Scorecard pinned-dependencies check and prevent supply-chain risk from upstream changes.

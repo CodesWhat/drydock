@@ -88,6 +88,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: DD_VERSION=${{ steps.meta.outputs.version }}
+          sbom: true
           no-cache: true
 
       - name: Install cosign
@@ -111,17 +112,3 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
-      - name: Generate SBOM
-        uses: anchore/sbom-action@28d71544de8eaf1b958d335707167c5f783590ad  # v0.22.2
-        with:
-          image: ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
-          output-file: sbom.spdx.json
-          format: spdx-json
-
-      - name: Attest SBOM
-        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34  # v3.0.0
-        with:
-          subject-name: ghcr.io/${{ github.repository }}
-          subject-digest: ${{ steps.build.outputs.digest }}
-          sbom-path: sbom.spdx.json
-          push-to-registry: true
