@@ -41,26 +41,27 @@
   <a href="https://snyk.io/test/github/CodesWhat/drydock?targetFile=app/package.json"><img src="https://snyk.io/test/github/CodesWhat/drydock/badge.svg?targetFile=app/package.json" alt="Snyk"></a>
 </p>
 
-<h2 align="center">Contents</h2>
+<br>
+
+<h3 align="center">📋 Contents</h3>
 
 ---
 
-- [Documentation](https://drydock.codeswhat.com/docs)
-- [Quick Start](#quick-start)
-- [Screenshots](#screenshots)
-- [Features](#features)
-- [Update Guard](#update-guard)
-- [Supported Registries](#supported-registries)
-- [Supported Triggers](#supported-triggers)
-- [Authentication](#authentication)
-- [Feature Comparison](#feature-comparison)
-- [Migrating from WUD](#migrating-from-wud)
-- [Roadmap](#roadmap)
-- [Documentation](#documentation)
-- [Star History](#star-history)
-- [Built With](#built-with)
+- [Quick Start](#-quick-start)
+- [Screenshots](#-screenshots)
+- [Features](#-features)
+- [Update Guard](#%EF%B8%8F-update-guard)
+- [Supported Registries](#-supported-registries)
+- [Supported Triggers](#-supported-triggers)
+- [Authentication](#-authentication)
+- [Migrating from WUD](#-migrating-from-wud)
+- [Roadmap](#%EF%B8%8F-roadmap)
+- [Documentation](#-documentation)
+- [Star History](#-star-history)
 
-<h2 align="center" id="quick-start">Quick Start</h2>
+<br>
+
+<h3 align="center" id="quick-start">🚀 Quick Start</h3>
 
 ---
 
@@ -116,31 +117,22 @@ open http://localhost:3000
 </details>
 
 <details>
-<summary><strong>If GHCR requires auth</strong></summary>
+<summary><strong>Behind a reverse proxy</strong></summary>
 
-```bash
-echo '<GITHUB_PAT>' | docker login ghcr.io -u <github-username> --password-stdin
-docker pull ghcr.io/codeswhat/drydock:latest
-```
-
-</details>
-
-<details>
-<summary><strong>Behind a reverse proxy (Traefik, nginx, Caddy, etc.)</strong></summary>
-
-If drydock sits behind a reverse proxy, set `DD_SERVER_TRUSTPROXY` so Express correctly resolves the client IP from `X-Forwarded-For` headers. This is required for rate limiting to work per-client instead of per-proxy.
+Set `DD_SERVER_TRUSTPROXY` so Express resolves client IPs from `X-Forwarded-For`. Required for per-client rate limiting.
 
 ```yaml
 environment:
-  # Number of trusted hops (1 = single reverse proxy)
   - DD_SERVER_TRUSTPROXY=1
 ```
 
-Accepted values: `false` (default — no proxy), `true` (trust all), a number (hop count), or an IP/CIDR string. See the [Express trust proxy docs](https://expressjs.com/en/guide/behind-proxies.html) for details.
+See the [Express trust proxy docs](https://expressjs.com/en/guide/behind-proxies.html) for accepted values.
 
 </details>
 
-<h2 align="center" id="screenshots">Screenshots</h2>
+<br>
+
+<h3 align="center" id="screenshots">📸 Screenshots</h3>
 
 ---
 
@@ -175,140 +167,53 @@ Accepted values: `false` (default — no proxy), `true` (trust all), a number (h
 </tr>
 </table>
 
-<h2 align="center" id="features">Features</h2>
+<br>
+
+<h3 align="center" id="features">⚡ Features</h3>
 
 ---
 
-<table>
-<tr>
-<td align="center" width="33%">
-<h3>Container Monitoring</h3>
-Auto-detect running containers and check for image updates across registries
-</td>
-<td align="center" width="33%">
-<h3>20 Notification Triggers</h3>
-Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, HTTP webhooks, Gotify, NTFY, and more
-</td>
-<td align="center" width="33%">
-<h3>22 Registry Providers</h3>
-Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more
-</td>
-</tr>
-<tr>
-<td align="center">
-<h3>Docker Compose Updates</h3>
-Auto-pull and recreate services via docker-compose with multi-network support
-</td>
-<td align="center">
-<h3>Distributed Agents</h3>
-Monitor remote Docker hosts with SSE-based agent architecture
-</td>
-<td align="center">
-<h3>Audit Log</h3>
-Event-based audit trail with persistent storage, REST API, and Prometheus counter
-</td>
-</tr>
-<tr>
-<td align="center" width="33%">
-<h3>OIDC Authentication</h3>
-Authelia, Auth0, Authentik — secure your dashboard with OpenID Connect
-</td>
-<td align="center" width="33%">
-<h3>Prometheus Metrics</h3>
-Built-in /metrics endpoint with optional auth bypass for monitoring stacks
-</td>
-<td align="center" width="33%">
-<h3>Image Backup & Rollback</h3>
-Automatic pre-update image backup with configurable retention and one-click rollback
-</td>
-</tr>
-<tr>
-<td align="center" width="33%">
-<h3>Container Actions</h3>
-Start, stop, restart, and update containers from the UI or API with feature-flag control
-</td>
-<td align="center" width="33%">
-<h3>Webhook API</h3>
-Token-authenticated HTTP endpoints for CI/CD integration to trigger watch cycles and updates
-</td>
-<td align="center" width="33%">
-<h3>Container Grouping</h3>
-Smart stack detection via compose project or labels with collapsible groups and batch-update
-</td>
-</tr>
-<tr>
-<td align="center" width="33%">
-<h3>Lifecycle Hooks</h3>
-Pre/post-update shell commands via container labels with configurable timeout and abort control
-</td>
-<td align="center" width="33%">
-<h3>Auto Rollback</h3>
-Automatic rollback on health check failure with configurable monitoring window and interval
-</td>
-<td align="center" width="33%">
-<h3>Graceful Self-Update</h3>
-DVD-style animated overlay during drydock's own container update with auto-reconnect
-</td>
-</tr>
-<tr>
-<td align="center" width="33%">
-<h3>Icon CDN</h3>
-Auto-resolved container icons via selfhst/icons with homarr-labs fallback
-</td>
-<td align="center" width="33%">
-<h3>Mobile Responsive</h3>
-Fully responsive dashboard with optimized mobile breakpoints for all views
-</td>
-<td align="center" width="33%">
-<h3>Multi-Registry Publishing</h3>
-Available on GHCR, Docker Hub, and Quay.io for flexible deployment
-</td>
-</tr>
-</table>
-
-<h2 align="center" id="update-guard">Update Guard</h2>
+Auto-detect running containers, check for image updates across 15 registry providers, and notify through 16 trigger channels — with a full web UI, REST API, and Prometheus metrics.
 
 <details>
-<summary><strong>Trivy-powered safe-pull gate for container updates</strong></summary>
+<summary><strong>All 18 features</strong></summary>
 
-1. Scan the candidate image before pull/restart
-2. Block the update when vulnerabilities exceed configured severity threshold
-3. Verify candidate image signatures with cosign (optional block gate)
-4. Generate SBOM documents (`spdx-json`, `cyclonedx-json`) for candidate images
-5. Persist security state to `container.security.{scan,signature,sbom}` for API/UI visibility
-
-Security scanning is disabled by default and is enabled with `DD_SECURITY_SCANNER=trivy`.
-
-> **v1.3.0+:** The official drydock image now includes both `trivy` and `cosign` — no custom image required for local CLI mode.
-
-```yaml
-services:
-  drydock:
-    image: codeswhat/drydock:latest
-    environment:
-      - DD_SECURITY_SCANNER=trivy
-      - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
-      # Optional: block updates when signature verification fails
-      # - DD_SECURITY_VERIFY_SIGNATURES=true
-      # - DD_SECURITY_COSIGN_KEY=/keys/cosign.pub
-      # Optional: generate and persist SBOM
-      # - DD_SECURITY_SBOM_ENABLED=true
-      # - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json
-      # Optional: use Trivy server mode instead of local CLI
-      # - DD_SECURITY_TRIVY_SERVER=http://trivy:4954
-```
-
-Security APIs:
-
-- `GET /api/containers/:id/vulnerabilities`
-- `GET /api/containers/:id/sbom?format={format}` where `format` is `spdx-json` or `cyclonedx-json`
-- `POST /api/containers/:id/scan` — trigger on-demand vulnerability scan, signature verification, and SBOM generation
-
-See full configuration in [`docs/configuration/security/README.md`](docs/configuration/security/README.md).
+- **Container Monitoring** — Auto-detect running containers and check for image updates across registries
+- **16 Notification Triggers** — Slack, Discord, Telegram, SMTP, MQTT, HTTP webhooks, Gotify, NTFY, and more
+- **10+ Registry Providers** — Docker Hub, GHCR, ECR, GCR, GitLab, Quay, LSCR, Codeberg, DHI, and custom
+- **Docker Compose Updates** — Auto-pull and recreate services via docker-compose with multi-network support
+- **Distributed Agents** — Monitor remote Docker hosts with SSE-based agent architecture
+- **Audit Log** — Event-based audit trail with persistent storage, REST API, and Prometheus counter
+- **OIDC Authentication** — Authelia, Auth0, Authentik — secure your dashboard with OpenID Connect
+- **Prometheus Metrics** — Built-in `/metrics` endpoint with optional auth bypass for monitoring stacks
+- **Image Backup & Rollback** — Automatic pre-update image backup with configurable retention and one-click rollback
+- **Container Actions** — Start, stop, restart, and update containers from the UI or API with feature-flag control
+- **Webhook API** — Token-authenticated HTTP endpoints for CI/CD integration to trigger watch cycles and updates
+- **Container Grouping** — Smart stack detection via compose project or labels with collapsible groups and batch-update
+- **Lifecycle Hooks** — Pre/post-update shell commands via container labels with configurable timeout and abort control
+- **Auto Rollback** — Automatic rollback on health check failure with configurable monitoring window and interval
+- **Graceful Self-Update** — DVD-style animated overlay during drydock's own container update with auto-reconnect
+- **Icon CDN** — Auto-resolved container icons via selfhst/icons with homarr-labs fallback
+- **Mobile Responsive** — Fully responsive dashboard with optimized mobile breakpoints for all views
+- **Multi-Registry Publishing** — Available on GHCR, Docker Hub, and Quay.io for flexible deployment
 
 </details>
 
-<h2 align="center" id="supported-registries">Supported Registries</h2>
+<br>
+
+<h3 align="center" id="update-guard">🛡️ Update Guard</h3>
+
+---
+
+Trivy-powered safe-pull gate that scans candidate images for vulnerabilities, verifies signatures with cosign, and generates SBOMs — all before pulling or restarting. Disabled by default; enable with `DD_SECURITY_SCANNER=trivy`.
+
+> **v1.3.0+:** The official image includes both `trivy` and `cosign` — no custom image required.
+
+See the full configuration guide at [drydock.codeswhat.com/configuration/security](https://drydock.codeswhat.com/configuration/security).
+
+<br>
+
+<h3 align="center" id="supported-registries">📦 Supported Registries</h3>
 
 ---
 
@@ -320,16 +225,12 @@ See full configuration in [`docs/configuration/security/README.md`](docs/configu
 | Docker Hub | `hub` | `hub.docker.com` |
 | GitHub Container Registry | `ghcr` | `ghcr.io` |
 | Google Container Registry | `gcr` | `gcr.io` |
-| Google Artifact Registry | `gar` | `*-docker.pkg.dev` |
 | Quay | `quay` | `quay.io` |
 | LinuxServer (LSCR) | `lscr` | `lscr.io` |
 | DigitalOcean | `docr` | `registry.digitalocean.com` |
 | Codeberg | `codeberg` | `codeberg.org` |
 | DHI | `dhi` | `dhi.io` |
 | Amazon ECR Public | `ecr` | `public.ecr.aws` |
-| IBM Cloud | `ibmcr` | `*.icr.io` |
-| Oracle Cloud (OCIR) | `ocir` | `*.ocir.io` |
-| Alibaba Cloud (ALICR) | `alicr` | `*.aliyuncs.com` |
 
 </details>
 
@@ -344,53 +245,50 @@ See full configuration in [`docs/configuration/security/README.md`](docs/configu
 | GitLab | `gitlab` | `DD_REGISTRY_GITLAB_{name}_TOKEN` |
 | GitHub (GHCR) | `ghcr` | `DD_REGISTRY_GHCR_{name}_TOKEN` |
 | Gitea / Forgejo | `gitea` | `DD_REGISTRY_GITEA_{name}_LOGIN`, `_PASSWORD` |
-| Harbor | `harbor` | `DD_REGISTRY_HARBOR_{name}_URL`, `_LOGIN`, `_PASSWORD` |
-| JFrog Artifactory | `artifactory` | `DD_REGISTRY_ARTIFACTORY_{name}_URL`, `_LOGIN`, `_PASSWORD` |
-| Sonatype Nexus | `nexus` | `DD_REGISTRY_NEXUS_{name}_URL`, `_LOGIN`, `_PASSWORD` |
 | TrueForge | `trueforge` | `DD_REGISTRY_TRUEFORGE_{name}_NAMESPACE`, `_ACCOUNT`, `_TOKEN` |
 | Custom (any v2) | `custom` | `DD_REGISTRY_CUSTOM_{name}_URL` + optional auth |
 
-See the [documentation](https://drydock.codeswhat.com/docs/configuration/registries) for full configuration.
+See [Registry docs](https://drydock.codeswhat.com/configuration/registries) for full configuration.
 
 </details>
 
-<h2 align="center" id="supported-triggers">Supported Triggers</h2>
+<br>
+
+<h3 align="center" id="supported-triggers">🔔 Supported Triggers</h3>
 
 ---
 
 <details>
-<summary><strong>Notification triggers</strong> (20 providers)</summary>
+<summary><strong>Notification triggers</strong> (16 providers)</summary>
 
 All env vars use the `DD_` prefix; Docker labels use the `dd.` prefix.
 
-| Trigger | Description |
-| --- | --- |
-| Apprise | Universal notification gateway |
-| Command | Run arbitrary shell commands |
-| Discord | Discord webhook |
-| Docker | Auto-pull and restart containers |
-| Docker Compose | Auto-pull and recreate compose services |
-| Google Chat | Google Chat incoming webhook |
-| Gotify | Gotify push notifications |
-| HTTP | Generic webhook (POST) |
-| IFTTT | IFTTT applet trigger |
-| Kafka | Kafka message producer |
-| Matrix | Matrix room notifications |
-| Mattermost | Mattermost incoming webhook |
-| MQTT | MQTT message (Home Assistant compatible) |
-| MS Teams | Microsoft Teams webhook (Adaptive Cards) |
-| NTFY | ntfy.sh push notifications |
-| Pushover | Pushover notifications |
-| Rocket.Chat | Rocket.Chat webhook |
-| Slack | Slack webhook |
-| SMTP | Email notifications |
-| Telegram | Telegram bot messages |
+| Trigger | Description | Docs |
+| --- | --- | --- |
+| Apprise | Universal notification gateway | [docs](https://drydock.codeswhat.com/configuration/triggers/apprise) |
+| Command | Run arbitrary shell commands | [docs](https://drydock.codeswhat.com/configuration/triggers/command) |
+| Discord | Discord webhook | [docs](https://drydock.codeswhat.com/configuration/triggers/discord) |
+| Docker | Auto-pull and restart containers | [docs](https://drydock.codeswhat.com/configuration/triggers/docker) |
+| Docker Compose | Auto-pull and recreate compose services | [docs](https://drydock.codeswhat.com/configuration/triggers/docker-compose) |
+| Gotify | Gotify push notifications | [docs](https://drydock.codeswhat.com/configuration/triggers/gotify) |
+| HTTP | Generic webhook (POST) | [docs](https://drydock.codeswhat.com/configuration/triggers/http) |
+| IFTTT | IFTTT applet trigger | [docs](https://drydock.codeswhat.com/configuration/triggers/ifttt) |
+| Kafka | Kafka message producer | [docs](https://drydock.codeswhat.com/configuration/triggers/kafka) |
+| MQTT | MQTT message (Home Assistant compatible) | [docs](https://drydock.codeswhat.com/configuration/triggers/mqtt) |
+| NTFY | ntfy.sh push notifications | [docs](https://drydock.codeswhat.com/configuration/triggers/ntfy) |
+| Pushover | Pushover notifications | [docs](https://drydock.codeswhat.com/configuration/triggers/pushover) |
+| Rocket.Chat | Rocket.Chat webhook | [docs](https://drydock.codeswhat.com/configuration/triggers/rocketchat) |
+| Slack | Slack webhook | [docs](https://drydock.codeswhat.com/configuration/triggers/slack) |
+| SMTP | Email notifications | [docs](https://drydock.codeswhat.com/configuration/triggers/smtp) |
+| Telegram | Telegram bot messages | [docs](https://drydock.codeswhat.com/configuration/triggers/telegram) |
 
 All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) to control which updates fire notifications.
 
 </details>
 
-<h2 align="center" id="authentication">Authentication</h2>
+<br>
+
+<h3 align="center" id="authentication">🔐 Authentication</h3>
 
 ---
 
@@ -400,46 +298,40 @@ All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) 
 | Method | Description | Docs |
 | --- | --- | --- |
 | Anonymous | No auth (default) | — |
-| Basic | Username + password hash | [docs](docs/configuration/authentications/basic/README.md) |
-| OIDC | OpenID Connect (Authelia, Auth0, Authentik) | [docs](docs/configuration/authentications/oidc/README.md) |
+| Basic | Username + password hash | [docs](https://drydock.codeswhat.com/configuration/authentications/basic) |
+| OIDC | OpenID Connect (Authelia, Auth0, Authentik) | [docs](https://drydock.codeswhat.com/configuration/authentications/oidc) |
 
 </details>
 
-<h2 align="center" id="migrating-from-wud">Migrating from WUD</h2>
+<br>
+
+<h3 align="center" id="migrating-from-wud">🔄 Migrating from WUD</h3>
 
 ---
 
-<details>
-<summary><strong>Drop-in replacement for What's Up Docker (WUD)</strong></summary>
-
-drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the image reference — everything else stays the same:
+drydock is a drop-in replacement for What's Up Docker (WUD). Swap the image and restart — all `WUD_` env vars, `wud.*` labels, and state files are automatically migrated.
 
 ```diff
 - image: getwud/wud:8.1.1
 + image: codeswhat/drydock:latest
 ```
 
-**Full backwards compatibility is built in.** You do not need to rename anything in your compose file, environment, or labels:
+<details>
+<summary><strong>Migration details</strong></summary>
 
 | WUD (legacy) | drydock (new) | Status |
 | --- | --- | --- |
 | `WUD_` env vars | `DD_` env vars | Both work — `WUD_` vars are automatically mapped to their `DD_` equivalents at startup. If both are set, `DD_` takes priority. |
-| `wud.*` container labels | `dd.*` container labels | Both work — all `wud.*` labels (`wud.watch`, `wud.tag.include`, `wud.display.name`, etc.) are recognized alongside their `dd.*` counterparts. |
-| `/store/wud.json` state file | `/store/dd.json` state file | Automatic migration — on first start, if `wud.json` exists and `dd.json` does not, drydock renames it in place. No data loss. |
-| Session store (connect-loki) | Session store (connect-loki) | Auto-healed — WUD's session data is incompatible (different secret key), but drydock automatically regenerates corrupt sessions instead of failing. No manual cleanup needed. |
-| Docker socket mount | Docker socket mount | Unchanged — same `/var/run/docker.sock` bind mount. |
-| Health endpoint `/health` | Health endpoint `/health` | Unchanged — same path, same port (default 3000). |
-
-**In short:** swap the image, restart the container, done. Your watchers, triggers, registries, and authentication config all carry over with zero changes.
+| `wud.*` container labels | `dd.*` container labels | Both work — all `wud.*` labels are recognized alongside their `dd.*` counterparts. |
+| `/store/wud.json` state file | `/store/dd.json` state file | Automatic migration — on first start, if `wud.json` exists and `dd.json` does not, drydock renames it in place. |
+| Session store (connect-loki) | Session store (connect-loki) | Auto-healed — drydock automatically regenerates corrupt sessions from WUD migration. |
 
 </details>
 
-<h2 align="center" id="feature-comparison">Feature Comparison</h2>
-
 <details>
-<summary><strong>How does drydock compare to other container update tools?</strong></summary>
+<summary><strong>Feature comparison</strong></summary>
 
-> ✅ = supported &nbsp; ❌ = not supported &nbsp; ⚠️ = partial / limited &nbsp; For the full itemized changelog, see [CHANGELOG.md](CHANGELOG.md).
+> For the full itemized changelog, see [CHANGELOG.md](CHANGELOG.md).
 
 <table>
 <thead>
@@ -456,111 +348,34 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 <tr><td>Web UI / Dashboard</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Auto-update containers</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Docker Compose updates</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Notification triggers</td><td align="center">20</td><td align="center">~18</td><td align="center">14</td><td align="center">17</td><td align="center">~6</td></tr>
-<tr><td>Registry providers</td><td align="center">22</td><td align="center">⚠️</td><td align="center">8</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Notification triggers</td><td align="center">16</td><td align="center">~18 (Shoutrrr)</td><td align="center">14</td><td align="center">17</td><td align="center">~6</td></tr>
+<tr><td>Registry providers</td><td align="center">15</td><td align="center">⚠️ (Docker auth)</td><td align="center">8</td><td align="center">⚠️ (regopts)</td><td align="center">⚠️ (Docker auth)</td></tr>
 <tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>REST API</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>REST API</td><td align="center">✅</td><td align="center">⚠️ (limited)</td><td align="center">✅</td><td align="center">⚠️ (gRPC)</td><td align="center">❌</td></tr>
 <tr><td>Prometheus metrics</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
 <tr><td>Image backup & rollback</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Container grouping / stacks</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Lifecycle hooks (pre/post)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Webhook API for CI/CD</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Container start/stop/restart/update</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Distributed agents (remote)</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td></tr>
-<tr><td>Audit log</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Security scanning (Trivy)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Semver-aware updates</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
-<tr><td>Digest watching</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Multi-arch (amd64/arm64)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Actively maintained</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>Distributed agents</td><td align="center">✅</td><td align="center">⚠️ (single host)</td><td align="center">❌</td><td align="center">✅ (multi-orch)</td><td align="center">❌</td></tr>
+<tr><td>Actively maintained</td><td align="center">✅</td><td align="center">❌ (archived)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌ (dead)</td></tr>
 </tbody>
 </table>
 
 > Data based on publicly available documentation as of February 2026.
-> Contributions welcome if any information is inaccurate.
 
 </details>
 
-<details>
-<summary><strong>Additional features over WUD</strong></summary>
+<br>
 
-| Feature | Description |
-| --- | --- |
-| **Agent mode** | Distributed monitoring with remote agents over SSE |
-| **OIDC token lifecycle** | Bearer/Basic auth for remote watcher HTTPS connections |
-| **Container update policy** | Skip/snooze specific versions per container via API and UI |
-| **Metrics auth toggle** | `DD_SERVER_METRICS_AUTH=false` to expose `/metrics` without auth |
-| **Trust proxy config** | `DD_SERVER_TRUSTPROXY` — set to `1` (hop count) behind a reverse proxy, or `false` (default) for direct exposure |
-| **NTFY provider-level threshold** | Set threshold at the ntfy provider level, not just per-trigger |
-| **Docker pull progress logging** | Rate-limited pull progress during compose updates |
-| **Registry lookup image override** | `lookupImage` field to override tag lookup image |
-| **DHI registry** | `dhi.io` registry provider |
-| **Custom URL icons** | URL-based icons via `dd.display.icon` label |
-| **Version skip UI** | Skip specific versions from the web interface |
-| **In-app log viewer** | View container stdout/stderr logs and application runtime logs with level filtering, agent source selection, auto-fetch polling, scroll lock, and auto-scroll |
-| **Semver tag recovery** | Recover mismatched semver tags from include filters |
-| **Per-image config presets** | `imgset` defaults for per-image configuration |
-| **Audit log** | Event-based audit trail with LokiJS storage, REST API, and Prometheus counter |
-| **Dry-run preview** | Preview what a container update would do without performing it |
-| **Image backup & rollback** | Automatic pre-update image backup with configurable retention and rollback API |
-| **Grafana dashboard** | Importable JSON template for Prometheus metrics overview |
-| **Update Guard** | Safe-pull gate for Docker updates: Trivy vulnerability scan + optional cosign signature verification + SBOM generation + on-demand scan from UI/API |
-| **Font Awesome 6 icons** | Migrated from MDI to FA6 with support for `fab:`/`far:`/`fas:` prefix syntax |
-| **Icon CDN** | Auto-resolve container icons via selfhst/icons (`sh-` prefix) with homarr-labs fallback, plus `hl-`/`si-` and custom URL support |
-| **Mobile responsive UI** | Optimized mobile breakpoints for dashboard, containers, and self-update overlay |
-| **Container actions** | Start/stop/restart/update containers via API and UI, gated by `DD_SERVER_FEATURE_CONTAINERACTIONS` |
-| **Webhook API** | Token-authenticated HTTP endpoints for CI/CD integration to trigger watch cycles and updates, gated by `DD_SERVER_WEBHOOK_ENABLED` and `DD_SERVER_WEBHOOK_TOKEN` |
-| **Lifecycle hooks** | Pre/post-update shell command hooks with configurable timeout |
-| **Auto rollback on health failure** | Monitors container health after updates and rolls back if unhealthy, configured via `dd.rollback.auto=true` |
-| **Graceful self-update** | Full-screen animated overlay during drydock's own container update with SSE-based reconnect |
-| **7 additional registries** | ALICR (Alibaba Cloud), JFrog Artifactory, GAR (Google Artifact Registry), Harbor, IBMCR (IBM Cloud), Sonatype Nexus, OCIR (Oracle Cloud) |
-| **4 additional triggers** | Google Chat, Matrix, Mattermost, Microsoft Teams (Adaptive Cards) |
-| **Container grouping / stacks** | Smart stack detection via `dd.group` label or compose project, with collapsible UI groups and batch-update |
-
-</details>
-
-<details>
-<summary><strong>Bug fixes over WUD</strong></summary>
-
-| Fix | Impact |
-| --- | --- |
-| `eval()` code injection | Replaced with safe `String.replace()` interpolation |
-| OIDC session state races | Serialized redirect checks, multiple pending states |
-| OIDC session resilience | Auto-regenerates corrupt sessions from WUD migration, JSON error responses |
-| Docker event stream crash | Buffered split payloads before JSON parse |
-| Multi-network container recreate | Reconnects additional networks after recreation |
-| docker-compose post_start hooks | Hooks now execute after updates |
-| Express 5 wildcard routes | Named wildcard params for Express 5 compat |
-
-</details>
-
-<details>
-<summary><strong>Tech stack comparison</strong></summary>
-
-| | WUD | drydock |
-| --- | --- | --- |
-| **Language** | JavaScript | TypeScript (ESM, `NodeNext`) |
-| **Test runner** | Jest | Vitest 4 |
-| **Linter** | ESLint + Prettier | Biome |
-| **Express** | 4.x | 5.x |
-| **Build system** | Babel | `tsc` (no transpiler) |
-
-</details>
-
-<h2 align="center" id="roadmap">Roadmap</h2>
+<h3 align="center" id="roadmap">🗺️ Roadmap</h3>
 
 ---
 
-Here's what's coming.
-
 | Version | Theme | Highlights |
 | --- | --- | --- |
-| **v1.3.0** ✅ | Security Integration | Trivy scanning, Update Guard, SBOM generation, image signing, on-demand scan |
-| **v1.3.3** ✅ | Log Viewer & Providers | Auto-fetch polling, scroll lock, auto-scroll for log viewers, 7 new registries, 4 new triggers, self-update fix, stale digest fix, rate-limit warning fixes, CVE patches, security hardening |
-| **v1.4.0** | UI Modernization | PrimeVue migration, Composition API, Vite cleanup, font personalization, icon caching, Internetless Mode, CSRF tokens, API error sanitization, update rollback improvements |
-| **v1.5.0** | Observability | Resource monitoring, registry webhooks, notification templates, release notes |
-| **v1.6.0** | Fleet Management | YAML config, live UI config panels, local registry provider, volume browser, parallel updates, dependency ordering, container groups, SQLite store migration |
+| **v1.3.x** ✅ | Security & Reliability | Trivy scanning, Update Guard, SBOM generation, image signing, on-demand scan, self-update fix, stale-digest fix, registry auth fixes, timeout hardening |
+| **v1.4.0** | UI Modernization | PrimeVue migration, Composition API, Vite cleanup, font personalization, Docker event-stream resilience, HTTP auth schema, non-self-update rollback, UI timing guards |
+| **v1.5.0** | Observability | Real-time log viewer, resource monitoring, registry webhooks, notification templates, release notes, MS Teams & Matrix |
+| **v1.6.0** | Fleet Management | YAML config, live UI config panels, volume browser, parallel updates, dependency ordering, container groups, SQLite store migration, backup retention policy |
 | **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers |
 | **v2.1.0** | Deployment Patterns | Health check gates, canary deployments |
 | **v2.2.0** | Container Operations | Web terminal, file browser, image building |
@@ -568,22 +383,21 @@ Here's what's coming.
 | **v2.4.0** | Data Safety | Scheduled backups (S3, SFTP), compose templates, secret management |
 | **v3.0.0** | GitOps & Beyond | Git-based stack deployment, network topology, GPU monitoring, i18n |
 
-<h2 align="center" id="documentation">Documentation</h2>
+<br>
+
+<h3 align="center" id="documentation">📚 Documentation</h3>
 
 ---
 
 | Resource | Link |
 | --- | --- |
-| Website | [drydock.codeswhat.com](https://drydock.codeswhat.com/) |
-| Docs | [`docs/README.md`](docs/README.md) |
-| Configuration | [`docs/configuration/README.md`](docs/configuration/README.md) |
-| Quick Start | [`docs/quickstart/README.md`](docs/quickstart/README.md) |
+| Website & Docs | [drydock.codeswhat.com](https://drydock.codeswhat.com/) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
-| Roadmap | See [Roadmap](#roadmap) section above |
-| Issues | [GitHub Issues](https://github.com/CodesWhat/drydock/issues) |
-| Discussions | [GitHub Discussions](https://github.com/CodesWhat/drydock/discussions) — feature requests & ideas welcome |
+| Issues & Discussions | [GitHub Issues](https://github.com/CodesWhat/drydock/issues) · [Discussions](https://github.com/CodesWhat/drydock/discussions) |
 
-<h2 align="center" id="star-history">Star History</h2>
+<br>
+
+<h3 align="center" id="star-history">⭐ Star History</h3>
 
 ---
 
@@ -622,9 +436,7 @@ Here's what's coming.
 
 <a href="https://github.com/CodesWhat"><img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="28"></a>
 
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=kofi&logoColor=white)](https://ko-fi.com/codeswhat)
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/codeswhat)
-[![Sponsor](https://img.shields.io/badge/Sponsor-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/CodesWhat)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/J3J21HQM0K)
 
 <a href="#drydock">Back to top</a>
 
