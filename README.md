@@ -43,6 +43,8 @@
 
 <h2 align="center">Contents</h2>
 
+---
+
 - [Quick Start](#quick-start)
 - [Screenshots](#screenshots)
 - [Features](#features)
@@ -57,6 +59,8 @@
 - [Built With](#built-with)
 
 <h2 align="center" id="quick-start">Quick Start</h2>
+
+---
 
 ```bash
 docker run -d \
@@ -136,6 +140,8 @@ Accepted values: `false` (default — no proxy), `true` (trust all), a number (h
 
 <h2 align="center" id="screenshots">Screenshots</h2>
 
+---
+
 <table>
 <tr>
 <th align="center">Light</th>
@@ -168,6 +174,8 @@ Accepted values: `false` (default — no proxy), `true` (trust all), a number (h
 </table>
 
 <h2 align="center" id="features">Features</h2>
+
+---
 
 <table>
 <tr>
@@ -258,6 +266,8 @@ Available on GHCR, Docker Hub, and Quay.io for flexible deployment
 
 <h2 align="center" id="update-guard">Update Guard</h2>
 
+---
+
 `Update Guard` adds a Trivy-powered safe-pull gate before container updates:
 
 1. Scan the candidate image before pull/restart
@@ -297,6 +307,8 @@ See full configuration in [`docs/configuration/security/README.md`](docs/configu
 
 <h2 align="center" id="supported-registries">Supported Registries</h2>
 
+---
+
 <details>
 <summary><strong>Public registries</strong> (auto-registered, no config needed)</summary>
 
@@ -334,6 +346,8 @@ See [Registry docs](docs/configuration/registries/README.md) for full configurat
 
 <h2 align="center" id="supported-triggers">Supported Triggers</h2>
 
+---
+
 <details>
 <summary><strong>Notification triggers</strong> (16 providers)</summary>
 
@@ -364,6 +378,8 @@ All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) 
 
 <h2 align="center" id="authentication">Authentication</h2>
 
+---
+
 <details>
 <summary><strong>Supported auth methods</strong></summary>
 
@@ -376,6 +392,8 @@ All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) 
 </details>
 
 <h2 align="center" id="migrating-from-wud">Migrating from WUD</h2>
+
+---
 
 drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the image reference — everything else stays the same:
 
@@ -509,6 +527,8 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 
 <h2 align="center" id="roadmap">Roadmap</h2>
 
+---
+
 Here's what's coming.
 
 | Version | Theme | Highlights |
@@ -526,6 +546,8 @@ Here's what's coming.
 
 <h2 align="center" id="documentation">Documentation</h2>
 
+---
+
 | Resource | Link |
 | --- | --- |
 | Website | [drydock.codeswhat.com](https://drydock.codeswhat.com/) |
@@ -538,6 +560,8 @@ Here's what's coming.
 | Discussions | [GitHub Discussions](https://github.com/CodesWhat/drydock/discussions) — feature requests & ideas welcome |
 
 <h2 align="center" id="star-history">Star History</h2>
+
+---
 
 <div align="center">
   <a href="https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left">
