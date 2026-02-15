@@ -17,8 +17,6 @@
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://ghcr-badge.egpl.dev/codeswhat/drydock/size" alt="Image size"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-C9A227" alt="License MIT"></a>
-  <a href="https://ko-fi.com/codeswhat"><img src="https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=kofi&logoColor=white" alt="Ko-fi"></a>
-  <a href="https://github.com/sponsors/CodesWhat"><img src="https://img.shields.io/badge/Sponsor-ea4aaa?logo=githubsponsors&logoColor=white" alt="GitHub Sponsors"></a>
 </p>
 
 <p align="center">
@@ -175,14 +173,14 @@ See the [Express trust proxy docs](https://expressjs.com/en/guide/behind-proxies
 
 ---
 
-Auto-detect running containers, check for image updates across 15 registry providers, and notify through 16 trigger channels — with a full web UI, REST API, and Prometheus metrics.
+Auto-detect running containers, check for image updates across 22 registry providers, and notify through 20 trigger channels — with a full web UI, REST API, and Prometheus metrics.
 
 <details>
 <summary><strong>All 18 features</strong></summary>
 
 - **Container Monitoring** — Auto-detect running containers and check for image updates across registries
-- **16 Notification Triggers** — Slack, Discord, Telegram, SMTP, MQTT, HTTP webhooks, Gotify, NTFY, and more
-- **10+ Registry Providers** — Docker Hub, GHCR, ECR, GCR, GitLab, Quay, LSCR, Codeberg, DHI, and custom
+- **20 Notification Triggers** — Slack, Discord, Telegram, Mattermost, Microsoft Teams, Matrix, Google Chat, SMTP, MQTT, HTTP webhooks, Gotify, NTFY, and more
+- **10+ Registry Providers** — Docker Hub, GHCR, ECR, GCR, GAR, OCIR, IBMCR, Alicr, Harbor, Artifactory, Nexus, GitLab, Quay, LSCR, Codeberg, DHI, and custom
 - **Docker Compose Updates** — Auto-pull and recreate services via docker-compose with multi-network support
 - **Distributed Agents** — Monitor remote Docker hosts with SSE-based agent architecture
 - **Audit Log** — Event-based audit trail with persistent storage, REST API, and Prometheus counter
@@ -226,7 +224,11 @@ See the full configuration guide at [drydock.codeswhat.com/configuration/securit
 | --- | --- | --- |
 | Docker Hub | `hub` | `hub.docker.com` |
 | GitHub Container Registry | `ghcr` | `ghcr.io` |
+| Google Artifact Registry | `gar` | `*-docker.pkg.dev` |
 | Google Container Registry | `gcr` | `gcr.io` |
+| Oracle OCIR | `ocir` | `*.ocir.io` |
+| IBM Container Registry | `ibmcr` | `*.icr.io` |
+| Alibaba Container Registry | `alicr` | `*.aliyuncs.com` |
 | Quay | `quay` | `quay.io` |
 | LinuxServer (LSCR) | `lscr` | `lscr.io` |
 | DigitalOcean | `docr` | `registry.digitalocean.com` |
@@ -244,9 +246,16 @@ See the full configuration guide at [drydock.codeswhat.com/configuration/securit
 | Docker Hub | `hub` | `DD_REGISTRY_HUB_{name}_LOGIN`, `_TOKEN` |
 | Amazon ECR | `ecr` | `DD_REGISTRY_ECR_{name}_ACCESSKEYID`, `_SECRETACCESSKEY`, `_REGION` |
 | Azure ACR | `acr` | `DD_REGISTRY_ACR_{name}_CLIENTID`, `_CLIENTSECRET` |
+| Oracle OCIR | `ocir` | `DD_REGISTRY_OCIR_{name}_LOGIN`, `_PASSWORD` (or `_AUTH`) |
+| IBM Container Registry | `ibmcr` | `DD_REGISTRY_IBMCR_{name}_APIKEY` (or `_LOGIN` + `_PASSWORD`, or `_AUTH`) |
+| Alibaba Container Registry | `alicr` | `DD_REGISTRY_ALICR_{name}_LOGIN`, `_PASSWORD` (or `_AUTH`) |
+| Google Artifact Registry | `gar` | `DD_REGISTRY_GAR_{name}_CLIENTEMAIL`, `_PRIVATEKEY` |
 | GitLab | `gitlab` | `DD_REGISTRY_GITLAB_{name}_TOKEN` |
 | GitHub (GHCR) | `ghcr` | `DD_REGISTRY_GHCR_{name}_TOKEN` |
 | Gitea / Forgejo | `gitea` | `DD_REGISTRY_GITEA_{name}_LOGIN`, `_PASSWORD` |
+| Harbor | `harbor` | `DD_REGISTRY_HARBOR_{name}_URL`, `_LOGIN`, `_PASSWORD` (or `_AUTH`) |
+| JFrog Artifactory | `artifactory` | `DD_REGISTRY_ARTIFACTORY_{name}_URL`, `_LOGIN`, `_PASSWORD` (or `_AUTH`) |
+| Sonatype Nexus | `nexus` | `DD_REGISTRY_NEXUS_{name}_URL`, `_LOGIN`, `_PASSWORD` (or `_AUTH`) |
 | TrueForge | `trueforge` | `DD_REGISTRY_TRUEFORGE_{name}_NAMESPACE`, `_ACCOUNT`, `_TOKEN` |
 | Custom (any v2) | `custom` | `DD_REGISTRY_CUSTOM_{name}_URL` + optional auth |
 
@@ -261,7 +270,7 @@ See [Registry docs](https://drydock.codeswhat.com/configuration/registries) for 
 ---
 
 <details>
-<summary><strong>Notification triggers</strong> (16 providers)</summary>
+<summary><strong>Notification triggers</strong> (20 providers)</summary>
 
 All env vars use the `DD_` prefix; Docker labels use the `dd.` prefix.
 
@@ -273,9 +282,12 @@ All env vars use the `DD_` prefix; Docker labels use the `dd.` prefix.
 | Docker | Auto-pull and restart containers | [docs](https://drydock.codeswhat.com/configuration/triggers/docker) |
 | Docker Compose | Auto-pull and recreate compose services | [docs](https://drydock.codeswhat.com/configuration/triggers/docker-compose) |
 | Gotify | Gotify push notifications | [docs](https://drydock.codeswhat.com/configuration/triggers/gotify) |
+| Google Chat | Google Chat incoming webhook | [docs](https://drydock.codeswhat.com/configuration/triggers/google-chat) |
 | HTTP | Generic webhook (POST) | [docs](https://drydock.codeswhat.com/configuration/triggers/http) |
 | IFTTT | IFTTT applet trigger | [docs](https://drydock.codeswhat.com/configuration/triggers/ifttt) |
 | Kafka | Kafka message producer | [docs](https://drydock.codeswhat.com/configuration/triggers/kafka) |
+| Matrix | Matrix room message API | [docs](https://drydock.codeswhat.com/configuration/triggers/matrix) |
+| Mattermost | Mattermost incoming webhook | [docs](https://drydock.codeswhat.com/configuration/triggers/mattermost) |
 | MQTT | MQTT message (Home Assistant compatible) | [docs](https://drydock.codeswhat.com/configuration/triggers/mqtt) |
 | NTFY | ntfy.sh push notifications | [docs](https://drydock.codeswhat.com/configuration/triggers/ntfy) |
 | Pushover | Pushover notifications | [docs](https://drydock.codeswhat.com/configuration/triggers/pushover) |
@@ -283,6 +295,7 @@ All env vars use the `DD_` prefix; Docker labels use the `dd.` prefix.
 | Slack | Slack webhook | [docs](https://drydock.codeswhat.com/configuration/triggers/slack) |
 | SMTP | Email notifications | [docs](https://drydock.codeswhat.com/configuration/triggers/smtp) |
 | Telegram | Telegram bot messages | [docs](https://drydock.codeswhat.com/configuration/triggers/telegram) |
+| Teams | Microsoft Teams webhook (Workflow-compatible) | [docs](https://drydock.codeswhat.com/configuration/triggers/teams) |
 
 All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) to control which updates fire notifications.
 
@@ -353,8 +366,8 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Swap the image and 
 <tr><td>Web UI / Dashboard</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Auto-update containers</td><td align="center">✅</td><td align="center">⚠️ (Git stacks)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Docker Compose updates</td><td align="center">✅</td><td align="center">✅ (stacks)</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Notification triggers</td><td align="center">16</td><td align="center">⚠️ (webhooks)</td><td align="center">4</td><td align="center">❌</td><td align="center">~18 (Shoutrrr)</td><td align="center">14</td><td align="center">17</td><td align="center">~6</td></tr>
-<tr><td>Registry providers</td><td align="center">15</td><td align="center">✅ (many)</td><td align="center">⚠️ (custom)</td><td align="center">⚠️ (templates)</td><td align="center">⚠️ (Docker auth)</td><td align="center">8</td><td align="center">⚠️ (regopts)</td><td align="center">⚠️ (Docker auth)</td></tr>
+<tr><td>Notification triggers</td><td align="center">20</td><td align="center">⚠️ (webhooks)</td><td align="center">4</td><td align="center">❌</td><td align="center">~18 (Shoutrrr)</td><td align="center">14</td><td align="center">17</td><td align="center">~6</td></tr>
+<tr><td>Registry providers</td><td align="center">22</td><td align="center">✅ (many)</td><td align="center">⚠️ (custom)</td><td align="center">⚠️ (templates)</td><td align="center">⚠️ (Docker auth)</td><td align="center">8</td><td align="center">⚠️ (regopts)</td><td align="center">⚠️ (Docker auth)</td></tr>
 <tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>REST API</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">⚠️ (limited)</td><td align="center">✅</td><td align="center">⚠️ (gRPC)</td><td align="center">❌</td></tr>
 <tr><td>Prometheus metrics</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
@@ -451,6 +464,12 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Swap the image and 
 **[MIT License](LICENSE)**
 
 <a href="https://github.com/CodesWhat"><img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="28"></a>
+
+<p>
+  <a href="https://ko-fi.com/codeswhat"><img src="https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=kofi&logoColor=white" alt="Ko-fi"></a>
+  <a href="https://buymeacoffee.com/codeswhat"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?logo=buymeacoffee&logoColor=black" alt="Buy Me a Coffee"></a>
+  <a href="https://github.com/sponsors/CodesWhat"><img src="https://img.shields.io/badge/Sponsor-ea4aaa?logo=githubsponsors&logoColor=white" alt="GitHub Sponsors"></a>
+</p>
 
 <a href="#drydock">Back to top</a>
 
