@@ -246,7 +246,9 @@ Available on GHCR, Docker Hub, and Quay.io for flexible deployment
 
 1. Scan the candidate image before pull/restart
 2. Block the update when vulnerabilities exceed configured severity threshold
-3. Persist scan results to `container.security.scan` for API/UI visibility
+3. Verify candidate image signatures with cosign (optional block gate)
+4. Generate SBOM documents (`spdx-json`, `cyclonedx`) for candidate images
+5. Persist security state to `container.security.{scan,signature,sbom}` for API/UI visibility
 
 Security scanning is disabled by default and is enabled with `DD_SECURITY_SCANNER=trivy`.
 
@@ -257,9 +259,19 @@ services:
     environment:
       - DD_SECURITY_SCANNER=trivy
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
+      # Optional: block updates when signature verification fails
+      # - DD_SECURITY_VERIFY_SIGNATURES=true
+      # - DD_SECURITY_COSIGN_KEY=/keys/cosign.pub
+      # Optional: generate and persist SBOM
+      # - DD_SECURITY_SBOM_ENABLED=true
+      # - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx
       # Optional: use Trivy server mode instead of local CLI
       # - DD_SECURITY_TRIVY_SERVER=http://trivy:4954
 ```
+
+Security APIs:
+- `GET /api/containers/:id/vulnerabilities`
+- `GET /api/containers/:id/sbom?format=spdx-json|cyclonedx`
 
 See full configuration in [`docs/configuration/security/README.md`](docs/configuration/security/README.md).
 
@@ -433,7 +445,7 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 | **Dry-run preview** | Preview what a container update would do without performing it |
 | **Image backup & rollback** | Automatic pre-update image backup with configurable retention and rollback API |
 | **Grafana dashboard** | Importable JSON template for Prometheus metrics overview |
-| **Update Guard** | Trivy vulnerability gate that scans candidate images before Docker updates and blocks based on configured severity thresholds |
+| **Update Guard** | Safe-pull gate for Docker updates: Trivy vulnerability scan + optional cosign signature verification + SBOM generation |
 | **Font Awesome 6 icons** | Migrated from MDI to FA6 with support for `fab:`/`far:`/`fas:` prefix syntax |
 | **Icon CDN** | Auto-resolve container icons via selfhst/icons (`sh-` prefix) with homarr-labs fallback, plus `hl-`/`si-` and custom URL support |
 | **Mobile responsive UI** | Optimized mobile breakpoints for dashboard, containers, and self-update overlay |
