@@ -1,4 +1,3 @@
-// @ts-nocheck
 import events from 'node:events';
 
 // Build EventEmitter
