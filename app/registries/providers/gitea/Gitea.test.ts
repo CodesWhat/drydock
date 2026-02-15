@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Gitea from './Gitea.js';
 
 // Test fixture credentials - not real secrets

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Custom from '../custom/Custom.js';
 
 /**

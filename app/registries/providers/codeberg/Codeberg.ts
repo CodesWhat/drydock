@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Forgejo from '../forgejo/Forgejo.js';
 
 /**

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import axios from 'axios';
 import Custom from '../custom/Custom.js';
 import { getTokenAuthConfigurationSchema } from '../shared/tokenAuthConfigurationSchema.js';
@@ -53,7 +52,7 @@ class Dhi extends Custom {
    * @returns {Promise<*>}
    */
   async authenticate(image, requestOptions) {
-    const axiosConfig = {
+    const axiosConfig: any = {
       method: 'GET',
       url: `https://dhi.io/token?service=registry.docker.io&scope=repository:${image.name}:pull&grant_type=password`,
       headers: {

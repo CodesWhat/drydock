@@ -1,11 +1,10 @@
-// @ts-nocheck
 import BaseRegistry from '../../BaseRegistry.js';
 
 /**
  * Docker Custom Registry V2 integration.
  */
 class Custom extends BaseRegistry {
-  getConfigurationSchema() {
+  getConfigurationSchema(): any {
     const authSchema = this.joi
       .alternatives()
       .try(this.joi.string().base64(), this.joi.string().valid(''));

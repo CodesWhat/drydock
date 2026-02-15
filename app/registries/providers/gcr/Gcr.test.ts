@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Gcr from './Gcr.js';
 
 // Test fixture credentials - not real secrets
@@ -100,7 +99,7 @@ test('normalizeImage should return the proper registry v2 endpoint', async () =>
 });
 
 test('authenticate should call gcr auth endpoint', async () => {
-  expect(gcr.authenticate({}, { headers: {} })).resolves.toEqual({
+  await expect(gcr.authenticate({}, { headers: {} })).resolves.toEqual({
     headers: {
       Authorization: 'Bearer xxxxx',
     },

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Ecr from './Ecr.js';
 
 vi.mock('@aws-sdk/client-ecr', () => ({

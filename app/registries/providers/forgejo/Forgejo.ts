@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Gitea from '../gitea/Gitea.js';
 
 /**

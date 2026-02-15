@@ -1,11 +1,10 @@
-// @ts-nocheck
 import Custom from '../custom/Custom.js';
 
 /**
  * Gitea Container Registry integration.
  */
 class Gitea extends Custom {
-  getConfigurationSchema() {
+  getConfigurationSchema(): any {
     return this.joi
       .object()
       .keys({

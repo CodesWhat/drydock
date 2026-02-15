@@ -1,4 +1,3 @@
-// @ts-nocheck
 import BaseRegistry from './BaseRegistry.js';
 
 vi.mock('axios', () => ({

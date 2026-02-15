@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Ghcr from './Ghcr.js';
 
 describe('GitHub Container Registry', () => {

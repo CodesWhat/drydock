@@ -1,4 +1,3 @@
-// @ts-nocheck
 import log from '../log/index.js';
 
 vi.mock('axios');
@@ -84,7 +83,7 @@ test('normalizeImage should return same image when not overridden', async () => 
 });
 
 test('authenticate should return same request options when not overridden', async () => {
-  expect(registry.authenticate({}, { x: 'x' })).resolves.toStrictEqual({
+  await expect(registry.authenticate({}, { x: 'x' })).resolves.toStrictEqual({
     x: 'x',
   });
 });
@@ -153,7 +152,7 @@ describe('getImageManifestDigest', () => {
       }
       throw new Error('Boom!');
     };
-    expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
       version: 2,
       digest: '123456789',
     });
@@ -175,7 +174,7 @@ describe('getImageManifestDigest', () => {
       }
       throw new Error('Boom!');
     };
-    expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
       version: 1,
       digest: 'digest_x',
     });
@@ -227,7 +226,7 @@ describe('getImageManifestDigest', () => {
       }
       throw new Error('Boom!');
     };
-    expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
       version: 1,
       digest: 'xxxxxxxxxx',
       created: undefined,

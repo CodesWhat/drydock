@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Ghcr from '../ghcr/Ghcr.js';
 
 /**

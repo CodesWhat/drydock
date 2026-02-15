@@ -1,5 +1,5 @@
-// @ts-nocheck
-import axios from 'axios';
+import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios';
+import type { ContainerImage } from '../model/container.js';
 import Registry from './Registry.js';
 
 /**
@@ -9,7 +9,7 @@ class BaseRegistry extends Registry {
   /**
    * Common URL normalization for registries that need https:// prefix and /v2 suffix
    */
-  normalizeImageUrl(image, registryUrl = null) {
+  normalizeImageUrl(image: ContainerImage, registryUrl: string | null = null): ContainerImage {
     const imageNormalized = { ...image };
     const url = registryUrl || image.registry.url;
 
@@ -22,10 +22,16 @@ class BaseRegistry extends Registry {
   /**
    * Common Basic Auth implementation
    */
-  async authenticateBasic(requestOptions, credentials) {
-    const requestOptionsWithAuth = { ...requestOptions };
+  async authenticateBasic(
+    requestOptions: AxiosRequestConfig,
+    credentials: string | undefined,
+  ): Promise<AxiosRequestConfig> {
+    const requestOptionsWithAuth: AxiosRequestConfig = {
+      ...requestOptions,
+      headers: { ...(requestOptions.headers as Record<string, any> | undefined) },
+    };
     if (credentials) {
-      requestOptionsWithAuth.headers.Authorization = `Basic ${credentials}`;
+      (requestOptionsWithAuth.headers as Record<string, any>).Authorization = `Basic ${credentials}`;
     }
     return requestOptionsWithAuth;
   }
@@ -33,10 +39,16 @@ class BaseRegistry extends Registry {
   /**
    * Common Bearer token authentication
    */
-  async authenticateBearer(requestOptions, token) {
-    const requestOptionsWithAuth = { ...requestOptions };
+  async authenticateBearer(
+    requestOptions: AxiosRequestConfig,
+    token: string | undefined,
+  ): Promise<AxiosRequestConfig> {
+    const requestOptionsWithAuth: AxiosRequestConfig = {
+      ...requestOptions,
+      headers: { ...(requestOptions.headers as Record<string, any> | undefined) },
+    };
     if (token) {
-      requestOptionsWithAuth.headers.Authorization = `Bearer ${token}`;
+      (requestOptionsWithAuth.headers as Record<string, any>).Authorization = `Bearer ${token}`;
     }
     return requestOptionsWithAuth;
   }
@@ -52,15 +64,19 @@ class BaseRegistry extends Registry {
    * @returns the request options with Authorization header set
    */
   async authenticateBearerFromAuthUrl(
-    requestOptions,
-    authUrl,
-    credentials,
-    tokenExtractor = (response) => response.data.token,
-  ) {
-    const requestOptionsWithAuth = requestOptions;
-    let token;
+    requestOptions: AxiosRequestConfig,
+    authUrl: string,
+    credentials: string | undefined,
+    tokenExtractor: (response: AxiosResponse<any>) => string | undefined = (response) =>
+      response.data.token,
+  ): Promise<AxiosRequestConfig> {
+    const requestOptionsWithAuth: AxiosRequestConfig = {
+      ...requestOptions,
+      headers: { ...(requestOptions.headers as Record<string, any> | undefined) },
+    };
+    let token: string | undefined;
 
-    const request = {
+    const request: AxiosRequestConfig = {
       method: 'GET',
       url: authUrl,
       headers: {
@@ -69,7 +85,7 @@ class BaseRegistry extends Registry {
     };
 
     if (credentials) {
-      request.headers.Authorization = `Basic ${credentials}`;
+      (request.headers as Record<string, any>).Authorization = `Basic ${credentials}`;
     }
 
     try {
@@ -80,7 +96,7 @@ class BaseRegistry extends Registry {
     }
 
     if (token) {
-      requestOptionsWithAuth.headers.Authorization = `Bearer ${token}`;
+      (requestOptionsWithAuth.headers as Record<string, any>).Authorization = `Bearer ${token}`;
     }
     return requestOptionsWithAuth;
   }
@@ -120,14 +136,14 @@ class BaseRegistry extends Registry {
   /**
    * Common URL pattern matching
    */
-  matchUrlPattern(image, pattern) {
+  matchUrlPattern(image: ContainerImage, pattern: RegExp) {
     return pattern.test(image.registry.url);
   }
 
   /**
    * Common mask configuration for sensitive fields
    */
-  maskSensitiveFields(fields) {
+  maskSensitiveFields(fields: string[]) {
     const masked = { ...this.configuration };
     fields.forEach((field) => {
       if (masked[field]) {
