@@ -9,7 +9,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.2.0-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.3.0-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/GHCR-image-2ea44f?logo=docker&logoColor=white" alt="GHCR package"></a>
   <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
   <a href="https://quay.io/repository/codeswhat/drydock"><img src="https://img.shields.io/badge/Quay.io-image-ee0000?logo=redhat&logoColor=white" alt="Quay.io"></a>
@@ -268,6 +268,8 @@ Available on GHCR, Docker Hub, and Quay.io for flexible deployment
 
 Security scanning is disabled by default and is enabled with `DD_SECURITY_SCANNER=trivy`.
 
+> **v1.3.0+:** The official drydock image now includes both `trivy` and `cosign` — no custom image required for local CLI mode.
+
 ```yaml
 services:
   drydock:
@@ -289,6 +291,7 @@ Security APIs:
 
 - `GET /api/containers/:id/vulnerabilities`
 - `GET /api/containers/:id/sbom?format={format}` where `format` is `spdx-json` or `cyclonedx-json`
+- `POST /api/containers/:id/scan` — trigger on-demand vulnerability scan, signature verification, and SBOM generation
 
 See full configuration in [`docs/configuration/security/README.md`](docs/configuration/security/README.md).
 
@@ -427,6 +430,7 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 <tr><td>Container start/stop/restart</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Distributed agents (remote)</td><td align="center">✅</td><td align="center">⚠️ (single host)</td><td align="center">❌</td><td align="center">✅ (multi-orch)</td><td align="center">❌</td></tr>
 <tr><td>Audit log</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Security scanning (Trivy)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Semver-aware updates</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
 <tr><td>Digest watching</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Multi-arch (amd64/arm64)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
@@ -462,7 +466,7 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 | **Dry-run preview** | Preview what a container update would do without performing it |
 | **Image backup & rollback** | Automatic pre-update image backup with configurable retention and rollback API |
 | **Grafana dashboard** | Importable JSON template for Prometheus metrics overview |
-| **Update Guard** | Safe-pull gate for Docker updates: Trivy vulnerability scan + optional cosign signature verification + SBOM generation |
+| **Update Guard** | Safe-pull gate for Docker updates: Trivy vulnerability scan + optional cosign signature verification + SBOM generation + on-demand scan from UI/API |
 | **Font Awesome 6 icons** | Migrated from MDI to FA6 with support for `fab:`/`far:`/`fas:` prefix syntax |
 | **Icon CDN** | Auto-resolve container icons via selfhst/icons (`sh-` prefix) with homarr-labs fallback, plus `hl-`/`si-` and custom URL support |
 | **Mobile responsive UI** | Optimized mobile breakpoints for dashboard, containers, and self-update overlay |
@@ -505,11 +509,11 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 
 <h2 align="center" id="roadmap">Roadmap</h2>
 
-Here's what's coming. See the [full roadmap](docs/planning/ROADMAP.md) for details.
+Here's what's coming.
 
 | Version | Theme | Highlights |
 | --- | --- | --- |
-| **v1.3.0** | Security Integration | Trivy scanning, Update Guard, SBOM generation, image signing |
+| **v1.3.0** ✅ | Security Integration | Trivy scanning, Update Guard, SBOM generation, image signing, on-demand scan |
 | **v1.4.0** | UI Modernization | PrimeVue migration, Composition API, Vite cleanup, font personalization |
 | **v1.5.0** | Observability | Real-time log viewer, resource monitoring, registry webhooks, notification templates, release notes, MS Teams & Matrix |
 | **v1.6.0** | Fleet Management | YAML config, live UI config panels, volume browser, parallel updates, dependency ordering, container groups |
@@ -529,7 +533,7 @@ Here's what's coming. See the [full roadmap](docs/planning/ROADMAP.md) for detai
 | Configuration | [`docs/configuration/README.md`](docs/configuration/README.md) |
 | Quick Start | [`docs/quickstart/README.md`](docs/quickstart/README.md) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
-| Roadmap | [`docs/planning/ROADMAP.md`](docs/planning/ROADMAP.md) |
+| Roadmap | See [Roadmap](#roadmap) section above |
 | Issues | [GitHub Issues](https://github.com/CodesWhat/drydock/issues) |
 | Discussions | [GitHub Discussions](https://github.com/CodesWhat/drydock/discussions) — feature requests & ideas welcome |
 
