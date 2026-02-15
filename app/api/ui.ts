@@ -1,4 +1,3 @@
-// @ts-nocheck
 import path from 'node:path';
 import express from 'express';
 import rateLimit from 'express-rate-limit';

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as component from './component.js';
 
 /**
