@@ -453,7 +453,7 @@ describe('ContainerItem', () => {
     expect(wrapper.vm.securityScan).toBeUndefined();
     expect(wrapper.vm.hasSecurityScan).toBe(false);
     expect(wrapper.vm.vulnerabilityChipColor).toBe('info');
-    expect(wrapper.vm.vulnerabilityChipLabel).toBe('scanned');
+    expect(wrapper.vm.vulnerabilityChipLabel).toBe('no scan');
     expect(wrapper.vm.vulnerabilityTooltipDescription).toBe('No vulnerability scan result');
   });
 
@@ -915,5 +915,59 @@ describe('ContainerItem', () => {
     } finally {
       localWrapper.unmount();
     }
+  });
+
+  it('defaults blockingCount to 0 when missing from blocked scan data', async () => {
+    const scanWithoutBlockingCount = {
+      ...BASE_SECURITY_SCAN,
+      status: 'blocked',
+      summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+    };
+    delete (scanWithoutBlockingCount as any).blockingCount;
+
+    await wrapper.setProps({
+      container: createContainer({
+        security: { scan: scanWithoutBlockingCount },
+      }),
+    });
+
+    expect(wrapper.vm.vulnerabilityChipLabel).toBe('blocked (0)');
+  });
+
+  it('defaults missing severity fields to 0 in tooltip description', async () => {
+    const scanWithPartialSummary = {
+      ...BASE_SECURITY_SCAN,
+      status: 'passed',
+      summary: { critical: 2 },
+    };
+
+    await wrapper.setProps({
+      container: createContainer({
+        security: { scan: scanWithPartialSummary },
+      }),
+    });
+
+    expect(wrapper.vm.vulnerabilityTooltipDescription).toBe(
+      `Scanned at ${new Date(scanWithPartialSummary.scannedAt).toLocaleString()}. Critical: 2, High: 0, Medium: 0, Low: 0, Unknown: 0`,
+    );
+  });
+
+  it('shows unknown error in tooltip when status is error but error field is absent', async () => {
+    const errorScanNoMessage = {
+      ...BASE_SECURITY_SCAN,
+      status: 'error',
+    };
+    delete (errorScanNoMessage as any).error;
+
+    await wrapper.setProps({
+      container: createContainer({
+        security: { scan: errorScanNoMessage },
+      }),
+    });
+
+    expect(wrapper.vm.vulnerabilityChipLabel).toBe('scan error');
+    expect(wrapper.vm.vulnerabilityTooltipDescription).toBe(
+      `Security scan failed at ${new Date(errorScanNoMessage.scannedAt).toLocaleString()}: unknown error`,
+    );
   });
 });

@@ -234,7 +234,7 @@ export default defineComponent({
       if (scanStatus === 'passed') {
         return 'safe';
       }
-      return 'scanned';
+      return 'no scan';
     },
     vulnerabilityTooltipDescription() {
       if (!this.hasSecurityScan) {

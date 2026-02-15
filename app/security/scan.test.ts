@@ -16,6 +16,8 @@ vi.mock('../configuration/index.js', async () => {
   };
 });
 
+vi.mock('../log/index.js', () => ({ default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) } }));
+
 vi.mock('node:child_process', async () => {
   const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
   return {
@@ -148,20 +150,24 @@ test('scanImageForVulnerabilities should parse trivy output and block by severit
       'json',
       '--server',
       'http://trivy:4954',
-      '--username',
-      'user',
-      '--password',
-      'token',
     ]),
-    expect.any(Object),
+    expect.objectContaining({
+      env: expect.objectContaining({
+        TRIVY_USERNAME: 'user',
+        TRIVY_PASSWORD: 'token',
+      }),
+    }),
     expect.any(Function),
   );
+  const callArgs = execFileMock.mock.calls[0][1];
+  expect(callArgs).not.toContain('--username');
+  expect(callArgs).not.toContain('--password');
 });
 
 test('scanImageForVulnerabilities should return error result when trivy command fails', async () => {
   childProcessControl.execFileImpl = (command, args, options, callback) => {
     const error = new Error('command failed') as NodeJS.ErrnoException;
-    error.code = 1;
+    error.code = 'ERR_CHILD_PROCESS';
     callback(error, '', 'failed to scan');
     return { exitCode: 1 };
   };

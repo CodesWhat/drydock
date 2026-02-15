@@ -1,10 +1,12 @@
 import { execFile } from 'node:child_process';
-import { getSecurityConfiguration } from '../configuration/index.js';
+import {
+  getSecurityConfiguration,
+  SECURITY_SEVERITY_VALUES as SECURITY_SEVERITIES,
+  type SecuritySeverity,
+} from '../configuration/index.js';
 import log from '../log/index.js';
 
-export const SECURITY_SEVERITIES = ['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
-
-export type SecuritySeverity = (typeof SECURITY_SEVERITIES)[number];
+export { SECURITY_SEVERITIES, type SecuritySeverity };
 export type SecurityScanStatus = 'passed' | 'blocked' | 'error';
 
 export interface ContainerVulnerabilitySummary {
@@ -156,12 +158,13 @@ function runTrivyCommand(
     args.push('--server', configuration.trivy.server);
   }
 
-  if (options.auth?.password !== undefined) {
-    args.push('--username', options.auth.username ?? '');
-    args.push('--password', options.auth.password);
-  }
-
   args.push(options.image);
+
+  const env = { ...process.env };
+  if (options.auth?.password !== undefined) {
+    env.TRIVY_USERNAME = options.auth.username ?? '';
+    env.TRIVY_PASSWORD = options.auth.password;
+  }
 
   return new Promise((resolve, reject) => {
     const child = execFile(
@@ -170,6 +173,7 @@ function runTrivyCommand(
       {
         maxBuffer: MAX_TRIVY_OUTPUT_BYTES,
         timeout: configuration.trivy.timeout,
+        env,
       },
       (error, stdout, stderr) => {
         if (error) {

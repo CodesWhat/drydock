@@ -98,6 +98,7 @@
                   size="x-small"
                   variant="outlined"
                   :color="vulnerabilityChipColor"
+                  :aria-label="vulnerabilityTooltipDescription"
                   class="flex-shrink-0"
                   v-bind="props"
                 >

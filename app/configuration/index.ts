@@ -5,10 +5,10 @@ import setValue from 'set-value';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
-const SECURITY_SEVERITY_VALUES = ['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
+export const SECURITY_SEVERITY_VALUES = ['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 const DEFAULT_SECURITY_BLOCK_SEVERITY = 'CRITICAL,HIGH';
 
-type SecuritySeverity = (typeof SECURITY_SEVERITY_VALUES)[number];
+export type SecuritySeverity = (typeof SECURITY_SEVERITY_VALUES)[number];
 
 /*
  * Get a prop by path from environment variables.

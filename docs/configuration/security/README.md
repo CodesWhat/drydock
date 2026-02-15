@@ -31,6 +31,8 @@ DD_SECURITY_SCANNER=trivy
 
 Use this mode when the `trivy` binary is available inside the drydock runtime.
 
+?> **Tip:** Local CLI mode requires the `trivy` binary inside the container. Build a custom image or use server mode with a standalone Trivy instance.
+
 ```yaml
 services:
   drydock:

@@ -607,7 +607,7 @@ class Docker extends Trigger {
     };
   }
 
-  recordHookAudit(action, container, status, details) {
+  recordAudit(action, container, status, details) {
     auditStore.insertAudit({
       id: '',
       timestamp: new Date().toISOString(),
@@ -620,17 +620,12 @@ class Docker extends Trigger {
     getAuditCounter()?.inc({ action });
   }
 
+  recordHookAudit(action, container, status, details) {
+    this.recordAudit(action, container, status, details);
+  }
+
   recordSecurityAudit(action, container, status, details) {
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
-      action,
-      containerName: fullName(container),
-      containerImage: container.image.name,
-      status,
-      details,
-    });
-    getAuditCounter()?.inc({ action });
+    this.recordAudit(action, container, status, details);
   }
 
   isHookFailure(hookResult) {
