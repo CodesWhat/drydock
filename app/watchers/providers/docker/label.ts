@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Supported Docker labels (dd.* preferred, wud.* legacy fallback).
  */

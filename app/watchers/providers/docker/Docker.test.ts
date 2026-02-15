@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { Mocked } from 'vitest';
 import * as event from '../../../event/index.js';
 import { fullName } from '../../../model/container.js';
@@ -4636,7 +4635,6 @@ describe('isDigestToWatch Logic', () => {
 
     const containerModule = await import('../../../model/container.js');
     const validateContainer = containerModule.validate;
-    // @ts-expect-error
     validateContainer.mockImplementation((c) => c);
 
     return container;
