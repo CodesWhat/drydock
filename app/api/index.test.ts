@@ -122,7 +122,7 @@ describe('API Index', () => {
       port: 3000,
       cors: {
         enabled: true,
-        origin: '*', // NOSONAR - test fixture
+        origin: '*',
         methods: 'GET,POST',
       },
       tls: {},

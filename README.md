@@ -350,6 +350,7 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 | `WUD_` env vars | `DD_` env vars | Both work — `WUD_` vars are automatically mapped to their `DD_` equivalents at startup. If both are set, `DD_` takes priority. |
 | `wud.*` container labels | `dd.*` container labels | Both work — all `wud.*` labels (`wud.watch`, `wud.tag.include`, `wud.display.name`, etc.) are recognized alongside their `dd.*` counterparts. |
 | `/store/wud.json` state file | `/store/dd.json` state file | Automatic migration — on first start, if `wud.json` exists and `dd.json` does not, drydock renames it in place. No data loss. |
+| Session store (connect-loki) | Session store (connect-loki) | Auto-healed — WUD's session data is incompatible (different secret key), but drydock automatically regenerates corrupt sessions instead of failing. No manual cleanup needed. |
 | Docker socket mount | Docker socket mount | Unchanged — same `/var/run/docker.sock` bind mount. |
 | Health endpoint `/health` | Health endpoint `/health` | Unchanged — same path, same port (default 3000). |
 
@@ -442,6 +443,7 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 | --- | --- |
 | `eval()` code injection | Replaced with safe `String.replace()` interpolation |
 | OIDC session state races | Serialized redirect checks, multiple pending states |
+| OIDC session resilience | Auto-regenerates corrupt sessions from WUD migration, JSON error responses |
 | Docker event stream crash | Buffered split payloads before JSON parse |
 | Multi-network container recreate | Reconnects additional networks after recreation |
 | docker-compose post_start hooks | Hooks now execute after updates |
@@ -514,11 +516,9 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 
 **[MIT License](LICENSE)**
 
-<sub>Unofficial, unauthorized-ish WUD fork. We ship fixes instead of forum drama.</sub>
-
-<br>
-
 <a href="https://github.com/CodesWhat"><img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="28"></a>
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/J3J21HQM0K)
 
 <a href="#drydock">Back to top</a>
 

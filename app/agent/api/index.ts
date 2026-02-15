@@ -56,6 +56,7 @@ export async function init() {
 
   const configuration = getServerConfiguration();
   const app = express();
+  app.disable('x-powered-by');
 
   app.use(express.json());
   if (configuration.cors.enabled) {

@@ -28,6 +28,7 @@ export async function init() {
 
     // Init Express app
     const app = express();
+    app.disable('x-powered-by');
 
     // Trust proxy (helpful to resolve public facing hostname & protocol)
     if (configuration.trustproxy !== false) {
