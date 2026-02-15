@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Component from './Component.js';
 
 beforeEach(async () => {
@@ -46,7 +45,7 @@ test('register should not call init when validateConfiguration fails', async () 
     throw new Error('validation failed');
   };
   const spyInit = vi.spyOn(component, 'init');
-  expect(component.register('type', 'name', { x: 'x' })).rejects.toThrowError('validation failed');
+  await expect(component.register('type', 'name', { x: 'x' })).rejects.toThrowError('validation failed');
   expect(spyInit).toHaveBeenCalledTimes(0);
 });
 
@@ -55,7 +54,7 @@ test('register should throw when init fails', async () => {
   component.init = () => {
     throw new Error('init failed');
   };
-  expect(component.register('type', 'name', { x: 'x' })).rejects.toThrowError('init failed');
+  await expect(component.register('type', 'name', { x: 'x' })).rejects.toThrowError('init failed');
 });
 
 test('getId should include agent prefix when agent is set', async () => {

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from 'node:fs';
 import path from 'node:path';
 import * as configuration from '../configuration/index.js';
@@ -501,7 +500,7 @@ test('deregisterAll should throw an error when any component fails to deregister
   registry.getState().trigger = {
     trigger1: component,
   };
-  expect(registry.testable_deregisterAll()).rejects.toThrowError(
+  await expect(registry.testable_deregisterAll()).rejects.toThrowError(
     'Error when deregistering component .',
   );
 });
@@ -514,7 +513,7 @@ test('deregisterRegistries should throw when errors occurred', async () => {
   registry.getState().registry = {
     registry1: component,
   };
-  expect(registry.testable_deregisterRegistries()).rejects.toThrowError(
+  await expect(registry.testable_deregisterRegistries()).rejects.toThrowError(
     'Error when deregistering component .',
   );
 });
@@ -527,7 +526,7 @@ test('deregisterTriggers should throw when errors occurred', async () => {
   registry.getState().trigger = {
     trigger1: component,
   };
-  expect(registry.testable_deregisterTriggers()).rejects.toThrowError(
+  await expect(registry.testable_deregisterTriggers()).rejects.toThrowError(
     'Error when deregistering component .',
   );
 });
@@ -540,7 +539,7 @@ test('deregisterWatchers should throw when errors occurred', async () => {
   registry.getState().watcher = {
     watcher1: component,
   };
-  expect(registry.testable_deregisterWatchers()).rejects.toThrowError(
+  await expect(registry.testable_deregisterWatchers()).rejects.toThrowError(
     'Error when deregistering component .',
   );
 });

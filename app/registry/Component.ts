@@ -96,7 +96,7 @@ class Component {
    * Can be overridden by the component implementation class
    * @returns {*}
    */
-  getConfigurationSchema(): joi.ObjectSchema {
+  getConfigurationSchema(): joi.Schema {
     return this.joi.object();
   }
 
@@ -105,7 +105,7 @@ class Component {
    * Can be overridden by the component implementation class
    */
 
-  init(): Promise<void> {
+  init(): void | Promise<void> {
     return Promise.resolve();
   }
 
