@@ -1,4 +1,3 @@
-// @ts-nocheck
 import axios from 'axios';
 
 import Trigger from '../Trigger.js';
@@ -40,7 +39,7 @@ class Apprise extends Trigger {
    */
   async trigger(container) {
     let uri = `${this.configuration.url}/notify`;
-    const body = {
+    const body: any = {
       title: this.renderSimpleTitle(container),
       data: this.renderSimpleBody(container),
       format: 'text',
@@ -74,7 +73,7 @@ class Apprise extends Trigger {
    * @returns {Promise<*>}
    */
   async triggerBatch(containers) {
-    const options = {
+    const options: any = {
       method: 'POST',
       url: `${this.configuration.url}/notify`,
       data: {

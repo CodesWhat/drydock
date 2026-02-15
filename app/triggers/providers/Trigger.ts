@@ -316,7 +316,7 @@ class Trigger extends Component {
    * @returns {*}
    */
   validateConfiguration(configuration: TriggerConfiguration): TriggerConfiguration {
-    const schema = this.getConfigurationSchema();
+    const schema = this.getConfigurationSchema() as any;
     const schemaWithDefaultOptions = schema.append({
       auto: this.joi.bool().default(true),
       order: this.joi.number().default(100),
@@ -366,7 +366,7 @@ class Trigger extends Component {
    * Trigger method. Must be overridden in trigger implementation class.
    */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async trigger(containerWithResult: Container) {
+  async trigger(containerWithResult: Container): Promise<any> {
     // do nothing by default
     this.log.warn('Cannot trigger container result; this trigger does not implement "simple" mode');
     return containerWithResult;
@@ -377,7 +377,7 @@ class Trigger extends Component {
    * @param containersWithResult
    * @returns {*}
    */
-  async triggerBatch(containersWithResult: Container[]) {
+  async triggerBatch(containersWithResult: Container[]): Promise<any> {
     // do nothing by default
     this.log.warn('Cannot trigger container results; this trigger does not implement "batch" mode');
     return containersWithResult;

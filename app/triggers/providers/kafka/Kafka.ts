@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Kafka as KafkaClient } from 'kafkajs';
 import Trigger from '../Trigger.js';
 
@@ -6,6 +5,8 @@ import Trigger from '../Trigger.js';
  * Kafka Trigger implementation
  */
 class Kafka extends Trigger {
+  kafka: KafkaClient;
+
   /**
    * Get the Trigger configuration schema.
    * @returns {*}
@@ -55,7 +56,7 @@ class Kafka extends Trigger {
    */
   initTrigger() {
     const brokers = this.configuration.brokers.split(',').map((broker) => broker.trim());
-    const clientConfiguration = {
+    const clientConfiguration: any = {
       clientId: this.configuration.clientId,
       brokers,
       ssl: this.configuration.ssl,

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Http from './Http.js';
 
 // Mock axios

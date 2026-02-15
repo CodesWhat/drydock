@@ -1,4 +1,3 @@
-// @ts-nocheck
 import axios from 'axios';
 import Trigger from '../Trigger.js';
 
@@ -80,7 +79,7 @@ class Ntfy extends Trigger {
    */
   async sendHttpRequest(body) {
     const auth = this.configuration.auth;
-    const options = {
+    const options: any = {
       method: 'POST',
       url: this.configuration.url,
       headers: {

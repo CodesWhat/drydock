@@ -1,4 +1,3 @@
-// @ts-nocheck
 import axios from 'axios';
 import Trigger from '../Trigger.js';
 
@@ -78,7 +77,7 @@ class Rocketchat extends Trigger {
    * @returns {Object} The message body
    */
   buildMessageBody(text) {
-    const body = {
+    const body: any = {
       channel: this.configuration.channel,
       text: text,
     };

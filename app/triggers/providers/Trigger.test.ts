@@ -1,4 +1,3 @@
-// @ts-nocheck
 import joi from 'joi';
 import * as event from '../../event/index.js';
 import log from '../../log/index.js';

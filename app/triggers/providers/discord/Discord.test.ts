@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Discord from './Discord.js';
 
 // Mock axios

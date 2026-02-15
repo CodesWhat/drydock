@@ -1,4 +1,3 @@
-// @ts-nocheck
 import axios from 'axios';
 
 import Trigger from '../Trigger.js';
@@ -50,7 +49,7 @@ class Http extends Trigger {
   }
 
   async sendHttpRequest(body) {
-    const options = {
+    const options: any = {
       method: this.configuration.method,
       url: this.configuration.url,
       timeout: 30000,
