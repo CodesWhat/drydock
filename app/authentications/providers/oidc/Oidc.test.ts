@@ -1,4 +1,3 @@
-// @ts-nocheck
 import express from 'express';
 import { ClientSecretPost, Configuration } from 'openid-client';
 import * as configuration from '../../../configuration/index.js';
@@ -133,6 +132,11 @@ test('validateConfiguration should throw error when invalid', async () => {
 
 test('getStrategy should return an Authentication strategy', async () => {
   const strategy = oidc.getStrategy(app);
+  expect(strategy.name).toEqual('oidc');
+});
+
+test('getStrategy should return an Authentication strategy when app is omitted', async () => {
+  const strategy = oidc.getStrategy();
   expect(strategy.name).toEqual('oidc');
 });
 

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { BasicStrategy as HttpBasicStrategy } from 'passport-http';
 
 /**
@@ -6,10 +5,20 @@ import { BasicStrategy as HttpBasicStrategy } from 'passport-http';
  * @type {module.MyStrategy}
  */
 class BasicStrategy extends HttpBasicStrategy {
+  constructor(optionsOrVerify?: any, maybeVerify?: (...args: any[]) => void) {
+    const verify =
+      typeof optionsOrVerify === 'function'
+        ? optionsOrVerify
+        : typeof maybeVerify === 'function'
+          ? maybeVerify
+          : (_user: string, _pass: string, done: any) => done(null, false);
+    super(verify);
+  }
+
   authenticate(req) {
     // Already authenticated (thanks to session) => ok
     if (req.isAuthenticated()) {
-      return this.success(req.user);
+      return (this as any).success(req.user);
     }
     return super.authenticate(req);
   }

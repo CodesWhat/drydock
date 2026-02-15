@@ -1,4 +1,3 @@
-// @ts-nocheck
 import passJs from 'pass';
 import Authentication from '../Authentication.js';
 import BasicStrategy from './BasicStrategy.js';

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import BasicStrategy from './BasicStrategy.js';
 
 const basicStrategy = new BasicStrategy({}, () => {});
@@ -26,4 +25,11 @@ test('authenticate should call super.authenticate when no existing session', asy
     },
   });
   expect(fail).toHaveBeenCalled();
+});
+
+test('constructor should default verify callback to deny access when none is provided', async () => {
+  const strategy = new BasicStrategy({});
+  const done = vi.fn();
+  (strategy as any)._verify('user', 'pass', done);
+  expect(done).toHaveBeenCalledWith(null, false);
 });

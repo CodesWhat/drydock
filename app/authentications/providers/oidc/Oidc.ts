@@ -1,4 +1,3 @@
-// @ts-nocheck
 
 import rateLimit from 'express-rate-limit';
 import * as openidClientLibrary from 'openid-client';
@@ -153,6 +152,8 @@ async function saveSessionIfPossible(session: any) {
  * Htpasswd authentication.
  */
 class Oidc extends Authentication {
+  client?: any;
+  logoutUrl?: string;
   openidClient = openidClientLibrary;
 
   getSessionKey() {
@@ -216,7 +217,7 @@ class Oidc extends Authentication {
    * Return passport strategy.
    * @param app
    */
-  getStrategy(app) {
+  getStrategy(app?: any) {
     const oidcLimiter = rateLimit({
       windowMs: 15 * 60 * 1000,
       max: 50,
@@ -224,13 +225,15 @@ class Oidc extends Authentication {
       legacyHeaders: false,
       validate: { xForwardedForHeader: false },
     });
-    app.use(`/auth/oidc/${this.name}`, oidcLimiter);
-    app.get(`/auth/oidc/${this.name}/redirect`, (req, res) => {
-      void this.redirect(req, res);
-    });
-    app.get(`/auth/oidc/${this.name}/cb`, (req, res) => {
-      void this.callback(req, res);
-    });
+    if (app) {
+      app.use(`/auth/oidc/${this.name}`, oidcLimiter);
+      app.get(`/auth/oidc/${this.name}/redirect`, (req, res) => {
+        void this.redirect(req, res);
+      });
+      app.get(`/auth/oidc/${this.name}/cb`, (req, res) => {
+        void this.callback(req, res);
+      });
+    }
     const strategy = new OidcStrategy(
       {
         config: this.client,

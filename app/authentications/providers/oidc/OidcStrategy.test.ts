@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { ClientSecretPost, Configuration } from 'openid-client';
 import log from '../../../log/index.js';
 import OidcStrategy from './OidcStrategy.js';

@@ -1,7 +1,10 @@
-// @ts-nocheck
 import { Strategy } from 'openid-client/passport';
 
 class OidcStrategy extends Strategy {
+  options: any;
+  log: any;
+  verify: any;
+
   /**
    * Constructor.
    * @param options
@@ -24,7 +27,7 @@ class OidcStrategy extends Strategy {
     this.log.debug('Executing oidc strategy');
     if (req.isAuthenticated()) {
       this.log.debug('User is already authenticated');
-      this.success(req.user);
+      (this as any).success(req.user);
     } else {
       // Get bearer token if so
       const authorization = req.headers.authorization || '';
@@ -35,16 +38,16 @@ class OidcStrategy extends Strategy {
         this.verify(accessToken, (err, user) => {
           if (err || !user) {
             this.log.warn('Bearer token is invalid');
-            this.fail(401);
+            (this as any).fail(401);
           } else {
             this.log.debug('Bearer token is valid');
-            this.success(user);
+            (this as any).success(user);
           }
         });
         // Fail if no bearer token
       } else {
         this.log.debug('No bearer token found in the request');
-        this.fail(401);
+        (this as any).fail(401);
       }
     }
   }
