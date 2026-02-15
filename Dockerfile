@@ -26,6 +26,11 @@ RUN apk add --no-cache \
     tzdata \
     && mkdir /store && chown node:node /store
 
+# Install trivy and cosign for security scanning and signature verification
+# hadolint ignore=DL3018,DL3028,DL4006
+RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing cosign \
+    && curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
 # Build stage for backend app
 FROM base AS app-build
 
