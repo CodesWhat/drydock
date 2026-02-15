@@ -68,6 +68,12 @@ export async function init() {
     // Serve ui (resulting from ui built & copied on docker build)
     app.use('/', uiRouter.init());
 
+    // Global JSON error handler — ensures unhandled exceptions return JSON instead of HTML
+    app.use((err, _req, res, _next) => {
+      log.error(`Unhandled error: ${err.message}`);
+      res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+    });
+
     if (configuration.tls.enabled) {
       let serverKey;
       let serverCert;

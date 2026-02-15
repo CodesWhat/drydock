@@ -114,15 +114,24 @@ async function reloadSessionIfPossible(session: any) {
   if (!session || typeof session.reload !== 'function') {
     return;
   }
-  await new Promise((resolve, reject) => {
-    session.reload((err) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(undefined);
-      }
+  try {
+    await new Promise((resolve, reject) => {
+      session.reload((err) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(undefined);
+        }
+      });
     });
-  });
+  } catch {
+    // Corrupt session — regenerate to self-heal (e.g. WUD migration)
+    if (typeof session.regenerate === 'function') {
+      await new Promise((resolve, reject) => {
+        session.regenerate((err) => (err ? reject(err) : resolve(undefined)));
+      });
+    }
+  }
 }
 
 async function saveSessionIfPossible(session: any) {
@@ -255,7 +264,7 @@ class Oidc extends Authentication {
 
     if (!req.session) {
       this.log.warn('Unable to initialize OIDC checks because no session is available');
-      res.status(500).send('Unable to initialize OIDC session');
+      res.status(500).json({ error: 'Unable to initialize OIDC session' });
       return;
     }
     const authUrl = openidClient.buildAuthorizationUrl(this.client, {
@@ -294,7 +303,7 @@ class Oidc extends Authentication {
       }
     } catch (e) {
       this.log.warn(`Unable to persist OIDC session checks (${e.message})`);
-      res.status(500).send('Unable to initialize OIDC session');
+      res.status(500).json({ error: 'Unable to initialize OIDC session' });
       return;
     }
 
@@ -315,7 +324,7 @@ class Oidc extends Authentication {
         this.log.warn(
           `OIDC checks are missing from session for strategy ${sessionKey}; ask user to restart authentication`,
         );
-        res.status(401).send('OIDC session is missing or expired. Please retry authentication.');
+        res.status(401).json({ error: 'OIDC session is missing or expired. Please retry authentication.' });
         return;
       }
 
@@ -323,7 +332,7 @@ class Oidc extends Authentication {
       const callbackState = callbackUrl.searchParams.get('state');
       if (!isValidStateToken(callbackState)) {
         this.log.warn(`OIDC callback is missing state parameter for strategy ${sessionKey}`);
-        res.status(401).send('OIDC callback is missing state. Please retry authentication.');
+        res.status(401).json({ error: 'OIDC callback is missing state. Please retry authentication.' });
         return;
       }
 
@@ -332,7 +341,7 @@ class Oidc extends Authentication {
         this.log.warn(`OIDC callback state not found in pending checks for strategy ${sessionKey}`);
         res
           .status(401)
-          .send('OIDC session state mismatch or expired. Please retry authentication.');
+          .json({ error: 'OIDC session state mismatch or expired. Please retry authentication.' });
         return;
       }
       const oidcCheck = pendingChecks[callbackState];
@@ -342,7 +351,7 @@ class Oidc extends Authentication {
         );
         res
           .status(401)
-          .send('OIDC session state mismatch or expired. Please retry authentication.');
+          .json({ error: 'OIDC session state mismatch or expired. Please retry authentication.' });
         return;
       }
 
