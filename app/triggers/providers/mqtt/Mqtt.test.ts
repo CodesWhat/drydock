@@ -1,4 +1,3 @@
-// @ts-nocheck
 import joi from 'joi';
 import mqttClient from 'mqtt';
 import {

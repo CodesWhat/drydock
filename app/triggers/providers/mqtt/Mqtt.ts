@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import mqtt from 'mqtt';
@@ -30,6 +29,9 @@ function getContainerTopic({ baseTopic, container }) {
  * MQTT Trigger implementation
  */
 class Mqtt extends Trigger {
+  client: any;
+  hass?: Hass;
+
   handleContainerEvent(container) {
     void this.trigger(container).catch((error) => {
       this.log.warn(`Error (${error.message})`);
@@ -92,7 +94,7 @@ class Mqtt extends Trigger {
     // Enforce simple mode
     this.configuration.mode = 'simple';
 
-    const options = {
+    const options: any = {
       clientId: this.configuration.clientid,
     };
     if (this.configuration.user) {

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from 'node:fs/promises';
 import yaml from 'yaml';
 import { getState } from '../../../registry/index.js';

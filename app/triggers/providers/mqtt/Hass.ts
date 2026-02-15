@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { getVersion } from '../../../configuration/index.js';
 import {
   registerContainerAdded,
@@ -55,6 +54,10 @@ function sanitizeIcon(icon) {
 }
 
 class Hass {
+  client: any;
+  configuration: any;
+  log: any;
+
   constructor({ client, configuration, log }) {
     this.client = client;
     this.configuration = configuration;
@@ -323,7 +326,21 @@ class Hass {
    * @param options
    * @returns {Promise<*>}
    */
-  async publishDiscoveryMessage({ discoveryTopic, stateTopic, kind, name, icon, options = {} }) {
+  async publishDiscoveryMessage({
+    discoveryTopic,
+    stateTopic,
+    kind,
+    name,
+    icon,
+    options = {},
+  }: {
+    discoveryTopic: string;
+    stateTopic: string;
+    kind: string;
+    name?: string;
+    icon?: string;
+    options?: Record<string, any>;
+  }) {
     const entityId = getHassEntityId(stateTopic);
     return this.client.publish(
       discoveryTopic,

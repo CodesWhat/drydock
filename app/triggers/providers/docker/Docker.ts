@@ -1,4 +1,3 @@
-// @ts-nocheck
 import crypto from 'node:crypto';
 import parse from 'parse-docker-image-name';
 import { getSecurityConfiguration } from '../../../configuration/index.js';
@@ -125,7 +124,7 @@ class Docker extends Trigger {
    * @returns {*}
    */
 
-  getWatcher(container) {
+  getWatcher(container): any {
     return getState().watcher[`docker.${container.watcher}`];
   }
 
@@ -521,11 +520,7 @@ class Docker extends Trigger {
    * the previous container was running.
    */
   async recreateContainer(dockerApi, currentContainerSpec, newImage, container, logContainer) {
-    const containerToCreateInspect = this.cloneContainer(
-      currentContainerSpec,
-      newImage,
-      logContainer,
-    );
+    const containerToCreateInspect = this.cloneContainer(currentContainerSpec, newImage);
 
     const newContainer = await this.createContainer(
       dockerApi,
@@ -1174,7 +1169,7 @@ class Docker extends Trigger {
    * @param containers
    * @returns {Promise<unknown[]>}
    */
-  async triggerBatch(containers) {
+  async triggerBatch(containers): Promise<any> {
     return Promise.all(containers.map((container) => this.trigger(container)));
   }
 }
