@@ -7,6 +7,7 @@ import {
   type SecuritySeverity,
 } from '../configuration/index.js';
 import log from '../log/index.js';
+import { sanitizeLogParam } from '../log/sanitize.js';
 
 export { SECURITY_SEVERITIES, SECURITY_SBOM_FORMATS, type SecuritySeverity, type SecuritySbomFormat };
 export type SecurityScanStatus = 'passed' | 'blocked' | 'error';
@@ -594,7 +595,7 @@ export async function generateImageSbom(
 
   if (generatedFormats.length === 0) {
     const errorMessage = errors.join('; ') || 'SBOM generation failed';
-    logSecurity.warn(errorMessage);
+    logSecurity.warn(sanitizeLogParam(errorMessage));
     return mapToSbomErrorResult(options.image, formats, errorMessage);
   }
 
@@ -609,9 +610,9 @@ export async function generateImageSbom(
 
   if (errors.length > 0) {
     sbomResult.error = errors.join('; ');
-    logSecurity.warn(`SBOM generation partially failed (${sbomResult.error})`);
+    logSecurity.warn(`SBOM generation partially failed (${sanitizeLogParam(sbomResult.error)})`);
   } else {
-    logSecurity.info(`SBOM generation finished (${generatedFormats.join(', ')})`);
+    logSecurity.info(`SBOM generation finished (${sanitizeLogParam(generatedFormats.join(', '))})`);
   }
 
   return sbomResult;
