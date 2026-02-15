@@ -1,4 +1,3 @@
-// @ts-nocheck
 import express from 'express';
 import healthcheck from 'express-healthcheck';
 import nocache from 'nocache';

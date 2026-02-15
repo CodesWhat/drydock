@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Mock express modules
 vi.mock('express', () => ({
   default: {

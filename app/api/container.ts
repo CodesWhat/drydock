@@ -1,4 +1,3 @@
-// @ts-nocheck
 import express from 'express';
 import nocache from 'nocache';
 import rateLimit from 'express-rate-limit';
@@ -22,6 +21,18 @@ import { broadcastScanCompleted, broadcastScanStarted } from './sse.js';
 const log = logger.child({ component: 'container' });
 
 const router = express.Router();
+
+interface UpdatePolicy {
+  skipTags?: string[];
+  skipDigests?: string[];
+  snoozeUntil?: string;
+}
+
+interface PolicyActionPayload {
+  snoozeUntil?: string;
+  days?: number | string;
+  [key: string]: unknown;
+}
 
 /**
  * Return registered watchers.
@@ -52,8 +63,8 @@ function uniqStrings(values = []) {
   return [...new Set(values.filter((value) => typeof value === 'string'))];
 }
 
-function normalizeUpdatePolicy(updatePolicy = {}) {
-  const normalizedPolicy = {};
+function normalizeUpdatePolicy(updatePolicy: UpdatePolicy = {}) {
+  const normalizedPolicy: UpdatePolicy = {};
 
   if (Array.isArray(updatePolicy.skipTags)) {
     const skipTags = uniqStrings(updatePolicy.skipTags);
@@ -89,7 +100,7 @@ function getCurrentUpdateValue(container, kind) {
   return undefined;
 }
 
-function getSnoozeUntilFromActionPayload(payload = {}) {
+function getSnoozeUntilFromActionPayload(payload: PolicyActionPayload = {}) {
   if (payload.snoozeUntil) {
     const customDate = new Date(payload.snoozeUntil);
     if (Number.isNaN(customDate.getTime())) {
@@ -482,7 +493,7 @@ async function watchContainer(req, res) {
   if (container.agent) {
     watcherId = `${container.agent}.${watcherId}`;
   }
-  const watcher = getWatchers()[watcherId];
+      const watcher = getWatchers()[watcherId] as any;
   if (!watcher) {
     res.status(500).json({
       error: `No provider found for container ${id} and provider ${watcherId}`,
@@ -518,7 +529,7 @@ async function watchContainer(req, res) {
  * @param req
  * @param res
  */
-function applySkipCurrentAction(container, updatePolicy) {
+function applySkipCurrentAction(container, updatePolicy: UpdatePolicy) {
   const updateKind = container.updateKind?.kind;
   const updateValue = getCurrentUpdateValue(container, updateKind);
   if (!['tag', 'digest'].includes(updateKind)) {
@@ -535,7 +546,12 @@ function applySkipCurrentAction(container, updatePolicy) {
   return { policy: updatePolicy };
 }
 
-function applyPolicyAction(action, container, updatePolicy, body = {}) {
+function applyPolicyAction(
+  action,
+  container,
+  updatePolicy: UpdatePolicy,
+  body: PolicyActionPayload = {},
+) {
   switch (action) {
     case 'skip-current':
       return applySkipCurrentAction(container, updatePolicy);
@@ -572,7 +588,7 @@ function patchContainerUpdatePolicy(req, res) {
   }
 
   try {
-    let updatePolicy = normalizeUpdatePolicy(container.updatePolicy || {});
+    let updatePolicy: UpdatePolicy = normalizeUpdatePolicy(container.updatePolicy || {});
     const result = applyPolicyAction(action, container, updatePolicy, req.body);
 
     if (result.error) {
@@ -645,7 +661,7 @@ async function getContainerLogs(req, res) {
   }
 
   const watcherId = `docker.${container.watcher}`;
-  const watcher = getWatchers()[watcherId];
+  const watcher = getWatchers()[watcherId] as any;
   if (!watcher) {
     res.status(500).json({
       error: `No watcher found for container ${id}`,

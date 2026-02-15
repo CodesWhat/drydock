@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { mockApp, mockFs, mockHttps, mockGetServerConfiguration } = vi.hoisted(() => ({
   mockApp: {
     disable: vi.fn(),

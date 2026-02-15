@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Mock the store module
 vi.mock('../store/app', () => ({
   getAppInfos: vi.fn(() => ({

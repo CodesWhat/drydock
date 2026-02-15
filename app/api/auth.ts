@@ -1,4 +1,3 @@
-// @ts-nocheck
 
 import ConnectLoki from 'connect-loki';
 import express from 'express';
@@ -18,7 +17,7 @@ import * as store from '../store/index.js';
 const router = express.Router();
 
 // The configured strategy ids.
-const STRATEGY_IDS = [];
+const STRATEGY_IDS: string[] = [];
 
 // Constant DD namespace for uuid v5 bound sessions.
 const DD_NAMESPACE = 'dee41e92-5fc4-460e-beec-528c9ea7d760';
@@ -88,8 +87,8 @@ function useStrategy(authentication, app) {
 function getUniqueStrategies() {
   const strategies = Object.values(registry.getState().authentication).map((authentication) =>
     authentication.getStrategyDescription(),
-  );
-  const uniqueStrategies = [];
+  ) as Array<{ type: string; name: string; logoutUrl?: string }>;
+  const uniqueStrategies: Array<{ type: string; name: string; logoutUrl?: string }> = [];
   strategies.forEach((strategy) => {
     if (
       !uniqueStrategies.some((item) => item.type === strategy.type && item.name === strategy.name)
@@ -186,7 +185,7 @@ export function init(app) {
   });
 
   passport.deserializeUser((user, done) => {
-    done(null, JSON.parse(user));
+    done(null, JSON.parse(String(user)));
   });
 
   const authLimiter = rateLimit({

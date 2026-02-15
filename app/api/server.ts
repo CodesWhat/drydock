@@ -1,4 +1,3 @@
-// @ts-nocheck
 import express from 'express';
 import nocache from 'nocache';
 import { getServerConfiguration, getWebhookConfiguration } from '../configuration/index.js';
