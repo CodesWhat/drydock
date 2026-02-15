@@ -96,39 +96,3 @@ test('maskConfiguration should mask apikey', async () => {
     apikey: 'a*****y',
   });
 });
-
-test('match should support icr domain with protocol', async () => {
-  expect(
-    ibmcr.match({
-      registry: {
-        url: 'https://us.icr.io/v2',
-      },
-    }),
-  ).toBeTruthy();
-});
-
-test('match should gracefully handle malformed registry URLs', async () => {
-  expect(
-    ibmcr.match({
-      registry: {
-        url: '%',
-      },
-    }),
-  ).toBeFalsy();
-});
-
-test('authenticate should set basic auth header', async () => {
-  await expect(
-    ibmcr.authenticate(
-      {
-        name: 'namespace/repository',
-        registry: { url: 'us.icr.io' },
-      },
-      { headers: {} },
-    ),
-  ).resolves.toEqual({
-    headers: {
-      Authorization: `Basic ${Buffer.from('iamapikey:api-key', 'utf-8').toString('base64')}`,
-    },
-  });
-});

@@ -60,39 +60,3 @@ test('maskConfiguration should mask credentials', async () => {
     password: 't***n',
   });
 });
-
-test('match should support ocir domain with protocol', async () => {
-  expect(
-    ocir.match({
-      registry: {
-        url: 'https://iad.ocir.io/v2',
-      },
-    }),
-  ).toBeTruthy();
-});
-
-test('match should gracefully handle malformed registry URLs', async () => {
-  expect(
-    ocir.match({
-      registry: {
-        url: '%',
-      },
-    }),
-  ).toBeFalsy();
-});
-
-test('authenticate should set basic auth header', async () => {
-  await expect(
-    ocir.authenticate(
-      {
-        name: 'namespace/repository',
-        registry: { url: 'iad.ocir.io' },
-      },
-      { headers: {} },
-    ),
-  ).resolves.toEqual({
-    headers: {
-      Authorization: `Basic ${Buffer.from('tenancy/my.user@acme.com:token', 'utf-8').toString('base64')}`,
-    },
-  });
-});

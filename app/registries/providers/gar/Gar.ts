@@ -1,4 +1,3 @@
-// @ts-nocheck
 import axios from 'axios';
 import type { ContainerImage } from '../../../model/container.js';
 import BaseRegistry from '../../BaseRegistry.js';

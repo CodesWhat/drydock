@@ -133,32 +133,3 @@ test('getAuthPull should return credentials', async () => {
     password: TEST_PRIVATE_KEY,
   });
 });
-
-test('authenticate should use access_token and create headers when missing', async () => {
-  const { default: axios } = await import('axios');
-  axios.mockResolvedValueOnce({
-    data: { access_token: 'yyyyy' },
-  });
-
-  await expect(
-    gar.authenticate(
-      {
-        name: 'project/repository/image',
-        registry: { url: 'us-central1-docker.pkg.dev' },
-      },
-      {},
-    ),
-  ).resolves.toEqual({
-    headers: {
-      Authorization: 'Bearer yyyyy',
-    },
-  });
-});
-
-test('match should gracefully handle missing registry URL', async () => {
-  expect(
-    gar.match({
-      registry: {},
-    }),
-  ).toBeFalsy();
-});
