@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { fc, test as fcTest } from '@fast-check/vitest';
 import { describe, expect, it } from 'vitest';
 import { diff, isGreater, parse, transform } from './index.js';
