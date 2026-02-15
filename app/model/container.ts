@@ -165,7 +165,7 @@ const schema = joi.object({
       image: joi.string().required(),
       generatedAt: joi.string().isoDate().required(),
       status: joi.string().valid('generated', 'error').required(),
-      formats: joi.array().items(joi.string().valid('spdx-json', 'cyclonedx')).required(),
+      formats: joi.array().items(joi.string().valid('spdx-json', 'cyclonedx-json')).required(),
       documents: joi.object().required(),
       error: joi.string(),
     }),

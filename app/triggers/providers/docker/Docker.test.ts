@@ -901,17 +901,17 @@ test('trigger should generate sbom when enabled', async () => {
     createSecurityConfiguration({
       sbom: {
         enabled: true,
-        formats: ['spdx-json', 'cyclonedx'],
+        formats: ['spdx-json', 'cyclonedx-json'],
       },
     }),
   );
   mockScanImageForVulnerabilities.mockResolvedValue(createSecurityScanResult());
   mockGenerateImageSbom.mockResolvedValue(
     createSbomResult({
-      formats: ['spdx-json', 'cyclonedx'],
+      formats: ['spdx-json', 'cyclonedx-json'],
       documents: {
         'spdx-json': { SPDXID: 'SPDXRef-DOCUMENT' },
-        cyclonedx: { bomFormat: 'CycloneDX' },
+        'cyclonedx-json': { bomFormat: 'CycloneDX' },
       },
     }),
   );
@@ -921,7 +921,7 @@ test('trigger should generate sbom when enabled', async () => {
 
   expect(mockGenerateImageSbom).toHaveBeenCalledWith(
     expect.objectContaining({
-      formats: ['spdx-json', 'cyclonedx'],
+      formats: ['spdx-json', 'cyclonedx-json'],
     }),
   );
 });
