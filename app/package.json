@@ -21,6 +21,7 @@
     "@slack/web-api": "^7.13.0",
     "axios": "1.13.5",
     "capitalize": "2.0.4",
+    "change-case": "^5.4.4",
     "connect-loki": "1.2.0",
     "cors": "2.8.6",
     "dockerode": "4.0.9",
@@ -53,7 +54,6 @@
     "re2-wasm": "^1.0.2",
     "semver": "7.7.4",
     "set-value": "4.1.0",
-    "snake-case": "^4.0.0",
     "sort-es": "1.7.18",
     "uuid": "^13.0.0",
     "yaml": "2.8.2"
@@ -75,7 +75,6 @@
     "@types/nodemailer": "^7.0.9",
     "@types/passport": "^1.0.17",
     "@types/semver": "^7.7.1",
-    "@types/yaml": "^1.9.7",
     "@vitest/coverage-v8": "^4.0.18",
     "fast-check": "^4.5.3",
     "nodemon": "3.1.11",

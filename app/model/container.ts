@@ -1,6 +1,6 @@
 import { flatten as flat } from 'flat';
 import joi from 'joi';
-import { snakeCase } from 'snake-case';
+import { snakeCase } from 'change-case';
 import type {
   ContainerSecuritySbom,
   ContainerSecurityScan,
