@@ -122,3 +122,7 @@ screenshots/
 
 # SonarCloud scanner working directory
 .scannerwork/
+
+# Docs content (local editing, copied to drydock-website)
+docs/content/
+docs/assets/
