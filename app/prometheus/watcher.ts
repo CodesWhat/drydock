@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Counter, Gauge, register } from 'prom-client';
 
 let watchContainerGauge;

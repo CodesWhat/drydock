@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as prometheus from './index.js';
 
 vi.mock('../configuration', () => ({

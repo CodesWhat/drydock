@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Gauge, register } from 'prom-client';
 import log from '../log/index.js';
 import { flatten } from '../model/container.js';
