@@ -1,4 +1,3 @@
-// @ts-nocheck
 import log from './index.js';
 
 // Mock the configuration module

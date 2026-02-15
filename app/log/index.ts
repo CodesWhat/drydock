@@ -1,4 +1,3 @@
-// @ts-nocheck
 
 import { Writable } from 'node:stream';
 import pino from 'pino';
