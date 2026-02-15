@@ -1,4 +1,3 @@
-// @ts-nocheck
 
 import * as agentServer from './agent/api/index.js';
 import * as agentManager from './agent/index.js';
