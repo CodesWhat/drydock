@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from 'node:fs';
 import joi from 'joi';
 import setValue from 'set-value';
@@ -18,8 +17,11 @@ export type SecuritySbomFormat = (typeof SECURITY_SBOM_FORMAT_VALUES)[number];
  * @param prop
  * @returns {{}}
  */
-export function get(prop, env = process.env) {
-  const object = {};
+export function get(
+  prop: string,
+  env: Record<string, string | undefined> = process.env,
+): Record<string, any> {
+  const object: Record<string, any> = {};
   const envVarPattern = prop.replaceAll('.', '_').toUpperCase();
   const matchingEnvVars = Object.keys(env).filter((envKey) => envKey.startsWith(envVarPattern));
   matchingEnvVars.forEach((matchingEnvVar) => {
@@ -35,7 +37,7 @@ export function get(prop, env = process.env) {
  * Lookup external secrets defined in files.
  * @param ddEnvVars
  */
-export function replaceSecrets(ddEnvVars) {
+export function replaceSecrets(ddEnvVars: Record<string, string | undefined>) {
   const secretFileEnvVars = Object.keys(ddEnvVars).filter((ddEnvVar) =>
     ddEnvVar.toUpperCase().endsWith(VAR_FILE_SUFFIX),
   );
@@ -51,7 +53,7 @@ export function replaceSecrets(ddEnvVars) {
 }
 
 // 1. Get a copy of all dd-related env vars (DD_ primary, WUD_ legacy fallback)
-export const ddEnvVars = {};
+export const ddEnvVars: Record<string, string | undefined> = {};
 
 // First, collect legacy WUD_ vars and remap to DD_ keys
 Object.keys(process.env)

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as configuration from './index.js';
