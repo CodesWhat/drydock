@@ -14,7 +14,8 @@ ENV DD_VERSION=$DD_VERSION
 
 HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -z \"$DD_SERVER_ENABLED\" ] || [ \"$DD_SERVER_ENABLED\" = 'true' ]; then curl --fail http://localhost:${DD_SERVER_PORT:-3000}/health || exit 1; else exit 0; fi"]
 
-# hadolint ignore=DL3018
+# Install system packages, trivy, and cosign
+# hadolint ignore=DL3018,DL3028,DL4006
 RUN apk add --no-cache \
     bash \
     curl \
@@ -24,12 +25,9 @@ RUN apk add --no-cache \
     su-exec \
     tini \
     tzdata \
+    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing cosign \
+    && curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin \
     && mkdir /store && chown node:node /store
-
-# Install trivy and cosign for security scanning and signature verification
-# hadolint ignore=DL3018,DL3028,DL4006
-RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing cosign \
-    && curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
 
 # Build stage for backend app
 FROM base AS app-build

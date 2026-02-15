@@ -915,9 +915,7 @@
               },
               "thresholds": {
                 "mode": "absolute",
-                "steps": [
-                  { "color": "green", "value": null }
-                ]
+                "steps": [{ "color": "green", "value": null }]
               },
               "unit": "reqpm"
             },
@@ -980,9 +978,7 @@
               },
               "thresholds": {
                 "mode": "absolute",
-                "steps": [
-                  { "color": "green", "value": null }
-                ]
+                "steps": [{ "color": "green", "value": null }]
               }
             },
             "overrides": []
@@ -1022,17 +1018,13 @@
               "mappings": [],
               "thresholds": {
                 "mode": "absolute",
-                "steps": [
-                  { "color": "green", "value": null }
-                ]
+                "steps": [{ "color": "green", "value": null }]
               }
             },
             "overrides": [
               {
                 "matcher": { "id": "byName", "options": "Value" },
-                "properties": [
-                  { "id": "displayName", "value": "Container Count" }
-                ]
+                "properties": [{ "id": "displayName", "value": "Container Count" }]
               }
             ]
           },
@@ -1047,9 +1039,7 @@
               "show": true
             },
             "showHeader": true,
-            "sortBy": [
-              { "desc": true, "displayName": "Container Count" }
-            ]
+            "sortBy": [{ "desc": true, "displayName": "Container Count" }]
           },
           "pluginVersion": "11.5.0",
           "targets": [
@@ -1079,9 +1069,7 @@
               "id": "sortBy",
               "options": {
                 "fields": {},
-                "sort": [
-                  { "desc": true, "field": "Container Count" }
-                ]
+                "sort": [{ "desc": true, "field": "Container Count" }]
               }
             }
           ],
