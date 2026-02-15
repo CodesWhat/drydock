@@ -47,17 +47,17 @@
 
 ---
 
-- [Quick Start](#-quick-start)
-- [Screenshots](#-screenshots)
-- [Features](#-features)
-- [Update Guard](#%EF%B8%8F-update-guard)
-- [Supported Registries](#-supported-registries)
-- [Supported Triggers](#-supported-triggers)
-- [Authentication](#-authentication)
-- [Migrating from WUD](#-migrating-from-wud)
-- [Roadmap](#%EF%B8%8F-roadmap)
-- [Documentation](#-documentation)
-- [Star History](#-star-history)
+- [Quick Start](#quick-start)
+- [Screenshots](#screenshots)
+- [Features](#features)
+- [Update Guard](#update-guard)
+- [Supported Registries](#supported-registries)
+- [Supported Triggers](#supported-triggers)
+- [Authentication](#authentication)
+- [Migrating from WUD](#migrating-from-wud)
+- [Roadmap](#roadmap)
+- [Documentation](#documentation)
+- [Star History](#star-history)
 
 <br>
 

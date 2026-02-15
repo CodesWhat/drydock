@@ -10,6 +10,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **OCIR (Oracle Cloud Infrastructure Registry)** — New registry provider for Oracle Cloud Infrastructure Container Registry.
+- **IBMCR (IBM Cloud Container Registry)** — New registry provider for IBM Cloud Container Registry with API key support.
+- **Alicr (Alibaba Cloud Container Registry)** — New registry provider for Alibaba Cloud Container Registry.
+- **GAR (Google Artifact Registry)** — New registry provider for Google Artifact Registry.
+- **Harbor registry provider** — New registry provider for Harbor container registries.
+- **JFrog Artifactory registry provider** — New registry provider for JFrog Artifactory container registries.
+- **Sonatype Nexus registry provider** — New registry provider for Sonatype Nexus container registries.
+- **Shared `SelfHostedBasic` base class** — Common base class for self-hosted registries (Harbor, Artifactory, Nexus) to reduce duplication.
+- **Mattermost notification trigger** — New trigger provider for Mattermost webhook notifications.
+- **Microsoft Teams notification trigger** — New trigger provider for Microsoft Teams notifications via Workflow webhook.
+- **Matrix notification trigger** — New trigger provider for Matrix protocol notifications.
+- **Google Chat notification trigger** — New trigger provider for Google Chat space webhook notifications.
+- **Buy Me a Coffee funding option** — Added Buy Me a Coffee as a funding option.
+
+### Changed
+
+- **Funding badges moved to README footer** — Moved funding badges (Ko-fi, Buy Me a Coffee, GitHub Sponsors) from header to footer.
+
 ## [1.3.3] — 2026-02-16
 
 ### Fixed
