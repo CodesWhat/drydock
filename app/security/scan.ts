@@ -95,7 +95,7 @@ interface TrivyRawOutput {
   Results?: TrivyRawResult[];
 }
 
-const MAX_TRIVY_OUTPUT_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_TRIVY_OUTPUT_BYTES = 50 * 1024 * 1024; // 50 MB
 const MAX_COSIGN_OUTPUT_BYTES = 2 * 1024 * 1024; // 2 MB
 const MAX_STORED_VULNERABILITIES = 500;
 const COSIGN_UNVERIFIED_PATTERNS = [
@@ -104,6 +104,27 @@ const COSIGN_UNVERIFIED_PATTERNS = [
   'signature verification failed',
   'invalid signature',
 ];
+
+let trivyQueue: Promise<void> = Promise.resolve();
+
+function enqueueTrivy<T>(operation: () => Promise<T>): Promise<T> {
+  const previousTail = trivyQueue;
+  let resolve: () => void;
+  const gate = new Promise<void>((r) => { resolve = r; });
+  trivyQueue = gate;
+  return previousTail.catch(() => undefined).then(async () => {
+    try {
+      return await operation();
+    } finally {
+      resolve!();
+    }
+  });
+}
+
+/** @internal — test-only reset */
+export function _resetTrivyQueueForTesting(): void {
+  trivyQueue = Promise.resolve();
+}
 
 function createEmptySummary(): ContainerVulnerabilitySummary {
   return {
@@ -254,16 +275,18 @@ function runTrivyVulnerabilityCommand(
   options: ScanImageOptions,
   configuration: ReturnType<typeof getSecurityConfiguration>,
 ): Promise<string> {
-  const trivyCommand = configuration.trivy.command || 'trivy';
-  const args = [...buildTrivyArgs(configuration, 'json'), options.image];
+  return enqueueTrivy(() => {
+    const trivyCommand = configuration.trivy.command || 'trivy';
+    const args = [...buildTrivyArgs(configuration, 'json'), options.image];
 
-  return runCommand({
-    command: trivyCommand,
-    args,
-    timeout: configuration.trivy.timeout,
-    maxBuffer: MAX_TRIVY_OUTPUT_BYTES,
-    env: buildTrivyEnvironment(options),
-    commandName: 'Trivy',
+    return runCommand({
+      command: trivyCommand,
+      args,
+      timeout: configuration.trivy.timeout,
+      maxBuffer: MAX_TRIVY_OUTPUT_BYTES,
+      env: buildTrivyEnvironment(options),
+      commandName: 'Trivy',
+    });
   });
 }
 
@@ -272,16 +295,18 @@ function runTrivySbomCommand(
   configuration: ReturnType<typeof getSecurityConfiguration>,
   format: SecuritySbomFormat,
 ): Promise<string> {
-  const trivyCommand = configuration.trivy.command || 'trivy';
-  const args = [...buildTrivyArgs(configuration, format), options.image];
+  return enqueueTrivy(() => {
+    const trivyCommand = configuration.trivy.command || 'trivy';
+    const args = [...buildTrivyArgs(configuration, format), options.image];
 
-  return runCommand({
-    command: trivyCommand,
-    args,
-    timeout: configuration.trivy.timeout,
-    maxBuffer: MAX_TRIVY_OUTPUT_BYTES,
-    env: buildTrivyEnvironment(options),
-    commandName: 'Trivy',
+    return runCommand({
+      command: trivyCommand,
+      args,
+      timeout: configuration.trivy.timeout,
+      maxBuffer: MAX_TRIVY_OUTPUT_BYTES,
+      env: buildTrivyEnvironment(options),
+      commandName: 'Trivy',
+    });
   });
 }
 

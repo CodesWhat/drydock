@@ -33,7 +33,7 @@ vi.mock('node:child_process', async () => {
   };
 });
 
-import { generateImageSbom, scanImageForVulnerabilities, verifyImageSignature } from './scan.js';
+import { _resetTrivyQueueForTesting, generateImageSbom, scanImageForVulnerabilities, verifyImageSignature } from './scan.js';
 
 function createEnabledConfiguration() {
   return {
@@ -65,6 +65,7 @@ function createEnabledConfiguration() {
 beforeEach(() => {
   vi.resetAllMocks();
   childProcessControl.execFileImpl = null;
+  _resetTrivyQueueForTesting();
   mockGetSecurityConfiguration.mockReturnValue(createEnabledConfiguration());
 });
 
@@ -507,4 +508,49 @@ test('scanImageForVulnerabilities should pass json format through unchanged in t
     expect.any(Object),
     expect.any(Function),
   );
+});
+
+test('trivy queue should serialize concurrent scan invocations', async () => {
+  const order: string[] = [];
+
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    const index = order.filter((e) => e.startsWith('start-')).length;
+    order.push(`start-${index}`);
+    setTimeout(() => {
+      order.push(`end-${index}`);
+      callback(null, JSON.stringify({ Results: [] }), '');
+    }, 50);
+    return { exitCode: 0 };
+  };
+
+  await Promise.all([
+    scanImageForVulnerabilities({ image: 'img:1' }),
+    scanImageForVulnerabilities({ image: 'img:2' }),
+  ]);
+
+  expect(order).toEqual(['start-0', 'end-0', 'start-1', 'end-1']);
+});
+
+test('trivy queue should recover after a failed scan', async () => {
+  let callCount = 0;
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    callCount += 1;
+    if (callCount === 1) {
+      const error = new Error('cache locked') as NodeJS.ErrnoException;
+      error.code = '1';
+      callback(error, '', 'cache locked');
+      return { exitCode: 1 };
+    }
+    callback(null, JSON.stringify({ Results: [] }), '');
+    return { exitCode: 0 };
+  };
+
+  const [first, second] = await Promise.all([
+    scanImageForVulnerabilities({ image: 'img:1' }),
+    scanImageForVulnerabilities({ image: 'img:2' }),
+  ]);
+
+  expect(first.status).toBe('error');
+  expect(first.error).toContain('cache locked');
+  expect(second.status).toBe('passed');
 });

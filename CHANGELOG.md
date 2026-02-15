@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **OIDC session resilience for WUD migrations** — Corrupt or incompatible session data (e.g. from WUD's connect-loki store) no longer causes 500 errors. Sessions that fail to reload are automatically regenerated. All OIDC error responses now return JSON instead of plain text, preventing frontend parse errors. Added a global Express error handler to ensure unhandled exceptions return JSON.
 - **Disabled X-Powered-By header** — Removed the default Express `X-Powered-By` header from both the main API and agent API servers to reduce information exposure.
+- **Trivy scan queue** — Serialized concurrent Trivy invocations to prevent `"cache may be in use by another process"` errors when multiple containers are scanned simultaneously (batch triggers, on-demand scans, SBOM generation).
 
 ### Added
 
