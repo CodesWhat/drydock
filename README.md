@@ -50,7 +50,7 @@
 - [Quick Start](#quick-start)
 - [Screenshots](#screenshots)
 - [Features](#features)
-- [Update Guard](#update-guard)
+- [🥊 Update Bouncer](#update-bouncer)
 - [Supported Registries](#supported-registries)
 - [Supported Triggers](#supported-triggers)
 - [Authentication](#authentication)
@@ -201,7 +201,7 @@ Auto-detect running containers, check for image updates across 22 registry provi
 
 <br>
 
-<h3 align="center" id="update-guard">🛡️ Update Guard</h3>
+<h3 align="center" id="update-bouncer">🥊 Update Bouncer</h3>
 
 ---
 
@@ -400,7 +400,7 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Swap the image and 
 
 | Version | Theme | Highlights |
 | --- | --- | --- |
-| **v1.3.x** ✅ | Security & Reliability | Trivy scanning, Update Guard, SBOM generation, image signing, on-demand scan, self-update fix, stale-digest fix, registry auth fixes, timeout hardening |
+| **v1.3.x** ✅ | Security & Reliability | Trivy scanning, 🥊 Update Bouncer, SBOM generation, image signing, on-demand scan, self-update fix, stale-digest fix, registry auth fixes, timeout hardening |
 | **v1.4.0** | UI Modernization | PrimeVue migration, Composition API, Vite cleanup, font personalization, Docker event-stream resilience, HTTP auth schema, non-self-update rollback, UI timing guards |
 | **v1.5.0** | Observability | Real-time log viewer, resource monitoring, registry webhooks, notification templates, release notes, MS Teams & Matrix |
 | **v1.6.0** | Dashboard & UX | Clickable port links, Traefik label integration, image prune, JSON/CSV export, container tags, exit code explanations, drag-and-drop columns |

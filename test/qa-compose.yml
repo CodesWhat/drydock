@@ -42,7 +42,7 @@ services:
       - DD_AGENT_PRODUCTION_HOST=10.0.0.100
       - DD_AGENT_PRODUCTION_PORT=3000
       - DD_AGENT_PRODUCTION_SECRET=production-shared-secret-key
-      # --- Update Guard (security scanning) ---
+      # --- 🥊 Update Bouncer (security scanning) ---
       - DD_SECURITY_SCANNER=trivy
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL
       - DD_SECURITY_SBOM_ENABLED=true
