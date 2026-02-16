@@ -43,6 +43,7 @@ exclude_patterns = [
   ".qlty/logs/**",
   ".qlty/results/**",
   ".qlty/plugin_cachedir/**",
+  "prototypes/**/style.css",
 ]
 
 test_patterns = [
