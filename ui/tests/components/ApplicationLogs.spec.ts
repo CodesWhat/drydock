@@ -33,9 +33,14 @@ const mockEntries = [
 
 describe('ApplicationLogs', () => {
   beforeEach(() => {
+    vi.useRealTimers();
     mockGetLogEntries.mockReset();
     mockGetAgents.mockReset();
     mockGetAgents.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('shows loading state initially', async () => {
@@ -428,6 +433,73 @@ describe('ApplicationLogs', () => {
       expect(wrapper.vm.loading).toBe(true);
       expect(wrapper.vm.entries.length).toBeGreaterThan(0);
       expect(wrapper.find('.v-progress-circular').exists()).toBe(false);
+      wrapper.unmount();
+    });
+  });
+
+  describe('auto-fetch behavior', () => {
+    it('auto-fetches logs on interval', async () => {
+      vi.useFakeTimers();
+      mockGetLogEntries.mockResolvedValue(mockEntries);
+
+      const wrapper = mount(ApplicationLogs);
+      await flushPromises();
+
+      expect(mockGetLogEntries).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      await flushPromises();
+
+      expect(mockGetLogEntries).toHaveBeenCalledTimes(2);
+      wrapper.unmount();
+    });
+
+    it('stops auto-fetching when interval is disabled', async () => {
+      vi.useFakeTimers();
+      mockGetLogEntries.mockResolvedValue(mockEntries);
+
+      const wrapper = mount(ApplicationLogs);
+      await flushPromises();
+
+      expect(mockGetLogEntries).toHaveBeenCalledTimes(1);
+
+      wrapper.vm.autoFetchSeconds = 0;
+      await wrapper.vm.$nextTick();
+
+      await vi.advanceTimersByTimeAsync(10000);
+      await flushPromises();
+
+      expect(mockGetLogEntries).toHaveBeenCalledTimes(1);
+      wrapper.unmount();
+    });
+  });
+
+  describe('scroll lock behavior', () => {
+    it('locks and unlocks auto-scroll based on scroll position', async () => {
+      mockGetLogEntries.mockResolvedValue(mockEntries);
+
+      const wrapper = mount(ApplicationLogs);
+      await flushPromises();
+
+      const terminal = wrapper.find('section');
+      expect(terminal.exists()).toBe(true);
+
+      Object.defineProperty(terminal.element, 'scrollHeight', {
+        configurable: true,
+        value: 400,
+      });
+      Object.defineProperty(terminal.element, 'clientHeight', {
+        configurable: true,
+        value: 100,
+      });
+
+      terminal.element.scrollTop = 150;
+      await terminal.trigger('scroll');
+      expect(wrapper.vm.scrollBlocked).toBe(true);
+
+      terminal.element.scrollTop = 300;
+      await terminal.trigger('scroll');
+      expect(wrapper.vm.scrollBlocked).toBe(false);
       wrapper.unmount();
     });
   });

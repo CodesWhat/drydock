@@ -1,12 +1,9 @@
+import { defineComponent, nextTick, onMounted, type PropType, ref, watch } from 'vue';
 import {
-  defineComponent,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  type PropType,
-  ref,
-  watch,
-} from 'vue';
+  LOG_AUTO_FETCH_INTERVALS,
+  useAutoFetchLogs,
+  useLogViewport,
+} from '@/composables/useLogViewerBehavior';
 import { getContainerLogs } from '../services/container';
 
 type ContainerLogTarget = {
@@ -17,24 +14,11 @@ type ContainerLogsResponse = {
   logs?: unknown;
 };
 
-const AUTO_FETCH_INTERVALS = [
-  { title: 'Off', value: 0 },
-  { title: '2s', value: 2 },
-  { title: '5s', value: 5 },
-  { title: '10s', value: 10 },
-  { title: '30s', value: 30 },
-];
-
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
   return String(error);
-}
-
-function isNearBottom(element: HTMLElement): boolean {
-  const thresholdPx = 16;
-  return element.scrollHeight - element.scrollTop - element.clientHeight <= thresholdPx;
 }
 
 export default defineComponent({
@@ -50,31 +34,8 @@ export default defineComponent({
     const error = ref('');
     const tail = ref(100);
     const autoFetchSeconds = ref(5);
-    const scrollBlocked = ref(false);
-    const logPre = ref<HTMLElement | null>(null);
-    let autoFetchTimer: ReturnType<typeof setInterval> | undefined;
-
-    const scrollToBottom = function scrollToBottom(): void {
-      const element = logPre.value;
-      if (!element) {
-        return;
-      }
-      element.scrollTop = element.scrollHeight;
-      scrollBlocked.value = false;
-    };
-
-    const handleLogScroll = function handleLogScroll(): void {
-      const element = logPre.value;
-      if (!element) {
-        return;
-      }
-      scrollBlocked.value = !isNearBottom(element);
-    };
-
-    const resumeAutoScroll = function resumeAutoScroll(): void {
-      scrollBlocked.value = false;
-      scrollToBottom();
-    };
+    const { logPre, scrollBlocked, scrollToBottom, handleLogScroll, resumeAutoScroll } =
+      useLogViewport();
 
     const fetchLogs = async function fetchLogs(): Promise<void> {
       loading.value = true;
@@ -96,40 +57,19 @@ export default defineComponent({
       }
     };
 
-    const stopAutoFetch = function stopAutoFetch(): void {
-      if (autoFetchTimer) {
-        clearInterval(autoFetchTimer);
-        autoFetchTimer = undefined;
-      }
-    };
-
-    const startAutoFetch = function startAutoFetch(): void {
-      stopAutoFetch();
-      if (autoFetchSeconds.value <= 0) {
-        return;
-      }
-      autoFetchTimer = globalThis.setInterval(() => {
-        if (!loading.value) {
-          void fetchLogs();
-        }
-      }, autoFetchSeconds.value * 1000);
-    };
+    const { startAutoFetch } = useAutoFetchLogs({
+      intervalSeconds: autoFetchSeconds,
+      loading,
+      fetchLogs,
+    });
 
     onMounted(function loadLogsOnMount() {
       void fetchLogs();
       startAutoFetch();
     });
 
-    onBeforeUnmount(function stopLogsAutoFetchOnUnmount() {
-      stopAutoFetch();
-    });
-
     watch(tail, function reloadLogsOnTailChange() {
       void fetchLogs();
-    });
-
-    watch(autoFetchSeconds, function restartAutoFetchOnIntervalChange() {
-      startAutoFetch();
     });
 
     watch(
@@ -146,7 +86,7 @@ export default defineComponent({
       error,
       tail,
       autoFetchSeconds,
-      autoFetchItems: AUTO_FETCH_INTERVALS,
+      autoFetchItems: LOG_AUTO_FETCH_INTERVALS,
       scrollBlocked,
       logPre,
       fetchLogs,

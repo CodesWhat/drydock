@@ -37,6 +37,17 @@
         variant="outlined"
         style="max-width: 130px"
       />
+      <v-select
+        v-model="autoFetchSeconds"
+        :items="autoFetchItems"
+        item-title="title"
+        item-value="value"
+        label="Auto fetch"
+        density="compact"
+        hide-details
+        variant="outlined"
+        style="max-width: 150px"
+      />
       <v-btn
         icon
         size="small"
@@ -45,6 +56,22 @@
         @click="fetchEntries"
       >
         <v-icon>fas fa-arrows-rotate</v-icon>
+      </v-btn>
+      <v-chip
+        v-if="scrollBlocked"
+        size="small"
+        color="warning"
+        variant="tonal"
+      >
+        Scroll locked
+      </v-chip>
+      <v-btn
+        v-if="scrollBlocked"
+        size="small"
+        variant="text"
+        @click="resumeAutoScroll"
+      >
+        Resume
       </v-btn>
     </div>
 
@@ -61,6 +88,7 @@
       ref="logPre"
       class="app-logs__terminal ma-2"
       aria-label="Application log output"
+      @scroll="handleLogScroll"
     ><pre><span v-for="(entry, i) in entries" :key="i" :style="{ color: levelColor(entry.level) }">{{ new Date(entry.timestamp).toISOString() }} [{{ entry.level.toUpperCase().padEnd(5) }}] [{{ entry.component }}] {{ entry.msg }}
 </span></pre></section>
 
