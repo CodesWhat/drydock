@@ -411,6 +411,7 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Swap the image and 
 | **v2.3.0** | Developer Experience | API keys, passkey auth, TOTP 2FA, OpenAPI docs, TypeScript actions, CLI |
 | **v2.4.0** | Data Safety | Scheduled backups (S3, SFTP), compose templates, secret management |
 | **v3.0.0** | GitOps & Beyond | Git-based stack deployment, network topology, GPU monitoring, i18n |
+| **v3.1.0** | Enterprise Access | RBAC, LDAP/AD, environment-scoped permissions, audit logging, Wolfi hardened image, FIPS |
 
 <br>
 
