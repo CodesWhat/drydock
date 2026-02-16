@@ -343,8 +343,8 @@ describe('ApplicationLogs', () => {
       await flushPromises();
 
       const selects = wrapper.findAll('.v-select');
-      // Should have 3 selects: source, level, tail
-      expect(selects.length).toBeGreaterThanOrEqual(3);
+      // Should have at least 4 selects: source, level, tail, auto-fetch
+      expect(selects.length).toBeGreaterThanOrEqual(4);
       wrapper.unmount();
     });
 
@@ -355,8 +355,8 @@ describe('ApplicationLogs', () => {
       await flushPromises();
 
       const selects = wrapper.findAll('.v-select');
-      // Should have 2 selects: level, tail (no source when no agents)
-      expect(selects.length).toBeGreaterThanOrEqual(2);
+      // Should have at least 3 selects: level, tail, auto-fetch
+      expect(selects.length).toBeGreaterThanOrEqual(3);
       wrapper.unmount();
     });
 
