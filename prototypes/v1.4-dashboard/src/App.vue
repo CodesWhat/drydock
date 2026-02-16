@@ -505,6 +505,67 @@ function setFont(id: FontId) {
 // Apply persisted font on load
 { const opt = fontOptions.find(f => f.id === activeFont.value); if (opt) { document.documentElement.style.setProperty('--font-mono', opt.family); document.body.style.fontFamily = opt.family; } }
 
+// ── Updates Page ──────────────────────────────────────
+const updatesFilterSearch = ref('');
+const updatesFilterKind = ref('all');
+const updatesFilterBouncer = ref('all');
+const updatesFilterRegistry = ref('all');
+
+const updatesData = computed(() =>
+  containers.value.filter((c) => c.newTag !== null)
+);
+
+const filteredUpdates = computed(() => {
+  return updatesData.value.filter((c) => {
+    if (updatesFilterSearch.value) {
+      const q = updatesFilterSearch.value.toLowerCase();
+      if (!c.name.toLowerCase().includes(q) && !c.image.toLowerCase().includes(q)) return false;
+    }
+    if (updatesFilterKind.value !== 'all' && c.updateKind !== updatesFilterKind.value) return false;
+    if (updatesFilterBouncer.value !== 'all' && c.bouncer !== updatesFilterBouncer.value) return false;
+    if (updatesFilterRegistry.value !== 'all' && c.registry !== updatesFilterRegistry.value) return false;
+    return true;
+  });
+});
+
+const updatesStats = computed(() => {
+  const data = updatesData.value;
+  return {
+    total: data.length,
+    major: data.filter((c) => c.updateKind === 'major').length,
+    minor: data.filter((c) => c.updateKind === 'minor').length,
+    patch: data.filter((c) => c.updateKind === 'patch').length,
+    digest: data.filter((c) => c.updateKind === 'digest').length,
+  };
+});
+
+const updatesFiltersActive = computed(() =>
+  updatesFilterSearch.value !== '' ||
+  updatesFilterKind.value !== 'all' ||
+  updatesFilterBouncer.value !== 'all' ||
+  updatesFilterRegistry.value !== 'all'
+);
+
+function clearUpdatesFilters() {
+  updatesFilterSearch.value = '';
+  updatesFilterKind.value = 'all';
+  updatesFilterBouncer.value = 'all';
+  updatesFilterRegistry.value = 'all';
+}
+
+function bouncerColor(status: string) {
+  if (status === 'safe') return { bg: 'rgba(6,214,160,0.15)', text: '#06D6A0' };
+  if (status === 'unsafe') return { bg: 'rgba(255,152,0,0.15)', text: '#FF9800' };
+  return { bg: 'rgba(229,57,53,0.15)', text: '#E53935' };
+}
+
+// Stub actions (no-op for prototype)
+function updateContainer(_name: string) { /* no-op */ }
+function skipUpdate(_name: string) { /* no-op */ }
+function forceUpdate(_name: string) { /* no-op */ }
+function updateAll() { /* no-op */ }
+
+
 // ── Lifecycle ──────────────────────────────────────────
 onMounted(() => {
   globalThis.addEventListener('resize', handleResize);
@@ -1392,6 +1453,237 @@ onUnmounted(() => {
           </aside>
 
           </div><!-- end content + detail panel flex wrapper -->
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- UPDATES PAGE                                   -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div v-if="activeRoute === '/updates'">
+
+          <!-- ═══ FILTER BAR ═══ -->
+          <div class="sticky top-0 z-10 mb-5">
+            <div class="px-3 py-2 rounded-xl relative z-[1]"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+              <div class="flex flex-wrap items-center gap-2.5">
+                <!-- Kind filter -->
+                <select v-model="updatesFilterKind"
+                        class="px-2 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide outline-none cursor-pointer"
+                        :class="isDark
+                          ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                          : 'bg-slate-50 text-slate-600 border border-slate-200'">
+                  <option value="all">Kind</option>
+                  <option value="major">Major</option>
+                  <option value="minor">Minor</option>
+                  <option value="patch">Patch</option>
+                  <option value="digest">Digest</option>
+                </select>
+
+                <!-- Bouncer filter -->
+                <select v-model="updatesFilterBouncer"
+                        class="px-2 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide outline-none cursor-pointer"
+                        :class="isDark
+                          ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                          : 'bg-slate-50 text-slate-600 border border-slate-200'">
+                  <option value="all">🥊 Bouncer</option>
+                  <option value="safe">Safe</option>
+                  <option value="unsafe">Unsafe</option>
+                  <option value="blocked">Blocked</option>
+                </select>
+
+                <!-- Registry filter -->
+                <select v-model="updatesFilterRegistry"
+                        class="px-2 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide outline-none cursor-pointer"
+                        :class="isDark
+                          ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                          : 'bg-slate-50 text-slate-600 border border-slate-200'">
+                  <option value="all">Registry</option>
+                  <option value="dockerhub">Docker Hub</option>
+                  <option value="ghcr">GHCR</option>
+                  <option value="custom">Custom</option>
+                </select>
+
+                <!-- Result count -->
+                <span class="text-[10px] font-semibold tabular-nums shrink-0 px-2 py-1 rounded-lg ml-auto"
+                      :class="isDark ? 'text-slate-500 bg-slate-800/50' : 'text-slate-400 bg-slate-100'">
+                  {{ filteredUpdates.length }}/{{ updatesData.length }}
+                </span>
+              </div>
+            </div>
+            <!-- Background shield -->
+            <div class="absolute -inset-x-4 -top-4 z-0 pointer-events-none"
+                 :style="{
+                   bottom: '-24px',
+                   background: isDark
+                     ? 'linear-gradient(to bottom, #151d2e 0%, #151d2e calc(100% - 24px), #151d2e00 100%)'
+                     : 'linear-gradient(to bottom, #f1f5f9 0%, #f1f5f9 calc(100% - 24px), #f1f5f900 100%)',
+                 }" />
+          </div>
+
+          <!-- ═══ UPDATES TABLE ═══ -->
+          <div v-if="filteredUpdates.length > 0"
+               class="rounded-xl overflow-hidden"
+               :style="{
+                 backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                 border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+               }">
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs" style="min-width: 480px;">
+                <thead>
+                  <tr :style="{ backgroundColor: isDark ? '#0f172a40' : '#f8fafc' }">
+                    <th class="text-left px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px]" style="width: 99%;"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Container</th>
+                    <th class="text-center px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px]"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Version</th>
+                    <th class="text-center px-3 py-2.5 font-semibold uppercase tracking-wider text-[10px] whitespace-nowrap"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Kind</th>
+                    <th class="hidden sm:table-cell text-center px-3 py-2.5 font-semibold uppercase tracking-wider text-[10px] whitespace-nowrap"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Bouncer</th>
+                    <th class="hidden sm:table-cell text-center px-3 py-2.5 font-semibold uppercase tracking-wider text-[10px] whitespace-nowrap"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Registry</th>
+                    <th class="text-center px-0 py-2.5 font-semibold uppercase tracking-wider text-[10px] whitespace-nowrap"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Actions</th>
+                    <th class="pl-0 pr-1 py-2.5 text-center">
+                      <button class="w-7 h-7 rounded-lg inline-flex items-center justify-center text-sm transition-colors mx-auto"
+                              :class="isDark
+                                ? 'text-slate-500 hover:text-slate-300 hover:bg-slate-700'
+                                : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200'"
+                              title="Update All"
+                              @click="updateAll">
+                        &hellip;
+                      </button>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(c, i) in filteredUpdates" :key="c.name"
+                      class="transition-colors"
+                      :class="isDark ? 'hover:bg-slate-700/30' : 'hover:bg-slate-50'"
+                      :style="{ borderBottom: i < filteredUpdates.length - 1 ? (isDark ? '1px solid #334155' : '1px solid #f1f5f9') : 'none' }">
+                    <!-- Container name + image -->
+                    <td class="px-5 py-3">
+                      <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-2 h-2 rounded-full shrink-0"
+                             :style="{ backgroundColor: c.status === 'running' ? '#06D6A0' : '#64748b' }" />
+                        <div class="min-w-0">
+                          <div class="font-medium truncate" :class="isDark ? 'text-slate-200' : 'text-slate-700'">{{ c.name }}</div>
+                          <div class="text-[10px] mt-0.5 truncate" :class="isDark ? 'text-slate-500' : 'text-slate-400'">{{ c.image }}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <!-- Version comparison -->
+                    <td class="px-5 py-3">
+                      <!-- Inline on sm+ -->
+                      <div class="hidden sm:grid items-center gap-1.5" style="grid-template-columns: 1fr auto 1fr;">
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-medium text-right justify-self-end"
+                              :class="isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-100 text-slate-500'">
+                          {{ c.currentTag }}
+                        </span>
+                        <AppIcon name="arrow-right" :size="8" class="justify-self-center"
+                           :class="isDark ? 'text-slate-600' : 'text-slate-300'" />
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-medium justify-self-start"
+                              style="background: rgba(0,150,199,0.15); color: #0096C7;">
+                          {{ c.newTag }}
+                        </span>
+                      </div>
+                      <!-- Stacked on mobile -->
+                      <div class="sm:hidden flex flex-col items-center gap-0.5">
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-medium"
+                              :class="isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-100 text-slate-500'">
+                          {{ c.currentTag }}
+                        </span>
+                        <AppIcon name="trend-down" :size="7" :class="isDark ? 'text-slate-600' : 'text-slate-300'" />
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-medium"
+                              style="background: rgba(0,150,199,0.15); color: #0096C7;">
+                          {{ c.newTag }}
+                        </span>
+                      </div>
+                    </td>
+                    <!-- Kind badge -->
+                    <td class="px-3 py-3 text-center whitespace-nowrap">
+                      <span class="badge text-[9px] uppercase font-bold"
+                            :style="{ backgroundColor: updateKindColor(c.updateKind).bg, color: updateKindColor(c.updateKind).text }">
+                        <template v-if="isMobile">{{ c.updateKind === 'major' ? '⬆⬆' : c.updateKind === 'minor' ? '⬆' : '#' }}</template>
+                        <template v-else>{{ c.updateKind }}</template>
+                      </span>
+                    </td>
+                    <!-- Bouncer badge -->
+                    <td class="hidden sm:table-cell px-3 py-3 text-center whitespace-nowrap">
+                      <span class="badge text-[9px] uppercase font-bold"
+                            :style="{ backgroundColor: bouncerColor(c.bouncer).bg, color: bouncerColor(c.bouncer).text }">
+                        <AppIcon :name="c.bouncer === 'safe' ? 'check' : c.bouncer === 'unsafe' ? 'pending' : 'xmark'"
+                                 :size="8" class="mr-1" />
+                        {{ c.bouncer }}
+                      </span>
+                    </td>
+                    <!-- Registry badge -->
+                    <td class="hidden sm:table-cell px-3 py-3 text-center whitespace-nowrap">
+                      <span class="badge text-[9px] uppercase tracking-wide font-bold"
+                            :style="{ backgroundColor: registryColorBg(c.registry, isDark), color: registryColorText(c.registry, isDark) }">
+                        {{ registryLabel(c.registry) }}
+                      </span>
+                    </td>
+                    <!-- Actions -->
+                    <td class="px-0 py-3 text-center whitespace-nowrap">
+                      <button v-if="c.bouncer === 'blocked'"
+                              class="inline-flex items-center whitespace-nowrap px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wide cursor-not-allowed"
+                              :style="{
+                                backgroundColor: '#0f172a',
+                                color: '#475569',
+                              }">
+                        🥊 Blocked
+                      </button>
+                      <button v-else
+                              class="inline-flex items-center whitespace-nowrap px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all"
+                              :style="{
+                                background: 'linear-gradient(135deg, #0096C7, #0077b6)',
+                                color: '#ffffff',
+                                boxShadow: '0 1px 3px rgba(0,150,199,0.3)',
+                              }"
+                              @click="updateContainer(c.name)">
+                        <AppIcon name="updates" :size="10" class="mr-1" />
+                        Update
+                      </button>
+                    </td>
+                    <td class="pl-0 pr-1 py-3 text-center">
+                      <button class="w-7 h-7 rounded-lg inline-flex items-center justify-center text-sm transition-colors mx-auto"
+                              :class="isDark
+                                ? 'text-slate-500 hover:text-slate-300 hover:bg-slate-700'
+                                : 'text-slate-400 hover:text-slate-600 hover:bg-slate-200'"
+                              title="Skip update"
+                              @click="skipUpdate(c.name)">
+                        &hellip;
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- ═══ EMPTY STATE ═══ -->
+          <div v-else
+               class="flex flex-col items-center justify-center py-16 rounded-xl"
+               :style="{
+                 backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                 border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+               }">
+            <AppIcon name="up-to-date" :size="24" class="mb-3" :class="isDark ? 'text-slate-600' : 'text-slate-300'" />
+            <p class="text-sm font-medium mb-1" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
+              {{ updatesFiltersActive ? 'No updates match your filters' : 'All containers are up to date' }}
+            </p>
+            <button v-if="updatesFiltersActive"
+                    class="text-xs font-medium mt-2 px-3 py-1.5 rounded-lg transition-colors"
+                    :class="isDark
+                      ? 'text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20'
+                      : 'text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/15'"
+                    @click="clearUpdatesFilters">
+              Clear all filters
+            </button>
+          </div>
+
         </div>
 
         <!-- ═══════════════════════════════════════════════ -->
