@@ -34,6 +34,14 @@ function getTriggerProviderIcon(type) {
       return 'fab fa-docker';
     case 'rocketchat':
       return 'fas fa-comment';
+    case 'mattermost':
+      return 'fab fa-mattermost';
+    case 'teams':
+      return 'fab fa-microsoft';
+    case 'matrix':
+      return 'fas fa-hashtag';
+    case 'googlechat':
+      return 'fab fa-google';
     case 'docker':
       return 'fab fa-docker';
     default:
@@ -74,6 +82,14 @@ function getTriggerProviderColor(type) {
       return '#2496ED';
     case 'rocketchat':
       return '#F5455C';
+    case 'mattermost':
+      return '#0058CC';
+    case 'teams':
+      return '#6264A7';
+    case 'matrix':
+      return '#0DBD8B';
+    case 'googlechat':
+      return '#34A853';
     default:
       return '#6B7280';
   }

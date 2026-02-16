@@ -36,6 +36,10 @@ describe('Trigger Service', () => {
       ['command', 'fas fa-terminal'],
       ['dockercompose', 'fab fa-docker'],
       ['rocketchat', 'fas fa-comment'],
+      ['mattermost', 'fab fa-mattermost'],
+      ['teams', 'fab fa-microsoft'],
+      ['matrix', 'fas fa-hashtag'],
+      ['googlechat', 'fab fa-google'],
       ['docker', 'fab fa-docker'],
       ['unknown', 'fas fa-bolt'],
     ])('returns %s icon', (type, icon) => {
@@ -76,6 +80,10 @@ describe('Trigger Service', () => {
       ['docker', '#2496ED'],
       ['dockercompose', '#2496ED'],
       ['rocketchat', '#F5455C'],
+      ['mattermost', '#0058CC'],
+      ['teams', '#6264A7'],
+      ['matrix', '#0DBD8B'],
+      ['googlechat', '#34A853'],
       ['unknown', '#6B7280'],
       [undefined, '#6B7280'],
     ])('returns %s color', (type, color) => {

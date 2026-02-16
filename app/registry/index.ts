@@ -275,14 +275,18 @@ async function registerTriggers(options: RegistrationOptions = {}) {
  */
 async function registerRegistries() {
   const defaultRegistries = {
+    alicr: { public: '' },
     codeberg: { public: '' },
     dhi: { public: '' },
     docr: { public: '' },
     ecr: { public: '' },
+    gar: { public: '' },
     gcr: { public: '' },
     ghcr: { public: '' },
     hub: { public: '' },
+    ibmcr: { public: '' },
     lscr: { public: '' },
+    ocir: { public: '' },
     quay: { public: '' },
   };
   const registriesToRegister = {

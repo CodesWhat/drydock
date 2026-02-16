@@ -147,14 +147,18 @@ test('registerRegistries should register all registries', async () => {
   };
   await registry.testable_registerRegistries();
   expect(Object.keys(registry.getState().registry).sort()).toEqual([
+    'alicr.public',
     'codeberg.public',
     'dhi.public',
     'docr.public',
     'ecr.private',
+    'gar.public',
     'gcr.public',
     'ghcr.public',
     'hub.private',
+    'ibmcr.public',
     'lscr.public',
+    'ocir.public',
     'quay.public',
   ]);
 });
@@ -162,14 +166,18 @@ test('registerRegistries should register all registries', async () => {
 test('registerRegistries should register all anonymous registries by default', async () => {
   await registry.testable_registerRegistries();
   expect(Object.keys(registry.getState().registry).sort()).toEqual([
+    'alicr.public',
     'codeberg.public',
     'dhi.public',
     'docr.public',
     'ecr.public',
+    'gar.public',
     'gcr.public',
     'ghcr.public',
     'hub.public',
+    'ibmcr.public',
     'lscr.public',
+    'ocir.public',
     'quay.public',
   ]);
 });
@@ -397,14 +405,18 @@ test('init should register all components', async () => {
   };
   await registry.init();
   expect(Object.keys(registry.getState().registry).sort()).toEqual([
+    'alicr.public',
     'codeberg.public',
     'dhi.public',
     'docr.public',
     'ecr.private',
+    'gar.public',
     'gcr.public',
     'ghcr.public',
     'hub.private',
+    'ibmcr.public',
     'lscr.public',
+    'ocir.public',
     'quay.public',
   ]);
   expect(Object.keys(registry.getState().trigger)).toEqual(['mock.mock1', 'mock.mock2']);
