@@ -2,9 +2,12 @@ import { createApp } from 'vue';
 import PrimeVue from 'primevue/config';
 import Aura from '@primeuix/themes/aura';
 import App from './App.vue';
+import IconCompare from './IconCompare.vue';
 import './style.css';
 
-const app = createApp(App);
+const page = new URLSearchParams(window.location.search).get('page');
+const root = page === 'icons' ? IconCompare : App;
+const app = createApp(root);
 
 app.use(PrimeVue, {
   theme: {

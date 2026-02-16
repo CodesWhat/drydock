@@ -7,18 +7,23 @@
     "build": "vite build"
   },
   "dependencies": {
-    "vue": "^3.5.27",
-    "primevue": "^4.5.4",
+    "@fontsource/comic-mono": "^5.2.5",
+    "@fontsource/commit-mono": "^5.2.5",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/inconsolata": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/source-code-pro": "^5.2.7",
+    "@fortawesome/fontawesome-free": "7.1.0",
     "@primeuix/themes": "^2.0.3",
     "primeicons": "^7.0.0",
-    "@fontsource/ibm-plex-mono": "^5.2.7",
-    "@fortawesome/fontawesome-free": "7.1.0"
+    "primevue": "^4.5.4",
+    "vue": "^3.5.27"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^6.0.4",
     "@tailwindcss/vite": "^4.1.18",
+    "@vitejs/plugin-vue": "^6.0.4",
     "tailwindcss": "^4.1.18",
-    "vite": "^7.3.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
   }
 }

@@ -4,6 +4,11 @@ import Menu from 'primevue/menu';
 import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
 import whaleLogo from '@/assets/whale-logo.png';
+import AppIcon from './components/AppIcon.vue';
+import { useIcons } from './composables/useIcons';
+import { type IconLibrary, libraryLabels, iconMap } from './icons';
+
+const { icon, iconLibrary, setIconLibrary, iconScale, setIconScale } = useIcons();
 
 // ── Theme ──────────────────────────────────────────────
 const isDark = ref(true);
@@ -43,33 +48,33 @@ const navGroups: NavGroup[] = [
   {
     label: 'Overview',
     items: [
-      { label: 'Dashboard', icon: 'fa-solid fa-layer-group', route: '/home' },
-      { label: 'Containers', icon: 'fa-solid fa-cube', route: '/containers', badge: '47', badgeColor: 'blue' },
+      { label: 'Dashboard', icon: 'dashboard', route: '/home' },
+      { label: 'Containers', icon: 'containers', route: '/containers', badge: '47', badgeColor: 'blue' },
     ],
   },
   {
     label: 'Operations',
     items: [
-      { label: 'Updates', icon: 'fa-solid fa-download', route: '/updates', badge: '12', badgeColor: 'amber' },
-      { label: 'Security', icon: 'fa-solid fa-shield-halved', route: '/security', badge: '3', badgeColor: 'red' },
-      { label: 'Logs', icon: 'fa-solid fa-scroll', route: '/logs' },
+      { label: 'Updates', icon: 'updates', route: '/updates', badge: '12', badgeColor: 'amber' },
+      { label: 'Security', icon: 'security', route: '/security', badge: '3', badgeColor: 'red' },
+      { label: 'Logs', icon: 'logs', route: '/logs' },
     ],
   },
   {
     label: 'Infrastructure',
     items: [
-      { label: 'Registries', icon: 'fa-solid fa-database', route: '/registries' },
-      { label: 'Agents', icon: 'fa-solid fa-satellite-dish', route: '/agents' },
-      { label: 'Triggers', icon: 'fa-solid fa-bolt', route: '/triggers' },
-      { label: 'Watchers', icon: 'fa-solid fa-eye', route: '/watchers' },
+      { label: 'Registries', icon: 'registries', route: '/registries' },
+      { label: 'Agents', icon: 'agents', route: '/agents' },
+      { label: 'Triggers', icon: 'triggers', route: '/triggers' },
+      { label: 'Watchers', icon: 'watchers', route: '/watchers' },
     ],
   },
   {
     label: 'Settings',
     items: [
-      { label: 'Server', icon: 'fa-solid fa-cog', route: '/server' },
-      { label: 'Auth', icon: 'fa-solid fa-lock', route: '/auth' },
-      { label: 'Notifications', icon: 'fa-solid fa-bell', route: '/notifications' },
+      { label: 'Server', icon: 'settings', route: '/server' },
+      { label: 'Auth', icon: 'auth', route: '/auth' },
+      { label: 'Notifications', icon: 'notifications', route: '/notifications' },
     ],
   },
 ];
@@ -89,7 +94,7 @@ const currentPageIcon = computed(() => {
       if (item.route === activeRoute.value) return item.icon;
     }
   }
-  return 'fa-solid fa-layer-group';
+  return 'dashboard';
 });
 
 function navigateTo(route: string) {
@@ -140,10 +145,10 @@ watch(showSearch, async (val) => {
 
 // ── Stats ──────────────────────────────────────────────
 const stats = [
-  { label: 'Containers', value: '47', icon: 'fa-solid fa-cube', color: '#0096C7', trend: '+3' },
-  { label: 'Updates Available', value: '12', icon: 'fa-solid fa-download', color: '#FF9800', trend: '+5' },
-  { label: 'Security Issues', value: '3', icon: 'fa-solid fa-shield-halved', color: '#E53935', trend: '-2' },
-  { label: 'Uptime', value: '99.8%', icon: 'fa-solid fa-heart-pulse', color: '#06D6A0', trend: '+0.1%' },
+  { label: 'Containers', value: '47', icon: 'containers', color: '#0096C7', trend: '+3' },
+  { label: 'Updates Available', value: '12', icon: 'updates', color: '#FF9800', trend: '+5' },
+  { label: 'Security Issues', value: '3', icon: 'security', color: '#E53935', trend: '-2' },
+  { label: 'Uptime', value: '99.8%', icon: 'uptime', color: '#06D6A0', trend: '+0.1%' },
 ];
 
 // ── Recent Updates ─────────────────────────────────────
@@ -369,10 +374,10 @@ const panelFlex = computed(() =>
 // Panel size is set directly via S/M/L buttons in the toolbar
 
 const detailTabs = [
-  { id: 'overview', label: 'Overview', icon: 'fa-solid fa-info-circle' },
-  { id: 'logs', label: 'Logs', icon: 'fa-solid fa-scroll' },
-  { id: 'security', label: 'Security', icon: 'fa-solid fa-shield-halved' },
-  { id: 'triggers', label: 'Triggers', icon: 'fa-solid fa-bolt' },
+  { id: 'overview', label: 'Overview', icon: 'info' },
+  { id: 'logs', label: 'Logs', icon: 'logs' },
+  { id: 'security', label: 'Security', icon: 'security' },
+  { id: 'triggers', label: 'Triggers', icon: 'triggers' },
 ];
 
 function selectContainer(c: Container) {
@@ -433,6 +438,59 @@ const mockTriggers = [
   { name: 'Restart on failure', type: 'policy', active: false },
   { name: 'Security scan on pull', type: 'webhook', active: true },
 ];
+
+// ── Settings Page ─────────────────────────────────────
+const activeSettingsTab = ref('general');
+const settingsTabs = [
+  { id: 'general', label: 'General', icon: 'settings' },
+  { id: 'appearance', label: 'Appearance', icon: 'moon' },
+];
+
+const serverFields = [
+  { label: 'Server Name', value: 'drydock-prod' },
+  { label: 'Version', value: 'v1.3.1' },
+  { label: 'Host', value: '0.0.0.0:3001' },
+  { label: 'Uptime', value: '14d 7h 23m' },
+  { label: 'Docker Engine', value: '24.0.7' },
+  { label: 'Containers', value: '47 (8 running)' },
+];
+
+const themeOptions = [
+  { id: 'dark', label: 'Dark', icon: 'moon' },
+  { id: 'light', label: 'Light', icon: 'sun' },
+];
+
+type FontId = 'ibm-plex-mono' | 'jetbrains-mono' | 'source-code-pro' | 'commit-mono' | 'inconsolata' | 'comic-mono';
+const fontOptions: { id: FontId; label: string; family: string }[] = [
+  { id: 'ibm-plex-mono', label: 'IBM Plex Mono', family: '"IBM Plex Mono", monospace' },
+  { id: 'jetbrains-mono', label: 'JetBrains Mono', family: '"JetBrains Mono", monospace' },
+  { id: 'source-code-pro', label: 'Source Code Pro', family: '"Source Code Pro", monospace' },
+  { id: 'commit-mono', label: 'Commit Mono', family: '"Commit Mono", monospace' },
+  { id: 'inconsolata', label: 'Inconsolata', family: '"Inconsolata", monospace' },
+  { id: 'comic-mono', label: 'Comic Mono', family: '"Comic Mono", monospace' },
+];
+
+const FONT_STORAGE_KEY = 'drydock-font-family';
+function loadFont(): FontId {
+  try {
+    const stored = localStorage.getItem(FONT_STORAGE_KEY);
+    if (stored && fontOptions.some(f => f.id === stored)) return stored as FontId;
+  } catch { /* ignored */ }
+  return 'ibm-plex-mono';
+}
+const activeFont = ref<FontId>(loadFont());
+
+function setFont(id: FontId) {
+  activeFont.value = id;
+  const opt = fontOptions.find(f => f.id === id);
+  if (opt) {
+    document.documentElement.style.setProperty('--font-mono', opt.family);
+    document.body.style.fontFamily = opt.family;
+  }
+  try { localStorage.setItem(FONT_STORAGE_KEY, id); } catch { /* ignored */ }
+}
+// Apply persisted font on load
+{ const opt = fontOptions.find(f => f.id === activeFont.value); if (opt) { document.documentElement.style.setProperty('--font-mono', opt.family); document.body.style.fontFamily = opt.family; } }
 
 // ── Lifecycle ──────────────────────────────────────────
 onMounted(() => {
@@ -520,7 +578,7 @@ onUnmounted(() => {
                    class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-drydock-secondary"
                    style="height: 20px;" />
 
-              <i :class="item.icon" class="text-sm shrink-0" style="width:18px; text-align:center;" />
+              <AppIcon :name="item.icon" :size="14" class="shrink-0" style="width:18px; text-align:center;" />
               <span class="sidebar-label text-[13px] font-medium">{{ item.label }}</span>
 
               <!-- Badge -->
@@ -603,7 +661,7 @@ onUnmounted(() => {
           </button>
 
           <nav class="flex items-center gap-1.5 text-[13px]">
-            <i :class="[currentPageIcon, isDark ? 'text-slate-500' : 'text-slate-400']" class="text-[11px] leading-none" />
+            <AppIcon :name="currentPageIcon" :size="14" :class="isDark ? 'text-slate-500' : 'text-slate-400'" class="leading-none" />
             <i class="pi pi-angle-right text-[11px] leading-none" :class="isDark ? 'text-slate-600' : 'text-slate-300'" />
             <span class="font-medium leading-none" :class="isDark ? 'text-slate-300' : 'text-slate-600'">
               {{ currentPageLabel }}
@@ -634,7 +692,7 @@ onUnmounted(() => {
                     ? 'text-slate-400 hover:bg-slate-800 hover:text-amber-400'
                     : 'text-slate-500 hover:bg-slate-100 hover:text-amber-500'"
                   @click="toggleTheme">
-            <i :class="isDark ? 'fa-solid fa-moon' : 'fa-solid fa-sun'" class="text-sm" />
+            <AppIcon :name="isDark ? 'moon' : 'sun'" :size="14" />
           </button>
 
           <!-- Notifications -->
@@ -642,7 +700,7 @@ onUnmounted(() => {
                   :class="isDark
                     ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                     : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'">
-            <i class="fa-regular fa-bell text-sm" />
+            <AppIcon name="notifications" :size="14" />
             <span class="badge-pulse absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white"
                   style="background:#E53935;">3</span>
           </button>
@@ -689,7 +747,7 @@ onUnmounted(() => {
                 </span>
                 <div class="w-8 h-8 rounded-lg flex items-center justify-center"
                      :style="{ backgroundColor: stat.color + '18', color: stat.color }">
-                  <i :class="stat.icon" class="text-sm" />
+                  <AppIcon :name="stat.icon" :size="14" />
                 </div>
               </div>
               <div class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">
@@ -697,8 +755,7 @@ onUnmounted(() => {
               </div>
               <div class="text-[11px] mt-1 flex items-center gap-1"
                    :style="{ color: stat.trend.startsWith('+') ? '#06D6A0' : stat.trend.startsWith('-') ? '#E53935' : '#64748b' }">
-                <i :class="stat.trend.startsWith('+') ? 'fa-solid fa-arrow-up' : stat.trend.startsWith('-') ? 'fa-solid fa-arrow-down' : 'fa-solid fa-minus'"
-                   class="text-[9px]" />
+                <AppIcon :name="stat.trend.startsWith('+') ? 'trend-up' : stat.trend.startsWith('-') ? 'trend-down' : 'neutral'" :size="9" />
                 {{ stat.trend }} from last week
               </div>
             </div>
@@ -716,7 +773,7 @@ onUnmounted(() => {
               <div class="flex items-center justify-between px-5 py-3.5"
                    :style="{ borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
                 <div class="flex items-center gap-2">
-                  <i class="fa-solid fa-rotate text-drydock-secondary text-sm" />
+                  <AppIcon name="recent-updates" :size="14" class="text-drydock-secondary" />
                   <h2 class="text-sm font-semibold" :class="isDark ? 'text-slate-200' : 'text-slate-700'">
                     Recent Updates
                   </h2>
@@ -761,7 +818,7 @@ onUnmounted(() => {
                                 :class="isDark ? 'bg-slate-700 text-slate-400' : 'bg-slate-100 text-slate-500'">
                             {{ row.oldVer }}
                           </span>
-                          <i class="fa-solid fa-arrow-right text-[8px] justify-self-center"
+                          <AppIcon name="arrow-right" :size="8" class="justify-self-center"
                              :class="isDark ? 'text-slate-600' : 'text-slate-300'" />
                           <span class="px-1.5 py-0.5 rounded text-[10px] font-medium justify-self-start"
                                 style="background: rgba(0,150,199,0.15); color: #0096C7;">
@@ -779,8 +836,8 @@ onUnmounted(() => {
                                     : (isDark ? 'rgba(229,57,53,0.15)' : 'rgba(229,57,53,0.1)'),
                                 color: row.status === 'updated' ? '#06D6A0' : row.status === 'pending' ? '#FF9800' : '#E53935',
                               }">
-                          <i :class="row.status === 'updated' ? 'fa-solid fa-check' : row.status === 'pending' ? 'fa-solid fa-clock' : 'fa-solid fa-xmark'"
-                             class="mr-1 text-[8px]" />
+                          <AppIcon :name="row.status === 'updated' ? 'check' : row.status === 'pending' ? 'pending' : 'xmark'"
+                             :size="8" class="mr-1" />
                           {{ row.status }}
                         </span>
                       </td>
@@ -802,7 +859,7 @@ onUnmounted(() => {
               <div class="flex items-center justify-between px-5 py-3.5"
                    :style="{ borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
                 <div class="flex items-center gap-2">
-                  <i class="fa-solid fa-shield-halved text-drydock-accent text-sm" />
+                  <AppIcon name="security" :size="14" class="text-drydock-accent" />
                   <h2 class="text-sm font-semibold" :class="isDark ? 'text-slate-200' : 'text-slate-700'">
                     Security Overview
                   </h2>
@@ -895,52 +952,64 @@ onUnmounted(() => {
                style="-webkit-mask-image: linear-gradient(to bottom, black calc(100% - 48px), transparent 100%); mask-image: linear-gradient(to bottom, black calc(100% - 48px), transparent 100%)">
 
           <!-- ═══ FILTER BAR ═══ -->
-          <div class="flex items-center gap-2.5 mb-5 px-3 py-2 rounded-xl sticky top-0 z-10"
-               :style="{
-                 backgroundColor: isDark ? '#1e293b' : '#ffffff',
-                 border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
-               }">
-            <!-- Status filter -->
-            <select v-model="filterStatus"
-                    class="px-2 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide outline-none cursor-pointer"
-                    :class="isDark
-                      ? 'bg-slate-800 text-slate-300 border border-slate-700'
-                      : 'bg-slate-50 text-slate-600 border border-slate-200'">
-              <option value="all">Status</option>
-              <option value="running">Running</option>
-              <option value="stopped">Stopped</option>
-            </select>
+          <div class="sticky top-0 z-10 mb-5">
+            <div class="px-3 py-2 rounded-xl relative z-[1]"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+            <div class="flex flex-wrap items-center gap-2.5">
+              <!-- Status filter -->
+              <select v-model="filterStatus"
+                      class="px-2 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide outline-none cursor-pointer"
+                      :class="isDark
+                        ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                        : 'bg-slate-50 text-slate-600 border border-slate-200'">
+                <option value="all">Status</option>
+                <option value="running">Running</option>
+                <option value="stopped">Stopped</option>
+              </select>
 
-            <!-- Registry filter -->
-            <select v-model="filterRegistry"
-                    class="px-2 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide outline-none cursor-pointer"
-                    :class="isDark
-                      ? 'bg-slate-800 text-slate-300 border border-slate-700'
-                      : 'bg-slate-50 text-slate-600 border border-slate-200'">
-              <option value="all">Registry</option>
-              <option value="dockerhub">Docker Hub</option>
-              <option value="ghcr">GHCR</option>
-              <option value="custom">Custom</option>
-            </select>
+              <!-- Registry filter -->
+              <select v-model="filterRegistry"
+                      class="px-2 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide outline-none cursor-pointer"
+                      :class="isDark
+                        ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                        : 'bg-slate-50 text-slate-600 border border-slate-200'">
+                <option value="all">Registry</option>
+                <option value="dockerhub">Docker Hub</option>
+                <option value="ghcr">GHCR</option>
+                <option value="custom">Custom</option>
+              </select>
 
-            <!-- Updates checkbox -->
-            <label class="flex items-center gap-1.5 cursor-pointer select-none ml-1"
-                   @click.prevent="filterUpdate = filterUpdate === 'available' ? 'all' : 'available'">
-              <div class="w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors"
-                   :class="filterUpdate === 'available'
-                     ? 'bg-drydock-secondary border-drydock-secondary'
-                     : isDark ? 'border-slate-600 bg-slate-800' : 'border-slate-300 bg-slate-50'">
-                <i v-if="filterUpdate === 'available'" class="fa-solid fa-check text-[8px] text-white" />
-              </div>
-              <span class="text-[11px] font-semibold uppercase tracking-wide"
-                    :class="isDark ? 'text-slate-400' : 'text-slate-500'">Updates</span>
-            </label>
+              <!-- Updates checkbox -->
+              <label class="flex items-center gap-1.5 cursor-pointer select-none"
+                     @click.prevent="filterUpdate = filterUpdate === 'available' ? 'all' : 'available'">
+                <div class="w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors"
+                     :class="filterUpdate === 'available'
+                       ? 'bg-drydock-secondary border-drydock-secondary'
+                       : isDark ? 'border-slate-600 bg-slate-800' : 'border-slate-300 bg-slate-50'">
+                  <AppIcon v-if="filterUpdate === 'available'" name="check" :size="8" class="text-white" />
+                </div>
+                <span class="text-[11px] font-semibold uppercase tracking-wide"
+                      :class="isDark ? 'text-slate-400' : 'text-slate-500'">Updates</span>
+              </label>
 
-            <!-- Result count -->
-            <span class="text-[10px] font-semibold tabular-nums shrink-0 px-2 py-1 rounded-lg ml-auto"
-                  :class="isDark ? 'text-slate-500 bg-slate-800/50' : 'text-slate-400 bg-slate-100'">
-              {{ filteredContainers.length }}/{{ containers.length }}
-            </span>
+              <!-- Result count -->
+              <span class="text-[10px] font-semibold tabular-nums shrink-0 px-2 py-1 rounded-lg ml-auto"
+                    :class="isDark ? 'text-slate-500 bg-slate-800/50' : 'text-slate-400 bg-slate-100'">
+                {{ filteredContainers.length }}/{{ containers.length }}
+              </span>
+            </div>
+            </div>
+            <!-- Background shield: solid behind filter bar, fades out below -->
+            <div class="absolute -inset-x-4 -top-4 z-0 pointer-events-none"
+                 :style="{
+                   bottom: '-24px',
+                   background: isDark
+                     ? 'linear-gradient(to bottom, #151d2e 0%, #151d2e calc(100% - 24px), #151d2e00 100%)'
+                     : 'linear-gradient(to bottom, #f1f5f9 0%, #f1f5f9 calc(100% - 24px), #f1f5f900 100%)',
+                 }" />
           </div>
 
           <!-- ═══ CONTAINER CARD GRID ═══ -->
@@ -999,7 +1068,7 @@ onUnmounted(() => {
                   <template v-else>
                     <span class="flex items-center gap-1.5 text-[11px] font-medium ml-2"
                           :style="{ color: isDark ? '#06D6A080' : '#06D6A0' }">
-                      <i class="fa-regular fa-circle-check text-[10px]" />
+                      <AppIcon name="up-to-date" :size="10" />
                       Up to date
                     </span>
                   </template>
@@ -1023,27 +1092,27 @@ onUnmounted(() => {
                           :class="isDark ? 'text-red-400/70 hover:text-red-400 hover:bg-slate-700' : 'text-red-400 hover:text-red-500 hover:bg-red-50'"
                           title="Stop"
                           @click.stop>
-                    <i class="fa-solid fa-stop" />
+                    <AppIcon name="stop" :size="11" />
                   </button>
                   <button v-else
                           class="w-6 h-6 rounded flex items-center justify-center text-[11px] transition-colors"
                           :class="isDark ? 'text-green-400/70 hover:text-green-400 hover:bg-slate-700' : 'text-green-500 hover:text-green-600 hover:bg-green-50'"
                           title="Start"
                           @click.stop>
-                    <i class="fa-solid fa-play" />
+                    <AppIcon name="play" :size="11" />
                   </button>
                   <button class="w-6 h-6 rounded flex items-center justify-center text-[11px] transition-colors"
                           :class="isDark ? 'text-slate-500 hover:text-slate-300 hover:bg-slate-700' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'"
                           title="Restart"
                           @click.stop>
-                    <i class="fa-solid fa-rotate-right" />
+                    <AppIcon name="restart" :size="11" />
                   </button>
                   <button v-if="c.newTag"
                           class="w-6 h-6 rounded flex items-center justify-center text-[11px] transition-colors"
                           :class="isDark ? 'text-amber-400 hover:text-amber-300 hover:bg-slate-700' : 'text-amber-500 hover:text-amber-600 hover:bg-amber-50'"
                           title="Update"
                           @click.stop>
-                    <i class="fa-solid fa-cloud-arrow-down" />
+                    <AppIcon name="cloud-download" :size="11" />
                   </button>
                 </div>
               </div>
@@ -1057,7 +1126,7 @@ onUnmounted(() => {
                  backgroundColor: isDark ? '#1e293b' : '#ffffff',
                  border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
                }">
-            <i class="fa-solid fa-filter text-2xl mb-3" :class="isDark ? 'text-slate-600' : 'text-slate-300'" />
+            <AppIcon name="filter" :size="24" class="mb-3" :class="isDark ? 'text-slate-600' : 'text-slate-300'" />
             <p class="text-sm font-medium mb-1" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
               No containers match your filters
             </p>
@@ -1080,7 +1149,7 @@ onUnmounted(() => {
 
           <!-- Panel -->
           <aside v-if="detailPanelOpen && selectedContainer"
-                 class="detail-panel-inline flex flex-col rounded-xl overflow-hidden transition-all duration-300 ease-in-out"
+                 class="detail-panel-inline flex flex-col rounded-xl overflow-clip transition-all duration-300 ease-in-out"
                  :class="isMobile ? 'fixed top-0 right-0 h-full z-50' : 'sticky top-0'"
                  :style="{
                    flex: isMobile ? undefined : panelFlex,
@@ -1110,7 +1179,7 @@ onUnmounted(() => {
                           ? 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'
                           : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'"
                         @click="closePanel">
-                  <i class="fa-solid fa-xmark text-sm" />
+                  <AppIcon name="xmark" :size="14" />
                 </button>
               </div>
 
@@ -1154,7 +1223,7 @@ onUnmounted(() => {
                           ? (isDark ? 'text-drydock-secondary' : 'text-drydock-secondary')
                           : (isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600')"
                         @click="activeDetailTab = tab.id">
-                  <i :class="tab.icon" class="mr-1 text-[10px]" />
+                  <AppIcon :name="tab.icon" :size="10" class="mr-1" />
                   {{ tab.label }}
                   <div v-if="activeDetailTab === tab.id"
                        class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full" />
@@ -1176,7 +1245,7 @@ onUnmounted(() => {
                       <div v-for="port in selectedContainer.details.ports" :key="port"
                            class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-mono"
                            :style="{ backgroundColor: isDark ? '#1e293b' : '#f8fafc' }">
-                        <i class="fa-solid fa-network-wired text-[9px]" :class="isDark ? 'text-slate-600' : 'text-slate-400'" />
+                        <AppIcon name="network" :size="9" :class="isDark ? 'text-slate-600' : 'text-slate-400'" />
                         <span :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ port }}</span>
                       </div>
                     </div>
@@ -1192,7 +1261,7 @@ onUnmounted(() => {
                       <div v-for="vol in selectedContainer.details.volumes" :key="vol"
                            class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-mono"
                            :style="{ backgroundColor: isDark ? '#1e293b' : '#f8fafc' }">
-                        <i class="fa-solid fa-hard-drive text-[9px]" :class="isDark ? 'text-slate-600' : 'text-slate-400'" />
+                        <AppIcon name="hard-drive" :size="9" :class="isDark ? 'text-slate-600' : 'text-slate-400'" />
                         <span class="truncate" :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ vol }}</span>
                       </div>
                     </div>
@@ -1259,7 +1328,7 @@ onUnmounted(() => {
                 <!-- Security tab -->
                 <div v-if="activeDetailTab === 'security'"
                      class="flex flex-col items-center justify-center py-10">
-                  <i class="fa-solid fa-shield-halved text-2xl mb-3" :class="isDark ? 'text-slate-600' : 'text-slate-300'" />
+                  <AppIcon name="security" :size="24" class="mb-3" :class="isDark ? 'text-slate-600' : 'text-slate-300'" />
                   <p class="text-xs font-medium" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
                     No vulnerabilities detected
                   </p>
@@ -1274,13 +1343,8 @@ onUnmounted(() => {
                        class="flex items-center justify-between p-3 rounded-lg"
                        :style="{ backgroundColor: isDark ? '#1e293b' : '#f8fafc' }">
                     <div class="flex items-center gap-2.5 min-w-0">
-                      <i :class="[
-                            trigger.type === 'webhook' ? 'fa-solid fa-globe'
-                              : trigger.type === 'notification' ? 'fa-solid fa-bell'
-                              : 'fa-solid fa-shield-halved',
-                            'text-[11px] shrink-0',
-                            isDark ? 'text-slate-500' : 'text-slate-400',
-                         ]" />
+                      <AppIcon :name="trigger.type === 'webhook' ? 'globe' : trigger.type === 'notification' ? 'notifications' : 'security'"
+                               :size="11" class="shrink-0" :class="isDark ? 'text-slate-500' : 'text-slate-400'" />
                       <div class="min-w-0">
                         <div class="text-[11px] font-medium truncate"
                              :class="isDark ? 'text-slate-200' : 'text-slate-700'">
@@ -1303,6 +1367,210 @@ onUnmounted(() => {
           </aside>
 
           </div><!-- end content + detail panel flex wrapper -->
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- SETTINGS PAGE (Server)                         -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div v-if="activeRoute === '/server'" class="max-w-4xl">
+          <!-- Tabs -->
+          <div class="flex gap-1 mb-6"
+               :style="{ borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+            <button v-for="tab in settingsTabs" :key="tab.id"
+                    class="px-4 py-2.5 text-[12px] font-semibold transition-colors relative"
+                    :class="activeSettingsTab === tab.id
+                      ? 'text-drydock-secondary'
+                      : (isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600')"
+                    @click="activeSettingsTab = tab.id">
+              <AppIcon :name="tab.icon" :size="12" class="mr-1.5" />
+              {{ tab.label }}
+              <div v-if="activeSettingsTab === tab.id"
+                   class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full" />
+            </button>
+          </div>
+
+          <!-- ═══ GENERAL TAB ═══ -->
+          <div v-if="activeSettingsTab === 'general'" class="space-y-6">
+            <div class="rounded-xl overflow-hidden"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+              <div class="px-5 py-3.5 flex items-center gap-2"
+                   :style="{ borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+                <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
+                <h2 class="text-sm font-semibold" :class="isDark ? 'text-slate-200' : 'text-slate-700'">Server Info</h2>
+              </div>
+              <div class="p-5 space-y-4">
+                <div v-for="field in serverFields" :key="field.label"
+                     class="flex items-center justify-between py-2"
+                     :style="{ borderBottom: isDark ? '1px solid #1e293b' : '1px solid #f1f5f9' }">
+                  <span class="text-[11px] font-semibold uppercase tracking-wider"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">{{ field.label }}</span>
+                  <span class="text-[12px] font-medium font-mono"
+                        :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ field.value }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ═══ APPEARANCE TAB ═══ -->
+          <div v-if="activeSettingsTab === 'appearance'" class="space-y-6">
+
+            <!-- Theme -->
+            <div class="rounded-xl overflow-hidden"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+              <div class="px-5 py-3.5 flex items-center gap-2"
+                   :style="{ borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+                <AppIcon :name="isDark ? 'moon' : 'sun'" :size="14" class="text-drydock-secondary" />
+                <h2 class="text-sm font-semibold" :class="isDark ? 'text-slate-200' : 'text-slate-700'">Theme</h2>
+              </div>
+              <div class="p-5">
+                <div class="flex gap-2">
+                  <button v-for="opt in themeOptions" :key="opt.id"
+                          class="flex items-center gap-2.5 px-4 py-3 rounded-lg transition-colors"
+                          :class="(opt.id === 'dark') === isDark ? 'ring-2 ring-drydock-secondary' : ''"
+                          :style="{
+                            backgroundColor: (opt.id === 'dark') === isDark
+                              ? (isDark ? 'rgba(0,150,199,0.12)' : 'rgba(0,150,199,0.08)')
+                              : (isDark ? '#0f172a80' : '#f8fafc'),
+                            border: (opt.id === 'dark') === isDark
+                              ? '1.5px solid #0096C7'
+                              : isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                          }"
+                          @click="opt.id === 'dark' ? (isDark || toggleTheme()) : (isDark && toggleTheme())">
+                    <AppIcon :name="opt.icon" :size="16"
+                             :class="(opt.id === 'dark') === isDark ? 'text-drydock-secondary' : (isDark ? 'text-slate-500' : 'text-slate-400')" />
+                    <span class="text-[12px] font-semibold"
+                          :class="(opt.id === 'dark') === isDark ? 'text-drydock-secondary' : (isDark ? 'text-slate-400' : 'text-slate-500')">
+                      {{ opt.label }}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Font Family -->
+            <div class="rounded-xl overflow-hidden"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+              <div class="px-5 py-3.5 flex items-center gap-2"
+                   :style="{ borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+                <AppIcon name="terminal" :size="14" class="text-drydock-secondary" />
+                <h2 class="text-sm font-semibold" :class="isDark ? 'text-slate-200' : 'text-slate-700'">Font Family</h2>
+              </div>
+              <div class="p-5">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button v-for="f in fontOptions" :key="f.id"
+                          class="flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors"
+                          :class="activeFont === f.id ? 'ring-2 ring-drydock-secondary' : ''"
+                          :style="{
+                            backgroundColor: activeFont === f.id
+                              ? (isDark ? 'rgba(0,150,199,0.12)' : 'rgba(0,150,199,0.08)')
+                              : (isDark ? '#0f172a80' : '#f8fafc'),
+                            border: activeFont === f.id
+                              ? '1.5px solid #0096C7'
+                              : isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                          }"
+                          @click="setFont(f.id)">
+                    <div class="flex-1 min-w-0">
+                      <div class="text-[13px] font-semibold truncate"
+                           :style="{ fontFamily: f.family }"
+                           :class="activeFont === f.id ? 'text-drydock-secondary' : (isDark ? 'text-slate-200' : 'text-slate-700')">
+                        {{ f.label }}
+                      </div>
+                      <div class="text-[10px] mt-0.5 truncate" :style="{ fontFamily: f.family }"
+                           :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                        The quick brown fox jumps over the lazy dog
+                      </div>
+                    </div>
+                    <AppIcon v-if="activeFont === f.id" name="check" :size="14" class="text-drydock-secondary shrink-0" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Icon Library -->
+            <div class="rounded-xl overflow-hidden"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+              <div class="px-5 py-3.5 flex items-center gap-2"
+                   :style="{ borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+                <AppIcon name="dashboard" :size="14" class="text-drydock-secondary" />
+                <h2 class="text-sm font-semibold" :class="isDark ? 'text-slate-200' : 'text-slate-700'">Icon Library</h2>
+              </div>
+              <div class="p-5">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  <button v-for="(label, lib) in libraryLabels" :key="lib"
+                          class="flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors"
+                          :class="iconLibrary === lib ? 'ring-2 ring-drydock-secondary' : ''"
+                          :style="{
+                            backgroundColor: iconLibrary === lib
+                              ? (isDark ? 'rgba(0,150,199,0.12)' : 'rgba(0,150,199,0.08)')
+                              : (isDark ? '#0f172a80' : '#f8fafc'),
+                            border: iconLibrary === lib
+                              ? '1.5px solid #0096C7'
+                              : isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                          }"
+                          @click="setIconLibrary(lib as IconLibrary)">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center"
+                         :style="{
+                           backgroundColor: iconLibrary === lib ? 'rgba(0,150,199,0.2)' : (isDark ? '#1e293b' : '#f1f5f9'),
+                         }">
+                      <iconify-icon :icon="iconMap['dashboard']?.[lib as IconLibrary]" width="18" height="18"
+                                    :class="iconLibrary === lib ? 'text-drydock-secondary' : (isDark ? 'text-slate-400' : 'text-slate-500')" />
+                    </div>
+                    <div class="min-w-0">
+                      <div class="text-[12px] font-semibold" :class="iconLibrary === lib ? 'text-drydock-secondary' : (isDark ? 'text-slate-200' : 'text-slate-700')">
+                        {{ label }}
+                      </div>
+                      <div class="text-[10px]" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                        {{ lib }}
+                      </div>
+                    </div>
+                    <div v-if="iconLibrary === lib" class="ml-auto shrink-0">
+                      <AppIcon name="check" :size="14" class="text-drydock-secondary" />
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Icon Size -->
+            <div class="rounded-xl overflow-hidden"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+              <div class="px-5 py-3.5 flex items-center gap-2"
+                   :style="{ borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+                <AppIcon name="containers" :size="14" class="text-drydock-secondary" />
+                <h2 class="text-sm font-semibold" :class="isDark ? 'text-slate-200' : 'text-slate-700'">Icon Size</h2>
+              </div>
+              <div class="p-5">
+                <div class="flex items-center gap-4">
+                  <AppIcon name="dashboard" :size="10" :class="isDark ? 'text-slate-500' : 'text-slate-400'" />
+                  <input type="range" min="0.8" max="1.5" step="0.05"
+                         :value="iconScale"
+                         @input="setIconScale(parseFloat(($event.target as HTMLInputElement).value))"
+                         class="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
+                         :style="{ background: isDark ? '#334155' : '#e2e8f0', accentColor: '#0096C7' }" />
+                  <AppIcon name="dashboard" :size="20" :class="isDark ? 'text-slate-500' : 'text-slate-400'" />
+                </div>
+                <div class="text-center mt-2 text-[11px]" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                  {{ Math.round(iconScale * 100) }}%
+                </div>
+              </div>
+            </div>
+
+          </div><!-- end appearance tab -->
         </div>
 
       </main>
@@ -1329,7 +1597,7 @@ onUnmounted(() => {
              :class="isDark ? 'bg-slate-700 text-slate-500' : 'bg-slate-200 text-slate-400'">ESC</kbd>
       </div>
       <div class="px-4 py-6 text-center text-xs" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
-        <i class="fa-solid fa-terminal mr-1" />
+        <AppIcon name="terminal" :size="12" class="mr-1" />
         Start typing to search across your infrastructure...
       </div>
     </Dialog>
