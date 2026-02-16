@@ -485,5 +485,21 @@ describe('ApplicationLogs', () => {
       expect(wrapper.vm.scrollBlocked).toBe(false);
       wrapper.unmount();
     });
+
+    it('fetches entries without auto-scroll when scroll is blocked', async () => {
+      mockGetLogEntries.mockResolvedValue(mockEntries);
+
+      const wrapper = mount(ApplicationLogs);
+      await flushPromises();
+
+      wrapper.vm.scrollBlocked = true;
+      mockGetLogEntries.mockResolvedValue(mockEntries);
+      await wrapper.vm.fetchEntries();
+      await flushPromises();
+
+      expect(wrapper.vm.entries).toEqual(mockEntries);
+      expect(wrapper.vm.scrollBlocked).toBe(true);
+      wrapper.unmount();
+    });
   });
 });

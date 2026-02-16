@@ -310,4 +310,23 @@ describe('ContainerLogs', () => {
     expect(pre.element.scrollTop).toBe(400);
     wrapper.unmount();
   });
+
+  it('fetches without auto-scroll when scroll is blocked', async () => {
+    mockGetContainerLogs.mockResolvedValue({ logs: 'initial logs' });
+
+    const wrapper = mount(ContainerLogs, {
+      props: { container: mockContainer },
+    });
+
+    await flushPromises();
+    wrapper.vm.scrollBlocked = true;
+
+    mockGetContainerLogs.mockResolvedValue({ logs: 'updated logs' });
+    await wrapper.vm.fetchLogs();
+    await flushPromises();
+
+    expect(wrapper.vm.logs).toBe('updated logs');
+    expect(wrapper.vm.scrollBlocked).toBe(true);
+    wrapper.unmount();
+  });
 });
