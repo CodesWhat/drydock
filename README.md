@@ -318,12 +318,16 @@ See full configuration in [`docs/configuration/security/README.md`](docs/configu
 | Docker Hub | `hub` | `hub.docker.com` |
 | GitHub Container Registry | `ghcr` | `ghcr.io` |
 | Google Container Registry | `gcr` | `gcr.io` |
+| Google Artifact Registry | `gar` | `*-docker.pkg.dev` |
 | Quay | `quay` | `quay.io` |
 | LinuxServer (LSCR) | `lscr` | `lscr.io` |
 | DigitalOcean | `docr` | `registry.digitalocean.com` |
 | Codeberg | `codeberg` | `codeberg.org` |
 | DHI | `dhi` | `dhi.io` |
 | Amazon ECR Public | `ecr` | `public.ecr.aws` |
+| IBM Cloud | `ibmcr` | `*.icr.io` |
+| Oracle Cloud (OCIR) | `ocir` | `*.ocir.io` |
+| Alibaba Cloud (ALICR) | `alicr` | `*.aliyuncs.com` |
 
 </details>
 
@@ -338,10 +342,13 @@ See full configuration in [`docs/configuration/security/README.md`](docs/configu
 | GitLab | `gitlab` | `DD_REGISTRY_GITLAB_{name}_TOKEN` |
 | GitHub (GHCR) | `ghcr` | `DD_REGISTRY_GHCR_{name}_TOKEN` |
 | Gitea / Forgejo | `gitea` | `DD_REGISTRY_GITEA_{name}_LOGIN`, `_PASSWORD` |
+| Harbor | `harbor` | `DD_REGISTRY_HARBOR_{name}_URL`, `_LOGIN`, `_PASSWORD` |
+| JFrog Artifactory | `artifactory` | `DD_REGISTRY_ARTIFACTORY_{name}_URL`, `_LOGIN`, `_PASSWORD` |
+| Sonatype Nexus | `nexus` | `DD_REGISTRY_NEXUS_{name}_URL`, `_LOGIN`, `_PASSWORD` |
 | TrueForge | `trueforge` | `DD_REGISTRY_TRUEFORGE_{name}_NAMESPACE`, `_ACCOUNT`, `_TOKEN` |
 | Custom (any v2) | `custom` | `DD_REGISTRY_CUSTOM_{name}_URL` + optional auth |
 
-See [Registry docs](docs/configuration/registries/README.md) for full configuration.
+See the [documentation](https://drydock.codeswhat.com/docs/configuration/registries) for full configuration.
 
 </details>
 
@@ -350,28 +357,32 @@ See [Registry docs](docs/configuration/registries/README.md) for full configurat
 ---
 
 <details>
-<summary><strong>Notification triggers</strong> (16 providers)</summary>
+<summary><strong>Notification triggers</strong> (20 providers)</summary>
 
 All env vars use the `DD_` prefix; Docker labels use the `dd.` prefix.
 
-| Trigger | Description | Docs |
-| --- | --- | --- |
-| Apprise | Universal notification gateway | [docs](docs/configuration/triggers/apprise/README.md) |
-| Command | Run arbitrary shell commands | [docs](docs/configuration/triggers/command/README.md) |
-| Discord | Discord webhook | [docs](docs/configuration/triggers/discord/README.md) |
-| Docker | Auto-pull and restart containers | [docs](docs/configuration/triggers/docker/README.md) |
-| Docker Compose | Auto-pull and recreate compose services | [docs](docs/configuration/triggers/docker-compose/README.md) |
-| Gotify | Gotify push notifications | [docs](docs/configuration/triggers/gotify/README.md) |
-| HTTP | Generic webhook (POST) | [docs](docs/configuration/triggers/http/README.md) |
-| IFTTT | IFTTT applet trigger | [docs](docs/configuration/triggers/ifttt/README.md) |
-| Kafka | Kafka message producer | [docs](docs/configuration/triggers/kafka/README.md) |
-| MQTT | MQTT message (Home Assistant compatible) | [docs](docs/configuration/triggers/mqtt/README.md) |
-| NTFY | ntfy.sh push notifications | [docs](docs/configuration/triggers/ntfy/README.md) |
-| Pushover | Pushover notifications | [docs](docs/configuration/triggers/pushover/README.md) |
-| Rocket.Chat | Rocket.Chat webhook | [docs](docs/configuration/triggers/rocketchat/README.md) |
-| Slack | Slack webhook | [docs](docs/configuration/triggers/slack/README.md) |
-| SMTP | Email notifications | [docs](docs/configuration/triggers/smtp/README.md) |
-| Telegram | Telegram bot messages | [docs](docs/configuration/triggers/telegram/README.md) |
+| Trigger | Description |
+| --- | --- |
+| Apprise | Universal notification gateway |
+| Command | Run arbitrary shell commands |
+| Discord | Discord webhook |
+| Docker | Auto-pull and restart containers |
+| Docker Compose | Auto-pull and recreate compose services |
+| Google Chat | Google Chat incoming webhook |
+| Gotify | Gotify push notifications |
+| HTTP | Generic webhook (POST) |
+| IFTTT | IFTTT applet trigger |
+| Kafka | Kafka message producer |
+| Matrix | Matrix room notifications |
+| Mattermost | Mattermost incoming webhook |
+| MQTT | MQTT message (Home Assistant compatible) |
+| MS Teams | Microsoft Teams webhook (Adaptive Cards) |
+| NTFY | ntfy.sh push notifications |
+| Pushover | Pushover notifications |
+| Rocket.Chat | Rocket.Chat webhook |
+| Slack | Slack webhook |
+| SMTP | Email notifications |
+| Telegram | Telegram bot messages |
 
 All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) to control which updates fire notifications.
 
@@ -540,9 +551,9 @@ Here's what's coming.
 | Version | Theme | Highlights |
 | --- | --- | --- |
 | **v1.3.0** ✅ | Security Integration | Trivy scanning, Update Guard, SBOM generation, image signing, on-demand scan |
-| **v1.3.2** ✅ | Log Viewer & Fixes | Auto-fetch polling, scroll lock, auto-scroll for log viewers, v1 digest fix, Discord trigger fix |
+| **v1.3.2** ✅ | Log Viewer & Providers | Auto-fetch polling, scroll lock, auto-scroll for log viewers, 7 new registries, 4 new triggers, v1 digest fix, Discord trigger fix |
 | **v1.4.0** | UI Modernization | PrimeVue migration, Composition API, Vite cleanup, font personalization, icon caching, Internetless Mode |
-| **v1.5.0** | Observability | Real-time log viewer, resource monitoring, registry webhooks, notification templates, release notes, MS Teams & Matrix |
+| **v1.5.0** | Observability | Resource monitoring, registry webhooks, notification templates, release notes |
 | **v1.6.0** | Fleet Management | YAML config, live UI config panels, local registry provider, volume browser, parallel updates, dependency ordering, container groups |
 | **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers |
 | **v2.1.0** | Deployment Patterns | Health check gates, canary deployments |

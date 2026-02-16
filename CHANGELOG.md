@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Log viewer scroll lock** — Scrolling away from the bottom pauses auto-scroll, showing a "Scroll locked" indicator and "Resume" button. New log data continues to load in the background without yanking the user's scroll position. ([#57](https://github.com/CodesWhat/drydock/issues/57))
 - **Log viewer auto-scroll** — New log entries automatically scroll the view to the bottom when the user is near the end, providing a tail-like experience. ([#57](https://github.com/CodesWhat/drydock/issues/57))
 - **Shared log viewer composable** — Extracted `useLogViewerBehavior` composable with `useLogViewport` (scroll management) and `useAutoFetchLogs` (interval timer lifecycle) to eliminate duplication between application and container log views.
+- **7 new registry providers** — Added OCIR (Oracle Cloud), IBMCR (IBM Cloud), ALICR (Alibaba Cloud), GAR (Google Artifact Registry), Harbor, JFrog Artifactory, and Sonatype Nexus. Includes a shared `SelfHostedBasic` base class for self-hosted registries with basic auth.
+- **4 new trigger providers** — Added Mattermost, Microsoft Teams (Adaptive Cards), Matrix, and Google Chat notification triggers.
 
 ### Fixed
 
