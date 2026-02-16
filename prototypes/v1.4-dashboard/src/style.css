@@ -1,0 +1,136 @@
+@import "tailwindcss";
+@import "@fontsource/ibm-plex-mono/300.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/ibm-plex-mono/700.css";
+@import "primeicons/primeicons.css";
+@import "@fortawesome/fontawesome-free/css/all.min.css";
+
+/* Drydock design tokens */
+@theme {
+  --color-drydock-primary: #00355E;
+  --color-drydock-secondary: #0096C7;
+  --color-drydock-accent: #06D6A0;
+  --font-family-mono: "IBM Plex Mono", monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body { font-family: "IBM Plex Mono", monospace; }
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+.dark ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+.light ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+/* Sidebar transitions */
+.sidebar-transition {
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Nav item transitions */
+.nav-item {
+  transition: background-color 0.15s ease, color 0.15s ease, padding 0.15s ease;
+}
+
+/* Overlay backdrop */
+.sidebar-overlay {
+  transition: opacity 0.25s ease;
+}
+
+/* Fade text in sidebar */
+.sidebar-label {
+  transition: opacity 0.2s ease 0.05s, max-width 0.2s ease;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.sidebar-collapsed .sidebar-label {
+  opacity: 0;
+  max-width: 0;
+  transition: opacity 0.1s ease, max-width 0.15s ease;
+}
+
+/* Stat card left border */
+.stat-card { border-left: 4px solid transparent; }
+
+/* Donut chart */
+.donut-ring {
+  transition: stroke-dasharray 0.6s ease;
+}
+
+/* Badge pulse */
+@keyframes pulse-badge {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+.badge-pulse { animation: pulse-badge 2s ease-in-out infinite; }
+
+/* Tooltip for collapsed sidebar */
+.nav-tooltip {
+  position: fixed;
+  left: 64px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 1000;
+}
+.sidebar-collapsed .nav-item-wrapper:hover .nav-tooltip {
+  opacity: 1;
+}
+
+/* Status badge styles */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* Hamburger line */
+.hamburger-line {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+/* Search modal */
+.search-backdrop {
+  transition: opacity 0.2s ease;
+}
+
+/* Container card hover */
+.container-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.container-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* Detail panel inline */
+.detail-panel-inline {
+  animation: panel-slide-in 0.25s ease-out;
+}
+@keyframes panel-slide-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Filter inputs */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+}
