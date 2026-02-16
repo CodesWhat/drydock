@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] — 2026-02-16
+
+### Added
+
+- **Log viewer auto-fetch polling** — Configurable auto-fetch interval (Off / 2s / 5s / 10s / 30s) for both application and container log viewers, replacing manual-only refresh. Defaults to 5 seconds for a near-real-time tail experience. ([#57](https://github.com/CodesWhat/drydock/issues/57))
+- **Log viewer scroll lock** — Scrolling away from the bottom pauses auto-scroll, showing a "Scroll locked" indicator and "Resume" button. New log data continues to load in the background without yanking the user's scroll position. ([#57](https://github.com/CodesWhat/drydock/issues/57))
+- **Log viewer auto-scroll** — New log entries automatically scroll the view to the bottom when the user is near the end, providing a tail-like experience. ([#57](https://github.com/CodesWhat/drydock/issues/57))
+- **Shared log viewer composable** — Extracted `useLogViewerBehavior` composable with `useLogViewport` (scroll management) and `useAutoFetchLogs` (interval timer lifecycle) to eliminate duplication between application and container log views.
+
 ### Fixed
 
 - **v1 manifest digest watch using image ID instead of repo digest** — Fixed `handleDigestWatch()` incorrectly reading `Config.Image` (the local image ID) as the digest for v1 manifest images, causing perpetual false "update available" notifications. Now uses the repo digest from `RepoDigests` instead. ([getwud/wud#934](https://github.com/getwud/wud/issues/934))
@@ -357,7 +366,9 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/CodesWhat/drydock/compare/v1.3.1...v1.3.2
+[1.3.1]: https://github.com/CodesWhat/drydock/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/CodesWhat/drydock/compare/v1.2.0...v1.3.0
 [1.1.1]: https://github.com/CodesWhat/drydock/compare/v1.1.0...1.1.1
 [1.1.0]: https://github.com/CodesWhat/drydock/compare/v1.0.2...v1.1.0
