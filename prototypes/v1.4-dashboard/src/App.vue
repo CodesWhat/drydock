@@ -63,18 +63,20 @@ const navGroups: NavGroup[] = [
   {
     label: 'Infrastructure',
     items: [
+      { label: 'Servers', icon: 'servers', route: '/servers' },
       { label: 'Registries', icon: 'registries', route: '/registries' },
       { label: 'Agents', icon: 'agents', route: '/agents' },
       { label: 'Triggers', icon: 'triggers', route: '/triggers' },
       { label: 'Watchers', icon: 'watchers', route: '/watchers' },
+      { label: 'Auth', icon: 'auth', route: '/auth' },
+      { label: 'Notifications', icon: 'notifications', route: '/notifications' },
     ],
   },
   {
     label: 'Settings',
     items: [
-      { label: 'Server', icon: 'settings', route: '/server' },
-      { label: 'Auth', icon: 'auth', route: '/auth' },
-      { label: 'Notifications', icon: 'notifications', route: '/notifications' },
+      { label: 'Config', icon: 'config', route: '/config' },
+      { label: 'Profile', icon: 'user', route: '/profile' },
     ],
   },
 ];
@@ -109,9 +111,6 @@ const userMenuItems = [
   {
     label: 'admin',
     items: [
-      { label: 'Profile', icon: 'fa-regular fa-user' },
-      { label: 'Settings', icon: 'fa-solid fa-cog' },
-      { separator: true },
       { label: 'Sign out', icon: 'fa-solid fa-arrow-right-from-bracket', class: 'text-red-400' },
     ],
   },
@@ -789,7 +788,7 @@ onUnmounted(() => {
                 <div class="flex items-center gap-2">
                   <AppIcon name="recent-updates" :size="14" class="text-drydock-secondary" />
                   <h2 class="text-sm font-semibold" :class="isDark ? 'text-slate-200' : 'text-slate-700'">
-                    Recent Updates
+                    Container Log
                   </h2>
                 </div>
                 <button class="text-[11px] font-medium text-drydock-secondary hover:underline">View all</button>
@@ -1398,7 +1397,7 @@ onUnmounted(() => {
         <!-- ═══════════════════════════════════════════════ -->
         <!-- SETTINGS PAGE (Server)                         -->
         <!-- ═══════════════════════════════════════════════ -->
-        <div v-if="activeRoute === '/server'" class="max-w-4xl">
+        <div v-if="activeRoute === '/config'" class="max-w-4xl">
           <!-- Tabs -->
           <div class="flex gap-1 mb-6"
                :style="{ borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">

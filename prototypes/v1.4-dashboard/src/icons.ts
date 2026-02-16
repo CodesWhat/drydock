@@ -56,6 +56,16 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     'lucide': 'lucide:eye', 'tabler': 'tabler:eye',
     'heroicons': 'heroicons:eye', 'iconoir': 'iconoir:eye-empty',
   },
+  'servers': {
+    'fa6-solid': 'fa6-solid:server', 'ph': 'ph:computer-tower', 'ph-duotone': 'ph:computer-tower-duotone',
+    'lucide': 'lucide:server', 'tabler': 'tabler:server',
+    'heroicons': 'heroicons:server', 'iconoir': 'iconoir:server',
+  },
+  'config': {
+    'fa6-solid': 'fa6-solid:sliders', 'ph': 'ph:sliders-horizontal', 'ph-duotone': 'ph:sliders-horizontal-duotone',
+    'lucide': 'lucide:sliders-horizontal', 'tabler': 'tabler:adjustments-horizontal',
+    'heroicons': 'heroicons:adjustments-horizontal', 'iconoir': 'iconoir:settings',
+  },
   'settings': {
     'fa6-solid': 'fa6-solid:gear', 'ph': 'ph:gear-six', 'ph-duotone': 'ph:gear-six-duotone',
     'lucide': 'lucide:settings', 'tabler': 'tabler:settings',
