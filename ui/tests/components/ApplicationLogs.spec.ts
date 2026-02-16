@@ -79,6 +79,17 @@ describe('ApplicationLogs', () => {
     wrapper.unmount();
   });
 
+  it('stringifies non-Error failures in error state', async () => {
+    mockGetLogEntries.mockRejectedValue('raw-error');
+
+    const wrapper = mount(ApplicationLogs);
+
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('raw-error');
+    wrapper.unmount();
+  });
+
   it('shows empty state when no entries returned', async () => {
     mockGetLogEntries.mockResolvedValue([]);
 

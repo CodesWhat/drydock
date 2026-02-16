@@ -180,6 +180,31 @@ describe('ContainerLogs', () => {
     wrapper.unmount();
   });
 
+  it('re-fetches and clears scroll lock when container id changes', async () => {
+    mockGetContainerLogs.mockResolvedValue({ logs: 'initial logs' });
+
+    const wrapper = mount(ContainerLogs, {
+      props: { container: mockContainer },
+    });
+
+    await flushPromises();
+    expect(mockGetContainerLogs).toHaveBeenCalledTimes(1);
+
+    wrapper.vm.scrollBlocked = true;
+    mockGetContainerLogs.mockResolvedValue({ logs: 'new container logs' });
+    await wrapper.setProps({
+      container: {
+        ...mockContainer,
+        id: 'different-container-id',
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.vm.scrollBlocked).toBe(false);
+    expect(mockGetContainerLogs).toHaveBeenLastCalledWith('different-container-id', 100);
+    wrapper.unmount();
+  });
+
   it('auto-fetches logs on interval', async () => {
     vi.useFakeTimers();
     mockGetContainerLogs.mockResolvedValue({ logs: 'logs' });
