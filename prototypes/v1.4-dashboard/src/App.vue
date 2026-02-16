@@ -182,6 +182,7 @@ interface Container {
   status: 'running' | 'stopped';
   registry: 'dockerhub' | 'ghcr' | 'custom';
   updateKind: 'major' | 'minor' | 'patch' | 'digest' | null;
+  bouncer: 'safe' | 'unsafe' | 'blocked';
   details: ContainerDetails;
 }
 
@@ -194,6 +195,7 @@ const containers = ref<Container[]>([
     status: 'running',
     registry: 'dockerhub',
     updateKind: 'major',
+    bouncer: 'blocked',
     details: {
       ports: ['80:80', '443:443', '8080:8080'],
       volumes: ['/var/run/docker.sock:/var/run/docker.sock:ro', './traefik.yml:/traefik.yml'],
@@ -209,6 +211,7 @@ const containers = ref<Container[]>([
     status: 'running',
     registry: 'dockerhub',
     updateKind: 'major',
+    bouncer: 'blocked',
     details: {
       ports: ['5432:5432'],
       volumes: ['pg_data:/var/lib/postgresql/data'],
@@ -224,6 +227,7 @@ const containers = ref<Container[]>([
     status: 'running',
     registry: 'dockerhub',
     updateKind: 'minor',
+    bouncer: 'safe',
     details: {
       ports: ['6379:6379'],
       volumes: ['redis_data:/data'],
@@ -239,6 +243,7 @@ const containers = ref<Container[]>([
     status: 'stopped',
     registry: 'dockerhub',
     updateKind: 'minor',
+    bouncer: 'unsafe',
     details: {
       ports: ['8081:80'],
       volumes: ['./nginx.conf:/etc/nginx/nginx.conf:ro'],
@@ -254,6 +259,7 @@ const containers = ref<Container[]>([
     status: 'running',
     registry: 'dockerhub',
     updateKind: 'minor',
+    bouncer: 'safe',
     details: {
       ports: ['3000:3000'],
       volumes: ['grafana_data:/var/lib/grafana'],
@@ -269,6 +275,7 @@ const containers = ref<Container[]>([
     status: 'running',
     registry: 'dockerhub',
     updateKind: null,
+    bouncer: 'safe',
     details: {
       ports: ['9090:9090'],
       volumes: ['./prometheus.yml:/etc/prometheus/prometheus.yml', 'prom_data:/prometheus'],
@@ -284,6 +291,7 @@ const containers = ref<Container[]>([
     status: 'running',
     registry: 'ghcr',
     updateKind: 'patch',
+    bouncer: 'safe',
     details: {
       ports: ['3001:3001'],
       volumes: ['./config:/app/config:ro'],
@@ -299,6 +307,7 @@ const containers = ref<Container[]>([
     status: 'running',
     registry: 'ghcr',
     updateKind: null,
+    bouncer: 'safe',
     details: {
       ports: ['8080:80'],
       volumes: [],
@@ -314,6 +323,7 @@ const containers = ref<Container[]>([
     status: 'stopped',
     registry: 'custom',
     updateKind: 'patch',
+    bouncer: 'unsafe',
     details: {
       ports: ['5000:5000'],
       volumes: ['registry_data:/var/lib/registry'],
@@ -329,6 +339,7 @@ const containers = ref<Container[]>([
     status: 'running',
     registry: 'dockerhub',
     updateKind: null,
+    bouncer: 'safe',
     details: {
       ports: [],
       volumes: ['/var/run/docker.sock:/var/run/docker.sock:ro'],
@@ -343,6 +354,7 @@ const filterSearch = ref('');
 const filterStatus = ref('all');
 const filterRegistry = ref('all');
 const filterUpdate = ref('all');
+const filterBouncer = ref('all');
 
 const filteredContainers = computed(() => {
   return containers.value.filter((c) => {
@@ -354,6 +366,7 @@ const filteredContainers = computed(() => {
     if (filterRegistry.value !== 'all' && c.registry !== filterRegistry.value) return false;
     if (filterUpdate.value === 'available' && !c.newTag) return false;
     if (filterUpdate.value === 'uptodate' && c.newTag) return false;
+    if (filterBouncer.value !== 'all' && c.bouncer !== filterBouncer.value) return false;
     return true;
   });
 });
@@ -396,6 +409,7 @@ function clearFilters() {
   filterStatus.value = 'all';
   filterRegistry.value = 'all';
   filterUpdate.value = 'all';
+  filterBouncer.value = 'all';
 }
 
 function registryLabel(reg: string) {
@@ -968,6 +982,18 @@ onUnmounted(() => {
                 <option value="all">Status</option>
                 <option value="running">Running</option>
                 <option value="stopped">Stopped</option>
+              </select>
+
+              <!-- Bouncer filter -->
+              <select v-model="filterBouncer"
+                      class="px-2 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide outline-none cursor-pointer"
+                      :class="isDark
+                        ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                        : 'bg-slate-50 text-slate-600 border border-slate-200'">
+                <option value="all">🥊 Bouncer</option>
+                <option value="safe">Safe</option>
+                <option value="unsafe">Unsafe</option>
+                <option value="blocked">Blocked</option>
               </select>
 
               <!-- Registry filter -->
