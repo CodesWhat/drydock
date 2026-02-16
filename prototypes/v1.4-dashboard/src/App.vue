@@ -359,11 +359,11 @@ const detailPanelOpen = ref(false);
 const activeDetailTab = ref('overview');
 const panelSize = ref<'sm' | 'md' | 'lg'>('sm');
 
-// Fraction-based: 1/4, 1/3, 2/3 — cards always stay on the left
+// Panel widths: S=30%, M=45%, L=75% — cards always stay on the left
 const panelFlex = computed(() =>
-  panelSize.value === 'sm' ? '0 0 25%'
-  : panelSize.value === 'md' ? '0 0 33.333%'
-  : '0 0 66.666%'
+  panelSize.value === 'sm' ? '0 0 30%'
+  : panelSize.value === 'md' ? '0 0 45%'
+  : '0 0 70%'
 );
 
 // Panel size is set directly via S/M/L buttons in the toolbar
@@ -888,50 +888,53 @@ onUnmounted(() => {
         <div v-if="activeRoute === '/containers'" class="flex flex-col" style="height: calc(100vh - 80px);">
 
           <!-- ═══ CONTENT + DETAIL PANEL FLEX WRAPPER ═══ -->
-          <div class="flex gap-4 min-w-0 flex-1 min-h-0">
+          <div class="flex gap-4 min-w-0 flex-1 min-h-0 pb-4">
 
           <!-- Left: filters + cards (scrolls independently) -->
-          <div class="flex-1 min-w-0 overflow-y-auto p-0.5 -m-0.5">
+          <div class="flex-1 min-w-0 overflow-y-auto p-0.5 -m-0.5 pr-4 pb-4"
+               style="-webkit-mask-image: linear-gradient(to bottom, black calc(100% - 48px), transparent 100%); mask-image: linear-gradient(to bottom, black calc(100% - 48px), transparent 100%)">
 
           <!-- ═══ FILTER BAR ═══ -->
-          <div class="flex flex-wrap items-center gap-3 mb-5 p-3 rounded-xl sticky top-0 z-10"
+          <div class="flex items-center gap-2.5 mb-5 px-3 py-2 rounded-xl sticky top-0 z-10"
                :style="{
                  backgroundColor: isDark ? '#1e293b' : '#ffffff',
                  border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
                }">
             <!-- Status filter -->
             <select v-model="filterStatus"
-                    class="px-2.5 py-1.5 rounded-lg text-xs font-mono outline-none cursor-pointer"
+                    class="px-2 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide outline-none cursor-pointer"
                     :class="isDark
                       ? 'bg-slate-800 text-slate-300 border border-slate-700'
                       : 'bg-slate-50 text-slate-600 border border-slate-200'">
-              <option value="all">All Status</option>
+              <option value="all">Status</option>
               <option value="running">Running</option>
               <option value="stopped">Stopped</option>
             </select>
 
             <!-- Registry filter -->
             <select v-model="filterRegistry"
-                    class="px-2.5 py-1.5 rounded-lg text-xs font-mono outline-none cursor-pointer"
+                    class="px-2 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide outline-none cursor-pointer"
                     :class="isDark
                       ? 'bg-slate-800 text-slate-300 border border-slate-700'
                       : 'bg-slate-50 text-slate-600 border border-slate-200'">
-              <option value="all">All Registries</option>
+              <option value="all">Registry</option>
               <option value="dockerhub">Docker Hub</option>
               <option value="ghcr">GHCR</option>
               <option value="custom">Custom</option>
             </select>
 
-            <!-- Update filter -->
-            <select v-model="filterUpdate"
-                    class="px-2.5 py-1.5 rounded-lg text-xs font-mono outline-none cursor-pointer"
-                    :class="isDark
-                      ? 'bg-slate-800 text-slate-300 border border-slate-700'
-                      : 'bg-slate-50 text-slate-600 border border-slate-200'">
-              <option value="all">All Updates</option>
-              <option value="available">Update Available</option>
-              <option value="uptodate">Up to Date</option>
-            </select>
+            <!-- Updates checkbox -->
+            <label class="flex items-center gap-1.5 cursor-pointer select-none ml-1"
+                   @click.prevent="filterUpdate = filterUpdate === 'available' ? 'all' : 'available'">
+              <div class="w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors"
+                   :class="filterUpdate === 'available'
+                     ? 'bg-drydock-secondary border-drydock-secondary'
+                     : isDark ? 'border-slate-600 bg-slate-800' : 'border-slate-300 bg-slate-50'">
+                <i v-if="filterUpdate === 'available'" class="fa-solid fa-check text-[8px] text-white" />
+              </div>
+              <span class="text-[11px] font-semibold uppercase tracking-wide"
+                    :class="isDark ? 'text-slate-400' : 'text-slate-500'">Updates</span>
+            </label>
 
             <!-- Result count -->
             <span class="text-[10px] font-semibold tabular-nums shrink-0 px-2 py-1 rounded-lg ml-auto"
@@ -948,12 +951,14 @@ onUnmounted(() => {
                  class="container-card rounded-xl cursor-pointer"
                  :class="[
                    selectedContainer?.name === c.name
-                     ? 'ring-2 ring-drydock-secondary'
+                     ? 'ring-2 ring-drydock-secondary ring-offset-0'
                      : '',
                  ]"
                  :style="{
                    backgroundColor: isDark ? '#1e293b' : '#ffffff',
-                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                   border: selectedContainer?.name === c.name
+                     ? '1.5px solid var(--color-drydock-secondary)'
+                     : isDark ? '1px solid #334155' : '1px solid #e2e8f0',
                  }"
                  @click="selectContainer(c)">
 
@@ -1076,19 +1081,20 @@ onUnmounted(() => {
           <!-- Panel -->
           <aside v-if="detailPanelOpen && selectedContainer"
                  class="detail-panel-inline flex flex-col rounded-xl overflow-hidden transition-all duration-300 ease-in-out"
-                 :class="isMobile ? 'fixed top-0 right-0 h-full z-50' : 'self-start sticky top-0'"
+                 :class="isMobile ? 'fixed top-0 right-0 h-full z-50' : 'sticky top-0'"
                  :style="{
                    flex: isMobile ? undefined : panelFlex,
                    width: isMobile ? '100%' : undefined,
                    backgroundColor: isDark ? '#1e293b' : '#ffffff',
                    border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
-                   maxHeight: isMobile ? '100vh' : '100%',
+                   height: isMobile ? '100vh' : 'calc(100vh - 96px)',
+                   minHeight: '480px',
                  }">
 
               <!-- Panel toolbar: expand/shrink + close -->
               <div class="shrink-0 px-4 py-2.5 flex items-center justify-between"
                    :style="{ borderBottom: isDark ? '1px solid #1e293b' : '1px solid #e2e8f0' }">
-                <div class="flex items-center rounded-lg overflow-hidden"
+                <div v-if="!isMobile" class="flex items-center rounded-lg overflow-hidden"
                      :style="{ border: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
                   <button v-for="s in (['lg', 'md', 'sm'] as const)" :key="s"
                           class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors"
