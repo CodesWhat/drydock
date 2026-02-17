@@ -70,7 +70,7 @@
     "@types/dockerode": "4.0.1",
     "@types/express": "^5.0.6",
     "@types/express-session": "^1.18.2",
-    "@types/node": "^25.2.2",
+    "@types/node": "^25.2.3",
     "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^7.0.9",
     "@types/passport": "^1.0.17",
