@@ -45,8 +45,6 @@
 
 <h3 align="center">📋 Contents</h3>
 
----
-
 - [Quick Start](#quick-start)
 - [Screenshots](#screenshots)
 - [Features](#features)
@@ -57,13 +55,12 @@
 - [Migrating from WUD](#migrating-from-wud)
 - [Roadmap](#roadmap)
 - [Documentation](#documentation)
-- [Star History](#star-history)
+
+---
 
 <br>
 
 <h3 align="center" id="quick-start">🚀 Quick Start</h3>
-
----
 
 ```bash
 docker run -d \
@@ -130,11 +127,11 @@ See the [Express trust proxy docs](https://expressjs.com/en/guide/behind-proxies
 
 </details>
 
+---
+
 <br>
 
 <h3 align="center" id="screenshots">📸 Screenshots</h3>
-
----
 
 <table>
 <tr>
@@ -167,11 +164,11 @@ See the [Express trust proxy docs](https://expressjs.com/en/guide/behind-proxies
 </tr>
 </table>
 
+---
+
 <br>
 
 <h3 align="center" id="features">⚡ Features</h3>
-
----
 
 Auto-detect running containers, check for image updates across 22 registry providers, and notify through 20 trigger channels — with a full web UI, REST API, and Prometheus metrics.
 
@@ -199,11 +196,11 @@ Auto-detect running containers, check for image updates across 22 registry provi
 
 </details>
 
+---
+
 <br>
 
 <h3 align="center" id="update-bouncer">🥊 Update Bouncer</h3>
-
----
 
 Trivy-powered safe-pull gate that scans candidate images for vulnerabilities, verifies signatures with cosign, and generates SBOMs — all before pulling or restarting. Disabled by default; enable with `DD_SECURITY_SCANNER=trivy`.
 
@@ -211,11 +208,11 @@ Trivy-powered safe-pull gate that scans candidate images for vulnerabilities, ve
 
 See the full configuration guide at [drydock.codeswhat.com/configuration/security](https://drydock.codeswhat.com/configuration/security).
 
+---
+
 <br>
 
 <h3 align="center" id="supported-registries">📦 Supported Registries</h3>
-
----
 
 <details>
 <summary><strong>Public registries</strong> (auto-registered, no config needed)</summary>
@@ -263,11 +260,11 @@ See [Registry docs](https://drydock.codeswhat.com/configuration/registries) for 
 
 </details>
 
+---
+
 <br>
 
 <h3 align="center" id="supported-triggers">🔔 Supported Triggers</h3>
-
----
 
 <details>
 <summary><strong>Notification triggers</strong> (20 providers)</summary>
@@ -301,11 +298,11 @@ All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) 
 
 </details>
 
+---
+
 <br>
 
 <h3 align="center" id="authentication">🔐 Authentication</h3>
-
----
 
 <details>
 <summary><strong>Supported auth methods</strong></summary>
@@ -318,11 +315,11 @@ All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) 
 
 </details>
 
+---
+
 <br>
 
 <h3 align="center" id="migrating-from-wud">🔄 Migrating from WUD</h3>
-
----
 
 drydock is a drop-in replacement for What's Up Docker (WUD). Swap the image and restart — all `WUD_` env vars, `wud.*` labels, and state files are automatically migrated.
 
@@ -392,11 +389,11 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Swap the image and 
 
 </details>
 
+---
+
 <br>
 
 <h3 align="center" id="roadmap">🗺️ Roadmap</h3>
-
----
 
 | Version | Theme | Highlights |
 | --- | --- | --- |
@@ -413,23 +410,22 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Swap the image and 
 | **v3.0.0** | GitOps & Beyond | Git-based stack deployment, network topology, GPU monitoring, i18n |
 | **v3.1.0** | Enterprise Access | RBAC, LDAP/AD, environment-scoped permissions, audit logging, Wolfi hardened image, FIPS |
 
+---
+
 <br>
 
 <h3 align="center" id="documentation">📚 Documentation</h3>
 
----
-
 | Resource | Link |
 | --- | --- |
-| Website & Docs | [drydock.codeswhat.com](https://drydock.codeswhat.com/) |
-| Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
+| Website | [drydock.codeswhat.com](https://drydock.codeswhat.com/) |
+| Documentation | [drydock.codeswhat.com/configuration](https://drydock.codeswhat.com/configuration/) |
+| Changelog | [CHANGELOG.md](CHANGELOG.md) |
 | Issues & Discussions | [GitHub Issues](https://github.com/CodesWhat/drydock/issues) · [Discussions](https://github.com/CodesWhat/drydock/discussions) |
 
-<br>
-
-<h3 align="center" id="star-history">⭐ Star History</h3>
-
 ---
+
+<br>
 
 <div align="center">
   <a href="https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left">
@@ -458,7 +454,7 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Swap the image and 
 [![Biome](https://img.shields.io/badge/Biome_2.3-60a5fa?logo=biome&logoColor=fff)](https://biomejs.dev/)
 [![Node 24](https://img.shields.io/badge/Node_24_Alpine-339933?logo=nodedotjs&logoColor=fff)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=fff)](https://www.docker.com/)
-[![Built with AI](https://img.shields.io/badge/Built_with_AI-000000?style=flat&logo=anthropic&logoColor=white)](https://claude.ai/)
+[![Claude](https://img.shields.io/badge/Claude-000000?style=flat&logo=anthropic&logoColor=white)](https://claude.ai/)
 
 ---
 
