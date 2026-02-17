@@ -31,4 +31,4 @@ Open a [GitHub Issue](https://github.com/CodesWhat/drydock/issues) with steps to
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+By contributing, you agree that your contributions will be licensed under the [AGPL-3.0 License](LICENSE).

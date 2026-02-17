@@ -5,8 +5,8 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **Fork point:** upstream post-8.1.1 (2025-11-27)
-> **Upstream baseline:** WUD 8.1.1 + 65 merged PRs on `main` (Vue 3 migration, Alpine base image, Rocket.Chat trigger, threshold system, semver improvements, request→axios migration, and more)
+> **Origin:** Initially derived from WUD 8.1.1 (2025-11-27), since fully rewritten. Zero original code remains as of v1.4.0.
+> **License:** AGPL-3.0-only (changed from MIT in v1.4.0)
 
 ## [Unreleased]
 
@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **License changed from MIT to AGPL-3.0-only** — The codebase has been fully rewritten with zero original upstream code remaining. License updated to AGPL-3.0-only to support future dual-licensing with commercial support tiers.
 - **Funding badges moved to README footer** — Moved funding badges (Ko-fi, Buy Me a Coffee, GitHub Sponsors) from header to footer.
 
 ## [1.3.3] — 2026-02-16
@@ -396,28 +397,17 @@ First semver release. Drydock adopts semantic versioning starting with this rele
 
 > **Stats:** 392 files changed, +25,725 insertions, -25,995 deletions, 872 total tests (709 app + 163 UI).
 
-## Upstream Backports
+## Historical: WUD Backports (v1.0.0)
 
-The following changes from `upstream/main` (post-fork) have been ported to drydock:
+The following WUD changes were incorporated during the initial v1.0.0 rewrite. All code has since been fully rewritten.
 
 | Description | Status |
 | --- | --- |
-| Add Codeberg to default registries | Ported (new TS provider) |
-| Increase `maxAliasCount` in YAML parsing | Ported |
-| Fix authentication for private ECR registry (async `getAuthPull`) | Ported across all registries |
-| Prometheus: add `DD_PROMETHEUS_ENABLED` config | Ported |
-| Fix Authelia OIDC docs (field names) | Ported |
-| Buffer Docker event stream before JSON parse | Already fixed independently |
-| SMTP trigger: allow display name in from address ([#908](https://github.com/getwud/wud/pull/908)) | Ported |
-
-Remaining upstream-only changes (not ported — not applicable to drydock):
-
-| Description | Reason |
-| --- | --- |
-| Fix e2e tests (x2) | JS-based, drydock tests are TS |
-| Fix prettier | drydock uses Biome |
-| Fix codeberg tests | Covered by drydock's own tests |
-| Update changelog | Upstream-specific |
+| Add Codeberg to default registries | Rewritten as TS provider |
+| Increase `maxAliasCount` in YAML parsing | Incorporated |
+| Fix authentication for private ECR registry (async `getAuthPull`) | Rewritten across all registries |
+| Prometheus: add `DD_PROMETHEUS_ENABLED` config | Incorporated |
+| SMTP trigger: allow display name in from address | Incorporated |
 
 [Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.3.3...HEAD
 [1.3.3]: https://github.com/CodesWhat/drydock/compare/v1.3.2...v1.3.3

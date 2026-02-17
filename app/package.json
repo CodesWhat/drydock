@@ -15,7 +15,7 @@
   },
   "author": "CodesWhat",
   "repository": "CodesWhat/drydock",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "dependencies": {
     "@aws-sdk/client-ecr": "^3.894.0",
     "@slack/web-api": "^7.13.0",
