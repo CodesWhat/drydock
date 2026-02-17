@@ -32,6 +32,7 @@ export function init() {
     max: 1000,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
   });
   router.use(apiLimiter);
 

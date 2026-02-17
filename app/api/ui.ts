@@ -16,6 +16,7 @@ export function init() {
     max: 500,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
   });
   router.use(uiLimiter);
   router.use(express.static(uiDirectory));

@@ -186,6 +186,7 @@ export function init(app) {
     max: 100,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
   });
   router.use(authLimiter);
 
