@@ -1,6 +1,6 @@
 {
   "name": "drydock-app",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "drydock - the app",
   "type": "module",
   "main": "dist/index.js",
