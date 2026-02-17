@@ -111,7 +111,7 @@ dist/
 .audit/
 .research-findings.md
 
-# Playwright MCP
+# Playwright
 .playwright-mcp/
 .playwright-cli/
 output/
