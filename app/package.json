@@ -18,7 +18,7 @@
   "repository": "CodesWhat/drydock",
   "license": "MIT",
   "dependencies": {
-    "@aws-sdk/client-ecr": "^3.894.0",
+    "@aws-sdk/client-ecr": "^3.991.0",
     "@slack/web-api": "^7.13.0",
     "axios": "1.13.5",
     "capitalize": "2.0.4",
