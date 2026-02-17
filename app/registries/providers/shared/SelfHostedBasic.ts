@@ -38,7 +38,10 @@ class SelfHostedBasic extends BaseRegistry {
     try {
       return new URL(withProtocol).hostname.toLowerCase();
     } catch {
-      return value.replace(/^https?:\/\//i, '').split('/')[0].toLowerCase();
+      return value
+        .replace(/^https?:\/\//i, '')
+        .split('/')[0]
+        .toLowerCase();
     }
   }
 

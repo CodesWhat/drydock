@@ -103,7 +103,9 @@ test('triggerBatch should send formatted batch message', async () => {
   googlechat.configuration = configurationValid;
   googlechat.postMessage = vi.fn();
   await googlechat.triggerBatch([{ name: 'container1' }, { name: 'container2' }]);
-  expect(googlechat.postMessage).toHaveBeenCalledWith('Batch Title\n\n- Test Body\n\n- Test Body\n');
+  expect(googlechat.postMessage).toHaveBeenCalledWith(
+    'Batch Title\n\n- Test Body\n\n- Test Body\n',
+  );
 });
 
 test('postMessage should call Google Chat webhook endpoint', async () => {
