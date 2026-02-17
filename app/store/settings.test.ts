@@ -73,6 +73,23 @@ describe('Settings Store', () => {
     });
   });
 
+  test('getSettings should fall back to defaults when stored document is missing', () => {
+    const collection = {
+      findOne: vi.fn(() => null),
+      insert: vi.fn(),
+      remove: vi.fn(),
+    };
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(),
+    };
+
+    settings.createCollections(db);
+    expect(settings.getSettings()).toEqual({
+      internetlessMode: false,
+    });
+  });
+
   test('updateSettings should merge existing and update values', () => {
     const collection = createCollection({
       internetlessMode: false,
@@ -95,6 +112,22 @@ describe('Settings Store', () => {
     });
   });
 
+  test('updateSettings should support empty payload and keep current values', () => {
+    const collection = createCollection({
+      internetlessMode: true,
+    });
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(),
+    };
+
+    settings.createCollections(db);
+    const settingsUpdated = settings.updateSettings();
+    expect(settingsUpdated).toEqual({
+      internetlessMode: true,
+    });
+  });
+
   test('isInternetlessModeEnabled should return mode state', () => {
     const collection = createCollection();
     const db = {
@@ -107,5 +140,20 @@ describe('Settings Store', () => {
 
     settings.updateSettings({ internetlessMode: true });
     expect(settings.isInternetlessModeEnabled()).toBe(true);
+  });
+
+  test('updateSettings should throw when value is invalid', () => {
+    const collection = createCollection();
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(),
+    };
+
+    settings.createCollections(db);
+    expect(() =>
+      settings.updateSettings({
+        internetlessMode: 'yes' as unknown as boolean,
+      }),
+    ).toThrow();
   });
 });

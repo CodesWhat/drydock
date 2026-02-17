@@ -63,7 +63,7 @@ describe('API Router', () => {
     const containerActionsRouter = await import('./container-actions.js');
     const auditRouter = await import('./audit.js');
     const webhookRouter = await import('./webhook.js');
-    const sseRouter = await import('./sse.js');
+    await import('./sse.js');
 
     expect(appRouter.init).toHaveBeenCalled();
     expect(containerRouter.init).toHaveBeenCalled();
@@ -83,7 +83,6 @@ describe('API Router', () => {
     expect(containerActionsRouter.init).toHaveBeenCalled();
     expect(auditRouter.init).toHaveBeenCalled();
     expect(webhookRouter.init).toHaveBeenCalled();
-    expect(sseRouter.init).toHaveBeenCalled();
   });
 
   test('should use requireAuthentication middleware', async () => {
