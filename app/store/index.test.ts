@@ -55,6 +55,7 @@ const {
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
     vi.doMock('./container', createCollectionsMock);
+    vi.doMock('./settings', createCollectionsMock);
     vi.doMock('../log', createLogMock);
   }
 
@@ -78,6 +79,7 @@ vi.mock('./app', createCollectionsMock);
 vi.mock('./audit', createCollectionsMock);
 vi.mock('./backup', createCollectionsMock);
 vi.mock('./container', createCollectionsMock);
+vi.mock('./settings', createCollectionsMock);
 vi.mock('../log', createLogMock);
 
 describe('Store Module', () => {
@@ -92,9 +94,11 @@ describe('Store Module', () => {
 
     const app = await import('./app.js');
     const container = await import('./container.js');
+    const settings = await import('./settings.js');
 
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
+    expect(settings.createCollections).toHaveBeenCalled();
   });
 
   test('should create directory if it does not exist', async () => {
@@ -136,8 +140,10 @@ describe('Store Module', () => {
 
     const app = await import('./app.js');
     const container = await import('./container.js');
+    const settings = await import('./settings.js');
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
+    expect(settings.createCollections).toHaveBeenCalled();
   });
 
   test('should throw when store configuration is invalid', async () => {
@@ -158,6 +164,7 @@ describe('Store Module', () => {
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
     vi.doMock('./container', createCollectionsMock);
+    vi.doMock('./settings', createCollectionsMock);
     vi.doMock('../log', createLogMock);
 
     const storeDefault = await import('./index.js');

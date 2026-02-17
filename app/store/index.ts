@@ -1,4 +1,3 @@
-
 import fs from 'node:fs';
 import path from 'node:path';
 import joi from 'joi';
@@ -14,6 +13,7 @@ import * as app from './app.js';
 import * as audit from './audit.js';
 import * as backup from './backup.js';
 import * as container from './container.js';
+import * as settings from './settings.js';
 
 // Store Configuration Schema
 const configurationSchema = joi.object().keys({
@@ -36,6 +36,7 @@ function createCollections() {
   audit.createCollections(db);
   backup.createCollections(db);
   container.createCollections(db);
+  settings.createCollections(db);
 }
 
 /**
