@@ -12,7 +12,10 @@ vi.mock('./watcher', mockInit);
 vi.mock('./trigger', mockInit);
 vi.mock('./registry', mockInit);
 vi.mock('./authentication', mockInit);
+vi.mock('./icons', mockInit);
+vi.mock('./group', mockInit);
 vi.mock('./log', mockInit);
+vi.mock('./settings', mockInit);
 vi.mock('./store', mockInit);
 vi.mock('./server', mockInit);
 vi.mock('./agent', mockInit);
@@ -47,7 +50,10 @@ describe('API Router', () => {
     const triggerRouter = await import('./trigger.js');
     const registryRouter = await import('./registry.js');
     const authenticationRouter = await import('./authentication.js');
+    const iconsRouter = await import('./icons.js');
+    const groupRouter = await import('./group.js');
     const logRouter = await import('./log.js');
+    const settingsRouter = await import('./settings.js');
     const storeRouter = await import('./store.js');
     const serverRouter = await import('./server.js');
     const agentRouter = await import('./agent.js');
@@ -56,7 +62,7 @@ describe('API Router', () => {
     const containerActionsRouter = await import('./container-actions.js');
     const auditRouter = await import('./audit.js');
     const webhookRouter = await import('./webhook.js');
-    const sseRouter = await import('./sse.js');
+    await import('./sse.js');
 
     expect(appRouter.init).toHaveBeenCalled();
     expect(containerRouter.init).toHaveBeenCalled();
@@ -64,7 +70,10 @@ describe('API Router', () => {
     expect(triggerRouter.init).toHaveBeenCalled();
     expect(registryRouter.init).toHaveBeenCalled();
     expect(authenticationRouter.init).toHaveBeenCalled();
+    expect(iconsRouter.init).toHaveBeenCalled();
+    expect(groupRouter.init).toHaveBeenCalled();
     expect(logRouter.init).toHaveBeenCalled();
+    expect(settingsRouter.init).toHaveBeenCalled();
     expect(storeRouter.init).toHaveBeenCalled();
     expect(serverRouter.init).toHaveBeenCalled();
     expect(agentRouter.init).toHaveBeenCalled();
@@ -73,7 +82,6 @@ describe('API Router', () => {
     expect(containerActionsRouter.init).toHaveBeenCalled();
     expect(auditRouter.init).toHaveBeenCalled();
     expect(webhookRouter.init).toHaveBeenCalled();
-    expect(sseRouter.init).toHaveBeenCalled();
   });
 
   test('should use requireAuthentication middleware', async () => {

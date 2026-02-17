@@ -89,4 +89,18 @@ describe('Settings Router', () => {
       error: expect.any(String),
     });
   });
+
+  test('should reject empty settings payload', () => {
+    settingsRouter.init();
+    const handler = mockRouter.put.mock.calls.find((call) => call[0] === '/')[1];
+    const res = createMockResponse();
+
+    handler({ body: undefined }, res);
+
+    expect(mockUpdateSettings).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: expect.any(String),
+    });
+  });
 });
