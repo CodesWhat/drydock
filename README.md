@@ -50,10 +50,11 @@
 - [Screenshots](#screenshots)
 - [Features](#features)
 - [Update Guard](#update-guard)
-- [Migrating from WUD](#migrating-from-wud)
 - [Supported Registries](#supported-registries)
 - [Supported Triggers](#supported-triggers)
 - [Authentication](#authentication)
+- [Feature Comparison](#feature-comparison)
+- [Migrating from WUD](#migrating-from-wud)
 - [Roadmap](#roadmap)
 - [Documentation](#documentation)
 - [Star History](#star-history)
@@ -185,12 +186,12 @@ Accepted values: `false` (default — no proxy), `true` (trust all), a number (h
 Auto-detect running containers and check for image updates across registries
 </td>
 <td align="center" width="33%">
-<h3>16 Notification Triggers</h3>
-Slack, Discord, Telegram, SMTP, MQTT, HTTP webhooks, Gotify, NTFY, and more
+<h3>20 Notification Triggers</h3>
+Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, HTTP webhooks, Gotify, NTFY, and more
 </td>
 <td align="center" width="33%">
-<h3>10+ Registry Providers</h3>
-Docker Hub, GHCR, ECR, GCR, GitLab, Quay, LSCR, Codeberg, DHI, and custom
+<h3>22 Registry Providers</h3>
+Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more
 </td>
 </tr>
 <tr>
@@ -267,9 +268,8 @@ Available on GHCR, Docker Hub, and Quay.io for flexible deployment
 
 <h2 align="center" id="update-guard">Update Guard</h2>
 
----
-
-`Update Guard` adds a Trivy-powered safe-pull gate before container updates:
+<details>
+<summary><strong>Trivy-powered safe-pull gate for container updates</strong></summary>
 
 1. Scan the candidate image before pull/restart
 2. Block the update when vulnerabilities exceed configured severity threshold
@@ -305,6 +305,8 @@ Security APIs:
 - `POST /api/containers/:id/scan` — trigger on-demand vulnerability scan, signature verification, and SBOM generation
 
 See full configuration in [`docs/configuration/security/README.md`](docs/configuration/security/README.md).
+
+</details>
 
 <h2 align="center" id="supported-registries">Supported Registries</h2>
 
@@ -432,10 +434,12 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 
 </details>
 
-<details>
-<summary><strong>Feature comparison</strong></summary>
+<h2 align="center" id="feature-comparison">Feature Comparison</h2>
 
-> For the full itemized changelog, see [CHANGELOG.md](CHANGELOG.md).
+<details>
+<summary><strong>How does drydock compare to other container update tools?</strong></summary>
+
+> ✅ = supported &nbsp; ❌ = not supported &nbsp; ⚠️ = partial / limited &nbsp; For the full itemized changelog, see [CHANGELOG.md](CHANGELOG.md).
 
 <table>
 <thead>
@@ -452,24 +456,24 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 <tr><td>Web UI / Dashboard</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Auto-update containers</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Docker Compose updates</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Notification triggers</td><td align="center">16</td><td align="center">~18 (Shoutrrr)</td><td align="center">14</td><td align="center">17</td><td align="center">~6</td></tr>
-<tr><td>Registry providers</td><td align="center">15</td><td align="center">⚠️ (Docker auth)</td><td align="center">8</td><td align="center">⚠️ (regopts)</td><td align="center">⚠️ (Docker auth)</td></tr>
+<tr><td>Notification triggers</td><td align="center">20</td><td align="center">~18</td><td align="center">14</td><td align="center">17</td><td align="center">~6</td></tr>
+<tr><td>Registry providers</td><td align="center">22</td><td align="center">⚠️</td><td align="center">8</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>REST API</td><td align="center">✅</td><td align="center">⚠️ (limited)</td><td align="center">✅</td><td align="center">⚠️ (gRPC)</td><td align="center">❌</td></tr>
+<tr><td>REST API</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
 <tr><td>Prometheus metrics</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
 <tr><td>Image backup & rollback</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Container grouping / stacks</td><td align="center">✅</td><td align="center">⚠️ (linked)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Container grouping / stacks</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Lifecycle hooks (pre/post)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Webhook API for CI/CD</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Container start/stop/restart/update</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Distributed agents (remote)</td><td align="center">✅</td><td align="center">⚠️ (single host)</td><td align="center">❌</td><td align="center">✅ (multi-orch)</td><td align="center">❌</td></tr>
+<tr><td>Distributed agents (remote)</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td></tr>
 <tr><td>Audit log</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Security scanning (Trivy)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Semver-aware updates</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
 <tr><td>Digest watching</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Multi-arch (amd64/arm64)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Actively maintained</td><td align="center">✅</td><td align="center">❌ (archived)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌ (dead)</td></tr>
+<tr><td>Actively maintained</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
 </tbody>
 </table>
 
@@ -494,7 +498,7 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 | **DHI registry** | `dhi.io` registry provider |
 | **Custom URL icons** | URL-based icons via `dd.display.icon` label |
 | **Version skip UI** | Skip specific versions from the web interface |
-| **In-app log viewer** | View container stdout/stderr logs and application runtime logs with level filtering and agent source selection |
+| **In-app log viewer** | View container stdout/stderr logs and application runtime logs with level filtering, agent source selection, auto-fetch polling, scroll lock, and auto-scroll |
 | **Semver tag recovery** | Recover mismatched semver tags from include filters |
 | **Per-image config presets** | `imgset` defaults for per-image configuration |
 | **Audit log** | Event-based audit trail with LokiJS storage, REST API, and Prometheus counter |
@@ -510,6 +514,8 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 | **Lifecycle hooks** | Pre/post-update shell command hooks with configurable timeout |
 | **Auto rollback on health failure** | Monitors container health after updates and rolls back if unhealthy, configured via `dd.rollback.auto=true` |
 | **Graceful self-update** | Full-screen animated overlay during drydock's own container update with SSE-based reconnect |
+| **7 additional registries** | ALICR (Alibaba Cloud), JFrog Artifactory, GAR (Google Artifact Registry), Harbor, IBMCR (IBM Cloud), Sonatype Nexus, OCIR (Oracle Cloud) |
+| **4 additional triggers** | Google Chat, Matrix, Mattermost, Microsoft Teams (Adaptive Cards) |
 | **Container grouping / stacks** | Smart stack detection via `dd.group` label or compose project, with collapsible UI groups and batch-update |
 
 </details>
@@ -616,7 +622,9 @@ Here's what's coming.
 
 <a href="https://github.com/CodesWhat"><img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="28"></a>
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/J3J21HQM0K)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=kofi&logoColor=white)](https://ko-fi.com/codeswhat)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/codeswhat)
+[![Sponsor](https://img.shields.io/badge/Sponsor-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/CodesWhat)
 
 <a href="#drydock">Back to top</a>
 
