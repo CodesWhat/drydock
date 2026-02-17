@@ -27,6 +27,7 @@ jobs:
       packages: write
       id-token: write  # cosign keyless signing
       attestations: write
+      artifact-metadata: write  # attestation storage records
 
     steps:
       - name: Checkout
