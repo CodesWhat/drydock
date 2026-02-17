@@ -113,12 +113,15 @@ dist/
 
 # Playwright MCP
 .playwright-mcp/
+.playwright-cli/
+output/
 
 # Generated screenshots
 screenshots/
 
-# qlty tool outputs
-.qlty/
+# qlty config (track qlty.toml, ignore cache/outputs)
+.qlty/*
+!.qlty/qlty.toml
 
 # SonarCloud scanner working directory
 .scannerwork/

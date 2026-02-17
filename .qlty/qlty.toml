@@ -44,6 +44,8 @@ exclude_patterns = [
   ".qlty/results/**",
   ".qlty/plugin_cachedir/**",
   "prototypes/**/style.css",
+  ".playwright-cli/**",
+  "output/**",
 ]
 
 test_patterns = [
