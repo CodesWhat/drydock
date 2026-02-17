@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.2.7",
-    "@fortawesome/fontawesome-free": "7.1.0",
+    "@fortawesome/fontawesome-free": "7.2.0",
     "register-service-worker": "1.7.2",
     "vue": "^3.5.27",
     "vue-router": "^5.0.2",
