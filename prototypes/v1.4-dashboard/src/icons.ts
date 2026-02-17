@@ -201,6 +201,16 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     'lucide': 'lucide:info', 'tabler': 'tabler:info-circle',
     'heroicons': 'heroicons:information-circle', 'iconoir': 'iconoir:info-circle',
   },
+  'pause': {
+    'fa6-solid': 'fa6-solid:pause', 'ph': 'ph:pause', 'ph-duotone': 'ph:pause-duotone',
+    'lucide': 'lucide:pause', 'tabler': 'tabler:player-pause',
+    'heroicons': 'heroicons:pause', 'iconoir': 'iconoir:media-pause',
+  },
+  'trash': {
+    'fa6-solid': 'fa6-solid:trash', 'ph': 'ph:trash', 'ph-duotone': 'ph:trash-duotone',
+    'lucide': 'lucide:trash-2', 'tabler': 'tabler:trash',
+    'heroicons': 'heroicons:trash', 'iconoir': 'iconoir:trash',
+  },
 };
 
 /** All semantic icon names */

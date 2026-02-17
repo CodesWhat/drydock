@@ -565,6 +565,271 @@ function skipUpdate(_name: string) { /* no-op */ }
 function forceUpdate(_name: string) { /* no-op */ }
 function updateAll() { /* no-op */ }
 
+// ── Security Page ────────────────────────────────────
+const securityStats = {
+  scannedImages: 47,
+  clean: 41,
+  critical: 2,
+  high: 3,
+  medium: 8,
+  low: 12,
+};
+
+const securityVulnerabilities = [
+  { id: 'CVE-2024-21626', severity: 'CRITICAL', package: 'runc', version: '1.1.11', fixedIn: '1.1.12', image: 'nginx-proxy', publishedDate: '2024-01-31' },
+  { id: 'CVE-2024-0727', severity: 'CRITICAL', package: 'openssl', version: '3.1.4', fixedIn: '3.1.5', image: 'traefik', publishedDate: '2024-01-26' },
+  { id: 'CVE-2023-50164', severity: 'HIGH', package: 'curl', version: '8.4.0', fixedIn: '8.4.1', image: 'postgres-db', publishedDate: '2023-12-07' },
+  { id: 'CVE-2024-1086', severity: 'HIGH', package: 'linux-kernel', version: '6.6.8', fixedIn: '6.6.15', image: 'grafana', publishedDate: '2024-01-31' },
+  { id: 'CVE-2023-46218', severity: 'HIGH', package: 'curl', version: '8.4.0', fixedIn: '8.5.0', image: 'redis-cache', publishedDate: '2023-12-06' },
+  { id: 'CVE-2024-0553', severity: 'MEDIUM', package: 'gnutls', version: '3.8.2', fixedIn: '3.8.3', image: 'traefik', publishedDate: '2024-01-16' },
+  { id: 'CVE-2023-6129', severity: 'MEDIUM', package: 'openssl', version: '3.1.4', fixedIn: '3.1.5', image: 'drydock-api', publishedDate: '2024-01-09' },
+  { id: 'CVE-2023-5678', severity: 'MEDIUM', package: 'openssl', version: '3.0.12', fixedIn: '3.0.13', image: 'registry-mirror', publishedDate: '2023-11-06' },
+  { id: 'CVE-2024-0567', severity: 'MEDIUM', package: 'gnutls', version: '3.8.2', fixedIn: '3.8.3', image: 'prometheus', publishedDate: '2024-01-16' },
+  { id: 'CVE-2023-44487', severity: 'MEDIUM', package: 'nghttp2', version: '1.57.0', fixedIn: null, image: 'nginx-proxy', publishedDate: '2023-10-10' },
+  { id: 'CVE-2023-50495', severity: 'MEDIUM', package: 'ncurses', version: '6.4', fixedIn: '6.4-20231217', image: 'postgres-db', publishedDate: '2023-12-12' },
+  { id: 'CVE-2023-52425', severity: 'MEDIUM', package: 'expat', version: '2.5.0', fixedIn: '2.6.0', image: 'grafana', publishedDate: '2024-02-04' },
+  { id: 'CVE-2023-45853', severity: 'LOW', package: 'zlib', version: '1.3', fixedIn: '1.3.1', image: 'redis-cache', publishedDate: '2023-10-14' },
+  { id: 'CVE-2023-39615', severity: 'LOW', package: 'libxml2', version: '2.11.5', fixedIn: null, image: 'traefik', publishedDate: '2023-08-29' },
+  { id: 'CVE-2023-31484', severity: 'LOW', package: 'perl', version: '5.36.0', fixedIn: '5.38.0', image: 'prometheus', publishedDate: '2023-04-29' },
+];
+
+const securityScanHistory = [
+  { container: 'traefik', image: 'traefik:2.10.7', scannedAt: '14 min ago', vulnCount: 3, status: 'issues' as const },
+  { container: 'postgres-db', image: 'postgres:15.4', scannedAt: '22 min ago', vulnCount: 2, status: 'issues' as const },
+  { container: 'redis-cache', image: 'redis:7.0.12', scannedAt: '35 min ago', vulnCount: 2, status: 'issues' as const },
+  { container: 'drydock-api', image: 'ghcr.io/drydock/api:1.3.1', scannedAt: '1h ago', vulnCount: 0, status: 'clean' as const },
+  { container: 'watchtower', image: 'containrrr/watchtower:1.7.1', scannedAt: '2h ago', vulnCount: 0, status: 'clean' as const },
+];
+
+// Security page filters
+const securityFilterSeverity = ref('all');
+const securitySortField = ref<'severity' | 'published'>('severity');
+const securitySortAsc = ref(false);
+
+const severityOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+
+function severityColor(sev: string) {
+  if (sev === 'CRITICAL') return { bg: 'rgba(229,57,53,0.15)', text: '#E53935' };
+  if (sev === 'HIGH') return { bg: 'rgba(255,152,0,0.15)', text: '#FF9800' };
+  if (sev === 'MEDIUM') return { bg: 'rgba(234,179,8,0.15)', text: '#EAB308' };
+  return { bg: 'rgba(59,130,246,0.15)', text: '#3B82F6' };
+}
+
+function scanStatusColor(status: string) {
+  if (status === 'clean') return { bg: 'rgba(6,214,160,0.15)', text: '#06D6A0' };
+  if (status === 'issues') return { bg: 'rgba(255,152,0,0.15)', text: '#FF9800' };
+  return { bg: 'rgba(229,57,53,0.15)', text: '#E53935' };
+}
+
+const filteredSecurityVulns = computed(() => {
+  let items = [...securityVulnerabilities];
+  if (securityFilterSeverity.value !== 'all') {
+    items = items.filter((v) => v.severity === securityFilterSeverity.value);
+  }
+  items.sort((a, b) => {
+    if (securitySortField.value === 'severity') {
+      const diff = severityOrder[a.severity] - severityOrder[b.severity];
+      return securitySortAsc.value ? diff : -diff;
+    }
+    const diff = new Date(a.publishedDate).getTime() - new Date(b.publishedDate).getTime();
+    return securitySortAsc.value ? diff : -diff;
+  });
+  return items;
+});
+
+function toggleSecuritySort(field: 'severity' | 'published') {
+  if (securitySortField.value === field) {
+    securitySortAsc.value = !securitySortAsc.value;
+  } else {
+    securitySortField.value = field;
+    securitySortAsc.value = false;
+  }
+}
+
+// ── Servers Page ──────────────────────────────────────
+interface Server {
+  name: string;
+  host: string;
+  status: 'connected' | 'disconnected';
+  dockerVersion: string;
+  os: string;
+  arch: string;
+  cpus: number;
+  memoryGb: number;
+  containers: { total: number; running: number; stopped: number };
+  images: number;
+  lastSeen: string;
+}
+
+const servers = ref<Server[]>([
+  { name: 'Local', host: 'unix:///var/run/docker.sock', status: 'connected', dockerVersion: '27.5.1', os: 'Ubuntu 24.04', arch: 'amd64', cpus: 8, memoryGb: 32, containers: { total: 31, running: 28, stopped: 3 }, images: 45, lastSeen: 'Just now' },
+  { name: 'Agent-01 (prod-east)', host: 'https://10.0.1.50:3001', status: 'connected', dockerVersion: '27.5.1', os: 'Debian 12', arch: 'amd64', cpus: 16, memoryGb: 64, containers: { total: 12, running: 12, stopped: 0 }, images: 23, lastSeen: '2s ago' },
+  { name: 'Agent-02 (staging)', host: 'https://10.0.2.10:3001', status: 'disconnected', dockerVersion: '26.1.4', os: 'Alpine 3.20', arch: 'arm64', cpus: 4, memoryGb: 8, containers: { total: 4, running: 0, stopped: 4 }, images: 12, lastSeen: '14m ago' },
+]);
+
+const serversStats = computed(() => {
+  const all = servers.value;
+  return {
+    total: all.length,
+    totalContainers: all.reduce((sum, s) => sum + s.containers.total, 0),
+    connected: all.filter((s) => s.status === 'connected').length,
+    disconnected: all.filter((s) => s.status === 'disconnected').length,
+  };
+});
+
+// Stub server actions (no-op for prototype)
+function refreshServer(_name: string) { /* no-op */ }
+function viewServerContainers(_name: string) { /* no-op */ }
+
+// ── Logs Page ─────────────────────────────────────────
+const logSourceFilter = ref('all');
+const logLevelFilter = ref('all');
+const logLinesLimit = ref('50');
+const logAutoScroll = ref(true);
+const logPaused = ref(false);
+
+const logLines = ref([
+  { timestamp: '2025-02-17T14:23:01.482Z', level: 'info', component: 'api', message: 'Server started on 0.0.0.0:3001' },
+  { timestamp: '2025-02-17T14:23:01.519Z', level: 'info', component: 'docker', message: 'Connected to Docker engine v24.0.7 via /var/run/docker.sock' },
+  { timestamp: '2025-02-17T14:23:02.104Z', level: 'info', component: 'watcher:hub', message: 'Polling 47 containers across 3 registries' },
+  { timestamp: '2025-02-17T14:23:02.881Z', level: 'debug', component: 'registry:ghcr', message: 'Authenticated with ghcr.io using token (expires 2025-02-18T14:00:00Z)' },
+  { timestamp: '2025-02-17T14:23:03.217Z', level: 'info', component: 'watcher:hub', message: 'Checking traefik:2.10.7 for updates on dockerhub' },
+  { timestamp: '2025-02-17T14:23:04.550Z', level: 'warn', component: 'watcher:hub', message: 'Rate limit approaching for dockerhub (87/100 requests used)' },
+  { timestamp: '2025-02-17T14:23:05.012Z', level: 'info', component: 'watcher:hub', message: 'Update available: traefik 2.10.7 -> 3.0.1 (major)' },
+  { timestamp: '2025-02-17T14:23:05.884Z', level: 'info', component: 'docker', message: 'Container postgres-db health check passed (latency: 4ms)' },
+  { timestamp: '2025-02-17T14:23:06.192Z', level: 'info', component: 'watcher:hub', message: 'Update available: postgres 15.4 -> 16.1 (major)' },
+  { timestamp: '2025-02-17T14:23:06.741Z', level: 'error', component: 'registry:ghcr', message: 'Failed to fetch manifest for ghcr.io/drydock/api:latest (HTTP 429 Too Many Requests)' },
+  { timestamp: '2025-02-17T14:23:07.103Z', level: 'info', component: 'watcher:hub', message: 'Retrying ghcr.io/drydock/api manifest fetch in 30s (attempt 1/3)' },
+  { timestamp: '2025-02-17T14:23:08.290Z', level: 'info', component: 'watcher:hub', message: 'Update available: redis 7.0.12 -> 7.2.4 (minor)' },
+  { timestamp: '2025-02-17T14:23:09.441Z', level: 'debug', component: 'docker', message: 'Inspecting container nginx-proxy: status=exited, exitCode=137' },
+  { timestamp: '2025-02-17T14:23:10.115Z', level: 'warn', component: 'docker', message: 'Container nginx-proxy is stopped (exit code 137 - OOM killed)' },
+  { timestamp: '2025-02-17T14:23:11.320Z', level: 'info', component: 'trigger:slack', message: 'Webhook delivered to #infrastructure (update summary: 6 containers)' },
+  { timestamp: '2025-02-17T14:23:12.087Z', level: 'debug', component: 'auth', message: 'Session refreshed for user admin (token valid until 2025-02-17T15:23:12Z)' },
+  { timestamp: '2025-02-17T14:23:13.550Z', level: 'info', component: 'watcher:hub', message: 'Update available: grafana/grafana 10.1.5 -> 10.2.3 (minor)' },
+  { timestamp: '2025-02-17T14:23:14.920Z', level: 'info', component: 'watcher:hub', message: 'Scan complete: 6 updates found across 47 containers' },
+  { timestamp: '2025-02-17T14:23:15.445Z', level: 'info', component: 'api', message: 'GET /api/v1/containers 200 (23ms) - 47 results' },
+  { timestamp: '2025-02-17T14:23:16.880Z', level: 'error', component: 'trigger:slack', message: 'Webhook delivery failed to #security-alerts (timeout after 10s)' },
+  { timestamp: '2025-02-17T14:23:17.201Z', level: 'info', component: 'trigger:slack', message: 'Retrying webhook to #security-alerts in 5s (attempt 1/3)' },
+  { timestamp: '2025-02-17T14:23:18.620Z', level: 'debug', component: 'registry:ghcr', message: 'Pulling manifest list for ghcr.io/drydock/ui:1.3.1 (sha256:a1b2c3...)' },
+  { timestamp: '2025-02-17T14:23:19.330Z', level: 'info', component: 'docker', message: 'Container drydock-api health check passed (latency: 8ms)' },
+  { timestamp: '2025-02-17T14:23:20.880Z', level: 'warn', component: 'auth', message: 'Failed login attempt for user "guest" from 192.168.1.105 (invalid credentials)' },
+  { timestamp: '2025-02-17T14:23:22.015Z', level: 'info', component: 'api', message: 'GET /api/v1/updates 200 (45ms) - 6 results' },
+  { timestamp: '2025-02-17T14:23:23.440Z', level: 'info', component: 'trigger:slack', message: 'Webhook retry successful to #security-alerts (attempt 2/3)' },
+  { timestamp: '2025-02-17T14:23:25.710Z', level: 'debug', component: 'docker', message: 'Image layer cache hit for grafana/grafana:10.1.5 (4/4 layers cached)' },
+  { timestamp: '2025-02-17T14:23:27.050Z', level: 'error', component: 'watcher:hub', message: 'Registry registry.internal/mirror unreachable (ECONNREFUSED 10.0.0.50:5000)' },
+  { timestamp: '2025-02-17T14:23:28.330Z', level: 'info', component: 'api', message: 'POST /api/v1/containers/traefik/update 202 (12ms) - update queued' },
+  { timestamp: '2025-02-17T14:23:30.100Z', level: 'info', component: 'docker', message: 'All container health checks passed (8/8 running, 2 stopped)' },
+]);
+
+function clearLogLines() {
+  logLines.value = [];
+}
+
+function formatLogTimestamp(iso: string) {
+  const d = new Date(iso);
+  return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+}
+
+// ── Config Pages (shared expandable state) ──────────────
+const expandedConfigItems = ref(new Set<string>());
+
+function toggleConfigItem(id: string) {
+  const s = expandedConfigItems.value;
+  if (s.has(id)) s.delete(id); else s.add(id);
+  expandedConfigItems.value = new Set(s);
+}
+
+// ── Registries Page ─────────────────────────────────────
+const registriesData = [
+  { id: 'hub', name: 'Docker Hub', type: 'hub', status: 'connected', config: { login: 'drydock-bot', url: 'https://registry-1.docker.io' } },
+  { id: 'ghcr', name: 'GitHub Packages', type: 'ghcr', status: 'connected', config: { login: 'CodesWhat', url: 'https://ghcr.io' } },
+  { id: 'quay', name: 'Quay.io', type: 'quay', status: 'connected', config: { namespace: 'drydock', url: 'https://quay.io' } },
+  { id: 'ecr', name: 'AWS ECR (prod)', type: 'ecr', status: 'error', config: { region: 'us-east-1', accountId: '123456789012', accessKeyId: 'AKIA***' } },
+  { id: 'gitlab', name: 'GitLab Registry', type: 'gitlab', status: 'connected', config: { url: 'https://registry.gitlab.com', token: '***' } },
+];
+
+function registryTypeBadge(type: string) {
+  if (type === 'hub') return { bg: 'rgba(59,130,246,0.15)', text: '#3B82F6', label: 'Hub' };
+  if (type === 'ghcr') return { bg: 'rgba(168,85,247,0.15)', text: '#A855F7', label: 'GHCR' };
+  if (type === 'quay') return { bg: 'rgba(229,57,53,0.15)', text: '#E53935', label: 'Quay' };
+  if (type === 'ecr') return { bg: 'rgba(255,152,0,0.15)', text: '#FF9800', label: 'ECR' };
+  if (type === 'gitlab') return { bg: 'rgba(255,152,0,0.15)', text: '#FF9800', label: 'GitLab' };
+  return { bg: 'rgba(100,116,139,0.15)', text: '#64748b', label: type };
+}
+
+// ── Agents Page ─────────────────────────────────────────
+const agentsData = [
+  { id: 'agent-01', name: 'prod-east', host: 'https://10.0.1.50:3001', status: 'connected', lastSeen: '2s ago', containers: 12, version: '1.3.2' },
+  { id: 'agent-02', name: 'staging', host: 'https://10.0.2.10:3001', status: 'disconnected', lastSeen: '14m ago', containers: 4, version: '1.3.1' },
+  { id: 'agent-03', name: 'dev-local', host: 'https://192.168.1.100:3001', status: 'connected', lastSeen: '1s ago', containers: 8, version: '1.3.2' },
+];
+
+// ── Triggers Page ───────────────────────────────────────
+const triggersData = [
+  { id: 'slack-ops', name: 'Slack #ops-updates', type: 'slack', status: 'active', config: { channel: '#ops-updates', webhook: 'https://hooks.slack.com/***' } },
+  { id: 'discord-dev', name: 'Discord Dev', type: 'discord', status: 'active', config: { webhook: 'https://discord.com/api/webhooks/***' } },
+  { id: 'email-admin', name: 'Admin Email', type: 'smtp', status: 'active', config: { to: 'admin@example.com', from: 'drydock@example.com', host: 'smtp.sendgrid.net' } },
+  { id: 'http-ci', name: 'CI Pipeline Webhook', type: 'http', status: 'error', config: { url: 'https://ci.example.com/api/trigger', method: 'POST' } },
+  { id: 'telegram-alerts', name: 'Telegram Alerts', type: 'telegram', status: 'active', config: { botToken: '***', chatId: '-1001234567890' } },
+  { id: 'mqtt-home', name: 'MQTT Home Automation', type: 'mqtt', status: 'active', config: { broker: 'mqtt://192.168.1.5:1883', topic: 'drydock/updates' } },
+];
+
+function triggerTypeBadge(type: string) {
+  if (type === 'slack') return { bg: 'rgba(59,130,246,0.15)', text: '#3B82F6', label: 'Slack' };
+  if (type === 'discord') return { bg: 'rgba(168,85,247,0.15)', text: '#A855F7', label: 'Discord' };
+  if (type === 'smtp') return { bg: 'rgba(6,214,160,0.15)', text: '#06D6A0', label: 'SMTP' };
+  if (type === 'http') return { bg: 'rgba(255,152,0,0.15)', text: '#FF9800', label: 'HTTP' };
+  if (type === 'telegram') return { bg: 'rgba(0,150,199,0.15)', text: '#0096C7', label: 'Telegram' };
+  if (type === 'mqtt') return { bg: 'rgba(234,179,8,0.15)', text: '#EAB308', label: 'MQTT' };
+  return { bg: 'rgba(100,116,139,0.15)', text: '#64748b', label: type };
+}
+
+// ── Watchers Page ───────────────────────────────────────
+const watchersData = [
+  { id: 'local', name: 'Local Docker', type: 'docker', status: 'watching', containers: 31, cron: '0 */6 * * *', lastRun: '2h ago', config: { socket: '/var/run/docker.sock', watchByDefault: 'true' } },
+  { id: 'agent-01-watcher', name: 'prod-east', type: 'docker', status: 'watching', containers: 12, cron: '0 */4 * * *', lastRun: '45m ago', config: { agent: 'agent-01', watchByDefault: 'true' } },
+  { id: 'agent-02-watcher', name: 'staging', type: 'docker', status: 'paused', containers: 4, cron: '0 8 * * 1', lastRun: '6d ago', config: { agent: 'agent-02', maintenanceWindow: 'true', maintenanceOpen: 'false', nextWindow: '2026-02-17T08:00:00Z' } },
+];
+
+function watcherStatusColor(status: string) {
+  if (status === 'watching') return '#06D6A0';
+  if (status === 'paused') return '#FF9800';
+  return '#64748b';
+}
+
+// ── Auth Page ───────────────────────────────────────────
+const authData = [
+  { id: 'basic', name: 'Basic Auth', type: 'basic', status: 'active', config: { username: 'admin', hash: 'argon2id:***' } },
+  { id: 'oidc', name: 'Google OIDC', type: 'oidc', status: 'active', config: { issuer: 'https://accounts.google.com', clientId: '***', redirectUri: 'https://drydock.example.com/auth/callback' } },
+];
+
+function authTypeBadge(type: string) {
+  if (type === 'basic') return { bg: 'rgba(100,116,139,0.15)', text: '#64748b', label: 'Basic' };
+  if (type === 'oidc') return { bg: 'rgba(0,150,199,0.15)', text: '#0096C7', label: 'OIDC' };
+  return { bg: 'rgba(100,116,139,0.15)', text: '#64748b', label: type };
+}
+
+// ── Notifications Page ──────────────────────────────────
+const notificationsData = ref([
+  { id: 'update-available', name: 'Update Available', enabled: true, triggers: ['slack-ops', 'discord-dev', 'email-admin'], description: 'When a container has a new version' },
+  { id: 'update-applied', name: 'Update Applied', enabled: true, triggers: ['slack-ops'], description: 'After a container is successfully updated' },
+  { id: 'update-failed', name: 'Update Failed', enabled: true, triggers: ['slack-ops', 'email-admin', 'telegram-alerts'], description: 'When an update fails or is rolled back' },
+  { id: 'security-alert', name: 'Security Alert', enabled: true, triggers: ['email-admin', 'telegram-alerts'], description: 'Critical/High vulnerability detected' },
+  { id: 'agent-disconnect', name: 'Agent Disconnected', enabled: false, triggers: [] as string[], description: 'When a remote agent loses connection' },
+]);
+
+function toggleNotification(id: string) {
+  const item = notificationsData.value.find(n => n.id === id);
+  if (item) item.enabled = !item.enabled;
+}
+
+function triggerNameById(id: string) {
+  const t = triggersData.find(tr => tr.id === id);
+  return t ? t.name : id;
+}
+
+// ── Profile Page ────────────────────────────────────────
+const profileData = { username: 'admin', email: 'admin@example.com', role: 'Administrator', lastLogin: '2026-02-16 14:23:01', sessions: 3 };
 
 // ── Lifecycle ──────────────────────────────────────────
 onMounted(() => {
@@ -1687,6 +1952,697 @@ onUnmounted(() => {
         </div>
 
         <!-- ═══════════════════════════════════════════════ -->
+        <!-- SECURITY PAGE                                  -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div v-if="activeRoute === '/security'">
+
+          <!-- ═══ STAT CARDS ═══ -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="stat-card rounded-xl p-4"
+                 :style="{
+                   borderLeftColor: '#0096C7',
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                   borderLeftWidth: '4px',
+                 }">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[11px] font-medium uppercase tracking-wider"
+                      :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                  Total Scanned
+                </span>
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center"
+                     style="background-color: rgba(0,150,199,0.1); color: #0096C7;">
+                  <AppIcon name="security" :size="14" />
+                </div>
+              </div>
+              <div class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">
+                {{ securityStats.scannedImages }}
+              </div>
+              <div class="text-[11px] mt-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                images scanned
+              </div>
+            </div>
+
+            <div class="stat-card rounded-xl p-4"
+                 :style="{
+                   borderLeftColor: '#06D6A0',
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                   borderLeftWidth: '4px',
+                 }">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[11px] font-medium uppercase tracking-wider"
+                      :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                  Clean
+                </span>
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center"
+                     style="background-color: rgba(6,214,160,0.1); color: #06D6A0;">
+                  <AppIcon name="check" :size="14" />
+                </div>
+              </div>
+              <div class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">
+                {{ securityStats.clean }}
+              </div>
+              <div class="text-[11px] mt-1 flex items-center gap-1" style="color: #06D6A0;">
+                <AppIcon name="trend-up" :size="9" />
+                {{ Math.round(securityStats.clean / securityStats.scannedImages * 100) }}% pass rate
+              </div>
+            </div>
+
+            <div class="stat-card rounded-xl p-4"
+                 :style="{
+                   borderLeftColor: '#E53935',
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                   borderLeftWidth: '4px',
+                 }">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[11px] font-medium uppercase tracking-wider"
+                      :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                  Critical + High
+                </span>
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center"
+                     style="background-color: rgba(229,57,53,0.1); color: #E53935;">
+                  <AppIcon name="security" :size="14" />
+                </div>
+              </div>
+              <div class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">
+                {{ securityStats.critical + securityStats.high }}
+              </div>
+              <div class="text-[11px] mt-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                {{ securityStats.critical }} critical, {{ securityStats.high }} high
+              </div>
+            </div>
+
+            <div class="stat-card rounded-xl p-4"
+                 :style="{
+                   borderLeftColor: '#EAB308',
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                   borderLeftWidth: '4px',
+                 }">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[11px] font-medium uppercase tracking-wider"
+                      :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                  Medium + Low
+                </span>
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center"
+                     style="background-color: rgba(234,179,8,0.1); color: #EAB308;">
+                  <AppIcon name="info" :size="14" />
+                </div>
+              </div>
+              <div class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">
+                {{ securityStats.medium + securityStats.low }}
+              </div>
+              <div class="text-[11px] mt-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                {{ securityStats.medium }} medium, {{ securityStats.low }} low
+              </div>
+            </div>
+          </div>
+
+          <!-- ═══ VULNERABILITY TABLE ═══ -->
+          <div class="rounded-xl overflow-hidden mb-6"
+               :style="{
+                 backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                 border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+               }">
+            <div class="flex items-center justify-between px-5 py-3.5"
+                 :style="{ borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+              <div class="flex items-center gap-2">
+                <AppIcon name="security" :size="14" class="text-drydock-secondary" />
+                <h2 class="text-sm font-semibold" :class="isDark ? 'text-slate-200' : 'text-slate-700'">
+                  Vulnerabilities
+                </h2>
+                <span class="badge text-[10px] ml-1"
+                      :style="{
+                        backgroundColor: isDark ? 'rgba(229,57,53,0.2)' : 'rgba(229,57,53,0.12)',
+                        color: '#E53935',
+                      }">
+                  {{ filteredSecurityVulns.length }}
+                </span>
+              </div>
+              <div class="flex items-center gap-2">
+                <select v-model="securityFilterSeverity"
+                        class="px-2 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide outline-none cursor-pointer"
+                        :class="isDark
+                          ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                          : 'bg-slate-50 text-slate-600 border border-slate-200'">
+                  <option value="all">All Severities</option>
+                  <option value="CRITICAL">Critical</option>
+                  <option value="HIGH">High</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="LOW">Low</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs" style="min-width: 640px;">
+                <thead>
+                  <tr :style="{ backgroundColor: isDark ? '#0f172a40' : '#f8fafc' }">
+                    <th class="text-left px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] cursor-pointer select-none"
+                        :class="isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'"
+                        @click="toggleSecuritySort('severity')">
+                      Severity
+                      <span v-if="securitySortField === 'severity'" class="ml-0.5">{{ securitySortAsc ? '&#9650;' : '&#9660;' }}</span>
+                    </th>
+                    <th class="text-left px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px]"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">CVE ID</th>
+                    <th class="text-left px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px]"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Package</th>
+                    <th class="text-center px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px]"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Fixed In</th>
+                    <th class="text-left px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px]"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Image</th>
+                    <th class="text-right px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] cursor-pointer select-none"
+                        :class="isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-600'"
+                        @click="toggleSecuritySort('published')">
+                      Published
+                      <span v-if="securitySortField === 'published'" class="ml-0.5">{{ securitySortAsc ? '&#9650;' : '&#9660;' }}</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(vuln, i) in filteredSecurityVulns" :key="vuln.id"
+                      class="transition-colors"
+                      :class="isDark ? 'hover:bg-slate-700/30' : 'hover:bg-slate-50'"
+                      :style="{ borderBottom: i < filteredSecurityVulns.length - 1 ? (isDark ? '1px solid #334155' : '1px solid #f1f5f9') : 'none' }">
+                    <td class="px-5 py-3">
+                      <span class="badge text-[9px] uppercase font-bold"
+                            :style="{ backgroundColor: severityColor(vuln.severity).bg, color: severityColor(vuln.severity).text }">
+                        {{ vuln.severity }}
+                      </span>
+                    </td>
+                    <td class="px-5 py-3 font-medium font-mono" :class="isDark ? 'text-slate-200' : 'text-slate-700'">
+                      {{ vuln.id }}
+                    </td>
+                    <td class="px-5 py-3">
+                      <div>
+                        <span class="font-medium" :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ vuln.package }}</span>
+                        <span class="ml-1.5 text-[10px]" :class="isDark ? 'text-slate-500' : 'text-slate-400'">{{ vuln.version }}</span>
+                      </div>
+                    </td>
+                    <td class="px-5 py-3 text-center">
+                      <span v-if="vuln.fixedIn"
+                            class="px-1.5 py-0.5 rounded text-[10px] font-medium"
+                            style="background: rgba(6,214,160,0.15); color: #06D6A0;">
+                        {{ vuln.fixedIn }}
+                      </span>
+                      <span v-else class="text-[10px]" :class="isDark ? 'text-slate-600' : 'text-slate-400'">
+                        No fix
+                      </span>
+                    </td>
+                    <td class="px-5 py-3" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
+                      {{ vuln.image }}
+                    </td>
+                    <td class="px-5 py-3 text-right" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                      {{ vuln.publishedDate }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- ═══ RECENT SCANS ═══ -->
+          <div class="rounded-xl overflow-hidden"
+               :style="{
+                 backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                 border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+               }">
+            <div class="flex items-center justify-between px-5 py-3.5"
+                 :style="{ borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+              <div class="flex items-center gap-2">
+                <AppIcon name="recent-updates" :size="14" class="text-drydock-secondary" />
+                <h2 class="text-sm font-semibold" :class="isDark ? 'text-slate-200' : 'text-slate-700'">
+                  Recent Scans
+                </h2>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs">
+                <thead>
+                  <tr :style="{ backgroundColor: isDark ? '#0f172a40' : '#f8fafc' }">
+                    <th class="text-left px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px]"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Container</th>
+                    <th class="text-left px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px]"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Image</th>
+                    <th class="text-center px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px]"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Vulnerabilities</th>
+                    <th class="text-center px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px]"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Status</th>
+                    <th class="text-right px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px]"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Scanned</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(scan, i) in securityScanHistory" :key="scan.container"
+                      class="transition-colors"
+                      :class="isDark ? 'hover:bg-slate-700/30' : 'hover:bg-slate-50'"
+                      :style="{ borderBottom: i < securityScanHistory.length - 1 ? (isDark ? '1px solid #334155' : '1px solid #f1f5f9') : 'none' }">
+                    <td class="px-5 py-3 font-medium" :class="isDark ? 'text-slate-200' : 'text-slate-700'">
+                      {{ scan.container }}
+                    </td>
+                    <td class="px-5 py-3" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
+                      {{ scan.image }}
+                    </td>
+                    <td class="px-5 py-3 text-center">
+                      <span class="font-bold tabular-nums"
+                            :style="{ color: scan.vulnCount > 0 ? '#FF9800' : '#06D6A0' }">
+                        {{ scan.vulnCount }}
+                      </span>
+                    </td>
+                    <td class="px-5 py-3 text-center">
+                      <span class="badge"
+                            :style="{
+                              backgroundColor: scanStatusColor(scan.status).bg,
+                              color: scanStatusColor(scan.status).text,
+                            }">
+                        <AppIcon :name="scan.status === 'clean' ? 'check' : scan.status === 'issues' ? 'pending' : 'xmark'"
+                           :size="8" class="mr-1" />
+                        {{ scan.status }}
+                      </span>
+                    </td>
+                    <td class="px-5 py-3 text-right" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                      {{ scan.scannedAt }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- LOGS PAGE                                       -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div v-if="activeRoute === '/logs'" class="flex flex-col" style="height: calc(100vh - 80px);">
+
+          <!-- ═══ TOOLBAR ═══ -->
+          <div class="shrink-0 mb-3">
+            <div class="px-3 py-2 rounded-xl"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+              <div class="flex flex-wrap items-center gap-2.5">
+                <!-- Source filter -->
+                <select v-model="logSourceFilter"
+                        class="px-2 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide outline-none cursor-pointer"
+                        :class="isDark
+                          ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                          : 'bg-slate-50 text-slate-600 border border-slate-200'">
+                  <option value="all">All Sources</option>
+                  <option value="server">Server</option>
+                  <option value="agent-01">Agent-01</option>
+                  <option value="agent-02">Agent-02</option>
+                </select>
+
+                <!-- Level filter -->
+                <select v-model="logLevelFilter"
+                        class="px-2 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide outline-none cursor-pointer"
+                        :class="isDark
+                          ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                          : 'bg-slate-50 text-slate-600 border border-slate-200'">
+                  <option value="all">All Levels</option>
+                  <option value="debug">Debug</option>
+                  <option value="info">Info</option>
+                  <option value="warn">Warn</option>
+                  <option value="error">Error</option>
+                </select>
+
+                <!-- Lines limit -->
+                <select v-model="logLinesLimit"
+                        class="px-2 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide outline-none cursor-pointer"
+                        :class="isDark
+                          ? 'bg-slate-800 text-slate-300 border border-slate-700'
+                          : 'bg-slate-50 text-slate-600 border border-slate-200'">
+                  <option value="50">50 lines</option>
+                  <option value="100">100 lines</option>
+                  <option value="500">500 lines</option>
+                  <option value="1000">1000 lines</option>
+                </select>
+
+                <!-- Spacer -->
+                <div class="flex-1" />
+
+                <!-- Auto-scroll toggle -->
+                <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                  <span class="text-[10px] font-semibold uppercase tracking-wider"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">Auto-scroll</span>
+                  <div class="w-8 h-4 rounded-full relative cursor-pointer shrink-0 transition-colors"
+                       :style="{ backgroundColor: logAutoScroll ? '#06D6A0' : (isDark ? '#334155' : '#cbd5e1') }"
+                       @click="logAutoScroll = !logAutoScroll">
+                    <div class="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform"
+                         :style="{ left: logAutoScroll ? '17px' : '2px' }" />
+                  </div>
+                </label>
+
+                <!-- Pause button -->
+                <button class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors"
+                        :class="logPaused
+                          ? 'bg-amber-500/15 text-amber-500'
+                          : isDark ? 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700' : 'bg-slate-50 text-slate-500 hover:text-slate-700 border border-slate-200'"
+                        @click="logPaused = !logPaused">
+                  <AppIcon :name="logPaused ? 'play' : 'pause'" :size="10" />
+                  {{ logPaused ? 'Resume' : 'Pause' }}
+                </button>
+
+                <!-- Clear button -->
+                <button class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors"
+                        :class="isDark
+                          ? 'bg-slate-800 text-slate-400 hover:text-red-400 border border-slate-700'
+                          : 'bg-slate-50 text-slate-500 hover:text-red-500 border border-slate-200'"
+                        @click="clearLogLines">
+                  <AppIcon name="trash" :size="10" />
+                  Clear
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ═══ TERMINAL DISPLAY ═══ -->
+          <div class="flex-1 min-h-0 flex flex-col rounded-xl overflow-hidden"
+               :style="{
+                 backgroundColor: isDark ? '#0a0f1a' : '#1e293b',
+                 border: isDark ? '1px solid #334155' : '1px solid #334155',
+               }">
+            <!-- Log lines -->
+            <div class="flex-1 overflow-y-auto px-1"
+                 style="box-shadow: inset 0 8px 16px -8px rgba(0,0,0,0.4);">
+              <div v-if="logLines.length === 0"
+                   class="flex flex-col items-center justify-center h-full">
+                <AppIcon name="logs" :size="24" class="mb-3 text-slate-600" />
+                <p class="text-xs font-medium text-slate-500">No log entries</p>
+                <p class="text-[10px] mt-1 text-slate-600">Waiting for new events...</p>
+              </div>
+              <div v-for="(line, i) in logLines" :key="i"
+                   class="px-3 py-[3px] font-mono text-[11px] leading-relaxed flex gap-3 hover:bg-white/[0.03] transition-colors"
+                   :style="{ borderBottom: '1px solid rgba(255,255,255,0.03)' }">
+                <span class="text-slate-600 shrink-0 tabular-nums">{{ formatLogTimestamp(line.timestamp) }}</span>
+                <span class="shrink-0 w-11 text-right font-semibold uppercase text-[10px]"
+                      :style="{
+                        color: line.level === 'error' ? '#E53935'
+                             : line.level === 'warn' ? '#FF9800'
+                             : line.level === 'debug' ? '#64748b'
+                             : '#06D6A0'
+                      }">
+                  {{ line.level }}
+                </span>
+                <span class="shrink-0 text-drydock-secondary">{{ line.component }}</span>
+                <span class="text-slate-300 break-all">{{ line.message }}</span>
+              </div>
+            </div>
+
+            <!-- Status bar -->
+            <div class="shrink-0 px-4 py-2 flex items-center justify-between"
+                 :style="{ borderTop: '1px solid rgba(255,255,255,0.06)', backgroundColor: 'rgba(0,0,0,0.2)' }">
+              <span class="text-[10px] font-medium text-slate-500">
+                Showing {{ logLines.length }} of 1,247 entries
+              </span>
+              <div class="flex items-center gap-1.5">
+                <div class="w-2 h-2 rounded-full"
+                     :style="{ backgroundColor: logPaused ? '#E53935' : '#06D6A0' }" />
+                <span class="text-[10px] font-semibold"
+                      :style="{ color: logPaused ? '#E53935' : '#06D6A0' }">
+                  {{ logPaused ? 'Paused' : 'Connected' }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- SERVERS PAGE                                    -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div v-if="activeRoute === '/servers'">
+
+          <!-- ═══ STAT CARDS ═══ -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <!-- Total Servers -->
+            <div class="stat-card rounded-xl p-4"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                   borderLeftWidth: '4px',
+                   borderLeftColor: '#0096C7',
+                 }">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[11px] font-medium uppercase tracking-wider"
+                      :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                  Total Servers
+                </span>
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center"
+                     style="background-color: rgba(0,150,199,0.1); color: #0096C7;">
+                  <AppIcon name="servers" :size="14" />
+                </div>
+              </div>
+              <div class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">
+                {{ serversStats.total }}
+              </div>
+              <div class="text-[11px] mt-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                Docker hosts monitored
+              </div>
+            </div>
+
+            <!-- Total Containers -->
+            <div class="stat-card rounded-xl p-4"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                   borderLeftWidth: '4px',
+                   borderLeftColor: '#06D6A0',
+                 }">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[11px] font-medium uppercase tracking-wider"
+                      :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                  Total Containers
+                </span>
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center"
+                     style="background-color: rgba(6,214,160,0.1); color: #06D6A0;">
+                  <AppIcon name="containers" :size="14" />
+                </div>
+              </div>
+              <div class="text-2xl font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">
+                {{ serversStats.totalContainers }}
+              </div>
+              <div class="text-[11px] mt-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                Across all servers
+              </div>
+            </div>
+
+            <!-- Connected / Disconnected -->
+            <div class="stat-card rounded-xl p-4"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                   borderLeftWidth: '4px',
+                   borderLeftColor: serversStats.disconnected > 0 ? '#E53935' : '#06D6A0',
+                 }">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[11px] font-medium uppercase tracking-wider"
+                      :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                  Connection Status
+                </span>
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center"
+                     :style="{
+                       backgroundColor: serversStats.disconnected > 0 ? 'rgba(229,57,53,0.1)' : 'rgba(6,214,160,0.1)',
+                       color: serversStats.disconnected > 0 ? '#E53935' : '#06D6A0',
+                     }">
+                  <AppIcon name="agents" :size="14" />
+                </div>
+              </div>
+              <div class="flex items-baseline gap-3">
+                <div>
+                  <span class="text-2xl font-bold" style="color: #06D6A0;">{{ serversStats.connected }}</span>
+                  <span class="text-[11px] ml-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">connected</span>
+                </div>
+                <div>
+                  <span class="text-2xl font-bold" :style="{ color: serversStats.disconnected > 0 ? '#E53935' : '#64748b' }">{{ serversStats.disconnected }}</span>
+                  <span class="text-[11px] ml-1" :class="isDark ? 'text-slate-500' : 'text-slate-400'">disconnected</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ═══ SERVER CARDS ═══ -->
+          <div class="space-y-4">
+            <div v-for="server in servers" :key="server.name"
+                 class="rounded-xl overflow-hidden"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+
+              <!-- Card header -->
+              <div class="px-5 py-3.5 flex items-center gap-3"
+                   :style="{ borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+                <div class="w-2.5 h-2.5 rounded-full shrink-0"
+                     :style="{ backgroundColor: server.status === 'connected' ? '#06D6A0' : '#E53935' }" />
+                <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                  <AppIcon name="servers" :size="14" class="shrink-0"
+                           :style="{ color: server.status === 'connected' ? '#0096C7' : '#64748b' }" />
+                  <h2 class="text-sm font-semibold truncate" :class="isDark ? 'text-slate-200' : 'text-slate-700'">
+                    {{ server.name }}
+                  </h2>
+                  <span class="text-[11px] font-mono truncate"
+                        :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                    {{ server.host }}
+                  </span>
+                </div>
+                <span class="badge text-[9px] uppercase tracking-wide font-bold shrink-0"
+                      :style="{
+                        backgroundColor: server.status === 'connected'
+                          ? (isDark ? 'rgba(6,214,160,0.15)' : 'rgba(6,214,160,0.1)')
+                          : (isDark ? 'rgba(229,57,53,0.15)' : 'rgba(229,57,53,0.1)'),
+                        color: server.status === 'connected' ? '#06D6A0' : '#E53935',
+                      }">
+                  {{ server.status }}
+                </span>
+              </div>
+
+              <!-- Card body grid -->
+              <div class="p-5">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+
+                  <!-- Left column -->
+                  <div class="space-y-4">
+                    <div>
+                      <div class="text-[10px] font-semibold uppercase tracking-wider mb-1"
+                           :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                        Docker Version
+                      </div>
+                      <div class="text-[13px] font-medium font-mono"
+                           :class="isDark ? 'text-slate-200' : 'text-slate-700'">
+                        {{ server.dockerVersion }}
+                      </div>
+                    </div>
+                    <div>
+                      <div class="text-[10px] font-semibold uppercase tracking-wider mb-1"
+                           :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                        Operating System
+                      </div>
+                      <div class="text-[13px] font-medium"
+                           :class="isDark ? 'text-slate-200' : 'text-slate-700'">
+                        {{ server.os }}
+                      </div>
+                    </div>
+                    <div>
+                      <div class="text-[10px] font-semibold uppercase tracking-wider mb-1"
+                           :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                        Architecture
+                      </div>
+                      <div class="text-[13px] font-medium font-mono"
+                           :class="isDark ? 'text-slate-200' : 'text-slate-700'">
+                        {{ server.arch }}
+                      </div>
+                    </div>
+                    <div class="flex gap-6">
+                      <div>
+                        <div class="text-[10px] font-semibold uppercase tracking-wider mb-1"
+                             :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                          CPUs
+                        </div>
+                        <div class="text-[13px] font-medium font-mono"
+                             :class="isDark ? 'text-slate-200' : 'text-slate-700'">
+                          {{ server.cpus }}
+                        </div>
+                      </div>
+                      <div>
+                        <div class="text-[10px] font-semibold uppercase tracking-wider mb-1"
+                             :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                          Memory
+                        </div>
+                        <div class="text-[13px] font-medium font-mono"
+                             :class="isDark ? 'text-slate-200' : 'text-slate-700'">
+                          {{ server.memoryGb }} GB
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Right column -->
+                  <div class="space-y-4">
+                    <div>
+                      <div class="text-[10px] font-semibold uppercase tracking-wider mb-1"
+                           :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                        Containers
+                      </div>
+                      <div class="flex items-baseline gap-3">
+                        <span class="text-[13px] font-bold" :class="isDark ? 'text-slate-200' : 'text-slate-700'">
+                          {{ server.containers.total }}
+                        </span>
+                        <span class="text-[11px] font-medium" style="color: #06D6A0;">
+                          {{ server.containers.running }} running
+                        </span>
+                        <span v-if="server.containers.stopped > 0"
+                              class="text-[11px] font-medium" style="color: #E53935;">
+                          {{ server.containers.stopped }} stopped
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <div class="text-[10px] font-semibold uppercase tracking-wider mb-1"
+                           :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                        Images
+                      </div>
+                      <div class="text-[13px] font-medium font-mono"
+                           :class="isDark ? 'text-slate-200' : 'text-slate-700'">
+                        {{ server.images }}
+                      </div>
+                    </div>
+                    <div>
+                      <div class="text-[10px] font-semibold uppercase tracking-wider mb-1"
+                           :class="isDark ? 'text-slate-500' : 'text-slate-400'">
+                        Last Seen
+                      </div>
+                      <div class="text-[13px] font-medium"
+                           :class="server.status === 'connected'
+                             ? (isDark ? 'text-slate-200' : 'text-slate-700')
+                             : ''
+                           "
+                           :style="server.status === 'disconnected' ? { color: '#E53935' } : {}">
+                        {{ server.lastSeen }}
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              <!-- Card footer -->
+              <div class="px-5 py-3 flex items-center justify-end gap-2"
+                   :style="{
+                     borderTop: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                     backgroundColor: isDark ? '#111827' : '#f1f5f9',
+                   }">
+                <button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors"
+                        :class="isDark
+                          ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+                          : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'"
+                        @click="refreshServer(server.name)">
+                  <AppIcon name="restart" :size="10" />
+                  Refresh
+                </button>
+                <button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors"
+                        :class="isDark
+                          ? 'text-drydock-secondary hover:bg-drydock-secondary/15'
+                          : 'text-drydock-secondary hover:bg-drydock-secondary/10'"
+                        @click="viewServerContainers(server.name)">
+                  <AppIcon name="containers" :size="10" />
+                  View Containers
+                </button>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
         <!-- SETTINGS PAGE (Server)                         -->
         <!-- ═══════════════════════════════════════════════ -->
         <div v-if="activeRoute === '/config'" class="max-w-4xl">
@@ -1888,6 +2844,563 @@ onUnmounted(() => {
             </div>
 
           </div><!-- end appearance tab -->
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- REGISTRIES PAGE                                -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div v-if="activeRoute === '/registries'" class="max-w-4xl">
+          <!-- Page header -->
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-9 h-9 rounded-lg flex items-center justify-center"
+                 :style="{ backgroundColor: 'rgba(0,150,199,0.15)', color: '#0096C7' }">
+              <AppIcon name="registries" :size="16" />
+            </div>
+            <div>
+              <h1 class="text-lg font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">Registries</h1>
+              <p class="text-[11px]" :class="isDark ? 'text-slate-500' : 'text-slate-400'">Manage container registry connections</p>
+            </div>
+            <span class="badge text-[10px] font-bold ml-auto"
+                  :style="{ backgroundColor: 'rgba(0,150,199,0.15)', color: '#0096C7' }">
+              {{ registriesData.length }}
+            </span>
+          </div>
+
+          <!-- Registry cards -->
+          <div class="space-y-3">
+            <div v-for="reg in registriesData" :key="reg.id"
+                 class="rounded-xl overflow-hidden transition-all"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+              <!-- Card header -->
+              <div class="flex items-center gap-3 px-5 py-3.5 cursor-pointer transition-colors"
+                   :class="isDark ? 'hover:bg-slate-700/30' : 'hover:bg-slate-50'"
+                   @click="toggleConfigItem(reg.id)">
+                <div class="w-2.5 h-2.5 rounded-full shrink-0"
+                     :style="{ backgroundColor: reg.status === 'connected' ? '#06D6A0' : reg.status === 'error' ? '#E53935' : '#64748b' }" />
+                <AppIcon name="registries" :size="14" :class="isDark ? 'text-slate-400' : 'text-slate-500'" />
+                <span class="text-sm font-semibold flex-1 min-w-0 truncate"
+                      :class="isDark ? 'text-slate-200' : 'text-slate-700'">{{ reg.name }}</span>
+                <span class="badge text-[9px] uppercase font-bold shrink-0"
+                      :style="{ backgroundColor: registryTypeBadge(reg.type).bg, color: registryTypeBadge(reg.type).text }">
+                  {{ registryTypeBadge(reg.type).label }}
+                </span>
+                <i class="pi text-[10px] transition-transform shrink-0"
+                   :class="[
+                     expandedConfigItems.has(reg.id) ? 'pi-angle-up' : 'pi-angle-down',
+                     isDark ? 'text-slate-500' : 'text-slate-400',
+                   ]" />
+              </div>
+              <!-- Expanded config -->
+              <div v-if="expandedConfigItems.has(reg.id)"
+                   class="px-5 pb-4 pt-1"
+                   :style="{ borderTop: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
+                  <div v-for="(val, key) in reg.config" :key="key">
+                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                         :class="isDark ? 'text-slate-500' : 'text-slate-400'">{{ key }}</div>
+                    <div class="text-[12px] font-mono"
+                         :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ val }}</div>
+                  </div>
+                  <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                         :class="isDark ? 'text-slate-500' : 'text-slate-400'">Status</div>
+                    <span class="badge text-[10px] font-semibold"
+                          :style="{
+                            backgroundColor: reg.status === 'connected' ? 'rgba(6,214,160,0.15)' : 'rgba(229,57,53,0.15)',
+                            color: reg.status === 'connected' ? '#06D6A0' : '#E53935',
+                          }">{{ reg.status }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- AGENTS PAGE                                    -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div v-if="activeRoute === '/agents'" class="max-w-4xl">
+          <!-- Page header -->
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-9 h-9 rounded-lg flex items-center justify-center"
+                 :style="{ backgroundColor: 'rgba(0,150,199,0.15)', color: '#0096C7' }">
+              <AppIcon name="agents" :size="16" />
+            </div>
+            <div>
+              <h1 class="text-lg font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">Agents</h1>
+              <p class="text-[11px]" :class="isDark ? 'text-slate-500' : 'text-slate-400'">Remote agent connections</p>
+            </div>
+            <span class="badge text-[10px] font-bold ml-auto"
+                  :style="{ backgroundColor: 'rgba(0,150,199,0.15)', color: '#0096C7' }">
+              {{ agentsData.length }}
+            </span>
+          </div>
+
+          <!-- Agent cards -->
+          <div class="space-y-3">
+            <div v-for="agent in agentsData" :key="agent.id"
+                 class="rounded-xl overflow-hidden transition-all"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+              <!-- Card header -->
+              <div class="flex items-center gap-3 px-5 py-3.5 cursor-pointer transition-colors"
+                   :class="isDark ? 'hover:bg-slate-700/30' : 'hover:bg-slate-50'"
+                   @click="toggleConfigItem(agent.id)">
+                <div class="w-2.5 h-2.5 rounded-full shrink-0"
+                     :style="{ backgroundColor: agent.status === 'connected' ? '#06D6A0' : '#E53935' }" />
+                <AppIcon name="agents" :size="14" :class="isDark ? 'text-slate-400' : 'text-slate-500'" />
+                <span class="text-sm font-semibold flex-1 min-w-0 truncate"
+                      :class="isDark ? 'text-slate-200' : 'text-slate-700'">{{ agent.name }}</span>
+                <span class="badge text-[9px] uppercase font-bold shrink-0"
+                      :style="{
+                        backgroundColor: agent.status === 'connected' ? 'rgba(6,214,160,0.15)' : 'rgba(229,57,53,0.15)',
+                        color: agent.status === 'connected' ? '#06D6A0' : '#E53935',
+                      }">
+                  {{ agent.status }}
+                </span>
+                <i class="pi text-[10px] transition-transform shrink-0"
+                   :class="[
+                     expandedConfigItems.has(agent.id) ? 'pi-angle-up' : 'pi-angle-down',
+                     isDark ? 'text-slate-500' : 'text-slate-400',
+                   ]" />
+              </div>
+              <!-- Expanded config -->
+              <div v-if="expandedConfigItems.has(agent.id)"
+                   class="px-5 pb-4 pt-1"
+                   :style="{ borderTop: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
+                  <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                         :class="isDark ? 'text-slate-500' : 'text-slate-400'">Host</div>
+                    <div class="text-[12px] font-mono"
+                         :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ agent.host }}</div>
+                  </div>
+                  <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                         :class="isDark ? 'text-slate-500' : 'text-slate-400'">Last Seen</div>
+                    <div class="text-[12px] font-mono"
+                         :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ agent.lastSeen }}</div>
+                  </div>
+                  <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                         :class="isDark ? 'text-slate-500' : 'text-slate-400'">Containers</div>
+                    <div class="text-[12px] font-mono"
+                         :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ agent.containers }}</div>
+                  </div>
+                  <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                         :class="isDark ? 'text-slate-500' : 'text-slate-400'">Version</div>
+                    <div class="text-[12px] font-mono"
+                         :class="isDark ? 'text-slate-300' : 'text-slate-600'">v{{ agent.version }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- TRIGGERS PAGE                                  -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div v-if="activeRoute === '/triggers'" class="max-w-4xl">
+          <!-- Page header -->
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-9 h-9 rounded-lg flex items-center justify-center"
+                 :style="{ backgroundColor: 'rgba(0,150,199,0.15)', color: '#0096C7' }">
+              <AppIcon name="triggers" :size="16" />
+            </div>
+            <div>
+              <h1 class="text-lg font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">Triggers</h1>
+              <p class="text-[11px]" :class="isDark ? 'text-slate-500' : 'text-slate-400'">Notification and webhook endpoints</p>
+            </div>
+            <span class="badge text-[10px] font-bold ml-auto"
+                  :style="{ backgroundColor: 'rgba(0,150,199,0.15)', color: '#0096C7' }">
+              {{ triggersData.length }}
+            </span>
+          </div>
+
+          <!-- Trigger cards -->
+          <div class="space-y-3">
+            <div v-for="trigger in triggersData" :key="trigger.id"
+                 class="rounded-xl overflow-hidden transition-all"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+              <!-- Card header -->
+              <div class="flex items-center gap-3 px-5 py-3.5 cursor-pointer transition-colors"
+                   :class="isDark ? 'hover:bg-slate-700/30' : 'hover:bg-slate-50'"
+                   @click="toggleConfigItem(trigger.id)">
+                <div class="w-2.5 h-2.5 rounded-full shrink-0"
+                     :style="{ backgroundColor: trigger.status === 'active' ? '#06D6A0' : '#E53935' }" />
+                <AppIcon name="triggers" :size="14" :class="isDark ? 'text-slate-400' : 'text-slate-500'" />
+                <span class="text-sm font-semibold flex-1 min-w-0 truncate"
+                      :class="isDark ? 'text-slate-200' : 'text-slate-700'">{{ trigger.name }}</span>
+                <span class="badge text-[9px] uppercase font-bold shrink-0"
+                      :style="{ backgroundColor: triggerTypeBadge(trigger.type).bg, color: triggerTypeBadge(trigger.type).text }">
+                  {{ triggerTypeBadge(trigger.type).label }}
+                </span>
+                <i class="pi text-[10px] transition-transform shrink-0"
+                   :class="[
+                     expandedConfigItems.has(trigger.id) ? 'pi-angle-up' : 'pi-angle-down',
+                     isDark ? 'text-slate-500' : 'text-slate-400',
+                   ]" />
+              </div>
+              <!-- Expanded config -->
+              <div v-if="expandedConfigItems.has(trigger.id)"
+                   class="px-5 pb-4 pt-1"
+                   :style="{ borderTop: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
+                  <div v-for="(val, key) in trigger.config" :key="key">
+                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                         :class="isDark ? 'text-slate-500' : 'text-slate-400'">{{ key }}</div>
+                    <div class="text-[12px] font-mono"
+                         :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ val }}</div>
+                  </div>
+                  <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                         :class="isDark ? 'text-slate-500' : 'text-slate-400'">Status</div>
+                    <span class="badge text-[10px] font-semibold"
+                          :style="{
+                            backgroundColor: trigger.status === 'active' ? 'rgba(6,214,160,0.15)' : 'rgba(229,57,53,0.15)',
+                            color: trigger.status === 'active' ? '#06D6A0' : '#E53935',
+                          }">{{ trigger.status }}</span>
+                  </div>
+                </div>
+                <!-- Test button -->
+                <div class="mt-4 pt-3" :style="{ borderTop: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+                  <button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold tracking-wide transition-all"
+                          :style="{
+                            background: 'linear-gradient(135deg, #0096C7, #0077b6)',
+                            color: '#ffffff',
+                            boxShadow: '0 1px 3px rgba(0,150,199,0.3)',
+                          }">
+                    <AppIcon name="play" :size="10" />
+                    Test
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- WATCHERS PAGE                                  -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div v-if="activeRoute === '/watchers'" class="max-w-4xl">
+          <!-- Page header -->
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-9 h-9 rounded-lg flex items-center justify-center"
+                 :style="{ backgroundColor: 'rgba(0,150,199,0.15)', color: '#0096C7' }">
+              <AppIcon name="watchers" :size="16" />
+            </div>
+            <div>
+              <h1 class="text-lg font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">Watchers</h1>
+              <p class="text-[11px]" :class="isDark ? 'text-slate-500' : 'text-slate-400'">Container update monitoring sources</p>
+            </div>
+            <span class="badge text-[10px] font-bold ml-auto"
+                  :style="{ backgroundColor: 'rgba(0,150,199,0.15)', color: '#0096C7' }">
+              {{ watchersData.length }}
+            </span>
+          </div>
+
+          <!-- Watcher cards -->
+          <div class="space-y-3">
+            <div v-for="watcher in watchersData" :key="watcher.id"
+                 class="rounded-xl overflow-hidden transition-all"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+              <!-- Card header -->
+              <div class="flex items-center gap-3 px-5 py-3.5 cursor-pointer transition-colors"
+                   :class="isDark ? 'hover:bg-slate-700/30' : 'hover:bg-slate-50'"
+                   @click="toggleConfigItem(watcher.id)">
+                <div class="w-2.5 h-2.5 rounded-full shrink-0"
+                     :style="{ backgroundColor: watcherStatusColor(watcher.status) }" />
+                <AppIcon name="watchers" :size="14" :class="isDark ? 'text-slate-400' : 'text-slate-500'" />
+                <span class="text-sm font-semibold flex-1 min-w-0 truncate"
+                      :class="isDark ? 'text-slate-200' : 'text-slate-700'">{{ watcher.name }}</span>
+                <span class="badge text-[9px] uppercase font-bold shrink-0"
+                      :style="{
+                        backgroundColor: watcher.status === 'watching' ? 'rgba(6,214,160,0.15)' : 'rgba(255,152,0,0.15)',
+                        color: watcher.status === 'watching' ? '#06D6A0' : '#FF9800',
+                      }">
+                  {{ watcher.status }}
+                </span>
+                <span v-if="watcher.config.maintenanceWindow"
+                      class="badge text-[9px] uppercase font-bold shrink-0"
+                      :style="{ backgroundColor: 'rgba(168,85,247,0.15)', color: '#A855F7' }">
+                  Maint
+                </span>
+                <i class="pi text-[10px] transition-transform shrink-0"
+                   :class="[
+                     expandedConfigItems.has(watcher.id) ? 'pi-angle-up' : 'pi-angle-down',
+                     isDark ? 'text-slate-500' : 'text-slate-400',
+                   ]" />
+              </div>
+              <!-- Expanded config -->
+              <div v-if="expandedConfigItems.has(watcher.id)"
+                   class="px-5 pb-4 pt-1"
+                   :style="{ borderTop: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
+                  <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                         :class="isDark ? 'text-slate-500' : 'text-slate-400'">Cron</div>
+                    <div class="text-[12px] font-mono"
+                         :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ watcher.cron }}</div>
+                  </div>
+                  <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                         :class="isDark ? 'text-slate-500' : 'text-slate-400'">Last Run</div>
+                    <div class="text-[12px] font-mono"
+                         :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ watcher.lastRun }}</div>
+                  </div>
+                  <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                         :class="isDark ? 'text-slate-500' : 'text-slate-400'">Containers Watched</div>
+                    <div class="text-[12px] font-mono"
+                         :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ watcher.containers }}</div>
+                  </div>
+                  <div v-for="(val, key) in watcher.config" :key="key">
+                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                         :class="isDark ? 'text-slate-500' : 'text-slate-400'">{{ key }}</div>
+                    <div class="text-[12px] font-mono"
+                         :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ val }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- AUTH PAGE                                      -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div v-if="activeRoute === '/auth'" class="max-w-4xl">
+          <!-- Page header -->
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-9 h-9 rounded-lg flex items-center justify-center"
+                 :style="{ backgroundColor: 'rgba(0,150,199,0.15)', color: '#0096C7' }">
+              <AppIcon name="auth" :size="16" />
+            </div>
+            <div>
+              <h1 class="text-lg font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">Authentication</h1>
+              <p class="text-[11px]" :class="isDark ? 'text-slate-500' : 'text-slate-400'">Authentication providers and methods</p>
+            </div>
+            <span class="badge text-[10px] font-bold ml-auto"
+                  :style="{ backgroundColor: 'rgba(0,150,199,0.15)', color: '#0096C7' }">
+              {{ authData.length }}
+            </span>
+          </div>
+
+          <!-- Auth cards -->
+          <div class="space-y-3">
+            <div v-for="auth in authData" :key="auth.id"
+                 class="rounded-xl overflow-hidden transition-all"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+              <!-- Card header -->
+              <div class="flex items-center gap-3 px-5 py-3.5 cursor-pointer transition-colors"
+                   :class="isDark ? 'hover:bg-slate-700/30' : 'hover:bg-slate-50'"
+                   @click="toggleConfigItem(auth.id)">
+                <div class="w-2.5 h-2.5 rounded-full shrink-0"
+                     :style="{ backgroundColor: auth.status === 'active' ? '#06D6A0' : '#64748b' }" />
+                <AppIcon name="auth" :size="14" :class="isDark ? 'text-slate-400' : 'text-slate-500'" />
+                <span class="text-sm font-semibold flex-1 min-w-0 truncate"
+                      :class="isDark ? 'text-slate-200' : 'text-slate-700'">{{ auth.name }}</span>
+                <span class="badge text-[9px] uppercase font-bold shrink-0"
+                      :style="{ backgroundColor: authTypeBadge(auth.type).bg, color: authTypeBadge(auth.type).text }">
+                  {{ authTypeBadge(auth.type).label }}
+                </span>
+                <i class="pi text-[10px] transition-transform shrink-0"
+                   :class="[
+                     expandedConfigItems.has(auth.id) ? 'pi-angle-up' : 'pi-angle-down',
+                     isDark ? 'text-slate-500' : 'text-slate-400',
+                   ]" />
+              </div>
+              <!-- Expanded config -->
+              <div v-if="expandedConfigItems.has(auth.id)"
+                   class="px-5 pb-4 pt-1"
+                   :style="{ borderTop: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
+                  <div v-for="(val, key) in auth.config" :key="key">
+                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                         :class="isDark ? 'text-slate-500' : 'text-slate-400'">{{ key }}</div>
+                    <div class="text-[12px] font-mono"
+                         :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ String(val).includes('***') ? val : val }}</div>
+                  </div>
+                  <div>
+                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5"
+                         :class="isDark ? 'text-slate-500' : 'text-slate-400'">Status</div>
+                    <span class="badge text-[10px] font-semibold"
+                          :style="{
+                            backgroundColor: auth.status === 'active' ? 'rgba(6,214,160,0.15)' : 'rgba(100,116,139,0.15)',
+                            color: auth.status === 'active' ? '#06D6A0' : '#64748b',
+                          }">{{ auth.status }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- NOTIFICATIONS PAGE                             -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div v-if="activeRoute === '/notifications'" class="max-w-4xl">
+          <!-- Page header -->
+          <div class="flex items-center gap-3 mb-6">
+            <div class="w-9 h-9 rounded-lg flex items-center justify-center"
+                 :style="{ backgroundColor: 'rgba(0,150,199,0.15)', color: '#0096C7' }">
+              <AppIcon name="notifications" :size="16" />
+            </div>
+            <div>
+              <h1 class="text-lg font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">Notifications</h1>
+              <p class="text-[11px]" :class="isDark ? 'text-slate-500' : 'text-slate-400'">Configure which events fire which triggers</p>
+            </div>
+            <span class="badge text-[10px] font-bold ml-auto"
+                  :style="{ backgroundColor: 'rgba(0,150,199,0.15)', color: '#0096C7' }">
+              {{ notificationsData.length }}
+            </span>
+          </div>
+
+          <!-- Notification cards -->
+          <div class="space-y-3">
+            <div v-for="notif in notificationsData" :key="notif.id"
+                 class="rounded-xl overflow-hidden transition-all"
+                 :style="{
+                   backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                   border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                 }">
+              <div class="flex items-center gap-3 px-5 py-3.5">
+                <!-- Enable/disable toggle -->
+                <div class="w-8 h-4 rounded-full relative cursor-pointer shrink-0 transition-colors"
+                     :style="{ backgroundColor: notif.enabled ? '#06D6A0' : (isDark ? '#334155' : '#cbd5e1') }"
+                     @click="toggleNotification(notif.id)">
+                  <div class="absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform"
+                       :style="{ left: notif.enabled ? '17px' : '2px' }" />
+                </div>
+
+                <!-- Name and description -->
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-semibold"
+                       :class="isDark ? 'text-slate-200' : 'text-slate-700'">{{ notif.name }}</div>
+                  <div class="text-[11px] mt-0.5"
+                       :class="isDark ? 'text-slate-500' : 'text-slate-400'">{{ notif.description }}</div>
+                </div>
+
+                <!-- Trigger badges -->
+                <div class="flex flex-wrap gap-1.5 shrink-0 max-w-[260px] justify-end">
+                  <span v-for="tId in notif.triggers" :key="tId"
+                        class="badge text-[9px] font-semibold"
+                        :style="{
+                          backgroundColor: isDark ? 'rgba(148,163,184,0.1)' : 'rgba(100,116,139,0.08)',
+                          color: isDark ? '#94a3b8' : '#475569',
+                        }">
+                    {{ triggerNameById(tId) }}
+                  </span>
+                  <span v-if="notif.triggers.length === 0"
+                        class="text-[10px] italic"
+                        :class="isDark ? 'text-slate-600' : 'text-slate-400'">
+                    No triggers
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════ -->
+        <!-- PROFILE PAGE                                   -->
+        <!-- ═══════════════════════════════════════════════ -->
+        <div v-if="activeRoute === '/profile'" class="max-w-2xl">
+          <div class="rounded-xl overflow-hidden"
+               :style="{
+                 backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                 border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+               }">
+            <!-- Profile header -->
+            <div class="px-6 py-6 flex items-center gap-5"
+                 :style="{ borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0' }">
+              <!-- Large avatar -->
+              <div class="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-white shrink-0"
+                   style="background: linear-gradient(135deg, #0096C7, #06D6A0);">
+                SB
+              </div>
+              <div>
+                <h1 class="text-lg font-bold" :class="isDark ? 'text-slate-100' : 'text-slate-800'">
+                  {{ profileData.username }}
+                </h1>
+                <p class="text-[12px] mt-0.5" :class="isDark ? 'text-slate-400' : 'text-slate-500'">
+                  {{ profileData.email }}
+                </p>
+                <span class="badge text-[10px] font-semibold mt-1.5 inline-flex"
+                      :style="{ backgroundColor: 'rgba(0,150,199,0.15)', color: '#0096C7' }">
+                  {{ profileData.role }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Profile details -->
+            <div class="p-6 space-y-4">
+              <div class="flex items-center justify-between py-2"
+                   :style="{ borderBottom: isDark ? '1px solid #1e293b' : '1px solid #f1f5f9' }">
+                <span class="text-[11px] font-semibold uppercase tracking-wider"
+                      :class="isDark ? 'text-slate-500' : 'text-slate-400'">Username</span>
+                <span class="text-[12px] font-medium font-mono"
+                      :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ profileData.username }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2"
+                   :style="{ borderBottom: isDark ? '1px solid #1e293b' : '1px solid #f1f5f9' }">
+                <span class="text-[11px] font-semibold uppercase tracking-wider"
+                      :class="isDark ? 'text-slate-500' : 'text-slate-400'">Email</span>
+                <span class="text-[12px] font-medium font-mono"
+                      :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ profileData.email }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2"
+                   :style="{ borderBottom: isDark ? '1px solid #1e293b' : '1px solid #f1f5f9' }">
+                <span class="text-[11px] font-semibold uppercase tracking-wider"
+                      :class="isDark ? 'text-slate-500' : 'text-slate-400'">Role</span>
+                <span class="text-[12px] font-medium font-mono"
+                      :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ profileData.role }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2"
+                   :style="{ borderBottom: isDark ? '1px solid #1e293b' : '1px solid #f1f5f9' }">
+                <span class="text-[11px] font-semibold uppercase tracking-wider"
+                      :class="isDark ? 'text-slate-500' : 'text-slate-400'">Last Login</span>
+                <span class="text-[12px] font-medium font-mono"
+                      :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ profileData.lastLogin }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2"
+                   :style="{ borderBottom: isDark ? '1px solid #1e293b' : '1px solid #f1f5f9' }">
+                <span class="text-[11px] font-semibold uppercase tracking-wider"
+                      :class="isDark ? 'text-slate-500' : 'text-slate-400'">Active Sessions</span>
+                <span class="text-[12px] font-medium font-mono"
+                      :class="isDark ? 'text-slate-300' : 'text-slate-600'">{{ profileData.sessions }}</span>
+              </div>
+            </div>
+
+            <!-- Sign Out -->
+            <div class="px-6 pb-6">
+              <button class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-[12px] font-bold transition-colors"
+                      :style="{
+                        backgroundColor: isDark ? 'rgba(229,57,53,0.12)' : 'rgba(229,57,53,0.08)',
+                        color: '#E53935',
+                        border: isDark ? '1px solid rgba(229,57,53,0.25)' : '1px solid rgba(229,57,53,0.2)',
+                      }">
+                <AppIcon name="sign-out" :size="12" />
+                Sign Out
+              </button>
+            </div>
+          </div>
         </div>
 
       </main>
