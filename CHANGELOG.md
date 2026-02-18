@@ -18,6 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Stale digest after container updates** — After a container was updated (new image pulled, container recreated), the next watch cycle still showed the old digest because the early-return path in `addImageDetailsToContainer` skipped re-inspecting the Docker image. Now re-inspects the local image on each watch cycle to refresh digest, image ID, and created date. ([#76](https://github.com/CodesWhat/drydock/issues/76))
 - **express-rate-limit IPv6 key generation warning** — Removed custom `keyGenerator` from the container scan rate-limiter that bypassed built-in IPv6 normalization, causing `ERR_ERL_KEY_GEN_IPV6` validation errors.
 - **express-rate-limit X-Forwarded-For warning** — Added `validate: { xForwardedForHeader: false }` to all 6 rate-limiters to suppress noisy `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` warnings when running without `trust proxy` (e.g. direct Docker port mapping).
+- **Quay auth token extraction broken** — Fixed `authenticate()` reading `response.token` instead of `response.data.token`, causing authenticated pulls to silently run unauthenticated. Also affects Trueforge via inheritance.
+- **GHCR anonymous bearer token** — Fixed anonymous configurations sending `Authorization: Bearer Og==` (base64 of `:`) instead of no auth header, which could break public image access.
+- **Created-date-only updates crash trigger execution** — Fixed `getNewImageFullName()` crashing on `.includes()` of `undefined` when a container had only a created-date change (no tag change). Now rejects `unknown` update kind in threshold logic.
+- **Compose write failure allows container updates** — Fixed `writeComposeFile()` swallowing errors, allowing `processComposeFile()` to proceed with container updates even when the file write failed, causing runtime/file state desynchronization.
+- **Self-update fallback removes running old container** — Fixed helper script running `removeOld` after the fallback path (`startOld`), which would delete the running old container. Now only removes old after successful new container start.
+- **Registry calls have no timeout** — Added 30-second timeout to all registry API calls via Axios. Previously a hung registry could stall the entire watch cycle indefinitely.
+- **HTTP trigger providers have no timeout** — Added 30-second timeout to all outbound HTTP trigger calls (Http, Apprise, Discord, Teams, Telegram). Previously a slow upstream could block trigger execution indefinitely.
+- **Kafka producer connection leak** — Fixed producer connections never being disconnected after send, leaking TCP connections to the broker over time. Now wraps send in try/finally with disconnect.
+- **Rollback timer labels not validated** — Invalid `dd.rollback.window` or `dd.rollback.interval` label values (NaN, negative, zero) could cause `setInterval` to fire continuously. Now validates with `Number.isFinite()` and falls back to defaults.
+- **Health monitor overlapping async checks** — Added in-flight guard to prevent overlapping health checks from triggering duplicate rollback executions when inspections take longer than the poll interval.
+- **Anonymous login double navigation guard** — Fixed `beforeRouteEnter` calling `next()` twice when anonymous auth was enabled, causing Vue Router errors and nondeterministic redirects.
+- **Container API response not validated** — Fixed `getAllContainers()` not checking `response.ok` before parsing, allowing error payloads to be treated as container arrays and crash computed properties.
 
 ### Security
 
