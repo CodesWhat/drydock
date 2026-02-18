@@ -84,7 +84,7 @@ describe('API Router', () => {
 
   test('should mount SSE after requireAuthentication middleware', async () => {
     const auth = await import('./auth.js');
-    const sseRouter = await import('./sse.js');
+    await import('./sse.js');
     const useCalls = router.use.mock.calls;
 
     const authIndex = useCalls.findIndex((c) => c[0] === auth.requireAuthentication);
