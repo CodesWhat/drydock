@@ -3,7 +3,7 @@
  * Semver utils.
  */
 
-import RE2 from 're2';
+import { RE2 } from 're2-wasm';
 import semver from 'semver';
 import log from '../log/index.js';
 
@@ -88,7 +88,7 @@ function safeRegExp(pattern: string): RE2 | null {
     return null;
   }
   try {
-    return new RE2(pattern);
+    return new RE2(pattern, 'u');
   } catch (e: any) {
     log.warn(`Invalid regex pattern "${pattern}": ${e.message}`);
     return null;

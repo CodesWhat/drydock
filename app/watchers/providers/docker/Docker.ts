@@ -3,7 +3,7 @@ import axios from 'axios';
 import Dockerode from 'dockerode';
 import Joi from 'joi';
 import JoiCronExpression from 'joi-cron-expression';
-import RE2 from 're2';
+import { RE2 } from 're2-wasm';
 
 const joi = JoiCronExpression(Joi);
 
@@ -109,7 +109,7 @@ function safeRegExp(pattern: string, logger: any): RE2 | null {
     return null;
   }
   try {
-    return new RE2(pattern);
+    return new RE2(pattern, 'u');
   } catch (e: any) {
     logger.warn(`Invalid regex pattern "${pattern}": ${e.message}`);
     return null;
