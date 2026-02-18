@@ -350,6 +350,7 @@ class Registry extends Component {
       method,
       headers,
       responseType: 'json',
+      timeout: 30000,
     };
 
     const axiosOptionsWithAuth = await this.authenticate(image, axiosOptions);

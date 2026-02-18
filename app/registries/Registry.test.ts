@@ -419,6 +419,16 @@ describe('callRegistry', () => {
     ).rejects.toThrow('network error');
   });
 
+  test('should include 30s timeout in axios options', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    const registryMocked = createMockedRegistry();
+    await registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' });
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({ timeout: 30000 }),
+    );
+  });
+
   test('should return full response when resolveWithFullResponse is true', async () => {
     const { default: axios } = await import('axios');
     const mockResponse = { data: { tags: ['v1'] }, headers: {} };
