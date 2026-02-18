@@ -14,8 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Self-update leaves container stopped** — When drydock updated its own container, stopping the old container killed the Node process before the new one could be created, leaving the UI stuck on "Restarting..." indefinitely. Now uses a helper container pattern: renames old container, creates new container, then spawns a short-lived helper that curls the Docker socket to stop old → start new → remove old. ([#76](https://github.com/CodesWhat/drydock/issues/76))
+- **Stale digest after container updates** — After a container was updated (new image pulled, container recreated), the next watch cycle still showed the old digest because the early-return path in `addImageDetailsToContainer` skipped re-inspecting the Docker image. Now re-inspects the local image on each watch cycle to refresh digest, image ID, and created date. ([#76](https://github.com/CodesWhat/drydock/issues/76))
 - **express-rate-limit IPv6 key generation warning** — Removed custom `keyGenerator` from the container scan rate-limiter that bypassed built-in IPv6 normalization, causing `ERR_ERL_KEY_GEN_IPV6` validation errors.
 - **express-rate-limit X-Forwarded-For warning** — Added `validate: { xForwardedForHeader: false }` to all 6 rate-limiters to suppress noisy `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` warnings when running without `trust proxy` (e.g. direct Docker port mapping).
+
+### Security
+
+- **fast-xml-parser DoS via entity expansion** — Override `fast-xml-parser` 5.3.4→5.3.6 to fix CVE GHSA-jmr7-xgp7-cmfj (transitive dep via `@aws-sdk/client-ecr`, upstream hasn't released a fix yet).
+- **tar arbitrary file read/write** — Override `tar` to ≥7.5.8 to fix CVE GHSA-83g3-92jg-28cx (transitive dep via `re2` → `node-gyp`).
 
 ## [1.3.2] — 2026-02-16
 
