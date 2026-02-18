@@ -59,7 +59,7 @@ class Quay extends BaseRegistry {
       requestOptions,
       authUrl,
       credentials,
-      (response) => response.token,
+      (response) => response.data.token,
     );
   }
 
