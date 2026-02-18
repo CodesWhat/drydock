@@ -509,6 +509,29 @@ describe('Dockercompose Trigger', () => {
     expect(dockerTriggerSpy).not.toHaveBeenCalled();
   });
 
+  test('processComposeFile should not trigger container updates when compose file write fails', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+
+    const container = makeContainer();
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from('image: nginx:1.0.0'));
+    vi.spyOn(trigger, 'writeComposeFile').mockRejectedValue(new Error('disk full'));
+    const dockerTriggerSpy = vi.spyOn(Docker.prototype, 'trigger').mockResolvedValue();
+    const hooksSpy = vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+    ).rejects.toThrow('disk full');
+
+    expect(dockerTriggerSpy).not.toHaveBeenCalled();
+    expect(hooksSpy).not.toHaveBeenCalled();
+  });
+
   test('processComposeFile should handle mapCurrentVersionToUpdateVersion returning undefined', async () => {
     trigger.configuration.dryrun = false;
 
@@ -807,10 +830,12 @@ describe('Dockercompose Trigger', () => {
     expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('copy failed'));
   });
 
-  test('writeComposeFile should log error on write failure', async () => {
+  test('writeComposeFile should log error and throw on write failure', async () => {
     fs.writeFile.mockRejectedValueOnce(new Error('write failed'));
 
-    await trigger.writeComposeFile('/opt/drydock/test/compose.yml', 'data');
+    await expect(trigger.writeComposeFile('/opt/drydock/test/compose.yml', 'data')).rejects.toThrow(
+      'write failed',
+    );
 
     expect(mockLog.error).toHaveBeenCalledWith(expect.stringContaining('write failed'));
   });

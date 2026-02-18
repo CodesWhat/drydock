@@ -471,6 +471,7 @@ class Dockercompose extends Docker {
     } catch (e) {
       this.log.error(`Error when writing ${filePath} (${e.message})`);
       this.log.debug(e);
+      throw e;
     }
   }
 
