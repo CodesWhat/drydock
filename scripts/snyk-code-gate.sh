@@ -8,5 +8,5 @@
 set -uo pipefail
 
 echo "Running Snyk Code SAST scan (informational)..."
-snyk code test --severity-threshold=high 2>&1 || true
+snyk code test --severity-threshold=high "$@" 2>&1 || true
 echo "Snyk Code: scan complete (informational — see CI for gate)"
