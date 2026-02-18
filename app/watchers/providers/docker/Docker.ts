@@ -2349,11 +2349,28 @@ class Docker extends Watcher {
     const containerId = container.Id;
     const containerLabels = container.Labels || {};
 
-    // Is container already in store? just return it :)
+    // Is container already in store? Refresh volatile image fields, then return it
     const containerInStore = storeContainer.getContainer(containerId);
     if (containerInStore !== undefined && containerInStore.error === undefined) {
       this.ensureLogger();
       this.log.debug(`Container ${containerInStore.id} already in store`);
+      try {
+        const currentImage = await this.dockerApi.getImage(container.Image).inspect();
+        const freshDigestRepo = getRepoDigest(currentImage);
+        const freshImageId = currentImage.Id;
+        if (
+          freshDigestRepo !== containerInStore.image.digest.repo ||
+          freshImageId !== containerInStore.image.id
+        ) {
+          containerInStore.image.digest.repo = freshDigestRepo;
+          containerInStore.image.id = freshImageId;
+          if (currentImage.Created) {
+            containerInStore.image.created = currentImage.Created;
+          }
+        }
+      } catch {
+        // Degrade gracefully to cached values
+      }
       return containerInStore;
     }
 
