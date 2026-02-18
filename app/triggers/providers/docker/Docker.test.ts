@@ -2063,6 +2063,29 @@ describe('executeSelfUpdate', () => {
     expect(context.currentContainer.rename).toHaveBeenLastCalledWith({ name: 'drydock' });
   });
 
+  test('should rollback when inspecting new container fails', async () => {
+    const context = createSelfUpdateContext();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const container = createTriggerContainer({
+      image: {
+        name: 'codeswhat/drydock',
+        registry: { name: 'ghcr' },
+        tag: { value: '1.0.0' },
+        digest: {},
+      },
+    });
+
+    context._mockNewContainer.inspect.mockRejectedValue(new Error('inspect failed'));
+
+    await expect(docker.executeSelfUpdate(context, container, logContainer)).rejects.toThrow(
+      'inspect failed',
+    );
+
+    expect(context._mockNewContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(context.currentContainer.rename).toHaveBeenLastCalledWith({ name: 'drydock' });
+    expect(context.dockerApi.createContainer).not.toHaveBeenCalled();
+  });
+
   test('should throw when docker socket bind not found', async () => {
     const context = createSelfUpdateContext();
     context.currentContainerSpec.HostConfig.Binds = ['/data:/data'];
