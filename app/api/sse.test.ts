@@ -19,7 +19,7 @@ import * as sseRouter from './sse.js';
 
 function getHandler() {
   sseRouter.init();
-  var call = mockRouter.get.mock.calls.find((c) => c[0] === '/');
+  const call = mockRouter.get.mock.calls.find((c) => c[0] === '/');
   return call[1];
 }
 
@@ -31,7 +31,7 @@ function createSSEResponse() {
 }
 
 function createSSERequest(ip = '127.0.0.1') {
-  var listeners = {};
+  const listeners = {};
   return {
     ip,
     on: vi.fn((event, handler) => {
@@ -68,9 +68,9 @@ describe('SSE Router', () => {
 
   describe('eventsHandler', () => {
     test('should set correct SSE headers', () => {
-      var handler = getHandler();
-      var req = createSSERequest();
-      var res = createSSEResponse();
+      const handler = getHandler();
+      const req = createSSERequest();
+      const res = createSSEResponse();
 
       handler(req, res);
 
@@ -82,9 +82,9 @@ describe('SSE Router', () => {
     });
 
     test('should send initial dd:connected event', () => {
-      var handler = getHandler();
-      var req = createSSERequest();
-      var res = createSSEResponse();
+      const handler = getHandler();
+      const req = createSSERequest();
+      const res = createSSEResponse();
 
       handler(req, res);
 
@@ -92,9 +92,9 @@ describe('SSE Router', () => {
     });
 
     test('should add client to clients set', () => {
-      var handler = getHandler();
-      var req = createSSERequest();
-      var res = createSSEResponse();
+      const handler = getHandler();
+      const req = createSSERequest();
+      const res = createSSEResponse();
 
       handler(req, res);
 
@@ -103,9 +103,9 @@ describe('SSE Router', () => {
     });
 
     test('should remove client on connection close', () => {
-      var handler = getHandler();
-      var req = createSSERequest();
-      var res = createSSEResponse();
+      const handler = getHandler();
+      const req = createSSERequest();
+      const res = createSSEResponse();
 
       handler(req, res);
       expect(sseRouter._clients.size).toBe(1);
@@ -118,9 +118,9 @@ describe('SSE Router', () => {
     });
 
     test('should set up heartbeat interval', () => {
-      var handler = getHandler();
-      var req = createSSERequest();
-      var res = createSSEResponse();
+      const handler = getHandler();
+      const req = createSSERequest();
+      const res = createSSEResponse();
 
       handler(req, res);
 
@@ -134,9 +134,9 @@ describe('SSE Router', () => {
     });
 
     test('should clear heartbeat interval on disconnect', () => {
-      var handler = getHandler();
-      var req = createSSERequest();
-      var res = createSSEResponse();
+      const handler = getHandler();
+      const req = createSSERequest();
+      const res = createSSEResponse();
 
       handler(req, res);
       res.write.mockClear();
@@ -152,19 +152,23 @@ describe('SSE Router', () => {
 
   describe('per-IP connection limits', () => {
     test('should reject connections exceeding the per-IP limit', () => {
-      var handler = getHandler();
-      var ip = '192.168.1.1';
+      const handler = getHandler();
+      const ip = '192.168.1.1';
 
       // Fill up to the limit
-      for (var i = 0; i < sseRouter._MAX_CONNECTIONS_PER_IP; i++) {
-        var req = createSSERequest(ip);
-        var res = createSSEResponse();
+      for (let i = 0; i < sseRouter._MAX_CONNECTIONS_PER_IP; i++) {
+        const req = createSSERequest(ip);
+        const res = createSSEResponse();
         handler(req, res);
       }
 
       // Next connection from the same IP should be rejected
-      var rejectedReq = createSSERequest(ip);
-      var rejectedRes = { ...createSSEResponse(), status: vi.fn().mockReturnThis(), json: vi.fn() };
+      const rejectedReq = createSSERequest(ip);
+      const rejectedRes = {
+        ...createSSEResponse(),
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      };
       handler(rejectedReq, rejectedRes);
 
       expect(rejectedRes.status).toHaveBeenCalledWith(429);
@@ -172,26 +176,26 @@ describe('SSE Router', () => {
     });
 
     test('should allow connections from different IPs independently', () => {
-      var handler = getHandler();
+      const handler = getHandler();
 
       // Fill up one IP
-      for (var i = 0; i < sseRouter._MAX_CONNECTIONS_PER_IP; i++) {
+      for (let i = 0; i < sseRouter._MAX_CONNECTIONS_PER_IP; i++) {
         handler(createSSERequest('10.0.0.1'), createSSEResponse());
       }
 
       // Another IP should still be allowed
-      var req = createSSERequest('10.0.0.2');
-      var res = createSSEResponse();
+      const req = createSSERequest('10.0.0.2');
+      const res = createSSEResponse();
       handler(req, res);
 
       expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
     });
 
     test('should decrement counter when client disconnects', () => {
-      var handler = getHandler();
-      var ip = '192.168.1.1';
-      var req = createSSERequest(ip);
-      var res = createSSEResponse();
+      const handler = getHandler();
+      const ip = '192.168.1.1';
+      const req = createSSERequest(ip);
+      const res = createSSEResponse();
 
       handler(req, res);
       expect(sseRouter._connectionsPerIp.get(ip)).toBe(1);
@@ -202,9 +206,9 @@ describe('SSE Router', () => {
     });
 
     test('should use unknown key when request ip is missing', () => {
-      var handler = getHandler();
-      var req = createSSERequest(null);
-      var res = createSSEResponse();
+      const handler = getHandler();
+      const req = createSSERequest(null);
+      const res = createSSEResponse();
 
       handler(req, res);
 
@@ -213,10 +217,10 @@ describe('SSE Router', () => {
     });
 
     test('should safely close when ip counter has already been removed', () => {
-      var handler = getHandler();
-      var ip = '192.168.1.1';
-      var req = createSSERequest(ip);
-      var res = createSSEResponse();
+      const handler = getHandler();
+      const ip = '192.168.1.1';
+      const req = createSSERequest(ip);
+      const res = createSSEResponse();
 
       handler(req, res);
       sseRouter._connectionsPerIp.delete(ip);
@@ -226,14 +230,14 @@ describe('SSE Router', () => {
     });
 
     test('should allow new connection after disconnect frees a slot', () => {
-      var handler = getHandler();
-      var ip = '192.168.1.1';
-      var requests = [];
+      const handler = getHandler();
+      const ip = '192.168.1.1';
+      const requests = [];
 
       // Fill up to the limit
-      for (var i = 0; i < sseRouter._MAX_CONNECTIONS_PER_IP; i++) {
-        var req = createSSERequest(ip);
-        var res = createSSEResponse();
+      for (let i = 0; i < sseRouter._MAX_CONNECTIONS_PER_IP; i++) {
+        const req = createSSERequest(ip);
+        const res = createSSEResponse();
         handler(req, res);
         requests.push(req);
       }
@@ -242,8 +246,8 @@ describe('SSE Router', () => {
       requests[0]._listeners.close();
 
       // New connection should now be accepted
-      var newReq = createSSERequest(ip);
-      var newRes = createSSEResponse();
+      const newReq = createSSERequest(ip);
+      const newRes = createSSEResponse();
       handler(newReq, newRes);
 
       expect(newRes.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
@@ -252,8 +256,8 @@ describe('SSE Router', () => {
 
   describe('broadcastSelfUpdate', () => {
     test('should send dd:self-update to all connected clients', () => {
-      var res1 = createSSEResponse();
-      var res2 = createSSEResponse();
+      const res1 = createSSEResponse();
+      const res2 = createSSEResponse();
       sseRouter._clients.add(res1);
       sseRouter._clients.add(res2);
 
@@ -271,9 +275,9 @@ describe('SSE Router', () => {
     test('should be triggered when self-update event fires', () => {
       sseRouter.init();
       // The registerSelfUpdateStarting callback should call broadcastSelfUpdate
-      var registeredCallback = mockRegisterSelfUpdateStarting.mock.calls[0][0];
+      const registeredCallback = mockRegisterSelfUpdateStarting.mock.calls[0][0];
 
-      var res = createSSEResponse();
+      const res = createSSEResponse();
       sseRouter._clients.add(res);
 
       registeredCallback();
@@ -284,14 +288,14 @@ describe('SSE Router', () => {
 
   describe('broadcastScanStarted', () => {
     test('should send dd:scan-started to all connected clients', () => {
-      var res1 = createSSEResponse();
-      var res2 = createSSEResponse();
+      const res1 = createSSEResponse();
+      const res2 = createSSEResponse();
       sseRouter._clients.add(res1);
       sseRouter._clients.add(res2);
 
       sseRouter._broadcastScanStarted('container-1');
 
-      var expected = 'event: dd:scan-started\ndata: {"containerId":"container-1"}\n\n';
+      const expected = 'event: dd:scan-started\ndata: {"containerId":"container-1"}\n\n';
       expect(res1.write).toHaveBeenCalledWith(expected);
       expect(res2.write).toHaveBeenCalledWith(expected);
     });
@@ -303,14 +307,14 @@ describe('SSE Router', () => {
 
   describe('broadcastScanCompleted', () => {
     test('should send dd:scan-completed to all connected clients', () => {
-      var res1 = createSSEResponse();
-      var res2 = createSSEResponse();
+      const res1 = createSSEResponse();
+      const res2 = createSSEResponse();
       sseRouter._clients.add(res1);
       sseRouter._clients.add(res2);
 
       sseRouter._broadcastScanCompleted('container-1', 'success');
 
-      var expected =
+      const expected =
         'event: dd:scan-completed\ndata: {"containerId":"container-1","status":"success"}\n\n';
       expect(res1.write).toHaveBeenCalledWith(expected);
       expect(res2.write).toHaveBeenCalledWith(expected);
@@ -321,12 +325,12 @@ describe('SSE Router', () => {
     });
 
     test('should include error status', () => {
-      var res = createSSEResponse();
+      const res = createSSEResponse();
       sseRouter._clients.add(res);
 
       sseRouter._broadcastScanCompleted('container-1', 'error');
 
-      var expected =
+      const expected =
         'event: dd:scan-completed\ndata: {"containerId":"container-1","status":"error"}\n\n';
       expect(res.write).toHaveBeenCalledWith(expected);
     });
