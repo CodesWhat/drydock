@@ -2317,6 +2317,34 @@ describe('Docker Watcher', () => {
       expect(result.image.created).toBe('2024-06-15');
     });
 
+    test('should keep existing created date when refreshed image has no Created field', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      docker.log = createMockLog(['debug']);
+      const existingContainer = {
+        id: '123',
+        error: undefined,
+        image: {
+          digest: { repo: 'sha256:olddigest' },
+          id: 'old-image-id',
+          created: '2023-01-01',
+        },
+      };
+      storeContainer.getContainer.mockReturnValue(existingContainer);
+      mockImage.inspect.mockResolvedValue({
+        Id: 'new-image-id',
+        RepoDigests: ['nginx@sha256:newdigest'],
+      });
+
+      const result = await docker.addImageDetailsToContainer({
+        Id: '123',
+        Image: 'nginx:latest',
+      });
+
+      expect(result.image.digest.repo).toBe('sha256:newdigest');
+      expect(result.image.id).toBe('new-image-id');
+      expect(result.image.created).toBe('2023-01-01');
+    });
+
     test('should degrade gracefully when image inspect fails for store container', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.log = createMockLog(['debug']);

@@ -1752,6 +1752,23 @@ describe('additional docker trigger coverage', () => {
     }
   });
 
+  test('maybeNotifySelfUpdate should no-op for non-drydock images', async () => {
+    const logContainer = createMockLog('info');
+
+    await expect(
+      docker.maybeNotifySelfUpdate(
+        {
+          image: {
+            name: 'nginx',
+          },
+        },
+        logContainer,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(logContainer.info).not.toHaveBeenCalled();
+  });
+
   test('cleanupOldImages should remove digest image when prune is enabled and digest repo exists', async () => {
     docker.configuration.prune = true;
     const removeImageSpy = vi.spyOn(docker, 'removeImage').mockResolvedValue(undefined);
@@ -2060,5 +2077,30 @@ describe('trigger self-update routing', () => {
 
     expect(executeContainerUpdateSpy).toHaveBeenCalled();
     expect(executeSelfUpdateSpy).not.toHaveBeenCalled();
+  });
+
+  test('should stop trigger flow when self-update returns false', async () => {
+    stubTriggerFlow({ running: true });
+    const maybeNotifySelfUpdateSpy = vi
+      .spyOn(docker, 'maybeNotifySelfUpdate')
+      .mockResolvedValue(undefined);
+    const executeSelfUpdateSpy = vi.spyOn(docker, 'executeSelfUpdate').mockResolvedValue(false);
+    const executeContainerUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate');
+
+    await expect(
+      docker.trigger(
+        createTriggerContainer({
+          image: {
+            name: 'codeswhat/drydock',
+            registry: { name: 'hub', url: 'my-registry' },
+            tag: { value: '1.0.0' },
+          },
+        }),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(maybeNotifySelfUpdateSpy).toHaveBeenCalled();
+    expect(executeSelfUpdateSpy).toHaveBeenCalled();
+    expect(executeContainerUpdateSpy).not.toHaveBeenCalled();
   });
 });
