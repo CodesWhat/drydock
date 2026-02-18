@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -eo pipefail
 
 # ── Privilege-drop logic (runs only on first invocation as root) ──
 if [ "$(id -u)" = "0" ]; then
