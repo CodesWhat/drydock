@@ -798,7 +798,8 @@ class Docker extends Trigger {
     const removeOld = `${curlSocket} -X DELETE ${apiBase}/containers/${oldContainerId}`;
 
     // Stop old, then start new — if new fails, restart old as fallback
-    const script = `${stopOld} && (${startNew} || ${startOld}) && ${removeOld}`;
+    // Only remove old after a successful startNew (not after fallback to startOld)
+    const script = `${stopOld} && (${startNew} && ${removeOld} || ${startOld})`;
 
     logContainer.info('Spawning helper container for self-update transition');
     try {

@@ -2100,6 +2100,8 @@ describe('executeSelfUpdate', () => {
     expect(script).toContain('start');
     // Verify fallback: if new start fails, old is restarted
     expect(script).toMatch(/\(.*start.*\|\|.*start.*\)/);
+    // Verify removeOld only runs after successful startNew, not after fallback
+    expect(script).toMatch(/start.*&&.*DELETE.*\|\|.*start/);
     expect(helperCall[0].HostConfig.AutoRemove).toBe(true);
     expect(context._mockHelperContainer.start).toHaveBeenCalled();
   });

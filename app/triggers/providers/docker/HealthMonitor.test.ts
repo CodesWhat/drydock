@@ -623,12 +623,12 @@ describe('HealthMonitor', () => {
   });
 
   test('should prevent overlapping health checks when previous check is still in flight', async () => {
-    var log = createMockLog();
-    var inspectCallCount = 0;
-    var resolveInspect: (() => void) | undefined;
+    const log = createMockLog();
+    let inspectCallCount = 0;
+    let resolveInspect: (() => void) | undefined;
 
     // First inspect hangs until we resolve it; second resolves immediately
-    var dockerApi = {
+    const dockerApi = {
       getContainer: vi.fn().mockReturnValue({
         inspect: vi.fn().mockImplementation(() => {
           inspectCallCount++;
@@ -667,7 +667,7 @@ describe('HealthMonitor', () => {
     expect(inspectCallCount).toBe(1);
 
     // Resolve the first inspect
-    resolveInspect!();
+    if (resolveInspect) resolveInspect();
     await vi.advanceTimersByTimeAsync(0);
 
     // Fourth interval fires — first is done, so this should proceed
