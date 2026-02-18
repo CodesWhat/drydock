@@ -151,9 +151,11 @@ test('initTrigger should init kafka client with auth when configured', async () 
 });
 
 test('trigger should post message to kafka', async () => {
+  const disconnectMock = vi.fn();
   const producer = () => ({
     connect: () => ({}),
     send: (params) => params,
+    disconnect: disconnectMock,
   });
   kafka.kafka = {
     producer,
@@ -169,14 +171,17 @@ test('trigger should post message to kafka', async () => {
     messages: [{ value: '{"name":"container1"}' }],
     topic: 'topic',
   });
+  expect(disconnectMock).toHaveBeenCalled();
 });
 
 test('triggerBatch should post multiple messages to kafka', async () => {
   const sendMock = vi.fn((params) => params);
   const connectMock = vi.fn();
+  const disconnectMock = vi.fn();
   const producer = () => ({
     connect: connectMock,
     send: sendMock,
+    disconnect: disconnectMock,
   });
   kafka.kafka = {
     producer,
@@ -195,4 +200,5 @@ test('triggerBatch should post multiple messages to kafka', async () => {
     topic: 'my-topic',
     messages: [{ value: '{"name":"container1"}' }, { value: '{"name":"container2"}' }],
   });
+  expect(disconnectMock).toHaveBeenCalled();
 });
