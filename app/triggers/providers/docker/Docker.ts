@@ -495,7 +495,7 @@ class Docker extends Trigger {
     const tagOrDigest =
       container.updateKind.kind === 'digest'
         ? container.image.tag.value
-        : container.updateKind.remoteValue;
+        : (container.updateKind.remoteValue ?? container.image.tag.value);
 
     // Rebuild image definition string
     return registry.getImageFullName(container.image, tagOrDigest);
@@ -1023,6 +1023,44 @@ class Docker extends Trigger {
   }
 
   getRollbackConfig(container) {
+    const DEFAULT_ROLLBACK_WINDOW = 300000;
+    const DEFAULT_ROLLBACK_INTERVAL = 10000;
+
+    const parsedWindow = Number.parseInt(
+      container.labels?.['dd.rollback.window'] ??
+        container.labels?.['wud.rollback.window'] ??
+        String(DEFAULT_ROLLBACK_WINDOW),
+      10,
+    );
+    const parsedInterval = Number.parseInt(
+      container.labels?.['dd.rollback.interval'] ??
+        container.labels?.['wud.rollback.interval'] ??
+        String(DEFAULT_ROLLBACK_INTERVAL),
+      10,
+    );
+
+    const rollbackWindow =
+      Number.isFinite(parsedWindow) && parsedWindow > 0 ? parsedWindow : DEFAULT_ROLLBACK_WINDOW;
+    const rollbackInterval =
+      Number.isFinite(parsedInterval) && parsedInterval > 0
+        ? parsedInterval
+        : DEFAULT_ROLLBACK_INTERVAL;
+
+    if (rollbackWindow !== parsedWindow) {
+      this.log
+        ?.child?.({})
+        ?.warn?.(
+          `Invalid rollback window label value — using default ${DEFAULT_ROLLBACK_WINDOW}ms`,
+        );
+    }
+    if (rollbackInterval !== parsedInterval) {
+      this.log
+        ?.child?.({})
+        ?.warn?.(
+          `Invalid rollback interval label value — using default ${DEFAULT_ROLLBACK_INTERVAL}ms`,
+        );
+    }
+
     return {
       autoRollback:
         (
@@ -1030,18 +1068,8 @@ class Docker extends Trigger {
           container.labels?.['wud.rollback.auto'] ??
           'false'
         ).toLowerCase() === 'true',
-      rollbackWindow: Number.parseInt(
-        container.labels?.['dd.rollback.window'] ??
-          container.labels?.['wud.rollback.window'] ??
-          '300000',
-        10,
-      ),
-      rollbackInterval: Number.parseInt(
-        container.labels?.['dd.rollback.interval'] ??
-          container.labels?.['wud.rollback.interval'] ??
-          '10000',
-        10,
-      ),
+      rollbackWindow,
+      rollbackInterval,
     };
   }
 

@@ -74,6 +74,10 @@ export function isThresholdReached(containerResult: Container, threshold: string
     return false;
   }
 
+  if (updateKind === 'unknown') {
+    return false;
+  }
+
   if (isDigestThreshold(thresholdBase)) {
     return updateKind === 'digest';
   }

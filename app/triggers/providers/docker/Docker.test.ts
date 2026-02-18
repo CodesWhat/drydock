@@ -1298,6 +1298,22 @@ test('getNewImageFullName should use tag value for digest updates', () => {
   expect(result).toBe('my-registry/test/test:nginx-prod');
 });
 
+test('getNewImageFullName should fall back to tag value when remoteValue is undefined', () => {
+  const mockRegistry = {
+    getImageFullName: (image, tagOrDigest) => `${image.registry.url}/${image.name}:${tagOrDigest}`,
+  };
+  const containerUnknown = {
+    image: {
+      name: 'test/test',
+      tag: { value: 'latest' },
+      registry: { url: 'my-registry' },
+    },
+    updateKind: { kind: 'unknown', remoteValue: undefined },
+  };
+  const result = docker.getNewImageFullName(mockRegistry, containerUnknown);
+  expect(result).toBe('my-registry/test/test:latest');
+});
+
 // --- createPullProgressLogger ---
 
 test('createPullProgressLogger should throttle duplicate snapshots within interval', () => {
@@ -1683,6 +1699,79 @@ describe('auto-rollback health monitor integration', () => {
         window: 120000,
         interval: 3000,
       }),
+    );
+  });
+});
+
+describe('getRollbackConfig timer validation', () => {
+  beforeEach(() => {
+    docker.log = {
+      child: vi.fn().mockReturnValue({ warn: vi.fn(), info: vi.fn(), debug: vi.fn() }),
+    };
+  });
+
+  test('should return defaults when labels produce NaN', () => {
+    const result = docker.getRollbackConfig({
+      labels: {
+        'dd.rollback.auto': 'true',
+        'dd.rollback.window': 'abc',
+        'dd.rollback.interval': 'xyz',
+      },
+    });
+    expect(result.rollbackWindow).toBe(300000);
+    expect(result.rollbackInterval).toBe(10000);
+  });
+
+  test('should return defaults when labels are negative', () => {
+    const result = docker.getRollbackConfig({
+      labels: {
+        'dd.rollback.auto': 'true',
+        'dd.rollback.window': '-5000',
+        'dd.rollback.interval': '-1000',
+      },
+    });
+    expect(result.rollbackWindow).toBe(300000);
+    expect(result.rollbackInterval).toBe(10000);
+  });
+
+  test('should return defaults when labels are zero', () => {
+    const result = docker.getRollbackConfig({
+      labels: {
+        'dd.rollback.auto': 'true',
+        'dd.rollback.window': '0',
+        'dd.rollback.interval': '0',
+      },
+    });
+    expect(result.rollbackWindow).toBe(300000);
+    expect(result.rollbackInterval).toBe(10000);
+  });
+
+  test('should use valid label values when provided', () => {
+    const result = docker.getRollbackConfig({
+      labels: {
+        'dd.rollback.auto': 'true',
+        'dd.rollback.window': '60000',
+        'dd.rollback.interval': '5000',
+      },
+    });
+    expect(result.rollbackWindow).toBe(60000);
+    expect(result.rollbackInterval).toBe(5000);
+  });
+
+  test('should log warnings when falling back to defaults', () => {
+    docker.getRollbackConfig({
+      labels: {
+        'dd.rollback.auto': 'true',
+        'dd.rollback.window': 'bad',
+        'dd.rollback.interval': '-1',
+      },
+    });
+    const childLog = docker.log.child({});
+    expect(childLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid rollback window label value'),
+    );
+    expect(childLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid rollback interval label value'),
     );
   });
 });
