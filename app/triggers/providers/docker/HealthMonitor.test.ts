@@ -621,4 +621,59 @@ describe('HealthMonitor', () => {
 
     abortController.abort();
   });
+
+  test('should prevent overlapping health checks when previous check is still in flight', async () => {
+    var log = createMockLog();
+    var inspectCallCount = 0;
+    var resolveInspect: (() => void) | undefined;
+
+    // First inspect hangs until we resolve it; second resolves immediately
+    var dockerApi = {
+      getContainer: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockImplementation(() => {
+          inspectCallCount++;
+          if (inspectCallCount === 1) {
+            return new Promise((resolve) => {
+              resolveInspect = () =>
+                resolve({ State: { Running: true, Health: { Status: 'healthy' } } });
+            });
+          }
+          return Promise.resolve({ State: { Running: true, Health: { Status: 'healthy' } } });
+        }),
+      }),
+    };
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '1.0.0',
+      window: 300000,
+      interval: 5000,
+      triggerInstance: createMockTriggerInstance(),
+      log,
+    });
+
+    // First interval fires — inspect starts but hangs
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(inspectCallCount).toBe(1);
+
+    // Second interval fires while first is still in-flight — should be skipped
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(inspectCallCount).toBe(1);
+
+    // Third interval fires while first is still in-flight — should also be skipped
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(inspectCallCount).toBe(1);
+
+    // Resolve the first inspect
+    resolveInspect!();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Fourth interval fires — first is done, so this should proceed
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(inspectCallCount).toBe(2);
+
+    abortController.abort();
+  });
 });

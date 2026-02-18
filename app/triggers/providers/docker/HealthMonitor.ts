@@ -38,6 +38,7 @@ export function startHealthMonitor(options: HealthMonitorOptions): AbortControll
 
   let pollTimer: ReturnType<typeof setInterval> | undefined;
   let windowTimer: ReturnType<typeof setTimeout> | undefined;
+  let checkInFlight = false;
 
   function cleanup() {
     if (pollTimer !== undefined) {
@@ -55,7 +56,8 @@ export function startHealthMonitor(options: HealthMonitorOptions): AbortControll
   });
 
   async function checkHealth() {
-    if (signal.aborted) return;
+    if (signal.aborted || checkInFlight) return;
+    checkInFlight = true;
 
     try {
       const container = dockerApi.getContainer(containerId);
@@ -81,6 +83,8 @@ export function startHealthMonitor(options: HealthMonitorOptions): AbortControll
       log.warn(
         `Error inspecting container ${containerName} during health monitoring: ${e.message}`,
       );
+    } finally {
+      checkInFlight = false;
     }
   }
 
