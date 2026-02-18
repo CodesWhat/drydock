@@ -558,9 +558,9 @@ Here's what's coming.
 | --- | --- | --- |
 | **v1.3.0** ✅ | Security Integration | Trivy scanning, Update Guard, SBOM generation, image signing, on-demand scan |
 | **v1.3.3** ✅ | Log Viewer & Providers | Auto-fetch polling, scroll lock, auto-scroll for log viewers, 7 new registries, 4 new triggers, self-update fix, stale digest fix, rate-limit warning fixes, CVE patches, security hardening |
-| **v1.4.0** | UI Modernization | PrimeVue migration, Composition API, Vite cleanup, font personalization, icon caching, Internetless Mode, CSRF tokens, API error sanitization |
+| **v1.4.0** | UI Modernization | PrimeVue migration, Composition API, Vite cleanup, font personalization, icon caching, Internetless Mode, CSRF tokens, API error sanitization, update rollback improvements |
 | **v1.5.0** | Observability | Resource monitoring, registry webhooks, notification templates, release notes |
-| **v1.6.0** | Fleet Management | YAML config, live UI config panels, local registry provider, volume browser, parallel updates, dependency ordering, container groups |
+| **v1.6.0** | Fleet Management | YAML config, live UI config panels, local registry provider, volume browser, parallel updates, dependency ordering, container groups, SQLite store migration |
 | **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers |
 | **v2.1.0** | Deployment Patterns | Health check gates, canary deployments |
 | **v2.2.0** | Container Operations | Web terminal, file browser, image building |
