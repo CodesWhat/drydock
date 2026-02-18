@@ -47,12 +47,14 @@ vi.mock('../registry', () => ({
   })),
 }));
 
-vi.mock('../log', () => ({ default: { warn: vi.fn() } }));
+vi.mock('../log', () => ({ default: { warn: vi.fn(), info: vi.fn() } }));
 
 vi.mock('../configuration', () => ({
   getVersion: vi.fn(() => '1.0.0'),
 }));
 
+import session from 'express-session';
+import log from '../log/index.js';
 import passport from 'passport';
 import * as registry from '../registry/index.js';
 import * as auth from './auth.js';
@@ -144,6 +146,20 @@ describe('Auth Router', () => {
       expect(passport.deserializeUser).toHaveBeenCalled();
     });
 
+    test('should configure session cookie with sameSite strict', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie).toEqual(
+        expect.objectContaining({
+          httpOnly: true,
+          sameSite: 'strict',
+          secure: 'auto',
+        }),
+      );
+    });
+
     test('should register strategies from the registry', () => {
       const mockStrategy = { type: 'mock' };
       const mockAuth = {
@@ -217,6 +233,31 @@ describe('Auth Router', () => {
       expect(getRoutes).toContain('/user');
       expect(postRoutes).toContain('/login');
       expect(postRoutes).toContain('/logout');
+    });
+
+    test('should use DD_SESSION_SECRET when environment variable is set', () => {
+      const app = createApp();
+      const previousSessionSecret = process.env.DD_SESSION_SECRET;
+      process.env.DD_SESSION_SECRET = 'session-secret-from-env';
+
+      try {
+        auth.init(app);
+      } finally {
+        if (previousSessionSecret === undefined) {
+          delete process.env.DD_SESSION_SECRET;
+        } else {
+          process.env.DD_SESSION_SECRET = previousSessionSecret;
+        }
+      }
+
+      expect(session).toHaveBeenCalledWith(
+        expect.objectContaining({
+          secret: 'session-secret-from-env',
+        }),
+      );
+      expect(log.info).toHaveBeenCalledWith(
+        'Using session secret from DD_SESSION_SECRET environment variable',
+      );
     });
   });
 

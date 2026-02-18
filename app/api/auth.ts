@@ -55,10 +55,17 @@ function getCookieMaxAge(days) {
 }
 
 /**
- * Get session secret key (bound to dd version).
+ * Get session secret key.
+ * Uses DD_SESSION_SECRET env var if set, otherwise falls back to a
+ * deterministic UUIDv5 derived from the application version and MAC address.
  * @returns {string}
  */
 function getSessionSecretKey() {
+  const envSecret = process.env.DD_SESSION_SECRET;
+  if (envSecret) {
+    log.info('Using session secret from DD_SESSION_SECRET environment variable');
+    return envSecret;
+  }
   const stringToHash = `dd.${getVersion()}.${getmac()}`;
   return uuidV5(stringToHash, DD_NAMESPACE);
 }
@@ -158,6 +165,7 @@ export function init(app) {
       saveUninitialized: false,
       cookie: {
         httpOnly: true,
+        sameSite: 'strict',
         secure: 'auto',
         maxAge: getCookieMaxAge(7),
       },
