@@ -12,7 +12,7 @@ vi.mock('../event/index', () => ({
 }));
 
 vi.mock('../log', () => ({
-  default: { child: vi.fn(() => ({ debug: vi.fn() })) },
+  default: { child: vi.fn(() => ({ debug: vi.fn(), warn: vi.fn() })) },
 }));
 
 import * as sseRouter from './sse.js';
@@ -30,9 +30,10 @@ function createSSEResponse() {
   };
 }
 
-function createSSERequest() {
+function createSSERequest(ip = '127.0.0.1') {
   var listeners = {};
   return {
+    ip,
     on: vi.fn((event, handler) => {
       listeners[event] = handler;
     }),
@@ -44,8 +45,9 @@ describe('SSE Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    // Clear clients set between tests
+    // Clear clients and connection tracking between tests
     sseRouter._clients.clear();
+    sseRouter._connectionsPerIp.clear();
   });
 
   afterEach(() => {
@@ -145,6 +147,106 @@ describe('SSE Router', () => {
       // Advance time — no more heartbeats should fire
       vi.advanceTimersByTime(30000);
       expect(res.write).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('per-IP connection limits', () => {
+    test('should reject connections exceeding the per-IP limit', () => {
+      var handler = getHandler();
+      var ip = '192.168.1.1';
+
+      // Fill up to the limit
+      for (var i = 0; i < sseRouter._MAX_CONNECTIONS_PER_IP; i++) {
+        var req = createSSERequest(ip);
+        var res = createSSEResponse();
+        handler(req, res);
+      }
+
+      // Next connection from the same IP should be rejected
+      var rejectedReq = createSSERequest(ip);
+      var rejectedRes = { ...createSSEResponse(), status: vi.fn().mockReturnThis(), json: vi.fn() };
+      handler(rejectedReq, rejectedRes);
+
+      expect(rejectedRes.status).toHaveBeenCalledWith(429);
+      expect(rejectedRes.json).toHaveBeenCalledWith({ message: 'Too many SSE connections' });
+    });
+
+    test('should allow connections from different IPs independently', () => {
+      var handler = getHandler();
+
+      // Fill up one IP
+      for (var i = 0; i < sseRouter._MAX_CONNECTIONS_PER_IP; i++) {
+        handler(createSSERequest('10.0.0.1'), createSSEResponse());
+      }
+
+      // Another IP should still be allowed
+      var req = createSSERequest('10.0.0.2');
+      var res = createSSEResponse();
+      handler(req, res);
+
+      expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+    });
+
+    test('should decrement counter when client disconnects', () => {
+      var handler = getHandler();
+      var ip = '192.168.1.1';
+      var req = createSSERequest(ip);
+      var res = createSSEResponse();
+
+      handler(req, res);
+      expect(sseRouter._connectionsPerIp.get(ip)).toBe(1);
+
+      // Simulate disconnect
+      req._listeners.close();
+      expect(sseRouter._connectionsPerIp.has(ip)).toBe(false);
+    });
+
+    test('should use unknown key when request ip is missing', () => {
+      var handler = getHandler();
+      var req = createSSERequest(null);
+      var res = createSSEResponse();
+
+      handler(req, res);
+
+      expect(sseRouter._connectionsPerIp.get('unknown')).toBe(1);
+      req._listeners.close();
+    });
+
+    test('should safely close when ip counter has already been removed', () => {
+      var handler = getHandler();
+      var ip = '192.168.1.1';
+      var req = createSSERequest(ip);
+      var res = createSSEResponse();
+
+      handler(req, res);
+      sseRouter._connectionsPerIp.delete(ip);
+
+      expect(() => req._listeners.close()).not.toThrow();
+      expect(sseRouter._connectionsPerIp.has(ip)).toBe(false);
+    });
+
+    test('should allow new connection after disconnect frees a slot', () => {
+      var handler = getHandler();
+      var ip = '192.168.1.1';
+      var requests = [];
+
+      // Fill up to the limit
+      for (var i = 0; i < sseRouter._MAX_CONNECTIONS_PER_IP; i++) {
+        var req = createSSERequest(ip);
+        var res = createSSEResponse();
+        handler(req, res);
+        requests.push(req);
+      }
+
+      // Disconnect one
+      requests[0]._listeners.close();
+
+      // New connection should now be accepted
+      var newReq = createSSERequest(ip);
+      var newRes = createSSEResponse();
+      handler(newReq, newRes);
+
+      expect(newRes.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
     });
   });
 
