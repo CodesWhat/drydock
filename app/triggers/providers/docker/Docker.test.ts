@@ -2059,7 +2059,7 @@ describe('executeSelfUpdate', () => {
     );
 
     // Verify rollback: new container removed, old renamed back
-    expect(context._mockNewContainer.remove).toBeDefined;
+    expect(context._mockNewContainer.remove).toHaveBeenCalledWith({ force: true });
     expect(context.currentContainer.rename).toHaveBeenLastCalledWith({ name: 'drydock' });
   });
 
