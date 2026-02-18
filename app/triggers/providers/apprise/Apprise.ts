@@ -62,6 +62,7 @@ class Apprise extends Trigger {
       method: 'POST',
       url: uri,
       data: body,
+      timeout: 30000,
     };
     const response = await axios(options);
     return response.data;
@@ -83,6 +84,7 @@ class Apprise extends Trigger {
         format: 'text',
         type: 'info',
       },
+      timeout: 30000,
     };
     const response = await axios(options);
     return response.data;

@@ -78,11 +78,15 @@ class Kafka extends Trigger {
    */
   async trigger(container) {
     const producer = this.kafka.producer();
-    await producer.connect();
-    return producer.send({
-      topic: this.configuration.topic,
-      messages: [{ value: JSON.stringify(container) }],
-    });
+    try {
+      await producer.connect();
+      return await producer.send({
+        topic: this.configuration.topic,
+        messages: [{ value: JSON.stringify(container) }],
+      });
+    } finally {
+      await producer.disconnect();
+    }
   }
 
   /**
@@ -92,13 +96,17 @@ class Kafka extends Trigger {
    */
   async triggerBatch(containers) {
     const producer = this.kafka.producer();
-    await producer.connect();
-    return producer.send({
-      topic: this.configuration.topic,
-      messages: containers.map((container) => ({
-        value: JSON.stringify(container),
-      })),
-    });
+    try {
+      await producer.connect();
+      return await producer.send({
+        topic: this.configuration.topic,
+        messages: containers.map((container) => ({
+          value: JSON.stringify(container),
+        })),
+      });
+    } finally {
+      await producer.disconnect();
+    }
   }
 }
 

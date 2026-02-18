@@ -48,6 +48,7 @@ describe('HTTP Trigger', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'POST',
       url: 'https://example.com/webhook',
+      timeout: 30000,
       data: container,
     });
   });
@@ -64,6 +65,7 @@ describe('HTTP Trigger', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'POST',
       url: 'https://example.com/webhook',
+      timeout: 30000,
       data: containers,
     });
   });
@@ -81,6 +83,7 @@ describe('HTTP Trigger', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
       url: 'https://example.com/webhook',
+      timeout: 30000,
       params: container,
     });
   });
@@ -98,6 +101,7 @@ describe('HTTP Trigger', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'POST',
       url: 'https://example.com/webhook',
+      timeout: 30000,
       data: container,
       auth: { username: 'user', password: 'pass' },
     });
@@ -116,6 +120,7 @@ describe('HTTP Trigger', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'POST',
       url: 'https://example.com/webhook',
+      timeout: 30000,
       data: container,
       headers: { Authorization: 'Bearer token' },
     });
@@ -135,6 +140,7 @@ describe('HTTP Trigger', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'POST',
       url: 'https://example.com/webhook',
+      timeout: 30000,
       data: container,
     });
   });
@@ -152,6 +158,7 @@ describe('HTTP Trigger', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'POST',
       url: 'https://example.com/webhook',
+      timeout: 30000,
       data: container,
     });
   });
@@ -169,6 +176,7 @@ describe('HTTP Trigger', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'PUT',
       url: 'https://example.com/webhook',
+      timeout: 30000,
     });
   });
 
@@ -185,6 +193,7 @@ describe('HTTP Trigger', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'POST',
       url: 'https://example.com/webhook',
+      timeout: 30000,
       data: container,
       proxy: { host: 'proxy', port: '8080' },
     });

@@ -98,6 +98,7 @@ describe('Discord Trigger', () => {
           },
         ],
       },
+      timeout: 30000,
     });
   });
 });

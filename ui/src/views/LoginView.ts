@@ -103,6 +103,7 @@ export default defineComponent({
       // If anonymous auth is enabled then no need to login => go home
       if (strategies.some((strategy) => strategy.type === 'anonymous')) {
         next('/');
+        return;
       }
 
       // If oidc strategy supporting redirect

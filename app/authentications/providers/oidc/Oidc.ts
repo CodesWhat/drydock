@@ -222,6 +222,7 @@ class Oidc extends Authentication {
       max: 50,
       standardHeaders: true,
       legacyHeaders: false,
+      validate: { xForwardedForHeader: false },
     });
     app.use(`/auth/oidc/${this.name}`, oidcLimiter);
     app.get(`/auth/oidc/${this.name}/redirect`, (req, res) => {

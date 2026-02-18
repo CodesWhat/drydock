@@ -8,7 +8,7 @@ const TEST_TOKEN = 'token';
 
 vi.mock('axios');
 axios.mockImplementation(() => ({
-  token: TEST_TOKEN,
+  data: { token: TEST_TOKEN },
 }));
 
 const quay = new Quay();

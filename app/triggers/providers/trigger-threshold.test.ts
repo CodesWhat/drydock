@@ -16,6 +16,20 @@ describe('trigger-threshold', () => {
     });
   });
 
+  test('isThresholdReached should return false for unknown update kind', () => {
+    expect(
+      isThresholdReached(
+        {
+          updateKind: {
+            kind: 'unknown',
+            semverDiff: undefined,
+          },
+        },
+        'all',
+      ),
+    ).toBe(false);
+  });
+
   test('isThresholdReached should filter digest updates for non-digest-only thresholds', () => {
     expect(
       isThresholdReached(

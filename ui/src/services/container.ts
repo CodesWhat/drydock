@@ -4,6 +4,9 @@ function getContainerIcon() {
 
 async function getAllContainers() {
   const response = await fetch('/api/containers', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get containers: ${response.statusText}`);
+  }
   return response.json();
 }
 

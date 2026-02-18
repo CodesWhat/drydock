@@ -22,6 +22,7 @@ vi.mock('./backup', mockInit);
 vi.mock('./container-actions', mockInit);
 vi.mock('./audit', mockInit);
 vi.mock('./webhook', mockInit);
+vi.mock('./sse', mockInit);
 vi.mock('./auth', () => ({
   requireAuthentication: vi.fn((req, res, next) => next()),
 }));
@@ -56,6 +57,7 @@ describe('API Router', () => {
     const containerActionsRouter = await import('./container-actions.js');
     const auditRouter = await import('./audit.js');
     const webhookRouter = await import('./webhook.js');
+    const sseRouter = await import('./sse.js');
 
     expect(appRouter.init).toHaveBeenCalled();
     expect(containerRouter.init).toHaveBeenCalled();
@@ -72,11 +74,25 @@ describe('API Router', () => {
     expect(containerActionsRouter.init).toHaveBeenCalled();
     expect(auditRouter.init).toHaveBeenCalled();
     expect(webhookRouter.init).toHaveBeenCalled();
+    expect(sseRouter.init).toHaveBeenCalled();
   });
 
   test('should use requireAuthentication middleware', async () => {
     const auth = await import('./auth.js');
     expect(router.use).toHaveBeenCalledWith(auth.requireAuthentication);
+  });
+
+  test('should mount SSE after requireAuthentication middleware', async () => {
+    const auth = await import('./auth.js');
+    await import('./sse.js');
+    const useCalls = router.use.mock.calls;
+
+    const authIndex = useCalls.findIndex((c) => c[0] === auth.requireAuthentication);
+    const sseIndex = useCalls.findIndex((c) => c[0] === '/events/ui');
+
+    expect(authIndex).toBeGreaterThan(-1);
+    expect(sseIndex).toBeGreaterThan(-1);
+    expect(sseIndex).toBeGreaterThan(authIndex);
   });
 
   test('should register catch-all 404 handler', () => {

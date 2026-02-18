@@ -88,6 +88,7 @@ test('trigger should send POST http request to notify endpoint', async () => {
 
     method: 'POST',
     url: 'http://xxx.com/notify',
+    timeout: 30000,
   });
 });
 
@@ -116,6 +117,7 @@ test('trigger should use config and tag when configured', async () => {
 
     method: 'POST',
     url: 'http://xxx.com/notify/myconfig',
+    timeout: 30000,
   });
 });
 
@@ -142,6 +144,7 @@ test('trigger should use config without tag', async () => {
 
     method: 'POST',
     url: 'http://xxx.com/notify/myconfig',
+    timeout: 30000,
   });
 });
 
@@ -176,6 +179,7 @@ test('triggerBatch should send batch notification', async () => {
 
     method: 'POST',
     url: 'http://xxx.com/notify',
+    timeout: 30000,
   });
 });
 

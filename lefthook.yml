@@ -5,9 +5,9 @@ pre-push:
       run: qlty check --no-progress
     snyk-deps:
       root: app/
-      run: snyk test --severity-threshold=high
+      run: snyk test --severity-threshold=high --org=codeswhat
     snyk-code:
-      run: scripts/snyk-code-gate.sh
+      run: scripts/snyk-code-gate.sh --org=codeswhat
     build:
       root: app/
       run: npm run build

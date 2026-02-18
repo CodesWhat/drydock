@@ -1298,6 +1298,22 @@ test('getNewImageFullName should use tag value for digest updates', () => {
   expect(result).toBe('my-registry/test/test:nginx-prod');
 });
 
+test('getNewImageFullName should fall back to tag value when remoteValue is undefined', () => {
+  const mockRegistry = {
+    getImageFullName: (image, tagOrDigest) => `${image.registry.url}/${image.name}:${tagOrDigest}`,
+  };
+  const containerUnknown = {
+    image: {
+      name: 'test/test',
+      tag: { value: 'latest' },
+      registry: { url: 'my-registry' },
+    },
+    updateKind: { kind: 'unknown', remoteValue: undefined },
+  };
+  const result = docker.getNewImageFullName(mockRegistry, containerUnknown);
+  expect(result).toBe('my-registry/test/test:latest');
+});
+
 // --- createPullProgressLogger ---
 
 test('createPullProgressLogger should throttle duplicate snapshots within interval', () => {
@@ -1687,6 +1703,79 @@ describe('auto-rollback health monitor integration', () => {
   });
 });
 
+describe('getRollbackConfig timer validation', () => {
+  beforeEach(() => {
+    docker.log = {
+      child: vi.fn().mockReturnValue({ warn: vi.fn(), info: vi.fn(), debug: vi.fn() }),
+    };
+  });
+
+  test('should return defaults when labels produce NaN', () => {
+    const result = docker.getRollbackConfig({
+      labels: {
+        'dd.rollback.auto': 'true',
+        'dd.rollback.window': 'abc',
+        'dd.rollback.interval': 'xyz',
+      },
+    });
+    expect(result.rollbackWindow).toBe(300000);
+    expect(result.rollbackInterval).toBe(10000);
+  });
+
+  test('should return defaults when labels are negative', () => {
+    const result = docker.getRollbackConfig({
+      labels: {
+        'dd.rollback.auto': 'true',
+        'dd.rollback.window': '-5000',
+        'dd.rollback.interval': '-1000',
+      },
+    });
+    expect(result.rollbackWindow).toBe(300000);
+    expect(result.rollbackInterval).toBe(10000);
+  });
+
+  test('should return defaults when labels are zero', () => {
+    const result = docker.getRollbackConfig({
+      labels: {
+        'dd.rollback.auto': 'true',
+        'dd.rollback.window': '0',
+        'dd.rollback.interval': '0',
+      },
+    });
+    expect(result.rollbackWindow).toBe(300000);
+    expect(result.rollbackInterval).toBe(10000);
+  });
+
+  test('should use valid label values when provided', () => {
+    const result = docker.getRollbackConfig({
+      labels: {
+        'dd.rollback.auto': 'true',
+        'dd.rollback.window': '60000',
+        'dd.rollback.interval': '5000',
+      },
+    });
+    expect(result.rollbackWindow).toBe(60000);
+    expect(result.rollbackInterval).toBe(5000);
+  });
+
+  test('should log warnings when falling back to defaults', () => {
+    docker.getRollbackConfig({
+      labels: {
+        'dd.rollback.auto': 'true',
+        'dd.rollback.window': 'bad',
+        'dd.rollback.interval': '-1',
+      },
+    });
+    const childLog = docker.log.child({});
+    expect(childLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid rollback window label value'),
+    );
+    expect(childLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid rollback interval label value'),
+    );
+  });
+});
+
 describe('additional docker trigger coverage', () => {
   beforeEach(() => {
     docker.configuration = { ...configurationValid, dryrun: false, prune: false };
@@ -1750,6 +1839,23 @@ describe('additional docker trigger coverage', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test('maybeNotifySelfUpdate should no-op for non-drydock images', async () => {
+    const logContainer = createMockLog('info');
+
+    await expect(
+      docker.maybeNotifySelfUpdate(
+        {
+          image: {
+            name: 'nginx',
+          },
+        },
+        logContainer,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(logContainer.info).not.toHaveBeenCalled();
   });
 
   test('cleanupOldImages should remove digest image when prune is enabled and digest repo exists', async () => {
@@ -1853,5 +1959,315 @@ describe('additional docker trigger coverage', () => {
 
     expect(getCurrentContainerSpy).toHaveBeenCalled();
     expect(inspectContainerSpy).not.toHaveBeenCalled();
+  });
+});
+
+// --- Self-update ---
+
+describe('isSelfUpdate', () => {
+  test('should return true for drydock image', () => {
+    expect(docker.isSelfUpdate({ image: { name: 'drydock' } })).toBe(true);
+  });
+
+  test('should return true for namespaced drydock image', () => {
+    expect(docker.isSelfUpdate({ image: { name: 'codeswhat/drydock' } })).toBe(true);
+  });
+
+  test('should return false for non-drydock image', () => {
+    expect(docker.isSelfUpdate({ image: { name: 'nginx' } })).toBe(false);
+  });
+
+  test('should return false for image name containing drydock as substring', () => {
+    expect(docker.isSelfUpdate({ image: { name: 'drydock-proxy' } })).toBe(false);
+  });
+});
+
+describe('findDockerSocketBind', () => {
+  test('should find docker socket bind', () => {
+    const spec = {
+      HostConfig: {
+        Binds: ['/var/run/docker.sock:/var/run/docker.sock'],
+      },
+    };
+    expect(docker.findDockerSocketBind(spec)).toBe('/var/run/docker.sock');
+  });
+
+  test('should find docker socket with custom host path', () => {
+    const spec = {
+      HostConfig: {
+        Binds: ['/run/user/1000/docker.sock:/var/run/docker.sock'],
+      },
+    };
+    expect(docker.findDockerSocketBind(spec)).toBe('/run/user/1000/docker.sock');
+  });
+
+  test('should return undefined when no binds', () => {
+    expect(docker.findDockerSocketBind({ HostConfig: {} })).toBeUndefined();
+  });
+
+  test('should return undefined when no docker socket bind', () => {
+    const spec = {
+      HostConfig: {
+        Binds: ['/data:/data'],
+      },
+    };
+    expect(docker.findDockerSocketBind(spec)).toBeUndefined();
+  });
+
+  test('should return undefined when Binds is not an array', () => {
+    expect(docker.findDockerSocketBind({ HostConfig: { Binds: null } })).toBeUndefined();
+  });
+});
+
+describe('executeSelfUpdate', () => {
+  function createSelfUpdateContext(overrides = {}) {
+    const mockHelperContainer = { start: vi.fn().mockResolvedValue(undefined) };
+    const mockNewContainer = {
+      start: vi.fn().mockResolvedValue(undefined),
+      inspect: vi.fn().mockResolvedValue({ Id: 'new-container-id' }),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const dockerApi = {
+      createContainer: vi.fn().mockResolvedValue(mockHelperContainer),
+      getContainer: vi.fn(),
+      pull: vi.fn().mockResolvedValue(undefined),
+      modem: { followProgress: (_s, res) => res() },
+    };
+
+    const currentContainer = {
+      rename: vi.fn().mockResolvedValue(undefined),
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'old-container-id',
+        Name: '/drydock',
+        State: { Running: true },
+      }),
+    };
+
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/drydock',
+      Config: { Image: 'ghcr.io/codeswhat/drydock:1.0.0' },
+      State: { Running: true },
+      HostConfig: {
+        Binds: ['/var/run/docker.sock:/var/run/docker.sock'],
+      },
+      NetworkSettings: { Networks: {} },
+    };
+
+    vi.spyOn(docker, 'pullImage').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'cloneContainer').mockReturnValue({ name: 'drydock' });
+    vi.spyOn(docker, 'createContainer').mockResolvedValue(mockNewContainer);
+
+    return {
+      dockerApi,
+      registry: { getImageFullName: vi.fn() },
+      auth: undefined,
+      newImage: 'ghcr.io/codeswhat/drydock:2.0.0',
+      currentContainer,
+      currentContainerSpec,
+      _mockHelperContainer: mockHelperContainer,
+      _mockNewContainer: mockNewContainer,
+      ...overrides,
+    };
+  }
+
+  test('should rename old container, create new, and spawn helper', async () => {
+    const context = createSelfUpdateContext();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const container = createTriggerContainer({
+      image: {
+        name: 'codeswhat/drydock',
+        registry: { name: 'ghcr' },
+        tag: { value: '1.0.0' },
+        digest: {},
+      },
+    });
+
+    const result = await docker.executeSelfUpdate(context, container, logContainer);
+
+    expect(result).toBe(true);
+    expect(context.currentContainer.rename).toHaveBeenCalledWith({
+      name: expect.stringContaining('drydock-old-'),
+    });
+    expect(docker.createContainer).toHaveBeenCalled();
+    const helperCall = context.dockerApi.createContainer.mock.calls.find(
+      (call) => call[0]?.Cmd?.[0] === 'sh',
+    );
+    expect(helperCall).toBeDefined();
+    const script = helperCall[0].Cmd[2];
+    expect(script).toContain('stop');
+    expect(script).toContain('start');
+    // Verify fallback: if new start fails, old is restarted
+    expect(script).toMatch(/\(.*start.*\|\|.*start.*\)/);
+    // Verify removeOld only runs after successful startNew, not after fallback
+    expect(script).toMatch(/start.*&&.*DELETE.*\|\|.*start/);
+    expect(helperCall[0].HostConfig.AutoRemove).toBe(true);
+    expect(context._mockHelperContainer.start).toHaveBeenCalled();
+  });
+
+  test('should rollback rename when createContainer fails', async () => {
+    const context = createSelfUpdateContext();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const container = createTriggerContainer({
+      image: {
+        name: 'codeswhat/drydock',
+        registry: { name: 'ghcr' },
+        tag: { value: '1.0.0' },
+        digest: {},
+      },
+    });
+
+    vi.spyOn(docker, 'createContainer').mockRejectedValue(new Error('create failed'));
+
+    await expect(docker.executeSelfUpdate(context, container, logContainer)).rejects.toThrow(
+      'create failed',
+    );
+
+    // Verify rollback: old container renamed back to original name
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(2);
+    expect(context.currentContainer.rename).toHaveBeenLastCalledWith({ name: 'drydock' });
+  });
+
+  test('should rollback when helper container spawn fails', async () => {
+    const context = createSelfUpdateContext();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const container = createTriggerContainer({
+      image: {
+        name: 'codeswhat/drydock',
+        registry: { name: 'ghcr' },
+        tag: { value: '1.0.0' },
+        digest: {},
+      },
+    });
+
+    // First call is createContainer for the new drydock container (via spy on docker.createContainer)
+    // Second call is dockerApi.createContainer for the helper — make it fail
+    context.dockerApi.createContainer.mockRejectedValue(new Error('helper spawn failed'));
+
+    await expect(docker.executeSelfUpdate(context, container, logContainer)).rejects.toThrow(
+      'helper spawn failed',
+    );
+
+    // Verify rollback: new container removed, old renamed back
+    expect(context._mockNewContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(context.currentContainer.rename).toHaveBeenLastCalledWith({ name: 'drydock' });
+  });
+
+  test('should rollback when inspecting new container fails', async () => {
+    const context = createSelfUpdateContext();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const container = createTriggerContainer({
+      image: {
+        name: 'codeswhat/drydock',
+        registry: { name: 'ghcr' },
+        tag: { value: '1.0.0' },
+        digest: {},
+      },
+    });
+
+    context._mockNewContainer.inspect.mockRejectedValue(new Error('inspect failed'));
+
+    await expect(docker.executeSelfUpdate(context, container, logContainer)).rejects.toThrow(
+      'inspect failed',
+    );
+
+    expect(context._mockNewContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(context.currentContainer.rename).toHaveBeenLastCalledWith({ name: 'drydock' });
+    expect(context.dockerApi.createContainer).not.toHaveBeenCalled();
+  });
+
+  test('should throw when docker socket bind not found', async () => {
+    const context = createSelfUpdateContext();
+    context.currentContainerSpec.HostConfig.Binds = ['/data:/data'];
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const container = createTriggerContainer({
+      image: {
+        name: 'codeswhat/drydock',
+        registry: { name: 'ghcr' },
+        tag: { value: '1.0.0' },
+        digest: {},
+      },
+    });
+
+    await expect(docker.executeSelfUpdate(context, container, logContainer)).rejects.toThrow(
+      'Self-update requires the Docker socket',
+    );
+  });
+
+  test('should return false in dryrun mode', async () => {
+    docker.configuration = { ...configurationValid, dryrun: true };
+    const context = createSelfUpdateContext();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const container = createTriggerContainer({
+      image: {
+        name: 'codeswhat/drydock',
+        registry: { name: 'ghcr' },
+        tag: { value: '1.0.0' },
+        digest: {},
+      },
+    });
+
+    const result = await docker.executeSelfUpdate(context, container, logContainer);
+
+    expect(result).toBe(false);
+    expect(context.currentContainer.rename).not.toHaveBeenCalled();
+  });
+});
+
+describe('trigger self-update routing', () => {
+  test('should route to executeSelfUpdate for drydock image', async () => {
+    stubTriggerFlow({ running: true });
+    const executeSelfUpdateSpy = vi.spyOn(docker, 'executeSelfUpdate').mockResolvedValue(true);
+    const executeContainerUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate');
+
+    await docker.trigger(
+      createTriggerContainer({
+        image: {
+          name: 'codeswhat/drydock',
+          registry: { name: 'hub', url: 'my-registry' },
+          tag: { value: '1.0.0' },
+        },
+      }),
+    );
+
+    expect(executeSelfUpdateSpy).toHaveBeenCalled();
+    expect(executeContainerUpdateSpy).not.toHaveBeenCalled();
+  });
+
+  test('should route to executeContainerUpdate for non-drydock image', async () => {
+    stubTriggerFlow({ running: true });
+    const executeSelfUpdateSpy = vi.spyOn(docker, 'executeSelfUpdate');
+    const executeContainerUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate');
+
+    await docker.trigger(createTriggerContainer());
+
+    expect(executeContainerUpdateSpy).toHaveBeenCalled();
+    expect(executeSelfUpdateSpy).not.toHaveBeenCalled();
+  });
+
+  test('should stop trigger flow when self-update returns false', async () => {
+    stubTriggerFlow({ running: true });
+    const maybeNotifySelfUpdateSpy = vi
+      .spyOn(docker, 'maybeNotifySelfUpdate')
+      .mockResolvedValue(undefined);
+    const executeSelfUpdateSpy = vi.spyOn(docker, 'executeSelfUpdate').mockResolvedValue(false);
+    const executeContainerUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate');
+
+    await expect(
+      docker.trigger(
+        createTriggerContainer({
+          image: {
+            name: 'codeswhat/drydock',
+            registry: { name: 'hub', url: 'my-registry' },
+            tag: { value: '1.0.0' },
+          },
+        }),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(maybeNotifySelfUpdateSpy).toHaveBeenCalled();
+    expect(executeSelfUpdateSpy).toHaveBeenCalled();
+    expect(executeContainerUpdateSpy).not.toHaveBeenCalled();
   });
 });

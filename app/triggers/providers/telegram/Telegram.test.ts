@@ -175,11 +175,15 @@ test('sendMessage should post to telegram API and return data', async () => {
   axios.post.mockResolvedValue({ data: { ok: true } });
 
   const result = await tg.sendMessage('Hello');
-  expect(axios.post).toHaveBeenCalledWith('https://api.telegram.org/bottoken/sendMessage', {
-    chat_id: '123456789',
-    text: 'Hello',
-    parse_mode: 'MarkdownV2',
-  });
+  expect(axios.post).toHaveBeenCalledWith(
+    'https://api.telegram.org/bottoken/sendMessage',
+    {
+      chat_id: '123456789',
+      text: 'Hello',
+      parse_mode: 'MarkdownV2',
+    },
+    { timeout: 30000 },
+  );
   expect(result).toEqual({ ok: true });
 });
 

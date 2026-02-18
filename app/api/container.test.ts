@@ -201,11 +201,10 @@ describe('Container Router', () => {
       expect(router.get).toHaveBeenCalledWith('/:id/logs', expect.any(Function));
     });
 
-    test('should configure scan rate-limit key generator fallback', () => {
+    test('should disable xForwardedForHeader validation on scan rate-limiter', () => {
       containerRouter.init();
       const rateLimitOptions = rateLimit.mock.calls[0][0];
-      expect(rateLimitOptions.keyGenerator({ ip: '192.168.1.10' })).toBe('192.168.1.10');
-      expect(rateLimitOptions.keyGenerator({})).toBe('unknown');
+      expect(rateLimitOptions.validate).toEqual({ xForwardedForHeader: false });
     });
   });
 

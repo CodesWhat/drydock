@@ -78,8 +78,7 @@ describe('GitHub Container Registry', () => {
 
     const result = await ghcr.authenticate(image, requestOptions);
 
-    const expectedBearer = Buffer.from(':', 'utf-8').toString('base64');
-    expect(result.headers.Authorization).toBe(`Bearer ${expectedBearer}`);
+    expect(result.headers.Authorization).toBeUndefined();
   });
 
   test('should validate string configuration', async () => {

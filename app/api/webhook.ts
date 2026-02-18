@@ -205,6 +205,7 @@ export function init() {
     max: 30,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
   });
   router.use(webhookLimiter);
   router.use(nocache());

@@ -753,7 +753,7 @@ export function init() {
       max: 5,
       standardHeaders: true,
       legacyHeaders: false,
-      keyGenerator: (req) => req.ip ?? 'unknown',
+      validate: { xForwardedForHeader: false },
     }),
     scanContainer,
   );

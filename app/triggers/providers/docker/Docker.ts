@@ -495,7 +495,7 @@ class Docker extends Trigger {
     const tagOrDigest =
       container.updateKind.kind === 'digest'
         ? container.image.tag.value
-        : container.updateKind.remoteValue;
+        : (container.updateKind.remoteValue ?? container.image.tag.value);
 
     // Rebuild image definition string
     return registry.getImageFullName(container.image, tagOrDigest);
@@ -699,10 +699,139 @@ class Docker extends Trigger {
     );
   }
 
+  isSelfUpdate(container) {
+    return container.image.name === 'drydock' || container.image.name.endsWith('/drydock');
+  }
+
+  findDockerSocketBind(spec) {
+    const binds = spec?.HostConfig?.Binds;
+    if (!Array.isArray(binds)) return undefined;
+    for (const bind of binds) {
+      const parts = bind.split(':');
+      if (parts.length >= 2 && parts[1] === '/var/run/docker.sock') {
+        return parts[0];
+      }
+    }
+    return undefined;
+  }
+
+  async executeSelfUpdate(context, container, logContainer) {
+    const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
+
+    if (this.configuration.dryrun) {
+      logContainer.info('Do not replace the existing container because dry-run mode is enabled');
+      return false;
+    }
+
+    const socketPath = this.findDockerSocketBind(currentContainerSpec);
+    if (!socketPath) {
+      throw new Error(
+        'Self-update requires the Docker socket to be bind-mounted (e.g. /var/run/docker.sock:/var/run/docker.sock)',
+      );
+    }
+
+    // Insert backup before starting the update
+    backupStore.insertBackup({
+      id: crypto.randomUUID(),
+      containerId: container.id,
+      containerName: container.name,
+      imageName: `${container.image.registry.name}/${container.image.name}`,
+      imageTag: container.image.tag.value,
+      imageDigest: container.image.digest?.repo,
+      timestamp: new Date().toISOString(),
+      triggerName: this.getId(),
+    });
+
+    // Pull the new image while we're still alive
+    await this.pullImage(dockerApi, auth, newImage, logContainer);
+
+    const oldName = currentContainerSpec.Name.replace(/^\//, '');
+    const tempName = `drydock-old-${Date.now()}`;
+
+    // Rename old container to free the name
+    logContainer.info(`Rename container ${oldName} to ${tempName}`);
+    await currentContainer.rename({ name: tempName });
+
+    let newContainer;
+    try {
+      // Create new container with original name (don't start — port conflict)
+      const containerToCreateInspect = this.cloneContainer(
+        currentContainerSpec,
+        newImage,
+        logContainer,
+      );
+      newContainer = await this.createContainer(
+        dockerApi,
+        containerToCreateInspect,
+        oldName,
+        logContainer,
+      );
+    } catch (e) {
+      // Rollback: rename old container back to original name
+      logContainer.warn(`Failed to create new container, rolling back rename: ${e.message}`);
+      await currentContainer.rename({ name: oldName });
+      throw e;
+    }
+
+    // Spawn a helper container to orchestrate the stop/start/cleanup
+    let newContainerId;
+    try {
+      newContainerId = (await newContainer.inspect()).Id;
+    } catch (e) {
+      logContainer.warn(`Failed to inspect new container, rolling back: ${e.message}`);
+      try {
+        await newContainer.remove({ force: true });
+      } catch {
+        /* best effort */
+      }
+      await currentContainer.rename({ name: oldName });
+      throw e;
+    }
+    const oldContainerId = currentContainerSpec.Id;
+    const socketMount = `${socketPath}:/var/run/docker.sock`;
+    const apiBase = 'http://localhost';
+
+    const curlSocket = `curl -sf --unix-socket /var/run/docker.sock`;
+    const stopOld = `${curlSocket} -X POST ${apiBase}/containers/${oldContainerId}/stop`;
+    const startNew = `${curlSocket} -X POST ${apiBase}/containers/${newContainerId}/start`;
+    const startOld = `${curlSocket} -X POST ${apiBase}/containers/${oldContainerId}/start`;
+    const removeOld = `${curlSocket} -X DELETE ${apiBase}/containers/${oldContainerId}`;
+
+    // Stop old, then start new — if new fails, restart old as fallback
+    // Only remove old after a successful startNew (not after fallback to startOld)
+    const script = `${stopOld} && (${startNew} && ${removeOld} || ${startOld})`;
+
+    logContainer.info('Spawning helper container for self-update transition');
+    try {
+      await dockerApi
+        .createContainer({
+          Image: currentContainerSpec.Config.Image,
+          Cmd: ['sh', '-c', script],
+          HostConfig: {
+            AutoRemove: true,
+            Binds: [socketMount],
+          },
+          name: `drydock-self-update-${Date.now()}`,
+        })
+        .then((helperContainer) => helperContainer.start());
+    } catch (e) {
+      // Rollback: remove new container, rename old back
+      logContainer.warn(`Failed to spawn helper container, rolling back: ${e.message}`);
+      try {
+        await newContainer.remove({ force: true });
+      } catch {
+        /* best effort */
+      }
+      await currentContainer.rename({ name: oldName });
+      throw e;
+    }
+
+    logContainer.info('Helper container started — process will terminate when old container stops');
+    return true;
+  }
+
   async maybeNotifySelfUpdate(container, logContainer) {
-    const isSelfUpdate =
-      container.image.name === 'drydock' || container.image.name.endsWith('/drydock');
-    if (!isSelfUpdate) {
+    if (!this.isSelfUpdate(container)) {
       return;
     }
 
@@ -895,6 +1024,44 @@ class Docker extends Trigger {
   }
 
   getRollbackConfig(container) {
+    const DEFAULT_ROLLBACK_WINDOW = 300000;
+    const DEFAULT_ROLLBACK_INTERVAL = 10000;
+
+    const parsedWindow = Number.parseInt(
+      container.labels?.['dd.rollback.window'] ??
+        container.labels?.['wud.rollback.window'] ??
+        String(DEFAULT_ROLLBACK_WINDOW),
+      10,
+    );
+    const parsedInterval = Number.parseInt(
+      container.labels?.['dd.rollback.interval'] ??
+        container.labels?.['wud.rollback.interval'] ??
+        String(DEFAULT_ROLLBACK_INTERVAL),
+      10,
+    );
+
+    const rollbackWindow =
+      Number.isFinite(parsedWindow) && parsedWindow > 0 ? parsedWindow : DEFAULT_ROLLBACK_WINDOW;
+    const rollbackInterval =
+      Number.isFinite(parsedInterval) && parsedInterval > 0
+        ? parsedInterval
+        : DEFAULT_ROLLBACK_INTERVAL;
+
+    if (rollbackWindow !== parsedWindow) {
+      this.log
+        ?.child?.({})
+        ?.warn?.(
+          `Invalid rollback window label value — using default ${DEFAULT_ROLLBACK_WINDOW}ms`,
+        );
+    }
+    if (rollbackInterval !== parsedInterval) {
+      this.log
+        ?.child?.({})
+        ?.warn?.(
+          `Invalid rollback interval label value — using default ${DEFAULT_ROLLBACK_INTERVAL}ms`,
+        );
+    }
+
     return {
       autoRollback:
         (
@@ -902,18 +1069,8 @@ class Docker extends Trigger {
           container.labels?.['wud.rollback.auto'] ??
           'false'
         ).toLowerCase() === 'true',
-      rollbackWindow: Number.parseInt(
-        container.labels?.['dd.rollback.window'] ??
-          container.labels?.['wud.rollback.window'] ??
-          '300000',
-        10,
-      ),
-      rollbackInterval: Number.parseInt(
-        container.labels?.['dd.rollback.interval'] ??
-          container.labels?.['wud.rollback.interval'] ??
-          '10000',
-        10,
-      ),
+      rollbackWindow,
+      rollbackInterval,
     };
   }
 
@@ -972,7 +1129,15 @@ class Docker extends Trigger {
       const hookConfig = this.buildHookConfig(container);
       await this.runPreUpdateHook(container, hookConfig, logContainer);
 
-      await this.maybeNotifySelfUpdate(container, logContainer);
+      if (this.isSelfUpdate(container)) {
+        await this.maybeNotifySelfUpdate(container, logContainer);
+        const updated = await this.executeSelfUpdate(context, container, logContainer);
+        if (!updated) {
+          return;
+        }
+        // Process will die when helper stops old container — skip post-update steps
+        return;
+      }
 
       const updated = await this.executeContainerUpdate(context, container, logContainer);
       if (!updated) {

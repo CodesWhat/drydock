@@ -32,6 +32,7 @@ export function init() {
     max: 1000,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
   });
   router.use(apiLimiter);
 
@@ -41,11 +42,11 @@ export function init() {
   // Mount webhook router (uses its own bearer token auth)
   router.use('/webhook', webhookRouter.init());
 
-  // Mount SSE events endpoint (before auth so connections persist through updates)
-  router.use('/events/ui', sseRouter.init());
-
   // Routes to protect after this line
   router.use(requireAuthentication);
+
+  // Mount SSE events endpoint (authenticated — UI sends session cookie)
+  router.use('/events/ui', sseRouter.init());
 
   // Mount log router
   router.use('/log', logRouter.init());
