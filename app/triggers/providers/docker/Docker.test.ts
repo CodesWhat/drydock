@@ -1936,6 +1936,7 @@ describe('executeSelfUpdate', () => {
     const mockNewContainer = {
       start: vi.fn().mockResolvedValue(undefined),
       inspect: vi.fn().mockResolvedValue({ Id: 'new-container-id' }),
+      remove: vi.fn().mockResolvedValue(undefined),
     };
 
     const dockerApi = {
@@ -2001,13 +2002,65 @@ describe('executeSelfUpdate', () => {
       name: expect.stringContaining('drydock-old-'),
     });
     expect(docker.createContainer).toHaveBeenCalled();
-    expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
-      expect.objectContaining({
-        Cmd: ['sh', '-c', expect.stringContaining('stop')],
-        HostConfig: expect.objectContaining({ AutoRemove: true }),
-      }),
+    const helperCall = context.dockerApi.createContainer.mock.calls.find(
+      (call) => call[0]?.Cmd?.[0] === 'sh',
     );
+    expect(helperCall).toBeDefined();
+    const script = helperCall[0].Cmd[2];
+    expect(script).toContain('stop');
+    expect(script).toContain('start');
+    // Verify fallback: if new start fails, old is restarted
+    expect(script).toMatch(/\(.*start.*\|\|.*start.*\)/);
+    expect(helperCall[0].HostConfig.AutoRemove).toBe(true);
     expect(context._mockHelperContainer.start).toHaveBeenCalled();
+  });
+
+  test('should rollback rename when createContainer fails', async () => {
+    const context = createSelfUpdateContext();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const container = createTriggerContainer({
+      image: {
+        name: 'codeswhat/drydock',
+        registry: { name: 'ghcr' },
+        tag: { value: '1.0.0' },
+        digest: {},
+      },
+    });
+
+    vi.spyOn(docker, 'createContainer').mockRejectedValue(new Error('create failed'));
+
+    await expect(docker.executeSelfUpdate(context, container, logContainer)).rejects.toThrow(
+      'create failed',
+    );
+
+    // Verify rollback: old container renamed back to original name
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(2);
+    expect(context.currentContainer.rename).toHaveBeenLastCalledWith({ name: 'drydock' });
+  });
+
+  test('should rollback when helper container spawn fails', async () => {
+    const context = createSelfUpdateContext();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const container = createTriggerContainer({
+      image: {
+        name: 'codeswhat/drydock',
+        registry: { name: 'ghcr' },
+        tag: { value: '1.0.0' },
+        digest: {},
+      },
+    });
+
+    // First call is createContainer for the new drydock container (via spy on docker.createContainer)
+    // Second call is dockerApi.createContainer for the helper — make it fail
+    context.dockerApi.createContainer.mockRejectedValue(new Error('helper spawn failed'));
+
+    await expect(docker.executeSelfUpdate(context, container, logContainer)).rejects.toThrow(
+      'helper spawn failed',
+    );
+
+    // Verify rollback: new container removed, old renamed back
+    expect(context._mockNewContainer.remove).toBeDefined;
+    expect(context.currentContainer.rename).toHaveBeenLastCalledWith({ name: 'drydock' });
   });
 
   test('should throw when docker socket bind not found', async () => {

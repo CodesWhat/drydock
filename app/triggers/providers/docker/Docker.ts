@@ -752,46 +752,78 @@ class Docker extends Trigger {
     logContainer.info(`Rename container ${oldName} to ${tempName}`);
     await currentContainer.rename({ name: tempName });
 
-    // Create new container with original name (don't start — port conflict)
-    const containerToCreateInspect = this.cloneContainer(
-      currentContainerSpec,
-      newImage,
-      logContainer,
-    );
-    const newContainer = await this.createContainer(
-      dockerApi,
-      containerToCreateInspect,
-      oldName,
-      logContainer,
-    );
+    let newContainer;
+    try {
+      // Create new container with original name (don't start — port conflict)
+      const containerToCreateInspect = this.cloneContainer(
+        currentContainerSpec,
+        newImage,
+        logContainer,
+      );
+      newContainer = await this.createContainer(
+        dockerApi,
+        containerToCreateInspect,
+        oldName,
+        logContainer,
+      );
+    } catch (e) {
+      // Rollback: rename old container back to original name
+      logContainer.warn(`Failed to create new container, rolling back rename: ${e.message}`);
+      await currentContainer.rename({ name: oldName });
+      throw e;
+    }
 
     // Spawn a helper container to orchestrate the stop/start/cleanup
-    const newContainerId = (await newContainer.inspect()).Id;
+    let newContainerId;
+    try {
+      newContainerId = (await newContainer.inspect()).Id;
+    } catch (e) {
+      logContainer.warn(`Failed to inspect new container, rolling back: ${e.message}`);
+      try {
+        await newContainer.remove({ force: true });
+      } catch {
+        /* best effort */
+      }
+      await currentContainer.rename({ name: oldName });
+      throw e;
+    }
     const oldContainerId = currentContainerSpec.Id;
     const socketMount = `${socketPath}:/var/run/docker.sock`;
     const apiBase = 'http://localhost';
 
-    const script = [
-      // Stop the old (renamed) container — this kills our process
-      `curl -sf --unix-socket /var/run/docker.sock -X POST ${apiBase}/containers/${oldContainerId}/stop`,
-      // Start the new container
-      `curl -sf --unix-socket /var/run/docker.sock -X POST ${apiBase}/containers/${newContainerId}/start`,
-      // Remove the old container
-      `curl -sf --unix-socket /var/run/docker.sock -X DELETE ${apiBase}/containers/${oldContainerId}`,
-    ].join(' && ');
+    const curlSocket = `curl -sf --unix-socket /var/run/docker.sock`;
+    const stopOld = `${curlSocket} -X POST ${apiBase}/containers/${oldContainerId}/stop`;
+    const startNew = `${curlSocket} -X POST ${apiBase}/containers/${newContainerId}/start`;
+    const startOld = `${curlSocket} -X POST ${apiBase}/containers/${oldContainerId}/start`;
+    const removeOld = `${curlSocket} -X DELETE ${apiBase}/containers/${oldContainerId}`;
+
+    // Stop old, then start new — if new fails, restart old as fallback
+    const script = `${stopOld} && (${startNew} || ${startOld}) && ${removeOld}`;
 
     logContainer.info('Spawning helper container for self-update transition');
-    await dockerApi
-      .createContainer({
-        Image: currentContainerSpec.Config.Image,
-        Cmd: ['sh', '-c', script],
-        HostConfig: {
-          AutoRemove: true,
-          Binds: [socketMount],
-        },
-        name: `drydock-self-update-${Date.now()}`,
-      })
-      .then((helperContainer) => helperContainer.start());
+    try {
+      await dockerApi
+        .createContainer({
+          Image: currentContainerSpec.Config.Image,
+          Cmd: ['sh', '-c', script],
+          HostConfig: {
+            AutoRemove: true,
+            Binds: [socketMount],
+          },
+          name: `drydock-self-update-${Date.now()}`,
+        })
+        .then((helperContainer) => helperContainer.start());
+    } catch (e) {
+      // Rollback: remove new container, rename old back
+      logContainer.warn(`Failed to spawn helper container, rolling back: ${e.message}`);
+      try {
+        await newContainer.remove({ force: true });
+      } catch {
+        /* best effort */
+      }
+      await currentContainer.rename({ name: oldName });
+      throw e;
+    }
 
     logContainer.info('Helper container started — process will terminate when old container stops');
     return true;

@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **fast-xml-parser DoS via entity expansion** — Override `fast-xml-parser` 5.3.4→5.3.6 to fix CVE GHSA-jmr7-xgp7-cmfj (transitive dep via `@aws-sdk/client-ecr`, upstream hasn't released a fix yet).
-- **tar arbitrary file read/write** — Override `tar` to ≥7.5.8 to fix CVE GHSA-83g3-92jg-28cx (transitive dep via `re2` → `node-gyp`).
+- **tar arbitrary file read/write** — Removed `tar` from dependency graph entirely by replacing native `re2` (which pulled in `node-gyp` → `tar`) with `re2-wasm`, a pure WASM drop-in. Previously affected by CVE GHSA-83g3-92jg-28cx.
 
 ## [1.3.2] — 2026-02-16
 
