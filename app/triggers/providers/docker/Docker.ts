@@ -699,10 +699,106 @@ class Docker extends Trigger {
     );
   }
 
+  isSelfUpdate(container) {
+    return container.image.name === 'drydock' || container.image.name.endsWith('/drydock');
+  }
+
+  findDockerSocketBind(spec) {
+    const binds = spec?.HostConfig?.Binds;
+    if (!Array.isArray(binds)) return undefined;
+    for (const bind of binds) {
+      const parts = bind.split(':');
+      if (parts.length >= 2 && parts[1] === '/var/run/docker.sock') {
+        return parts[0];
+      }
+    }
+    return undefined;
+  }
+
+  async executeSelfUpdate(context, container, logContainer) {
+    const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
+
+    if (this.configuration.dryrun) {
+      logContainer.info('Do not replace the existing container because dry-run mode is enabled');
+      return false;
+    }
+
+    const socketPath = this.findDockerSocketBind(currentContainerSpec);
+    if (!socketPath) {
+      throw new Error(
+        'Self-update requires the Docker socket to be bind-mounted (e.g. /var/run/docker.sock:/var/run/docker.sock)',
+      );
+    }
+
+    // Insert backup before starting the update
+    backupStore.insertBackup({
+      id: crypto.randomUUID(),
+      containerId: container.id,
+      containerName: container.name,
+      imageName: `${container.image.registry.name}/${container.image.name}`,
+      imageTag: container.image.tag.value,
+      imageDigest: container.image.digest?.repo,
+      timestamp: new Date().toISOString(),
+      triggerName: this.getId(),
+    });
+
+    // Pull the new image while we're still alive
+    await this.pullImage(dockerApi, auth, newImage, logContainer);
+
+    const oldName = currentContainerSpec.Name.replace(/^\//, '');
+    const tempName = `drydock-old-${Date.now()}`;
+
+    // Rename old container to free the name
+    logContainer.info(`Rename container ${oldName} to ${tempName}`);
+    await currentContainer.rename({ name: tempName });
+
+    // Create new container with original name (don't start — port conflict)
+    const containerToCreateInspect = this.cloneContainer(
+      currentContainerSpec,
+      newImage,
+      logContainer,
+    );
+    const newContainer = await this.createContainer(
+      dockerApi,
+      containerToCreateInspect,
+      oldName,
+      logContainer,
+    );
+
+    // Spawn a helper container to orchestrate the stop/start/cleanup
+    const newContainerId = (await newContainer.inspect()).Id;
+    const oldContainerId = currentContainerSpec.Id;
+    const socketMount = `${socketPath}:/var/run/docker.sock`;
+    const apiBase = 'http://localhost';
+
+    const script = [
+      // Stop the old (renamed) container — this kills our process
+      `curl -sf --unix-socket /var/run/docker.sock -X POST ${apiBase}/containers/${oldContainerId}/stop`,
+      // Start the new container
+      `curl -sf --unix-socket /var/run/docker.sock -X POST ${apiBase}/containers/${newContainerId}/start`,
+      // Remove the old container
+      `curl -sf --unix-socket /var/run/docker.sock -X DELETE ${apiBase}/containers/${oldContainerId}`,
+    ].join(' && ');
+
+    logContainer.info('Spawning helper container for self-update transition');
+    await dockerApi
+      .createContainer({
+        Image: currentContainerSpec.Config.Image,
+        Cmd: ['sh', '-c', script],
+        HostConfig: {
+          AutoRemove: true,
+          Binds: [socketMount],
+        },
+        name: `drydock-self-update-${Date.now()}`,
+      })
+      .then((helperContainer) => helperContainer.start());
+
+    logContainer.info('Helper container started — process will terminate when old container stops');
+    return true;
+  }
+
   async maybeNotifySelfUpdate(container, logContainer) {
-    const isSelfUpdate =
-      container.image.name === 'drydock' || container.image.name.endsWith('/drydock');
-    if (!isSelfUpdate) {
+    if (!this.isSelfUpdate(container)) {
       return;
     }
 
@@ -972,7 +1068,15 @@ class Docker extends Trigger {
       const hookConfig = this.buildHookConfig(container);
       await this.runPreUpdateHook(container, hookConfig, logContainer);
 
-      await this.maybeNotifySelfUpdate(container, logContainer);
+      if (this.isSelfUpdate(container)) {
+        await this.maybeNotifySelfUpdate(container, logContainer);
+        const updated = await this.executeSelfUpdate(context, container, logContainer);
+        if (!updated) {
+          return;
+        }
+        // Process will die when helper stops old container — skip post-update steps
+        return;
+      }
 
       const updated = await this.executeContainerUpdate(context, container, logContainer);
       if (!updated) {
