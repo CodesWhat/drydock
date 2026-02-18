@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **fast-xml-parser DoS via entity expansion** — Override `fast-xml-parser` 5.3.4→5.3.6 to fix CVE GHSA-jmr7-xgp7-cmfj (transitive dep via `@aws-sdk/client-ecr`, upstream hasn't released a fix yet).
 - **tar arbitrary file read/write** — Removed `tar` from dependency graph entirely by replacing native `re2` (which pulled in `node-gyp` → `tar`) with `re2-wasm`, a pure WASM drop-in. Previously affected by CVE GHSA-83g3-92jg-28cx.
+- **Unauthenticated SSE endpoint** — Moved `/api/events/ui` behind `requireAuthentication` middleware and added per-IP connection limits (max 10) to prevent connection exhaustion.
+- **Session cookie missing sameSite** — Set `sameSite: 'strict'` on session cookie to mitigate CSRF attacks.
+- **Predictable session secret** — Added `DD_SESSION_SECRET` environment variable override so deployments can provide proper entropy instead of the default deterministic UUIDv5.
+- **Global error handler leaks internal details** — Replaced `err.message` with generic `'Internal server error'` in the global error handler to prevent leaking hostnames, paths, and Docker socket info to unauthenticated callers.
+- **Entrypoint masks crash exit codes** — Enabled `pipefail` in `Docker.entrypoint.sh` so `node | pino-pretty` correctly propagates non-zero exit codes for restart policies.
 
 ## [1.3.2] — 2026-02-16
 
