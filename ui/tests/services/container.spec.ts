@@ -43,6 +43,17 @@ describe('Container Service', () => {
       });
       expect(containers).toEqual(mockContainers);
     });
+
+    it('throws when response is not ok', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Internal Server Error',
+      } as any);
+
+      await expect(getAllContainers()).rejects.toThrow(
+        'Failed to get containers: Internal Server Error',
+      );
+    });
   });
 
   describe('refreshAllContainers', () => {
