@@ -292,7 +292,7 @@ describe('API Index', () => {
     await expect(indexRouter.init()).rejects.toThrow('Cert not found');
   });
 
-  test('global error handler should use err.status and err.message', async () => {
+  test('global error handler should use err.status and keep message generic', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
       port: 3000,
@@ -313,7 +313,7 @@ describe('API Index', () => {
     errorHandler(err, {}, res, vi.fn());
 
     expect(res.status).toHaveBeenCalledWith(422);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Validation failed' });
+    expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
   });
 
   test('global error handler should default to 500 and generic message', async () => {

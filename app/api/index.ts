@@ -71,7 +71,7 @@ export async function init() {
     // Global JSON error handler — ensures unhandled exceptions return JSON instead of HTML
     app.use((err, _req, res, _next) => {
       log.error(`Unhandled error: ${err.message}`);
-      res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+      res.status(err.status || 500).json({ error: 'Internal server error' });
     });
 
     if (configuration.tls.enabled) {
