@@ -93,11 +93,15 @@ class Telegram extends Trigger {
    * @returns {Promise<>}
    */
   async sendMessage(text) {
-    const response = await axios.post(`${this.apiUrl}/sendMessage`, {
-      chat_id: this.configuration.chatid,
-      text,
-      parse_mode: this.getParseMode(),
-    });
+    const response = await axios.post(
+      `${this.apiUrl}/sendMessage`,
+      {
+        chat_id: this.configuration.chatid,
+        text,
+        parse_mode: this.getParseMode(),
+      },
+      { timeout: 30000 },
+    );
 
     return response.data;
   }

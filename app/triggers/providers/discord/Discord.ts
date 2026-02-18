@@ -79,6 +79,7 @@ class Discord extends Trigger {
       method: 'POST',
       url: uri,
       data: body,
+      timeout: 30000,
     };
     const response = await axios(options);
     return response.data;

@@ -53,6 +53,7 @@ class Http extends Trigger {
     const options = {
       method: this.configuration.method,
       url: this.configuration.url,
+      timeout: 30000,
     };
     if (this.configuration.method === 'POST') {
       options.data = body;

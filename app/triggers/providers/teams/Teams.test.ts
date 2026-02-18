@@ -137,6 +137,7 @@ test('postMessage should call Teams webhook endpoint', async () => {
       headers: {
         'content-type': 'application/json',
       },
+      timeout: 30000,
     },
   );
 });
