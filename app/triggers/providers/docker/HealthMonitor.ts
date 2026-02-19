@@ -90,7 +90,7 @@ export function startHealthMonitor(options: HealthMonitorOptions): AbortControll
 
   async function performRollback() {
     try {
-      const backups = backupStore.getBackups(containerId);
+      const backups = backupStore.getBackupsByName(containerName);
       if (backups.length === 0) {
         log.warn(`No backups found for container ${containerName} — cannot auto-rollback`);
         return;

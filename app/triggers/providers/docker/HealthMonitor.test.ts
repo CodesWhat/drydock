@@ -6,9 +6,9 @@ vi.mock('../../../store/audit.js', () => ({
   insertAudit: mockInsertAudit,
 }));
 
-var mockGetBackups = vi.hoisted(() => vi.fn());
+var mockGetBackupsByName = vi.hoisted(() => vi.fn());
 vi.mock('../../../store/backup.js', () => ({
-  getBackups: mockGetBackups,
+  getBackupsByName: mockGetBackupsByName,
 }));
 
 var mockAuditCounterInc = vi.hoisted(() => vi.fn());
@@ -136,7 +136,7 @@ describe('HealthMonitor', () => {
       }),
     };
 
-    mockGetBackups.mockReturnValue([
+    mockGetBackupsByName.mockReturnValue([
       {
         id: 'backup-1',
         containerId: 'container-123',
@@ -186,7 +186,7 @@ describe('HealthMonitor', () => {
       State: { Running: true, Health: { Status: 'unhealthy' } },
     });
 
-    mockGetBackups.mockReturnValue([
+    mockGetBackupsByName.mockReturnValue([
       {
         id: 'backup-1',
         containerId: 'container-123',
@@ -231,7 +231,7 @@ describe('HealthMonitor', () => {
       State: { Running: true, Health: { Status: 'unhealthy' } },
     });
 
-    mockGetBackups.mockReturnValue([
+    mockGetBackupsByName.mockReturnValue([
       {
         id: 'backup-latest',
         containerId: 'container-123',
@@ -397,7 +397,7 @@ describe('HealthMonitor', () => {
       State: { Running: true, Health: { Status: 'unhealthy' } },
     });
 
-    mockGetBackups.mockReturnValue([]);
+    mockGetBackupsByName.mockReturnValue([]);
 
     var abortController = startHealthMonitor({
       dockerApi,
@@ -426,7 +426,7 @@ describe('HealthMonitor', () => {
       State: { Running: true, Health: { Status: 'unhealthy' } },
     });
 
-    mockGetBackups.mockReturnValue([
+    mockGetBackupsByName.mockReturnValue([
       {
         id: 'backup-1',
         containerId: 'container-123',
@@ -495,7 +495,7 @@ describe('HealthMonitor', () => {
       State: { Running: true, Health: { Status: 'unhealthy' } },
     });
 
-    mockGetBackups.mockReturnValue([
+    mockGetBackupsByName.mockReturnValue([
       {
         id: 'backup-1',
         containerId: 'container-123',
@@ -540,7 +540,7 @@ describe('HealthMonitor', () => {
     });
 
     mockGetAuditCounter.mockReturnValue(undefined);
-    mockGetBackups.mockReturnValue([
+    mockGetBackupsByName.mockReturnValue([
       {
         id: 'backup-1',
         containerId: 'container-123',
@@ -585,7 +585,7 @@ describe('HealthMonitor', () => {
     });
 
     mockGetAuditCounter.mockReturnValue(undefined);
-    mockGetBackups.mockReturnValue([
+    mockGetBackupsByName.mockReturnValue([
       {
         id: 'backup-1',
         containerId: 'container-123',

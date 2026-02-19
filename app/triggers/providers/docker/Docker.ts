@@ -545,7 +545,15 @@ class Docker extends Trigger {
   async cleanupOldImages(dockerApi, registry, container, logContainer) {
     if (!this.configuration.prune) return;
 
+    // Don't prune images that are retained as backups — they're needed for rollback
+    const retainedBackups = backupStore.getBackupsByName(container.name) || [];
+    const retainedTags = new Set(retainedBackups.map((b) => b.imageTag));
+
     if (container.updateKind.kind === 'tag') {
+      if (retainedTags.has(container.image.tag.value)) {
+        logContainer.info(`Skipping prune of ${container.image.tag.value} — retained for rollback`);
+        return;
+      }
       const oldImage = registry.getImageFullName(container.image, container.image.tag.value);
       await this.removeImage(dockerApi, oldImage, logContainer);
     } else if (container.updateKind.kind === 'digest' && container.image.digest.repo) {
@@ -716,7 +724,7 @@ class Docker extends Trigger {
   }
 
   async executeSelfUpdate(context, container, logContainer) {
-    const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
+    const { dockerApi, registry, auth, newImage, currentContainer, currentContainerSpec } = context;
 
     if (this.configuration.dryrun) {
       logContainer.info('Do not replace the existing container because dry-run mode is enabled');
@@ -730,12 +738,16 @@ class Docker extends Trigger {
       );
     }
 
-    // Insert backup before starting the update
+    // Insert backup before starting the update (store the Docker-pullable
+    // base image name, not the internal registry-prefixed name)
+    const baseImageName = registry
+      .getImageFullName(container.image, '__TAG__')
+      .replace(/:__TAG__$/, '');
     backupStore.insertBackup({
       id: crypto.randomUUID(),
       containerId: container.id,
       containerName: container.name,
-      imageName: `${container.image.registry.name}/${container.image.name}`,
+      imageName: baseImageName,
       imageTag: container.image.tag.value,
       imageDigest: container.image.digest?.repo,
       timestamp: new Date().toISOString(),
@@ -987,11 +999,18 @@ class Docker extends Trigger {
       await this.pruneImages(dockerApi, registry, container, logContainer);
     }
 
+    // Store the Docker-pullable image reference (e.g. "nginx") not the
+    // internal registry-prefixed name (e.g. "hub.public/library/nginx").
+    // Use a sentinel tag to extract just the base name, since
+    // getImageFullName returns "name:tag" and we store tag separately.
+    const baseImageName = registry
+      .getImageFullName(container.image, '__TAG__')
+      .replace(/:__TAG__$/, '');
     backupStore.insertBackup({
       id: crypto.randomUUID(),
       containerId: container.id,
       containerName: container.name,
-      imageName: `${container.image.registry.name}/${container.image.name}`,
+      imageName: baseImageName,
       imageTag: container.image.tag.value,
       imageDigest: container.image.digest?.repo,
       timestamp: new Date().toISOString(),
@@ -1079,8 +1098,13 @@ class Docker extends Trigger {
       return;
     }
 
-    const newContainer = await this.getCurrentContainer(dockerApi, container);
+    // Look up the newly-recreated container by name (the old container.id
+    // no longer exists after executeContainerUpdate recreated it).
+    const newContainer = await this.getCurrentContainer(dockerApi, { id: container.name });
     if (newContainer == null) {
+      logContainer.warn(
+        'Cannot find recreated container by name — skipping health monitoring',
+      );
       return;
     }
 
@@ -1093,12 +1117,14 @@ class Docker extends Trigger {
       return;
     }
 
+    const newContainerId = newContainerSpec.Id;
+
     logContainer.info(
       `Starting health monitor (window=${rollbackConfig.rollbackWindow}ms, interval=${rollbackConfig.rollbackInterval}ms)`,
     );
     startHealthMonitor({
       dockerApi,
-      containerId: container.id,
+      containerId: newContainerId,
       containerName: container.name,
       backupImageTag: container.image.tag.value,
       backupImageDigest: container.image.digest?.repo,
@@ -1159,7 +1185,7 @@ class Docker extends Trigger {
       await emitContainerUpdateApplied(fullName(container));
 
       // Prune old backups, keeping only the configured number
-      backupStore.pruneOldBackups(container.id, this.configuration.backupcount);
+      backupStore.pruneOldBackups(container.name, this.configuration.backupcount);
     } catch (e: any) {
       await emitContainerUpdateFailed({
         containerName: fullName(container),

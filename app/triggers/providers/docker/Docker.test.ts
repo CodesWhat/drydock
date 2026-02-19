@@ -53,6 +53,7 @@ vi.mock('../../../store/container.js', () => ({
 vi.mock('../../../store/backup', () => ({
   insertBackup: vi.fn(),
   pruneOldBackups: vi.fn(),
+  getBackupsByName: vi.fn().mockReturnValue([]),
 }));
 
 const mockRunHook = vi.hoisted(() => vi.fn());
@@ -1605,7 +1606,7 @@ describe('auto-rollback health monitor integration', () => {
 
     expect(mockStartHealthMonitor).toHaveBeenCalledWith(
       expect.objectContaining({
-        containerId: '123456789',
+        containerId: '123',
         containerName: 'container-name',
         backupImageTag: '1.0.0',
         window: 300000,
@@ -1957,7 +1958,7 @@ describe('additional docker trigger coverage', () => {
       createMockLog('info', 'warn'),
     );
 
-    expect(getCurrentContainerSpy).toHaveBeenCalled();
+    expect(getCurrentContainerSpy).toHaveBeenCalledWith({}, { id: 'container-name' });
     expect(inspectContainerSpy).not.toHaveBeenCalled();
   });
 });
@@ -2061,7 +2062,7 @@ describe('executeSelfUpdate', () => {
 
     return {
       dockerApi,
-      registry: { getImageFullName: vi.fn() },
+      registry: { getImageFullName: vi.fn((_img, tag) => `codeswhat/drydock:${tag}`) },
       auth: undefined,
       newImage: 'ghcr.io/codeswhat/drydock:2.0.0',
       currentContainer,
