@@ -105,10 +105,44 @@ jobs:
           done
           cosign sign --yes ${images}
 
+      - name: Build release artifact
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          git archive --format=tar.gz --prefix="drydock-${RELEASE_TAG}/" --output="${artifact}" "${GITHUB_SHA}"
+          sha256sum "${artifact}" > "${artifact}.sha256"
+
+      - name: Sign release artifact
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          cosign sign-blob --yes \
+            --output-signature "${artifact}.sig" \
+            --output-certificate "${artifact}.pem" \
+            "${artifact}"
+
+      - name: Upload signed release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "${RELEASE_TAG}" >/dev/null 2>&1 || gh release create "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes ""
+          gh release upload "${RELEASE_TAG}" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.sha256" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.sig" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.pem" \
+            --clobber
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f  # v3.2.0
         with:
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
-
