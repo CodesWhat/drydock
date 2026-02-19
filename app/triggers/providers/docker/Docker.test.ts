@@ -1,6 +1,7 @@
 // @ts-nocheck
 import joi from 'joi';
 import log from '../../../log/index.js';
+import * as backupStore from '../../../store/backup';
 import Docker from './Docker.js';
 
 const configurationValid = {
@@ -53,6 +54,7 @@ vi.mock('../../../store/container.js', () => ({
 vi.mock('../../../store/backup', () => ({
   insertBackup: vi.fn(),
   pruneOldBackups: vi.fn(),
+  getBackupsByName: vi.fn().mockReturnValue([]),
 }));
 
 const mockRunHook = vi.hoisted(() => vi.fn());
@@ -1605,7 +1607,7 @@ describe('auto-rollback health monitor integration', () => {
 
     expect(mockStartHealthMonitor).toHaveBeenCalledWith(
       expect.objectContaining({
-        containerId: '123456789',
+        containerId: '123',
         containerName: 'container-name',
         backupImageTag: '1.0.0',
         window: 300000,
@@ -1889,6 +1891,43 @@ describe('additional docker trigger coverage', () => {
     );
   });
 
+  test('cleanupOldImages should skip tag pruning when tag is retained for rollback', async () => {
+    docker.configuration.prune = true;
+    vi.mocked(backupStore.getBackupsByName).mockReturnValue([
+      {
+        imageTag: '1.0.0',
+      },
+    ] as any);
+    const removeImageSpy = vi.spyOn(docker, 'removeImage').mockResolvedValue(undefined);
+    const registryProvider = {
+      getImageFullName: vi.fn(() => 'my-registry/test/test:1.0.0'),
+    };
+    const logContainer = createMockLog('info');
+
+    await docker.cleanupOldImages(
+      {},
+      registryProvider,
+      {
+        name: 'container-name',
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/test',
+          tag: { value: '1.0.0' },
+          digest: {},
+        },
+        updateKind: {
+          kind: 'tag',
+        },
+      },
+      logContainer,
+    );
+
+    expect(backupStore.getBackupsByName).toHaveBeenCalledWith('container-name');
+    expect(registryProvider.getImageFullName).not.toHaveBeenCalled();
+    expect(removeImageSpy).not.toHaveBeenCalled();
+    expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Skipping prune of 1.0.0'));
+  });
+
   test('cleanupOldImages should skip digest pruning when digest repo is missing', async () => {
     docker.configuration.prune = true;
     const removeImageSpy = vi.spyOn(docker, 'removeImage').mockResolvedValue(undefined);
@@ -1957,7 +1996,7 @@ describe('additional docker trigger coverage', () => {
       createMockLog('info', 'warn'),
     );
 
-    expect(getCurrentContainerSpy).toHaveBeenCalled();
+    expect(getCurrentContainerSpy).toHaveBeenCalledWith({}, { id: 'container-name' });
     expect(inspectContainerSpy).not.toHaveBeenCalled();
   });
 });
@@ -2061,7 +2100,7 @@ describe('executeSelfUpdate', () => {
 
     return {
       dockerApi,
-      registry: { getImageFullName: vi.fn() },
+      registry: { getImageFullName: vi.fn((_img, tag) => `codeswhat/drydock:${tag}`) },
       auth: undefined,
       newImage: 'ghcr.io/codeswhat/drydock:2.0.0',
       currentContainer,

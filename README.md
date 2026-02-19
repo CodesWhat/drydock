@@ -9,8 +9,8 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.3.3-blue" alt="Version"></a>
-  <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/GHCR-image-2ea44f?logo=docker&logoColor=white" alt="GHCR package"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.3.4-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-~10k_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
   <a href="https://quay.io/repository/codeswhat/drydock"><img src="https://img.shields.io/badge/Quay.io-image-ee0000?logo=redhat&logoColor=white" alt="Quay.io"></a>
   <br>
@@ -557,6 +557,7 @@ Here's what's coming.
 | Version | Theme | Highlights |
 | --- | --- | --- |
 | **v1.3.0** ✅ | Security Integration | Trivy scanning, Update Guard, SBOM generation, image signing, on-demand scan |
+| **v1.3.4** ✅ | Rollback Bugfixes | Fix backup lookup by container name, retain backup images during prune, fix auto-rollback monitor, store Docker-pullable image names for rollback |
 | **v1.3.3** ✅ | Log Viewer & Providers | Auto-fetch polling, scroll lock, auto-scroll for log viewers, 7 new registries, 4 new triggers, self-update fix, stale digest fix, rate-limit warning fixes, CVE patches, security hardening |
 | **v1.4.0** | UI Modernization | PrimeVue migration, Composition API, Vite cleanup, font personalization, icon caching, Internetless Mode, CSRF tokens, API error sanitization, update rollback improvements |
 | **v1.5.0** | Observability | Resource monitoring, registry webhooks, notification templates, release notes |

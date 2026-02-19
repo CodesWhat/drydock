@@ -29,17 +29,19 @@ export function insertBackup(backup: ImageBackup): ImageBackup {
 }
 
 /**
- * Get all backups for a container, sorted by timestamp desc.
- * @param containerId
+ * Get all backups for a container by name, sorted by timestamp desc.
+ * Uses containerName (stable across recreates) rather than containerId
+ * (which changes every time Docker recreates the container).
+ * @param containerName
  */
-export function getBackups(containerId: string): ImageBackup[] {
+export function getBackupsByName(containerName: string): ImageBackup[] {
   if (!backupCollection) {
     return [];
   }
   return backupCollection
     .find()
     .map((item) => item.data as ImageBackup)
-    .filter((b) => b.containerId === containerId)
+    .filter((b) => b.containerName === containerName)
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
@@ -86,14 +88,14 @@ export function deleteBackup(id: string): boolean {
 
 /**
  * Prune old backups for a container, keeping only the N most recent.
- * @param containerId
+ * @param containerName
  * @param maxCount
  */
-export function pruneOldBackups(containerId: string, maxCount: number): number {
+export function pruneOldBackups(containerName: string, maxCount: number): number {
   if (!backupCollection) {
     return 0;
   }
-  const docs = backupCollection.find().filter((item) => item.data.containerId === containerId);
+  const docs = backupCollection.find().filter((item) => item.data.containerName === containerName);
   docs.sort((a, b) => new Date(b.data.timestamp).getTime() - new Date(a.data.timestamp).getTime());
   const toRemove = docs.slice(maxCount);
   toRemove.forEach((doc) => backupCollection.remove(doc));

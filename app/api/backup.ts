@@ -13,12 +13,12 @@ const log = logger.child({ component: 'backup' });
 const router = express.Router();
 
 /**
- * Get all backups, optionally filtered by containerId query param.
+ * Get all backups, optionally filtered by containerName query param.
  */
 function getBackups(req: Request, res: Response) {
-  const { containerId } = req.query;
-  if (containerId) {
-    res.status(200).json(storeBackup.getBackups(containerId as string));
+  const { containerName } = req.query;
+  if (containerName) {
+    res.status(200).json(storeBackup.getBackupsByName(containerName as string));
   } else {
     res.status(200).json(storeBackup.getAllBackups());
   }
@@ -36,7 +36,7 @@ function getContainerBackups(req: Request, res: Response) {
     return;
   }
 
-  res.status(200).json(storeBackup.getBackups(id));
+  res.status(200).json(storeBackup.getBackupsByName(container.name));
 }
 
 /**
@@ -56,12 +56,12 @@ async function rollbackContainer(req: Request, res: Response) {
   let backup;
   if (backupId) {
     backup = storeBackup.getBackup(backupId);
-    if (!backup || backup.containerId !== id) {
+    if (!backup || backup.containerName !== container.name) {
       res.status(404).json({ error: 'Backup not found for this container' });
       return;
     }
   } else {
-    const backups = storeBackup.getBackups(id);
+    const backups = storeBackup.getBackupsByName(container.name);
     if (backups.length === 0) {
       res.status(404).json({ error: 'No backups found for this container' });
       return;
@@ -87,8 +87,9 @@ async function rollbackContainer(req: Request, res: Response) {
     // Pull the backup image
     await trigger.pullImage(dockerApi, auth, backupImage, log);
 
-    // Get current container
-    const currentContainer = await trigger.getCurrentContainer(dockerApi, container);
+    // Get current container (look up by name since the Docker ID may have
+    // changed after the most recent update recreated the container)
+    const currentContainer = await trigger.getCurrentContainer(dockerApi, { id: container.name });
     if (!currentContainer) {
       res.status(500).json({ error: 'Container not found in Docker' });
       return;
