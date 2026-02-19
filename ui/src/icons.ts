@@ -1,0 +1,222 @@
+export type IconLibrary = 'ph-duotone' | 'ph' | 'lucide' | 'tabler' | 'heroicons' | 'iconoir' | 'fa6-solid';
+
+export const libraryLabels: Record<IconLibrary, string> = {
+  'ph-duotone': 'Phosphor Duotone',
+  'ph': 'Phosphor',
+  'lucide': 'Lucide',
+  'tabler': 'Tabler',
+  'heroicons': 'Heroicons',
+  'iconoir': 'Iconoir',
+  'fa6-solid': 'Font Awesome',
+};
+
+export const iconMap: Record<string, Record<IconLibrary, string>> = {
+  'dashboard': {
+    'fa6-solid': 'fa6-solid:layer-group', 'ph': 'ph:squares-four', 'ph-duotone': 'ph:squares-four-duotone',
+    'lucide': 'lucide:layout-dashboard', 'tabler': 'tabler:layout-dashboard',
+    'heroicons': 'heroicons:squares-2x2', 'iconoir': 'iconoir:dashboard',
+  },
+  'containers': {
+    'fa6-solid': 'fa6-solid:cube', 'ph': 'ph:cube', 'ph-duotone': 'ph:cube-duotone',
+    'lucide': 'lucide:box', 'tabler': 'tabler:box',
+    'heroicons': 'heroicons:cube', 'iconoir': 'iconoir:box-3d-center',
+  },
+  'updates': {
+    'fa6-solid': 'fa6-solid:download', 'ph': 'ph:download-simple', 'ph-duotone': 'ph:download-simple-duotone',
+    'lucide': 'lucide:download', 'tabler': 'tabler:download',
+    'heroicons': 'heroicons:arrow-down-tray', 'iconoir': 'iconoir:download',
+  },
+  'security': {
+    'fa6-solid': 'fa6-solid:shield-halved', 'ph': 'ph:shield-check', 'ph-duotone': 'ph:shield-check-duotone',
+    'lucide': 'lucide:shield-check', 'tabler': 'tabler:shield-check',
+    'heroicons': 'heroicons:shield-check', 'iconoir': 'iconoir:shield-check',
+  },
+  'logs': {
+    'fa6-solid': 'fa6-solid:scroll', 'ph': 'ph:scroll', 'ph-duotone': 'ph:scroll-duotone',
+    'lucide': 'lucide:scroll-text', 'tabler': 'tabler:file-text',
+    'heroicons': 'heroicons:document-text', 'iconoir': 'iconoir:page',
+  },
+  'registries': {
+    'fa6-solid': 'fa6-solid:database', 'ph': 'ph:database', 'ph-duotone': 'ph:database-duotone',
+    'lucide': 'lucide:database', 'tabler': 'tabler:database',
+    'heroicons': 'heroicons:circle-stack', 'iconoir': 'iconoir:database',
+  },
+  'agents': {
+    'fa6-solid': 'fa6-solid:satellite-dish', 'ph': 'ph:broadcast', 'ph-duotone': 'ph:broadcast-duotone',
+    'lucide': 'lucide:radio-tower', 'tabler': 'tabler:antenna',
+    'heroicons': 'heroicons:signal', 'iconoir': 'iconoir:antenna-signal',
+  },
+  'triggers': {
+    'fa6-solid': 'fa6-solid:bolt', 'ph': 'ph:lightning', 'ph-duotone': 'ph:lightning-duotone',
+    'lucide': 'lucide:zap', 'tabler': 'tabler:bolt',
+    'heroicons': 'heroicons:bolt', 'iconoir': 'iconoir:flash',
+  },
+  'watchers': {
+    'fa6-solid': 'fa6-solid:eye', 'ph': 'ph:eye', 'ph-duotone': 'ph:eye-duotone',
+    'lucide': 'lucide:eye', 'tabler': 'tabler:eye',
+    'heroicons': 'heroicons:eye', 'iconoir': 'iconoir:eye-empty',
+  },
+  'servers': {
+    'fa6-solid': 'fa6-solid:server', 'ph': 'ph:computer-tower', 'ph-duotone': 'ph:computer-tower-duotone',
+    'lucide': 'lucide:server', 'tabler': 'tabler:server',
+    'heroicons': 'heroicons:server', 'iconoir': 'iconoir:server',
+  },
+  'config': {
+    'fa6-solid': 'fa6-solid:sliders', 'ph': 'ph:sliders-horizontal', 'ph-duotone': 'ph:sliders-horizontal-duotone',
+    'lucide': 'lucide:sliders-horizontal', 'tabler': 'tabler:adjustments-horizontal',
+    'heroicons': 'heroicons:adjustments-horizontal', 'iconoir': 'iconoir:settings',
+  },
+  'settings': {
+    'fa6-solid': 'fa6-solid:gear', 'ph': 'ph:gear-six', 'ph-duotone': 'ph:gear-six-duotone',
+    'lucide': 'lucide:settings', 'tabler': 'tabler:settings',
+    'heroicons': 'heroicons:cog-6-tooth', 'iconoir': 'iconoir:settings',
+  },
+  'auth': {
+    'fa6-solid': 'fa6-solid:lock', 'ph': 'ph:lock', 'ph-duotone': 'ph:lock-duotone',
+    'lucide': 'lucide:lock', 'tabler': 'tabler:lock',
+    'heroicons': 'heroicons:lock-closed', 'iconoir': 'iconoir:lock',
+  },
+  'notifications': {
+    'fa6-solid': 'fa6-solid:bell', 'ph': 'ph:bell', 'ph-duotone': 'ph:bell-duotone',
+    'lucide': 'lucide:bell', 'tabler': 'tabler:bell',
+    'heroicons': 'heroicons:bell', 'iconoir': 'iconoir:bell',
+  },
+  'moon': {
+    'fa6-solid': 'fa6-solid:moon', 'ph': 'ph:moon', 'ph-duotone': 'ph:moon-duotone',
+    'lucide': 'lucide:moon', 'tabler': 'tabler:moon',
+    'heroicons': 'heroicons:moon', 'iconoir': 'iconoir:half-moon',
+  },
+  'sun': {
+    'fa6-solid': 'fa6-solid:sun', 'ph': 'ph:sun', 'ph-duotone': 'ph:sun-duotone',
+    'lucide': 'lucide:sun', 'tabler': 'tabler:sun',
+    'heroicons': 'heroicons:sun', 'iconoir': 'iconoir:sun-light',
+  },
+  'uptime': {
+    'fa6-solid': 'fa6-solid:heart-pulse', 'ph': 'ph:heartbeat', 'ph-duotone': 'ph:heartbeat-duotone',
+    'lucide': 'lucide:heart-pulse', 'tabler': 'tabler:heartbeat',
+    'heroicons': 'heroicons:heart', 'iconoir': 'iconoir:heart',
+  },
+  'trend-up': {
+    'fa6-solid': 'fa6-solid:arrow-up', 'ph': 'ph:arrow-up', 'ph-duotone': 'ph:arrow-up-duotone',
+    'lucide': 'lucide:trending-up', 'tabler': 'tabler:trending-up',
+    'heroicons': 'heroicons:arrow-trending-up', 'iconoir': 'iconoir:arrow-up',
+  },
+  'trend-down': {
+    'fa6-solid': 'fa6-solid:arrow-down', 'ph': 'ph:arrow-down', 'ph-duotone': 'ph:arrow-down-duotone',
+    'lucide': 'lucide:trending-down', 'tabler': 'tabler:trending-down',
+    'heroicons': 'heroicons:arrow-trending-down', 'iconoir': 'iconoir:arrow-down',
+  },
+  'neutral': {
+    'fa6-solid': 'fa6-solid:minus', 'ph': 'ph:minus', 'ph-duotone': 'ph:minus-duotone',
+    'lucide': 'lucide:minus', 'tabler': 'tabler:minus',
+    'heroicons': 'heroicons:minus', 'iconoir': 'iconoir:minus',
+  },
+  'recent-updates': {
+    'fa6-solid': 'fa6-solid:rotate', 'ph': 'ph:arrows-clockwise', 'ph-duotone': 'ph:arrows-clockwise-duotone',
+    'lucide': 'lucide:refresh-cw', 'tabler': 'tabler:refresh',
+    'heroicons': 'heroicons:arrow-path', 'iconoir': 'iconoir:refresh-double',
+  },
+  'arrow-right': {
+    'fa6-solid': 'fa6-solid:arrow-right', 'ph': 'ph:arrow-right', 'ph-duotone': 'ph:arrow-right-duotone',
+    'lucide': 'lucide:arrow-right', 'tabler': 'tabler:arrow-right',
+    'heroicons': 'heroicons:arrow-right', 'iconoir': 'iconoir:arrow-right',
+  },
+  'check': {
+    'fa6-solid': 'fa6-solid:check', 'ph': 'ph:check', 'ph-duotone': 'ph:check-duotone',
+    'lucide': 'lucide:check', 'tabler': 'tabler:check',
+    'heroicons': 'heroicons:check', 'iconoir': 'iconoir:check',
+  },
+  'pending': {
+    'fa6-solid': 'fa6-solid:clock', 'ph': 'ph:clock', 'ph-duotone': 'ph:clock-duotone',
+    'lucide': 'lucide:clock', 'tabler': 'tabler:clock',
+    'heroicons': 'heroicons:clock', 'iconoir': 'iconoir:clock',
+  },
+  'xmark': {
+    'fa6-solid': 'fa6-solid:xmark', 'ph': 'ph:x', 'ph-duotone': 'ph:x-duotone',
+    'lucide': 'lucide:x', 'tabler': 'tabler:x',
+    'heroicons': 'heroicons:x-mark', 'iconoir': 'iconoir:xmark',
+  },
+  'up-to-date': {
+    'fa6-solid': 'fa6-solid:circle-check', 'ph': 'ph:check-circle', 'ph-duotone': 'ph:check-circle-duotone',
+    'lucide': 'lucide:check-circle', 'tabler': 'tabler:circle-check',
+    'heroicons': 'heroicons:check-circle', 'iconoir': 'iconoir:check-circle',
+  },
+  'stop': {
+    'fa6-solid': 'fa6-solid:stop', 'ph': 'ph:stop', 'ph-duotone': 'ph:stop-duotone',
+    'lucide': 'lucide:square', 'tabler': 'tabler:player-stop',
+    'heroicons': 'heroicons:stop', 'iconoir': 'iconoir:media-stop',
+  },
+  'play': {
+    'fa6-solid': 'fa6-solid:play', 'ph': 'ph:play', 'ph-duotone': 'ph:play-duotone',
+    'lucide': 'lucide:play', 'tabler': 'tabler:player-play',
+    'heroicons': 'heroicons:play', 'iconoir': 'iconoir:media-play',
+  },
+  'restart': {
+    'fa6-solid': 'fa6-solid:rotate-right', 'ph': 'ph:arrow-clockwise', 'ph-duotone': 'ph:arrow-clockwise-duotone',
+    'lucide': 'lucide:rotate-cw', 'tabler': 'tabler:rotate-clockwise',
+    'heroicons': 'heroicons:arrow-path', 'iconoir': 'iconoir:redo',
+  },
+  'cloud-download': {
+    'fa6-solid': 'fa6-solid:cloud-arrow-down', 'ph': 'ph:cloud-arrow-down', 'ph-duotone': 'ph:cloud-arrow-down-duotone',
+    'lucide': 'lucide:cloud-download', 'tabler': 'tabler:cloud-download',
+    'heroicons': 'heroicons:cloud-arrow-down', 'iconoir': 'iconoir:cloud-download',
+  },
+  'filter': {
+    'fa6-solid': 'fa6-solid:filter', 'ph': 'ph:funnel', 'ph-duotone': 'ph:funnel-duotone',
+    'lucide': 'lucide:filter', 'tabler': 'tabler:filter',
+    'heroicons': 'heroicons:funnel', 'iconoir': 'iconoir:filter',
+  },
+  'network': {
+    'fa6-solid': 'fa6-solid:network-wired', 'ph': 'ph:plugs-connected', 'ph-duotone': 'ph:plugs-connected-duotone',
+    'lucide': 'lucide:network', 'tabler': 'tabler:network',
+    'heroicons': 'heroicons:server-stack', 'iconoir': 'iconoir:network-right',
+  },
+  'hard-drive': {
+    'fa6-solid': 'fa6-solid:hard-drive', 'ph': 'ph:hard-drives', 'ph-duotone': 'ph:hard-drives-duotone',
+    'lucide': 'lucide:hard-drive', 'tabler': 'tabler:device-floppy',
+    'heroicons': 'heroicons:server', 'iconoir': 'iconoir:hard-drive',
+  },
+  'globe': {
+    'fa6-solid': 'fa6-solid:globe', 'ph': 'ph:globe', 'ph-duotone': 'ph:globe-duotone',
+    'lucide': 'lucide:globe', 'tabler': 'tabler:world',
+    'heroicons': 'heroicons:globe-alt', 'iconoir': 'iconoir:globe',
+  },
+  'terminal': {
+    'fa6-solid': 'fa6-solid:terminal', 'ph': 'ph:terminal', 'ph-duotone': 'ph:terminal-duotone',
+    'lucide': 'lucide:terminal', 'tabler': 'tabler:terminal',
+    'heroicons': 'heroicons:command-line', 'iconoir': 'iconoir:terminal',
+  },
+  'user': {
+    'fa6-solid': 'fa6-solid:user', 'ph': 'ph:user', 'ph-duotone': 'ph:user-duotone',
+    'lucide': 'lucide:user', 'tabler': 'tabler:user',
+    'heroicons': 'heroicons:user', 'iconoir': 'iconoir:user',
+  },
+  'sign-out': {
+    'fa6-solid': 'fa6-solid:arrow-right-from-bracket', 'ph': 'ph:sign-out', 'ph-duotone': 'ph:sign-out-duotone',
+    'lucide': 'lucide:log-out', 'tabler': 'tabler:logout',
+    'heroicons': 'heroicons:arrow-right-on-rectangle', 'iconoir': 'iconoir:log-out',
+  },
+  'info': {
+    'fa6-solid': 'fa6-solid:circle-info', 'ph': 'ph:info', 'ph-duotone': 'ph:info-duotone',
+    'lucide': 'lucide:info', 'tabler': 'tabler:info-circle',
+    'heroicons': 'heroicons:information-circle', 'iconoir': 'iconoir:info-circle',
+  },
+  'pause': {
+    'fa6-solid': 'fa6-solid:pause', 'ph': 'ph:pause', 'ph-duotone': 'ph:pause-duotone',
+    'lucide': 'lucide:pause', 'tabler': 'tabler:player-pause',
+    'heroicons': 'heroicons:pause', 'iconoir': 'iconoir:media-pause',
+  },
+  'trash': {
+    'fa6-solid': 'fa6-solid:trash', 'ph': 'ph:trash', 'ph-duotone': 'ph:trash-duotone',
+    'lucide': 'lucide:trash-2', 'tabler': 'tabler:trash',
+    'heroicons': 'heroicons:trash', 'iconoir': 'iconoir:trash',
+  },
+  'playground': {
+    'fa6-solid': 'fa6-solid:palette', 'ph': 'ph:palette', 'ph-duotone': 'ph:palette-duotone',
+    'lucide': 'lucide:palette', 'tabler': 'tabler:palette',
+    'heroicons': 'heroicons:swatch', 'iconoir': 'iconoir:palette',
+  },
+};
+
+/** All semantic icon names */
+export const allIconNames = Object.keys(iconMap);

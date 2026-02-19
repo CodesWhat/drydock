@@ -1,23 +1,19 @@
 import { createApp } from 'vue';
+import PrimeVue from 'primevue/config';
+import Aura from '@primeuix/themes/aura';
 import App from './App.vue';
-import { useEventBus } from './composables/useEventBus';
-import { registerGlobalProperties } from './filters';
-import { createVuetify } from './plugins/vuetify';
 import router from './router';
-import './registerServiceWorker';
+import { addCollection } from 'iconify-icon';
+import phIcons from '@iconify-json/ph/icons.json';
+import './theme/tokens.css';
+import './style.css';
+
+// Pre-load Phosphor icons so they render offline (default icon set)
+addCollection(phIcons);
 
 const app = createApp(App);
-
-// Register global properties (replacing filters)
-registerGlobalProperties(app);
-
-// Global event bus
-const eventBus = useEventBus();
-app.config.globalProperties.$eventBus = eventBus;
-app.provide('eventBus', eventBus);
-
-// Use plugins
-app.use(createVuetify());
+app.use(PrimeVue, {
+  theme: { preset: Aura, options: { darkModeSelector: '.dark' } },
+});
 app.use(router);
-
 app.mount('#app');
