@@ -4,14 +4,14 @@ import { createMockRequest, createMockResponse } from '../test/helpers.js';
 const {
   mockRouter,
   mockGetContainer,
-  mockGetBackups,
+  mockGetBackupsByName,
   mockGetAllBackups,
   mockGetBackup,
   mockGetState,
 } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
   mockGetContainer: vi.fn(),
-  mockGetBackups: vi.fn(),
+  mockGetBackupsByName: vi.fn(),
   mockGetAllBackups: vi.fn(),
   mockGetBackup: vi.fn(),
   mockGetState: vi.fn(),
@@ -28,7 +28,7 @@ vi.mock('../store/container', () => ({
 }));
 
 vi.mock('../store/backup', () => ({
-  getBackups: mockGetBackups,
+  getBackupsByName: mockGetBackupsByName,
   getAllBackups: mockGetAllBackups,
   getBackup: mockGetBackup,
 }));
@@ -82,16 +82,16 @@ describe('Backup Router', () => {
       expect(res.json).toHaveBeenCalledWith(allBackups);
     });
 
-    test('should return filtered backups when containerId provided', () => {
+    test('should return filtered backups when containerName provided', () => {
       const handler = getHandler('get', '/');
-      const filtered = [{ id: 'b1', containerId: 'c1' }];
-      mockGetBackups.mockReturnValue(filtered);
+      const filtered = [{ id: 'b1', containerName: 'nginx' }];
+      mockGetBackupsByName.mockReturnValue(filtered);
 
-      const req = createMockRequest({ query: { containerId: 'c1' } });
+      const req = createMockRequest({ query: { containerName: 'nginx' } });
       const res = createMockResponse();
       handler(req, res);
 
-      expect(mockGetBackups).toHaveBeenCalledWith('c1');
+      expect(mockGetBackupsByName).toHaveBeenCalledWith('nginx');
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(filtered);
     });
@@ -112,14 +112,14 @@ describe('Backup Router', () => {
     test('should return backups for existing container', () => {
       const handler = getHandler('get', '/:id/backups');
       mockGetContainer.mockReturnValue({ id: 'c1', name: 'nginx' });
-      const backups = [{ id: 'b1', containerId: 'c1', imageTag: '1.24' }];
-      mockGetBackups.mockReturnValue(backups);
+      const backups = [{ id: 'b1', containerName: 'nginx', imageTag: '1.24' }];
+      mockGetBackupsByName.mockReturnValue(backups);
 
       const req = createMockRequest({ params: { id: 'c1' } });
       const res = createMockResponse();
       handler(req, res);
 
-      expect(mockGetBackups).toHaveBeenCalledWith('c1');
+      expect(mockGetBackupsByName).toHaveBeenCalledWith('nginx');
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(backups);
     });
@@ -127,7 +127,7 @@ describe('Backup Router', () => {
     test('should return empty array when container has no backups', () => {
       const handler = getHandler('get', '/:id/backups');
       mockGetContainer.mockReturnValue({ id: 'c1', name: 'nginx' });
-      mockGetBackups.mockReturnValue([]);
+      mockGetBackupsByName.mockReturnValue([]);
 
       const req = createMockRequest({ params: { id: 'c1' } });
       const res = createMockResponse();
@@ -153,7 +153,7 @@ describe('Backup Router', () => {
     test('should return 404 when no backups found', async () => {
       const handler = getHandler('post', '/:id/rollback');
       mockGetContainer.mockReturnValue({ id: 'c1', name: 'nginx' });
-      mockGetBackups.mockReturnValue([]);
+      mockGetBackupsByName.mockReturnValue([]);
 
       const req = createMockRequest({ params: { id: 'c1' } });
       const res = createMockResponse();
@@ -182,7 +182,7 @@ describe('Backup Router', () => {
     test('should return 404 when backupId belongs to another container', async () => {
       const handler = getHandler('post', '/:id/rollback');
       mockGetContainer.mockReturnValue({ id: 'c1', name: 'nginx' });
-      mockGetBackup.mockReturnValue({ id: 'b2', containerId: 'c2' });
+      mockGetBackup.mockReturnValue({ id: 'b2', containerName: 'redis' });
 
       const req = createMockRequest({ params: { id: 'c1' }, body: { backupId: 'b2' } });
       const res = createMockResponse();
@@ -196,7 +196,7 @@ describe('Backup Router', () => {
     test('should return 404 when no docker trigger found', async () => {
       const handler = getHandler('post', '/:id/rollback');
       mockGetContainer.mockReturnValue({ id: 'c1', name: 'nginx' });
-      mockGetBackups.mockReturnValue([
+      mockGetBackupsByName.mockReturnValue([
         {
           id: 'b1',
           containerId: 'c1',
@@ -231,7 +231,7 @@ describe('Backup Router', () => {
       };
 
       mockGetContainer.mockReturnValue(container);
-      mockGetBackups.mockReturnValue([latestBackup]);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
 
       const mockCurrentContainer = {};
       const mockContainerSpec = { State: { Running: true } };
@@ -274,7 +274,7 @@ describe('Backup Router', () => {
       };
       const selectedBackup = {
         id: 'b2',
-        containerId: 'c1',
+        containerName: 'nginx',
         imageName: 'library/nginx',
         imageTag: '1.25',
       };
@@ -303,7 +303,7 @@ describe('Backup Router', () => {
       await handler(req, res);
 
       expect(mockGetBackup).toHaveBeenCalledWith('b2');
-      expect(mockGetBackups).not.toHaveBeenCalled();
+      expect(mockGetBackupsByName).not.toHaveBeenCalled();
       expect(mockTrigger.pullImage).toHaveBeenCalled();
       expect(mockTrigger.stopAndRemoveContainer).toHaveBeenCalled();
       expect(mockTrigger.recreateContainer).toHaveBeenCalled();
@@ -331,7 +331,7 @@ describe('Backup Router', () => {
       };
 
       mockGetContainer.mockReturnValue(container);
-      mockGetBackups.mockReturnValue([latestBackup]);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
 
       const mockTrigger = {
         type: 'docker',
@@ -360,7 +360,7 @@ describe('Backup Router', () => {
         image: { registry: { name: 'hub' } },
       };
       mockGetContainer.mockReturnValue(container);
-      mockGetBackups.mockReturnValue([
+      mockGetBackupsByName.mockReturnValue([
         {
           id: 'b1',
           containerId: 'c1',
@@ -397,7 +397,7 @@ describe('Backup Router', () => {
         image: { registry: { name: 'hub' } },
       };
       mockGetContainer.mockReturnValue(container);
-      mockGetBackups.mockReturnValue([
+      mockGetBackupsByName.mockReturnValue([
         {
           id: 'b1',
           containerId: 'c1',
