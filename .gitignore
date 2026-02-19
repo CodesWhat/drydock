@@ -126,5 +126,8 @@ screenshots/
 # SonarCloud scanner working directory
 .scannerwork/
 
+# Demo prototype (standalone showcase, lives on demo branch)
+demo/
+
 # Docs content (local editing, copied to drydock-website)
 docs/content/
