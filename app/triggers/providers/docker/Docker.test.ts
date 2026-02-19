@@ -1,6 +1,7 @@
 // @ts-nocheck
 import joi from 'joi';
 import log from '../../../log/index.js';
+import * as backupStore from '../../../store/backup';
 import Docker from './Docker.js';
 
 const configurationValid = {
@@ -1888,6 +1889,43 @@ describe('additional docker trigger coverage', () => {
       'my-registry/test/test:sha256:old',
       expect.any(Object),
     );
+  });
+
+  test('cleanupOldImages should skip tag pruning when tag is retained for rollback', async () => {
+    docker.configuration.prune = true;
+    vi.mocked(backupStore.getBackupsByName).mockReturnValue([
+      {
+        imageTag: '1.0.0',
+      },
+    ] as any);
+    const removeImageSpy = vi.spyOn(docker, 'removeImage').mockResolvedValue(undefined);
+    const registryProvider = {
+      getImageFullName: vi.fn(() => 'my-registry/test/test:1.0.0'),
+    };
+    const logContainer = createMockLog('info');
+
+    await docker.cleanupOldImages(
+      {},
+      registryProvider,
+      {
+        name: 'container-name',
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/test',
+          tag: { value: '1.0.0' },
+          digest: {},
+        },
+        updateKind: {
+          kind: 'tag',
+        },
+      },
+      logContainer,
+    );
+
+    expect(backupStore.getBackupsByName).toHaveBeenCalledWith('container-name');
+    expect(registryProvider.getImageFullName).not.toHaveBeenCalled();
+    expect(removeImageSpy).not.toHaveBeenCalled();
+    expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Skipping prune of 1.0.0'));
   });
 
   test('cleanupOldImages should skip digest pruning when digest repo is missing', async () => {
