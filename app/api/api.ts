@@ -10,10 +10,12 @@ import * as backupRouter from './backup.js';
 import * as containerRouter from './container.js';
 import * as containerActionsRouter from './container-actions.js';
 import * as groupRouter from './group.js';
+import * as iconsRouter from './icons.js';
 import * as logRouter from './log.js';
 import * as previewRouter from './preview.js';
 import * as registryRouter from './registry.js';
 import * as serverRouter from './server.js';
+import * as settingsRouter from './settings.js';
 import * as sseRouter from './sse.js';
 import * as storeRouter from './store.js';
 import * as triggerRouter from './trigger.js';
@@ -89,6 +91,12 @@ export function init() {
 
   // Mount audit log
   router.use('/audit', auditRouter.init());
+
+  // Mount icons proxy (CDN cache)
+  router.use('/icons', iconsRouter.init());
+
+  // Mount settings
+  router.use('/settings', settingsRouter.init());
 
   // All other API routes => 404
   router.get('/{*path}', (req, res) => res.sendStatus(404));
