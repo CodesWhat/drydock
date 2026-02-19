@@ -82,7 +82,7 @@ describe('Backup Store', () => {
     expect(result.id).toBe('custom-id');
   });
 
-  test('getBackups should return backups for a specific container sorted by timestamp desc', () => {
+  test('getBackupsByName should return backups for a specific container sorted by timestamp desc', () => {
     backup.insertBackup({
       containerId: 'c1',
       containerName: 'nginx',
@@ -108,14 +108,14 @@ describe('Backup Store', () => {
       timestamp: '2024-03-01T00:00:00.000Z',
     });
 
-    const result = backup.getBackups('c1');
+    const result = backup.getBackupsByName('nginx');
     expect(result).toHaveLength(2);
     expect(result[0].imageTag).toBe('1.23');
     expect(result[1].imageTag).toBe('1.22');
   });
 
-  test('getBackups should return empty array for unknown container', () => {
-    const result = backup.getBackups('unknown');
+  test('getBackupsByName should return empty array for unknown container', () => {
+    const result = backup.getBackupsByName('unknown');
     expect(result).toEqual([]);
   });
 
@@ -219,10 +219,10 @@ describe('Backup Store', () => {
       timestamp: '2024-09-01T00:00:00.000Z',
     });
 
-    const pruned = backup.pruneOldBackups('c1', 2);
+    const pruned = backup.pruneOldBackups('nginx', 2);
     expect(pruned).toBe(2);
 
-    const remaining = backup.getBackups('c1');
+    const remaining = backup.getBackupsByName('nginx');
     expect(remaining).toHaveLength(2);
     expect(remaining[0].imageTag).toBe('1.23');
     expect(remaining[1].imageTag).toBe('1.22');
@@ -246,10 +246,10 @@ describe('Backup Store', () => {
       timestamp: '2024-01-01T00:00:00.000Z',
     });
 
-    backup.pruneOldBackups('c1', 0);
+    backup.pruneOldBackups('nginx', 0);
 
-    expect(backup.getBackups('c1')).toHaveLength(0);
-    expect(backup.getBackups('c2')).toHaveLength(1);
+    expect(backup.getBackupsByName('nginx')).toHaveLength(0);
+    expect(backup.getBackupsByName('redis')).toHaveLength(1);
   });
 
   test('pruneOldBackups should return 0 when collection not initialized', async () => {
@@ -259,10 +259,10 @@ describe('Backup Store', () => {
     expect(count).toBe(0);
   });
 
-  test('getBackups should return empty when collection not initialized', async () => {
+  test('getBackupsByName should return empty when collection not initialized', async () => {
     vi.resetModules();
     const freshBackup = await import('./backup.js');
-    const result = freshBackup.getBackups('c1');
+    const result = freshBackup.getBackupsByName('nginx');
     expect(result).toEqual([]);
   });
 
