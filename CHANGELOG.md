@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.4] — 2026-02-19
+
+### Fixed
+
+- **Backup lookup broken after container update** — Backups were keyed by Docker container ID, which changes on every recreate (e.g. after an update). Switched all backup queries to use the stable container name, so backups are always found regardless of container ID changes. ([#79](https://github.com/CodesWhat/drydock/issues/79))
+- **Image prune deletes backup image** — `cleanupOldImages` removed the previous image tag after updates, making rollback impossible. Now checks retained backup tags before pruning and skips images that are needed for rollback.
+- **Auto-rollback monitor uses stale container ID** — After an update recreates the container, `maybeStartAutoRollbackMonitor` passed the old (now-deleted) container ID to the health monitor. Now looks up the new container by name and passes the correct ID.
+- **Backup stores internal registry name instead of Docker-pullable name** — Backup `imageName` was stored as the internal registry-prefixed name (e.g. `hub.public/library/nginx`) which is not a valid Docker image reference. Rollback would fail with DNS lookup errors. Now stores the Docker-pullable base name (e.g. `nginx`) using the registry's `getImageFullName` method.
+- **Rollback API docs incorrect endpoint** — Fixed documentation showing `/api/backup/:id/rollback` instead of the correct `/api/containers/:id/rollback`.
+
 ## [1.3.3] — 2026-02-16
 
 ### Fixed
@@ -399,7 +409,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.3.3...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.3.4...HEAD
+[1.3.4]: https://github.com/CodesWhat/drydock/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/CodesWhat/drydock/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/CodesWhat/drydock/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/CodesWhat/drydock/compare/v1.3.0...v1.3.1
