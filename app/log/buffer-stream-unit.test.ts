@@ -3,6 +3,7 @@ import { addEntry } from './buffer.js';
 
 vi.mock('../configuration', () => ({
   getLogLevel: vi.fn(() => 'info'),
+  getLogFormat: vi.fn(() => 'json'),
 }));
 
 vi.mock('./buffer.js', () => ({

@@ -2,7 +2,8 @@
 
 import { Writable } from 'node:stream';
 import pino from 'pino';
-import { getLogLevel } from '../configuration/index.js';
+import pinoPretty from 'pino-pretty';
+import { getLogFormat, getLogLevel } from '../configuration/index.js';
 import { addEntry } from './buffer.js';
 
 export function parseLogChunk(chunk: Buffer | string) {
@@ -26,9 +27,19 @@ const bufferStream = new Writable({
   },
 });
 
+function createMainLogStream() {
+  if (getLogFormat() === 'json') {
+    return process.stdout;
+  }
+  return pinoPretty({
+    colorize: Boolean(process.stdout.isTTY),
+    sync: true,
+  });
+}
+
 const logger = pino(
   { name: 'drydock', level: getLogLevel() },
-  pino.multistream([{ stream: process.stdout }, { stream: bufferStream }]),
+  pino.multistream([{ stream: createMainLogStream() }, { stream: bufferStream }]),
 );
 
 export default logger;
