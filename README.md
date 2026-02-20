@@ -561,14 +561,17 @@ Here's what's coming.
 | **v1.3.4** ✅ | Rollback Bugfixes | Fix backup lookup by container name, retain backup images during prune, fix auto-rollback monitor, store Docker-pullable image names for rollback |
 | **v1.3.5** ✅ | Entrypoint Fix | Fix container immediate exit when Docker socket GID has no named group, move log pretty-printing from shell pipe to app logger |
 | **v1.4.0** | UI Modernization | PrimeVue + Tailwind migration, Composition API, shared data components, design system tokens, dark/light theme, settings backend, icon proxy cache |
-| **v1.5.0** | Observability | Resource monitoring, registry webhooks, notification templates, release notes |
-| **v1.6.0** | Fleet Management | YAML config, live UI config panels, local registry provider, volume browser, parallel updates, dependency ordering, container groups, SQLite store migration |
-| **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers |
+| **v1.5.0** | Observability | Real-time log viewer, container resource monitoring, registry webhooks |
+| **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers |
+| **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring |
+| **v1.8.0** | Fleet Management | YAML config, live UI config panels, volume browser, parallel updates, SQLite store migration, i18n framework |
+| **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers, basic GitOps |
 | **v2.1.0** | Deployment Patterns | Health check gates, canary deployments |
-| **v2.2.0** | Container Operations | Web terminal, file browser, image building |
+| **v2.2.0** | Container Operations | Web terminal, file browser, image building, basic Podman support |
 | **v2.3.0** | Developer Experience | API keys, passkey auth, TOTP 2FA, OpenAPI docs, TypeScript actions, CLI |
 | **v2.4.0** | Data Safety | Scheduled backups (S3, SFTP), compose templates, secret management |
-| **v3.0.0** | GitOps & Beyond | Git-based stack deployment, network topology, GPU monitoring, i18n |
+| **v3.0.0** | Advanced Platform | Network topology, GPU monitoring, full i18n translations |
+| **v3.1.0** | Enterprise Access | RBAC, LDAP/AD, environment-scoped permissions, audit logging, Wolfi hardened image |
 
 <h2 align="center" id="documentation">Documentation</h2>
 
