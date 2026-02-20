@@ -9,8 +9,8 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.3.5-blue" alt="Version"></a>
-  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-10.1K_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.3.6-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-10.6K_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
   <a href="https://quay.io/repository/codeswhat/drydock"><img src="https://img.shields.io/badge/Quay.io-image-ee0000?logo=redhat&logoColor=white" alt="Quay.io"></a>
   <br>
@@ -41,9 +41,9 @@
   <a href="https://snyk.io/test/github/CodesWhat/drydock?targetFile=app/package.json"><img src="https://snyk.io/test/github/CodesWhat/drydock/badge.svg?targetFile=app/package.json" alt="Snyk"></a>
 </p>
 
-<h2 align="center">Contents</h2>
+<hr>
 
----
+<h2 align="center">Contents</h2>
 
 - [Documentation](https://drydock.codeswhat.com/docs)
 - [Quick Start](#quick-start)
@@ -60,9 +60,9 @@
 - [Star History](#star-history)
 - [Built With](#built-with)
 
-<h2 align="center" id="quick-start">Quick Start</h2>
+<hr>
 
----
+<h2 align="center" id="quick-start">Quick Start</h2>
 
 ```bash
 docker run -d \
@@ -140,7 +140,7 @@ Accepted values: `false` (default — no proxy), `true` (trust all), a number (h
 
 </details>
 
----
+<hr>
 
 <h2 align="center" id="screenshots">Screenshots</h2>
 
@@ -175,9 +175,9 @@ Accepted values: `false` (default — no proxy), `true` (trust all), a number (h
 </tr>
 </table>
 
-<h2 align="center" id="features">Features</h2>
+<hr>
 
----
+<h2 align="center" id="features">Features</h2>
 
 <table>
 <tr>
@@ -266,6 +266,8 @@ Available on GHCR, Docker Hub, and Quay.io for flexible deployment
 </tr>
 </table>
 
+<hr>
+
 <h2 align="center" id="update-guard">Update Guard</h2>
 
 <details>
@@ -308,9 +310,9 @@ See full configuration in [`docs/configuration/security/README.md`](docs/configu
 
 </details>
 
-<h2 align="center" id="supported-registries">Supported Registries</h2>
+<hr>
 
----
+<h2 align="center" id="supported-registries">Supported Registries</h2>
 
 <details>
 <summary><strong>Public registries</strong> (auto-registered, no config needed)</summary>
@@ -354,9 +356,9 @@ See the [documentation](https://drydock.codeswhat.com/docs/configuration/registr
 
 </details>
 
-<h2 align="center" id="supported-triggers">Supported Triggers</h2>
+<hr>
 
----
+<h2 align="center" id="supported-triggers">Supported Triggers</h2>
 
 <details>
 <summary><strong>Notification triggers</strong> (20 providers)</summary>
@@ -390,9 +392,9 @@ All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) 
 
 </details>
 
-<h2 align="center" id="authentication">Authentication</h2>
+<hr>
 
----
+<h2 align="center" id="authentication">Authentication</h2>
 
 <details>
 <summary><strong>Supported auth methods</strong></summary>
@@ -405,9 +407,9 @@ All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) 
 
 </details>
 
-<h2 align="center" id="migrating-from-wud">Migrating from WUD</h2>
+<hr>
 
----
+<h2 align="center" id="migrating-from-wud">Migrating from WUD</h2>
 
 <details>
 <summary><strong>Drop-in replacement for What's Up Docker (WUD)</strong></summary>
@@ -433,6 +435,8 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 **In short:** swap the image, restart the container, done. Your watchers, triggers, registries, and authentication config all carry over with zero changes.
 
 </details>
+
+<hr>
 
 <h2 align="center" id="feature-comparison">Feature Comparison</h2>
 
@@ -548,9 +552,9 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 
 </details>
 
-<h2 align="center" id="roadmap">Roadmap</h2>
+<hr>
 
----
+<h2 align="center" id="roadmap">Roadmap</h2>
 
 Here's what's coming.
 
@@ -560,6 +564,7 @@ Here's what's coming.
 | **v1.3.3** ✅ | Log Viewer & Providers | Auto-fetch polling, scroll lock, auto-scroll for log viewers, 7 new registries, 4 new triggers, self-update fix, stale digest fix, rate-limit warning fixes, CVE patches, security hardening |
 | **v1.3.4** ✅ | Rollback Bugfixes | Fix backup lookup by container name, retain backup images during prune, fix auto-rollback monitor, store Docker-pullable image names for rollback |
 | **v1.3.5** ✅ | Entrypoint Fix | Fix container immediate exit when Docker socket GID has no named group, move log pretty-printing from shell pipe to app logger |
+| **v1.3.6** ✅ | Registry Auth Fix | Fix GHCR/LSCR anonymous auth regression — implement proper token exchange for public repos |
 | **v1.4.0** | UI Modernization | PrimeVue + Tailwind migration, Composition API, shared data components, design system tokens, dark/light theme, settings backend, icon proxy cache |
 | **v1.5.0** | Observability | Real-time log viewer, container resource monitoring, registry webhooks |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers |
@@ -573,9 +578,9 @@ Here's what's coming.
 | **v3.0.0** | Advanced Platform | Network topology, GPU monitoring, full i18n translations |
 | **v3.1.0** | Enterprise Access | RBAC, LDAP/AD, environment-scoped permissions, audit logging, Wolfi hardened image |
 
-<h2 align="center" id="documentation">Documentation</h2>
+<hr>
 
----
+<h2 align="center" id="documentation">Documentation</h2>
 
 | Resource | Link |
 | --- | --- |

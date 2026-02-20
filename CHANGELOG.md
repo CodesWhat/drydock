@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.6] — 2026-02-20
+
+### Fixed
+
+- **GHCR anonymous auth returns 401 on public repos** — The v1.3.3 fix for anonymous bearer tokens (`Og==`) removed the auth header entirely, but GHCR requires a token exchange even for unauthenticated pulls. Replaced direct bearer auth with proper token exchange via `https://ghcr.io/token`, matching the Hub/Quay pattern. Authenticated requests add Basic credentials to the token request; anonymous requests omit them. LSCR inherits the fix automatically. ([#85](https://github.com/CodesWhat/drydock/issues/85), [#86](https://github.com/CodesWhat/drydock/issues/86))
+
 ## [1.3.5] — 2026-02-19
 
 ### Fixed
@@ -416,7 +422,9 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.3.4...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.3.6...HEAD
+[1.3.6]: https://github.com/CodesWhat/drydock/compare/v1.3.5...v1.3.6
+[1.3.5]: https://github.com/CodesWhat/drydock/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/CodesWhat/drydock/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/CodesWhat/drydock/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/CodesWhat/drydock/compare/v1.3.1...v1.3.2

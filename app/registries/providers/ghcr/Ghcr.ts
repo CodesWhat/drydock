@@ -28,11 +28,18 @@ class Ghcr extends BaseRegistry {
   }
 
   async authenticate(image, requestOptions) {
-    if (!this.configuration.token) {
-      return requestOptions;
-    }
-    const token = Buffer.from(this.configuration.token, 'utf-8').toString('base64');
-    return this.authenticateBearer(requestOptions, token);
+    const credentials =
+      this.configuration.username && this.configuration.token
+        ? Ghcr.base64Encode(this.configuration.username, this.configuration.token)
+        : undefined;
+    const scope = encodeURIComponent(`repository:${image.name}:pull`);
+    const authUrl = `https://ghcr.io/token?service=ghcr.io&scope=${scope}`;
+    return this.authenticateBearerFromAuthUrl(
+      requestOptions,
+      authUrl,
+      credentials,
+      (response) => response.data.token || response.data.access_token,
+    );
   }
 }
 
