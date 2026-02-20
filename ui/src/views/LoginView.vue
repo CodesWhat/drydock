@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import whaleLogo from '../assets/whale-logo.png';
 import { getOidcRedirection, getStrategies, loginBasic } from '../services/auth';
 import { useTheme } from '../theme/useTheme';
 
@@ -120,7 +121,7 @@ function oidcIcon(name: string): string {
       <div class="p-8">
         <!-- Logo -->
         <div class="flex justify-center mb-5">
-          <img :src="whaleLogo" alt="Drydock" class="h-12 w-auto login-logo" :style="isDark ? 'filter: invert(1)' : ''" />
+          <img :src="whaleLogo" alt="Drydock" class="h-20 w-auto login-logo" :style="isDark ? 'filter: invert(1)' : ''" />
         </div>
 
         <!-- Heading -->

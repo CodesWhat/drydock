@@ -3,6 +3,7 @@ import type InputText from 'primevue/inputtext';
 import type Menu from 'primevue/menu';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import whaleLogo from '@/assets/whale-logo.png';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import { useIcons } from '@/composables/useIcons';
 import { getUser, logout } from '@/services/auth';
