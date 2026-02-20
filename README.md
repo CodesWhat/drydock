@@ -9,7 +9,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.3.6-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.3.7-blue" alt="Version"></a>
   <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-10.6K_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
   <a href="https://quay.io/repository/codeswhat/drydock"><img src="https://img.shields.io/badge/Quay.io-image-ee0000?logo=redhat&logoColor=white" alt="Quay.io"></a>
@@ -345,14 +345,15 @@ See full configuration in [`docs/configuration/security/README.md`](docs/configu
 | Azure ACR | `acr` | `DD_REGISTRY_ACR_{name}_CLIENTID`, `_CLIENTSECRET` |
 | GitLab | `gitlab` | `DD_REGISTRY_GITLAB_{name}_TOKEN` |
 | GitHub (GHCR) | `ghcr` | `DD_REGISTRY_GHCR_{name}_TOKEN` |
-| Gitea / Forgejo | `gitea` | `DD_REGISTRY_GITEA_{name}_LOGIN`, `_PASSWORD` |
-| Harbor | `harbor` | `DD_REGISTRY_HARBOR_{name}_URL`, `_LOGIN`, `_PASSWORD` |
-| JFrog Artifactory | `artifactory` | `DD_REGISTRY_ARTIFACTORY_{name}_URL`, `_LOGIN`, `_PASSWORD` |
-| Sonatype Nexus | `nexus` | `DD_REGISTRY_NEXUS_{name}_URL`, `_LOGIN`, `_PASSWORD` |
+| Gitea / Forgejo | `gitea` | `DD_REGISTRY_GITEA_{name}_URL`, `_LOGIN`, `_PASSWORD` + optional `_CAFILE`, `_INSECURE` |
+| Harbor | `harbor` | `DD_REGISTRY_HARBOR_{name}_URL`, `_LOGIN`, `_PASSWORD` + optional `_CAFILE`, `_INSECURE` |
+| JFrog Artifactory | `artifactory` | `DD_REGISTRY_ARTIFACTORY_{name}_URL`, `_LOGIN`, `_PASSWORD` + optional `_CAFILE`, `_INSECURE` |
+| Sonatype Nexus | `nexus` | `DD_REGISTRY_NEXUS_{name}_URL`, `_LOGIN`, `_PASSWORD` + optional `_CAFILE`, `_INSECURE` |
 | TrueForge | `trueforge` | `DD_REGISTRY_TRUEFORGE_{name}_NAMESPACE`, `_ACCOUNT`, `_TOKEN` |
-| Custom (any v2) | `custom` | `DD_REGISTRY_CUSTOM_{name}_URL` + optional auth |
+| Custom (any v2) | `custom` | `DD_REGISTRY_CUSTOM_{name}_URL` + optional auth, `_CAFILE`, `_INSECURE` |
 
 See the [documentation](https://drydock.codeswhat.com/docs/configuration/registries) for full configuration.
+For self-hosted registries, prefer `CAFILE` to trust internal CAs; use `INSECURE=true` only as a fallback on trusted internal networks.
 
 </details>
 
@@ -565,6 +566,7 @@ Here's what's coming.
 | **v1.3.4** ✅ | Rollback Bugfixes | Fix backup lookup by container name, retain backup images during prune, fix auto-rollback monitor, store Docker-pullable image names for rollback |
 | **v1.3.5** ✅ | Entrypoint Fix | Fix container immediate exit when Docker socket GID has no named group, move log pretty-printing from shell pipe to app logger |
 | **v1.3.6** ✅ | Registry Auth Fix | Fix GHCR/LSCR anonymous auth regression — implement proper token exchange for public repos |
+| **v1.3.7** ✅ | Self-Signed TLS | Add `CAFILE` and `INSECURE` TLS options for self-hosted registries (Custom, Gitea, Forgejo, Harbor, Artifactory, Nexus) |
 | **v1.4.0** | UI Modernization | PrimeVue + Tailwind migration, Composition API, shared data components, design system tokens, dark/light theme, settings backend, icon proxy cache |
 | **v1.5.0** | Observability | Real-time log viewer, container resource monitoring, registry webhooks |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers |

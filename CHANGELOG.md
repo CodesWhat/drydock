@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.7] — 2026-02-20
+
+### Fixed
+
+- **Self-signed/private CA support for self-hosted registries** — Added optional `CAFILE` and `INSECURE` TLS options for self-hosted registry providers (Custom, Gitea, Forgejo, Harbor, Artifactory, Nexus). This allows private registries with internal or self-signed certificates to pass TLS validation via a mounted CA bundle, or to explicitly disable verification for trusted internal networks. ([#88](https://github.com/CodesWhat/drydock/issues/88))
+
+### Changed
+
+- **Gitea refactored to shared base class** — Gitea now extends `SelfHostedBasic` directly instead of duplicating its logic from `Custom`, reducing code and ensuring consistent behavior with Harbor, Nexus, and Artifactory.
+
 ## [1.3.6] — 2026-02-20
 
 ### Fixed
@@ -422,7 +432,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.3.6...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.3.7...HEAD
+[1.3.7]: https://github.com/CodesWhat/drydock/compare/v1.3.6...v1.3.7
 [1.3.6]: https://github.com/CodesWhat/drydock/compare/v1.3.5...v1.3.6
 [1.3.5]: https://github.com/CodesWhat/drydock/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/CodesWhat/drydock/compare/v1.3.3...v1.3.4
