@@ -114,6 +114,18 @@ test('should validate configuration with empty auth', async () => {
   expect(() => gitea.validateConfiguration(config)).not.toThrow();
 });
 
+test('should validate configuration with cafile and insecure TLS options', async () => {
+  const config = {
+    url: 'https://gitea.example.com',
+    login: 'user',
+    password: TEST_PASS,
+    cafile: '/certs/private-ca.pem',
+    insecure: true,
+  };
+
+  expect(() => gitea.validateConfiguration(config)).not.toThrow();
+});
+
 test('match should handle URLs with different protocols', async () => {
   const giteaWithHttp = new Gitea();
   giteaWithHttp.configuration = { url: 'http://gitea.acme.com' };

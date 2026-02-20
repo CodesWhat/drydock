@@ -33,6 +33,13 @@ services:
       # --- GHCR registry (authenticated) ---
       - DD_REGISTRY_GHCR_PRIVATE_USERNAME=myghuser
       - DD_REGISTRY_GHCR_PRIVATE_TOKEN=ghp_fakeGitHubTokenForTesting123
+      # --- Gitea registry (self-hosted with custom CA) ---
+      - DD_REGISTRY_GITEA_PRIVATE_URL=https://gitea.internal.example
+      - DD_REGISTRY_GITEA_PRIVATE_LOGIN=gitea-bot
+      - DD_REGISTRY_GITEA_PRIVATE_PASSWORD=replace-me
+      - DD_REGISTRY_GITEA_PRIVATE_CAFILE=/certs/internal-ca.pem
+      # Optional fallback when CA cannot be mounted (prefer CAFILE)
+      # - DD_REGISTRY_GITEA_PRIVATE_INSECURE=true
       # Note: no private Hub registry -- test containers are public images
       # --- Agent: staging server ---
       - DD_AGENT_STAGING_HOST=192.168.1.50
@@ -87,6 +94,16 @@ services:
       - dd.rollback.auto=true
       - dd.rollback.window=120000
       - dd.rollback.interval=5000
+
+  # LSCR/GHCR public image (tests anonymous token exchange — #85)
+  lscr-nginx:
+    image: ghcr.io/linuxserver/nginx:1.26.2
+    pull_policy: never
+    container_name: lscr-nginx
+    labels:
+      - dd.watch=true
+      - dd.display.name=LSCR Nginx (GHCR)
+      - dd.tag.include=^\d+\.\d+\.\d+$$
 
   # Ungrouped container
   postgres-db:

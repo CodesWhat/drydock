@@ -17,6 +17,8 @@ class SelfHostedBasic extends BaseRegistry {
         login: this.joi.string(),
         password: this.joi.string(),
         auth: authSchema,
+        cafile: this.joi.string(),
+        insecure: this.joi.boolean(),
       })
       .and('login', 'password')
       .without('login', 'auth')
