@@ -4,10 +4,11 @@ import { useRoute, useRouter } from 'vue-router';
 import whaleLogo from '../assets/whale-logo.png';
 import { getOidcRedirection, getStrategies, loginBasic } from '../services/auth';
 import { useTheme } from '../theme/useTheme';
+import ThemeToggle from '../components/ThemeToggle.vue';
 
 const router = useRouter();
 const route = useRoute();
-const { isDark, themeVariant, toggleVariant, transitionTheme } = useTheme();
+const { isDark } = useTheme();
 
 interface Strategy {
   type: string;
@@ -97,14 +98,7 @@ function oidcIcon(name: string): string {
 <template>
   <div class="min-h-screen flex items-center justify-center px-4 py-8 dd-bg">
     <!-- Theme toggle — top-right corner -->
-    <button
-      class="fixed top-4 right-4 flex items-center justify-center w-9 h-9 dd-rounded transition-colors dd-text-secondary hover:dd-bg-elevated"
-      :class="themeVariant === 'light' ? 'hover:dd-text-caution' : themeVariant === 'dark' ? 'hover:dd-text-info' : 'hover:dd-text'"
-      @click="transitionTheme(() => toggleVariant(), $event)"
-    >
-      <template v-if="themeVariant === 'system'"><i class="fa-solid fa-display text-[14px]" /></template>
-      <AppIcon v-else :name="themeVariant === 'dark' ? 'moon' : 'sun'" :size="14" />
-    </button>
+    <ThemeToggle class="fixed top-4 right-4 w-9 h-9" />
 
     <!-- Loading state -->
     <div v-if="loading" class="dd-text-secondary">

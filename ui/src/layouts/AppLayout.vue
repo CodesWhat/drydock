@@ -9,11 +9,12 @@ import { useIcons } from '@/composables/useIcons';
 import { getUser, logout } from '@/services/auth';
 import { getAllContainers } from '@/services/container';
 import { useTheme } from '@/theme/useTheme';
+import ThemeToggle from '@/components/ThemeToggle.vue';
 
 const router = useRouter();
 const route = useRoute();
 const { icon } = useIcons();
-const { isDark, themeVariant, toggleVariant, transitionTheme } = useTheme();
+const { isDark } = useTheme();
 const { isMobile, windowNarrow } = useBreakpoints();
 
 const sidebarCollapsed = ref(false);
@@ -346,12 +347,7 @@ onUnmounted(() => {
 
         <!-- Right: theme, notifications, avatar -->
         <div class="flex items-center gap-2 justify-end">
-          <button class="flex items-center justify-center w-8 h-8 dd-rounded transition-colors dd-text-secondary hover:dd-bg-elevated"
-                  :class="themeVariant === 'light' ? 'hover:dd-text-caution' : themeVariant === 'dark' ? 'hover:dd-text-info' : 'hover:dd-text'"
-                  @click="transitionTheme(() => toggleVariant(), $event)">
-            <template v-if="themeVariant === 'system'"><i class="fa-solid fa-display text-[14px]" /></template>
-            <AppIcon v-else :name="themeVariant === 'dark' ? 'moon' : 'sun'" :size="14" />
-          </button>
+          <ThemeToggle class="w-8 h-8" />
 
           <button class="relative flex items-center justify-center w-8 h-8 dd-rounded transition-colors dd-text-secondary hover:dd-bg-elevated hover:dd-text">
             <AppIcon name="notifications" :size="14" />

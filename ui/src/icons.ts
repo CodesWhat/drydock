@@ -162,6 +162,15 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     heroicons: 'heroicons:sun',
     iconoir: 'iconoir:sun-light',
   },
+  monitor: {
+    'fa6-solid': 'fa6-solid:display',
+    ph: 'ph:monitor',
+    'ph-duotone': 'ph:monitor-duotone',
+    lucide: 'lucide:monitor',
+    tabler: 'tabler:device-desktop',
+    heroicons: 'heroicons:computer-desktop',
+    iconoir: 'iconoir:pc-check',
+  },
   uptime: {
     'fa6-solid': 'fa6-solid:heart-pulse',
     ph: 'ph:heartbeat',
