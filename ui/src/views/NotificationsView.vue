@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { getAllTriggers } from '../services/trigger';
 
 const notificationsViewMode = ref<'table' | 'cards' | 'list'>('table');
@@ -52,6 +52,22 @@ function triggerNameById(id: string) {
   return triggerMap.value[id] ?? id;
 }
 
+const searchQuery = ref('');
+const showFilters = ref(false);
+const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
+
+const filteredNotifications = computed(() => {
+  if (!searchQuery.value) return notificationsData.value;
+  const q = searchQuery.value.toLowerCase();
+  return notificationsData.value.filter((item) => item.name.toLowerCase().includes(q));
+});
+
+const tableColumns = [
+  { key: 'enabled', label: 'On', align: 'text-center', sortable: false, width: '48px' },
+  { key: 'name', label: 'Rule', sortable: false, width: '99%' },
+  { key: 'triggers', label: 'Triggers', align: 'text-right', sortable: false },
+];
+
 function toggleNotification(id: string) {
   const notif = notificationsData.value.find((n) => n.id === id);
   if (notif) notif.enabled = !notif.enabled;
@@ -92,88 +108,66 @@ onMounted(async () => {
 
 <template>
   <AppLayout>
-    <div class="p-6">
       <!-- Filter bar -->
-      <div class="shrink-0 mb-4">
-        <div class="px-3 py-2 dd-rounded"
-             :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-          <div class="flex items-center gap-2.5">
-            <div class="flex items-center gap-2 ml-auto">
-              <span class="text-[10px] font-semibold tabular-nums shrink-0 px-2 py-1 dd-rounded dd-text-muted dd-bg-card">
-                {{ notificationsData.length }} rules
-              </span>
-              <div class="flex items-center dd-rounded overflow-hidden border"
-                   :style="{ borderColor: 'var(--dd-border-strong)' }">
-                <button v-for="vm in ([
-                  { id: 'table', icon: 'fa-solid fa-table-list' },
-                  { id: 'cards', icon: 'fa-solid fa-grip' },
-                  { id: 'list', icon: 'fa-solid fa-list' },
-                ] as const)" :key="vm.id"
-                        class="w-7 h-7 flex items-center justify-center text-[11px] transition-colors"
-                        :class="notificationsViewMode === vm.id ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
-                        :style="vm.id !== 'table' ? { borderLeft: '1px solid var(--dd-border-strong)' } : {}"
-                        @click="notificationsViewMode = vm.id">
-                  <i :class="vm.icon" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <DataFilterBar
+        v-model="notificationsViewMode"
+        v-model:showFilters="showFilters"
+        :filtered-count="filteredNotifications.length"
+        :total-count="notificationsData.length"
+        count-label="rules"
+        :active-filter-count="activeFilterCount">
+        <template #filters>
+          <input v-model="searchQuery"
+                 type="text"
+                 placeholder="Filter by name..."
+                 class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
+          <button v-if="searchQuery"
+                  class="text-[10px] dd-text-muted hover:dd-text transition-colors"
+                  @click="searchQuery = ''">
+            Clear
+          </button>
+        </template>
+      </DataFilterBar>
 
       <!-- Table view -->
-      <div v-if="notificationsViewMode === 'table'"
-           class="dd-rounded overflow-hidden"
-           :style="{ border: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-card)' }">
-        <table class="w-full text-xs">
-          <thead>
-            <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              <th class="text-center px-3 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted whitespace-nowrap w-12">On</th>
-              <th class="text-left px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted" style="width: 99%;">Rule</th>
-              <th class="text-right px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted whitespace-nowrap">Triggers</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(notif, i) in notificationsData" :key="notif.id"
-                class="transition-colors hover:dd-bg-elevated"
-                :style="{
-                  backgroundColor: i % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)',
-                  borderBottom: i < notificationsData.length - 1 ? '1px solid var(--dd-border-strong)' : 'none',
-                }">
-              <td class="px-3 py-3 text-center">
-                <div class="w-8 h-4 rounded-full relative cursor-pointer shrink-0 transition-colors mx-auto"
-                     :style="{ backgroundColor: notif.enabled ? 'var(--dd-success)' : 'var(--dd-border-strong)' }"
-                     @click="toggleNotification(notif.id)">
-                  <div class="absolute top-0.5 w-3 h-3 rounded-full shadow-sm transition-transform"
-                       :style="{ backgroundColor: 'var(--dd-text)', left: notif.enabled ? '17px' : '2px' }" />
-                </div>
-              </td>
-              <td class="px-5 py-3">
-                <div class="font-medium dd-text">{{ notif.name }}</div>
-                <div class="text-[10px] mt-0.5 dd-text-muted">{{ notif.description }}</div>
-              </td>
-              <td class="px-5 py-3 text-right">
-                <div class="flex flex-wrap gap-1 justify-end">
-                  <span v-for="tId in notif.triggers" :key="tId"
-                        class="badge text-[9px] font-semibold"
-                        :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-text-secondary)' }">
-                    {{ triggerNameById(tId) }}
-                  </span>
-                  <span v-if="notif.triggers.length === 0" class="text-[10px] italic dd-text-muted">None</span>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        v-if="notificationsViewMode === 'table'"
+        :columns="tableColumns"
+        :rows="filteredNotifications"
+        row-key="id">
+        <template #cell-enabled="{ row }">
+          <div class="w-8 h-4 rounded-full relative cursor-pointer shrink-0 transition-colors mx-auto"
+               :style="{ backgroundColor: row.enabled ? 'var(--dd-success)' : 'var(--dd-border-strong)' }"
+               @click="toggleNotification(row.id)">
+            <div class="absolute top-0.5 w-3 h-3 rounded-full shadow-sm transition-transform"
+                 :style="{ backgroundColor: 'var(--dd-text)', left: row.enabled ? '17px' : '2px' }" />
+          </div>
+        </template>
+        <template #cell-name="{ row }">
+          <div class="font-medium dd-text">{{ row.name }}</div>
+          <div class="text-[10px] mt-0.5 dd-text-muted">{{ row.description }}</div>
+        </template>
+        <template #cell-triggers="{ row }">
+          <div class="flex flex-wrap gap-1 justify-end">
+            <span v-for="tId in row.triggers" :key="tId"
+                  class="badge text-[9px] font-semibold"
+                  :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-text-secondary)' }">
+              {{ triggerNameById(tId) }}
+            </span>
+            <span v-if="row.triggers.length === 0" class="text-[10px] italic dd-text-muted">None</span>
+          </div>
+        </template>
+        <template #empty>
+          <EmptyState icon="filter" message="No rules match your filters" :show-clear="activeFilterCount > 0" @clear="searchQuery = ''" />
+        </template>
+      </DataTable>
 
       <!-- Card view -->
-      <div v-if="notificationsViewMode === 'cards'"
-           class="grid gap-4"
-           style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
-        <div v-for="notif in notificationsData" :key="notif.id"
-             class="dd-rounded overflow-hidden flex flex-col"
-             :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+      <DataCardGrid
+        v-if="notificationsViewMode === 'cards'"
+        :items="filteredNotifications"
+        item-key="id">
+        <template #card="{ item: notif }">
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
             <div class="min-w-0 flex-1">
               <div class="text-[15px] font-semibold truncate dd-text">{{ notif.name }}</div>
@@ -195,36 +189,42 @@ onMounted(async () => {
             </span>
             <span v-if="notif.triggers.length === 0" class="text-[10px] italic dd-text-muted">No triggers</span>
           </div>
-        </div>
-      </div>
+        </template>
+      </DataCardGrid>
 
       <!-- List view -->
-      <div v-if="notificationsViewMode === 'list'" class="space-y-3">
-        <div v-for="notif in notificationsData" :key="notif.id"
-             class="dd-rounded overflow-hidden transition-all"
-             :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-          <div class="flex items-center gap-3 px-5 py-3.5">
-            <div class="w-8 h-4 rounded-full relative cursor-pointer shrink-0 transition-colors"
-                 :style="{ backgroundColor: notif.enabled ? 'var(--dd-success)' : 'var(--dd-border-strong)' }"
-                 @click="toggleNotification(notif.id)">
-              <div class="absolute top-0.5 w-3 h-3 rounded-full shadow-sm transition-transform"
-                   :style="{ backgroundColor: 'var(--dd-text)', left: notif.enabled ? '17px' : '2px' }" />
-            </div>
-            <div class="flex-1 min-w-0">
-              <div class="text-sm font-semibold dd-text">{{ notif.name }}</div>
-              <div class="text-[11px] mt-0.5 dd-text-muted">{{ notif.description }}</div>
-            </div>
-            <div class="flex flex-wrap gap-1.5 shrink-0 max-w-[260px] justify-end">
-              <span v-for="tId in notif.triggers" :key="tId"
-                    class="badge text-[9px] font-semibold"
-                    :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-text-secondary)' }">
-                {{ triggerNameById(tId) }}
-              </span>
-              <span v-if="notif.triggers.length === 0" class="text-[10px] italic dd-text-muted">No triggers</span>
-            </div>
+      <DataListAccordion
+        v-if="notificationsViewMode === 'list'"
+        :items="filteredNotifications"
+        item-key="id">
+        <template #header="{ item: notif }">
+          <div class="w-8 h-4 rounded-full relative cursor-pointer shrink-0 transition-colors"
+               :style="{ backgroundColor: notif.enabled ? 'var(--dd-success)' : 'var(--dd-border-strong)' }"
+               @click.stop="toggleNotification(notif.id)">
+            <div class="absolute top-0.5 w-3 h-3 rounded-full shadow-sm transition-transform"
+                 :style="{ backgroundColor: 'var(--dd-text)', left: notif.enabled ? '17px' : '2px' }" />
           </div>
-        </div>
-      </div>
-    </div>
+          <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ notif.name }}</span>
+          <div class="flex flex-wrap gap-1.5 shrink-0 max-w-[260px] justify-end">
+            <span v-for="tId in notif.triggers" :key="tId"
+                  class="badge text-[9px] font-semibold"
+                  :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-text-secondary)' }">
+              {{ triggerNameById(tId) }}
+            </span>
+            <span v-if="notif.triggers.length === 0" class="text-[10px] italic dd-text-muted">No triggers</span>
+          </div>
+        </template>
+        <template #details="{ item: notif }">
+          <div class="text-[11px] dd-text-muted">{{ notif.description }}</div>
+        </template>
+      </DataListAccordion>
+
+      <!-- Empty state (cards/list) -->
+      <EmptyState
+        v-if="(notificationsViewMode === 'cards' || notificationsViewMode === 'list') && filteredNotifications.length === 0"
+        icon="filter"
+        message="No rules match your filters"
+        :show-clear="activeFilterCount > 0"
+        @clear="searchQuery = ''" />
   </AppLayout>
 </template>

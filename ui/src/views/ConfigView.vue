@@ -82,7 +82,6 @@ const tableActionStyle = ref<'icons' | 'buttons'>('icons');
 
 <template>
   <AppLayout>
-    <div class="p-6">
       <!-- Tabs -->
       <div class="flex gap-1 mb-6"
            :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
@@ -399,6 +398,5 @@ const tableActionStyle = ref<'icons' | 'buttons'>('icons');
         </div>
 
       </div><!-- end appearance tab -->
-    </div>
   </AppLayout>
 </template>

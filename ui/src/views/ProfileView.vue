@@ -34,7 +34,6 @@ onMounted(async () => {
 
 <template>
   <AppLayout>
-    <div class="p-6">
       <div class="dd-rounded overflow-hidden"
            :style="{
              backgroundColor: 'var(--dd-bg-card)',
@@ -104,6 +103,5 @@ onMounted(async () => {
           </button>
         </div>
       </div>
-    </div>
   </AppLayout>
 </template>
