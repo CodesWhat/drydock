@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import AppLayout from '../layouts/AppLayout.vue';
+import { onMounted, ref } from 'vue';
 import { getAllTriggers } from '../services/trigger';
 
 const notificationsViewMode = ref<'table' | 'cards' | 'list'>('table');
@@ -12,11 +11,41 @@ const triggerMap = ref<Record<string, string>>({});
 
 // Notification rules remain as local state (no backend endpoint yet)
 const notificationsData = ref([
-  { id: 'update-available', name: 'Update Available', enabled: true, triggers: [] as string[], description: 'When a container has a new version' },
-  { id: 'update-applied', name: 'Update Applied', enabled: true, triggers: [] as string[], description: 'After a container is successfully updated' },
-  { id: 'update-failed', name: 'Update Failed', enabled: true, triggers: [] as string[], description: 'When an update fails or is rolled back' },
-  { id: 'security-alert', name: 'Security Alert', enabled: true, triggers: [] as string[], description: 'Critical/High vulnerability detected' },
-  { id: 'agent-disconnect', name: 'Agent Disconnected', enabled: false, triggers: [] as string[], description: 'When a remote agent loses connection' },
+  {
+    id: 'update-available',
+    name: 'Update Available',
+    enabled: true,
+    triggers: [] as string[],
+    description: 'When a container has a new version',
+  },
+  {
+    id: 'update-applied',
+    name: 'Update Applied',
+    enabled: true,
+    triggers: [] as string[],
+    description: 'After a container is successfully updated',
+  },
+  {
+    id: 'update-failed',
+    name: 'Update Failed',
+    enabled: true,
+    triggers: [] as string[],
+    description: 'When an update fails or is rolled back',
+  },
+  {
+    id: 'security-alert',
+    name: 'Security Alert',
+    enabled: true,
+    triggers: [] as string[],
+    description: 'Critical/High vulnerability detected',
+  },
+  {
+    id: 'agent-disconnect',
+    name: 'Agent Disconnected',
+    enabled: false,
+    triggers: [] as string[],
+    description: 'When a remote agent loses connection',
+  },
 ]);
 
 function triggerNameById(id: string) {
@@ -24,7 +53,7 @@ function triggerNameById(id: string) {
 }
 
 function toggleNotification(id: string) {
-  const notif = notificationsData.value.find(n => n.id === id);
+  const notif = notificationsData.value.find((n) => n.id === id);
   if (notif) notif.enabled = !notif.enabled;
 }
 

@@ -2,10 +2,13 @@
 import { computed } from 'vue';
 import { useIcons } from '../composables/useIcons';
 
-const props = withDefaults(defineProps<{
-  name: string;
-  size?: number;
-}>(), { size: 16 });
+const props = withDefaults(
+  defineProps<{
+    name: string;
+    size?: number;
+  }>(),
+  { size: 16 },
+);
 
 const { icon, iconScale } = useIcons();
 const resolved = computed(() => icon(props.name));

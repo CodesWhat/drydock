@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 
 const isMobile = ref(globalThis.innerWidth < 768);
 const windowNarrow = ref(globalThis.innerWidth < 1024);

@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
-import AppLayout from '../layouts/AppLayout.vue';
-import AppIcon from '../components/AppIcon.vue';
+import { onMounted, reactive, ref } from 'vue';
 import { getAllRegistries } from '../services/registry';
 
 const registriesViewMode = ref<'table' | 'cards' | 'list'>('table');
@@ -14,9 +12,12 @@ const error = ref('');
 function registryTypeBadge(type: string) {
   if (type === 'hub') return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)', label: 'Hub' };
   if (type === 'ghcr') return { bg: 'var(--dd-alt-muted)', text: 'var(--dd-alt)', label: 'GHCR' };
-  if (type === 'quay') return { bg: 'var(--dd-danger-muted)', text: 'var(--dd-danger)', label: 'Quay' };
-  if (type === 'ecr') return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)', label: 'ECR' };
-  if (type === 'gitlab') return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)', label: 'GitLab' };
+  if (type === 'quay')
+    return { bg: 'var(--dd-danger-muted)', text: 'var(--dd-danger)', label: 'Quay' };
+  if (type === 'ecr')
+    return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)', label: 'ECR' };
+  if (type === 'gitlab')
+    return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)', label: 'GitLab' };
   return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: type };
 }
 

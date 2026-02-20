@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import AppLayout from '../layouts/AppLayout.vue';
-import AppIcon from '../components/AppIcon.vue';
+import { computed, onMounted, ref } from 'vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { getAgents } from '../services/agent';
 import { getLogEntries } from '../services/log';
@@ -41,7 +39,7 @@ const agentLogsCache = ref<Record<string, AgentLog[]>>({});
 
 function formatAgentLogTimestamp(iso: string) {
   const d = new Date(iso);
-  return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  return `${d.toTimeString().slice(0, 8)}.${String(d.getMilliseconds()).padStart(3, '0')}`;
 }
 
 function formatTimestamp(ts: number | string): string {
@@ -63,7 +61,7 @@ async function fetchAgents() {
     agentsData.value = rawAgents.map((a: any) => ({
       id: a.name,
       name: a.name,
-      host: `${a.host}${a.port ? ':' + a.port : ''}`,
+      host: `${a.host}${a.port ? `:${a.port}` : ''}`,
       status: a.connected ? 'connected' : 'disconnected',
       dockerVersion: a.dockerVersion ?? '-',
       os: a.os ?? '-',
@@ -139,28 +137,56 @@ const sortedAgents = computed(() => {
 
 // ── Column visibility ──
 const agentAllColumns = [
-  { key: 'name', label: 'Agent', align: 'text-left', px: 'px-5', style: 'width: 99%;', required: true },
+  {
+    key: 'name',
+    label: 'Agent',
+    align: 'text-left',
+    px: 'px-5',
+    style: 'width: 99%;',
+    required: true,
+  },
   { key: 'status', label: 'Status', align: 'text-center', px: 'px-3', style: '', required: false },
-  { key: 'containers', label: 'Containers', align: 'text-center', px: 'px-3', style: '', required: false },
+  {
+    key: 'containers',
+    label: 'Containers',
+    align: 'text-center',
+    px: 'px-3',
+    style: '',
+    required: false,
+  },
   { key: 'docker', label: 'Docker', align: 'text-center', px: 'px-3', style: '', required: false },
   { key: 'os', label: 'OS', align: 'text-center', px: 'px-3', style: '', required: false },
-  { key: 'version', label: 'Version', align: 'text-center', px: 'px-3', style: '', required: false },
-  { key: 'lastSeen', label: 'Last Seen', align: 'text-right', px: 'px-3', style: '', required: false },
+  {
+    key: 'version',
+    label: 'Version',
+    align: 'text-center',
+    px: 'px-3',
+    style: '',
+    required: false,
+  },
+  {
+    key: 'lastSeen',
+    label: 'Last Seen',
+    align: 'text-right',
+    px: 'px-3',
+    style: '',
+    required: false,
+  },
 ];
 
-const agentVisibleColumns = ref<Set<string>>(new Set(agentAllColumns.map(c => c.key)));
+const agentVisibleColumns = ref<Set<string>>(new Set(agentAllColumns.map((c) => c.key)));
 const showAgentColumnPicker = ref(false);
 
 function toggleAgentColumn(key: string) {
-  const col = agentAllColumns.find(c => c.key === key);
+  const col = agentAllColumns.find((c) => c.key === key);
   if (col?.required) return;
   if (agentVisibleColumns.value.has(key)) agentVisibleColumns.value.delete(key);
   else agentVisibleColumns.value.add(key);
 }
 
 const agentActiveColumns = computed(() =>
-  agentAllColumns.filter(c =>
-    agentVisibleColumns.value.has(c.key) && (!isCompact.value || c.required),
+  agentAllColumns.filter(
+    (c) => agentVisibleColumns.value.has(c.key) && (!isCompact.value || c.required),
   ),
 );
 

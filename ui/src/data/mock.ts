@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue';
+import { computed, ref } from 'vue';
 
 // ── Container Types ─────────────────────────────────────
 
@@ -25,156 +25,583 @@ export interface Container {
 export const containers = ref<Container[]>([
   // ── Local (10 containers: 8 running, 2 stopped) ──
   {
-    name: 'traefik', image: 'traefik', currentTag: '2.10.7', newTag: '3.0.1', status: 'running',
-    registry: 'dockerhub', updateKind: 'major', bouncer: 'blocked', server: 'Local',
-    details: { ports: ['80:80', '443:443', '8080:8080'], volumes: ['/var/run/docker.sock:/var/run/docker.sock:ro', './traefik.yml:/traefik.yml'], env: [{ key: 'TRAEFIK_LOG_LEVEL', value: 'INFO' }], labels: ['reverse-proxy', 'load-balancer', 'production'] },
+    name: 'traefik',
+    image: 'traefik',
+    currentTag: '2.10.7',
+    newTag: '3.0.1',
+    status: 'running',
+    registry: 'dockerhub',
+    updateKind: 'major',
+    bouncer: 'blocked',
+    server: 'Local',
+    details: {
+      ports: ['80:80', '443:443', '8080:8080'],
+      volumes: ['/var/run/docker.sock:/var/run/docker.sock:ro', './traefik.yml:/traefik.yml'],
+      env: [{ key: 'TRAEFIK_LOG_LEVEL', value: 'INFO' }],
+      labels: ['reverse-proxy', 'load-balancer', 'production'],
+    },
   },
   {
-    name: 'postgres-db', image: 'postgres', currentTag: '15.4', newTag: '16.1', status: 'running',
-    registry: 'dockerhub', updateKind: 'major', bouncer: 'blocked', server: 'Local',
-    details: { ports: ['5432:5432'], volumes: ['pg_data:/var/lib/postgresql/data'], env: [{ key: 'POSTGRES_DB', value: 'drydock' }, { key: 'POSTGRES_USER', value: 'admin' }], labels: ['database', 'production'] },
+    name: 'postgres-db',
+    image: 'postgres',
+    currentTag: '15.4',
+    newTag: '16.1',
+    status: 'running',
+    registry: 'dockerhub',
+    updateKind: 'major',
+    bouncer: 'blocked',
+    server: 'Local',
+    details: {
+      ports: ['5432:5432'],
+      volumes: ['pg_data:/var/lib/postgresql/data'],
+      env: [
+        { key: 'POSTGRES_DB', value: 'drydock' },
+        { key: 'POSTGRES_USER', value: 'admin' },
+      ],
+      labels: ['database', 'production'],
+    },
   },
   {
-    name: 'redis-cache', image: 'redis', currentTag: '7.0.12', newTag: '7.2.4', status: 'running',
-    registry: 'dockerhub', updateKind: 'minor', bouncer: 'safe', server: 'Local',
-    details: { ports: ['6379:6379'], volumes: ['redis_data:/data'], env: [{ key: 'REDIS_MAXMEMORY', value: '256mb' }], labels: ['cache', 'production'] },
+    name: 'redis-cache',
+    image: 'redis',
+    currentTag: '7.0.12',
+    newTag: '7.2.4',
+    status: 'running',
+    registry: 'dockerhub',
+    updateKind: 'minor',
+    bouncer: 'safe',
+    server: 'Local',
+    details: {
+      ports: ['6379:6379'],
+      volumes: ['redis_data:/data'],
+      env: [{ key: 'REDIS_MAXMEMORY', value: '256mb' }],
+      labels: ['cache', 'production'],
+    },
   },
   {
-    name: 'nginx-proxy', image: 'nginx', currentTag: '1.24.0', newTag: '1.25.3', status: 'stopped',
-    registry: 'dockerhub', updateKind: 'minor', bouncer: 'unsafe', server: 'Local',
-    details: { ports: ['8081:80'], volumes: ['./nginx.conf:/etc/nginx/nginx.conf:ro'], env: [], labels: ['proxy', 'staging'] },
+    name: 'nginx-proxy',
+    image: 'nginx',
+    currentTag: '1.24.0',
+    newTag: '1.25.3',
+    status: 'stopped',
+    registry: 'dockerhub',
+    updateKind: 'minor',
+    bouncer: 'unsafe',
+    server: 'Local',
+    details: {
+      ports: ['8081:80'],
+      volumes: ['./nginx.conf:/etc/nginx/nginx.conf:ro'],
+      env: [],
+      labels: ['proxy', 'staging'],
+    },
   },
   {
-    name: 'grafana', image: 'grafana/grafana', currentTag: '10.1.5', newTag: '10.2.3', status: 'running',
-    registry: 'dockerhub', updateKind: 'minor', bouncer: 'safe', server: 'Local',
-    details: { ports: ['3000:3000'], volumes: ['grafana_data:/var/lib/grafana'], env: [{ key: 'GF_SECURITY_ADMIN_USER', value: 'admin' }], labels: ['monitoring', 'observability'] },
+    name: 'grafana',
+    image: 'grafana/grafana',
+    currentTag: '10.1.5',
+    newTag: '10.2.3',
+    status: 'running',
+    registry: 'dockerhub',
+    updateKind: 'minor',
+    bouncer: 'safe',
+    server: 'Local',
+    details: {
+      ports: ['3000:3000'],
+      volumes: ['grafana_data:/var/lib/grafana'],
+      env: [{ key: 'GF_SECURITY_ADMIN_USER', value: 'admin' }],
+      labels: ['monitoring', 'observability'],
+    },
   },
   {
-    name: 'prometheus', image: 'prom/prometheus', currentTag: '2.48.1', newTag: null, status: 'running',
-    registry: 'dockerhub', updateKind: null, bouncer: 'safe', server: 'Local',
-    details: { ports: ['9090:9090'], volumes: ['./prometheus.yml:/etc/prometheus/prometheus.yml', 'prom_data:/prometheus'], env: [], labels: ['monitoring', 'metrics', 'production'] },
+    name: 'prometheus',
+    image: 'prom/prometheus',
+    currentTag: '2.48.1',
+    newTag: null,
+    status: 'running',
+    registry: 'dockerhub',
+    updateKind: null,
+    bouncer: 'safe',
+    server: 'Local',
+    details: {
+      ports: ['9090:9090'],
+      volumes: ['./prometheus.yml:/etc/prometheus/prometheus.yml', 'prom_data:/prometheus'],
+      env: [],
+      labels: ['monitoring', 'metrics', 'production'],
+    },
   },
   {
-    name: 'drydock-api', image: 'ghcr.io/drydock/api', currentTag: '1.3.1', newTag: '1.3.2', status: 'running',
-    registry: 'ghcr', updateKind: 'patch', bouncer: 'safe', server: 'Local',
-    details: { ports: ['3001:3001'], volumes: ['./config:/app/config:ro'], env: [{ key: 'NODE_ENV', value: 'production' }, { key: 'LOG_LEVEL', value: 'info' }], labels: ['api', 'drydock', 'production'] },
+    name: 'drydock-api',
+    image: 'ghcr.io/drydock/api',
+    currentTag: '1.3.1',
+    newTag: '1.3.2',
+    status: 'running',
+    registry: 'ghcr',
+    updateKind: 'patch',
+    bouncer: 'safe',
+    server: 'Local',
+    details: {
+      ports: ['3001:3001'],
+      volumes: ['./config:/app/config:ro'],
+      env: [
+        { key: 'NODE_ENV', value: 'production' },
+        { key: 'LOG_LEVEL', value: 'info' },
+      ],
+      labels: ['api', 'drydock', 'production'],
+    },
   },
   {
-    name: 'drydock-ui', image: 'ghcr.io/drydock/ui', currentTag: '1.3.1', newTag: null, status: 'running',
-    registry: 'ghcr', updateKind: null, bouncer: 'safe', server: 'Local',
-    details: { ports: ['8080:80'], volumes: [], env: [{ key: 'API_URL', value: 'http://drydock-api:3001' }], labels: ['frontend', 'drydock', 'production'] },
+    name: 'drydock-ui',
+    image: 'ghcr.io/drydock/ui',
+    currentTag: '1.3.1',
+    newTag: null,
+    status: 'running',
+    registry: 'ghcr',
+    updateKind: null,
+    bouncer: 'safe',
+    server: 'Local',
+    details: {
+      ports: ['8080:80'],
+      volumes: [],
+      env: [{ key: 'API_URL', value: 'http://drydock-api:3001' }],
+      labels: ['frontend', 'drydock', 'production'],
+    },
   },
   {
-    name: 'registry-mirror', image: 'registry.internal/mirror', currentTag: '2.8.3', newTag: '2.8.4', status: 'stopped',
-    registry: 'custom', updateKind: 'patch', bouncer: 'unsafe', server: 'Local',
-    details: { ports: ['5000:5000'], volumes: ['registry_data:/var/lib/registry'], env: [{ key: 'REGISTRY_STORAGE_DELETE_ENABLED', value: 'true' }], labels: ['registry', 'internal'] },
+    name: 'registry-mirror',
+    image: 'registry.internal/mirror',
+    currentTag: '2.8.3',
+    newTag: '2.8.4',
+    status: 'stopped',
+    registry: 'custom',
+    updateKind: 'patch',
+    bouncer: 'unsafe',
+    server: 'Local',
+    details: {
+      ports: ['5000:5000'],
+      volumes: ['registry_data:/var/lib/registry'],
+      env: [{ key: 'REGISTRY_STORAGE_DELETE_ENABLED', value: 'true' }],
+      labels: ['registry', 'internal'],
+    },
   },
   {
-    name: 'watchtower', image: 'containrrr/watchtower', currentTag: '1.7.1', newTag: null, status: 'running',
-    registry: 'dockerhub', updateKind: null, bouncer: 'safe', server: 'Local',
-    details: { ports: [], volumes: ['/var/run/docker.sock:/var/run/docker.sock:ro'], env: [{ key: 'WATCHTOWER_POLL_INTERVAL', value: '3600' }, { key: 'WATCHTOWER_CLEANUP', value: 'true' }], labels: ['automation', 'updates'] },
+    name: 'watchtower',
+    image: 'containrrr/watchtower',
+    currentTag: '1.7.1',
+    newTag: null,
+    status: 'running',
+    registry: 'dockerhub',
+    updateKind: null,
+    bouncer: 'safe',
+    server: 'Local',
+    details: {
+      ports: [],
+      volumes: ['/var/run/docker.sock:/var/run/docker.sock:ro'],
+      env: [
+        { key: 'WATCHTOWER_POLL_INTERVAL', value: '3600' },
+        { key: 'WATCHTOWER_CLEANUP', value: 'true' },
+      ],
+      labels: ['automation', 'updates'],
+    },
   },
   // ── Agent-01 (prod-east) (12 containers: all running) ──
   {
-    name: 'api-gateway', image: 'kong', currentTag: '3.5.0', newTag: '3.6.1', status: 'running',
-    registry: 'dockerhub', updateKind: 'minor', bouncer: 'safe', server: 'Agent-01 (prod-east)',
-    details: { ports: ['8000:8000', '8443:8443', '8001:8001'], volumes: ['./kong.yml:/opt/kong/declarative/kong.yml:ro'], env: [{ key: 'KONG_DATABASE', value: 'off' }, { key: 'KONG_PROXY_LISTEN', value: '0.0.0.0:8000' }], labels: ['api-gateway', 'production'] },
+    name: 'api-gateway',
+    image: 'kong',
+    currentTag: '3.5.0',
+    newTag: '3.6.1',
+    status: 'running',
+    registry: 'dockerhub',
+    updateKind: 'minor',
+    bouncer: 'safe',
+    server: 'Agent-01 (prod-east)',
+    details: {
+      ports: ['8000:8000', '8443:8443', '8001:8001'],
+      volumes: ['./kong.yml:/opt/kong/declarative/kong.yml:ro'],
+      env: [
+        { key: 'KONG_DATABASE', value: 'off' },
+        { key: 'KONG_PROXY_LISTEN', value: '0.0.0.0:8000' },
+      ],
+      labels: ['api-gateway', 'production'],
+    },
   },
   {
-    name: 'auth-service', image: 'ghcr.io/acme/auth-service', currentTag: '2.4.1', newTag: '2.4.2', status: 'running',
-    registry: 'ghcr', updateKind: 'patch', bouncer: 'safe', server: 'Agent-01 (prod-east)',
-    details: { ports: ['4000:4000'], volumes: [], env: [{ key: 'JWT_SECRET', value: '***' }, { key: 'REDIS_URL', value: 'redis://redis-prod:6379' }], labels: ['auth', 'microservice', 'production'] },
+    name: 'auth-service',
+    image: 'ghcr.io/acme/auth-service',
+    currentTag: '2.4.1',
+    newTag: '2.4.2',
+    status: 'running',
+    registry: 'ghcr',
+    updateKind: 'patch',
+    bouncer: 'safe',
+    server: 'Agent-01 (prod-east)',
+    details: {
+      ports: ['4000:4000'],
+      volumes: [],
+      env: [
+        { key: 'JWT_SECRET', value: '***' },
+        { key: 'REDIS_URL', value: 'redis://redis-prod:6379' },
+      ],
+      labels: ['auth', 'microservice', 'production'],
+    },
   },
   {
-    name: 'user-service', image: 'ghcr.io/acme/user-service', currentTag: '3.1.0', newTag: null, status: 'running',
-    registry: 'ghcr', updateKind: null, bouncer: 'safe', server: 'Agent-01 (prod-east)',
-    details: { ports: ['4001:4001'], volumes: [], env: [{ key: 'DB_HOST', value: 'postgres-prod' }, { key: 'NODE_ENV', value: 'production' }], labels: ['users', 'microservice', 'production'] },
+    name: 'user-service',
+    image: 'ghcr.io/acme/user-service',
+    currentTag: '3.1.0',
+    newTag: null,
+    status: 'running',
+    registry: 'ghcr',
+    updateKind: null,
+    bouncer: 'safe',
+    server: 'Agent-01 (prod-east)',
+    details: {
+      ports: ['4001:4001'],
+      volumes: [],
+      env: [
+        { key: 'DB_HOST', value: 'postgres-prod' },
+        { key: 'NODE_ENV', value: 'production' },
+      ],
+      labels: ['users', 'microservice', 'production'],
+    },
   },
   {
-    name: 'order-service', image: 'ghcr.io/acme/order-service', currentTag: '1.8.3', newTag: '1.9.0', status: 'running',
-    registry: 'ghcr', updateKind: 'minor', bouncer: 'safe', server: 'Agent-01 (prod-east)',
-    details: { ports: ['4002:4002'], volumes: [], env: [{ key: 'STRIPE_KEY', value: '***' }, { key: 'DB_HOST', value: 'postgres-prod' }], labels: ['orders', 'microservice', 'production'] },
+    name: 'order-service',
+    image: 'ghcr.io/acme/order-service',
+    currentTag: '1.8.3',
+    newTag: '1.9.0',
+    status: 'running',
+    registry: 'ghcr',
+    updateKind: 'minor',
+    bouncer: 'safe',
+    server: 'Agent-01 (prod-east)',
+    details: {
+      ports: ['4002:4002'],
+      volumes: [],
+      env: [
+        { key: 'STRIPE_KEY', value: '***' },
+        { key: 'DB_HOST', value: 'postgres-prod' },
+      ],
+      labels: ['orders', 'microservice', 'production'],
+    },
   },
   {
-    name: 'notification-worker', image: 'ghcr.io/acme/notifications', currentTag: '1.2.0', newTag: null, status: 'running',
-    registry: 'ghcr', updateKind: null, bouncer: 'safe', server: 'Agent-01 (prod-east)',
-    details: { ports: [], volumes: [], env: [{ key: 'SMTP_HOST', value: 'smtp.mailgun.org' }, { key: 'QUEUE_URL', value: 'amqp://rabbitmq-prod:5672' }], labels: ['notifications', 'worker', 'production'] },
+    name: 'notification-worker',
+    image: 'ghcr.io/acme/notifications',
+    currentTag: '1.2.0',
+    newTag: null,
+    status: 'running',
+    registry: 'ghcr',
+    updateKind: null,
+    bouncer: 'safe',
+    server: 'Agent-01 (prod-east)',
+    details: {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'SMTP_HOST', value: 'smtp.mailgun.org' },
+        { key: 'QUEUE_URL', value: 'amqp://rabbitmq-prod:5672' },
+      ],
+      labels: ['notifications', 'worker', 'production'],
+    },
   },
   {
-    name: 'rabbitmq-prod', image: 'rabbitmq', currentTag: '3.12.10', newTag: '3.13.0', status: 'running',
-    registry: 'dockerhub', updateKind: 'minor', bouncer: 'unsafe', server: 'Agent-01 (prod-east)',
-    details: { ports: ['5672:5672', '15672:15672'], volumes: ['rabbitmq_data:/var/lib/rabbitmq'], env: [{ key: 'RABBITMQ_DEFAULT_USER', value: 'admin' }], labels: ['messaging', 'queue', 'production'] },
+    name: 'rabbitmq-prod',
+    image: 'rabbitmq',
+    currentTag: '3.12.10',
+    newTag: '3.13.0',
+    status: 'running',
+    registry: 'dockerhub',
+    updateKind: 'minor',
+    bouncer: 'unsafe',
+    server: 'Agent-01 (prod-east)',
+    details: {
+      ports: ['5672:5672', '15672:15672'],
+      volumes: ['rabbitmq_data:/var/lib/rabbitmq'],
+      env: [{ key: 'RABBITMQ_DEFAULT_USER', value: 'admin' }],
+      labels: ['messaging', 'queue', 'production'],
+    },
   },
   {
-    name: 'postgres-prod', image: 'postgres', currentTag: '16.1', newTag: null, status: 'running',
-    registry: 'dockerhub', updateKind: null, bouncer: 'safe', server: 'Agent-01 (prod-east)',
-    details: { ports: ['5432:5432'], volumes: ['pg_prod_data:/var/lib/postgresql/data'], env: [{ key: 'POSTGRES_DB', value: 'acme_prod' }, { key: 'POSTGRES_USER', value: 'acme' }], labels: ['database', 'production'] },
+    name: 'postgres-prod',
+    image: 'postgres',
+    currentTag: '16.1',
+    newTag: null,
+    status: 'running',
+    registry: 'dockerhub',
+    updateKind: null,
+    bouncer: 'safe',
+    server: 'Agent-01 (prod-east)',
+    details: {
+      ports: ['5432:5432'],
+      volumes: ['pg_prod_data:/var/lib/postgresql/data'],
+      env: [
+        { key: 'POSTGRES_DB', value: 'acme_prod' },
+        { key: 'POSTGRES_USER', value: 'acme' },
+      ],
+      labels: ['database', 'production'],
+    },
   },
   {
-    name: 'redis-prod', image: 'redis', currentTag: '7.2.4', newTag: null, status: 'running',
-    registry: 'dockerhub', updateKind: null, bouncer: 'safe', server: 'Agent-01 (prod-east)',
-    details: { ports: ['6379:6379'], volumes: ['redis_prod_data:/data'], env: [{ key: 'REDIS_MAXMEMORY', value: '512mb' }], labels: ['cache', 'session-store', 'production'] },
+    name: 'redis-prod',
+    image: 'redis',
+    currentTag: '7.2.4',
+    newTag: null,
+    status: 'running',
+    registry: 'dockerhub',
+    updateKind: null,
+    bouncer: 'safe',
+    server: 'Agent-01 (prod-east)',
+    details: {
+      ports: ['6379:6379'],
+      volumes: ['redis_prod_data:/data'],
+      env: [{ key: 'REDIS_MAXMEMORY', value: '512mb' }],
+      labels: ['cache', 'session-store', 'production'],
+    },
   },
   {
-    name: 'elasticsearch', image: 'docker.elastic.co/elasticsearch/elasticsearch', currentTag: '8.11.3', newTag: '8.12.0', status: 'running',
-    registry: 'custom', updateKind: 'minor', bouncer: 'safe', server: 'Agent-01 (prod-east)',
-    details: { ports: ['9200:9200', '9300:9300'], volumes: ['es_data:/usr/share/elasticsearch/data'], env: [{ key: 'discovery.type', value: 'single-node' }, { key: 'ES_JAVA_OPTS', value: '-Xms1g -Xmx1g' }], labels: ['search', 'logging', 'production'] },
+    name: 'elasticsearch',
+    image: 'docker.elastic.co/elasticsearch/elasticsearch',
+    currentTag: '8.11.3',
+    newTag: '8.12.0',
+    status: 'running',
+    registry: 'custom',
+    updateKind: 'minor',
+    bouncer: 'safe',
+    server: 'Agent-01 (prod-east)',
+    details: {
+      ports: ['9200:9200', '9300:9300'],
+      volumes: ['es_data:/usr/share/elasticsearch/data'],
+      env: [
+        { key: 'discovery.type', value: 'single-node' },
+        { key: 'ES_JAVA_OPTS', value: '-Xms1g -Xmx1g' },
+      ],
+      labels: ['search', 'logging', 'production'],
+    },
   },
   {
-    name: 'kibana', image: 'docker.elastic.co/kibana/kibana', currentTag: '8.11.3', newTag: '8.12.0', status: 'running',
-    registry: 'custom', updateKind: 'minor', bouncer: 'safe', server: 'Agent-01 (prod-east)',
-    details: { ports: ['5601:5601'], volumes: [], env: [{ key: 'ELASTICSEARCH_HOSTS', value: 'http://elasticsearch:9200' }], labels: ['logging', 'observability', 'production'] },
+    name: 'kibana',
+    image: 'docker.elastic.co/kibana/kibana',
+    currentTag: '8.11.3',
+    newTag: '8.12.0',
+    status: 'running',
+    registry: 'custom',
+    updateKind: 'minor',
+    bouncer: 'safe',
+    server: 'Agent-01 (prod-east)',
+    details: {
+      ports: ['5601:5601'],
+      volumes: [],
+      env: [{ key: 'ELASTICSEARCH_HOSTS', value: 'http://elasticsearch:9200' }],
+      labels: ['logging', 'observability', 'production'],
+    },
   },
   {
-    name: 'cadvisor', image: 'gcr.io/cadvisor/cadvisor', currentTag: '0.47.2', newTag: '0.49.1', status: 'running',
-    registry: 'custom', updateKind: 'minor', bouncer: 'safe', server: 'Agent-01 (prod-east)',
-    details: { ports: ['8888:8080'], volumes: ['/:/rootfs:ro', '/var/run:/var/run:ro', '/sys:/sys:ro', '/var/lib/docker/:/var/lib/docker:ro'], env: [], labels: ['monitoring', 'metrics', 'production'] },
+    name: 'cadvisor',
+    image: 'gcr.io/cadvisor/cadvisor',
+    currentTag: '0.47.2',
+    newTag: '0.49.1',
+    status: 'running',
+    registry: 'custom',
+    updateKind: 'minor',
+    bouncer: 'safe',
+    server: 'Agent-01 (prod-east)',
+    details: {
+      ports: ['8888:8080'],
+      volumes: [
+        '/:/rootfs:ro',
+        '/var/run:/var/run:ro',
+        '/sys:/sys:ro',
+        '/var/lib/docker/:/var/lib/docker:ro',
+      ],
+      env: [],
+      labels: ['monitoring', 'metrics', 'production'],
+    },
   },
   {
-    name: 'drydock-agent-01', image: 'ghcr.io/drydock/agent', currentTag: '1.3.1', newTag: '1.3.2', status: 'running',
-    registry: 'ghcr', updateKind: 'patch', bouncer: 'safe', server: 'Agent-01 (prod-east)',
-    details: { ports: ['3001:3001'], volumes: ['/var/run/docker.sock:/var/run/docker.sock:ro'], env: [{ key: 'DRYDOCK_SERVER', value: 'https://drydock.internal:3001' }, { key: 'AGENT_TOKEN', value: '***' }], labels: ['drydock', 'agent', 'production'] },
+    name: 'drydock-agent-01',
+    image: 'ghcr.io/drydock/agent',
+    currentTag: '1.3.1',
+    newTag: '1.3.2',
+    status: 'running',
+    registry: 'ghcr',
+    updateKind: 'patch',
+    bouncer: 'safe',
+    server: 'Agent-01 (prod-east)',
+    details: {
+      ports: ['3001:3001'],
+      volumes: ['/var/run/docker.sock:/var/run/docker.sock:ro'],
+      env: [
+        { key: 'DRYDOCK_SERVER', value: 'https://drydock.internal:3001' },
+        { key: 'AGENT_TOKEN', value: '***' },
+      ],
+      labels: ['drydock', 'agent', 'production'],
+    },
   },
   // ── Agent-02 (staging) (4 containers: all stopped — disconnected host) ──
   {
-    name: 'staging-app', image: 'ghcr.io/acme/app', currentTag: '3.0.0-rc.2', newTag: '3.0.0-rc.5', status: 'stopped',
-    registry: 'ghcr', updateKind: 'patch', bouncer: 'unsafe', server: 'Agent-02 (staging)',
-    details: { ports: ['8080:8080'], volumes: [], env: [{ key: 'NODE_ENV', value: 'staging' }, { key: 'API_URL', value: 'http://staging-api:4000' }], labels: ['frontend', 'staging'] },
+    name: 'staging-app',
+    image: 'ghcr.io/acme/app',
+    currentTag: '3.0.0-rc.2',
+    newTag: '3.0.0-rc.5',
+    status: 'stopped',
+    registry: 'ghcr',
+    updateKind: 'patch',
+    bouncer: 'unsafe',
+    server: 'Agent-02 (staging)',
+    details: {
+      ports: ['8080:8080'],
+      volumes: [],
+      env: [
+        { key: 'NODE_ENV', value: 'staging' },
+        { key: 'API_URL', value: 'http://staging-api:4000' },
+      ],
+      labels: ['frontend', 'staging'],
+    },
   },
   {
-    name: 'staging-api', image: 'ghcr.io/acme/api', currentTag: '3.0.0-rc.2', newTag: '3.0.0-rc.5', status: 'stopped',
-    registry: 'ghcr', updateKind: 'patch', bouncer: 'unsafe', server: 'Agent-02 (staging)',
-    details: { ports: ['4000:4000'], volumes: [], env: [{ key: 'NODE_ENV', value: 'staging' }, { key: 'DB_HOST', value: 'staging-db' }], labels: ['api', 'staging'] },
+    name: 'staging-api',
+    image: 'ghcr.io/acme/api',
+    currentTag: '3.0.0-rc.2',
+    newTag: '3.0.0-rc.5',
+    status: 'stopped',
+    registry: 'ghcr',
+    updateKind: 'patch',
+    bouncer: 'unsafe',
+    server: 'Agent-02 (staging)',
+    details: {
+      ports: ['4000:4000'],
+      volumes: [],
+      env: [
+        { key: 'NODE_ENV', value: 'staging' },
+        { key: 'DB_HOST', value: 'staging-db' },
+      ],
+      labels: ['api', 'staging'],
+    },
   },
   {
-    name: 'staging-db', image: 'postgres', currentTag: '16.1', newTag: null, status: 'stopped',
-    registry: 'dockerhub', updateKind: null, bouncer: 'safe', server: 'Agent-02 (staging)',
-    details: { ports: ['5432:5432'], volumes: ['staging_pg_data:/var/lib/postgresql/data'], env: [{ key: 'POSTGRES_DB', value: 'acme_staging' }], labels: ['database', 'staging'] },
+    name: 'staging-db',
+    image: 'postgres',
+    currentTag: '16.1',
+    newTag: null,
+    status: 'stopped',
+    registry: 'dockerhub',
+    updateKind: null,
+    bouncer: 'safe',
+    server: 'Agent-02 (staging)',
+    details: {
+      ports: ['5432:5432'],
+      volumes: ['staging_pg_data:/var/lib/postgresql/data'],
+      env: [{ key: 'POSTGRES_DB', value: 'acme_staging' }],
+      labels: ['database', 'staging'],
+    },
   },
   {
-    name: 'drydock-agent-02', image: 'ghcr.io/drydock/agent', currentTag: '1.3.1', newTag: '1.3.2', status: 'stopped',
-    registry: 'ghcr', updateKind: 'patch', bouncer: 'safe', server: 'Agent-02 (staging)',
-    details: { ports: ['3001:3001'], volumes: ['/var/run/docker.sock:/var/run/docker.sock:ro'], env: [{ key: 'DRYDOCK_SERVER', value: 'https://drydock.internal:3001' }, { key: 'AGENT_TOKEN', value: '***' }], labels: ['drydock', 'agent', 'staging'] },
+    name: 'drydock-agent-02',
+    image: 'ghcr.io/drydock/agent',
+    currentTag: '1.3.1',
+    newTag: '1.3.2',
+    status: 'stopped',
+    registry: 'ghcr',
+    updateKind: 'patch',
+    bouncer: 'safe',
+    server: 'Agent-02 (staging)',
+    details: {
+      ports: ['3001:3001'],
+      volumes: ['/var/run/docker.sock:/var/run/docker.sock:ro'],
+      env: [
+        { key: 'DRYDOCK_SERVER', value: 'https://drydock.internal:3001' },
+        { key: 'AGENT_TOKEN', value: '***' },
+      ],
+      labels: ['drydock', 'agent', 'staging'],
+    },
   },
 ]);
 
 // ── Stats ──────────────────────────────────────────────
 
 export const stats = [
-  { label: 'Containers', value: '26', icon: 'containers', color: 'var(--dd-primary)', colorMuted: 'var(--dd-primary-muted)', trend: '+3' },
-  { label: 'Updates Available', value: '16', icon: 'updates', color: 'var(--dd-warning)', colorMuted: 'var(--dd-warning-muted)', trend: '+5' },
-  { label: 'Security Issues', value: '3', icon: 'security', color: 'var(--dd-danger)', colorMuted: 'var(--dd-danger-muted)', trend: '-2' },
-  { label: 'Uptime', value: '99.8%', icon: 'uptime', color: 'var(--dd-success)', colorMuted: 'var(--dd-success-muted)', trend: '+0.1%' },
+  {
+    label: 'Containers',
+    value: '26',
+    icon: 'containers',
+    color: 'var(--dd-primary)',
+    colorMuted: 'var(--dd-primary-muted)',
+    trend: '+3',
+  },
+  {
+    label: 'Updates Available',
+    value: '16',
+    icon: 'updates',
+    color: 'var(--dd-warning)',
+    colorMuted: 'var(--dd-warning-muted)',
+    trend: '+5',
+  },
+  {
+    label: 'Security Issues',
+    value: '3',
+    icon: 'security',
+    color: 'var(--dd-danger)',
+    colorMuted: 'var(--dd-danger-muted)',
+    trend: '-2',
+  },
+  {
+    label: 'Uptime',
+    value: '99.8%',
+    icon: 'uptime',
+    color: 'var(--dd-success)',
+    colorMuted: 'var(--dd-success-muted)',
+    trend: '+0.1%',
+  },
 ];
 
 // ── Recent Updates ─────────────────────────────────────
 
 export const recentUpdates = [
-  { name: 'traefik', image: 'traefik', oldVer: '2.10.7', newVer: '3.0.1', status: 'updated', time: '12m ago', running: true },
-  { name: 'postgres-db', image: 'postgres', oldVer: '15.4', newVer: '16.1', status: 'pending', time: '34m ago', running: true },
-  { name: 'redis-cache', image: 'redis', oldVer: '7.0.12', newVer: '7.2.4', status: 'updated', time: '1h ago', running: true },
-  { name: 'nginx-proxy', image: 'nginx', oldVer: '1.24.0', newVer: '1.25.3', status: 'failed', time: '2h ago', running: false },
-  { name: 'grafana', image: 'grafana/grafana', oldVer: '10.1.5', newVer: '10.2.3', status: 'updated', time: '3h ago', running: true },
+  {
+    name: 'traefik',
+    image: 'traefik',
+    oldVer: '2.10.7',
+    newVer: '3.0.1',
+    status: 'updated',
+    time: '12m ago',
+    running: true,
+  },
+  {
+    name: 'postgres-db',
+    image: 'postgres',
+    oldVer: '15.4',
+    newVer: '16.1',
+    status: 'pending',
+    time: '34m ago',
+    running: true,
+  },
+  {
+    name: 'redis-cache',
+    image: 'redis',
+    oldVer: '7.0.12',
+    newVer: '7.2.4',
+    status: 'updated',
+    time: '1h ago',
+    running: true,
+  },
+  {
+    name: 'nginx-proxy',
+    image: 'nginx',
+    oldVer: '1.24.0',
+    newVer: '1.25.3',
+    status: 'failed',
+    time: '2h ago',
+    running: false,
+  },
+  {
+    name: 'grafana',
+    image: 'grafana/grafana',
+    oldVer: '10.1.5',
+    newVer: '10.2.3',
+    status: 'updated',
+    time: '3h ago',
+    running: true,
+  },
 ];
 
 // ── Vulnerabilities (dashboard) ────────────────────────
@@ -188,7 +615,7 @@ export const vulnerabilities = [
 // ── Container Logs ─────────────────────────────────────
 
 export const containerLogs: Record<string, string[]> = {
-  'traefik': [
+  traefik: [
     '2025-02-17T15:23:01.123Z  Starting Traefik v2.10.7...',
     '2025-02-17T15:23:01.456Z  Loading configuration from /traefik.yml',
     '2025-02-17T15:23:01.789Z  Entrypoint web listening on :80',
@@ -256,7 +683,7 @@ export const containerLogs: Record<string, string[]> = {
     '2025-02-17T15:18:55.600Z  [warn] 29#29: 1024 worker_connections are not enough for 1847 active connections',
     '2025-02-17T15:19:00.700Z  [notice] 1#1: signal 3 (SIGQUIT) received, shutting down',
   ],
-  'grafana': [
+  grafana: [
     '2025-02-17T15:23:01.200Z  Starting Grafana v10.1.5 (commit: abc123def)',
     '2025-02-17T15:23:01.400Z  Config loaded from /etc/grafana/grafana.ini',
     '2025-02-17T15:23:01.600Z  HTTP Server Listen addr=0.0.0.0:3000 protocol=http',
@@ -273,7 +700,7 @@ export const containerLogs: Record<string, string[]> = {
     '2025-02-17T15:23:10.800Z  [warn] Dashboard "Container Overview" has unsaved changes from user admin',
     '2025-02-17T15:23:15.900Z  Scheduled report "Weekly Summary" queued for delivery',
   ],
-  'prometheus': [
+  prometheus: [
     '2025-02-17T15:23:01.050Z  Starting Prometheus v2.48.1 (branch: HEAD, revision: abc123)',
     '2025-02-17T15:23:01.060Z  Build context (go=go1.21.5, platform=linux/amd64)',
     '2025-02-17T15:23:01.200Z  Loading configuration file /etc/prometheus/prometheus.yml',
@@ -341,7 +768,7 @@ export const containerLogs: Record<string, string[]> = {
     '2025-02-17T15:20:45.300Z  [warn] 3 sync operations pending (backlog)',
     '2025-02-17T15:20:50.400Z  Process received SIGTERM, shutting down gracefully...',
   ],
-  'watchtower': [
+  watchtower: [
     '2025-02-17T15:23:01.100Z  Watchtower 1.7.1',
     '2025-02-17T15:23:01.200Z  Using notifications: none',
     '2025-02-17T15:23:01.300Z  Scheduling first run: 2025-02-17T16:23:01Z',
@@ -361,9 +788,7 @@ export const containerLogs: Record<string, string[]> = {
 };
 
 export function getContainerLogs(name: string): string[] {
-  return containerLogs[name] || [
-    '2025-02-17T15:23:01.000Z  No logs available for this container',
-  ];
+  return containerLogs[name] || ['2025-02-17T15:23:01.000Z  No logs available for this container'];
 }
 
 // ── Security Page ────────────────────────────────────
@@ -378,29 +803,179 @@ export const securityStats = {
 };
 
 export const securityVulnerabilities = [
-  { id: 'CVE-2024-21626', severity: 'CRITICAL', package: 'runc', version: '1.1.11', fixedIn: '1.1.12', image: 'nginx-proxy', publishedDate: '2024-01-31' },
-  { id: 'CVE-2024-0727', severity: 'CRITICAL', package: 'openssl', version: '3.1.4', fixedIn: '3.1.5', image: 'traefik', publishedDate: '2024-01-26' },
-  { id: 'CVE-2023-50164', severity: 'HIGH', package: 'curl', version: '8.4.0', fixedIn: '8.4.1', image: 'postgres-db', publishedDate: '2023-12-07' },
-  { id: 'CVE-2024-1086', severity: 'HIGH', package: 'linux-kernel', version: '6.6.8', fixedIn: '6.6.15', image: 'grafana', publishedDate: '2024-01-31' },
-  { id: 'CVE-2023-46218', severity: 'HIGH', package: 'curl', version: '8.4.0', fixedIn: '8.5.0', image: 'redis-cache', publishedDate: '2023-12-06' },
-  { id: 'CVE-2024-0553', severity: 'MEDIUM', package: 'gnutls', version: '3.8.2', fixedIn: '3.8.3', image: 'traefik', publishedDate: '2024-01-16' },
-  { id: 'CVE-2023-6129', severity: 'MEDIUM', package: 'openssl', version: '3.1.4', fixedIn: '3.1.5', image: 'drydock-api', publishedDate: '2024-01-09' },
-  { id: 'CVE-2023-5678', severity: 'MEDIUM', package: 'openssl', version: '3.0.12', fixedIn: '3.0.13', image: 'registry-mirror', publishedDate: '2023-11-06' },
-  { id: 'CVE-2024-0567', severity: 'MEDIUM', package: 'gnutls', version: '3.8.2', fixedIn: '3.8.3', image: 'prometheus', publishedDate: '2024-01-16' },
-  { id: 'CVE-2023-44487', severity: 'MEDIUM', package: 'nghttp2', version: '1.57.0', fixedIn: null, image: 'nginx-proxy', publishedDate: '2023-10-10' },
-  { id: 'CVE-2023-50495', severity: 'MEDIUM', package: 'ncurses', version: '6.4', fixedIn: '6.4-20231217', image: 'postgres-db', publishedDate: '2023-12-12' },
-  { id: 'CVE-2023-52425', severity: 'MEDIUM', package: 'expat', version: '2.5.0', fixedIn: '2.6.0', image: 'grafana', publishedDate: '2024-02-04' },
-  { id: 'CVE-2023-45853', severity: 'LOW', package: 'zlib', version: '1.3', fixedIn: '1.3.1', image: 'redis-cache', publishedDate: '2023-10-14' },
-  { id: 'CVE-2023-39615', severity: 'LOW', package: 'libxml2', version: '2.11.5', fixedIn: null, image: 'traefik', publishedDate: '2023-08-29' },
-  { id: 'CVE-2023-31484', severity: 'LOW', package: 'perl', version: '5.36.0', fixedIn: '5.38.0', image: 'prometheus', publishedDate: '2023-04-29' },
+  {
+    id: 'CVE-2024-21626',
+    severity: 'CRITICAL',
+    package: 'runc',
+    version: '1.1.11',
+    fixedIn: '1.1.12',
+    image: 'nginx-proxy',
+    publishedDate: '2024-01-31',
+  },
+  {
+    id: 'CVE-2024-0727',
+    severity: 'CRITICAL',
+    package: 'openssl',
+    version: '3.1.4',
+    fixedIn: '3.1.5',
+    image: 'traefik',
+    publishedDate: '2024-01-26',
+  },
+  {
+    id: 'CVE-2023-50164',
+    severity: 'HIGH',
+    package: 'curl',
+    version: '8.4.0',
+    fixedIn: '8.4.1',
+    image: 'postgres-db',
+    publishedDate: '2023-12-07',
+  },
+  {
+    id: 'CVE-2024-1086',
+    severity: 'HIGH',
+    package: 'linux-kernel',
+    version: '6.6.8',
+    fixedIn: '6.6.15',
+    image: 'grafana',
+    publishedDate: '2024-01-31',
+  },
+  {
+    id: 'CVE-2023-46218',
+    severity: 'HIGH',
+    package: 'curl',
+    version: '8.4.0',
+    fixedIn: '8.5.0',
+    image: 'redis-cache',
+    publishedDate: '2023-12-06',
+  },
+  {
+    id: 'CVE-2024-0553',
+    severity: 'MEDIUM',
+    package: 'gnutls',
+    version: '3.8.2',
+    fixedIn: '3.8.3',
+    image: 'traefik',
+    publishedDate: '2024-01-16',
+  },
+  {
+    id: 'CVE-2023-6129',
+    severity: 'MEDIUM',
+    package: 'openssl',
+    version: '3.1.4',
+    fixedIn: '3.1.5',
+    image: 'drydock-api',
+    publishedDate: '2024-01-09',
+  },
+  {
+    id: 'CVE-2023-5678',
+    severity: 'MEDIUM',
+    package: 'openssl',
+    version: '3.0.12',
+    fixedIn: '3.0.13',
+    image: 'registry-mirror',
+    publishedDate: '2023-11-06',
+  },
+  {
+    id: 'CVE-2024-0567',
+    severity: 'MEDIUM',
+    package: 'gnutls',
+    version: '3.8.2',
+    fixedIn: '3.8.3',
+    image: 'prometheus',
+    publishedDate: '2024-01-16',
+  },
+  {
+    id: 'CVE-2023-44487',
+    severity: 'MEDIUM',
+    package: 'nghttp2',
+    version: '1.57.0',
+    fixedIn: null,
+    image: 'nginx-proxy',
+    publishedDate: '2023-10-10',
+  },
+  {
+    id: 'CVE-2023-50495',
+    severity: 'MEDIUM',
+    package: 'ncurses',
+    version: '6.4',
+    fixedIn: '6.4-20231217',
+    image: 'postgres-db',
+    publishedDate: '2023-12-12',
+  },
+  {
+    id: 'CVE-2023-52425',
+    severity: 'MEDIUM',
+    package: 'expat',
+    version: '2.5.0',
+    fixedIn: '2.6.0',
+    image: 'grafana',
+    publishedDate: '2024-02-04',
+  },
+  {
+    id: 'CVE-2023-45853',
+    severity: 'LOW',
+    package: 'zlib',
+    version: '1.3',
+    fixedIn: '1.3.1',
+    image: 'redis-cache',
+    publishedDate: '2023-10-14',
+  },
+  {
+    id: 'CVE-2023-39615',
+    severity: 'LOW',
+    package: 'libxml2',
+    version: '2.11.5',
+    fixedIn: null,
+    image: 'traefik',
+    publishedDate: '2023-08-29',
+  },
+  {
+    id: 'CVE-2023-31484',
+    severity: 'LOW',
+    package: 'perl',
+    version: '5.36.0',
+    fixedIn: '5.38.0',
+    image: 'prometheus',
+    publishedDate: '2023-04-29',
+  },
 ];
 
 export const securityScanHistory = [
-  { container: 'traefik', image: 'traefik:2.10.7', scannedAt: '14 min ago', vulnCount: 3, status: 'issues' as const },
-  { container: 'postgres-db', image: 'postgres:15.4', scannedAt: '22 min ago', vulnCount: 2, status: 'issues' as const },
-  { container: 'redis-cache', image: 'redis:7.0.12', scannedAt: '35 min ago', vulnCount: 2, status: 'issues' as const },
-  { container: 'drydock-api', image: 'ghcr.io/drydock/api:1.3.1', scannedAt: '1h ago', vulnCount: 0, status: 'clean' as const },
-  { container: 'watchtower', image: 'containrrr/watchtower:1.7.1', scannedAt: '2h ago', vulnCount: 0, status: 'clean' as const },
+  {
+    container: 'traefik',
+    image: 'traefik:2.10.7',
+    scannedAt: '14 min ago',
+    vulnCount: 3,
+    status: 'issues' as const,
+  },
+  {
+    container: 'postgres-db',
+    image: 'postgres:15.4',
+    scannedAt: '22 min ago',
+    vulnCount: 2,
+    status: 'issues' as const,
+  },
+  {
+    container: 'redis-cache',
+    image: 'redis:7.0.12',
+    scannedAt: '35 min ago',
+    vulnCount: 2,
+    status: 'issues' as const,
+  },
+  {
+    container: 'drydock-api',
+    image: 'ghcr.io/drydock/api:1.3.1',
+    scannedAt: '1h ago',
+    vulnCount: 0,
+    status: 'clean' as const,
+  },
+  {
+    container: 'watchtower',
+    image: 'containrrr/watchtower:1.7.1',
+    scannedAt: '2h ago',
+    vulnCount: 0,
+    status: 'clean' as const,
+  },
 ];
 
 // ── Servers Page ──────────────────────────────────────
@@ -420,9 +995,45 @@ export interface Server {
 }
 
 export const servers = ref<Server[]>([
-  { name: 'Local', host: 'unix:///var/run/docker.sock', status: 'connected', dockerVersion: '27.5.1', os: 'Ubuntu 24.04', arch: 'amd64', cpus: 8, memoryGb: 32, containers: { total: 10, running: 8, stopped: 2 }, images: 18, lastSeen: 'Just now' },
-  { name: 'Agent-01 (prod-east)', host: 'https://10.0.1.50:3001', status: 'connected', dockerVersion: '27.5.1', os: 'Debian 12', arch: 'amd64', cpus: 16, memoryGb: 64, containers: { total: 12, running: 12, stopped: 0 }, images: 23, lastSeen: '2s ago' },
-  { name: 'Agent-02 (staging)', host: 'https://10.0.2.10:3001', status: 'disconnected', dockerVersion: '26.1.4', os: 'Alpine 3.20', arch: 'arm64', cpus: 4, memoryGb: 8, containers: { total: 4, running: 0, stopped: 4 }, images: 12, lastSeen: '14m ago' },
+  {
+    name: 'Local',
+    host: 'unix:///var/run/docker.sock',
+    status: 'connected',
+    dockerVersion: '27.5.1',
+    os: 'Ubuntu 24.04',
+    arch: 'amd64',
+    cpus: 8,
+    memoryGb: 32,
+    containers: { total: 10, running: 8, stopped: 2 },
+    images: 18,
+    lastSeen: 'Just now',
+  },
+  {
+    name: 'Agent-01 (prod-east)',
+    host: 'https://10.0.1.50:3001',
+    status: 'connected',
+    dockerVersion: '27.5.1',
+    os: 'Debian 12',
+    arch: 'amd64',
+    cpus: 16,
+    memoryGb: 64,
+    containers: { total: 12, running: 12, stopped: 0 },
+    images: 23,
+    lastSeen: '2s ago',
+  },
+  {
+    name: 'Agent-02 (staging)',
+    host: 'https://10.0.2.10:3001',
+    status: 'disconnected',
+    dockerVersion: '26.1.4',
+    os: 'Alpine 3.20',
+    arch: 'arm64',
+    cpus: 4,
+    memoryGb: 8,
+    containers: { total: 4, running: 0, stopped: 4 },
+    images: 12,
+    lastSeen: '14m ago',
+  },
 ]);
 
 export const serversStats = computed(() => {
@@ -438,11 +1049,41 @@ export const serversStats = computed(() => {
 // ── Registries Page ─────────────────────────────────────
 
 export const registriesData = [
-  { id: 'hub', name: 'Docker Hub', type: 'hub', status: 'connected', config: { login: 'drydock-bot', url: 'https://registry-1.docker.io' } },
-  { id: 'ghcr', name: 'GitHub Packages', type: 'ghcr', status: 'connected', config: { login: 'CodesWhat', url: 'https://ghcr.io' } },
-  { id: 'quay', name: 'Quay.io', type: 'quay', status: 'connected', config: { namespace: 'drydock', url: 'https://quay.io' } },
-  { id: 'ecr', name: 'AWS ECR (prod)', type: 'ecr', status: 'error', config: { region: 'us-east-1', accountId: '123456789012', accessKeyId: 'AKIA***' } },
-  { id: 'gitlab', name: 'GitLab Registry', type: 'gitlab', status: 'connected', config: { url: 'https://registry.gitlab.com', token: '***' } },
+  {
+    id: 'hub',
+    name: 'Docker Hub',
+    type: 'hub',
+    status: 'connected',
+    config: { login: 'drydock-bot', url: 'https://registry-1.docker.io' },
+  },
+  {
+    id: 'ghcr',
+    name: 'GitHub Packages',
+    type: 'ghcr',
+    status: 'connected',
+    config: { login: 'CodesWhat', url: 'https://ghcr.io' },
+  },
+  {
+    id: 'quay',
+    name: 'Quay.io',
+    type: 'quay',
+    status: 'connected',
+    config: { namespace: 'drydock', url: 'https://quay.io' },
+  },
+  {
+    id: 'ecr',
+    name: 'AWS ECR (prod)',
+    type: 'ecr',
+    status: 'error',
+    config: { region: 'us-east-1', accountId: '123456789012', accessKeyId: 'AKIA***' },
+  },
+  {
+    id: 'gitlab',
+    name: 'GitLab Registry',
+    type: 'gitlab',
+    status: 'connected',
+    config: { url: 'https://registry.gitlab.com', token: '***' },
+  },
 ];
 
 // ── Agents Page ─────────────────────────────────────────
@@ -474,70 +1115,388 @@ export interface AgentLog {
 }
 
 export const agentsData = ref<Agent[]>([
-  { id: 'agent-local', name: 'Local', host: 'unix:///var/run/docker.sock', status: 'connected', dockerVersion: '27.5.1', os: 'Ubuntu 24.04', arch: 'amd64', cpus: 8, memoryGb: 32, containers: { total: 31, running: 28, stopped: 3 }, images: 45, lastSeen: 'Just now', version: '1.3.2', uptime: '14d 7h 23m', logLevel: 'info', pollInterval: '*/6 * * * *' },
-  { id: 'agent-01', name: 'prod-east', host: 'https://10.0.1.50:3001', status: 'connected', dockerVersion: '27.5.1', os: 'Debian 12', arch: 'amd64', cpus: 16, memoryGb: 64, containers: { total: 12, running: 12, stopped: 0 }, images: 23, lastSeen: '2s ago', version: '1.3.2', uptime: '32d 11h 5m', logLevel: 'info', pollInterval: '*/4 * * * *' },
-  { id: 'agent-02', name: 'staging', host: 'https://10.0.2.10:3001', status: 'disconnected', dockerVersion: '26.1.4', os: 'Alpine 3.20', arch: 'arm64', cpus: 4, memoryGb: 8, containers: { total: 4, running: 0, stopped: 4 }, images: 12, lastSeen: '14m ago', version: '1.3.1', uptime: '0d 0h 0m', logLevel: 'debug', pollInterval: '0 8 * * 1' },
-  { id: 'agent-03', name: 'dev-local', host: 'https://192.168.1.100:3001', status: 'connected', dockerVersion: '27.5.1', os: 'Fedora 41', arch: 'amd64', cpus: 4, memoryGb: 16, containers: { total: 8, running: 7, stopped: 1 }, images: 18, lastSeen: '1s ago', version: '1.3.2', uptime: '3d 19h 42m', logLevel: 'info', pollInterval: '*/10 * * * *' },
+  {
+    id: 'agent-local',
+    name: 'Local',
+    host: 'unix:///var/run/docker.sock',
+    status: 'connected',
+    dockerVersion: '27.5.1',
+    os: 'Ubuntu 24.04',
+    arch: 'amd64',
+    cpus: 8,
+    memoryGb: 32,
+    containers: { total: 31, running: 28, stopped: 3 },
+    images: 45,
+    lastSeen: 'Just now',
+    version: '1.3.2',
+    uptime: '14d 7h 23m',
+    logLevel: 'info',
+    pollInterval: '*/6 * * * *',
+  },
+  {
+    id: 'agent-01',
+    name: 'prod-east',
+    host: 'https://10.0.1.50:3001',
+    status: 'connected',
+    dockerVersion: '27.5.1',
+    os: 'Debian 12',
+    arch: 'amd64',
+    cpus: 16,
+    memoryGb: 64,
+    containers: { total: 12, running: 12, stopped: 0 },
+    images: 23,
+    lastSeen: '2s ago',
+    version: '1.3.2',
+    uptime: '32d 11h 5m',
+    logLevel: 'info',
+    pollInterval: '*/4 * * * *',
+  },
+  {
+    id: 'agent-02',
+    name: 'staging',
+    host: 'https://10.0.2.10:3001',
+    status: 'disconnected',
+    dockerVersion: '26.1.4',
+    os: 'Alpine 3.20',
+    arch: 'arm64',
+    cpus: 4,
+    memoryGb: 8,
+    containers: { total: 4, running: 0, stopped: 4 },
+    images: 12,
+    lastSeen: '14m ago',
+    version: '1.3.1',
+    uptime: '0d 0h 0m',
+    logLevel: 'debug',
+    pollInterval: '0 8 * * 1',
+  },
+  {
+    id: 'agent-03',
+    name: 'dev-local',
+    host: 'https://192.168.1.100:3001',
+    status: 'connected',
+    dockerVersion: '27.5.1',
+    os: 'Fedora 41',
+    arch: 'amd64',
+    cpus: 4,
+    memoryGb: 16,
+    containers: { total: 8, running: 7, stopped: 1 },
+    images: 18,
+    lastSeen: '1s ago',
+    version: '1.3.2',
+    uptime: '3d 19h 42m',
+    logLevel: 'info',
+    pollInterval: '*/10 * * * *',
+  },
 ]);
 
 export const agentLogs: Record<string, AgentLog[]> = {
   'agent-local': [
-    { timestamp: '2025-02-17T15:23:01.123Z', level: 'info', component: 'api', message: 'Server started on 0.0.0.0:3001' },
-    { timestamp: '2025-02-17T15:23:01.456Z', level: 'info', component: 'docker', message: 'Connected to Docker engine v27.5.1 via /var/run/docker.sock' },
-    { timestamp: '2025-02-17T15:23:02.104Z', level: 'info', component: 'watcher:hub', message: 'Scanning 31 containers for updates...' },
-    { timestamp: '2025-02-17T15:23:03.217Z', level: 'debug', component: 'registry:hub', message: 'Authenticated with Docker Hub (rate limit: 87/100)' },
-    { timestamp: '2025-02-17T15:23:04.550Z', level: 'info', component: 'watcher:hub', message: 'Update found: traefik 2.10.7 -> 3.0.1 (major)' },
-    { timestamp: '2025-02-17T15:23:05.012Z', level: 'info', component: 'watcher:hub', message: 'Update found: postgres 15.4 -> 16.1 (major)' },
-    { timestamp: '2025-02-17T15:23:06.192Z', level: 'warn', component: 'registry:hub', message: 'Rate limit approaching for Docker Hub (91/100 requests used)' },
-    { timestamp: '2025-02-17T15:23:07.103Z', level: 'info', component: 'watcher:hub', message: 'Update found: redis 7.0.12 -> 7.2.4 (minor)' },
-    { timestamp: '2025-02-17T15:23:08.290Z', level: 'error', component: 'registry:ghcr', message: 'Failed to fetch manifest for ghcr.io/drydock/api:latest (HTTP 429)' },
-    { timestamp: '2025-02-17T15:23:09.441Z', level: 'info', component: 'watcher:hub', message: 'Retrying ghcr.io/drydock/api in 30s (attempt 1/3)' },
-    { timestamp: '2025-02-17T15:23:10.115Z', level: 'info', component: 'trigger:slack', message: 'Webhook delivered to #ops-updates (6 updates)' },
-    { timestamp: '2025-02-17T15:23:11.320Z', level: 'debug', component: 'docker', message: 'Health check passed for postgres-db (latency: 4ms)' },
-    { timestamp: '2025-02-17T15:23:12.456Z', level: 'info', component: 'watcher:hub', message: 'Scan complete: 6 updates across 31 containers' },
-    { timestamp: '2025-02-17T15:23:13.550Z', level: 'info', component: 'api', message: 'GET /api/v1/containers 200 (23ms)' },
-    { timestamp: '2025-02-17T15:23:14.920Z', level: 'warn', component: 'docker', message: 'Container nginx-proxy stopped (exit code 137 - OOM killed)' },
-    { timestamp: '2025-02-17T15:23:16.880Z', level: 'info', component: 'docker', message: 'All health checks passed (28/28 running)' },
-    { timestamp: '2025-02-17T15:23:18.620Z', level: 'debug', component: 'auth', message: 'Session refreshed for admin (expires 2025-02-17T16:23:18Z)' },
-    { timestamp: '2025-02-17T15:23:20.880Z', level: 'info', component: 'backup', message: 'Database backup completed (2.3MB, 0.8s)' },
-    { timestamp: '2025-02-17T15:23:22.015Z', level: 'info', component: 'api', message: 'GET /api/v1/updates 200 (45ms)' },
-    { timestamp: '2025-02-17T15:23:24.440Z', level: 'info', component: 'watcher:hub', message: 'Next scan scheduled in 6h' },
+    {
+      timestamp: '2025-02-17T15:23:01.123Z',
+      level: 'info',
+      component: 'api',
+      message: 'Server started on 0.0.0.0:3001',
+    },
+    {
+      timestamp: '2025-02-17T15:23:01.456Z',
+      level: 'info',
+      component: 'docker',
+      message: 'Connected to Docker engine v27.5.1 via /var/run/docker.sock',
+    },
+    {
+      timestamp: '2025-02-17T15:23:02.104Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Scanning 31 containers for updates...',
+    },
+    {
+      timestamp: '2025-02-17T15:23:03.217Z',
+      level: 'debug',
+      component: 'registry:hub',
+      message: 'Authenticated with Docker Hub (rate limit: 87/100)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:04.550Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Update found: traefik 2.10.7 -> 3.0.1 (major)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:05.012Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Update found: postgres 15.4 -> 16.1 (major)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:06.192Z',
+      level: 'warn',
+      component: 'registry:hub',
+      message: 'Rate limit approaching for Docker Hub (91/100 requests used)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:07.103Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Update found: redis 7.0.12 -> 7.2.4 (minor)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:08.290Z',
+      level: 'error',
+      component: 'registry:ghcr',
+      message: 'Failed to fetch manifest for ghcr.io/drydock/api:latest (HTTP 429)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:09.441Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Retrying ghcr.io/drydock/api in 30s (attempt 1/3)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:10.115Z',
+      level: 'info',
+      component: 'trigger:slack',
+      message: 'Webhook delivered to #ops-updates (6 updates)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:11.320Z',
+      level: 'debug',
+      component: 'docker',
+      message: 'Health check passed for postgres-db (latency: 4ms)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:12.456Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Scan complete: 6 updates across 31 containers',
+    },
+    {
+      timestamp: '2025-02-17T15:23:13.550Z',
+      level: 'info',
+      component: 'api',
+      message: 'GET /api/v1/containers 200 (23ms)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:14.920Z',
+      level: 'warn',
+      component: 'docker',
+      message: 'Container nginx-proxy stopped (exit code 137 - OOM killed)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:16.880Z',
+      level: 'info',
+      component: 'docker',
+      message: 'All health checks passed (28/28 running)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:18.620Z',
+      level: 'debug',
+      component: 'auth',
+      message: 'Session refreshed for admin (expires 2025-02-17T16:23:18Z)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:20.880Z',
+      level: 'info',
+      component: 'backup',
+      message: 'Database backup completed (2.3MB, 0.8s)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:22.015Z',
+      level: 'info',
+      component: 'api',
+      message: 'GET /api/v1/updates 200 (45ms)',
+    },
+    {
+      timestamp: '2025-02-17T15:23:24.440Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Next scan scheduled in 6h',
+    },
   ],
   'agent-01': [
-    { timestamp: '2025-02-17T15:22:50.100Z', level: 'info', component: 'agent', message: 'Agent prod-east connected to hub (wss://drydock.local:3001)' },
-    { timestamp: '2025-02-17T15:22:50.340Z', level: 'info', component: 'docker', message: 'Connected to Docker engine v27.5.1 via /var/run/docker.sock' },
-    { timestamp: '2025-02-17T15:22:51.200Z', level: 'info', component: 'watcher:hub', message: 'Scanning 12 containers for updates...' },
-    { timestamp: '2025-02-17T15:22:52.330Z', level: 'debug', component: 'registry:ghcr', message: 'Authenticated with ghcr.io using token' },
-    { timestamp: '2025-02-17T15:22:53.112Z', level: 'info', component: 'watcher:hub', message: 'All 12 containers up to date' },
-    { timestamp: '2025-02-17T15:22:54.800Z', level: 'info', component: 'docker', message: 'Health check passed for all 12 containers (avg latency: 3ms)' },
-    { timestamp: '2025-02-17T15:22:55.990Z', level: 'info', component: 'agent', message: 'Heartbeat sent to hub (rtt: 12ms)' },
-    { timestamp: '2025-02-17T15:22:57.150Z', level: 'debug', component: 'docker', message: 'Image prune completed: removed 3 dangling images (1.2GB freed)' },
-    { timestamp: '2025-02-17T15:22:58.400Z', level: 'info', component: 'trigger:http', message: 'POST /webhook/ci 200 - pipeline status: passing' },
-    { timestamp: '2025-02-17T15:23:00.100Z', level: 'info', component: 'watcher:hub', message: 'Next scan scheduled in 4h' },
+    {
+      timestamp: '2025-02-17T15:22:50.100Z',
+      level: 'info',
+      component: 'agent',
+      message: 'Agent prod-east connected to hub (wss://drydock.local:3001)',
+    },
+    {
+      timestamp: '2025-02-17T15:22:50.340Z',
+      level: 'info',
+      component: 'docker',
+      message: 'Connected to Docker engine v27.5.1 via /var/run/docker.sock',
+    },
+    {
+      timestamp: '2025-02-17T15:22:51.200Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Scanning 12 containers for updates...',
+    },
+    {
+      timestamp: '2025-02-17T15:22:52.330Z',
+      level: 'debug',
+      component: 'registry:ghcr',
+      message: 'Authenticated with ghcr.io using token',
+    },
+    {
+      timestamp: '2025-02-17T15:22:53.112Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'All 12 containers up to date',
+    },
+    {
+      timestamp: '2025-02-17T15:22:54.800Z',
+      level: 'info',
+      component: 'docker',
+      message: 'Health check passed for all 12 containers (avg latency: 3ms)',
+    },
+    {
+      timestamp: '2025-02-17T15:22:55.990Z',
+      level: 'info',
+      component: 'agent',
+      message: 'Heartbeat sent to hub (rtt: 12ms)',
+    },
+    {
+      timestamp: '2025-02-17T15:22:57.150Z',
+      level: 'debug',
+      component: 'docker',
+      message: 'Image prune completed: removed 3 dangling images (1.2GB freed)',
+    },
+    {
+      timestamp: '2025-02-17T15:22:58.400Z',
+      level: 'info',
+      component: 'trigger:http',
+      message: 'POST /webhook/ci 200 - pipeline status: passing',
+    },
+    {
+      timestamp: '2025-02-17T15:23:00.100Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Next scan scheduled in 4h',
+    },
   ],
   'agent-02': [
-    { timestamp: '2025-02-17T15:09:01.100Z', level: 'info', component: 'agent', message: 'Agent staging connected to hub (wss://drydock.local:3001)' },
-    { timestamp: '2025-02-17T15:09:01.450Z', level: 'info', component: 'docker', message: 'Connected to Docker engine v26.1.4 via /var/run/docker.sock' },
-    { timestamp: '2025-02-17T15:09:02.200Z', level: 'info', component: 'watcher:hub', message: 'Scanning 4 containers for updates...' },
-    { timestamp: '2025-02-17T15:09:03.100Z', level: 'warn', component: 'docker', message: 'Docker engine v26.1.4 is outdated (latest: v27.5.1)' },
-    { timestamp: '2025-02-17T15:09:04.350Z', level: 'info', component: 'watcher:hub', message: 'Update found: staging-api 2.1.0 -> 2.2.0 (minor)' },
-    { timestamp: '2025-02-17T15:09:06.800Z', level: 'info', component: 'watcher:hub', message: 'Scan complete: 1 update across 4 containers' },
-    { timestamp: '2025-02-17T15:09:08.100Z', level: 'info', component: 'agent', message: 'Heartbeat sent to hub (rtt: 45ms)' },
-    { timestamp: '2025-02-17T15:09:10.200Z', level: 'warn', component: 'agent', message: 'High latency to hub (rtt: 45ms, threshold: 30ms)' },
-    { timestamp: '2025-02-17T15:09:17.100Z', level: 'error', component: 'agent', message: 'Connection to hub lost (ETIMEDOUT)' },
-    { timestamp: '2025-02-17T15:09:26.500Z', level: 'warn', component: 'agent', message: 'Entering offline mode after 3 failed reconnect attempts' },
+    {
+      timestamp: '2025-02-17T15:09:01.100Z',
+      level: 'info',
+      component: 'agent',
+      message: 'Agent staging connected to hub (wss://drydock.local:3001)',
+    },
+    {
+      timestamp: '2025-02-17T15:09:01.450Z',
+      level: 'info',
+      component: 'docker',
+      message: 'Connected to Docker engine v26.1.4 via /var/run/docker.sock',
+    },
+    {
+      timestamp: '2025-02-17T15:09:02.200Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Scanning 4 containers for updates...',
+    },
+    {
+      timestamp: '2025-02-17T15:09:03.100Z',
+      level: 'warn',
+      component: 'docker',
+      message: 'Docker engine v26.1.4 is outdated (latest: v27.5.1)',
+    },
+    {
+      timestamp: '2025-02-17T15:09:04.350Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Update found: staging-api 2.1.0 -> 2.2.0 (minor)',
+    },
+    {
+      timestamp: '2025-02-17T15:09:06.800Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Scan complete: 1 update across 4 containers',
+    },
+    {
+      timestamp: '2025-02-17T15:09:08.100Z',
+      level: 'info',
+      component: 'agent',
+      message: 'Heartbeat sent to hub (rtt: 45ms)',
+    },
+    {
+      timestamp: '2025-02-17T15:09:10.200Z',
+      level: 'warn',
+      component: 'agent',
+      message: 'High latency to hub (rtt: 45ms, threshold: 30ms)',
+    },
+    {
+      timestamp: '2025-02-17T15:09:17.100Z',
+      level: 'error',
+      component: 'agent',
+      message: 'Connection to hub lost (ETIMEDOUT)',
+    },
+    {
+      timestamp: '2025-02-17T15:09:26.500Z',
+      level: 'warn',
+      component: 'agent',
+      message: 'Entering offline mode after 3 failed reconnect attempts',
+    },
   ],
   'agent-03': [
-    { timestamp: '2025-02-17T15:20:01.100Z', level: 'info', component: 'agent', message: 'Agent dev-local connected to hub (wss://drydock.local:3001)' },
-    { timestamp: '2025-02-17T15:20:01.350Z', level: 'info', component: 'docker', message: 'Connected to Docker engine v27.5.1 via /var/run/docker.sock' },
-    { timestamp: '2025-02-17T15:20:02.200Z', level: 'info', component: 'watcher:hub', message: 'Scanning 8 containers for updates...' },
-    { timestamp: '2025-02-17T15:20:04.500Z', level: 'info', component: 'watcher:hub', message: 'Update found: dev-api 0.9.3 -> 0.10.0 (minor)' },
-    { timestamp: '2025-02-17T15:20:05.750Z', level: 'info', component: 'watcher:hub', message: 'Update found: dev-ui 0.9.3 -> 0.10.0 (minor)' },
-    { timestamp: '2025-02-17T15:20:06.900Z', level: 'info', component: 'watcher:hub', message: 'Scan complete: 2 updates across 8 containers' },
-    { timestamp: '2025-02-17T15:20:08.100Z', level: 'info', component: 'agent', message: 'Heartbeat sent to hub (rtt: 2ms)' },
-    { timestamp: '2025-02-17T15:20:12.350Z', level: 'info', component: 'docker', message: 'Health check passed for 7/8 containers' },
-    { timestamp: '2025-02-17T15:20:13.500Z', level: 'warn', component: 'docker', message: 'Container dev-cache health check timeout (>5s)' },
-    { timestamp: '2025-02-17T15:20:27.700Z', level: 'info', component: 'watcher:hub', message: 'Next scan scheduled in 10m' },
+    {
+      timestamp: '2025-02-17T15:20:01.100Z',
+      level: 'info',
+      component: 'agent',
+      message: 'Agent dev-local connected to hub (wss://drydock.local:3001)',
+    },
+    {
+      timestamp: '2025-02-17T15:20:01.350Z',
+      level: 'info',
+      component: 'docker',
+      message: 'Connected to Docker engine v27.5.1 via /var/run/docker.sock',
+    },
+    {
+      timestamp: '2025-02-17T15:20:02.200Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Scanning 8 containers for updates...',
+    },
+    {
+      timestamp: '2025-02-17T15:20:04.500Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Update found: dev-api 0.9.3 -> 0.10.0 (minor)',
+    },
+    {
+      timestamp: '2025-02-17T15:20:05.750Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Update found: dev-ui 0.9.3 -> 0.10.0 (minor)',
+    },
+    {
+      timestamp: '2025-02-17T15:20:06.900Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Scan complete: 2 updates across 8 containers',
+    },
+    {
+      timestamp: '2025-02-17T15:20:08.100Z',
+      level: 'info',
+      component: 'agent',
+      message: 'Heartbeat sent to hub (rtt: 2ms)',
+    },
+    {
+      timestamp: '2025-02-17T15:20:12.350Z',
+      level: 'info',
+      component: 'docker',
+      message: 'Health check passed for 7/8 containers',
+    },
+    {
+      timestamp: '2025-02-17T15:20:13.500Z',
+      level: 'warn',
+      component: 'docker',
+      message: 'Container dev-cache health check timeout (>5s)',
+    },
+    {
+      timestamp: '2025-02-17T15:20:27.700Z',
+      level: 'info',
+      component: 'watcher:hub',
+      message: 'Next scan scheduled in 10m',
+    },
   ],
 };
 
@@ -547,48 +1506,168 @@ export function getAgentLogs(agentId: string): AgentLog[] {
 
 export function formatAgentLogTimestamp(iso: string) {
   const d = new Date(iso);
-  return d.toTimeString().slice(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  return `${d.toTimeString().slice(0, 8)}.${String(d.getMilliseconds()).padStart(3, '0')}`;
 }
 
 // ── Triggers Page ───────────────────────────────────────
 
 export const triggersData = [
-  { id: 'slack-ops', name: 'Slack #ops-updates', type: 'slack', status: 'active', config: { channel: '#ops-updates', webhook: 'https://hooks.slack.com/***' } },
-  { id: 'discord-dev', name: 'Discord Dev', type: 'discord', status: 'active', config: { webhook: 'https://discord.com/api/webhooks/***' } },
-  { id: 'email-admin', name: 'Admin Email', type: 'smtp', status: 'active', config: { to: 'admin@example.com', from: 'drydock@example.com', host: 'smtp.sendgrid.net' } },
-  { id: 'http-ci', name: 'CI Pipeline Webhook', type: 'http', status: 'error', config: { url: 'https://ci.example.com/api/trigger', method: 'POST' } },
-  { id: 'telegram-alerts', name: 'Telegram Alerts', type: 'telegram', status: 'active', config: { botToken: '***', chatId: '-1001234567890' } },
-  { id: 'mqtt-home', name: 'MQTT Home Automation', type: 'mqtt', status: 'active', config: { broker: 'mqtt://192.168.1.5:1883', topic: 'drydock/updates' } },
+  {
+    id: 'slack-ops',
+    name: 'Slack #ops-updates',
+    type: 'slack',
+    status: 'active',
+    config: { channel: '#ops-updates', webhook: 'https://hooks.slack.com/***' },
+  },
+  {
+    id: 'discord-dev',
+    name: 'Discord Dev',
+    type: 'discord',
+    status: 'active',
+    config: { webhook: 'https://discord.com/api/webhooks/***' },
+  },
+  {
+    id: 'email-admin',
+    name: 'Admin Email',
+    type: 'smtp',
+    status: 'active',
+    config: { to: 'admin@example.com', from: 'drydock@example.com', host: 'smtp.sendgrid.net' },
+  },
+  {
+    id: 'http-ci',
+    name: 'CI Pipeline Webhook',
+    type: 'http',
+    status: 'error',
+    config: { url: 'https://ci.example.com/api/trigger', method: 'POST' },
+  },
+  {
+    id: 'telegram-alerts',
+    name: 'Telegram Alerts',
+    type: 'telegram',
+    status: 'active',
+    config: { botToken: '***', chatId: '-1001234567890' },
+  },
+  {
+    id: 'mqtt-home',
+    name: 'MQTT Home Automation',
+    type: 'mqtt',
+    status: 'active',
+    config: { broker: 'mqtt://192.168.1.5:1883', topic: 'drydock/updates' },
+  },
 ];
 
 // ── Watchers Page ───────────────────────────────────────
 
 export const watchersData = [
-  { id: 'local', name: 'Local Docker', type: 'docker', status: 'watching', containers: 31, cron: '0 */6 * * *', lastRun: '2h ago', config: { socket: '/var/run/docker.sock', watchByDefault: 'true' } },
-  { id: 'agent-01-watcher', name: 'prod-east', type: 'docker', status: 'watching', containers: 12, cron: '0 */4 * * *', lastRun: '45m ago', config: { agent: 'agent-01', watchByDefault: 'true' } },
-  { id: 'agent-02-watcher', name: 'staging', type: 'docker', status: 'paused', containers: 4, cron: '0 8 * * 1', lastRun: '6d ago', config: { agent: 'agent-02', maintenanceWindow: 'true', maintenanceOpen: 'false', nextWindow: '2026-02-17T08:00:00Z' } },
+  {
+    id: 'local',
+    name: 'Local Docker',
+    type: 'docker',
+    status: 'watching',
+    containers: 31,
+    cron: '0 */6 * * *',
+    lastRun: '2h ago',
+    config: { socket: '/var/run/docker.sock', watchByDefault: 'true' },
+  },
+  {
+    id: 'agent-01-watcher',
+    name: 'prod-east',
+    type: 'docker',
+    status: 'watching',
+    containers: 12,
+    cron: '0 */4 * * *',
+    lastRun: '45m ago',
+    config: { agent: 'agent-01', watchByDefault: 'true' },
+  },
+  {
+    id: 'agent-02-watcher',
+    name: 'staging',
+    type: 'docker',
+    status: 'paused',
+    containers: 4,
+    cron: '0 8 * * 1',
+    lastRun: '6d ago',
+    config: {
+      agent: 'agent-02',
+      maintenanceWindow: 'true',
+      maintenanceOpen: 'false',
+      nextWindow: '2026-02-17T08:00:00Z',
+    },
+  },
 ];
 
 // ── Auth Page ───────────────────────────────────────────
 
 export const authData = [
-  { id: 'basic', name: 'Basic Auth', type: 'basic', status: 'active', config: { username: 'admin', hash: 'argon2id:***' } },
-  { id: 'oidc', name: 'Google OIDC', type: 'oidc', status: 'active', config: { issuer: 'https://accounts.google.com', clientId: '***', redirectUri: 'https://drydock.example.com/auth/callback' } },
+  {
+    id: 'basic',
+    name: 'Basic Auth',
+    type: 'basic',
+    status: 'active',
+    config: { username: 'admin', hash: 'argon2id:***' },
+  },
+  {
+    id: 'oidc',
+    name: 'Google OIDC',
+    type: 'oidc',
+    status: 'active',
+    config: {
+      issuer: 'https://accounts.google.com',
+      clientId: '***',
+      redirectUri: 'https://drydock.example.com/auth/callback',
+    },
+  },
 ];
 
 // ── Notifications Page ──────────────────────────────────
 
 export const notificationsData = ref([
-  { id: 'update-available', name: 'Update Available', enabled: true, triggers: ['slack-ops', 'discord-dev', 'email-admin'], description: 'When a container has a new version' },
-  { id: 'update-applied', name: 'Update Applied', enabled: true, triggers: ['slack-ops'], description: 'After a container is successfully updated' },
-  { id: 'update-failed', name: 'Update Failed', enabled: true, triggers: ['slack-ops', 'email-admin', 'telegram-alerts'], description: 'When an update fails or is rolled back' },
-  { id: 'security-alert', name: 'Security Alert', enabled: true, triggers: ['email-admin', 'telegram-alerts'], description: 'Critical/High vulnerability detected' },
-  { id: 'agent-disconnect', name: 'Agent Disconnected', enabled: false, triggers: [] as string[], description: 'When a remote agent loses connection' },
+  {
+    id: 'update-available',
+    name: 'Update Available',
+    enabled: true,
+    triggers: ['slack-ops', 'discord-dev', 'email-admin'],
+    description: 'When a container has a new version',
+  },
+  {
+    id: 'update-applied',
+    name: 'Update Applied',
+    enabled: true,
+    triggers: ['slack-ops'],
+    description: 'After a container is successfully updated',
+  },
+  {
+    id: 'update-failed',
+    name: 'Update Failed',
+    enabled: true,
+    triggers: ['slack-ops', 'email-admin', 'telegram-alerts'],
+    description: 'When an update fails or is rolled back',
+  },
+  {
+    id: 'security-alert',
+    name: 'Security Alert',
+    enabled: true,
+    triggers: ['email-admin', 'telegram-alerts'],
+    description: 'Critical/High vulnerability detected',
+  },
+  {
+    id: 'agent-disconnect',
+    name: 'Agent Disconnected',
+    enabled: false,
+    triggers: [] as string[],
+    description: 'When a remote agent loses connection',
+  },
 ]);
 
 // ── Profile Page ────────────────────────────────────────
 
-export const profileData = { username: 'admin', email: 'admin@example.com', role: 'Administrator', lastLogin: '2026-02-16 14:23:01', sessions: 3 };
+export const profileData = {
+  username: 'admin',
+  email: 'admin@example.com',
+  role: 'Administrator',
+  lastLogin: '2026-02-16 14:23:01',
+  sessions: 3,
+};
 
 // ── Helper Functions ──────────────────────────────────
 
@@ -645,19 +1724,28 @@ export function severityColor(sev: string) {
 export function registryTypeBadge(type: string) {
   if (type === 'hub') return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)', label: 'Hub' };
   if (type === 'ghcr') return { bg: 'var(--dd-alt-muted)', text: 'var(--dd-alt)', label: 'GHCR' };
-  if (type === 'quay') return { bg: 'var(--dd-danger-muted)', text: 'var(--dd-danger)', label: 'Quay' };
-  if (type === 'ecr') return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)', label: 'ECR' };
-  if (type === 'gitlab') return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)', label: 'GitLab' };
+  if (type === 'quay')
+    return { bg: 'var(--dd-danger-muted)', text: 'var(--dd-danger)', label: 'Quay' };
+  if (type === 'ecr')
+    return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)', label: 'ECR' };
+  if (type === 'gitlab')
+    return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)', label: 'GitLab' };
   return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: type };
 }
 
 export function triggerTypeBadge(type: string) {
-  if (type === 'slack') return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)', label: 'Slack' };
-  if (type === 'discord') return { bg: 'var(--dd-alt-muted)', text: 'var(--dd-alt)', label: 'Discord' };
-  if (type === 'smtp') return { bg: 'var(--dd-success-muted)', text: 'var(--dd-success)', label: 'SMTP' };
-  if (type === 'http') return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)', label: 'HTTP' };
-  if (type === 'telegram') return { bg: 'var(--dd-primary-muted)', text: 'var(--dd-primary)', label: 'Telegram' };
-  if (type === 'mqtt') return { bg: 'var(--dd-caution-muted)', text: 'var(--dd-caution)', label: 'MQTT' };
+  if (type === 'slack')
+    return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)', label: 'Slack' };
+  if (type === 'discord')
+    return { bg: 'var(--dd-alt-muted)', text: 'var(--dd-alt)', label: 'Discord' };
+  if (type === 'smtp')
+    return { bg: 'var(--dd-success-muted)', text: 'var(--dd-success)', label: 'SMTP' };
+  if (type === 'http')
+    return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)', label: 'HTTP' };
+  if (type === 'telegram')
+    return { bg: 'var(--dd-primary-muted)', text: 'var(--dd-primary)', label: 'Telegram' };
+  if (type === 'mqtt')
+    return { bg: 'var(--dd-caution-muted)', text: 'var(--dd-caution)', label: 'MQTT' };
   return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: type };
 }
 
@@ -668,12 +1756,14 @@ export function watcherStatusColor(status: string) {
 }
 
 export function authTypeBadge(type: string) {
-  if (type === 'basic') return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: 'Basic' };
-  if (type === 'oidc') return { bg: 'var(--dd-primary-muted)', text: 'var(--dd-primary)', label: 'OIDC' };
+  if (type === 'basic')
+    return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: 'Basic' };
+  if (type === 'oidc')
+    return { bg: 'var(--dd-primary-muted)', text: 'var(--dd-primary)', label: 'OIDC' };
   return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: type };
 }
 
 export function triggerNameById(id: string) {
-  const t = triggersData.find(tr => tr.id === id);
+  const t = triggersData.find((tr) => tr.id === id);
   return t ? t.name : id;
 }

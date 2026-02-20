@@ -69,7 +69,7 @@ function deriveNewTag(apiContainer: any): string | null {
 function deriveLabels(apiContainer: any): string[] {
   const labels = apiContainer.labels;
   if (!labels || typeof labels !== 'object') return [];
-  return Object.entries(labels).map(([k, v]) => v ? `${k}=${v}` : k);
+  return Object.entries(labels).map(([k, v]) => (v ? `${k}=${v}` : k));
 }
 
 /** Map a single API container to the UI Container type. */

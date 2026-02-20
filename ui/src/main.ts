@@ -1,10 +1,10 @@
-import { createApp } from 'vue';
-import PrimeVue from 'primevue/config';
+import phIcons from '@iconify-json/ph/icons.json';
 import Aura from '@primeuix/themes/aura';
+import { addCollection } from 'iconify-icon';
+import PrimeVue from 'primevue/config';
+import { createApp } from 'vue';
 import App from './App.vue';
 import router from './router';
-import { addCollection } from 'iconify-icon';
-import phIcons from '@iconify-json/ph/icons.json';
 import './theme/tokens.css';
 import './style.css';
 

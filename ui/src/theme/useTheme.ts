@@ -1,4 +1,4 @@
-import { ref, computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { ThemeFamily, ThemeVariant } from './palettes';
 
 const FAMILY_KEY = 'drydock-theme-family';
@@ -10,7 +10,9 @@ function loadFamily(): ThemeFamily {
     if (stored && ['drydock', 'github', 'dracula', 'catppuccin'].includes(stored)) {
       return stored as ThemeFamily;
     }
-  } catch { /* SSR or blocked storage */ }
+  } catch {
+    /* SSR or blocked storage */
+  }
   return 'drydock';
 }
 
@@ -20,7 +22,9 @@ function loadVariant(): ThemeVariant {
     if (stored && ['dark', 'light', 'system'].includes(stored)) {
       return stored as ThemeVariant;
     }
-  } catch { /* SSR or blocked storage */ }
+  } catch {
+    /* SSR or blocked storage */
+  }
   return 'dark';
 }
 
@@ -31,18 +35,21 @@ const systemDark = ref(globalThis.matchMedia?.('(prefers-color-scheme: dark)').m
 
 // Listen for system preference changes — trigger transition when on 'system' mode
 try {
-  globalThis.matchMedia('(prefers-color-scheme: dark)')
-    .addEventListener('change', (e) => {
-      if (themeVariant.value === 'system') {
-        transitionTheme(() => { systemDark.value = e.matches; });
-      } else {
+  globalThis.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    if (themeVariant.value === 'system') {
+      transitionTheme(() => {
         systemDark.value = e.matches;
-      }
-    });
-} catch { /* ignored */ }
+      });
+    } else {
+      systemDark.value = e.matches;
+    }
+  });
+} catch {
+  /* ignored */
+}
 
 const resolvedVariant = computed<'dark' | 'light'>(() =>
-  themeVariant.value === 'system' ? (systemDark.value ? 'dark' : 'light') : themeVariant.value
+  themeVariant.value === 'system' ? (systemDark.value ? 'dark' : 'light') : themeVariant.value,
 );
 
 const isDark = computed(() => resolvedVariant.value === 'dark');
@@ -50,7 +57,11 @@ const isDark = computed(() => resolvedVariant.value === 'dark');
 // Apply classes on <html> — called directly (not in watchEffect) so we control timing
 function applyClasses() {
   const el = document.documentElement;
-  el.className = el.className.replace(/\btheme-(?!transition)\S+/g, '').replace(/\b(dark|light)\b/g, '').replace(/\s+/g, ' ').trim();
+  el.className = el.className
+    .replace(/\btheme-(?!transition)\S+/g, '')
+    .replace(/\b(dark|light)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   const family = themeFamily.value;
   const variant = resolvedVariant.value;
   if (family !== 'drydock') {
@@ -63,17 +74,37 @@ function applyClasses() {
 applyClasses();
 
 // Watch for changes not triggered via transitionTheme (e.g. direct ref sets)
-watch([themeFamily, themeVariant, systemDark], () => {
-  if (!isTransitioning) applyClasses();
-}, { flush: 'sync' });
+watch(
+  [themeFamily, themeVariant, systemDark],
+  () => {
+    if (!isTransitioning) applyClasses();
+  },
+  { flush: 'sync' },
+);
 
 // Persist to localStorage
-watch(themeFamily, (val) => {
-  try { localStorage.setItem(FAMILY_KEY, val); } catch { /* ignored */ }
-}, { flush: 'sync' });
-watch(themeVariant, (val) => {
-  try { localStorage.setItem(VARIANT_KEY, val); } catch { /* ignored */ }
-}, { flush: 'sync' });
+watch(
+  themeFamily,
+  (val) => {
+    try {
+      localStorage.setItem(FAMILY_KEY, val);
+    } catch {
+      /* ignored */
+    }
+  },
+  { flush: 'sync' },
+);
+watch(
+  themeVariant,
+  (val) => {
+    try {
+      localStorage.setItem(VARIANT_KEY, val);
+    } catch {
+      /* ignored */
+    }
+  },
+  { flush: 'sync' },
+);
 
 let isTransitioning = false;
 
@@ -111,11 +142,22 @@ async function transitionTheme(change: () => void, e?: MouseEvent) {
 
   try {
     await transition.finished;
-  } catch { /* aborted */ }
+  } catch {
+    /* aborted */
+  }
   isTransitioning = false;
   document.documentElement.classList.remove('theme-transition-active');
 }
 
 export function useTheme() {
-  return { themeFamily, themeVariant, resolvedVariant, isDark, setThemeFamily, setThemeVariant, toggleVariant, transitionTheme };
+  return {
+    themeFamily,
+    themeVariant,
+    resolvedVariant,
+    isDark,
+    setThemeFamily,
+    setThemeVariant,
+    toggleVariant,
+    transitionTheme,
+  };
 }

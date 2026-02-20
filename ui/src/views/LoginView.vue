@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { getOidcRedirection, getStrategies, loginBasic } from '../services/auth';
 import { useTheme } from '../theme/useTheme';
-import AppIcon from '../components/AppIcon.vue';
-import whaleLogo from '../assets/whale-logo.png';
-import { getStrategies, loginBasic, getOidcRedirection } from '../services/auth';
 
 const router = useRouter();
 const route = useRoute();

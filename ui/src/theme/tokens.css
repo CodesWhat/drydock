@@ -4,7 +4,7 @@
   --dd-bg-sidebar: #0c1222;
   --dd-bg-card: #1e293b;
   --dd-bg-elevated: #151d2e;
-  --dd-bg-inset: rgba(15,23,42,0.5);
+  --dd-bg-inset: rgba(15, 23, 42, 0.5);
   --dd-bg-code: #0a0f1a;
   --dd-border: #1e293b;
   --dd-border-strong: #334155;
@@ -12,13 +12,13 @@
   --dd-text-secondary: #94a3b8;
   --dd-text-muted: #64748b;
   --dd-scrollbar: #475569;
-  --dd-success: #06D6A0;
-  --dd-danger: #E53935;
-  --dd-warning: #FF9800;
-  --dd-caution: #EAB308;
-  --dd-info: #3B82F6;
-  --dd-primary: #0096C7;
-  --dd-alt: #A855F7;
+  --dd-success: #06d6a0;
+  --dd-danger: #e53935;
+  --dd-warning: #ff9800;
+  --dd-caution: #eab308;
+  --dd-info: #3b82f6;
+  --dd-primary: #0096c7;
+  --dd-alt: #a855f7;
   --dd-neutral: #64748b;
   --dd-success-muted: color-mix(in srgb, var(--dd-success) 15%, transparent);
   --dd-danger-muted: color-mix(in srgb, var(--dd-danger) 15%, transparent);
@@ -54,7 +54,7 @@
   --dd-bg-sidebar: #010409;
   --dd-bg-card: #161b22;
   --dd-bg-elevated: #161b22;
-  --dd-bg-inset: rgba(13,17,23,0.5);
+  --dd-bg-inset: rgba(13, 17, 23, 0.5);
   --dd-bg-code: #0d1117;
   --dd-border: #30363d;
   --dd-border-strong: #484f58;
@@ -102,7 +102,7 @@
   --dd-bg-sidebar: #21222c;
   --dd-bg-card: #44475a;
   --dd-bg-elevated: #343746;
-  --dd-bg-inset: rgba(40,42,54,0.5);
+  --dd-bg-inset: rgba(40, 42, 54, 0.5);
   --dd-bg-code: #1e1f29;
   --dd-border: #44475a;
   --dd-border-strong: #6272a4;
@@ -150,7 +150,7 @@
   --dd-bg-sidebar: #181825;
   --dd-bg-card: #313244;
   --dd-bg-elevated: #262637;
-  --dd-bg-inset: rgba(30,30,46,0.5);
+  --dd-bg-inset: rgba(30, 30, 46, 0.5);
   --dd-bg-code: #11111b;
   --dd-border: #313244;
   --dd-border-strong: #45475a;

@@ -1,4 +1,4 @@
-import { ref, computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { Container } from '../types/container';
 
 export function useDetailPanel() {
@@ -9,9 +9,7 @@ export function useDetailPanel() {
   const containerFullPage = ref(false);
 
   const panelFlex = computed(() =>
-    panelSize.value === 'sm' ? '0 0 30%'
-    : panelSize.value === 'md' ? '0 0 45%'
-    : '0 0 70%'
+    panelSize.value === 'sm' ? '0 0 30%' : panelSize.value === 'md' ? '0 0 45%' : '0 0 70%',
   );
 
   const detailTabs = [
@@ -23,13 +21,16 @@ export function useDetailPanel() {
 
   function savePanelState() {
     if (selectedContainer.value) {
-      sessionStorage.setItem('dd-panel', JSON.stringify({
-        name: selectedContainer.value.name,
-        tab: activeDetailTab.value,
-        panel: detailPanelOpen.value,
-        full: containerFullPage.value,
-        size: panelSize.value,
-      }));
+      sessionStorage.setItem(
+        'dd-panel',
+        JSON.stringify({
+          name: selectedContainer.value.name,
+          tab: activeDetailTab.value,
+          panel: detailPanelOpen.value,
+          full: containerFullPage.value,
+          size: panelSize.value,
+        }),
+      );
     } else {
       sessionStorage.removeItem('dd-panel');
     }
@@ -63,7 +64,16 @@ export function useDetailPanel() {
   watch([activeDetailTab, panelSize], savePanelState);
 
   return {
-    selectedContainer, detailPanelOpen, activeDetailTab, panelSize, containerFullPage,
-    panelFlex, detailTabs, selectContainer, openFullPage, closeFullPage, closePanel,
+    selectedContainer,
+    detailPanelOpen,
+    activeDetailTab,
+    panelSize,
+    containerFullPage,
+    panelFlex,
+    detailTabs,
+    selectContainer,
+    openFullPage,
+    closeFullPage,
+    closePanel,
   };
 }

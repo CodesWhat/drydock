@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import AppLayout from '../layouts/AppLayout.vue';
-import AppIcon from '../components/AppIcon.vue';
+import { getAgents } from '../services/agent';
 import { getAllContainers } from '../services/container';
 import { getServer } from '../services/server';
-import { getAgents } from '../services/agent';
-import { mapApiContainers } from '../utils/container-mapper';
 import type { Container } from '../types/container';
+import { mapApiContainers } from '../utils/container-mapper';
 
 const router = useRouter();
 
@@ -45,26 +43,56 @@ onMounted(async () => {
 // Computed: stat cards
 const stats = computed(() => {
   const total = containers.value.length;
-  const updatesAvailable = containers.value.filter(c => c.updateKind).length;
-  const securityIssues = containers.value.filter(c => c.bouncer === 'blocked' || c.bouncer === 'unsafe').length;
+  const updatesAvailable = containers.value.filter((c) => c.updateKind).length;
+  const securityIssues = containers.value.filter(
+    (c) => c.bouncer === 'blocked' || c.bouncer === 'unsafe',
+  ).length;
   return [
-    { label: 'Containers', value: String(total), icon: 'containers', color: 'var(--dd-primary)', colorMuted: 'var(--dd-primary-muted)', trend: '+0' },
-    { label: 'Updates Available', value: String(updatesAvailable), icon: 'updates', color: 'var(--dd-warning)', colorMuted: 'var(--dd-warning-muted)', trend: '+0' },
-    { label: 'Security Issues', value: String(securityIssues), icon: 'security', color: 'var(--dd-danger)', colorMuted: 'var(--dd-danger-muted)', trend: '+0' },
-    { label: 'Uptime', value: '99.8%', icon: 'uptime', color: 'var(--dd-success)', colorMuted: 'var(--dd-success-muted)', trend: '+0.0%' },
+    {
+      label: 'Containers',
+      value: String(total),
+      icon: 'containers',
+      color: 'var(--dd-primary)',
+      colorMuted: 'var(--dd-primary-muted)',
+      trend: '+0',
+    },
+    {
+      label: 'Updates Available',
+      value: String(updatesAvailable),
+      icon: 'updates',
+      color: 'var(--dd-warning)',
+      colorMuted: 'var(--dd-warning-muted)',
+      trend: '+0',
+    },
+    {
+      label: 'Security Issues',
+      value: String(securityIssues),
+      icon: 'security',
+      color: 'var(--dd-danger)',
+      colorMuted: 'var(--dd-danger-muted)',
+      trend: '+0',
+    },
+    {
+      label: 'Uptime',
+      value: '99.8%',
+      icon: 'uptime',
+      color: 'var(--dd-success)',
+      colorMuted: 'var(--dd-success-muted)',
+      trend: '+0.0%',
+    },
   ];
 });
 
 // Computed: recent updates (containers that have pending updates)
 const recentUpdates = computed(() => {
   return containers.value
-    .filter(c => c.newTag)
+    .filter((c) => c.newTag)
     .slice(0, 8)
-    .map(c => ({
+    .map((c) => ({
       name: c.name,
       image: c.image,
       oldVer: c.currentTag,
-      newVer: c.newTag!,
+      newVer: c.newTag ?? '',
       status: 'pending' as const,
       time: '',
       running: c.status === 'running',
@@ -74,9 +102,9 @@ const recentUpdates = computed(() => {
 // Computed: security vulnerabilities (containers flagged by bouncer)
 const vulnerabilities = computed(() => {
   return containers.value
-    .filter(c => c.bouncer === 'blocked' || c.bouncer === 'unsafe')
+    .filter((c) => c.bouncer === 'blocked' || c.bouncer === 'unsafe')
     .slice(0, 5)
-    .map(c => ({
+    .map((c) => ({
       id: c.name,
       severity: c.bouncer === 'blocked' ? 'CRITICAL' : 'HIGH',
       package: c.image,
@@ -86,27 +114,31 @@ const vulnerabilities = computed(() => {
 
 // Computed: servers list (local server + agents)
 const servers = computed(() => {
-  const list: Array<{ name: string; status: 'connected' | 'disconnected'; containers: { running: number; total: number } }> = [];
+  const list: Array<{
+    name: string;
+    status: 'connected' | 'disconnected';
+    containers: { running: number; total: number };
+  }> = [];
 
   // Local server is always present
-  const localContainers = containers.value.filter(c => c.server === 'Local');
+  const localContainers = containers.value.filter((c) => c.server === 'Local');
   list.push({
     name: 'Local',
     status: 'connected',
     containers: {
-      running: localContainers.filter(c => c.status === 'running').length,
+      running: localContainers.filter((c) => c.status === 'running').length,
       total: localContainers.length,
     },
   });
 
   // Add agents as remote hosts
   for (const agent of agents.value) {
-    const agentContainers = containers.value.filter(c => c.server === agent.name);
+    const agentContainers = containers.value.filter((c) => c.server === agent.name);
     list.push({
       name: agent.name,
       status: agent.connected ? 'connected' : 'disconnected',
       containers: {
-        running: agentContainers.filter(c => c.status === 'running').length,
+        running: agentContainers.filter((c) => c.status === 'running').length,
         total: agentContainers.length,
       },
     });
@@ -117,10 +149,10 @@ const servers = computed(() => {
 
 // Computed: security donut chart data
 const securityCleanCount = computed(() => {
-  return containers.value.filter(c => c.bouncer === 'safe').length;
+  return containers.value.filter((c) => c.bouncer === 'safe').length;
 });
 const securityIssueCount = computed(() => {
-  return containers.value.filter(c => c.bouncer === 'blocked' || c.bouncer === 'unsafe').length;
+  return containers.value.filter((c) => c.bouncer === 'blocked' || c.bouncer === 'unsafe').length;
 });
 const securityTotalCount = computed(() => containers.value.length);
 const DONUT_CIRCUMFERENCE = 301.6;

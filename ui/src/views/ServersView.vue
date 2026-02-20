@@ -1,7 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import AppIcon from '../components/AppIcon.vue';
-import AppLayout from '../layouts/AppLayout.vue';
 import { getAgents } from '../services/agent';
 import { getAllContainers } from '../services/container';
 import { getServer } from '../services/server';

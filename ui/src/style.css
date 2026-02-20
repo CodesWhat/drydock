@@ -233,6 +233,7 @@ select {
   padding-right: 24px;
 }
 
+/* biome-ignore lint/correctness/noUnknownTypeSelector: view-transition pseudo-elements are valid CSS */
 /* ── View Transition: Circular Reveal ──────────────── */
 ::view-transition-old(root),
 ::view-transition-new(root) {

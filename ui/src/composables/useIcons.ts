@@ -10,7 +10,9 @@ function loadLibrary(): IconLibrary {
     if (stored && stored in iconMap[Object.keys(iconMap)[0]]) {
       return stored as IconLibrary;
     }
-  } catch { /* SSR or blocked storage */ }
+  } catch {
+    /* SSR or blocked storage */
+  }
   return 'ph-duotone';
 }
 
@@ -21,7 +23,9 @@ function loadScale(): number {
       const val = parseFloat(stored);
       if (val >= 0.8 && val <= 1.5) return val;
     }
-  } catch { /* ignored */ }
+  } catch {
+    /* ignored */
+  }
   return 1;
 }
 
@@ -29,11 +33,19 @@ const iconLibrary = ref<IconLibrary>(loadLibrary());
 const iconScale = ref(loadScale());
 
 watch(iconLibrary, (lib) => {
-  try { localStorage.setItem(STORAGE_KEY, lib); } catch { /* ignored */ }
+  try {
+    localStorage.setItem(STORAGE_KEY, lib);
+  } catch {
+    /* ignored */
+  }
 });
 
 watch(iconScale, (scale) => {
-  try { localStorage.setItem(SCALE_KEY, String(scale)); } catch { /* ignored */ }
+  try {
+    localStorage.setItem(SCALE_KEY, String(scale));
+  } catch {
+    /* ignored */
+  }
 });
 
 function icon(name: string): string {

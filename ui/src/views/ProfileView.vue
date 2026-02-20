@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import AppLayout from '../layouts/AppLayout.vue';
-import AppIcon from '../components/AppIcon.vue';
+import { onMounted, ref } from 'vue';
 import { getUser } from '../services/auth';
 
 const profileData = ref({

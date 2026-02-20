@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
-import AppLayout from '../layouts/AppLayout.vue';
-import AppIcon from '../components/AppIcon.vue';
+import { onMounted, reactive, ref } from 'vue';
 import { getAllWatchers } from '../services/watcher';
 
 const watchersViewMode = ref<'table' | 'cards' | 'list'>('table');

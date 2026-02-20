@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
-import AppLayout from '../layouts/AppLayout.vue';
-import AppIcon from '../components/AppIcon.vue';
+import { onMounted, reactive, ref } from 'vue';
 import { getAllAuthentications } from '../services/authentication';
 
 const authViewMode = ref<'table' | 'cards' | 'list'>('table');
@@ -12,8 +10,10 @@ const loading = ref(true);
 const error = ref('');
 
 function authTypeBadge(type: string) {
-  if (type === 'basic') return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: 'Basic' };
-  if (type === 'oidc') return { bg: 'var(--dd-primary-muted)', text: 'var(--dd-primary)', label: 'OIDC' };
+  if (type === 'basic')
+    return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: 'Basic' };
+  if (type === 'oidc')
+    return { bg: 'var(--dd-primary-muted)', text: 'var(--dd-primary)', label: 'OIDC' };
   return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: type };
 }
 

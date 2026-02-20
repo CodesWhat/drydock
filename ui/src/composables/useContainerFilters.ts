@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue';
+import { computed, ref } from 'vue';
 import type { Container } from '../types/container';
 
 export function useContainerFilters(containers: { value: Container[] }) {
@@ -10,8 +10,11 @@ export function useContainerFilters(containers: { value: Container[] }) {
   const filterKind = ref('all');
   const showFilters = ref(false);
 
-  const activeFilterCount = computed(() =>
-    [filterStatus, filterBouncer, filterRegistry, filterServer, filterKind].filter(f => f.value !== 'all').length,
+  const activeFilterCount = computed(
+    () =>
+      [filterStatus, filterBouncer, filterRegistry, filterServer, filterKind].filter(
+        (f) => f.value !== 'all',
+      ).length,
   );
 
   const filteredContainers = computed(() => {
@@ -42,7 +45,15 @@ export function useContainerFilters(containers: { value: Container[] }) {
   }
 
   return {
-    filterSearch, filterStatus, filterRegistry, filterBouncer, filterServer, filterKind,
-    showFilters, activeFilterCount, filteredContainers, clearFilters,
+    filterSearch,
+    filterStatus,
+    filterRegistry,
+    filterBouncer,
+    filterServer,
+    filterKind,
+    showFilters,
+    activeFilterCount,
+    filteredContainers,
+    clearFilters,
   };
 }

@@ -1,17 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import AppLayout from '../layouts/AppLayout.vue';
-import AppIcon from '../components/AppIcon.vue';
-import { useTheme } from '../theme/useTheme';
+import { onMounted, ref } from 'vue';
 import { useIcons } from '../composables/useIcons';
-import { themeFamilies } from '../theme/palettes';
-import { type IconLibrary, libraryLabels, iconMap } from '../icons';
 import { getServer } from '../services/server';
+import { useTheme } from '../theme/useTheme';
 
-const {
-  themeFamily, themeVariant, isDark,
-  setThemeFamily, setThemeVariant, transitionTheme,
-} = useTheme();
+const { themeFamily, themeVariant, isDark, setThemeFamily, setThemeVariant, transitionTheme } =
+  useTheme();
 
 const { iconLibrary, setIconLibrary, iconScale, setIconScale } = useIcons();
 
@@ -23,19 +17,24 @@ const settingsTabs = [
 ];
 
 const loading = ref(true);
-const serverFields = ref<Array<{label: string, value: string}>>([]);
+const serverFields = ref<Array<{ label: string; value: string }>>([]);
 
 onMounted(async () => {
   try {
     const [serverData, appData] = await Promise.all([
       getServer().catch(() => null),
-      fetch('/api/app').then(r => r.json()).catch(() => null),
+      fetch('/api/app')
+        .then((r) => r.json())
+        .catch(() => null),
     ]);
     const config = serverData?.configuration ?? {};
     const fields = [
       { label: 'Version', value: appData?.version ?? 'unknown' },
       { label: 'Server Port', value: String(config.port ?? 3000) },
-      { label: 'Container Actions', value: config.feature?.containeractions ? 'Enabled' : 'Disabled' },
+      {
+        label: 'Container Actions',
+        value: config.feature?.containeractions ? 'Enabled' : 'Disabled',
+      },
       { label: 'Webhook', value: config.webhook?.enabled ? 'Enabled' : 'Disabled' },
       { label: 'Delete Enabled', value: config.feature?.delete ? 'Yes' : 'No' },
       { label: 'Trust Proxy', value: config.trustproxy ? 'Enabled' : 'Disabled' },

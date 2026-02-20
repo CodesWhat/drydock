@@ -1,25 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import AppLayout from '../layouts/AppLayout.vue';
-import AppIcon from '../components/AppIcon.vue';
-import { getAllContainers, getContainerLogs as fetchContainerLogs } from '../services/container';
-import {
-  startContainer as apiStartContainer,
-  stopContainer as apiStopContainer,
-  restartContainer as apiRestartContainer,
-  updateContainer as apiUpdateContainer,
-} from '../services/container-actions';
-import { mapApiContainers } from '../utils/container-mapper';
-import {
-  parseServer, serverBadgeColor, registryLabel, registryColorBg,
-  registryColorText, updateKindColor, bouncerColor,
-} from '../utils/display';
-import type { Container } from '../types/container';
-import { useContainerFilters } from '../composables/useContainerFilters';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useBreakpoints } from '../composables/useBreakpoints';
 import { useColumnVisibility } from '../composables/useColumnVisibility';
+import { useContainerFilters } from '../composables/useContainerFilters';
 import { useDetailPanel } from '../composables/useDetailPanel';
 import { useSorting } from '../composables/useSorting';
-import { useBreakpoints } from '../composables/useBreakpoints';
+import { getContainerLogs as fetchContainerLogs, getAllContainers } from '../services/container';
+import { updateContainer as apiUpdateContainer } from '../services/container-actions';
+import type { Container } from '../types/container';
+import { mapApiContainers } from '../utils/container-mapper';
 
 // Loading and error state
 const loading = ref(true);
@@ -91,20 +80,34 @@ const isCompact = computed(() => windowNarrow.value);
 // View mode
 const containerViewMode = ref<'table' | 'cards' | 'list'>('table');
 const tableActionStyle = ref<'icons' | 'buttons'>(
-  (localStorage.getItem('dd-table-actions') as 'icons' | 'buttons') || 'icons'
+  (localStorage.getItem('dd-table-actions') as 'icons' | 'buttons') || 'icons',
 );
-watch(() => tableActionStyle.value, (v) => localStorage.setItem('dd-table-actions', v));
+watch(
+  () => tableActionStyle.value,
+  (v) => localStorage.setItem('dd-table-actions', v),
+);
 
 // Filters
 const {
-  filterStatus, filterRegistry, filterBouncer, filterServer, filterKind,
-  showFilters, activeFilterCount, filteredContainers, clearFilters,
+  filterStatus,
+  filterRegistry,
+  filterBouncer,
+  filterServer,
+  filterKind,
+  showFilters,
+  activeFilterCount,
+  filteredContainers,
+  clearFilters,
 } = useContainerFilters(containers);
 
 const serverNames = computed(() => [...new Set(containers.value.map((c) => c.server))]);
 
 // Sorting
-const { sortKey: containerSortKey, sortAsc: containerSortAsc, toggleSort: toggleContainerSort } = useSorting('name');
+const {
+  sortKey: containerSortKey,
+  sortAsc: containerSortAsc,
+  toggleSort: toggleContainerSort,
+} = useSorting('name');
 
 const sortedContainers = computed(() => {
   const list = [...filteredContainers.value];
@@ -115,26 +118,52 @@ const sortedContainers = computed(() => {
   return list.sort((a, b) => {
     let av: string | number;
     let bv: string | number;
-    if (key === 'name') { av = a.name.toLowerCase(); bv = b.name.toLowerCase(); }
-    else if (key === 'image') { av = a.image.toLowerCase(); bv = b.image.toLowerCase(); }
-    else if (key === 'status') { av = a.status; bv = b.status; }
-    else if (key === 'server') { av = a.server; bv = b.server; }
-    else if (key === 'registry') { av = a.registry; bv = b.registry; }
-    else if (key === 'bouncer') { av = bouncerOrder[a.bouncer] ?? 9; bv = bouncerOrder[b.bouncer] ?? 9; }
-    else if (key === 'kind') { av = kindOrder[a.updateKind ?? ''] ?? 9; bv = kindOrder[b.updateKind ?? ''] ?? 9; }
-    else if (key === 'version') { av = a.currentTag; bv = b.currentTag; }
-    else return 0;
+    if (key === 'name') {
+      av = a.name.toLowerCase();
+      bv = b.name.toLowerCase();
+    } else if (key === 'image') {
+      av = a.image.toLowerCase();
+      bv = b.image.toLowerCase();
+    } else if (key === 'status') {
+      av = a.status;
+      bv = b.status;
+    } else if (key === 'server') {
+      av = a.server;
+      bv = b.server;
+    } else if (key === 'registry') {
+      av = a.registry;
+      bv = b.registry;
+    } else if (key === 'bouncer') {
+      av = bouncerOrder[a.bouncer] ?? 9;
+      bv = bouncerOrder[b.bouncer] ?? 9;
+    } else if (key === 'kind') {
+      av = kindOrder[a.updateKind ?? ''] ?? 9;
+      bv = kindOrder[b.updateKind ?? ''] ?? 9;
+    } else if (key === 'version') {
+      av = a.currentTag;
+      bv = b.currentTag;
+    } else return 0;
     return av < bv ? -dir : av > bv ? dir : 0;
   });
 });
 
 // Column visibility
-const { allColumns, visibleColumns, activeColumns, showColumnPicker, toggleColumn } = useColumnVisibility(isCompact);
+const { allColumns, visibleColumns, activeColumns, showColumnPicker, toggleColumn } =
+  useColumnVisibility(isCompact);
 
 // Detail panel
 const {
-  selectedContainer, detailPanelOpen, activeDetailTab, panelSize, containerFullPage,
-  panelFlex, detailTabs, selectContainer, openFullPage, closeFullPage, closePanel,
+  selectedContainer,
+  detailPanelOpen,
+  activeDetailTab,
+  panelSize,
+  containerFullPage,
+  panelFlex,
+  detailTabs,
+  selectContainer,
+  openFullPage,
+  closeFullPage,
+  closePanel,
 } = useDetailPanel();
 
 // Restore panel state on mount
@@ -151,7 +180,9 @@ onMounted(() => {
         containerFullPage.value = s.full ?? false;
         panelSize.value = s.size || 'sm';
       }
-    } catch { /* ignore corrupt data */ }
+    } catch {
+      /* ignore corrupt data */
+    }
   }
 });
 

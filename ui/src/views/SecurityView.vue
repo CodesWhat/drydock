@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import AppLayout from '../layouts/AppLayout.vue';
-import AppIcon from '../components/AppIcon.vue';
+import { computed, onMounted, ref } from 'vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { getAllContainers } from '../services/container';
 
@@ -74,12 +72,14 @@ const secFilterImage = ref('all');
 const secFilterFix = ref('all');
 
 const secImageNames = computed(() =>
-  [...new Set(securityVulnerabilities.value.map(v => v.image))].sort(),
+  [...new Set(securityVulnerabilities.value.map((v) => v.image))].sort(),
 );
 
-const activeSecFilterCount = computed(() =>
-  [secFilterSeverity, secFilterStatus, secFilterImage, secFilterFix]
-    .filter(f => f.value !== 'all').length,
+const activeSecFilterCount = computed(
+  () =>
+    [secFilterSeverity, secFilterStatus, secFilterImage, secFilterFix].filter(
+      (f) => f.value !== 'all',
+    ).length,
 );
 
 function clearSecFilters() {
@@ -108,13 +108,13 @@ const filteredSecurityVulns = computed(() => {
   let list = [...securityVulnerabilities.value];
 
   if (secFilterSeverity.value !== 'all') {
-    list = list.filter(v => v.severity === secFilterSeverity.value);
+    list = list.filter((v) => v.severity === secFilterSeverity.value);
   }
   if (secFilterImage.value !== 'all') {
-    list = list.filter(v => v.image === secFilterImage.value);
+    list = list.filter((v) => v.image === secFilterImage.value);
   }
   if (secFilterFix.value !== 'all') {
-    list = list.filter(v =>
+    list = list.filter((v) =>
       secFilterFix.value === 'yes' ? v.fixedIn !== null : v.fixedIn === null,
     );
   }
@@ -138,27 +138,41 @@ const filteredSecurityVulns = computed(() => {
 
 // ── Column visibility ──
 const secAllColumns = [
-  { key: 'severity', label: 'Severity', align: 'text-left', px: 'px-5', style: 'width: 99%;', required: true },
+  {
+    key: 'severity',
+    label: 'Severity',
+    align: 'text-left',
+    px: 'px-5',
+    style: 'width: 99%;',
+    required: true,
+  },
   { key: 'cve', label: 'CVE', align: 'text-left', px: 'px-5', style: '', required: false },
   { key: 'package', label: 'Package', align: 'text-left', px: 'px-5', style: '', required: false },
   { key: 'fixedIn', label: 'Fix', align: 'text-center', px: 'px-5', style: '', required: false },
   { key: 'image', label: 'Image', align: 'text-left', px: 'px-5', style: '', required: false },
-  { key: 'published', label: 'Published', align: 'text-right', px: 'px-5', style: '', required: false },
+  {
+    key: 'published',
+    label: 'Published',
+    align: 'text-right',
+    px: 'px-5',
+    style: '',
+    required: false,
+  },
 ];
 
-const secVisibleColumns = ref<Set<string>>(new Set(secAllColumns.map(c => c.key)));
+const secVisibleColumns = ref<Set<string>>(new Set(secAllColumns.map((c) => c.key)));
 const showSecColumnPicker = ref(false);
 
 function toggleSecColumn(key: string) {
-  const col = secAllColumns.find(c => c.key === key);
+  const col = secAllColumns.find((c) => c.key === key);
   if (col?.required) return;
   if (secVisibleColumns.value.has(key)) secVisibleColumns.value.delete(key);
   else secVisibleColumns.value.add(key);
 }
 
 const secActiveColumns = computed(() =>
-  secAllColumns.filter(c =>
-    secVisibleColumns.value.has(c.key) && (!isCompact.value || c.required),
+  secAllColumns.filter(
+    (c) => secVisibleColumns.value.has(c.key) && (!isCompact.value || c.required),
   ),
 );
 

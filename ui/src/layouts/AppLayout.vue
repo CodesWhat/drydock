@@ -1,16 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
-import Menu from 'primevue/menu';
-import Dialog from 'primevue/dialog';
-import InputText from 'primevue/inputtext';
-import whaleLogo from '@/assets/whale-logo.png';
-import AppIcon from '@/components/AppIcon.vue';
+import type InputText from 'primevue/inputtext';
+import type Menu from 'primevue/menu';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import { useIcons } from '@/composables/useIcons';
-import { useTheme } from '@/theme/useTheme';
-import { getAllContainers } from '@/services/container';
 import { getUser, logout } from '@/services/auth';
+import { getAllContainers } from '@/services/container';
+import { useTheme } from '@/theme/useTheme';
 
 const router = useRouter();
 const route = useRoute();
@@ -52,8 +49,20 @@ const navGroups = computed<NavGroup[]>(() => [
     label: '',
     items: [
       { label: 'Dashboard', icon: 'dashboard', route: '/' },
-      { label: 'Containers', icon: 'containers', route: '/containers', badge: containerCount.value || undefined, badgeColor: 'blue' },
-      { label: 'Security', icon: 'security', route: '/security', badge: securityIssueCount.value || undefined, badgeColor: 'red' },
+      {
+        label: 'Containers',
+        icon: 'containers',
+        route: '/containers',
+        badge: containerCount.value || undefined,
+        badgeColor: 'blue',
+      },
+      {
+        label: 'Security',
+        icon: 'security',
+        route: '/security',
+        badge: securityIssueCount.value || undefined,
+        badgeColor: 'red',
+      },
     ],
   },
   {
@@ -162,7 +171,10 @@ onMounted(async () => {
     ]);
     if (Array.isArray(containers)) {
       containerCount.value = String(containers.length);
-      const issues = containers.filter((c: Record<string, unknown>) => c.updateKind === 'major' || c.result?.vulnerabilities?.length).length;
+      const issues = containers.filter(
+        (c: Record<string, unknown>) =>
+          c.updateKind === 'major' || c.result?.vulnerabilities?.length,
+      ).length;
       if (issues > 0) securityIssueCount.value = String(issues);
     }
     if (user) currentUser.value = user;

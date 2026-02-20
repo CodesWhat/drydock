@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
-import AppLayout from '../layouts/AppLayout.vue';
-import AppIcon from '../components/AppIcon.vue';
+import { onMounted, reactive, ref } from 'vue';
 import { getAllTriggers } from '../services/trigger';
 
 const triggersViewMode = ref<'table' | 'cards' | 'list'>('table');
@@ -12,12 +10,18 @@ const loading = ref(true);
 const error = ref('');
 
 function triggerTypeBadge(type: string) {
-  if (type === 'slack') return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)', label: 'Slack' };
-  if (type === 'discord') return { bg: 'var(--dd-alt-muted)', text: 'var(--dd-alt)', label: 'Discord' };
-  if (type === 'smtp') return { bg: 'var(--dd-success-muted)', text: 'var(--dd-success)', label: 'SMTP' };
-  if (type === 'http') return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)', label: 'HTTP' };
-  if (type === 'telegram') return { bg: 'var(--dd-primary-muted)', text: 'var(--dd-primary)', label: 'Telegram' };
-  if (type === 'mqtt') return { bg: 'var(--dd-caution-muted)', text: 'var(--dd-caution)', label: 'MQTT' };
+  if (type === 'slack')
+    return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)', label: 'Slack' };
+  if (type === 'discord')
+    return { bg: 'var(--dd-alt-muted)', text: 'var(--dd-alt)', label: 'Discord' };
+  if (type === 'smtp')
+    return { bg: 'var(--dd-success-muted)', text: 'var(--dd-success)', label: 'SMTP' };
+  if (type === 'http')
+    return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)', label: 'HTTP' };
+  if (type === 'telegram')
+    return { bg: 'var(--dd-primary-muted)', text: 'var(--dd-primary)', label: 'Telegram' };
+  if (type === 'mqtt')
+    return { bg: 'var(--dd-caution-muted)', text: 'var(--dd-caution)', label: 'MQTT' };
   return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: type };
 }
 
