@@ -106,6 +106,17 @@ async function fetchAgentLogs(agentName: string) {
 
 onMounted(fetchAgents);
 
+// ── Search filter ──
+const searchQuery = ref('');
+const showFilters = ref(false);
+const activeFilterCount = computed(() => searchQuery.value ? 1 : 0);
+
+const filteredAgents = computed(() => {
+  if (!searchQuery.value) return agentsData.value;
+  const q = searchQuery.value.toLowerCase();
+  return agentsData.value.filter((item) => item.name.toLowerCase().includes(q));
+});
+
 // ── View mode ──
 const agentViewMode = ref<'table' | 'cards' | 'list'>('table');
 
@@ -123,7 +134,7 @@ function toggleAgentSort(key: string) {
 }
 
 const sortedAgents = computed(() => {
-  const list = [...agentsData.value];
+  const list = [...filteredAgents.value];
   const key = agentSortKey.value;
   const asc = agentSortAsc.value;
   list.sort((a, b) => {
@@ -238,10 +249,26 @@ function toggleExpandItem(key: string) {
                    border: '1px solid var(--dd-border-strong)',
                  }">
               <div class="flex items-center gap-2.5">
+                <!-- Filter toggle button -->
+                <div class="relative">
+                  <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
+                          :class="showFilters || activeFilterCount > 0 ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
+                          :style="{ borderColor: activeFilterCount > 0 ? 'var(--dd-primary)' : 'var(--dd-border-strong)' }"
+                          title="Filters"
+                          @click.stop="showFilters = !showFilters">
+                    <AppIcon name="filter" :size="11" />
+                  </button>
+                  <span v-if="activeFilterCount > 0"
+                        class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-[8px] font-bold flex items-center justify-center text-white"
+                        style="background: var(--dd-primary);">
+                    {{ activeFilterCount }}
+                  </span>
+                </div>
+
                 <!-- Result count + view toggle -->
                 <div class="flex items-center gap-2 ml-auto">
                   <span class="text-[10px] font-semibold tabular-nums shrink-0 px-2 py-1 dd-rounded dd-text-muted dd-bg-card">
-                    {{ agentsData.length }} agents
+                    {{ filteredAgents.length }}/{{ agentsData.length }} agents
                   </span>
                   <div class="flex items-center dd-rounded overflow-hidden border"
                        :style="{ borderColor: 'var(--dd-border-strong)' }">
@@ -286,6 +313,19 @@ function toggleExpandItem(key: string) {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <!-- Collapsible filter row -->
+              <div v-if="showFilters" class="flex flex-wrap items-center gap-2 mt-2 pt-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
+                <input v-model="searchQuery"
+                       type="text"
+                       placeholder="Filter by name..."
+                       class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
+                <button v-if="searchQuery"
+                        class="text-[10px] dd-text-muted hover:dd-text transition-colors"
+                        @click="searchQuery = ''">
+                  Clear
+                </button>
               </div>
             </div>
           </div>

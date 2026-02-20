@@ -9,6 +9,7 @@ import { getContainerLogs as fetchContainerLogs, getAllContainers } from '../ser
 import { updateContainer as apiUpdateContainer } from '../services/container-actions';
 import type { Container } from '../types/container';
 import { mapApiContainers } from '../utils/container-mapper';
+import { bouncerColor, parseServer, registryColorBg, registryColorText, registryLabel, serverBadgeColor, updateKindColor } from '../utils/display';
 
 // Loading and error state
 const loading = ref(true);
@@ -276,7 +277,7 @@ function forceUpdate(name: string) {
                     :style="{ borderColor: activeFilterCount > 0 ? 'var(--dd-primary)' : 'var(--dd-border-strong)' }"
                     title="Filters"
                     @click.stop="showFilters = !showFilters">
-              <i class="fa-solid fa-filter" />
+              <AppIcon name="filter" :size="11" />
             </button>
             <!-- Active filter count badge -->
             <span v-if="activeFilterCount > 0"
@@ -294,16 +295,16 @@ function forceUpdate(name: string) {
             <div class="flex items-center dd-rounded overflow-hidden border"
                  :style="{ borderColor: 'var(--dd-border-strong)' }">
               <button v-for="vm in ([
-                { id: 'table', icon: 'fa-solid fa-table-list' },
-                { id: 'cards', icon: 'fa-solid fa-grip' },
-                { id: 'list', icon: 'fa-solid fa-list' },
+                { id: 'table', icon: 'table' },
+                { id: 'cards', icon: 'grid' },
+                { id: 'list', icon: 'list' },
               ] as const)" :key="vm.id"
                       class="w-7 h-7 flex items-center justify-center text-[11px] transition-colors"
                       :class="containerViewMode === vm.id ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
                       :style="vm.id !== 'table' ? { borderLeft: '1px solid var(--dd-border-strong)' } : {}"
                       :title="vm.id.charAt(0).toUpperCase() + vm.id.slice(1) + ' view'"
                       @click="containerViewMode = vm.id">
-                <i :class="vm.icon" />
+                <AppIcon :name="vm.icon" :size="11" />
               </button>
             </div>
             <!-- Column picker -->
@@ -313,7 +314,7 @@ function forceUpdate(name: string) {
                       :style="{ borderColor: 'var(--dd-border-strong)' }"
                       title="Toggle columns"
                       @click.stop="showColumnPicker = !showColumnPicker">
-                <i class="fa-solid fa-sliders text-[10px]" />
+                <AppIcon name="config" :size="10" />
               </button>
               <div v-if="showColumnPicker" @click.stop
                    class="absolute right-0 top-9 z-50 min-w-[160px] py-1.5 dd-rounded shadow-lg"
@@ -327,9 +328,7 @@ function forceUpdate(name: string) {
                         class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated"
                         :class="col.required ? 'dd-text-muted cursor-not-allowed' : 'dd-text'"
                         @click="toggleColumn(col.key)">
-                  <i class="text-[10px] w-3 text-center"
-                     :class="visibleColumns.has(col.key) ? 'fa-solid fa-check' : 'fa-regular fa-square'"
-                     :style="visibleColumns.has(col.key) ? { color: 'var(--dd-primary)' } : {}" />
+                  <AppIcon :name="visibleColumns.has(col.key) ? 'check' : 'square'" :size="10" :style="visibleColumns.has(col.key) ? { color: 'var(--dd-primary)' } : {}" />
                   {{ col.label }}
                 </button>
               </div>
@@ -809,8 +808,7 @@ function forceUpdate(name: string) {
                 {{ parseServer(c.server).name }}
               </span>
             </div>
-            <i class="fa-solid text-[10px] transition-transform shrink-0 dd-text-muted"
-               :class="expandedConfigItems.has('c-' + c.name) ? 'fa-angle-up' : 'fa-angle-down'" />
+            <AppIcon :name="expandedConfigItems.has('c-' + c.name) ? 'chevron-up' : 'chevron-down'" :size="10" class="transition-transform shrink-0 dd-text-muted" />
           </div>
           <!-- Expanded details -->
           <div v-if="expandedConfigItems.has('c-' + c.name)"
