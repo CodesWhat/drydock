@@ -18,11 +18,7 @@ export default mergeConfig(
       setupFiles: ['./tests/setup.ts'],
       include: ['tests/**/*.spec.ts'],
       css: true,
-      server: {
-        deps: {
-          inline: ['vuetify'],
-        },
-      },
+      exclude: ['tests/_archive/**'],
       transformMode: {
         web: [/\.vue$/],
       },
