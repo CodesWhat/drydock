@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
 import { type IconLibrary, iconMap, libraryLabels } from '../icons';
-import { getSettings, updateSettings } from '../services/settings';
+import { clearIconCache, getSettings, updateSettings } from '../services/settings';
 import { getServer } from '../services/server';
 import { themeFamilies } from '../theme/palettes';
 import { useTheme } from '../theme/useTheme';
@@ -67,6 +67,20 @@ async function toggleInternetlessMode() {
     internetlessMode.value = updated.internetlessMode;
   } finally {
     settingsLoading.value = false;
+  }
+}
+
+const cacheClearing = ref(false);
+const cacheCleared = ref<number | null>(null);
+
+async function handleClearIconCache() {
+  cacheClearing.value = true;
+  cacheCleared.value = null;
+  try {
+    const result = await clearIconCache();
+    cacheCleared.value = result.cleared;
+  } finally {
+    cacheClearing.value = false;
   }
 }
 </script>
@@ -144,6 +158,45 @@ async function toggleInternetlessMode() {
                 <span class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform"
                       :class="internetlessMode ? 'translate-x-5' : 'translate-x-0'" />
               </button>
+            </div>
+          </div>
+        </div>
+        <!-- Icon Cache -->
+        <div class="dd-rounded overflow-hidden"
+             :style="{
+               backgroundColor: 'var(--dd-bg-card)',
+               border: '1px solid var(--dd-border-strong)',
+             }">
+          <div class="px-5 py-3.5 flex items-center gap-2"
+               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+            <AppIcon name="containers" :size="14" class="text-drydock-secondary" />
+            <h2 class="text-sm font-semibold dd-text">Container Icon Cache</h2>
+          </div>
+          <div class="p-5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-[12px] font-semibold dd-text">Cached Icons</div>
+                <div class="text-[10px] dd-text-muted mt-0.5">
+                  Container icons are cached to disk on first fetch
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span v-if="cacheCleared !== null" class="text-[10px] dd-text-success">
+                  {{ cacheCleared }} cleared
+                </span>
+                <button
+                  class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
+                  :class="cacheClearing ? 'opacity-50 pointer-events-none' : ''"
+                  :style="{
+                    backgroundColor: 'var(--dd-danger-muted)',
+                    color: 'var(--dd-danger)',
+                    border: '1px solid var(--dd-danger)',
+                  }"
+                  @click="handleClearIconCache">
+                  <AppIcon name="trash" :size="10" class="mr-1" />
+                  Clear Cache
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -11,6 +11,7 @@ export interface Container {
   id: string;
   name: string;
   image: string;
+  icon: string;
   currentTag: string;
   newTag: string | null;
   status: 'running' | 'stopped';

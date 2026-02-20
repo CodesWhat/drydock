@@ -1,4 +1,4 @@
-import { getSettings, updateSettings } from '@/services/settings';
+import { clearIconCache, getSettings, updateSettings } from '@/services/settings';
 
 describe('Settings Service', () => {
   beforeEach(() => {
@@ -73,6 +73,33 @@ describe('Settings Service', () => {
       });
 
       await expect(updateSettings({ internetlessMode: true })).rejects.toThrow('Unknown error');
+    });
+  });
+
+  describe('clearIconCache', () => {
+    it('should send DELETE request to icon cache endpoint', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ cleared: 42 }),
+      });
+
+      const result = await clearIconCache();
+
+      expect(global.fetch).toHaveBeenCalledWith('/api/icons/cache', {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      expect(result.cleared).toBe(42);
+    });
+
+    it('should throw on server error', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: vi.fn().mockResolvedValue({ error: 'Failed to clear icon cache' }),
+      });
+
+      await expect(clearIconCache()).rejects.toThrow('Failed to clear icon cache');
     });
   });
 });

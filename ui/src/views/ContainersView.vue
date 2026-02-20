@@ -366,8 +366,7 @@ function forceUpdate(name: string) {
         <!-- Container name + image (+ compact actions & badges) -->
         <template #cell-name="{ row: c }">
           <div class="flex items-start gap-2 min-w-0">
-            <div class="w-2 h-2 rounded-full shrink-0 mt-1.5"
-                 :style="{ backgroundColor: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+            <ContainerIcon :icon="c.icon" :size="20" class="shrink-0 mt-0.5" />
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
                 <div class="font-medium truncate dd-text flex-1">{{ c.name }}</div>
@@ -627,8 +626,7 @@ function forceUpdate(name: string) {
           <!-- Card header -->
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
             <div class="flex items-center gap-2.5 min-w-0">
-              <div class="w-2.5 h-2.5 rounded-full shrink-0 mt-1"
-                   :style="{ backgroundColor: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+              <ContainerIcon :icon="c.icon" :size="24" class="shrink-0" />
               <div class="min-w-0">
                 <div class="text-[15px] font-semibold truncate dd-text">
                   {{ c.name }}
@@ -709,8 +707,7 @@ function forceUpdate(name: string) {
                          item-key="name"
                          :selected-key="selectedContainer?.name">
         <template #header="{ item: c }">
-          <div class="w-2 h-2 rounded-full shrink-0"
-               :style="{ backgroundColor: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+          <ContainerIcon :icon="c.icon" :size="18" class="shrink-0" />
           <div class="min-w-0 flex-1">
             <div class="text-sm font-semibold truncate dd-text">{{ c.name }}</div>
             <div class="text-[10px] mt-0.5 truncate dd-text-muted">{{ c.image }}:{{ c.currentTag }}</div>

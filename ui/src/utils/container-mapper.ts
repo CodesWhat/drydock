@@ -14,6 +14,7 @@
  *   bouncer, server, details: { ports, volumes, env, labels }
  */
 
+import { getEffectiveDisplayIcon } from '../services/image-icon';
 import type { Container } from '../types/container';
 
 /** Derive a human-readable server/host name from watcher + agent fields. */
@@ -78,6 +79,7 @@ export function mapApiContainer(apiContainer: any): Container {
     id: apiContainer.id,
     name: apiContainer.displayName || apiContainer.name,
     image: apiContainer.image?.name ?? '',
+    icon: getEffectiveDisplayIcon(apiContainer.displayIcon ?? '', apiContainer.image?.name ?? ''),
     currentTag: apiContainer.image?.tag?.value ?? 'latest',
     newTag: deriveNewTag(apiContainer),
     status: apiContainer.status === 'running' ? 'running' : 'stopped',

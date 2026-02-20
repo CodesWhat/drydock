@@ -21,4 +21,16 @@ async function updateSettings(settings: Partial<Settings>): Promise<Settings> {
   return response.json();
 }
 
-export { getSettings, updateSettings };
+async function clearIconCache(): Promise<{ cleared: number }> {
+  const response = await fetch('/api/icons/cache', {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || `HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+export { getSettings, updateSettings, clearIconCache };

@@ -91,6 +91,7 @@ const recentUpdates = computed(() => {
     .map((c) => ({
       name: c.name,
       image: c.image,
+      icon: c.icon,
       oldVer: c.currentTag,
       newVer: c.newTag ?? '',
       status: 'pending' as const,
@@ -241,8 +242,7 @@ const DONUT_CIRCUMFERENCE = 301.6;
                     :style="{ borderBottom: i < recentUpdates.length - 1 ? '1px solid var(--dd-border-strong)' : 'none' }">
                   <td class="px-5 py-3 font-medium dd-text">
                     <div class="flex items-center gap-2">
-                      <div class="w-2 h-2 rounded-full shrink-0"
-                           :style="{ backgroundColor: row.running ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
+                      <ContainerIcon :icon="row.icon" :size="16" class="shrink-0" />
                       {{ row.name }}
                     </div>
                   </td>
