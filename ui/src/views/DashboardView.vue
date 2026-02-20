@@ -314,7 +314,7 @@ const DONUT_CIRCUMFERENCE = 301.6;
                   <circle cx="60" cy="60" r="48" fill="none" stroke="var(--dd-success)" stroke-width="14"
                           stroke-linecap="round" class="donut-ring"
                           :stroke-dasharray="(securityTotalCount > 0 ? securityCleanCount / securityTotalCount * DONUT_CIRCUMFERENCE : 0) + ' ' + DONUT_CIRCUMFERENCE" />
-                  <circle cx="60" cy="60" r="48" fill="none" stroke="var(--dd-danger)" stroke-width="14"
+                  <circle v-if="securityIssueCount > 0" cx="60" cy="60" r="48" fill="none" stroke="var(--dd-danger)" stroke-width="14"
                           stroke-linecap="round" class="donut-ring"
                           :stroke-dasharray="(securityTotalCount > 0 ? securityIssueCount / securityTotalCount * DONUT_CIRCUMFERENCE : 0) + ' ' + DONUT_CIRCUMFERENCE"
                           :stroke-dashoffset="-(securityTotalCount > 0 ? securityCleanCount / securityTotalCount * DONUT_CIRCUMFERENCE : 0)" />
@@ -332,7 +332,7 @@ const DONUT_CIRCUMFERENCE = 301.6;
                 <div class="w-2.5 h-2.5 rounded-full" style="background:var(--dd-success);" />
                 <span class="text-[11px] dd-text-secondary">{{ securityCleanCount }} Clean</span>
               </div>
-              <div class="flex items-center gap-1.5">
+              <div v-if="securityIssueCount > 0" class="flex items-center gap-1.5">
                 <div class="w-2.5 h-2.5 rounded-full" style="background:var(--dd-danger);" />
                 <span class="text-[11px] dd-text-secondary">{{ securityIssueCount }} Issues</span>
               </div>

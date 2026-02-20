@@ -311,7 +311,8 @@ function viewServerContainers(_name: string) {
                     <span class="text-[13px] font-bold dd-text">
                       {{ server.containers.total }}
                     </span>
-                    <span class="text-[11px] font-medium" style="color: var(--dd-success);">
+                    <span class="text-[11px] font-medium"
+                          :style="{ color: server.containers.running > 0 ? 'var(--dd-success)' : 'var(--dd-text-muted)' }">
                       {{ server.containers.running }} running
                     </span>
                     <span v-if="server.containers.stopped > 0"
