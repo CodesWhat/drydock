@@ -1,10 +1,15 @@
 // @ts-nocheck
+import axios from 'axios';
 import Ghcr from './Ghcr.js';
+
+vi.mock('axios');
 
 describe('GitHub Container Registry', () => {
   let ghcr;
 
   beforeEach(async () => {
+    axios.mockReset();
+    axios.mockResolvedValue({ data: { token: 'registry-token' } });
     ghcr = new Ghcr();
     await ghcr.register('registry', 'ghcr', 'test', {
       username: 'testuser',
@@ -61,14 +66,22 @@ describe('GitHub Container Registry', () => {
   });
 
   test('should authenticate with token', async () => {
-    ghcr.configuration = { token: 'test-token' };
+    ghcr.configuration = { username: 'test-user', token: 'test-token' };
     const image = { name: 'user/repo' };
     const requestOptions = { headers: {} };
 
     const result = await ghcr.authenticate(image, requestOptions);
 
-    const expectedBearer = Buffer.from('test-token', 'utf-8').toString('base64');
-    expect(result.headers.Authorization).toBe(`Bearer ${expectedBearer}`);
+    const expectedBasic = Buffer.from('test-user:test-token', 'utf-8').toString('base64');
+    expect(axios).toHaveBeenCalledWith({
+      method: 'GET',
+      url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Basic ${expectedBasic}`,
+      },
+    });
+    expect(result.headers.Authorization).toBe('Bearer registry-token');
   });
 
   test('should authenticate without token', async () => {
@@ -78,7 +91,25 @@ describe('GitHub Container Registry', () => {
 
     const result = await ghcr.authenticate(image, requestOptions);
 
-    expect(result.headers.Authorization).toBeUndefined();
+    expect(axios).toHaveBeenCalledWith({
+      method: 'GET',
+      url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+    expect(result.headers.Authorization).toBe('Bearer registry-token');
+  });
+
+  test('should authenticate with token endpoint access_token field', async () => {
+    ghcr.configuration = {};
+    axios.mockResolvedValueOnce({ data: { access_token: 'access-token' } });
+    const image = { name: 'user/repo' };
+    const requestOptions = { headers: {} };
+
+    const result = await ghcr.authenticate(image, requestOptions);
+
+    expect(result.headers.Authorization).toBe('Bearer access-token');
   });
 
   test('should validate string configuration', async () => {
