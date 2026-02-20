@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
+import { type IconLibrary, iconMap, libraryLabels } from '../icons';
+import { getSettings, updateSettings } from '../services/settings';
 import { getServer } from '../services/server';
+import { themeFamilies } from '../theme/palettes';
 import { useTheme } from '../theme/useTheme';
 
 const { themeFamily, themeVariant, isDark, setThemeFamily, setThemeVariant, transitionTheme } =
   useTheme();
 
 const { iconLibrary, setIconLibrary, iconScale, setIconScale } = useIcons();
+const { activeFont, setFont, fontLoading, isFontLoaded } = useFont();
 
 const activeSettingsTab = ref<'general' | 'appearance'>('general');
 
@@ -19,13 +24,18 @@ const settingsTabs = [
 const loading = ref(true);
 const serverFields = ref<Array<{ label: string; value: string }>>([]);
 
+// Settings state
+const internetlessMode = ref(false);
+const settingsLoading = ref(false);
+
 onMounted(async () => {
   try {
-    const [serverData, appData] = await Promise.all([
+    const [serverData, appData, settings] = await Promise.all([
       getServer().catch(() => null),
       fetch('/api/app')
         .then((r) => r.json())
         .catch(() => null),
+      getSettings().catch(() => null),
     ]);
     const config = serverData?.configuration ?? {};
     const fields = [
@@ -40,6 +50,9 @@ onMounted(async () => {
       { label: 'Trust Proxy', value: config.trustproxy ? 'Enabled' : 'Disabled' },
     ];
     serverFields.value = fields;
+    if (settings) {
+      internetlessMode.value = settings.internetlessMode;
+    }
   } catch {
     serverFields.value = [{ label: 'Error', value: 'Failed to load server info' }];
   } finally {
@@ -47,37 +60,15 @@ onMounted(async () => {
   }
 });
 
-const themeOptions = [
-  { id: 'dark', label: 'Dark', icon: 'moon', iconClass: '' },
-  { id: 'light', label: 'Light', icon: 'sun', iconClass: '' },
-  { id: 'system', label: 'System', icon: '', iconClass: 'fa-solid fa-display' },
-];
-
-const fontOptions = [
-  { id: 'mono', label: 'JetBrains Mono', family: '"JetBrains Mono", monospace' },
-  { id: 'inter', label: 'Inter', family: '"Inter", sans-serif' },
-  { id: 'system', label: 'System', family: 'system-ui, sans-serif' },
-  { id: 'fira', label: 'Fira Code', family: '"Fira Code", monospace' },
-];
-
-const activeFont = ref('mono');
-function setFont(id: string) {
-  activeFont.value = id;
+async function toggleInternetlessMode() {
+  settingsLoading.value = true;
+  try {
+    const updated = await updateSettings({ internetlessMode: !internetlessMode.value });
+    internetlessMode.value = updated.internetlessMode;
+  } finally {
+    settingsLoading.value = false;
+  }
 }
-
-const radiusPresets = [
-  { id: 'none', label: 'None', sm: 0, md: 0, lg: 0 },
-  { id: 'sm', label: 'Small', sm: 2, md: 4, lg: 6 },
-  { id: 'md', label: 'Medium', sm: 4, md: 8, lg: 12 },
-  { id: 'lg', label: 'Large', sm: 6, md: 12, lg: 16 },
-];
-
-const activeRadius = ref('md');
-function setRadius(id: string) {
-  activeRadius.value = id;
-}
-
-const tableActionStyle = ref<'icons' | 'buttons'>('icons');
 </script>
 
 <template>
@@ -100,6 +91,7 @@ const tableActionStyle = ref<'icons' | 'buttons'>('icons');
 
       <!-- GENERAL TAB -->
       <div v-if="activeSettingsTab === 'general'" class="space-y-6">
+        <!-- Application Info -->
         <div class="dd-rounded overflow-hidden"
              :style="{
                backgroundColor: 'var(--dd-bg-card)',
@@ -120,6 +112,39 @@ const tableActionStyle = ref<'icons' | 'buttons'>('icons');
                 <span class="text-[12px] font-medium font-mono dd-text">{{ field.value }}</span>
               </div>
             </template>
+          </div>
+        </div>
+
+        <!-- Internetless Mode -->
+        <div class="dd-rounded overflow-hidden"
+             :style="{
+               backgroundColor: 'var(--dd-bg-card)',
+               border: '1px solid var(--dd-border-strong)',
+             }">
+          <div class="px-5 py-3.5 flex items-center gap-2"
+               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+            <AppIcon name="globe" :size="14" class="text-drydock-secondary" />
+            <h2 class="text-sm font-semibold dd-text">Network</h2>
+          </div>
+          <div class="p-5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-[12px] font-semibold dd-text">Internetless Mode</div>
+                <div class="text-[10px] dd-text-muted mt-0.5">
+                  Block all outbound requests (container icons, external fetches)
+                </div>
+              </div>
+              <button
+                class="relative w-10 h-5 dd-rounded-lg transition-colors"
+                :class="settingsLoading ? 'opacity-50 pointer-events-none' : ''"
+                :style="{
+                  backgroundColor: internetlessMode ? 'var(--dd-primary)' : 'var(--dd-border-strong)',
+                }"
+                @click="toggleInternetlessMode">
+                <span class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform"
+                      :class="internetlessMode ? 'translate-x-5' : 'translate-x-0'" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -168,7 +193,7 @@ const tableActionStyle = ref<'icons' | 'buttons'>('icons');
           </div>
         </div>
 
-        <!-- Theme -->
+        <!-- Theme Variant -->
         <div class="dd-rounded overflow-hidden"
              :style="{
                backgroundColor: 'var(--dd-bg-card)',
@@ -176,13 +201,16 @@ const tableActionStyle = ref<'icons' | 'buttons'>('icons');
              }">
           <div class="px-5 py-3.5 flex items-center gap-2"
                :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <template v-if="themeVariant === 'system'"><i class="fa-solid fa-display text-[14px] text-drydock-secondary" /></template>
-            <AppIcon v-else :name="isDark ? 'moon' : 'sun'" :size="14" class="text-drydock-secondary" />
+            <AppIcon :name="themeVariant === 'system' ? 'monitor' : isDark ? 'moon' : 'sun'" :size="14" class="text-drydock-secondary" />
             <h2 class="text-sm font-semibold dd-text">Theme</h2>
           </div>
           <div class="p-5">
             <div class="flex gap-2">
-              <button v-for="opt in themeOptions" :key="opt.id"
+              <button v-for="opt in [
+                { id: 'dark', label: 'Dark', icon: 'moon' },
+                { id: 'light', label: 'Light', icon: 'sun' },
+                { id: 'system', label: 'System', icon: 'monitor' },
+              ]" :key="opt.id"
                       class="flex items-center gap-2.5 px-4 py-3 dd-rounded transition-colors"
                       :class="themeVariant === opt.id ? 'ring-2 ring-drydock-secondary' : ''"
                       :style="{
@@ -194,8 +222,7 @@ const tableActionStyle = ref<'icons' | 'buttons'>('icons');
                           : '1px solid var(--dd-border-strong)',
                       }"
                       @click="transitionTheme(() => setThemeVariant(opt.id as any), $event)">
-                <i v-if="opt.iconClass" :class="[opt.iconClass, 'text-[16px]', themeVariant === opt.id ? 'text-drydock-secondary' : 'dd-text-muted']" />
-                <AppIcon v-else :name="opt.icon" :size="16"
+                <AppIcon :name="opt.icon" :size="16"
                          :class="themeVariant === opt.id ? 'text-drydock-secondary' : 'dd-text-muted'" />
                 <span class="text-[12px] font-semibold"
                       :class="themeVariant === opt.id ? 'text-drydock-secondary' : 'dd-text-secondary'">
@@ -221,7 +248,10 @@ const tableActionStyle = ref<'icons' | 'buttons'>('icons');
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button v-for="f in fontOptions" :key="f.id"
                       class="flex items-center gap-3 px-4 py-3 dd-rounded text-left transition-colors"
-                      :class="activeFont === f.id ? 'ring-2 ring-drydock-secondary' : ''"
+                      :class="[
+                        activeFont === f.id ? 'ring-2 ring-drydock-secondary' : '',
+                        fontLoading ? 'pointer-events-none' : '',
+                      ]"
                       :style="{
                         backgroundColor: activeFont === f.id
                           ? 'var(--dd-primary-muted)'
@@ -230,14 +260,21 @@ const tableActionStyle = ref<'icons' | 'buttons'>('icons');
                           ? '1.5px solid var(--dd-primary)'
                           : '1px solid var(--dd-border-strong)',
                       }"
-                      @click="setFont(f.id)">
+                      @click="setFont(f.id as FontId)">
                 <div class="flex-1 min-w-0">
-                  <div class="text-[13px] font-semibold truncate"
-                       :style="{ fontFamily: f.family }"
-                       :class="activeFont === f.id ? 'text-drydock-secondary' : 'dd-text'">
-                    {{ f.label }}
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[13px] font-semibold truncate"
+                         :style="isFontLoaded(f.id) ? { fontFamily: f.family } : {}"
+                         :class="activeFont === f.id ? 'text-drydock-secondary' : 'dd-text'">
+                      {{ f.label }}
+                    </span>
+                    <span v-if="f.bundled" class="text-[8px] font-bold uppercase tracking-wider dd-text-muted px-1 py-0.5 dd-rounded-sm"
+                          :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+                      default
+                    </span>
                   </div>
-                  <div class="text-[10px] mt-0.5 truncate dd-text-muted" :style="{ fontFamily: f.family }">
+                  <div class="text-[10px] mt-0.5 truncate dd-text-muted"
+                       :style="isFontLoaded(f.id) ? { fontFamily: f.family } : {}">
                     The quick brown fox jumps over the lazy dog
                   </div>
                 </div>
@@ -318,81 +355,6 @@ const tableActionStyle = ref<'icons' | 'buttons'>('icons');
             </div>
             <div class="text-center mt-2 text-[11px] dd-text-muted">
               {{ Math.round(iconScale * 100) }}%
-            </div>
-          </div>
-        </div>
-
-        <!-- Border Radius -->
-        <div class="dd-rounded overflow-hidden"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }">
-          <div class="px-5 py-3.5 flex items-center gap-2"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
-            <h2 class="text-sm font-semibold dd-text">Border Radius</h2>
-          </div>
-          <div class="p-5">
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <button v-for="p in radiusPresets" :key="p.id"
-                      class="flex flex-col items-center gap-2.5 px-4 py-3.5 dd-rounded transition-colors"
-                      :class="activeRadius === p.id ? 'ring-2 ring-drydock-secondary' : ''"
-                      :style="{
-                        backgroundColor: activeRadius === p.id
-                          ? 'var(--dd-primary-muted)'
-                          : 'var(--dd-bg-inset)',
-                        border: activeRadius === p.id
-                          ? '1.5px solid var(--dd-primary)'
-                          : '1px solid var(--dd-border-strong)',
-                      }"
-                      @click="setRadius(p.id)">
-                <div class="w-12 h-8 border-2 transition-all"
-                     :class="activeRadius === p.id ? 'border-drydock-secondary/60' : 'dd-border-strong'"
-                     :style="{
-                       borderRadius: p.md + 'px',
-                       backgroundColor: activeRadius === p.id ? 'var(--dd-primary-muted)' : 'transparent',
-                     }" />
-                <div class="text-[12px] font-semibold"
-                     :class="activeRadius === p.id ? 'text-drydock-secondary' : 'dd-text'">
-                  {{ p.label }}
-                </div>
-                <div class="text-[10px] dd-text-muted">
-                  {{ p.sm }}px / {{ p.md }}px / {{ p.lg }}px
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Table Actions -->
-        <div class="dd-rounded overflow-hidden"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }">
-          <div class="px-5 py-3.5 flex items-center gap-2"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <AppIcon name="config" :size="14" class="text-drydock-secondary" />
-            <h2 class="text-sm font-semibold dd-text">Table Actions</h2>
-          </div>
-          <div class="p-5">
-            <div class="grid grid-cols-2 gap-2">
-              <button v-for="opt in [{ id: 'icons', label: 'Icons', desc: 'Compact icon buttons' }, { id: 'buttons', label: 'Buttons', desc: 'Full split buttons' }]"
-                      :key="opt.id"
-                      class="flex flex-col items-center gap-1.5 px-4 py-3 dd-rounded transition-colors"
-                      :class="tableActionStyle === opt.id ? 'ring-2 ring-drydock-secondary' : ''"
-                      :style="{
-                        backgroundColor: tableActionStyle === opt.id ? 'var(--dd-primary-muted)' : 'var(--dd-bg-inset)',
-                        border: tableActionStyle === opt.id ? '1.5px solid var(--dd-primary)' : '1px solid var(--dd-border-strong)',
-                      }"
-                      @click="tableActionStyle = opt.id as 'icons' | 'buttons'">
-                <div class="text-[12px] font-semibold"
-                     :class="tableActionStyle === opt.id ? 'text-drydock-secondary' : 'dd-text'">
-                  {{ opt.label }}
-                </div>
-                <div class="text-[10px] dd-text-muted">{{ opt.desc }}</div>
-              </button>
             </div>
           </div>
         </div>
