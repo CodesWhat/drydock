@@ -6,18 +6,20 @@ const {
   mockWriteFile,
   mockRename,
   mockUnlink,
+  mockReaddir,
   mockAxiosGet,
   mockAxiosIsAxiosError,
   mockIsInternetlessModeEnabled,
   mockGetStoreConfiguration,
 } = vi.hoisted(() => ({
-  mockRouter: { get: vi.fn() },
+  mockRouter: { get: vi.fn(), delete: vi.fn() },
   mockRandomUUID: vi.fn(() => 'uuid-test'),
   mockAccess: vi.fn(),
   mockMkdir: vi.fn(),
   mockWriteFile: vi.fn(),
   mockRename: vi.fn(),
   mockUnlink: vi.fn(),
+  mockReaddir: vi.fn(),
   mockAxiosGet: vi.fn(),
   mockAxiosIsAxiosError: vi.fn(() => false),
   mockIsInternetlessModeEnabled: vi.fn(() => false),
@@ -41,6 +43,7 @@ vi.mock('node:fs/promises', () => ({
     writeFile: mockWriteFile,
     rename: mockRename,
     unlink: mockUnlink,
+    readdir: mockReaddir,
   },
 }));
 
@@ -60,7 +63,7 @@ vi.mock('../store', () => ({
 }));
 
 vi.mock('../log', () => ({
-  default: { child: vi.fn(() => ({ warn: vi.fn() })) },
+  default: { child: vi.fn(() => ({ warn: vi.fn(), info: vi.fn() })) },
 }));
 
 import * as iconsRouter from './icons.js';
@@ -68,6 +71,11 @@ import * as iconsRouter from './icons.js';
 function getHandler() {
   iconsRouter.init();
   return mockRouter.get.mock.calls.find((call) => call[0] === '/:provider/:slug')[1];
+}
+
+function getDeleteHandler() {
+  iconsRouter.init();
+  return mockRouter.delete.mock.calls.find((call) => call[0] === '/cache')[1];
 }
 
 function createResponse() {
@@ -94,9 +102,10 @@ describe('Icons Router', () => {
     mockUnlink.mockResolvedValue(undefined);
   });
 
-  test('should initialize router with icon route', () => {
+  test('should initialize router with icon and cache routes', () => {
     const router = iconsRouter.init();
     expect(router.get).toHaveBeenCalledWith('/:provider/:slug', expect.any(Function));
+    expect(router.delete).toHaveBeenCalledWith('/cache', expect.any(Function));
   });
 
   test('should serve icon from cache when available', async () => {
@@ -391,6 +400,80 @@ describe('Icons Router', () => {
     expect(res.status).toHaveBeenCalledWith(502);
     expect(res.json).toHaveBeenCalledWith({
       error: expect.stringContaining('rename failed'),
+    });
+  });
+
+  describe('clearCache', () => {
+    test('should clear all cached icons and return count', async () => {
+      mockReaddir
+        .mockResolvedValueOnce([
+          { name: 'homarr', isDirectory: () => true },
+          { name: 'simple', isDirectory: () => true },
+        ])
+        .mockResolvedValueOnce(['docker.png', 'nginx.png'])
+        .mockResolvedValueOnce(['docker.svg']);
+      const handler = getDeleteHandler();
+      const res = createResponse();
+
+      await handler({}, res);
+
+      expect(mockUnlink).toHaveBeenCalledTimes(3);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ cleared: 3 });
+    });
+
+    test('should return zero when cache directory is empty', async () => {
+      mockReaddir.mockResolvedValueOnce([]);
+      const handler = getDeleteHandler();
+      const res = createResponse();
+
+      await handler({}, res);
+
+      expect(mockUnlink).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ cleared: 0 });
+    });
+
+    test('should skip non-directory entries', async () => {
+      mockReaddir
+        .mockResolvedValueOnce([
+          { name: '.gitkeep', isDirectory: () => false },
+          { name: 'homarr', isDirectory: () => true },
+        ])
+        .mockResolvedValueOnce(['docker.png']);
+      const handler = getDeleteHandler();
+      const res = createResponse();
+
+      await handler({}, res);
+
+      expect(mockUnlink).toHaveBeenCalledTimes(1);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ cleared: 1 });
+    });
+
+    test('should handle missing cache directory gracefully', async () => {
+      mockReaddir.mockRejectedValueOnce(new Error('ENOENT'));
+      const handler = getDeleteHandler();
+      const res = createResponse();
+
+      await handler({}, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ cleared: 0 });
+    });
+
+    test('should ignore individual file unlink failures', async () => {
+      mockReaddir
+        .mockResolvedValueOnce([{ name: 'homarr', isDirectory: () => true }])
+        .mockResolvedValueOnce(['docker.png', 'nginx.png']);
+      mockUnlink.mockRejectedValue(new Error('permission denied'));
+      const handler = getDeleteHandler();
+      const res = createResponse();
+
+      await handler({}, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ cleared: 2 });
     });
   });
 });

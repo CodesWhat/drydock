@@ -208,10 +208,41 @@ async function getIcon(req, res) {
 }
 
 /**
+ * Clear icon cache.
+ * Removes all cached icons from disk.
+ * @param req
+ * @param res
+ */
+async function clearCache(req, res) {
+  try {
+    const cacheBase = getIconCacheBaseDirectory();
+    const entries = await fs.readdir(cacheBase, { withFileTypes: true }).catch(() => []);
+    let cleared = 0;
+    for (const entry of entries) {
+      const entryPath = path.join(cacheBase, entry.name);
+      if (entry.isDirectory()) {
+        const files = await fs.readdir(entryPath).catch(() => []);
+        for (const file of files) {
+          await fs.unlink(path.join(entryPath, file)).catch(() => {});
+          cleared++;
+        }
+      }
+    }
+    log.info(`Cleared ${cleared} cached icons`);
+    res.status(200).json({ cleared });
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    log.warn(`Failed to clear icon cache: ${sanitizeLogParam(errorMessage)}`);
+    res.status(500).json({ error: `Failed to clear icon cache: ${errorMessage}` });
+  }
+}
+
+/**
  * Init router.
  * @returns {*}
  */
 export function init() {
   router.get('/:provider/:slug', getIcon);
+  router.delete('/cache', clearCache);
   return router;
 }
