@@ -106,10 +106,10 @@ async function fetchAgentLogs(agentName: string) {
 
 onMounted(fetchAgents);
 
-// ── Search filter ──
+// -- Search filter --
 const searchQuery = ref('');
 const showFilters = ref(false);
-const activeFilterCount = computed(() => searchQuery.value ? 1 : 0);
+const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
 const filteredAgents = computed(() => {
   if (!searchQuery.value) return agentsData.value;
@@ -117,21 +117,12 @@ const filteredAgents = computed(() => {
   return agentsData.value.filter((item) => item.name.toLowerCase().includes(q));
 });
 
-// ── View mode ──
+// -- View mode --
 const agentViewMode = ref<'table' | 'cards' | 'list'>('table');
 
-// ── Sorting ──
+// -- Sorting --
 const agentSortKey = ref('name');
 const agentSortAsc = ref(true);
-
-function toggleAgentSort(key: string) {
-  if (agentSortKey.value === key) {
-    agentSortAsc.value = !agentSortAsc.value;
-  } else {
-    agentSortKey.value = key;
-    agentSortAsc.value = true;
-  }
-}
 
 const sortedAgents = computed(() => {
   const list = [...filteredAgents.value];
@@ -146,43 +137,15 @@ const sortedAgents = computed(() => {
   return list;
 });
 
-// ── Column visibility ──
+// -- Column visibility --
 const agentAllColumns = [
-  {
-    key: 'name',
-    label: 'Agent',
-    align: 'text-left',
-    px: 'px-5',
-    style: 'width: 99%;',
-    required: true,
-  },
-  { key: 'status', label: 'Status', align: 'text-center', px: 'px-3', style: '', required: false },
-  {
-    key: 'containers',
-    label: 'Containers',
-    align: 'text-center',
-    px: 'px-3',
-    style: '',
-    required: false,
-  },
-  { key: 'docker', label: 'Docker', align: 'text-center', px: 'px-3', style: '', required: false },
-  { key: 'os', label: 'OS', align: 'text-center', px: 'px-3', style: '', required: false },
-  {
-    key: 'version',
-    label: 'Version',
-    align: 'text-center',
-    px: 'px-3',
-    style: '',
-    required: false,
-  },
-  {
-    key: 'lastSeen',
-    label: 'Last Seen',
-    align: 'text-right',
-    px: 'px-3',
-    style: '',
-    required: false,
-  },
+  { key: 'name', label: 'Agent', align: 'text-left', width: '99%', sortable: true, required: true },
+  { key: 'status', label: 'Status', align: 'text-center', sortable: true, required: false },
+  { key: 'containers', label: 'Containers', align: 'text-center', sortable: true, required: false },
+  { key: 'docker', label: 'Docker', align: 'text-center', sortable: true, required: false },
+  { key: 'os', label: 'OS', align: 'text-center', sortable: true, required: false },
+  { key: 'version', label: 'Version', align: 'text-center', sortable: true, required: false },
+  { key: 'lastSeen', label: 'Last Seen', align: 'text-right', sortable: true, required: false },
 ];
 
 const agentVisibleColumns = ref<Set<string>>(new Set(agentAllColumns.map((c) => c.key)));
@@ -201,7 +164,7 @@ const agentActiveColumns = computed(() =>
   ),
 );
 
-// ── Detail panel ──
+// -- Detail panel --
 const selectedAgent = ref<Agent | null>(null);
 const agentPanelOpen = ref(false);
 const agentDetailTab = ref('overview');
@@ -222,14 +185,6 @@ function closeAgentPanel() {
   agentPanelOpen.value = false;
   selectedAgent.value = null;
 }
-
-// ── Expandable list items ──
-const expandedItems = ref<Set<string>>(new Set());
-
-function toggleExpandItem(key: string) {
-  if (expandedItems.value.has(key)) expandedItems.value.delete(key);
-  else expandedItems.value.add(key);
-}
 </script>
 
 <template>
@@ -242,217 +197,142 @@ function toggleExpandItem(key: string) {
         <div class="flex-1 min-w-0 overflow-y-auto pr-4 pb-4">
 
           <!-- Filter bar -->
-          <div class="shrink-0 mb-4">
-            <div class="px-3 py-2 dd-rounded relative z-[1]"
-                 :style="{
-                   backgroundColor: 'var(--dd-bg-card)',
-                   border: '1px solid var(--dd-border-strong)',
-                 }">
-              <div class="flex items-center gap-2.5">
-                <!-- Filter toggle button -->
-                <div class="relative">
-                  <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
-                          :class="showFilters || activeFilterCount > 0 ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
-                          :style="{ borderColor: activeFilterCount > 0 ? 'var(--dd-primary)' : 'var(--dd-border-strong)' }"
-                          title="Filters"
-                          @click.stop="showFilters = !showFilters">
-                    <AppIcon name="filter" :size="11" />
-                  </button>
-                  <span v-if="activeFilterCount > 0"
-                        class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-[8px] font-bold flex items-center justify-center text-white"
-                        style="background: var(--dd-primary);">
-                    {{ activeFilterCount }}
-                  </span>
-                </div>
-
-                <!-- Result count + view toggle -->
-                <div class="flex items-center gap-2 ml-auto">
-                  <span class="text-[10px] font-semibold tabular-nums shrink-0 px-2 py-1 dd-rounded dd-text-muted dd-bg-card">
-                    {{ filteredAgents.length }}/{{ agentsData.length }} agents
-                  </span>
-                  <div class="flex items-center dd-rounded overflow-hidden border"
-                       :style="{ borderColor: 'var(--dd-border-strong)' }">
-                    <button v-for="vm in ([
-                      { id: 'table' as const, icon: 'table' },
-                      { id: 'cards' as const, icon: 'grid' },
-                      { id: 'list' as const, icon: 'list' },
-                    ])" :key="vm.id"
-                            class="w-7 h-7 flex items-center justify-center text-[11px] transition-colors"
-                            :class="agentViewMode === vm.id ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
-                            :style="vm.id !== 'table' ? { borderLeft: '1px solid var(--dd-border-strong)' } : {}"
-                            :title="vm.id.charAt(0).toUpperCase() + vm.id.slice(1) + ' view'"
-                            @click="agentViewMode = vm.id">
-                      <AppIcon :name="vm.icon" :size="11" />
-                    </button>
-                  </div>
-                  <!-- Column picker -->
-                  <div v-if="agentViewMode === 'table'" class="relative">
-                    <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
-                            :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
-                            :style="{ borderColor: 'var(--dd-border-strong)' }"
-                            title="Toggle columns"
-                            @click.stop="showAgentColumnPicker = !showAgentColumnPicker">
-                      <AppIcon name="config" :size="10" />
-                    </button>
-                    <div v-if="showAgentColumnPicker" @click.stop
-                         class="absolute right-0 top-9 z-50 min-w-[160px] py-1.5 dd-rounded shadow-lg"
-                         :style="{
-                           backgroundColor: 'var(--dd-bg-card)',
-                           border: '1px solid var(--dd-border-strong)',
-                           boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-                         }">
-                      <div class="px-3 py-1 text-[9px] font-bold uppercase tracking-wider dd-text-muted">Columns</div>
-                      <button v-for="col in agentAllColumns" :key="col.key"
-                              class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated"
-                              :class="col.required ? 'dd-text-muted cursor-not-allowed' : 'dd-text'"
-                              @click="toggleAgentColumn(col.key)">
-                        <AppIcon :name="agentVisibleColumns.has(col.key) ? 'check' : 'square'" :size="10"
-                                 :style="agentVisibleColumns.has(col.key) ? { color: 'var(--dd-primary)' } : {}" />
-                        {{ col.label }}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Collapsible filter row -->
-              <div v-if="showFilters" class="flex flex-wrap items-center gap-2 mt-2 pt-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
-                <input v-model="searchQuery"
-                       type="text"
-                       placeholder="Filter by name..."
-                       class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
-                <button v-if="searchQuery"
-                        class="text-[10px] dd-text-muted hover:dd-text transition-colors"
-                        @click="searchQuery = ''">
-                  Clear
+          <DataFilterBar
+            v-model="agentViewMode"
+            v-model:showFilters="showFilters"
+            :filtered-count="filteredAgents.length"
+            :total-count="agentsData.length"
+            count-label="agents"
+            :active-filter-count="activeFilterCount">
+            <template #filters>
+              <input v-model="searchQuery"
+                     type="text"
+                     placeholder="Filter by name..."
+                     class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
+              <button v-if="searchQuery"
+                      class="text-[10px] dd-text-muted hover:dd-text transition-colors"
+                      @click="searchQuery = ''">
+                Clear
+              </button>
+            </template>
+            <template #extra-buttons>
+              <div v-if="agentViewMode === 'table'" class="relative">
+                <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
+                        :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
+                        :style="{ borderColor: 'var(--dd-border-strong)' }"
+                        title="Toggle columns"
+                        @click.stop="showAgentColumnPicker = !showAgentColumnPicker">
+                  <AppIcon name="config" :size="10" />
                 </button>
+                <div v-if="showAgentColumnPicker" @click.stop
+                     class="absolute right-0 top-9 z-50 min-w-[160px] py-1.5 dd-rounded shadow-lg"
+                     :style="{
+                       backgroundColor: 'var(--dd-bg-card)',
+                       border: '1px solid var(--dd-border-strong)',
+                       boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                     }">
+                  <div class="px-3 py-1 text-[9px] font-bold uppercase tracking-wider dd-text-muted">Columns</div>
+                  <button v-for="col in agentAllColumns" :key="col.key"
+                          class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated"
+                          :class="col.required ? 'dd-text-muted cursor-not-allowed' : 'dd-text'"
+                          @click="toggleAgentColumn(col.key)">
+                    <AppIcon :name="agentVisibleColumns.has(col.key) ? 'check' : 'square'" :size="10"
+                             :style="agentVisibleColumns.has(col.key) ? { color: 'var(--dd-primary)' } : {}" />
+                    {{ col.label }}
+                  </button>
+                </div>
               </div>
-            </div>
-          </div>
+            </template>
+          </DataFilterBar>
 
           <!-- Table view -->
-          <div v-if="agentViewMode === 'table'"
-               class="dd-rounded overflow-hidden"
-               :style="{ border: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-card)' }">
-            <div>
-              <table class="w-full text-xs">
-                <thead>
-                  <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                    <th v-for="col in agentActiveColumns" :key="col.key"
-                        :class="[col.align, col.px, 'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-[10px] select-none cursor-pointer transition-colors', agentSortKey === col.key ? 'dd-text-secondary' : 'dd-text-muted hover:dd-text-secondary']"
-                        :style="col.style"
-                        @click="toggleAgentSort(col.key)">
-                      {{ col.label }}
-                      <span v-if="agentSortKey === col.key" class="inline-block ml-0.5 text-[8px]">{{ agentSortAsc ? '&#9650;' : '&#9660;' }}</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(agent, i) in sortedAgents" :key="agent.id"
-                      class="cursor-pointer transition-colors hover:dd-bg-elevated"
-                      :class="selectedAgent?.id === agent.id ? 'ring-1 ring-inset ring-drydock-secondary' : ''"
-                      :style="{
-                        backgroundColor: selectedAgent?.id === agent.id ? 'var(--dd-bg-elevated)' : (i % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)'),
-                        borderBottom: i < sortedAgents.length - 1 ? '1px solid var(--dd-border-strong)' : 'none',
-                      }"
-                      @click="selectAgent(agent)">
-                    <!-- Agent name (+ compact fold) -->
-                    <td class="px-5 py-3">
-                      <div class="flex items-start gap-2 min-w-0">
-                        <div class="w-2 h-2 rounded-full shrink-0 mt-1.5"
-                             :style="{ backgroundColor: agent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-                        <div class="min-w-0 flex-1">
-                          <div class="font-medium truncate dd-text">{{ agent.name }}</div>
-                          <div class="text-[10px] mt-0.5 truncate dd-text-muted">{{ agent.host }}</div>
-                          <!-- Compact mode: folded badge row -->
-                          <div v-if="isCompact" class="flex items-center gap-1.5 mt-1.5">
-                            <span class="badge px-1.5 py-0 text-[9px]"
-                                  :style="{
-                                    backgroundColor: agent.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                                    color: agent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                                  }">
-                              {{ agent.status }}
-                            </span>
-                            <span class="text-[9px] dd-text-secondary">
-                              {{ agent.containers.running }}/{{ agent.containers.total }}
-                            </span>
-                            <span class="text-[9px] dd-text-muted ml-auto">{{ agent.lastSeen }}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <!-- Status -->
-                    <td v-if="agentVisibleColumns.has('status') && !isCompact" class="px-3 py-3 text-center whitespace-nowrap">
-                      <span class="badge text-[9px] font-bold"
-                            :style="{
-                              backgroundColor: agent.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                              color: agent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                            }">
-                        {{ agent.status }}
-                      </span>
-                    </td>
-                    <!-- Containers -->
-                    <td v-if="agentVisibleColumns.has('containers') && !isCompact" class="px-3 py-3 text-center whitespace-nowrap">
-                      <span class="font-bold" style="color: var(--dd-success);">{{ agent.containers.running }}</span>
-                      <span class="dd-text-muted">/{{ agent.containers.total }}</span>
-                    </td>
-                    <!-- Docker -->
-                    <td v-if="agentVisibleColumns.has('docker') && !isCompact" class="px-3 py-3 text-center whitespace-nowrap font-mono" :class="agent.dockerVersion === '-' ? 'dd-text-muted' : 'dd-text-secondary'">
-                      {{ agent.dockerVersion }}
-                    </td>
-                    <!-- OS -->
-                    <td v-if="agentVisibleColumns.has('os') && !isCompact" class="px-3 py-3 text-center whitespace-nowrap" :class="agent.os === '-' ? 'dd-text-muted' : 'dd-text-secondary'">
-                      {{ agent.os }}
-                    </td>
-                    <!-- Version -->
-                    <td v-if="agentVisibleColumns.has('version') && !isCompact" class="px-3 py-3 text-center whitespace-nowrap">
-                      <span v-if="agent.version === '-'" class="dd-text-muted">-</span>
-                      <span v-else class="px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-secondary">
-                        v{{ agent.version }}
-                      </span>
-                    </td>
-                    <!-- Last Seen -->
-                    <td v-if="agentVisibleColumns.has('lastSeen') && !isCompact" class="px-3 py-3 text-right whitespace-nowrap dd-text-muted">
-                      {{ agent.lastSeen }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <DataTable v-if="agentViewMode === 'table'"
+                     :columns="agentActiveColumns"
+                     :rows="sortedAgents"
+                     row-key="id"
+                     :sort-key="agentSortKey"
+                     :sort-asc="agentSortAsc"
+                     :selected-key="selectedAgent?.id ?? null"
+                     @update:sort-key="agentSortKey = $event"
+                     @update:sort-asc="agentSortAsc = $event"
+                     @row-click="selectAgent($event)">
+            <template #cell-name="{ row }">
+              <div class="flex items-start gap-2 min-w-0">
+                <div class="w-2 h-2 rounded-full shrink-0 mt-1.5"
+                     :style="{ backgroundColor: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+                <div class="min-w-0 flex-1">
+                  <div class="font-medium truncate dd-text">{{ row.name }}</div>
+                  <div class="text-[10px] mt-0.5 truncate dd-text-muted">{{ row.host }}</div>
+                  <!-- Compact mode: folded badge row -->
+                  <div v-if="isCompact" class="flex items-center gap-1.5 mt-1.5">
+                    <span class="badge px-1.5 py-0 text-[9px]"
+                          :style="{
+                            backgroundColor: row.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
+                            color: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
+                          }">
+                      {{ row.status }}
+                    </span>
+                    <span class="text-[9px] dd-text-secondary">
+                      {{ row.containers.running }}/{{ row.containers.total }}
+                    </span>
+                    <span class="text-[9px] dd-text-muted ml-auto">{{ row.lastSeen }}</span>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <template #cell-status="{ row }">
+              <span class="badge text-[9px] font-bold"
+                    :style="{
+                      backgroundColor: row.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
+                      color: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
+                    }">
+                {{ row.status }}
+              </span>
+            </template>
+            <template #cell-containers="{ row }">
+              <span class="font-bold" style="color: var(--dd-success);">{{ row.containers.running }}</span>
+              <span class="dd-text-muted">/{{ row.containers.total }}</span>
+            </template>
+            <template #cell-docker="{ row }">
+              <span class="font-mono" :class="row.dockerVersion === '-' ? 'dd-text-muted' : 'dd-text-secondary'">
+                {{ row.dockerVersion }}
+              </span>
+            </template>
+            <template #cell-os="{ row }">
+              <span :class="row.os === '-' ? 'dd-text-muted' : 'dd-text-secondary'">{{ row.os }}</span>
+            </template>
+            <template #cell-version="{ row }">
+              <span v-if="row.version === '-'" class="dd-text-muted">-</span>
+              <span v-else class="px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-secondary">
+                v{{ row.version }}
+              </span>
+            </template>
+            <template #cell-lastSeen="{ row }">
+              <span class="dd-text-muted">{{ row.lastSeen }}</span>
+            </template>
+            <template #empty>
+              <EmptyState icon="filter"
+                          message="No agents match your filters"
+                          :show-clear="activeFilterCount > 0"
+                          @clear="searchQuery = ''" />
+            </template>
+          </DataTable>
 
           <!-- Card view -->
-          <div v-if="agentViewMode === 'cards'"
-               class="grid gap-4"
-               style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
-            <div v-for="agent in sortedAgents" :key="agent.id"
-                 class="container-card dd-rounded cursor-pointer overflow-hidden flex flex-col"
-                 :class="[
-                   selectedAgent?.id === agent.id && agentPanelOpen
-                     ? 'ring-2 ring-drydock-secondary ring-offset-0'
-                     : '',
-                 ]"
-                 :style="{
-                   backgroundColor: 'var(--dd-bg-card)',
-                   border: selectedAgent?.id === agent.id && agentPanelOpen
-                     ? '1.5px solid var(--color-drydock-secondary)'
-                     : '1px solid var(--dd-border-strong)',
-                   borderRadius: 'var(--dd-radius)',
-                   overflow: 'hidden',
-                 }"
-                 @click="selectAgent(agent)">
+          <DataCardGrid v-if="agentViewMode === 'cards'"
+                        :items="sortedAgents"
+                        item-key="id"
+                        :selected-key="selectedAgent?.id ?? null"
+                        @item-click="selectAgent($event)">
+            <template #card="{ item: agent }">
               <!-- Card header -->
               <div class="px-4 pt-4 pb-2 flex items-start justify-between">
                 <div class="flex items-center gap-2.5 min-w-0">
                   <div class="w-2.5 h-2.5 rounded-full shrink-0 mt-1"
                        :style="{ backgroundColor: agent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
                   <div class="min-w-0">
-                    <div class="text-[15px] font-semibold truncate dd-text">
-                      {{ agent.name }}
-                    </div>
-                    <div class="text-[11px] truncate mt-0.5 dd-text-muted">
-                      {{ agent.host }}
-                    </div>
+                    <div class="text-[15px] font-semibold truncate dd-text">{{ agent.name }}</div>
+                    <div class="text-[11px] truncate mt-0.5 dd-text-muted">{{ agent.host }}</div>
                   </div>
                 </div>
                 <span class="badge text-[9px] uppercase tracking-wide font-bold shrink-0 ml-2"
@@ -502,157 +382,134 @@ function toggleExpandItem(key: string) {
                 </div>
                 <span class="text-[10px] dd-text-muted">{{ agent.lastSeen }}</span>
               </div>
-            </div>
-          </div>
+            </template>
+          </DataCardGrid>
 
           <!-- List view -->
-          <div v-if="agentViewMode === 'list'"
-               class="space-y-2">
-            <div v-for="agent in sortedAgents" :key="agent.id"
-                 class="dd-rounded overflow-hidden transition-all"
-                 :style="{
-                   backgroundColor: 'var(--dd-bg-card)',
-                   border: selectedAgent?.id === agent.id
-                     ? '1.5px solid var(--color-drydock-secondary)'
-                     : '1px solid var(--dd-border-strong)',
-                 }">
-              <!-- List item header -->
-              <div class="flex items-center gap-3 px-5 py-3 cursor-pointer transition-colors hover:dd-bg-elevated"
-                   @click="toggleExpandItem('agent-' + agent.id)">
-                <div class="w-2.5 h-2.5 rounded-full shrink-0"
-                     :style="{ backgroundColor: agent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-                <div class="min-w-0 flex-1">
-                  <div class="text-sm font-semibold truncate dd-text">{{ agent.name }}</div>
-                  <div class="text-[10px] mt-0.5 truncate dd-text-muted">{{ agent.host }}</div>
-                </div>
-                <div class="flex items-center gap-1.5 shrink-0">
-                  <span class="badge text-[9px] font-bold"
-                        :style="{
-                          backgroundColor: agent.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                          color: agent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                        }">
-                    {{ agent.status }}
-                  </span>
-                  <span class="text-[10px] dd-text-secondary">
-                    {{ agent.containers.running }}/{{ agent.containers.total }}
-                  </span>
-                  <span class="text-[10px] dd-text-muted">{{ agent.lastSeen }}</span>
-                </div>
-                <AppIcon :name="expandedItems.has('agent-' + agent.id) ? 'chevron-up' : 'chevron-down'" :size="10" class="shrink-0 dd-text-muted" />
+          <DataListAccordion v-if="agentViewMode === 'list'"
+                             :items="sortedAgents"
+                             item-key="id"
+                             :selected-key="selectedAgent?.id ?? null">
+            <template #header="{ item: agent }">
+              <div class="w-2.5 h-2.5 rounded-full shrink-0"
+                   :style="{ backgroundColor: agent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold truncate dd-text">{{ agent.name }}</div>
+                <div class="text-[10px] mt-0.5 truncate dd-text-muted">{{ agent.host }}</div>
               </div>
-              <!-- Expanded details -->
-              <div v-if="expandedItems.has('agent-' + agent.id)"
-                   class="px-5 pb-4 pt-1"
-                   :style="{ borderTop: '1px solid var(--dd-border-strong)' }">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 mt-2">
-                  <div>
-                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Docker</div>
-                    <div class="text-[12px] font-mono" :class="agent.dockerVersion === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.dockerVersion }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">OS</div>
-                    <div class="text-[12px]" :class="agent.os === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.os }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Architecture</div>
-                    <div class="text-[12px]" :class="agent.arch === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.arch }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Version</div>
-                    <div class="text-[12px] font-mono" :class="agent.version === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.version === '-' ? '-' : 'v' + agent.version }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Uptime</div>
-                    <div class="text-[12px]" :class="agent.uptime === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.uptime }}</div>
-                  </div>
-                  <div>
-                    <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Containers</div>
-                    <div class="text-[12px] dd-text">
-                      <span class="font-bold" style="color: var(--dd-success);">{{ agent.containers.running }}</span>
-                      <span class="dd-text-muted"> running / </span>
-                      <span>{{ agent.containers.total }}</span>
-                      <span class="dd-text-muted"> total</span>
-                    </div>
-                  </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <span class="badge text-[9px] font-bold"
+                      :style="{
+                        backgroundColor: agent.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
+                        color: agent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
+                      }">
+                  {{ agent.status }}
+                </span>
+                <span class="text-[10px] dd-text-secondary">
+                  {{ agent.containers.running }}/{{ agent.containers.total }}
+                </span>
+                <span class="text-[10px] dd-text-muted">{{ agent.lastSeen }}</span>
+              </div>
+            </template>
+            <template #details="{ item: agent }">
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 mt-2">
+                <div>
+                  <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Docker</div>
+                  <div class="text-[12px] font-mono" :class="agent.dockerVersion === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.dockerVersion }}</div>
                 </div>
-                <!-- Action buttons -->
-                <div class="mt-4 pt-3 flex items-center gap-2" :style="{ borderTop: '1px solid var(--dd-border-strong)' }">
-                  <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-medium transition-colors dd-text-secondary hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
-                          @click.stop="selectAgent(agent)">
-                    <AppIcon name="info" :size="10" />
-                    Details
-                  </button>
+                <div>
+                  <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">OS</div>
+                  <div class="text-[12px]" :class="agent.os === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.os }}</div>
+                </div>
+                <div>
+                  <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Architecture</div>
+                  <div class="text-[12px]" :class="agent.arch === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.arch }}</div>
+                </div>
+                <div>
+                  <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Version</div>
+                  <div class="text-[12px] font-mono" :class="agent.version === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.version === '-' ? '-' : 'v' + agent.version }}</div>
+                </div>
+                <div>
+                  <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Uptime</div>
+                  <div class="text-[12px]" :class="agent.uptime === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.uptime }}</div>
+                </div>
+                <div>
+                  <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Containers</div>
+                  <div class="text-[12px] dd-text">
+                    <span class="font-bold" style="color: var(--dd-success);">{{ agent.containers.running }}</span>
+                    <span class="dd-text-muted"> running / </span>
+                    <span>{{ agent.containers.total }}</span>
+                    <span class="dd-text-muted"> total</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+              <!-- Action buttons -->
+              <div class="mt-4 pt-3 flex items-center gap-2" :style="{ borderTop: '1px solid var(--dd-border-strong)' }">
+                <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-medium transition-colors dd-text-secondary hover:dd-bg-elevated"
+                        :style="{ border: '1px solid var(--dd-border-strong)' }"
+                        @click.stop="selectAgent(agent)">
+                  <AppIcon name="info" :size="10" />
+                  Details
+                </button>
+              </div>
+            </template>
+          </DataListAccordion>
+
+          <!-- Empty state (when no data at all, not filtered) -->
+          <EmptyState v-if="!loading && sortedAgents.length === 0 && agentViewMode !== 'table'"
+                      icon="filter"
+                      message="No agents match your filters"
+                      :show-clear="activeFilterCount > 0"
+                      @clear="searchQuery = ''" />
 
         </div><!-- end left: filter bar + table/cards -->
 
-        <!-- Detail side panel overlay -->
-        <div v-if="agentPanelOpen && isMobile"
-             class="fixed inset-0 bg-black/50 z-40"
-             @click="closeAgentPanel" />
-
-        <!-- Detail side panel -->
-        <aside v-if="agentPanelOpen && selectedAgent"
-               class="flex flex-col dd-rounded overflow-clip transition-all duration-300 ease-in-out"
-               :class="isMobile ? 'fixed top-0 right-0 h-full z-50' : 'sticky top-0'"
-               :style="{
-                 flex: isMobile ? undefined : '0 0 45%',
-                 width: isMobile ? '100%' : undefined,
-                 backgroundColor: 'var(--dd-bg-card)',
-                 border: '1px solid var(--dd-border-strong)',
-                 height: isMobile ? '100vh' : 'calc(100vh - 96px)',
-                 minHeight: '480px',
-               }">
-          <!-- Panel toolbar -->
-          <div class="shrink-0 px-4 py-2.5 flex items-center justify-between"
-               :style="{ borderBottom: '1px solid var(--dd-border)' }">
+        <!-- Detail panel -->
+        <DetailPanel
+          :open="agentPanelOpen"
+          :is-mobile="isMobile"
+          size="md"
+          :show-size-controls="false"
+          :show-full-page="false"
+          @update:open="agentPanelOpen = $event; if (!$event) selectedAgent = null">
+          <template #header>
             <div class="flex items-center gap-2.5 min-w-0">
               <div class="w-2.5 h-2.5 rounded-full shrink-0"
-                   :style="{ backgroundColor: selectedAgent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-              <span class="text-sm font-bold truncate dd-text">{{ selectedAgent.name }}</span>
+                   :style="{ backgroundColor: selectedAgent?.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+              <span class="text-sm font-bold truncate dd-text">{{ selectedAgent?.name }}</span>
               <span class="badge text-[9px] uppercase font-bold shrink-0"
                     :style="{
-                      backgroundColor: selectedAgent.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                      color: selectedAgent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
+                      backgroundColor: selectedAgent?.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
+                      color: selectedAgent?.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
                     }">
-                {{ selectedAgent.status }}
+                {{ selectedAgent?.status }}
               </span>
             </div>
-            <button class="flex items-center justify-center w-7 h-7 dd-rounded text-xs font-medium transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                    @click="closeAgentPanel">
-              <AppIcon name="xmark" :size="14" />
-            </button>
-          </div>
+          </template>
 
-          <!-- Subtitle -->
-          <div class="shrink-0 px-4 py-2 text-[11px] font-mono dd-text-secondary"
-               :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            {{ selectedAgent.host }}
-          </div>
+          <template #subtitle>
+            <span class="text-[11px] font-mono dd-text-secondary">{{ selectedAgent?.host }}</span>
+          </template>
 
-          <!-- Tabs -->
-          <div class="shrink-0 flex px-4 gap-1"
-               :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <button v-for="tab in agentDetailTabs" :key="tab.id"
-                    class="px-3 py-2.5 text-[11px] font-medium transition-colors relative"
-                    :class="agentDetailTab === tab.id
-                      ? 'text-drydock-secondary'
-                      : 'dd-text-muted hover:dd-text'"
-                    @click="agentDetailTab = tab.id">
-              <AppIcon :name="tab.icon" :size="10" class="mr-1" />
-              {{ tab.label }}
-              <div v-if="agentDetailTab === tab.id"
-                   class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full" />
-            </button>
-          </div>
+          <template #tabs>
+            <div class="shrink-0 flex px-4 gap-1"
+                 :style="{ borderBottom: '1px solid var(--dd-border)' }">
+              <button v-for="tab in agentDetailTabs" :key="tab.id"
+                      class="px-3 py-2.5 text-[11px] font-medium transition-colors relative"
+                      :class="agentDetailTab === tab.id
+                        ? 'text-drydock-secondary'
+                        : 'dd-text-muted hover:dd-text'"
+                      @click="agentDetailTab = tab.id">
+                <AppIcon :name="tab.icon" :size="10" class="mr-1" />
+                {{ tab.label }}
+                <div v-if="agentDetailTab === tab.id"
+                     class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full" />
+              </button>
+            </div>
+          </template>
 
           <!-- Tab content -->
-          <div class="flex-1 overflow-y-auto">
-
+          <template v-if="selectedAgent">
             <!-- Overview tab -->
             <div v-if="agentDetailTab === 'overview'" class="p-4 space-y-5">
               <!-- Resources -->
@@ -771,9 +628,8 @@ function toggleExpandItem(key: string) {
                 <span class="text-[12px] font-mono" :class="field.muted ? 'dd-text-muted' : 'dd-text'">{{ field.value }}</span>
               </div>
             </div>
-
-          </div>
-        </aside>
+          </template>
+        </DetailPanel>
 
       </div><!-- end flex wrapper -->
     </div>
