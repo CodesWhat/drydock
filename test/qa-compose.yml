@@ -42,14 +42,6 @@ services:
       # Optional fallback when CA cannot be mounted (prefer CAFILE)
       # - DD_REGISTRY_GITEA_PRIVATE_INSECURE=true
       # Note: no private Hub registry -- test containers are public images
-      # --- Agent: staging server ---
-      - DD_AGENT_STAGING_HOST=192.168.1.50
-      - DD_AGENT_STAGING_PORT=3000
-      - DD_AGENT_STAGING_SECRET=staging-shared-secret-key
-      # --- Agent: production server ---
-      - DD_AGENT_PRODUCTION_HOST=10.0.0.100
-      - DD_AGENT_PRODUCTION_PORT=3000
-      - DD_AGENT_PRODUCTION_SECRET=production-shared-secret-key
       # --- Update Guard (security scanning) ---
       - DD_SECURITY_SCANNER=trivy
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL
