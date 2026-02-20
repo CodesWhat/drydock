@@ -10,7 +10,8 @@ if [ "$(id -u)" = "0" ]; then
 		DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
 		if [ "$DOCKER_GID" != "0" ]; then
 			# Non-root GID (e.g. Linux docker group): add node to socket group, drop to node
-			EXISTING_GROUP=$(getent group "$DOCKER_GID" | cut -d: -f1)
+			# getent exits non-zero when the GID has no named group; that's expected on some hosts.
+			EXISTING_GROUP=$(getent group "$DOCKER_GID" 2>/dev/null | cut -d: -f1 || true)
 			if [ -n "$EXISTING_GROUP" ]; then
 				addgroup node "$EXISTING_GROUP" 2>/dev/null || true
 			else
@@ -32,8 +33,4 @@ if [[ ${1#-} != "$1" ]]; then
 	set -- node dist/index "$@"
 fi
 
-if [[ $1 == "node" ]] && [[ $2 == dist/index* ]] && [[ ${DD_LOG_FORMAT} != "json" ]]; then
-	exec "$@" | ./node_modules/.bin/pino-pretty
-else
-	exec "$@"
-fi
+exec "$@"

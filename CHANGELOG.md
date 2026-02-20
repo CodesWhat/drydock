@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.5] — 2026-02-19
+
+### Fixed
+
+- **Container exits immediately when socket GID has no named group** — `Docker.entrypoint.sh` treated `getent group <gid>` failures as fatal under `set -e -o pipefail`, so mounts where `/var/run/docker.sock` had a numeric GID not present in `/etc/group` caused an immediate exit (`status=exited`, `exit=2`) before app startup. The group lookup is now tolerant and falls back to creating a matching group as intended. ([#82](https://github.com/CodesWhat/drydock/issues/82))
+- **Log pretty-printing no longer depends on shell pipes** — Moved human-readable formatting from the entrypoint pipeline (`node | pino-pretty`) into the app logger configuration. This preserves proper `exec`/signal behavior under `tini` while keeping `DD_LOG_FORMAT=json` support.
+
 ## [1.3.4] — 2026-02-19
 
 ### Fixed

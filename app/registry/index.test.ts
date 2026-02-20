@@ -7,6 +7,7 @@ import Component from './Component.js';
 
 vi.mock('../configuration', () => ({
   getLogLevel: vi.fn(() => 'info'),
+  getLogFormat: vi.fn(() => 'json'),
   getRegistryConfigurations: vi.fn(),
   getTriggerConfigurations: vi.fn(),
   getWatcherConfigurations: vi.fn(),

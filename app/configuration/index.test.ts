@@ -29,6 +29,27 @@ test('getLogLevel should return debug when overridden', async () => {
   expect(configuration.getLogLevel()).toStrictEqual('debug');
 });
 
+test('getLogFormat should return text by default', async () => {
+  delete configuration.ddEnvVars.DD_LOG_FORMAT;
+  expect(configuration.getLogFormat()).toStrictEqual('text');
+});
+
+test('getLogFormat should return json when overridden', async () => {
+  configuration.ddEnvVars.DD_LOG_FORMAT = 'json';
+  expect(configuration.getLogFormat()).toStrictEqual('json');
+});
+
+test('getLogFormat should normalize casing', async () => {
+  configuration.ddEnvVars.DD_LOG_FORMAT = 'JSON';
+  expect(configuration.getLogFormat()).toStrictEqual('json');
+});
+
+test('getLogFormat should fallback to text for unsupported values', async () => {
+  configuration.ddEnvVars.DD_LOG_FORMAT = 'pretty';
+  expect(configuration.getLogFormat()).toStrictEqual('text');
+  delete configuration.ddEnvVars.DD_LOG_FORMAT;
+});
+
 test('getWatcherConfiguration should return empty object by default', async () => {
   delete configuration.ddEnvVars.DD_WATCHER_WATCHER1_X;
   delete configuration.ddEnvVars.DD_WATCHER_WATCHER1_Y;

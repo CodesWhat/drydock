@@ -22,5 +22,8 @@
   "devDependencies": {
     "@biomejs/biome": "2.3.7",
     "@dotenvx/dotenvx": "1.52.0"
+  },
+  "overrides": {
+    "minimatch": "^10.2.1"
   }
 }

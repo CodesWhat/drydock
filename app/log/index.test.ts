@@ -4,6 +4,7 @@ import log from './index.js';
 // Mock the configuration module
 vi.mock('../configuration', () => ({
   getLogLevel: vi.fn(() => 'info'),
+  getLogFormat: vi.fn(() => 'json'),
 }));
 
 describe('Logger', () => {
