@@ -247,7 +247,7 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     'fa6-solid': 'fa6-solid:circle-check',
     ph: 'ph:check-circle',
     'ph-duotone': 'ph:check-circle-duotone',
-    lucide: 'lucide:check-circle',
+    lucide: 'lucide:circle-check',
     tabler: 'tabler:circle-check',
     heroicons: 'heroicons:check-circle',
     iconoir: 'iconoir:check-circle',
@@ -259,7 +259,7 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     lucide: 'lucide:square',
     tabler: 'tabler:player-stop',
     heroicons: 'heroicons:stop',
-    iconoir: 'iconoir:media-stop',
+    iconoir: 'iconoir:square',
   },
   play: {
     'fa6-solid': 'fa6-solid:play',
@@ -268,7 +268,7 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     lucide: 'lucide:play',
     tabler: 'tabler:player-play',
     heroicons: 'heroicons:play',
-    iconoir: 'iconoir:media-play',
+    iconoir: 'iconoir:play',
   },
   restart: {
     'fa6-solid': 'fa6-solid:rotate-right',
@@ -367,7 +367,7 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     lucide: 'lucide:pause',
     tabler: 'tabler:player-pause',
     heroicons: 'heroicons:pause',
-    iconoir: 'iconoir:media-pause',
+    iconoir: 'iconoir:pause',
   },
   trash: {
     'fa6-solid': 'fa6-solid:trash',
@@ -403,7 +403,7 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     lucide: 'lucide:grid-2x2',
     tabler: 'tabler:grid-dots',
     heroicons: 'heroicons:squares-2x2',
-    iconoir: 'iconoir:grid',
+    iconoir: 'iconoir:view-grid',
   },
   list: {
     'fa6-solid': 'fa6-solid:list',
