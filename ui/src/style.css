@@ -30,6 +30,8 @@
   --dd-radius: 3px; /* Global border-radius — cards, buttons */
   --dd-radius-sm: 2px; /* Small elements (badges, chips) */
   --dd-radius-lg: 4px; /* Large panels (modals, detail panels) */
+  background-color: var(--dd-bg);
+  color: var(--dd-text);
 }
 
 @theme {
@@ -409,12 +411,12 @@ select {
   z-index: 10;
 }
 
-html.theme-transition-active::view-transition-old(root) {
+html.dd-transitioning::view-transition-old(root) {
   animation: none;
   opacity: 1;
 }
 
-html.theme-transition-active::view-transition-new(root) {
+html.dd-transitioning::view-transition-new(root) {
   animation-name: theme-circle-reveal;
   animation-duration: 600ms;
   animation-timing-function: ease-out;
@@ -431,7 +433,7 @@ html.theme-transition-active::view-transition-new(root) {
 }
 
 @supports not (clip-path: circle(0% at 50% 50%)) {
-  html.theme-transition-active::view-transition-new(root) {
+  html.dd-transitioning::view-transition-new(root) {
     animation: theme-fade-in 600ms ease-out;
   }
 

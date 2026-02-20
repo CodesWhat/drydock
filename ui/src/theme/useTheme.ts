@@ -58,7 +58,7 @@ const isDark = computed(() => resolvedVariant.value === 'dark');
 function applyClasses() {
   const el = document.documentElement;
   el.className = el.className
-    .replace(/\btheme-(?!transition)\S+/g, '')
+    .replace(/\btheme-\S+/g, '')
     .replace(/\b(dark|light)\b/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -132,7 +132,7 @@ async function transitionTheme(change: () => void, e?: MouseEvent) {
   const y = e?.clientY ?? window.innerHeight / 2;
   document.documentElement.style.setProperty('--x', `${x}px`);
   document.documentElement.style.setProperty('--y', `${y}px`);
-  document.documentElement.classList.add('theme-transition-active');
+  document.documentElement.classList.add('dd-transitioning');
 
   isTransitioning = true;
   const transition = (document as any).startViewTransition(() => {
@@ -146,7 +146,7 @@ async function transitionTheme(change: () => void, e?: MouseEvent) {
     /* aborted */
   }
   isTransitioning = false;
-  document.documentElement.classList.remove('theme-transition-active');
+  document.documentElement.classList.remove('dd-transitioning');
 }
 
 export function useTheme() {
