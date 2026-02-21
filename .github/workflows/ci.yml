@@ -95,6 +95,9 @@ jobs:
             e2e/package-lock.json
             ui/package-lock.json
 
+      - name: Setup Qlty
+        uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899  # v2.2.0
+
       - name: Install dependencies
         run: |
           (cd app && npm ci)

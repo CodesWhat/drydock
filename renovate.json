@@ -20,12 +20,6 @@
       "groupSlug": "github-actions"
     },
     {
-      "description": "Keep Biome aligned across app, ui, e2e",
-      "matchPackageNames": ["@biomejs/biome"],
-      "groupName": "biome",
-      "groupSlug": "biome"
-    },
-    {
       "description": "Auto-merge patch updates",
       "matchUpdateTypes": ["patch"],
       "automerge": true,
