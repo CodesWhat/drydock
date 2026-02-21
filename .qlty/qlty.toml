@@ -125,6 +125,9 @@ name = "trufflehog"
 [[plugin]]
 name = "yamllint"
 
+[[plugin]]
+name = "zizmor"
+
 # Entrypoint uses su-exec for runtime privilege drop; no static USER needed
 [[triage]]
 match.rules = ["trivy:DS002"]
