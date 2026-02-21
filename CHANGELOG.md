@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Notifications view shows real trigger data** — Replaced hardcoded fake notification rules with read-only display of configured triggers from the API. Shows trigger name, type badge, and truncated configuration summary. Info banner notes that notification rules are coming in v1.4.1.
 - **Removed Vuetify dependency** — All Vuetify imports, components, and archived test files removed. Zero Vuetify references remain.
 
+### Security
+
+- **Removed plaintext credentials from login request body** — The Basic auth login was redundantly sending username and password in both the Authorization header and the JSON body. The backend only reads the Authorization header via Passport, so the body credentials were unnecessary exposure.
+
 ### Fixed
 
 - **Self-hosted registries ignore port when matching** — Registry matching now respects port numbers in self-hosted registry URLs, preventing mismatches between registries on different ports of the same host.
