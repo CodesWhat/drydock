@@ -1,5 +1,6 @@
 ---
 pre-push:
+  piped: true
   commands:
     qlty:
       run: qlty check --no-progress
