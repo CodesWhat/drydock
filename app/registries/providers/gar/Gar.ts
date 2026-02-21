@@ -23,9 +23,7 @@ class Gar extends BaseRegistry {
 
   private getRegistryHostname(image: ContainerImage): string {
     const registryUrl = image.registry?.url || '';
-    const withProtocol = /^https?:\/\//i.test(registryUrl)
-      ? registryUrl
-      : `https://${registryUrl}`;
+    const withProtocol = /^https?:\/\//i.test(registryUrl) ? registryUrl : `https://${registryUrl}`;
     try {
       return new URL(withProtocol).hostname;
     } catch {

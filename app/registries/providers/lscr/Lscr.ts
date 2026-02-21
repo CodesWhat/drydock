@@ -8,17 +8,13 @@ class Lscr extends Ghcr {
   getConfigurationSchema() {
     return this.joi.alternatives([
       // Anonymous configuration
-      this.joi
-        .string()
-        .allow(''),
+      this.joi.string().allow(''),
 
       // Auth configuration
-      this.joi
-        .object()
-        .keys({
-          username: this.joi.string().required(),
-          token: this.joi.string().required(),
-        }),
+      this.joi.object().keys({
+        username: this.joi.string().required(),
+        token: this.joi.string().required(),
+      }),
     ]);
   }
 

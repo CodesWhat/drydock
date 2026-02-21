@@ -1925,7 +1925,9 @@ describe('additional docker trigger coverage', () => {
     expect(backupStore.getBackupsByName).toHaveBeenCalledWith('container-name');
     expect(registryProvider.getImageFullName).not.toHaveBeenCalled();
     expect(removeImageSpy).not.toHaveBeenCalled();
-    expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Skipping prune of 1.0.0'));
+    expect(logContainer.info).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping prune of 1.0.0'),
+    );
   });
 
   test('cleanupOldImages should skip digest pruning when digest repo is missing', async () => {
