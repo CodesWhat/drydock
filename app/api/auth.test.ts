@@ -1,6 +1,7 @@
 // @ts-nocheck
-const { mockRouter } = vi.hoisted(() => ({
+const { mockRouter, mockLokiStore } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
+  mockLokiStore: vi.fn(),
 }));
 
 vi.mock('express', () => ({
@@ -12,7 +13,7 @@ vi.mock('express-session', () => ({
 }));
 
 vi.mock('connect-loki', () => ({
-  default: vi.fn(() => vi.fn()),
+  default: vi.fn(() => mockLokiStore),
 }));
 
 vi.mock('passport', () => ({
@@ -221,7 +222,7 @@ describe('Auth Router', () => {
       expect(done2).toHaveBeenCalledWith(null, { username: 'test' });
     });
 
-    test('should register /strategies, /login, /logout, /user routes', () => {
+    test('should register /strategies, /remember, /login, /logout, /user routes', () => {
       const app = createApp();
       registry.getState.mockReturnValue({ authentication: {} });
       auth.init(app);
@@ -231,8 +232,20 @@ describe('Auth Router', () => {
 
       expect(getRoutes).toContain('/strategies');
       expect(getRoutes).toContain('/user');
+      expect(postRoutes).toContain('/remember');
       expect(postRoutes).toContain('/login');
       expect(postRoutes).toContain('/logout');
+    });
+
+    test('should configure store ttl for remember-me duration', () => {
+      const app = createApp();
+      auth.init(app);
+
+      expect(mockLokiStore).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ttl: 3600 * 24 * 30,
+        }),
+      );
     });
 
     test('should use DD_SESSION_SECRET when environment variable is set', () => {
@@ -331,6 +344,38 @@ describe('Auth Router', () => {
       const handler = getRouteHandler('post', '/login');
       const res = createResponse();
       handler({ user: { username: 'john' } }, res);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+    });
+
+    test('setRememberMe should persist preference on session', () => {
+      const handler = getRouteHandler('post', '/remember');
+      const req = {
+        body: { remember: true },
+        session: {},
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(req.session.rememberMe).toBe(true);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ ok: true });
+    });
+
+    test('login should apply remember-me cookie max age', () => {
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        body: { remember: true },
+        user: { username: 'john' },
+        session: { cookie: {} },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(req.session.rememberMe).toBe(true);
+      expect(req.session.cookie.maxAge).toBe(3600 * 1000 * 24 * 30);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ username: 'john' });
     });

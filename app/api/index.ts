@@ -50,11 +50,11 @@ export async function init() {
       );
     }
 
-    // Init auth
-    auth.init(app);
-
     // Parse json payloads
     app.use(express.json());
+
+    // Init auth
+    auth.init(app);
 
     // Mount Healthcheck
     app.use('/health', healthRouter.init());

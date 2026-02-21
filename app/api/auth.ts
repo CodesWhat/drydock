@@ -22,6 +22,8 @@ const STRATEGY_IDS = [];
 
 // Constant DD namespace for uuid v5 bound sessions.
 const DD_NAMESPACE = 'dee41e92-5fc4-460e-beec-528c9ea7d760';
+const DEFAULT_SESSION_DAYS = 7;
+const REMEMBER_ME_DAYS = 30;
 
 /**
  * Get all strategies id.
@@ -135,7 +137,7 @@ function getUser(req, res) {
 function applyRememberMe(req) {
   if (!req.session?.cookie) return;
   if (req.session.rememberMe) {
-    req.session.cookie.maxAge = getCookieMaxAge(30);
+    req.session.cookie.maxAge = getCookieMaxAge(REMEMBER_ME_DAYS);
   } else {
     req.session.cookie.expires = false;
     req.session.cookie.maxAge = null;
@@ -189,7 +191,8 @@ export function init(app) {
     session({
       store: new LokiStore({
         path: `${store.getConfiguration().path}/${store.getConfiguration().file}`,
-        ttl: 604800, // 7 days
+        // Keep store retention >= longest auth cookie lifespan (remember-me).
+        ttl: getCookieMaxAge(REMEMBER_ME_DAYS) / 1000,
       }),
       secret: getSessionSecretKey(),
       resave: false,
@@ -198,7 +201,7 @@ export function init(app) {
         httpOnly: true,
         sameSite: 'strict',
         secure: 'auto',
-        maxAge: getCookieMaxAge(7),
+        maxAge: getCookieMaxAge(DEFAULT_SESSION_DAYS),
       },
     }),
   );
