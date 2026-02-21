@@ -7,7 +7,11 @@ import { useContainerFilters } from '../composables/useContainerFilters';
 import { useDetailPanel } from '../composables/useDetailPanel';
 import { useSorting } from '../composables/useSorting';
 import { getContainerLogs as fetchContainerLogs, getAllContainers } from '../services/container';
-import { updateContainer as apiUpdateContainer } from '../services/container-actions';
+import {
+  restartContainer as apiRestartContainer,
+  stopContainer as apiStopContainer,
+  updateContainer as apiUpdateContainer,
+} from '../services/container-actions';
 import type { Container } from '../types/container';
 import { mapApiContainers } from '../utils/container-mapper';
 import {
@@ -258,12 +262,22 @@ async function updateContainer(name: string) {
   }
 }
 
-function skipUpdate(name: string) {
-  console.log('skip', name);
+function skipUpdate(_name: string) {
+  // TODO: Add skip/dismiss update endpoint
 }
 
-function forceUpdate(name: string) {
-  console.log('force', name);
+async function forceUpdate(name: string) {
+  const containerId = containerIdMap.value[name];
+  if (!containerId || actionInProgress.value) return;
+  actionInProgress.value = name;
+  try {
+    await apiUpdateContainer(containerId);
+    await loadContainers();
+  } catch (e: any) {
+    console.error('Force update failed:', e.message);
+  } finally {
+    actionInProgress.value = null;
+  }
 }
 
 // Tooltip shorthand — shows on 400ms delay
@@ -276,7 +290,19 @@ function confirmStop(name: string) {
     message: `Stop ${name}?`,
     rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
     acceptProps: { label: 'Stop', severity: 'danger' },
-    accept: () => console.log('stop', name),
+    accept: async () => {
+      const containerId = containerIdMap.value[name];
+      if (!containerId || actionInProgress.value) return;
+      actionInProgress.value = name;
+      try {
+        await apiStopContainer(containerId);
+        await loadContainers();
+      } catch (e: any) {
+        console.error('Stop failed:', e.message);
+      } finally {
+        actionInProgress.value = null;
+      }
+    },
   });
 }
 
@@ -286,7 +312,19 @@ function confirmRestart(name: string) {
     message: `Restart ${name}?`,
     rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
     acceptProps: { label: 'Restart', severity: 'warn' },
-    accept: () => console.log('restart', name),
+    accept: async () => {
+      const containerId = containerIdMap.value[name];
+      if (!containerId || actionInProgress.value) return;
+      actionInProgress.value = name;
+      try {
+        await apiRestartContainer(containerId);
+        await loadContainers();
+      } catch (e: any) {
+        console.error('Restart failed:', e.message);
+      } finally {
+        actionInProgress.value = null;
+      }
+    },
   });
 }
 
@@ -306,7 +344,8 @@ function confirmIgnore(name: string) {
     message: `Ignore ${name}? It will no longer be monitored for updates.`,
     rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
     acceptProps: { label: 'Ignore', severity: 'danger' },
-    accept: () => console.log('ignore', name),
+    // TODO: Add ignore/unwatch endpoint
+    accept: () => {},
   });
 }
 </script>

@@ -78,6 +78,20 @@ function countContainersByWatcher(
   return counts;
 }
 
+function countImagesByWatcher(containers: any[]): Record<string, number> {
+  const imagesByWatcher: Record<string, Set<string>> = {};
+  for (const c of containers) {
+    const watcher = c.watcher ?? 'local';
+    if (!imagesByWatcher[watcher]) imagesByWatcher[watcher] = new Set();
+    imagesByWatcher[watcher].add(c.image ?? 'unknown');
+  }
+  const counts: Record<string, number> = {};
+  for (const [watcher, images] of Object.entries(imagesByWatcher)) {
+    counts[watcher] = images.size;
+  }
+  return counts;
+}
+
 async function fetchServers() {
   loading.value = true;
   error.value = null;
@@ -88,7 +102,9 @@ async function fetchServers() {
       getAllContainers(),
     ]);
 
-    const containerCounts = countContainersByWatcher(containersData ?? []);
+    const safeContainers = containersData ?? [];
+    const containerCounts = countContainersByWatcher(safeContainers);
+    const imageCounts = countImagesByWatcher(safeContainers);
     const entries: ServerEntry[] = [];
 
     const localCounts = containerCounts.local ?? { total: 0, running: 0, stopped: 0 };
@@ -98,7 +114,7 @@ async function fetchServers() {
       host: 'unix:///var/run/docker.sock',
       status: 'connected',
       containers: localCounts,
-      images: '-',
+      images: imageCounts.local ?? 0,
       lastSeen: 'Just now',
     });
 
@@ -116,7 +132,7 @@ async function fetchServers() {
         host: `${agent.host}${agent.port ? `:${agent.port}` : ''}`,
         status: agentConnected ? 'connected' : 'disconnected',
         containers: agentCounts,
-        images: '-',
+        images: (watcherName && imageCounts[watcherName]) ? imageCounts[watcherName] : 0,
         lastSeen: agentConnected ? 'Just now' : 'Never',
       });
     }

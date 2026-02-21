@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { getAllContainers } from '../services/container';
 import { getAllWatchers } from '../services/watcher';
 
 const watchersViewMode = ref<'table' | 'cards' | 'list'>('table');
@@ -34,15 +35,25 @@ const tableColumns = [
 
 onMounted(async () => {
   try {
-    const data = await getAllWatchers();
-    watchersData.value = data.map((w: any) => ({
+    const [watcherData, containerData] = await Promise.all([
+      getAllWatchers(),
+      getAllContainers(),
+    ]);
+
+    const containerCounts: Record<string, number> = {};
+    for (const c of containerData) {
+      const key = c.watcher || 'unknown';
+      containerCounts[key] = (containerCounts[key] || 0) + 1;
+    }
+
+    watchersData.value = watcherData.map((w: any) => ({
       id: w.id,
       name: w.name,
       type: w.type,
       status: 'watching',
-      containers: 0,
+      containers: containerCounts[w.id] ?? containerData.length,
       cron: w.configuration?.cron ?? '',
-      lastRun: '',
+      lastRun: '\u2014',
       config: w.configuration ?? {},
     }));
   } catch {

@@ -47,6 +47,8 @@ const stats = computed(() => {
   const securityIssues = containers.value.filter(
     (c) => c.bouncer === 'blocked' || c.bouncer === 'unsafe',
   ).length;
+  const running = containers.value.filter((c) => c.status === 'running').length;
+  const uptime = total > 0 ? (running / total * 100).toFixed(1) : '100';
   return [
     {
       label: 'Containers',
@@ -54,7 +56,6 @@ const stats = computed(() => {
       icon: 'containers',
       color: 'var(--dd-primary)',
       colorMuted: 'var(--dd-primary-muted)',
-      trend: '+0',
     },
     {
       label: 'Updates Available',
@@ -62,7 +63,6 @@ const stats = computed(() => {
       icon: 'updates',
       color: 'var(--dd-warning)',
       colorMuted: 'var(--dd-warning-muted)',
-      trend: '+0',
     },
     {
       label: 'Security Issues',
@@ -70,15 +70,13 @@ const stats = computed(() => {
       icon: 'security',
       color: 'var(--dd-danger)',
       colorMuted: 'var(--dd-danger-muted)',
-      trend: '+0',
     },
     {
       label: 'Uptime',
-      value: '99.8%',
+      value: `${uptime}%`,
       icon: 'uptime',
       color: 'var(--dd-success)',
       colorMuted: 'var(--dd-success-muted)',
-      trend: '+0.0%',
     },
   ];
 });
@@ -95,7 +93,6 @@ const recentUpdates = computed(() => {
       oldVer: c.currentTag,
       newVer: c.newTag ?? '',
       status: 'pending' as const,
-      time: '',
       running: c.status === 'running',
     }));
 });
@@ -195,11 +192,6 @@ const DONUT_CIRCUMFERENCE = 301.6;
           <div class="text-2xl font-bold dd-text">
             {{ stat.value }}
           </div>
-          <div class="text-[11px] mt-1 flex items-center gap-1"
-               :style="{ color: stat.trend.startsWith('+') ? 'var(--dd-success)' : stat.trend.startsWith('-') ? 'var(--dd-danger)' : 'var(--dd-neutral)' }">
-            <AppIcon :name="stat.trend.startsWith('+') ? 'trend-up' : stat.trend.startsWith('-') ? 'trend-down' : 'neutral'" :size="9" />
-            {{ stat.trend }} from last week
-          </div>
         </div>
       </div>
 
@@ -232,7 +224,6 @@ const DONUT_CIRCUMFERENCE = 301.6;
                   <th class="text-center px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Image</th>
                   <th class="text-center px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Version</th>
                   <th class="text-center px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Status</th>
-                  <th class="text-right px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Time</th>
                 </tr>
               </thead>
               <tbody>
@@ -274,9 +265,6 @@ const DONUT_CIRCUMFERENCE = 301.6;
                          :size="8" class="mr-1" />
                       {{ row.status }}
                     </span>
-                  </td>
-                  <td class="px-5 py-3 text-right dd-text-muted">
-                    {{ row.time }}
                   </td>
                 </tr>
               </tbody>

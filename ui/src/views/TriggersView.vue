@@ -1,12 +1,39 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { getAllTriggers } from '../services/trigger';
+import { getAllTriggers, runTrigger } from '../services/trigger';
 
 const triggersViewMode = ref<'table' | 'cards' | 'list'>('table');
 
 const triggersData = ref<any[]>([]);
 const loading = ref(true);
 const error = ref('');
+const testingTrigger = ref<string | null>(null);
+const testResult = ref<{ id: string; success: boolean } | null>(null);
+
+async function testTrigger(trigger: any) {
+  if (testingTrigger.value) return;
+  testingTrigger.value = trigger.id;
+  testResult.value = null;
+  try {
+    await runTrigger({
+      triggerType: trigger.type,
+      triggerName: trigger.name,
+      container: {
+        id: 'test',
+        name: 'Test Container',
+        image: { name: 'test/image', tag: { value: 'latest' } },
+        result: { tag: 'latest' },
+        updateKind: { kind: 'unknown', semverDiff: 'unknown' },
+      },
+    });
+    testResult.value = { id: trigger.id, success: true };
+  } catch (e: any) {
+    testResult.value = { id: trigger.id, success: false };
+  } finally {
+    testingTrigger.value = null;
+    setTimeout(() => { testResult.value = null; }, 3000);
+  }
+}
 
 function triggerTypeBadge(type: string) {
   if (type === 'slack')
@@ -157,8 +184,13 @@ onMounted(async () => {
             {{ item.status }}
           </span>
           <button class="inline-flex items-center gap-1 px-2 py-1 dd-rounded text-[10px] font-bold transition-all text-white"
-                  :style="{ background: 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))' }">
-            <AppIcon name="play" :size="8" /> Test
+                  :style="{ background: testResult?.id === item.id
+                    ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
+                    : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))' }"
+                  :disabled="testingTrigger !== null"
+                  @click.stop="testTrigger(item)">
+            <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="8" />
+            {{ testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test' }}
           </button>
         </div>
       </template>
@@ -197,8 +229,14 @@ onMounted(async () => {
         </div>
         <div class="mt-4 pt-3" :style="{ borderTop: '1px solid var(--dd-border-strong)' }">
           <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold tracking-wide transition-all text-white"
-                  :style="{ background: 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))', boxShadow: '0 1px 3px rgba(0,150,199,0.3)' }">
-            <AppIcon name="play" :size="10" /> Test
+                  :style="{ background: testResult?.id === item.id
+                    ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
+                    : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))',
+                    boxShadow: '0 1px 3px rgba(0,150,199,0.3)' }"
+                  :disabled="testingTrigger !== null"
+                  @click.stop="testTrigger(item)">
+            <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="10" />
+            {{ testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test' }}
           </button>
         </div>
       </template>
