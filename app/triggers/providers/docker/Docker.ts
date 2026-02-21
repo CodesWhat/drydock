@@ -1102,9 +1102,7 @@ class Docker extends Trigger {
     // no longer exists after executeContainerUpdate recreated it).
     const newContainer = await this.getCurrentContainer(dockerApi, { id: container.name });
     if (newContainer == null) {
-      logContainer.warn(
-        'Cannot find recreated container by name — skipping health monitoring',
-      );
+      logContainer.warn('Cannot find recreated container by name — skipping health monitoring');
       return;
     }
 
