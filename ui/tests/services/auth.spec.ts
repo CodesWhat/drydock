@@ -82,11 +82,7 @@ describe('Auth Service', () => {
           Authorization: 'Basic dGVzdHVzZXI6dGVzdHBhc3M=', // base64 of testuser:testpass
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          username: 'testuser',
-          password: 'testpass',
-          remember: false,
-        }),
+        body: JSON.stringify({ remember: false }),
       });
       expect(user).toEqual(mockUser);
     });

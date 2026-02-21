@@ -53,11 +53,7 @@ async function loginBasic(username, password, remember = false) {
       Authorization: `Basic ${base64}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      username,
-      password,
-      remember,
-    }),
+    body: JSON.stringify({ remember }),
   });
   if (!response.ok) {
     throw new Error('Username or password error');
