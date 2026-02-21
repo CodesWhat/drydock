@@ -78,6 +78,7 @@ describe('Auth Service', () => {
         body: JSON.stringify({
           username: 'testuser',
           password: 'testpass',
+          remember: false,
         }),
       });
       expect(user).toEqual(mockUser);

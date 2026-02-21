@@ -393,6 +393,15 @@ class Oidc extends Authentication {
           this.log.warn(`Error when logging the user [${err.message}]`);
           res.status(401).json({ error: 'Authentication failed' });
         } else {
+          // Apply remember-me preference stored before OIDC redirect
+          if (req.session?.cookie) {
+            if (req.session.rememberMe) {
+              req.session.cookie.maxAge = 3600 * 1000 * 24 * 30;
+            } else {
+              req.session.cookie.expires = false;
+              req.session.cookie.maxAge = null;
+            }
+          }
           this.log.debug('User authenticated => redirect to app');
           res.redirect(getPublicUrl(req) || '/');
         }

@@ -128,11 +128,42 @@ function getUser(req, res) {
 }
 
 /**
+ * Apply the "remember me" preference stored in the session.
+ * When remember is true, extend the cookie to 30 days.
+ * When false, make it a session cookie that expires on browser close.
+ */
+function applyRememberMe(req) {
+  if (!req.session?.cookie) return;
+  if (req.session.rememberMe) {
+    req.session.cookie.maxAge = getCookieMaxAge(30);
+  } else {
+    req.session.cookie.expires = false;
+    req.session.cookie.maxAge = null;
+  }
+}
+
+/**
+ * Store the "remember me" preference in the session.
+ * Called before any auth flow (basic or OIDC redirect).
+ * @param req
+ * @param res
+ */
+function setRememberMe(req, res) {
+  req.session.rememberMe = req.body?.remember === true;
+  res.status(200).json({ ok: true });
+}
+
+/**
  * Login user (and return it).
  * @param req
  * @param res
  */
 function login(req, res) {
+  // Accept remember from the body (basic auth) or from session (pre-set)
+  if (req.body?.remember !== undefined) {
+    req.session.rememberMe = req.body.remember === true;
+  }
+  applyRememberMe(req);
   return getUser(req, res);
 }
 
@@ -200,6 +231,9 @@ export function init(app) {
 
   // Return strategies
   router.get('/strategies', getStrategies);
+
+  // Store remember-me preference before auth flow starts
+  router.post('/remember', setRememberMe);
 
   // Routes to protect after this line
   router.use(requireAuthentication);

@@ -2,9 +2,8 @@
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import whaleLogo from '../assets/whale-logo.png';
-import { getOidcRedirection, getStrategies, loginBasic } from '../services/auth';
+import { getOidcRedirection, getStrategies, loginBasic, setRememberMe } from '../services/auth';
 import { useTheme } from '../theme/useTheme';
-import ThemeToggle from '../components/ThemeToggle.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -22,6 +21,7 @@ const error = ref('');
 const username = ref('');
 const password = ref('');
 const submitting = ref(false);
+const rememberMe = ref(false);
 
 const hasBasic = ref(false);
 const oidcStrategies = ref<Strategy[]>([]);
@@ -64,7 +64,7 @@ async function handleBasicLogin() {
   error.value = '';
   submitting.value = true;
   try {
-    await loginBasic(username.value, password.value);
+    await loginBasic(username.value, password.value, rememberMe.value);
     navigateAfterLogin();
   } catch {
     error.value = 'Invalid username or password';
@@ -75,6 +75,7 @@ async function handleBasicLogin() {
 
 async function handleOidc(name: string) {
   try {
+    await setRememberMe(rememberMe.value);
     const result = await getOidcRedirection(name);
     if (result?.redirect) {
       window.location.href = result.redirect;
@@ -97,9 +98,6 @@ function oidcIcon(name: string): string {
 
 <template>
   <div class="min-h-screen flex items-center justify-center px-4 py-8 dd-bg">
-    <!-- Theme toggle — top-right corner -->
-    <ThemeToggle class="fixed top-4 right-4 w-9 h-9" />
-
     <!-- Loading state -->
     <div v-if="loading" class="dd-text-secondary">
       <i class="fa-solid fa-spinner fa-spin mr-2" />
@@ -115,7 +113,7 @@ function oidcIcon(name: string): string {
       <div class="p-8">
         <!-- Logo -->
         <div class="flex justify-center mb-5">
-          <img :src="whaleLogo" alt="Drydock" class="h-20 w-auto login-logo" :style="isDark ? 'filter: invert(1)' : ''" />
+          <img :src="whaleLogo" alt="Drydock" class="h-20 w-auto login-logo" :style="isDark ? { filter: 'invert(1)' } : {}" />
         </div>
 
         <!-- Heading -->
@@ -198,6 +196,17 @@ function oidcIcon(name: string): string {
             {{ strategy.name }}
           </button>
         </div>
+
+        <!-- Remember me (shown for any auth method) -->
+        <label v-if="hasBasic || oidcStrategies.length > 0"
+               class="flex items-center gap-2 mt-4 cursor-pointer select-none">
+          <input
+            v-model="rememberMe"
+            type="checkbox"
+            class="w-3.5 h-3.5 dd-rounded-sm accent-[var(--dd-primary)]"
+          />
+          <span class="text-[11px] dd-text-muted">Remember me</span>
+        </label>
 
         <!-- No strategies available -->
         <div v-if="!hasBasic && oidcStrategies.length === 0" class="text-center dd-text-muted text-sm">

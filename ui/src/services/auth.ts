@@ -44,7 +44,7 @@ async function getUser() {
  * @param password
  * @returns {Promise<*>}
  */
-async function loginBasic(username, password) {
+async function loginBasic(username, password, remember = false) {
   const base64 = btoa(`${username}:${password}`);
   const response = await fetch(`/auth/login`, {
     method: 'POST',
@@ -56,6 +56,7 @@ async function loginBasic(username, password) {
     body: JSON.stringify({
       username,
       password,
+      remember,
     }),
   });
   if (!response.ok) {
@@ -63,6 +64,18 @@ async function loginBasic(username, password) {
   }
   user = await response.json();
   return user;
+}
+
+/**
+ * Store remember-me preference in the session before any auth flow.
+ */
+async function setRememberMe(remember: boolean) {
+  await fetch('/auth/remember', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ remember }),
+  });
 }
 
 /**
@@ -89,4 +102,4 @@ async function logout() {
   return response.json();
 }
 
-export { getStrategies, getUser, loginBasic, getOidcRedirection, logout };
+export { getStrategies, getUser, loginBasic, setRememberMe, getOidcRedirection, logout };
