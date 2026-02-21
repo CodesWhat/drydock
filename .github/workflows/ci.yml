@@ -114,9 +114,6 @@ jobs:
         run: npm run lint
         working-directory: ui
 
-      - name: ESM readiness check
-        run: ./scripts/esm-readiness.sh || true
-
   test:
     name: Test & Coverage
     runs-on: ubuntu-latest
