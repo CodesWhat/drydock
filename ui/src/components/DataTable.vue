@@ -5,6 +5,8 @@ export interface DataTableColumn {
   align?: string
   sortable?: boolean
   width?: string
+  /** Narrow icon-only column — no header text, tight padding, vertically centered */
+  icon?: boolean
 }
 
 defineProps<{
@@ -47,13 +49,13 @@ function toggleSort(key: string, currentSortKey: string | undefined, currentSort
           <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
             <th v-for="col in columns" :key="col.key"
                 :class="[
-                  col.align ?? 'text-left',
-                  'px-5 whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-[10px] select-none transition-colors',
-                  (col.sortable !== false) ? 'cursor-pointer' : '',
+                  col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-left', 'px-5'],
+                  'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-[10px] select-none transition-colors',
+                  (col.sortable !== false && !col.icon) ? 'cursor-pointer' : '',
                   sortKey === col.key ? 'dd-text-secondary' : 'dd-text-muted hover:dd-text-secondary',
                 ]"
                 :style="col.width ? { width: col.width } : {}"
-                @click="(col.sortable !== false) && toggleSort(col.key, sortKey, sortAsc, $emit)">
+                @click="(col.sortable !== false && !col.icon) && toggleSort(col.key, sortKey, sortAsc, $emit)">
               {{ col.label }}
               <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-[8px]">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
             </th>
@@ -72,7 +74,8 @@ function toggleSort(key: string, currentSortKey: string | undefined, currentSort
               }"
               @click="$emit('row-click', row)">
             <td v-for="col in columns" :key="col.key"
-                :class="[col.align ?? 'text-left', 'px-5 py-3']">
+                class="py-3 align-middle"
+                :class="col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-left', 'px-5']">
               <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
                 {{ row[col.key] }}
               </slot>

@@ -11,6 +11,14 @@ export interface ColumnDef {
 
 const allColumns: ColumnDef[] = [
   {
+    key: 'icon',
+    label: '',
+    align: 'text-center',
+    px: 'px-0',
+    style: 'width: 40px;',
+    required: true,
+  },
+  {
     key: 'name',
     label: 'Container',
     align: 'text-left',
@@ -65,7 +73,7 @@ function toggleColumn(key: string) {
 }
 
 export function useColumnVisibility(isCompact: { value: boolean }) {
-  const compactVisibleKeys = new Set(['name']);
+  const compactVisibleKeys = new Set(['icon', 'name']);
   const activeColumns = computed(() =>
     allColumns.filter(
       (c) => visibleColumns.value.has(c.key) && (!isCompact.value || compactVisibleKeys.has(c.key)),

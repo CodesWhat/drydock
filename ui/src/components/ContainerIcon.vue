@@ -46,17 +46,18 @@ const resolved = computed(() => {
 </script>
 
 <template>
-  <img v-if="(resolved.type === 'proxy' || resolved.type === 'url') && !failed"
-       :src="resolved.src"
-       :width="size"
-       :height="size"
-       class="object-contain"
-       loading="lazy"
-       @error="failed = true" />
-  <i v-else-if="resolved.type === 'fa' && !failed"
-     :class="[resolved.className, 'dd-text-muted']"
-     :style="{ fontSize: size + 'px' }" />
-  <i v-else
-     class="fab fa-docker dd-text-muted"
-     :style="{ fontSize: size + 'px' }" />
+  <div class="inline-flex items-center justify-center shrink-0"
+       :style="{ width: size + 'px', height: size + 'px' }">
+    <img v-if="(resolved.type === 'proxy' || resolved.type === 'url') && !failed"
+         :src="resolved.src"
+         class="max-w-full max-h-full object-contain"
+         loading="lazy"
+         @error="failed = true" />
+    <i v-else-if="resolved.type === 'fa' && !failed"
+       :class="[resolved.className, 'dd-text-muted']"
+       :style="{ fontSize: size + 'px', lineHeight: 1 }" />
+    <i v-else
+       class="fab fa-docker dd-text-muted"
+       :style="{ fontSize: size + 'px', lineHeight: 1 }" />
+  </div>
 </template>
