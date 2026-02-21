@@ -10,6 +10,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-02-21
+
+### Added
+
+- **PrimeVue 4 + Tailwind CSS 4 UI stack** — Complete frontend migration from Vuetify 3 to PrimeVue 4 with Tailwind CSS 4 for styling. All 13 views rebuilt with Composition API and shared component library.
+- **Shared data components** — Reusable DataTable, DataCardGrid, DataListAccordion, DataFilterBar, DetailPanel, DataViewLayout, and EmptyState components used consistently across all views with table/cards/list view modes.
+- **4 color themes** — Drydock (navy tones), GitHub (clean/familiar), Dracula (bold purple), and Catppuccin (warm pastels). Each with dark and light variants. Circle-reveal transition animation between themes.
+- **7 icon libraries** — Phosphor Duotone (default), Phosphor, Lucide, Tabler, Heroicons, Iconoir, and Font Awesome. Switchable in Config > Appearance with icon size slider.
+- **6 font families** — IBM Plex Mono (default/bundled), JetBrains Mono, Source Code Pro, Inconsolata, Commit Mono, and Comic Mono. Lazy-loaded from Google Fonts with internetless fallback.
+- **Settings backend** — New `/api/settings` endpoints with LokiJS collection for persistent UI preferences (internetless mode). Icon proxy cache with atomic file writes and manual cache clear.
+- **Container ghost state during updates** — When a container is updated, stopped, or restarted, its position is held in the UI with a spinner overlay while polling for the recreated container, preventing the "disappearing container" UX issue. ([#80](https://github.com/CodesWhat/drydock/issues/80))
+- **Skip update action** — Containers with pending updates can be individually skipped, hiding the update badge for the current session without requiring a backend endpoint.
+- **SSE real-time updates** — Server-Sent Events push container state changes to the UI without polling.
+- **Remember-me authentication** — Persistent login sessions via remember-me checkbox on the login form.
+- **Docker Compose trigger** — Refresh compose services via Docker Compose CLI when updates are detected.
+- **Dashboard live data** — Stat cards (containers, updates, security issues, uptime) computed from real container data. Container log, security overview donut chart, host status, and update breakdown widgets.
+- **View wiring** — Watcher container counts, trigger Test buttons with success/failure feedback, host images count, and registry self-hosted port matching all wired to live API data.
+- **Full UI test suite** — 592 tests across 41 files covering shared components, composables, views, and utilities. Shared mount helper with PrimeVue plugin and router stubs.
+
+### Changed
+
+- **Notifications view shows real trigger data** — Replaced hardcoded fake notification rules with read-only display of configured triggers from the API. Shows trigger name, type badge, and truncated configuration summary. Info banner notes that notification rules are coming in v1.4.1.
+- **Removed Vuetify dependency** — All Vuetify imports, components, and archived test files removed. Zero Vuetify references remain.
+
+### Fixed
+
+- **Self-hosted registries ignore port when matching** — Registry matching now respects port numbers in self-hosted registry URLs, preventing mismatches between registries on different ports of the same host.
+
 ## [1.3.9] — 2026-02-22
 
 ### Fixed
