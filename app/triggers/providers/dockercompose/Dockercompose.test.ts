@@ -284,7 +284,7 @@ describe('Dockercompose Trigger', () => {
     expect(dockerTriggerSpy).toHaveBeenCalledWith(container);
   });
 
-  test('processComposeFile should only trigger containers with actual image changes', async () => {
+  test('processComposeFile should trigger both tag and digest updates', async () => {
     const tagContainer = makeContainer({ name: 'nginx' });
     const digestContainer = makeContainer({
       name: 'redis',
@@ -308,11 +308,37 @@ describe('Dockercompose Trigger', () => {
       digestContainer,
     ]);
 
-    expect(dockerTriggerSpy).toHaveBeenCalledTimes(1);
+    expect(dockerTriggerSpy).toHaveBeenCalledTimes(2);
     expect(dockerTriggerSpy).toHaveBeenCalledWith(tagContainer);
+    expect(dockerTriggerSpy).toHaveBeenCalledWith(digestContainer);
   });
 
-  test('processComposeFile should skip writes and triggers when no service image changes are needed', async () => {
+  test('processComposeFile should trigger digest-only updates even in dryrun mode', async () => {
+    const container = makeContainer({
+      name: 'redis',
+      imageName: 'redis',
+      tagValue: '7.0.0',
+      updateKind: 'digest',
+      remoteValue: 'sha256:deadbeef',
+    });
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ redis: { image: 'redis:7.0.0' } }),
+    );
+
+    const { getComposeFileSpy, writeComposeFileSpy, dockerTriggerSpy } =
+      spyOnProcessComposeHelpers(trigger);
+
+    await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+
+    expect(getComposeFileSpy).not.toHaveBeenCalled();
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+    expect(dockerTriggerSpy).toHaveBeenCalledTimes(1);
+    expect(dockerTriggerSpy).toHaveBeenCalledWith(container);
+    expect(mockLog.info).not.toHaveBeenCalledWith(expect.stringContaining('dry-run mode'));
+  });
+
+  test('processComposeFile should skip compose writes but still trigger digest-only updates', async () => {
     trigger.configuration.dryrun = false;
     const container = makeContainer({
       name: 'redis',
@@ -333,11 +359,11 @@ describe('Dockercompose Trigger', () => {
 
     expect(getComposeFileSpy).not.toHaveBeenCalled();
     expect(writeComposeFileSpy).not.toHaveBeenCalled();
-    expect(dockerTriggerSpy).not.toHaveBeenCalled();
-    expect(mockLog.info).toHaveBeenCalledWith(expect.stringContaining('already up to date'));
+    expect(dockerTriggerSpy).toHaveBeenCalledTimes(1);
+    expect(dockerTriggerSpy).toHaveBeenCalledWith(container);
   });
 
-  test('processComposeFile should treat implicit latest as up to date', async () => {
+  test('processComposeFile should trigger digest update when compose image uses implicit latest', async () => {
     trigger.configuration.dryrun = false;
     const container = makeContainer({
       tagValue: 'latest',
@@ -356,8 +382,8 @@ describe('Dockercompose Trigger', () => {
 
     expect(getComposeFileSpy).not.toHaveBeenCalled();
     expect(writeComposeFileSpy).not.toHaveBeenCalled();
-    expect(dockerTriggerSpy).not.toHaveBeenCalled();
-    expect(mockLog.info).toHaveBeenCalledWith(expect.stringContaining('already up to date'));
+    expect(dockerTriggerSpy).toHaveBeenCalledTimes(1);
+    expect(dockerTriggerSpy).toHaveBeenCalledWith(container);
   });
 
   test('processComposeFile should warn when no containers belong to compose', async () => {

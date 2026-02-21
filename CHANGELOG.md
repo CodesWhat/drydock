@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Tag regex OOM crash with re2-wasm** — Replaced `re2-wasm` with `re2js` (pure JavaScript RE2 port). The WASM binary had a hard 16 MB memory ceiling with no growth allowed, causing `abort()` crashes on valid regex patterns like `^v(\d+\.\d+\.\d+)-ls\d+$`. Since `re2-wasm` is abandoned (last npm publish Sep 2021) with no path to a fix, `re2js` provides the same linear-time ReDoS protection without WASM memory limits or native compilation requirements. ([#89](https://github.com/CodesWhat/drydock/issues/89))
 - **Self-signed/private CA support for self-hosted registries** — Added optional `CAFILE` and `INSECURE` TLS options for self-hosted registry providers (Custom, Gitea, Forgejo, Harbor, Artifactory, Nexus). This allows private registries with internal or self-signed certificates to pass TLS validation via a mounted CA bundle, or to explicitly disable verification for trusted internal networks. ([#88](https://github.com/CodesWhat/drydock/issues/88))
+- **Docker Compose trigger silently no-ops on digest updates** — Digest-only updates (same tag, new image hash) were filtered out entirely because the compose image string didn't change, causing the trigger to report success without recreating the container. Now digest updates skip the compose file write (correct — tag hasn't changed) but still trigger container recreation to pull the new image. ([#91](https://github.com/CodesWhat/drydock/issues/91))
 
 ### Changed
 
