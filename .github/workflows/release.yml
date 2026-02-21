@@ -15,6 +15,8 @@ jobs:
     name: CI
     permissions:
       contents: read
+      security-events: write  # zizmor SARIF upload
+      actions: read           # zizmor workflow analysis
     uses: ./.github/workflows/ci.yml
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
