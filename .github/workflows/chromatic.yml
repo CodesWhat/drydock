@@ -3,10 +3,10 @@ name: Chromatic
 on:
   push:
     branches: [main]
-    paths: ['ui/**', '.storybook/**']
+    paths: ['ui/**']
   pull_request:
     branches: [main]
-    paths: ['ui/**', '.storybook/**']
+    paths: ['ui/**']
 
 permissions:
   contents: read
@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@c6295a65d1254861815972266d5933fd6e532bdf  # v2.11.1
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e  # v2.14.2
         with:
           egress-policy: audit
 
@@ -29,6 +29,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238  # v6.2.0
