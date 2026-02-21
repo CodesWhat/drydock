@@ -77,7 +77,6 @@ export function diff(version1, version2) {
 }
 
 interface SafeRegex {
-  test(s: string): boolean;
   match(s: string): RegExpMatchArray | null;
 }
 
@@ -95,9 +94,6 @@ function safeRegExp(pattern: string): SafeRegex | null {
   try {
     const compiled = RE2JS.compile(pattern);
     return {
-      test(s: string): boolean {
-        return compiled.matcher(s).find();
-      },
       match(s: string): RegExpMatchArray | null {
         const m = compiled.matcher(s);
         if (!m.find()) return null;
