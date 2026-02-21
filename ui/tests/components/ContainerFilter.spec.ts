@@ -327,12 +327,10 @@ describe('ContainerFilter', () => {
     }
   });
 
-  it('handles non-array group labels safely', async () => {
-    await wrapper.setProps({
+  it('handles non-array group labels safely', () => {
+    const items = (ContainerFilter as any).computed.groupLabelItems.call({
       groupLabels: null,
     });
-
-    const items = wrapper.vm.groupLabelItems;
     expect(items).toEqual([{ title: 'Smart group', value: '__smart__' }]);
   });
 
