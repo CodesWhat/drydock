@@ -186,21 +186,18 @@ test('authenticateBearerFromAuthUrl should set bearer token using default extrac
   expect(result.headers.Authorization).toBe('Bearer abc123');
 });
 
-test(
-  'authenticateBearerFromAuthUrl should set bearer token when request headers are not provided',
-  async () => {
-    const { default: axios } = await import('axios');
-    axios.mockResolvedValue({ data: { token: 'abc123' } });
+test('authenticateBearerFromAuthUrl should set bearer token when request headers are not provided', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
 
-    const result = await baseRegistry.authenticateBearerFromAuthUrl(
-      {},
-      'https://auth.example.com/token',
-      undefined,
-    );
+  const result = await baseRegistry.authenticateBearerFromAuthUrl(
+    {},
+    'https://auth.example.com/token',
+    undefined,
+  );
 
-    expect(result.headers.Authorization).toBe('Bearer abc123');
-  },
-);
+  expect(result.headers.Authorization).toBe('Bearer abc123');
+});
 
 test('authenticateBearerFromAuthUrl should not set header when token is missing', async () => {
   const { default: axios } = await import('axios');
