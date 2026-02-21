@@ -44,6 +44,11 @@ test('authenticateBasic should add Basic auth header when credentials provided',
   expect(result.headers.Authorization).toBe('Basic dXNlcjpwYXNz');
 });
 
+test('authenticateBasic should add Basic auth header when headers are not provided', async () => {
+  const result = await baseRegistry.authenticateBasic({}, 'dXNlcjpwYXNz');
+  expect(result.headers.Authorization).toBe('Basic dXNlcjpwYXNz');
+});
+
 test('authenticateBasic should not add header when no credentials', async () => {
   const result = await baseRegistry.authenticateBasic({ headers: {} }, undefined);
   expect(result.headers.Authorization).toBeUndefined();
@@ -51,6 +56,11 @@ test('authenticateBasic should not add header when no credentials', async () => 
 
 test('authenticateBearer should add Bearer auth header when token provided', async () => {
   const result = await baseRegistry.authenticateBearer({ headers: {} }, 'my-token');
+  expect(result.headers.Authorization).toBe('Bearer my-token');
+});
+
+test('authenticateBearer should add Bearer auth header when headers are not provided', async () => {
+  const result = await baseRegistry.authenticateBearer({}, 'my-token');
   expect(result.headers.Authorization).toBe('Bearer my-token');
 });
 
@@ -175,6 +185,22 @@ test('authenticateBearerFromAuthUrl should set bearer token using default extrac
   });
   expect(result.headers.Authorization).toBe('Bearer abc123');
 });
+
+test(
+  'authenticateBearerFromAuthUrl should set bearer token when request headers are not provided',
+  async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { token: 'abc123' } });
+
+    const result = await baseRegistry.authenticateBearerFromAuthUrl(
+      {},
+      'https://auth.example.com/token',
+      undefined,
+    );
+
+    expect(result.headers.Authorization).toBe('Bearer abc123');
+  },
+);
 
 test('authenticateBearerFromAuthUrl should not set header when token is missing', async () => {
   const { default: axios } = await import('axios');
