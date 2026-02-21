@@ -246,6 +246,7 @@ body {
 .sidebar-transition {
   transition:
     width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
     transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -379,27 +380,20 @@ select {
   padding-right: 24px;
 }
 
-/* ── View Transition: Circular Reveal ──────────────── */
-::view-transition-old(root),
-::view-transition-new(root) {
+/* ── View Transition: Circular Reveal (theme switch only) ── */
+html.dd-transitioning::view-transition-old(root),
+html.dd-transitioning::view-transition-new(root) {
   animation: none;
   mix-blend-mode: normal;
 }
 
-::view-transition-old(root) {
-  z-index: 1;
-}
-
-::view-transition-new(root) {
-  z-index: 10;
-}
-
 html.dd-transitioning::view-transition-old(root) {
-  animation: none;
+  z-index: 1;
   opacity: 1;
 }
 
 html.dd-transitioning::view-transition-new(root) {
+  z-index: 10;
   animation-name: theme-circle-reveal;
   animation-duration: 600ms;
   animation-timing-function: ease-out;

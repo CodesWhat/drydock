@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { getUser } from '@/services/auth';
+import AppLayout from '@/layouts/AppLayout.vue';
 
 export const viewLoaders = {
   dashboard: () => import('../views/DashboardView.vue'),
@@ -15,6 +16,7 @@ export const viewLoaders = {
   auth: () => import('../views/AuthView.vue'),
   notifications: () => import('../views/NotificationsView.vue'),
   profile: () => import('../views/ProfileView.vue'),
+  playground: () => import('../views/PlaygroundView.vue'),
 };
 
 export function createLazyRoute(path: string, name: keyof typeof viewLoaders) {
@@ -22,19 +24,26 @@ export function createLazyRoute(path: string, name: keyof typeof viewLoaders) {
 }
 
 const routes = [
-  createLazyRoute('/', 'dashboard'),
   createLazyRoute('/login', 'login'),
-  createLazyRoute('/containers', 'containers'),
-  createLazyRoute('/security', 'security'),
-  createLazyRoute('/servers', 'servers'),
-  createLazyRoute('/config', 'config'),
-  createLazyRoute('/registries', 'registries'),
-  createLazyRoute('/agents', 'agents'),
-  createLazyRoute('/triggers', 'triggers'),
-  createLazyRoute('/watchers', 'watchers'),
-  createLazyRoute('/auth', 'auth'),
-  createLazyRoute('/notifications', 'notifications'),
-  createLazyRoute('/profile', 'profile'),
+  {
+    path: '/',
+    component: AppLayout,
+    children: [
+      createLazyRoute('', 'dashboard'),
+      createLazyRoute('/containers', 'containers'),
+      createLazyRoute('/security', 'security'),
+      createLazyRoute('/servers', 'servers'),
+      createLazyRoute('/config', 'config'),
+      createLazyRoute('/registries', 'registries'),
+      createLazyRoute('/agents', 'agents'),
+      createLazyRoute('/triggers', 'triggers'),
+      createLazyRoute('/watchers', 'watchers'),
+      createLazyRoute('/auth', 'auth'),
+      createLazyRoute('/notifications', 'notifications'),
+      createLazyRoute('/profile', 'profile'),
+      createLazyRoute('/playground', 'playground'),
+    ],
+  },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 

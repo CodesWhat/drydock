@@ -1,10 +1,16 @@
 import Aura from '@primeuix/themes/aura';
+import Button from 'primevue/button';
 import PrimeVue from 'primevue/config';
+import ConfirmDialog from 'primevue/confirmdialog';
+import ConfirmationService from 'primevue/confirmationservice';
+import Dialog from 'primevue/dialog';
+import Tooltip from 'primevue/tooltip';
 import { createApp } from 'vue';
 import App from './App.vue';
 import { registerIcons } from './boot/icons';
 import AppIcon from './components/AppIcon.vue';
 import ContainerIcon from './components/ContainerIcon.vue';
+import ThemeToggle from './components/ThemeToggle.vue';
 import DataCardGrid from './components/DataCardGrid.vue';
 import DataFilterBar from './components/DataFilterBar.vue';
 import DataListAccordion from './components/DataListAccordion.vue';
@@ -23,14 +29,17 @@ const app = createApp(App);
 app.component('AppIcon', AppIcon);
 app.component('AppLayout', AppLayout);
 app.component('ContainerIcon', ContainerIcon);
+app.component('ThemeToggle', ThemeToggle);
 app.component('DataFilterBar', DataFilterBar);
 app.component('DataTable', DataTable);
 app.component('DataCardGrid', DataCardGrid);
 app.component('DataListAccordion', DataListAccordion);
 app.component('DetailPanel', DetailPanel);
 app.component('EmptyState', EmptyState);
+app.directive('tooltip', Tooltip);
 app.use(PrimeVue, {
   theme: { preset: Aura, options: { darkModeSelector: '.dark' } },
 });
+app.use(ConfirmationService);
 app.use(router);
 app.mount('#app');
