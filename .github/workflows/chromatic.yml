@@ -1,0 +1,47 @@
+name: Chromatic
+
+on:
+  push:
+    branches: [main]
+    paths: ['ui/**', '.storybook/**']
+  pull_request:
+    branches: [main]
+    paths: ['ui/**', '.storybook/**']
+
+permissions:
+  contents: read
+
+jobs:
+  chromatic:
+    name: Visual Regression
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@c6295a65d1254861815972266d5933fd6e532bdf  # v2.11.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238  # v6.2.0
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ui
+
+      - name: Run Chromatic
+        uses: chromaui/action@93712e37669f856c4828136f9cb535dbfa60b50c  # v15.1.1
+        with:
+          projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          workingDir: ui
+          onlyChanged: true
