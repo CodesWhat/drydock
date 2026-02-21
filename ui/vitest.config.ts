@@ -18,7 +18,6 @@ export default mergeConfig(
       setupFiles: ['./tests/setup.ts'],
       include: ['tests/**/*.spec.ts'],
       css: true,
-      exclude: ['tests/_archive/**'],
       transformMode: {
         web: [/\.vue$/],
       },
