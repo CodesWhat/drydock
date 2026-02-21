@@ -4,7 +4,7 @@ services:
     container_name: drydock-qa
     user: root
     ports:
-      - "3456:3000"
+      - "3333:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
@@ -20,6 +20,7 @@ services:
       - "DD_AUTH_BASIC_ADMIN_HASH={SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g="
       - DD_SERVER_WEBHOOK_ENABLED=true
       - DD_SERVER_WEBHOOK_TOKEN=test-token-12345
+      - DD_SESSION_SECRET=qa-test-session-secret
       # --- Slack trigger ---
       - DD_TRIGGER_SLACK_MYSLACK_TOKEN=xoxb-fake-slack-token-for-testing
       - DD_TRIGGER_SLACK_MYSLACK_CHANNEL=C01FAKECHANNEL
