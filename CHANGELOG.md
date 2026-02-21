@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dependabot replaced with Renovate** — Switched dependency update bot for better monorepo grouping, auto-merge of patch updates, and pinned GitHub Actions digests.
 - **Socket Firewall switched to free mode** — The CI supply chain scan now uses `firewall-free` (blocks known malware, no token required) instead of `firewall-enterprise`.
 - **CI pipeline improvements** — Added npm and Docker layer caching, parallelized e2e/load-test jobs, reordered job dependencies for faster feedback, added harden-runner to all workflow jobs.
+- **CI credential hardening** — Bumped `harden-runner` v2.11.1 → v2.14.2 (fixes GHSA-cpmj-h4f6-r6pq) and added `persist-credentials: false` to all `actions/checkout` steps across all workflows to prevent credential leakage through artifacts.
+- **Zizmor added to local pre-push checks** — GitHub Actions security linter now runs via qlty alongside biome, catching workflow misconfigurations before push.
 - **Lefthook pre-push runs piped** — Commands now run sequentially with fail-fast instead of parallel, so failures surface immediately instead of hanging while other commands complete.
 
 ## [1.3.6] — 2026-02-20
