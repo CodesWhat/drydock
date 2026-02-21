@@ -163,6 +163,15 @@ const sortedContainers = computed(() => {
   });
 });
 
+// Apply skip-update masking
+const displayContainers = computed(() =>
+  sortedContainers.value.map((c) =>
+    skippedUpdates.value.has(c.name)
+      ? { ...c, newTag: undefined, updateKind: undefined }
+      : c,
+  ),
+);
+
 // Column visibility
 const { allColumns, visibleColumns, activeColumns, showColumnPicker, toggleColumn } =
   useColumnVisibility(isCompact);
@@ -214,6 +223,9 @@ onMounted(() => {
   }
 });
 
+// Skipped updates (client-side only, resets on page reload)
+const skippedUpdates = ref(new Set<string>());
+
 // Actions menu
 const openActionsMenu = ref<string | null>(null);
 const actionsMenuStyle = ref<Record<string, string>>({});
@@ -262,8 +274,8 @@ async function updateContainer(name: string) {
   }
 }
 
-function skipUpdate(_name: string) {
-  // TODO: Add skip/dismiss update endpoint
+function skipUpdate(name: string) {
+  skippedUpdates.value.add(name);
 }
 
 async function forceUpdate(name: string) {
@@ -338,16 +350,6 @@ function confirmForceUpdate(name: string) {
   });
 }
 
-function confirmIgnore(name: string) {
-  confirm.require({
-    header: 'Ignore Container',
-    message: `Ignore ${name}? It will no longer be monitored for updates.`,
-    rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
-    acceptProps: { label: 'Ignore', severity: 'danger' },
-    // TODO: Add ignore/unwatch endpoint
-    accept: () => {},
-  });
-}
 </script>
 
 <template>
@@ -435,7 +437,7 @@ function confirmIgnore(name: string) {
       <!-- TABLE VIEW -->
       <DataTable v-if="containerViewMode === 'table' && filteredContainers.length > 0"
                  :columns="tableColumns"
-                 :rows="sortedContainers"
+                 :rows="displayContainers"
                  row-key="name"
                  :sort-key="containerSortKey"
                  :sort-asc="containerSortAsc"
@@ -689,19 +691,13 @@ function confirmIgnore(name: string) {
                 Force update
               </button>
             </template>
-            <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
-            <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text-danger hover:dd-bg-elevated"
-                    @click="closeActionsMenu(); confirmIgnore(c.name)">
-              <i class="fa-solid fa-eye-slash text-[9px] w-3 text-center" />
-              Ignore container
-            </button>
           </div>
         </template>
       </DataTable>
 
       <!-- CONTAINER CARD GRID -->
-      <DataCardGrid v-if="containerViewMode === 'cards' && sortedContainers.length > 0"
-                    :items="sortedContainers"
+      <DataCardGrid v-if="containerViewMode === 'cards' && displayContainers.length > 0"
+                    :items="displayContainers"
                     item-key="name"
                     :selected-key="selectedContainer?.name"
                     @item-click="selectContainer($event)">
@@ -785,8 +781,8 @@ function confirmIgnore(name: string) {
       </DataCardGrid>
 
       <!-- LIST VIEW -->
-      <DataListAccordion v-if="containerViewMode === 'list' && sortedContainers.length > 0"
-                         :items="sortedContainers"
+      <DataListAccordion v-if="containerViewMode === 'list' && displayContainers.length > 0"
+                         :items="displayContainers"
                          item-key="name"
                          :selected-key="selectedContainer?.name">
         <template #header="{ item: c }">
