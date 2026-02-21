@@ -10,10 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.3.7] — 2026-02-20
+## [1.3.7] — 2026-02-21
 
 ### Fixed
 
+- **Tag regex OOM crash with re2-wasm** — Replaced `re2-wasm` with `re2js` (pure JavaScript RE2 port). The WASM binary had a hard 16 MB memory ceiling with no growth allowed, causing `abort()` crashes on valid regex patterns like `^v(\d+\.\d+\.\d+)-ls\d+$`. Since `re2-wasm` is abandoned (last npm publish Sep 2021) with no path to a fix, `re2js` provides the same linear-time ReDoS protection without WASM memory limits or native compilation requirements. ([#89](https://github.com/CodesWhat/drydock/issues/89))
 - **Self-signed/private CA support for self-hosted registries** — Added optional `CAFILE` and `INSECURE` TLS options for self-hosted registry providers (Custom, Gitea, Forgejo, Harbor, Artifactory, Nexus). This allows private registries with internal or self-signed certificates to pass TLS validation via a mounted CA bundle, or to explicitly disable verification for trusted internal networks. ([#88](https://github.com/CodesWhat/drydock/issues/88))
 
 ### Changed
@@ -67,7 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **fast-xml-parser DoS via entity expansion** — Override `fast-xml-parser` 5.3.4→5.3.6 to fix CVE GHSA-jmr7-xgp7-cmfj (transitive dep via `@aws-sdk/client-ecr`, upstream hasn't released a fix yet).
-- **tar arbitrary file read/write** — Removed `tar` from dependency graph entirely by replacing native `re2` (which pulled in `node-gyp` → `tar`) with `re2-wasm`, a pure WASM drop-in. Previously affected by CVE GHSA-83g3-92jg-28cx.
+- **tar arbitrary file read/write** — Removed `tar` from dependency graph entirely by replacing native `re2` (which pulled in `node-gyp` → `tar`) with `re2-wasm` (v1.3.3), later replaced by `re2js` (v1.3.7) due to WASM memory limits. Previously affected by CVE GHSA-83g3-92jg-28cx.
 - **Unauthenticated SSE endpoint** — Moved `/api/events/ui` behind `requireAuthentication` middleware and added per-IP connection limits (max 10) to prevent connection exhaustion.
 - **Session cookie missing sameSite** — Set `sameSite: 'strict'` on session cookie to mitigate CSRF attacks.
 - **Predictable session secret** — Added `DD_SESSION_SECRET` environment variable override so deployments can provide proper entropy instead of the default deterministic UUIDv5.
