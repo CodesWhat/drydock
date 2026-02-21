@@ -163,14 +163,20 @@ const sortedContainers = computed(() => {
   });
 });
 
-// Apply skip-update masking
-const displayContainers = computed(() =>
-  sortedContainers.value.map((c) =>
+// Apply skip-update masking and merge ghost containers
+const displayContainers = computed(() => {
+  const live = sortedContainers.value.map((c) =>
     skippedUpdates.value.has(c.name)
       ? { ...c, newTag: undefined, updateKind: undefined }
       : c,
-  ),
-);
+  );
+  // Merge pending (ghost) containers that disappeared during action
+  const liveNames = new Set(live.map((c) => c.name));
+  const ghosts = [...actionPending.value.entries()]
+    .filter(([name]) => !liveNames.has(name))
+    .map(([, snapshot]) => ({ ...snapshot, _pending: true as const }));
+  return [...live, ...ghosts];
+});
 
 // Column visibility
 const { allColumns, visibleColumns, activeColumns, showColumnPicker, toggleColumn } =
@@ -260,18 +266,55 @@ onUnmounted(() => document.removeEventListener('click', handleGlobalClick));
 // Container action handlers
 const actionInProgress = ref<string | null>(null);
 
-async function updateContainer(name: string) {
+// Ghost state: hold container position during update/restart/stop (#80)
+const actionPending = ref<Map<string, Container>>(new Map());
+const pollTimers = ref<Map<string, ReturnType<typeof setInterval>>>(new Map());
+const POLL_INTERVAL = 2000;
+const POLL_TIMEOUT = 30000;
+
+function startPolling(name: string) {
+  const startTime = Date.now();
+  const timer = setInterval(async () => {
+    await loadContainers();
+    // Check if container reappeared (matched by name)
+    const found = containers.value.find((c) => c.name === name);
+    if (found || Date.now() - startTime > POLL_TIMEOUT) {
+      clearInterval(timer);
+      pollTimers.value.delete(name);
+      actionPending.value.delete(name);
+    }
+  }, POLL_INTERVAL);
+  pollTimers.value.set(name, timer);
+}
+
+onUnmounted(() => {
+  for (const timer of pollTimers.value.values()) clearInterval(timer);
+});
+
+async function executeAction(name: string, action: (id: string) => Promise<any>) {
   const containerId = containerIdMap.value[name];
   if (!containerId || actionInProgress.value) return;
   actionInProgress.value = name;
+  // Snapshot current state before action
+  const snapshot = containers.value.find((c) => c.name === name);
   try {
-    await apiUpdateContainer(containerId);
+    await action(containerId);
     await loadContainers();
+    // If container disappeared after reload, hold its position
+    const stillPresent = containers.value.find((c) => c.name === name);
+    if (!stillPresent && snapshot) {
+      actionPending.value.set(name, snapshot);
+      startPolling(name);
+    }
   } catch (e: any) {
-    console.error('Update failed:', e.message);
+    console.error(`Action failed for ${name}:`, e.message);
   } finally {
     actionInProgress.value = null;
   }
+}
+
+async function updateContainer(name: string) {
+  await executeAction(name, apiUpdateContainer);
 }
 
 function skipUpdate(name: string) {
@@ -279,17 +322,7 @@ function skipUpdate(name: string) {
 }
 
 async function forceUpdate(name: string) {
-  const containerId = containerIdMap.value[name];
-  if (!containerId || actionInProgress.value) return;
-  actionInProgress.value = name;
-  try {
-    await apiUpdateContainer(containerId);
-    await loadContainers();
-  } catch (e: any) {
-    console.error('Force update failed:', e.message);
-  } finally {
-    actionInProgress.value = null;
-  }
+  await executeAction(name, apiUpdateContainer);
 }
 
 // Tooltip shorthand — shows on 400ms delay
@@ -302,19 +335,7 @@ function confirmStop(name: string) {
     message: `Stop ${name}?`,
     rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
     acceptProps: { label: 'Stop', severity: 'danger' },
-    accept: async () => {
-      const containerId = containerIdMap.value[name];
-      if (!containerId || actionInProgress.value) return;
-      actionInProgress.value = name;
-      try {
-        await apiStopContainer(containerId);
-        await loadContainers();
-      } catch (e: any) {
-        console.error('Stop failed:', e.message);
-      } finally {
-        actionInProgress.value = null;
-      }
-    },
+    accept: () => executeAction(name, apiStopContainer),
   });
 }
 
@@ -324,19 +345,7 @@ function confirmRestart(name: string) {
     message: `Restart ${name}?`,
     rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
     acceptProps: { label: 'Restart', severity: 'warn' },
-    accept: async () => {
-      const containerId = containerIdMap.value[name];
-      if (!containerId || actionInProgress.value) return;
-      actionInProgress.value = name;
-      try {
-        await apiRestartContainer(containerId);
-        await loadContainers();
-      } catch (e: any) {
-        console.error('Restart failed:', e.message);
-      } finally {
-        actionInProgress.value = null;
-      }
-    },
+    accept: () => executeAction(name, apiRestartContainer),
   });
 }
 
@@ -448,12 +457,13 @@ function confirmForceUpdate(name: string) {
                  @row-click="selectContainer($event)">
         <!-- Container icon (own column) -->
         <template #cell-icon="{ row: c }">
-          <ContainerIcon :icon="c.icon" :size="20" />
+          <i v-if="c._pending || actionInProgress === c.name" class="fa-solid fa-spinner fa-spin text-[14px] dd-text-muted" />
+          <ContainerIcon v-else :icon="c.icon" :size="20" />
         </template>
 
         <!-- Container name + image (+ compact actions & badges) -->
         <template #cell-name="{ row: c }">
-          <div class="min-w-0">
+          <div class="min-w-0" :class="{ 'opacity-50': c._pending }">
               <div class="flex items-center gap-2">
                 <div class="font-medium truncate dd-text flex-1">{{ c.name }}</div>
                 <!-- Compact: inline action icons (top-right) -->
@@ -703,9 +713,10 @@ function confirmForceUpdate(name: string) {
                     @item-click="selectContainer($event)">
         <template #card="{ item: c }">
           <!-- Card header -->
-          <div class="px-4 pt-4 pb-2 flex items-start justify-between">
+          <div class="px-4 pt-4 pb-2 flex items-start justify-between" :class="{ 'opacity-50': c._pending }">
             <div class="flex items-center gap-2.5 min-w-0">
-              <ContainerIcon :icon="c.icon" :size="24" class="shrink-0" />
+              <i v-if="c._pending" class="fa-solid fa-spinner fa-spin text-[16px] dd-text-muted shrink-0" />
+              <ContainerIcon v-else :icon="c.icon" :size="24" class="shrink-0" />
               <div class="min-w-0">
                 <div class="text-[15px] font-semibold truncate dd-text">
                   {{ c.name }}
@@ -786,8 +797,9 @@ function confirmForceUpdate(name: string) {
                          item-key="name"
                          :selected-key="selectedContainer?.name">
         <template #header="{ item: c }">
-          <ContainerIcon :icon="c.icon" :size="18" class="shrink-0" />
-          <div class="min-w-0 flex-1">
+          <i v-if="c._pending" class="fa-solid fa-spinner fa-spin text-[14px] dd-text-muted shrink-0" />
+          <ContainerIcon v-else :icon="c.icon" :size="18" class="shrink-0" />
+          <div class="min-w-0 flex-1" :class="{ 'opacity-50': c._pending }">
             <div class="text-sm font-semibold truncate dd-text">{{ c.name }}</div>
             <div class="text-[10px] mt-0.5 truncate dd-text-muted">{{ c.image }}:{{ c.currentTag }}</div>
           </div>
