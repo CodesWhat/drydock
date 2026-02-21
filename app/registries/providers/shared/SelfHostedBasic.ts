@@ -36,10 +36,17 @@ class SelfHostedBasic extends BaseRegistry {
     this.configuration.url = this.configuration.url.replace(/\/+$/, '');
   }
 
-  private getHostname(value: string): string {
+  private getRegistryAuthority(value: string): string {
     const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
     try {
-      return new URL(withProtocol).hostname.toLowerCase();
+      const parsedUrl = new URL(withProtocol);
+      const hostname = parsedUrl.hostname.toLowerCase();
+      const isDefaultHttpPort = parsedUrl.protocol === 'http:' && parsedUrl.port === '80';
+      const isDefaultHttpsPort = parsedUrl.protocol === 'https:' && parsedUrl.port === '443';
+      if (!parsedUrl.port || isDefaultHttpPort || isDefaultHttpsPort) {
+        return hostname;
+      }
+      return `${hostname}:${parsedUrl.port}`;
     } catch {
       return value
         .replace(/^https?:\/\//i, '')
@@ -49,8 +56,8 @@ class SelfHostedBasic extends BaseRegistry {
   }
 
   match(image) {
-    const configuredHost = this.getHostname(this.configuration.url);
-    const imageHost = this.getHostname(image.registry.url);
+    const configuredHost = this.getRegistryAuthority(this.configuration.url);
+    const imageHost = this.getRegistryAuthority(image.registry.url);
     return configuredHost === imageHost;
   }
 

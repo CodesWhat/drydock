@@ -52,6 +52,44 @@ test('match should compare hosts and handle malformed URLs', async () => {
   ).toBeFalsy();
 });
 
+test('match should include registry port in comparison', async () => {
+  const registry = new SelfHostedBasic();
+  registry.configuration = {
+    url: 'https://registry.acme.com:5000',
+  };
+
+  expect(
+    registry.match({
+      registry: {
+        url: 'registry.acme.com:5000/library/nginx',
+      },
+    }),
+  ).toBeTruthy();
+
+  expect(
+    registry.match({
+      registry: {
+        url: 'registry.acme.com:5001/library/nginx',
+      },
+    }),
+  ).toBeFalsy();
+});
+
+test('match should treat explicit default ports as equivalent', async () => {
+  const registry = new SelfHostedBasic();
+  registry.configuration = {
+    url: 'https://registry.acme.com:443',
+  };
+
+  expect(
+    registry.match({
+      registry: {
+        url: 'registry.acme.com/library/nginx',
+      },
+    }),
+  ).toBeTruthy();
+});
+
 test('normalizeImage should point to configured v2 endpoint', async () => {
   const registry = new SelfHostedBasic();
   registry.configuration = {
