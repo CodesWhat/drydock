@@ -1,9 +1,14 @@
 // @ts-nocheck
+import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import yaml from 'yaml';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import Docker from '../docker/Docker.js';
+
+const COMPOSE_COMMAND_TIMEOUT_MS = 60_000;
+const COMPOSE_COMMAND_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 
 function getServiceKey(compose, container, currentImage) {
   const composeServiceName = container.labels?.['com.docker.compose.service'];
@@ -315,14 +320,117 @@ class Dockercompose extends Docker {
       await this.writeComposeFile(composeFile, composeFileStr);
     }
 
-    // Update all containers requiring a runtime refresh (tag or digest updates)
-    // (super.notify will take care of the dry-run mode for each container as well)
-    await Promise.all(
-      mappingsNeedingRuntimeUpdate.map(async ({ container, service }) => {
-        await super.trigger(container);
-        await this.runServicePostStartHooks(container, service, compose.services[service]);
-      }),
+    // Refresh all containers requiring a runtime update via docker compose
+    // to keep compose state and runtime state aligned.
+    for (const { container, service } of mappingsNeedingRuntimeUpdate) {
+      await this.updateContainerWithCompose(composeFile, service, container);
+      await this.runServicePostStartHooks(container, service, compose.services[service]);
+    }
+  }
+
+  async executeCommand(command, args, options = {}) {
+    return new Promise((resolve, reject) => {
+      execFile(
+        command,
+        args,
+        {
+          ...options,
+          timeout: COMPOSE_COMMAND_TIMEOUT_MS,
+          maxBuffer: COMPOSE_COMMAND_MAX_BUFFER_BYTES,
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            error.stdout = stdout;
+            error.stderr = stderr;
+            reject(error);
+            return;
+          }
+          resolve({
+            stdout: stdout || '',
+            stderr: stderr || '',
+          });
+        },
+      );
+    });
+  }
+
+  async runComposeCommand(composeFile, composeArgs, logContainer) {
+    const composeFilePath = resolveConfiguredPath(composeFile, {
+      label: 'Compose file path',
+    });
+    const composeWorkingDirectory = path.dirname(composeFilePath);
+    const commandsToTry = [
+      {
+        command: 'docker',
+        args: ['compose', '-f', composeFilePath, ...composeArgs],
+        label: 'docker compose',
+      },
+      {
+        command: 'docker-compose',
+        args: ['-f', composeFilePath, ...composeArgs],
+        label: 'docker-compose',
+      },
+    ];
+
+    let lastError;
+    for (const composeCommand of commandsToTry) {
+      try {
+        const { stdout, stderr } = await this.executeCommand(composeCommand.command, composeCommand.args, {
+          cwd: composeWorkingDirectory,
+          env: process.env,
+        });
+        if (stdout.trim()) {
+          logContainer.debug(
+            `${composeCommand.label} ${composeArgs.join(' ')} stdout:\n${stdout.trim()}`,
+          );
+        }
+        if (stderr.trim()) {
+          logContainer.debug(
+            `${composeCommand.label} ${composeArgs.join(' ')} stderr:\n${stderr.trim()}`,
+          );
+        }
+        return;
+      } catch (e) {
+        lastError = e;
+        const stderr = `${e?.stderr || ''}`;
+        const dockerComposePluginMissing =
+          composeCommand.command === 'docker' &&
+          /docker: ['"]?compose['"]? is not a docker command/i.test(stderr);
+        const executableMissing = e?.code === 'ENOENT';
+
+        if (composeCommand.command === 'docker' && (dockerComposePluginMissing || executableMissing)) {
+          logContainer.warn(
+            `Cannot use docker compose for ${composeFilePath} (${e.message}); trying docker-compose`,
+          );
+          continue;
+        }
+
+        throw new Error(
+          `Error when running ${composeCommand.label} ${composeArgs.join(' ')} for ${composeFilePath} (${e.message})`,
+        );
+      }
+    }
+
+    throw new Error(
+      `Cannot run docker compose command ${composeArgs.join(' ')} for ${composeFilePath} (${lastError?.message || 'unknown error'})`,
     );
+  }
+
+  async updateContainerWithCompose(composeFile, service, container) {
+    const logContainer = this.log.child({
+      container: container.name,
+    });
+
+    if (this.configuration.dryrun) {
+      logContainer.info(
+        `Do not refresh compose service ${service} from ${composeFile} because dry-run mode is enabled`,
+      );
+      return;
+    }
+
+    logContainer.info(`Refresh compose service ${service} from ${composeFile}`);
+    await this.runComposeCommand(composeFile, ['pull', service], logContainer);
+    await this.runComposeCommand(composeFile, ['up', '-d', '--no-deps', service], logContainer);
   }
 
   async runServicePostStartHooks(container, serviceKey, service) {
