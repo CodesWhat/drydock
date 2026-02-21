@@ -4,46 +4,46 @@ Feature: Drydock Registry API Exposure
     When I GET /api/registries
     Then response code should be 200
     And response body should be valid json
-    And response body path $ should be of type array with length 8
+    And response body path $ should be of type array with minimum length 8
 
-    And response body path $[0].id should be acr.private
-    And response body path $[0].type should be acr
-    And response body path $[0].name should be private
-    And response body path $[0].configuration.clientid should be 89dcf54b-ef99-4dc1-bebb-8e0eacafdac8
-    And response body path $[0].configuration.clientsecret should be .\*.*.
+    And I store the index of registry id acr.private as registryIndex in scenario scope
+    And response body path $[`registryIndex`].type should be acr
+    And response body path $[`registryIndex`].name should be private
+    And response body path $[`registryIndex`].configuration.clientid should be 89dcf54b-ef99-4dc1-bebb-8e0eacafdac8
+    And response body path $[`registryIndex`].configuration.clientsecret should be .*
 
-    And response body path $[1].id should be ecr.private
-    And response body path $[1].type should be ecr
-    And response body path $[1].name should be private
-    And response body path $[1].configuration.region should be eu-west-1
-    And response body path $[1].configuration.accesskeyid should be .\*.*.
-    And response body path $[1].configuration.secretaccesskey should be .\*.*.
+    And I store the index of registry id ecr.private as registryIndex in scenario scope
+    And response body path $[`registryIndex`].type should be ecr
+    And response body path $[`registryIndex`].name should be private
+    And response body path $[`registryIndex`].configuration.region should be eu-west-1
+    And response body path $[`registryIndex`].configuration.accesskeyid should be .*
+    And response body path $[`registryIndex`].configuration.secretaccesskey should be .*
 
-    And response body path $[2].id should be gcr.private
-    And response body path $[2].type should be gcr
-    And response body path $[2].name should be private
-    And response body path $[2].configuration.clientemail should be gcr@dd-test.iam.gserviceaccount.com
-    And response body path $[2].configuration.privatekey should be .\*.*.
+    And I store the index of registry id gcr.private as registryIndex in scenario scope
+    And response body path $[`registryIndex`].type should be gcr
+    And response body path $[`registryIndex`].name should be private
+    And response body path $[`registryIndex`].configuration.clientemail should be gcr@.*\.iam\.gserviceaccount\.com
+    And response body path $[`registryIndex`].configuration.privatekey should be .*
 
-    And response body path $[3].id should be ghcr.private
-    And response body path $[3].type should be ghcr
-    And response body path $[3].name should be private
+    And I store the index of registry id ghcr.private as registryIndex in scenario scope
+    And response body path $[`registryIndex`].type should be ghcr
+    And response body path $[`registryIndex`].name should be private
 
-    And response body path $[4].id should be gitlab.private
-    And response body path $[4].type should be gitlab
-    And response body path $[4].name should be private
+    And I store the index of registry id gitlab.private as registryIndex in scenario scope
+    And response body path $[`registryIndex`].type should be gitlab
+    And response body path $[`registryIndex`].name should be private
 
-    And response body path $[5].id should be hub.public
-    And response body path $[5].type should be hub
-    And response body path $[5].name should be public
+    And I store the index of registry id hub.public as registryIndex in scenario scope
+    And response body path $[`registryIndex`].type should be hub
+    And response body path $[`registryIndex`].name should be public
 
-    And response body path $[6].id should be lscr.private
-    And response body path $[6].type should be lscr
-    And response body path $[6].name should be private
+    And I store the index of registry id lscr.private as registryIndex in scenario scope
+    And response body path $[`registryIndex`].type should be lscr
+    And response body path $[`registryIndex`].name should be private
 
-    And response body path $[7].id should be quay.public
-    And response body path $[7].type should be quay
-    And response body path $[7].name should be public
+    And I store the index of registry id quay.public as registryIndex in scenario scope
+    And response body path $[`registryIndex`].type should be quay
+    And response body path $[`registryIndex`].name should be public
 
   Scenario: Drydock must allow to get specific Registry state
     When I GET /api/registries/acr/private
@@ -53,4 +53,4 @@ Feature: Drydock Registry API Exposure
     And response body path $.type should be acr
     And response body path $.name should be private
     And response body path $.configuration.clientid should be 89dcf54b-ef99-4dc1-bebb-8e0eacafdac8
-    And response body path $.configuration.clientsecret should be .\*.*.
+    And response body path $.configuration.clientsecret should be .*

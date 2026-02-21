@@ -10,6 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.7] — 2026-02-21
+
+### Fixed
+
+- **Tag regex OOM crash with re2-wasm** — Replaced `re2-wasm` with `re2js` (pure JavaScript RE2 port). The WASM binary had a hard 16 MB memory ceiling with no growth allowed, causing `abort()` crashes on valid regex patterns like `^v(\d+\.\d+\.\d+)-ls\d+$`. Since `re2-wasm` is abandoned (last npm publish Sep 2021) with no path to a fix, `re2js` provides the same linear-time ReDoS protection without WASM memory limits or native compilation requirements. ([#89](https://github.com/CodesWhat/drydock/issues/89))
+- **Self-signed/private CA support for self-hosted registries** — Added optional `CAFILE` and `INSECURE` TLS options for self-hosted registry providers (Custom, Gitea, Forgejo, Harbor, Artifactory, Nexus). This allows private registries with internal or self-signed certificates to pass TLS validation via a mounted CA bundle, or to explicitly disable verification for trusted internal networks. ([#88](https://github.com/CodesWhat/drydock/issues/88))
+- **Docker Compose trigger silently no-ops on digest updates** — Digest-only updates (same tag, new image hash) were filtered out entirely because the compose image string didn't change, causing the trigger to report success without recreating the container. Now digest updates skip the compose file write (correct — tag hasn't changed) but still trigger container recreation to pull the new image. ([#91](https://github.com/CodesWhat/drydock/issues/91))
+
+### Changed
+
+- **Gitea refactored to shared base class** — Gitea now extends `SelfHostedBasic` directly instead of duplicating its logic from `Custom`, reducing code and ensuring consistent behavior with Harbor, Nexus, and Artifactory.
+- **Lint tooling migrated from biome CLI to qlty** — Removed `@biomejs/biome` as a direct devDependency from all workspaces; biome is now managed centrally via qlty. Lint and format scripts updated to use `qlty check`/`qlty fmt`.
+- **Dependabot replaced with Renovate** — Switched dependency update bot for better monorepo grouping, auto-merge of patch updates, and pinned GitHub Actions digests.
+- **Socket Firewall switched to free mode** — The CI supply chain scan now uses `firewall-free` (blocks known malware, no token required) instead of `firewall-enterprise`.
+- **CI pipeline improvements** — Added npm and Docker layer caching, parallelized e2e/load-test jobs, reordered job dependencies for faster feedback, added harden-runner to all workflow jobs.
+- **CI credential hardening** — Bumped `harden-runner` v2.11.1 → v2.14.2 (fixes GHSA-cpmj-h4f6-r6pq) and added `persist-credentials: false` to all `actions/checkout` steps across all workflows to prevent credential leakage through artifacts.
+- **Zizmor added to local pre-push checks** — GitHub Actions security linter now runs via qlty alongside biome, catching workflow misconfigurations before push.
+- **Lefthook pre-push runs piped** — Commands now run sequentially with fail-fast instead of parallel, so failures surface immediately instead of hanging while other commands complete.
+
 ## [1.3.6] — 2026-02-20
 
 ### Fixed
@@ -57,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **fast-xml-parser DoS via entity expansion** — Override `fast-xml-parser` 5.3.4→5.3.6 to fix CVE GHSA-jmr7-xgp7-cmfj (transitive dep via `@aws-sdk/client-ecr`, upstream hasn't released a fix yet).
-- **tar arbitrary file read/write** — Removed `tar` from dependency graph entirely by replacing native `re2` (which pulled in `node-gyp` → `tar`) with `re2-wasm`, a pure WASM drop-in. Previously affected by CVE GHSA-83g3-92jg-28cx.
+- **tar arbitrary file read/write** — Removed `tar` from dependency graph entirely by replacing native `re2` (which pulled in `node-gyp` → `tar`) with `re2-wasm` (v1.3.3), later replaced by `re2js` (v1.3.7) due to WASM memory limits. Previously affected by CVE GHSA-83g3-92jg-28cx.
 - **Unauthenticated SSE endpoint** — Moved `/api/events/ui` behind `requireAuthentication` middleware and added per-IP connection limits (max 10) to prevent connection exhaustion.
 - **Session cookie missing sameSite** — Set `sameSite: 'strict'` on session cookie to mitigate CSRF attacks.
 - **Predictable session secret** — Added `DD_SESSION_SECRET` environment variable override so deployments can provide proper entropy instead of the default deterministic UUIDv5.
@@ -422,7 +441,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.3.6...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.3.7...HEAD
+[1.3.7]: https://github.com/CodesWhat/drydock/compare/v1.3.6...v1.3.7
 [1.3.6]: https://github.com/CodesWhat/drydock/compare/v1.3.5...v1.3.6
 [1.3.5]: https://github.com/CodesWhat/drydock/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/CodesWhat/drydock/compare/v1.3.3...v1.3.4

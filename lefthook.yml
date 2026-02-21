@@ -1,5 +1,6 @@
 ---
 pre-push:
+  piped: true
   commands:
     qlty:
       run: qlty check --no-progress
@@ -20,3 +21,5 @@ pre-push:
     ui-test:
       root: ui/
       run: npm run test:unit
+    e2e:
+      run: ./scripts/run-e2e-tests.sh

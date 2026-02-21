@@ -9,11 +9,69 @@ on:
     secrets:
       CODECOV_TOKEN:
         required: false
+      ARTILLERY_CLOUD_API_KEY:
+        required: false
 
 permissions:
   contents: read
 
 jobs:
+  zizmor:
+    name: Actions Security
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e  # v2.14.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@0dce2577a4760a2749d8cfb7a84b7d5585ebcb7d  # v0.5.0
+
+  supply-chain:
+    name: Supply Chain Security
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e  # v2.14.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Socket Firewall
+        uses: SocketDev/action@4337a545deecc20f19a909e52db7a2f6ba292f42  # v1.2.0
+        with:
+          mode: firewall-free
+
+      - name: Scan app dependencies
+        run: sfw npm ci
+        working-directory: app
+
+      - name: Scan e2e dependencies
+        run: sfw npm ci
+        working-directory: e2e
+
+      - name: Scan ui dependencies
+        run: sfw npm ci
+        working-directory: ui
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -21,13 +79,28 @@ jobs:
       contents: read
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e  # v2.14.2
+        with:
+          egress-policy: audit
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238  # v6.2.0
         with:
           node-version: 24
+          cache: 'npm'
+          cache-dependency-path: |
+            app/package-lock.json
+            e2e/package-lock.json
+            ui/package-lock.json
+
+      - name: Setup Qlty
+        uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899  # v2.2.0
 
       - name: Install dependencies
         run: |
@@ -47,9 +120,6 @@ jobs:
         run: npm run lint
         working-directory: ui
 
-      - name: ESM readiness check
-        run: ./scripts/esm-readiness.sh || true
-
   test:
     name: Test & Coverage
     runs-on: ubuntu-latest
@@ -57,13 +127,24 @@ jobs:
       contents: read
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e  # v2.14.2
+        with:
+          egress-policy: audit
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238  # v6.2.0
         with:
           node-version: 24
+          cache: 'npm'
+          cache-dependency-path: |
+            app/package-lock.json
+            ui/package-lock.json
 
       - name: Install app dependencies
         run: npm ci
@@ -92,18 +173,27 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [zizmor, supply-chain]
     permissions:
       contents: read
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e  # v2.14.2
+        with:
+          egress-policy: audit
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238  # v6.2.0
         with:
           node-version: 24
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
 
       - name: Install ui dependencies
         run: npm ci
@@ -113,5 +203,120 @@ jobs:
         run: npm run build
         working-directory: ui
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
+
       - name: Docker build (smoke test)
-        run: docker build --no-cache -t drydock --build-arg DD_VERSION=ci .
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83  # v6.18.0
+        with:
+          context: .
+          push: false
+          build-args: DD_VERSION=ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e  # v2.14.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238  # v6.2.0
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      - name: Setup test containers
+        run: ./scripts/setup-test-containers.sh
+
+      - name: Start drydock
+        run: ./scripts/start-drydock.sh
+
+      - name: Run Cucumber e2e tests
+        run: npm run cucumber
+        working-directory: e2e
+
+      - name: Show drydock logs on failure
+        if: failure()
+        run: docker logs drydock
+
+      - name: Cleanup
+        if: always()
+        run: ./scripts/cleanup-test-containers.sh
+
+  load-test:
+    name: Load Test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: [build]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e  # v2.14.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238  # v6.2.0
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Build Docker image
+        run: docker build -t drydock:ci --build-arg DD_VERSION=ci .
+
+      - name: Start services
+        run: docker compose -f test/ci-compose.yml up -d
+
+      - name: Wait for healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/health > /dev/null 2>&1; then
+              echo "Drydock is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Drydock failed to start"
+          docker compose -f test/ci-compose.yml logs drydock
+          exit 1
+
+      - name: Install Artillery
+        run: npm install -g artillery
+
+      - name: Run load test
+        env:
+          ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
+        run: |
+          artillery run test.yml -e ci \
+            ${ARTILLERY_CLOUD_API_KEY:+--record --key "$ARTILLERY_CLOUD_API_KEY"}
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f test/ci-compose.yml down -v

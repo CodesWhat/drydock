@@ -26,6 +26,24 @@ test('validatedConfiguration should initialize when configuration is valid', asy
   });
 });
 
+test('validatedConfiguration should accept cafile and insecure tls options', async () => {
+  expect(
+    custom.validateConfiguration({
+      url: 'http://localhost:5000',
+      login: TEST_LOGIN,
+      password: TEST_PASSWORD,
+      cafile: '/certs/internal-ca.pem',
+      insecure: true,
+    }),
+  ).toStrictEqual({
+    url: 'http://localhost:5000',
+    login: TEST_LOGIN,
+    password: TEST_PASSWORD,
+    cafile: '/certs/internal-ca.pem',
+    insecure: true,
+  });
+});
+
 test('validatedConfiguration should throw error when auth is not base64', async () => {
   expect(() => {
     custom.validateConfiguration({
@@ -115,6 +133,18 @@ test('authenticate should add basic auth', async () => {
       Authorization: 'Basic bG9naW46cGFzc3dvcmQ=',
     },
   });
+});
+
+test('authenticate should set httpsAgent when insecure=true', async () => {
+  const customRegistry = new Custom();
+  customRegistry.configuration = {
+    url: 'https://registry.internal',
+    insecure: true,
+  };
+
+  const result = await customRegistry.authenticate(undefined, { headers: {} });
+  expect(result.httpsAgent).toBeDefined();
+  expect(result.httpsAgent.options.rejectUnauthorized).toBe(false);
 });
 
 test('getAuthCredentials should return base64 creds when set in configuration', async () => {

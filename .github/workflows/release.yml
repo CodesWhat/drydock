@@ -16,7 +16,9 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/ci.yml
-    secrets: inherit
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
 
   release:
     name: Docker Build & Push
@@ -29,8 +31,15 @@ jobs:
       attestations: write
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e  # v2.14.2
+        with:
+          egress-policy: audit
+
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3.7.0
@@ -89,7 +98,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: DD_VERSION=${{ steps.meta.outputs.version }}
           sbom: true
-          no-cache: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Install cosign
         uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb  # v3.8.2
@@ -105,10 +115,44 @@ jobs:
           done
           cosign sign --yes ${images}
 
+      - name: Build release artifact
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          git archive --format=tar.gz --prefix="drydock-${RELEASE_TAG}/" --output="${artifact}" "${GITHUB_SHA}"
+          sha256sum "${artifact}" > "${artifact}.sha256"
+
+      - name: Sign release artifact
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          cosign sign-blob --yes \
+            --output-signature "${artifact}.sig" \
+            --output-certificate "${artifact}.pem" \
+            "${artifact}"
+
+      - name: Upload signed release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "${RELEASE_TAG}" >/dev/null 2>&1 || gh release create "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes ""
+          gh release upload "${RELEASE_TAG}" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.sha256" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.sig" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.pem" \
+            --clobber
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f  # v3.2.0
         with:
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
-

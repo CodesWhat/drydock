@@ -3,7 +3,7 @@
  * Semver utils.
  */
 
-import { RE2 } from 're2-wasm';
+import { RE2JS } from 're2js';
 import semver from 'semver';
 import log from '../log/index.js';
 
@@ -76,19 +76,34 @@ export function diff(version1, version2) {
   return semver.diff(version1Semver, version2Semver);
 }
 
+interface SafeRegex {
+  match(s: string): RegExpMatchArray | null;
+}
+
 /**
  * Safely compile a user-supplied regex pattern.
  * Returns null (and logs a warning) when the pattern is invalid.
- * Uses RE2, which is inherently immune to ReDoS backtracking attacks.
+ * Uses RE2 (via re2js), which is inherently immune to ReDoS backtracking attacks.
  */
-function safeRegExp(pattern: string): RE2 | null {
+function safeRegExp(pattern: string): SafeRegex | null {
   const MAX_PATTERN_LENGTH = 1024;
   if (pattern.length > MAX_PATTERN_LENGTH) {
     log.warn(`Regex pattern exceeds maximum length of ${MAX_PATTERN_LENGTH} characters`);
     return null;
   }
   try {
-    return new RE2(pattern, 'u');
+    const compiled = RE2JS.compile(pattern);
+    return {
+      match(s: string): RegExpMatchArray | null {
+        const m = compiled.matcher(s);
+        if (!m.find()) return null;
+        const result = [m.group(0)] as RegExpMatchArray;
+        for (let i = 1; i <= m.groupCount(); i++) result.push(m.group(i));
+        result.index = m.start();
+        result.input = s;
+        return result;
+      },
+    };
   } catch (e: any) {
     log.warn(`Invalid regex pattern "${pattern}": ${e.message}`);
     return null;
@@ -118,7 +133,7 @@ export function transform(transformFormula, originalTag) {
       return originalTag;
     }
     const placeholders = replacement.match(/\$\d+/g) || [];
-    const originalTagMatches = originalTag.match(compiledPattern);
+    const originalTagMatches = compiledPattern.match(originalTag);
     if (!originalTagMatches) {
       return originalTag;
     }

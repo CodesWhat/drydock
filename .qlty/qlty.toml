@@ -80,7 +80,7 @@ name = "actionlint"
 
 [[plugin]]
 name = "biome"
-version = "2.3.7"
+version = "2.3.15"
 
 [[plugin]]
 name = "checkov"
@@ -117,7 +117,6 @@ name = "shfmt"
 name = "trivy"
 drivers = [
   "config",
-  "fs-vuln",
 ]
 
 [[plugin]]
@@ -125,6 +124,9 @@ name = "trufflehog"
 
 [[plugin]]
 name = "yamllint"
+
+[[plugin]]
+name = "zizmor"
 
 # Entrypoint uses su-exec for runtime privilege drop; no static USER needed
 [[triage]]

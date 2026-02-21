@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import SelfHostedBasic from './SelfHostedBasic.js';
 
 test('init should add protocol and strip trailing slash', async () => {
@@ -106,4 +109,66 @@ test('authenticate should apply basic auth from credentials', async () => {
       Authorization: `Basic ${Buffer.from('robot:secret', 'utf-8').toString('base64')}`,
     },
   });
+});
+
+test('validateConfiguration should allow cafile and insecure options', async () => {
+  const registry = new SelfHostedBasic();
+  expect(
+    registry.validateConfiguration({
+      url: 'https://registry.acme.com',
+      cafile: '/certs/internal-ca.pem',
+      insecure: true,
+    }),
+  ).toStrictEqual({
+    url: 'https://registry.acme.com',
+    cafile: '/certs/internal-ca.pem',
+    insecure: true,
+  });
+});
+
+test('authenticate should set httpsAgent with rejectUnauthorized=false when insecure=true', async () => {
+  const registry = new SelfHostedBasic();
+  registry.configuration = {
+    url: 'https://registry.acme.com',
+    insecure: true,
+  };
+
+  const result = await registry.authenticate(
+    {
+      name: 'library/nginx',
+      registry: { url: 'registry.acme.com' },
+    },
+    { headers: {} },
+  );
+
+  expect(result.httpsAgent).toBeDefined();
+  expect(result.httpsAgent.options.rejectUnauthorized).toBe(false);
+});
+
+test('authenticate should load CA file into httpsAgent when cafile is configured', async () => {
+  const registry = new SelfHostedBasic();
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-selfhosted-'));
+  const caPath = path.join(tempDir, 'ca.pem');
+
+  try {
+    fs.writeFileSync(caPath, 'test-ca-content');
+    registry.configuration = {
+      url: 'https://registry.acme.com',
+      cafile: caPath,
+    };
+
+    const result = await registry.authenticate(
+      {
+        name: 'library/nginx',
+        registry: { url: 'registry.acme.com' },
+      },
+      { headers: {} },
+    );
+
+    expect(result.httpsAgent).toBeDefined();
+    expect(result.httpsAgent.options.rejectUnauthorized).toBe(true);
+    expect(result.httpsAgent.options.ca.toString('utf-8')).toBe('test-ca-content');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });

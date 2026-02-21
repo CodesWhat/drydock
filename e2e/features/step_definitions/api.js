@@ -197,7 +197,8 @@ Then(/^response body should be valid json$/, function () {
 });
 
 Then(/^response body path (.+) should be (?!of type )(.+)$/, function (path, expected) {
-  const actual = resolveJsonPath(this.responseJson, path);
+  const resolvedPath = resolveTemplate(path, this.scenarioScope);
+  const actual = resolveJsonPath(this.responseJson, resolvedPath);
   const actualStr = String(actual);
   if (isDynamicPattern(expected)) {
     assert.ok(
@@ -226,17 +227,58 @@ Then(/^response header (.+) should be (.+)$/, function (header, expected) {
   }
 });
 
+Then(/^response header (.+) should contain (.+)$/, function (header, expected) {
+  const actual = this.responseHeaders.get(header);
+  assert.ok(actual, `Header ${header} not found`);
+  assert.ok(
+    actual.includes(expected),
+    `Expected header "${header}" value "${actual}" to contain "${expected}"`,
+  );
+});
+
 Then(
   /^response body path (.+) should be of type array with length (\d+)$/,
   function (path, length) {
-    const actual = resolveJsonPath(this.responseJson, path);
+    const resolvedPath = resolveTemplate(path, this.scenarioScope);
+    const actual = resolveJsonPath(this.responseJson, resolvedPath);
     assert.ok(Array.isArray(actual), `Expected array at path ${path}, got ${typeof actual}`);
     assert.strictEqual(actual.length, Number(length));
   },
 );
 
+Then(
+  /^response body path (.+) should be of type array with minimum length (\d+)$/,
+  function (path, minLength) {
+    const resolvedPath = resolveTemplate(path, this.scenarioScope);
+    const actual = resolveJsonPath(this.responseJson, resolvedPath);
+    assert.ok(Array.isArray(actual), `Expected array at path ${path}, got ${typeof actual}`);
+    assert.ok(
+      actual.length >= Number(minLength),
+      `Expected array at path ${path} to have at least ${minLength} entries, got ${actual.length}`,
+    );
+  },
+);
+
 When(/^I store the value of body path (.+) as (.+) in scenario scope$/, function (path, varName) {
-  const value = resolveJsonPath(this.responseJson, path);
+  const resolvedPath = resolveTemplate(path, this.scenarioScope);
+  const value = resolveJsonPath(this.responseJson, resolvedPath);
   assert.ok(value !== undefined, `No value found at path ${path}`);
   this.scenarioScope[varName] = value;
+});
+
+When(
+  /^I store the index of container named (.+) as (.+) in scenario scope$/,
+  function (name, varName) {
+    assert.ok(Array.isArray(this.responseJson), 'Response body is not an array');
+    const index = this.responseJson.findIndex((item) => String(item?.name) === name);
+    assert.ok(index >= 0, `No container found with name ${name}`);
+    this.scenarioScope[varName] = index;
+  },
+);
+
+When(/^I store the index of registry id (.+) as (.+) in scenario scope$/, function (id, varName) {
+  assert.ok(Array.isArray(this.responseJson), 'Response body is not an array');
+  const index = this.responseJson.findIndex((item) => String(item?.id) === id);
+  assert.ok(index >= 0, `No registry found with id ${id}`);
+  this.scenarioScope[varName] = index;
 });

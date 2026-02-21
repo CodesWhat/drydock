@@ -83,7 +83,7 @@ test('authenticate should perform authenticate request', async () => {
       token: 'token',
     },
   }));
-  expect(
+  await expect(
     gitlab.authenticate(
       {},
       {

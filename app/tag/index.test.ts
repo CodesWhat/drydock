@@ -322,6 +322,16 @@ describe('transform', () => {
         replaceAllSpy.mockRestore();
       }
     });
+
+    test('should remain stable under repeated regex transform compilation (issue #89 regression)', () => {
+      const formula = '^v(\\d+\\.\\d+\\.\\d+)-ls\\d+$ => $1';
+      const input = 'v1.2.3-ls45';
+
+      // Repeated calls emulate watch cycles and catch regex-engine regressions.
+      for (let i = 0; i < 5000; i += 1) {
+        expect(semver.transform(formula, input)).toBe('1.2.3');
+      }
+    });
   });
 });
 

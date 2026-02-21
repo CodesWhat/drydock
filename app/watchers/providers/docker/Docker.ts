@@ -3,7 +3,7 @@ import axios from 'axios';
 import Dockerode from 'dockerode';
 import Joi from 'joi';
 import JoiCronExpression from 'joi-cron-expression';
-import { RE2 } from 're2-wasm';
+import { RE2JS } from 're2js';
 
 const joi = JoiCronExpression(Joi);
 
@@ -97,19 +97,28 @@ function getLabel(labels: Record<string, string>, ddKey: string, wudKey?: string
   return labels[ddKey] ?? (wudKey ? labels[wudKey] : undefined);
 }
 
+interface SafeRegex {
+  test(s: string): boolean;
+}
+
 /**
  * Safely compile a user-supplied regex pattern.
  * Returns null (and logs a warning) when the pattern is invalid.
- * Uses RE2, which is inherently immune to ReDoS backtracking attacks.
+ * Uses RE2 (via re2js), which is inherently immune to ReDoS backtracking attacks.
  */
-function safeRegExp(pattern: string, logger: any): RE2 | null {
+function safeRegExp(pattern: string, logger: any): SafeRegex | null {
   const MAX_PATTERN_LENGTH = 1024;
   if (pattern.length > MAX_PATTERN_LENGTH) {
     logger.warn(`Regex pattern exceeds maximum length of ${MAX_PATTERN_LENGTH} characters`);
     return null;
   }
   try {
-    return new RE2(pattern, 'u');
+    const compiled = RE2JS.compile(pattern);
+    return {
+      test(s: string): boolean {
+        return compiled.matcher(s).find();
+      },
+    };
   } catch (e: any) {
     logger.warn(`Invalid regex pattern "${pattern}": ${e.message}`);
     return null;

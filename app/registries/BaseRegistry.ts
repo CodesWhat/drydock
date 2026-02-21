@@ -1,11 +1,55 @@
 // @ts-nocheck
+import fs from 'node:fs';
+import https from 'node:https';
 import axios from 'axios';
+import { resolveConfiguredPath } from '../runtime/paths.js';
 import Registry from './Registry.js';
 
 /**
  * Base Registry with common patterns
  */
 class BaseRegistry extends Registry {
+  private httpsAgent;
+
+  private getHttpsAgent() {
+    const shouldDisableTlsVerification = this.configuration?.insecure === true;
+    const hasCaFile = Boolean(this.configuration?.cafile);
+    if (!shouldDisableTlsVerification && !hasCaFile) {
+      return undefined;
+    }
+
+    if (this.httpsAgent) {
+      return this.httpsAgent;
+    }
+
+    let ca;
+    if (hasCaFile) {
+      const caPath = resolveConfiguredPath(this.configuration.cafile, {
+        label: `registry ${this.getId()} CA file path`,
+      });
+      ca = fs.readFileSync(caPath);
+    }
+
+    // Intentional opt-in for self-hosted registries with private/self-signed cert chains.
+    // lgtm[js/disabling-certificate-validation]
+    this.httpsAgent = new https.Agent({
+      ca,
+      rejectUnauthorized: !shouldDisableTlsVerification,
+    });
+    return this.httpsAgent;
+  }
+
+  private withTlsRequestOptions(requestOptions) {
+    const httpsAgent = requestOptions?.httpsAgent || this.getHttpsAgent();
+    if (!httpsAgent) {
+      return requestOptions;
+    }
+    return {
+      ...requestOptions,
+      httpsAgent,
+    };
+  }
+
   /**
    * Common URL normalization for registries that need https:// prefix and /v2 suffix
    */
@@ -23,8 +67,9 @@ class BaseRegistry extends Registry {
    * Common Basic Auth implementation
    */
   async authenticateBasic(requestOptions, credentials) {
-    const requestOptionsWithAuth = { ...requestOptions };
+    const requestOptionsWithAuth = this.withTlsRequestOptions({ ...requestOptions });
     if (credentials) {
+      requestOptionsWithAuth.headers = requestOptionsWithAuth.headers || {};
       requestOptionsWithAuth.headers.Authorization = `Basic ${credentials}`;
     }
     return requestOptionsWithAuth;
@@ -34,8 +79,9 @@ class BaseRegistry extends Registry {
    * Common Bearer token authentication
    */
   async authenticateBearer(requestOptions, token) {
-    const requestOptionsWithAuth = { ...requestOptions };
+    const requestOptionsWithAuth = this.withTlsRequestOptions({ ...requestOptions });
     if (token) {
+      requestOptionsWithAuth.headers = requestOptionsWithAuth.headers || {};
       requestOptionsWithAuth.headers.Authorization = `Bearer ${token}`;
     }
     return requestOptionsWithAuth;
@@ -57,16 +103,19 @@ class BaseRegistry extends Registry {
     credentials,
     tokenExtractor = (response) => response.data.token,
   ) {
-    const requestOptionsWithAuth = requestOptions;
+    const requestOptionsWithAuth = this.withTlsRequestOptions({
+      ...requestOptions,
+    });
+    requestOptionsWithAuth.headers = requestOptionsWithAuth.headers || {};
     let token;
 
-    const request = {
+    const request = this.withTlsRequestOptions({
       method: 'GET',
       url: authUrl,
       headers: {
         Accept: 'application/json',
       },
-    };
+    });
 
     if (credentials) {
       request.headers.Authorization = `Basic ${credentials}`;

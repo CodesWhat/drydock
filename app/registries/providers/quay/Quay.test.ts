@@ -130,7 +130,7 @@ test('getAuthPull should return credentials when auth configuration', async () =
 });
 
 test('authenticate should populate header with base64 bearer', async () => {
-  expect(quay.authenticate({}, { headers: {} })).resolves.toEqual({
+  await expect(quay.authenticate({}, { headers: {} })).resolves.toEqual({
     headers: {
       Authorization: `Bearer ${TEST_TOKEN}`,
     },
@@ -140,7 +140,7 @@ test('authenticate should populate header with base64 bearer', async () => {
 test('authenticate should not populate header with base64 bearer when anonymous', async () => {
   const quayInstance = new Quay();
   quayInstance.configuration = {};
-  expect(quayInstance.authenticate({}, { headers: {} })).resolves.toEqual({
+  await expect(quayInstance.authenticate({}, { headers: {} })).resolves.toEqual({
     headers: {},
   });
 });

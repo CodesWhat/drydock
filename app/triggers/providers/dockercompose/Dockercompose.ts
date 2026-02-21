@@ -270,22 +270,31 @@ class Dockercompose extends Docker {
       })
       .filter((entry) => entry !== undefined);
 
-    // Only update/trigger containers where the compose image actually changes.
-    const mappingsNeedingUpdate = versionMappings.filter(
-      ({ currentNormalized, updateNormalized }) => currentNormalized !== updateNormalized,
+    // Update containers on:
+    // - tag changes (compose file + runtime update), or
+    // - digest updates (runtime update only; compose file remains unchanged).
+    const mappingsNeedingComposeUpdate = versionMappings.filter(
+      ({ container, currentNormalized, updateNormalized }) =>
+        container.updateKind?.kind !== 'digest' && currentNormalized !== updateNormalized,
+    );
+    const mappingsNeedingRuntimeUpdate = versionMappings.filter(
+      ({ container, currentNormalized, updateNormalized }) =>
+        container.updateKind?.kind === 'digest' || currentNormalized !== updateNormalized,
     );
 
-    if (mappingsNeedingUpdate.length === 0) {
+    if (mappingsNeedingRuntimeUpdate.length === 0) {
       this.log.info(`All containers in ${composeFile} are already up to date`);
       return;
     }
 
     // Dry-run?
     if (this.configuration.dryrun) {
-      this.log.info(
-        `Do not replace existing docker-compose file ${composeFile} (dry-run mode enabled)`,
-      );
-    } else {
+      if (mappingsNeedingComposeUpdate.length > 0) {
+        this.log.info(
+          `Do not replace existing docker-compose file ${composeFile} (dry-run mode enabled)`,
+        );
+      }
+    } else if (mappingsNeedingComposeUpdate.length > 0) {
       // Backup docker-compose file
       if (this.configuration.backup) {
         const backupFile = `${composeFile}.back`;
@@ -296,7 +305,7 @@ class Dockercompose extends Docker {
       let composeFileStr = (await this.getComposeFile(composeFile)).toString();
 
       // Replace only versions requiring updates
-      mappingsNeedingUpdate.forEach(({ current, update }) => {
+      mappingsNeedingComposeUpdate.forEach(({ current, update }) => {
         composeFileStr = composeFileStr.replaceAll(current, update);
       });
 
@@ -304,10 +313,10 @@ class Dockercompose extends Docker {
       await this.writeComposeFile(composeFile, composeFileStr);
     }
 
-    // Update only containers requiring an image change
+    // Update all containers requiring a runtime refresh (tag or digest updates)
     // (super.notify will take care of the dry-run mode for each container as well)
     await Promise.all(
-      mappingsNeedingUpdate.map(async ({ container, service }) => {
+      mappingsNeedingRuntimeUpdate.map(async ({ container, service }) => {
         await super.trigger(container);
         await this.runServicePostStartHooks(container, service, compose.services[service]);
       }),

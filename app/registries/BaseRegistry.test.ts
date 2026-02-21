@@ -1,4 +1,7 @@
 // @ts-nocheck
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import BaseRegistry from './BaseRegistry.js';
 
 vi.mock('axios', () => ({
@@ -9,6 +12,7 @@ let baseRegistry;
 
 beforeEach(() => {
   baseRegistry = new BaseRegistry();
+  vi.clearAllMocks();
 });
 
 test('normalizeImageUrl should prepend https when missing', () => {
@@ -40,6 +44,11 @@ test('authenticateBasic should add Basic auth header when credentials provided',
   expect(result.headers.Authorization).toBe('Basic dXNlcjpwYXNz');
 });
 
+test('authenticateBasic should add Basic auth header when headers are not provided', async () => {
+  const result = await baseRegistry.authenticateBasic({}, 'dXNlcjpwYXNz');
+  expect(result.headers.Authorization).toBe('Basic dXNlcjpwYXNz');
+});
+
 test('authenticateBasic should not add header when no credentials', async () => {
   const result = await baseRegistry.authenticateBasic({ headers: {} }, undefined);
   expect(result.headers.Authorization).toBeUndefined();
@@ -50,9 +59,38 @@ test('authenticateBearer should add Bearer auth header when token provided', asy
   expect(result.headers.Authorization).toBe('Bearer my-token');
 });
 
+test('authenticateBearer should add Bearer auth header when headers are not provided', async () => {
+  const result = await baseRegistry.authenticateBearer({}, 'my-token');
+  expect(result.headers.Authorization).toBe('Bearer my-token');
+});
+
 test('authenticateBearer should not add header when no token', async () => {
   const result = await baseRegistry.authenticateBearer({ headers: {} }, undefined);
   expect(result.headers.Authorization).toBeUndefined();
+});
+
+test('authenticateBasic should attach httpsAgent when insecure=true', async () => {
+  baseRegistry.configuration = { insecure: true };
+  const result = await baseRegistry.authenticateBasic({ headers: {} }, 'dXNlcjpwYXNz');
+  expect(result.headers.Authorization).toBe('Basic dXNlcjpwYXNz');
+  expect(result.httpsAgent).toBeDefined();
+  expect(result.httpsAgent.options.rejectUnauthorized).toBe(false);
+});
+
+test('authenticateBearer should attach CA from cafile when configured', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-baseregistry-'));
+  const caPath = path.join(tempDir, 'ca.pem');
+  try {
+    fs.writeFileSync(caPath, 'test-ca-content');
+    baseRegistry.configuration = { cafile: caPath };
+    const result = await baseRegistry.authenticateBearer({ headers: {} }, 'token-value');
+    expect(result.headers.Authorization).toBe('Bearer token-value');
+    expect(result.httpsAgent).toBeDefined();
+    expect(result.httpsAgent.options.rejectUnauthorized).toBe(true);
+    expect(result.httpsAgent.options.ca.toString('utf-8')).toBe('test-ca-content');
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('getAuthCredentials should return auth when set', () => {
@@ -148,6 +186,19 @@ test('authenticateBearerFromAuthUrl should set bearer token using default extrac
   expect(result.headers.Authorization).toBe('Bearer abc123');
 });
 
+test('authenticateBearerFromAuthUrl should set bearer token when request headers are not provided', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+
+  const result = await baseRegistry.authenticateBearerFromAuthUrl(
+    {},
+    'https://auth.example.com/token',
+    undefined,
+  );
+
+  expect(result.headers.Authorization).toBe('Bearer abc123');
+});
+
 test('authenticateBearerFromAuthUrl should not set header when token is missing', async () => {
   const { default: axios } = await import('axios');
   axios.mockResolvedValue({ data: {} });
@@ -160,4 +211,27 @@ test('authenticateBearerFromAuthUrl should not set header when token is missing'
   );
 
   expect(result.headers.Authorization).toBeUndefined();
+});
+
+test('authenticateBearerFromAuthUrl should apply tls options to token request', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  baseRegistry.configuration = { insecure: true };
+
+  const result = await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {} },
+    'https://auth.example.com/token',
+    'dXNlcjpwYXNz',
+  );
+
+  expect(axios).toHaveBeenCalledWith(
+    expect.objectContaining({
+      method: 'GET',
+      url: 'https://auth.example.com/token',
+      httpsAgent: expect.anything(),
+    }),
+  );
+  expect(result.headers.Authorization).toBe('Bearer abc123');
+  expect(result.httpsAgent).toBeDefined();
+  expect(result.httpsAgent.options.rejectUnauthorized).toBe(false);
 });

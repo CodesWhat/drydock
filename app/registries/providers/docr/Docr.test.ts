@@ -95,7 +95,7 @@ test('authenticate should add basic auth from token alias', async () => {
     password: TEST_TOKEN,
   };
 
-  expect(docr.authenticate(undefined, { headers: {} })).resolves.toEqual({
+  await expect(docr.authenticate(undefined, { headers: {} })).resolves.toEqual({
     headers: {
       Authorization: 'Basic ZG9jdGw6ZG9wX3YxX2FiY2RlZg==',
     },

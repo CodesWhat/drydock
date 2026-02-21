@@ -109,6 +109,8 @@ global.fetch = vi.fn();
 
 // Mock Vuetify components with templates
 config.global.stubs = {
+  'router-link': { template: '<a><slot /></a>' },
+  'router-view': { template: '<div><slot /></div>' },
   'v-img': { template: '<div class="v-img"><slot /></div>' },
   'v-avatar': { template: '<div class="v-avatar"><slot /></div>' },
   'v-app': { template: '<div class="v-app"><slot /></div>' },

@@ -56,7 +56,6 @@ const stubs = {
     props: ['modelValue'],
   },
   'router-link': { template: '<a><slot /></a>' },
-  img: true,
 };
 
 describe('NavigationDrawer', () => {
