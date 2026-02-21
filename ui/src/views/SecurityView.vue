@@ -155,7 +155,7 @@ const secActiveColumns = computed(() =>
 </script>
 
 <template>
-    <div>
+  <DataViewLayout>
       <!-- Filter bar -->
       <DataFilterBar
         v-model="securityViewMode"
@@ -402,5 +402,5 @@ const secActiveColumns = computed(() =>
                   message="No vulnerabilities match your filters"
                   :show-clear="activeSecFilterCount > 0"
                   @clear="clearSecFilters" />
-    </div>
+  </DataViewLayout>
 </template>

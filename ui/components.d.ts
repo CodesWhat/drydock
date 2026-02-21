@@ -18,6 +18,7 @@ declare module 'vue' {
     DataFilterBar: typeof import('./src/components/DataFilterBar.vue')['default']
     DataListAccordion: typeof import('./src/components/DataListAccordion.vue')['default']
     DataTable: typeof import('./src/components/DataTable.vue')['default']
+    DataViewLayout: typeof import('./src/components/DataViewLayout.vue')['default']
     DetailPanel: typeof import('./src/components/DetailPanel.vue')['default']
     Dialog: typeof import('primevue/dialog')['default']
     EmptyState: typeof import('./src/components/EmptyState.vue')['default']

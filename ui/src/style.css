@@ -219,6 +219,9 @@
 *::after {
   box-sizing: border-box;
 }
+button:not(:disabled) {
+  cursor: pointer;
+}
 html,
 body {
   margin: 0;
@@ -422,4 +425,128 @@ html.dd-transitioning::view-transition-new(root) {
       opacity: 1;
     }
   }
+}
+
+/* ── PrimeVue overrides — match Drydock design tokens ── */
+
+/* Overlay mask */
+.p-overlay-mask {
+  background: rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(2px);
+}
+
+/* Dialog chrome */
+.p-dialog {
+  font-family: var(--drydock-font, "IBM Plex Mono", monospace) !important;
+  background: var(--dd-bg-card) !important;
+  border: 1px solid var(--dd-border-strong) !important;
+  border-radius: var(--dd-radius-lg) !important;
+  color: var(--dd-text) !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3) !important;
+  max-width: 420px;
+  min-width: 340px;
+}
+
+/* Header */
+.p-dialog-header {
+  padding: 16px 20px 12px !important;
+  border-bottom: 1px solid var(--dd-border) !important;
+  background: transparent !important;
+}
+.p-dialog-title {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: var(--dd-text) !important;
+}
+
+/* Close button */
+.p-dialog-close-button {
+  color: var(--dd-text-muted) !important;
+  background: transparent !important;
+  border: none !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: var(--dd-radius) !important;
+}
+.p-dialog-close-button:hover {
+  color: var(--dd-text) !important;
+  background: var(--dd-bg-elevated) !important;
+}
+
+/* Content */
+.p-dialog-content {
+  padding: 18px 20px !important;
+  background: transparent !important;
+  color: var(--dd-text-secondary) !important;
+  font-size: 12px !important;
+  line-height: 1.6 !important;
+}
+
+/* Hide broken confirm icon */
+.p-confirmdialog-icon {
+  display: none !important;
+}
+
+/* Footer */
+.p-dialog-footer {
+  padding: 12px 20px 18px !important;
+  background: transparent !important;
+  gap: 10px !important;
+}
+
+/* PrimeVue buttons inside dialogs */
+.p-dialog-footer .p-button {
+  font-family: var(--drydock-font, "IBM Plex Mono", monospace) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  padding: 7px 16px !important;
+  border-radius: var(--dd-radius) !important;
+  transition: background-color 0.15s ease, color 0.15s ease !important;
+}
+
+/* Danger/accept button — matches Danger button style */
+.p-confirmdialog-accept-button.p-button-danger {
+  background: var(--dd-danger-muted) !important;
+  border: 1px solid var(--dd-danger) !important;
+  color: var(--dd-danger) !important;
+}
+.p-confirmdialog-accept-button.p-button-danger:hover {
+  background: color-mix(in srgb, var(--dd-danger) 25%, transparent) !important;
+}
+
+/* Warn/accept button — matches Warning button style */
+.p-confirmdialog-accept-button.p-button-warn {
+  background: var(--dd-warning-muted) !important;
+  border: 1px solid var(--dd-warning) !important;
+  color: var(--dd-warning) !important;
+}
+.p-confirmdialog-accept-button.p-button-warn:hover {
+  background: color-mix(in srgb, var(--dd-warning) 25%, transparent) !important;
+}
+
+/* Cancel/secondary button — matches Secondary button style */
+.p-confirmdialog-reject-button {
+  background: var(--dd-bg-inset) !important;
+  border: 1px solid var(--dd-border-strong) !important;
+  color: var(--dd-text) !important;
+}
+.p-confirmdialog-reject-button:hover {
+  background: var(--dd-bg-elevated) !important;
+}
+
+/* PrimeVue tooltip overrides */
+.p-tooltip {
+  font-family: var(--drydock-font, "IBM Plex Mono", monospace) !important;
+}
+.p-tooltip-text {
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  background: var(--dd-bg-card) !important;
+  color: var(--dd-text) !important;
+  border: 1px solid var(--dd-border-strong) !important;
+  border-radius: var(--dd-radius-sm) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+}
+.p-tooltip-arrow {
+  display: none !important;
 }

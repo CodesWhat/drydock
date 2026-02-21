@@ -274,7 +274,6 @@ function confirmStop(name: string) {
   confirm.require({
     header: 'Stop Container',
     message: `Stop ${name}?`,
-    icon: 'fa-solid fa-stop',
     rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
     acceptProps: { label: 'Stop', severity: 'danger' },
     accept: () => console.log('stop', name),
@@ -285,7 +284,6 @@ function confirmRestart(name: string) {
   confirm.require({
     header: 'Restart Container',
     message: `Restart ${name}?`,
-    icon: 'fa-solid fa-rotate-right',
     rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
     acceptProps: { label: 'Restart', severity: 'warn' },
     accept: () => console.log('restart', name),
@@ -296,7 +294,6 @@ function confirmForceUpdate(name: string) {
   confirm.require({
     header: 'Force Update',
     message: `Force update ${name}? This bypasses normal update checks.`,
-    icon: 'fa-solid fa-bolt',
     rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
     acceptProps: { label: 'Force Update', severity: 'warn' },
     accept: () => forceUpdate(name),
@@ -307,7 +304,6 @@ function confirmIgnore(name: string) {
   confirm.require({
     header: 'Ignore Container',
     message: `Ignore ${name}? It will no longer be monitored for updates.`,
-    icon: 'fa-solid fa-eye-slash',
     rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
     acceptProps: { label: 'Ignore', severity: 'danger' },
     accept: () => console.log('ignore', name),
@@ -318,13 +314,7 @@ function confirmIgnore(name: string) {
 <template>
     <ConfirmDialog />
     <!-- MAIN CONTAINERS LIST (not full page) -->
-    <div v-if="!containerFullPage" class="flex flex-col" style="height: calc(100vh - 48px);">
-
-      <!-- CONTENT + DETAIL PANEL FLEX WRAPPER -->
-      <div class="flex gap-4 min-w-0 flex-1 min-h-0 pb-4">
-
-      <!-- Left: filters + table (scrollbar outside table) -->
-      <div class="flex-1 min-w-0 overflow-y-auto pr-4 pb-4 pl-4 pt-4">
+    <DataViewLayout v-if="!containerFullPage">
 
       <!-- FILTER BAR -->
       <DataFilterBar
@@ -847,8 +837,7 @@ function confirmIgnore(name: string) {
                   :show-clear="activeFilterCount > 0"
                   @clear="clearFilters" />
 
-      </div><!-- end left: filters + cards -->
-
+      <template #panel>
       <!-- DETAIL SIDE PANEL -->
       <DetailPanel
         v-if="selectedContainer"
@@ -1041,9 +1030,8 @@ function confirmIgnore(name: string) {
 
         </div>
       </DetailPanel>
-
-      </div><!-- end content + detail panel flex wrapper -->
-    </div>
+      </template>
+    </DataViewLayout>
 
     <!-- CONTAINER FULL PAGE DETAIL VIEW -->
     <div v-if="containerFullPage && selectedContainer"

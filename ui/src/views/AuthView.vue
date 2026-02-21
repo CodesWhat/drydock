@@ -51,13 +51,13 @@ onMounted(async () => {
 </script>
 
 <template>
+  <DataViewLayout>
       <!-- Filter bar -->
       <DataFilterBar
         v-model="authViewMode"
         v-model:showFilters="showFilters"
         :filtered-count="filteredAuth.length"
         :total-count="authData.length"
-        count-label="providers"
         :active-filter-count="activeFilterCount">
         <template #filters>
           <input v-model="searchQuery"
@@ -185,4 +185,5 @@ onMounted(async () => {
         message="No providers match your filters"
         :show-clear="activeFilterCount > 0"
         @clear="searchQuery = ''" />
+  </DataViewLayout>
 </template>

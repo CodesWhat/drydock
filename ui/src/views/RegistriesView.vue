@@ -56,13 +56,13 @@ onMounted(async () => {
 </script>
 
 <template>
+  <DataViewLayout>
       <!-- Filter bar -->
       <DataFilterBar
         v-model="registriesViewMode"
         v-model:showFilters="showFilters"
         :filtered-count="filteredRegistries.length"
         :total-count="registriesData.length"
-        count-label="registries"
         :active-filter-count="activeFilterCount">
         <template #filters>
           <input v-model="searchQuery"
@@ -188,4 +188,5 @@ onMounted(async () => {
           </div>
         </template>
       </DataListAccordion>
+  </DataViewLayout>
 </template>

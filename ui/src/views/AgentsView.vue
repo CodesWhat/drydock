@@ -188,20 +188,13 @@ function closeAgentPanel() {
 </script>
 
 <template>
-    <div class="flex flex-col" style="height: calc(100vh - 80px);">
-      <!-- Content + detail panel flex wrapper -->
-      <div class="flex gap-4 min-w-0 flex-1 min-h-0 pb-4">
-
-        <!-- Left: filter bar + table -->
-        <div class="flex-1 min-w-0 overflow-y-auto pr-4 pb-4">
-
+  <DataViewLayout>
           <!-- Filter bar -->
           <DataFilterBar
             v-model="agentViewMode"
             v-model:showFilters="showFilters"
             :filtered-count="filteredAgents.length"
             :total-count="agentsData.length"
-            count-label="agents"
             :active-filter-count="activeFilterCount">
             <template #filters>
               <input v-model="searchQuery"
@@ -461,8 +454,7 @@ function closeAgentPanel() {
                       :show-clear="activeFilterCount > 0"
                       @clear="searchQuery = ''" />
 
-        </div><!-- end left: filter bar + table/cards -->
-
+    <template #panel>
         <!-- Detail panel -->
         <DetailPanel
           :open="agentPanelOpen"
@@ -629,7 +621,6 @@ function closeAgentPanel() {
             </div>
           </template>
         </DetailPanel>
-
-      </div><!-- end flex wrapper -->
-    </div>
+    </template>
+  </DataViewLayout>
 </template>

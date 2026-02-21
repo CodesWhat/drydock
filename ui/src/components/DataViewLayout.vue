@@ -1,0 +1,32 @@
+<script setup lang="ts">
+/**
+ * DataViewLayout — Shared page-level layout for all data-driven views.
+ *
+ * Provides the standard flex structure:
+ *   outer flex-col (full height) → inner flex row (gap-4) → scrollable left column + optional DetailPanel
+ *
+ * Usage:
+ *   <DataViewLayout>
+ *     <DataFilterBar ... />
+ *     <DataTable ... />
+ *   </DataViewLayout>
+ *
+ * With a detail panel:
+ *   <DataViewLayout>
+ *     <DataFilterBar ... />
+ *     <DataTable ... />
+ *     <template #panel> <DetailPanel ... /> </template>
+ *   </DataViewLayout>
+ */
+</script>
+
+<template>
+  <div class="flex flex-col" style="height: calc(100vh - 48px);">
+    <div class="flex gap-4 min-w-0 flex-1 min-h-0 pb-4">
+      <div class="flex-1 min-w-0 overflow-y-auto px-4 pt-4 pb-4">
+        <slot />
+      </div>
+      <slot name="panel" />
+    </div>
+  </div>
+</template>

@@ -9,7 +9,7 @@ function demoConfirmStop() {
   confirm.require({
     header: 'Stop Container',
     message: 'Stop nginx-proxy?',
-    icon: 'fa-solid fa-stop',
+
     rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
     acceptProps: { label: 'Stop', severity: 'danger' },
     accept: () => { lastConfirmResult.value = 'Stopped nginx-proxy'; },
@@ -21,7 +21,7 @@ function demoConfirmRestart() {
   confirm.require({
     header: 'Restart Container',
     message: 'Restart postgres-db?',
-    icon: 'fa-solid fa-rotate-right',
+
     rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
     acceptProps: { label: 'Restart', severity: 'warn' },
     accept: () => { lastConfirmResult.value = 'Restarted postgres-db'; },
@@ -33,7 +33,7 @@ function demoConfirmIgnore() {
   confirm.require({
     header: 'Ignore Container',
     message: 'Ignore redis-cache? It will no longer be monitored for updates.',
-    icon: 'fa-solid fa-eye-slash',
+
     rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
     acceptProps: { label: 'Ignore', severity: 'danger' },
     accept: () => { lastConfirmResult.value = 'Ignored redis-cache'; },
