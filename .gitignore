@@ -134,3 +134,6 @@ docs/content/
 
 # Storybook build output
 storybook-static/
+
+# Claude Code project instructions
+CLAUDE.md
