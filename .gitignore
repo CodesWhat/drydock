@@ -131,3 +131,6 @@ demo/
 
 # Docs content (local editing, copied to drydock-website)
 docs/content/
+
+# Storybook build output
+storybook-static/
