@@ -33,9 +33,6 @@ app.component('DataCardGrid', DataCardGrid);
 app.component('DataListAccordion', DataListAccordion);
 app.component('DetailPanel', DetailPanel);
 app.component('EmptyState', EmptyState);
-app.component('Button', Button);
-app.component('Dialog', Dialog);
-app.component('ConfirmDialog', ConfirmDialog);
 app.directive('tooltip', Tooltip);
 app.use(PrimeVue, {
   theme: { preset: Aura, options: { darkModeSelector: '.dark' } },
