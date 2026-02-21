@@ -155,7 +155,6 @@ const secActiveColumns = computed(() =>
 </script>
 
 <template>
-  <AppLayout>
     <div>
       <!-- Filter bar -->
       <DataFilterBar
@@ -404,5 +403,4 @@ const secActiveColumns = computed(() =>
                   :show-clear="activeSecFilterCount > 0"
                   @clear="clearSecFilters" />
     </div>
-  </AppLayout>
 </template>

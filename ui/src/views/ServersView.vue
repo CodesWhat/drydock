@@ -129,7 +129,6 @@ function viewServerContainers(_name: string) {
 </script>
 
 <template>
-  <AppLayout>
     <div>
       <!-- Stat cards -->
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -368,5 +367,4 @@ function viewServerContainers(_name: string) {
         </div>
       </div>
     </div>
-  </AppLayout>
 </template>

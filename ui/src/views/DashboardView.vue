@@ -160,7 +160,6 @@ const DONUT_CIRCUMFERENCE = 301.6;
 </script>
 
 <template>
-  <AppLayout>
       <!-- LOADING STATE -->
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="text-sm dd-text-muted">Loading dashboard...</div>
@@ -455,5 +454,4 @@ const DONUT_CIRCUMFERENCE = 301.6;
         </div>
       </div>
       </template>
-  </AppLayout>
 </template>

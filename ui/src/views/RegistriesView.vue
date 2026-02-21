@@ -56,7 +56,6 @@ onMounted(async () => {
 </script>
 
 <template>
-  <AppLayout>
       <!-- Filter bar -->
       <DataFilterBar
         v-model="registriesViewMode"
@@ -189,5 +188,4 @@ onMounted(async () => {
           </div>
         </template>
       </DataListAccordion>
-  </AppLayout>
 </template>

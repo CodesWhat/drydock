@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useConfirm } from 'primevue/useconfirm';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useColumnVisibility } from '../composables/useColumnVisibility';
@@ -18,6 +19,8 @@ import {
   serverBadgeColor,
   updateKindColor,
 } from '../utils/display';
+
+const confirm = useConfirm();
 
 // Loading and error state
 const loading = ref(true);
@@ -166,8 +169,9 @@ const tableColumns = computed(() =>
     key: col.key,
     label: col.label,
     align: col.align,
-    sortable: true,
-    width: col.key === 'name' ? '99%' : undefined,
+    sortable: col.key !== 'icon',
+    width: col.key === 'name' ? '99%' : col.key === 'icon' ? '40px' : undefined,
+    icon: col.key === 'icon',
   })),
 );
 
@@ -261,10 +265,58 @@ function skipUpdate(name: string) {
 function forceUpdate(name: string) {
   console.log('force', name);
 }
+
+// Tooltip shorthand — shows on 400ms delay
+const tt = (label: string) => ({ value: label, showDelay: 400 });
+
+// Confirm wrappers for destructive actions
+function confirmStop(name: string) {
+  confirm.require({
+    header: 'Stop Container',
+    message: `Stop ${name}?`,
+    icon: 'fa-solid fa-stop',
+    rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
+    acceptProps: { label: 'Stop', severity: 'danger' },
+    accept: () => console.log('stop', name),
+  });
+}
+
+function confirmRestart(name: string) {
+  confirm.require({
+    header: 'Restart Container',
+    message: `Restart ${name}?`,
+    icon: 'fa-solid fa-rotate-right',
+    rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
+    acceptProps: { label: 'Restart', severity: 'warn' },
+    accept: () => console.log('restart', name),
+  });
+}
+
+function confirmForceUpdate(name: string) {
+  confirm.require({
+    header: 'Force Update',
+    message: `Force update ${name}? This bypasses normal update checks.`,
+    icon: 'fa-solid fa-bolt',
+    rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
+    acceptProps: { label: 'Force Update', severity: 'warn' },
+    accept: () => forceUpdate(name),
+  });
+}
+
+function confirmIgnore(name: string) {
+  confirm.require({
+    header: 'Ignore Container',
+    message: `Ignore ${name}? It will no longer be monitored for updates.`,
+    icon: 'fa-solid fa-eye-slash',
+    rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
+    acceptProps: { label: 'Ignore', severity: 'danger' },
+    accept: () => console.log('ignore', name),
+  });
+}
 </script>
 
 <template>
-  <AppLayout>
+    <ConfirmDialog />
     <!-- MAIN CONTAINERS LIST (not full page) -->
     <div v-if="!containerFullPage" class="flex flex-col" style="height: calc(100vh - 48px);">
 
@@ -327,7 +379,7 @@ function forceUpdate(name: string) {
             <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
                     :class="showColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
                     :style="{ borderColor: 'var(--dd-border-strong)' }"
-                    title="Toggle columns"
+                    v-tooltip.top="tt('Toggle columns')"
                     @click.stop="showColumnPicker = !showColumnPicker">
               <AppIcon name="config" :size="10" />
             </button>
@@ -363,39 +415,42 @@ function forceUpdate(name: string) {
                  @update:sort-key="containerSortKey = $event"
                  @update:sort-asc="containerSortAsc = $event"
                  @row-click="selectContainer($event)">
+        <!-- Container icon (own column) -->
+        <template #cell-icon="{ row: c }">
+          <ContainerIcon :icon="c.icon" :size="20" />
+        </template>
+
         <!-- Container name + image (+ compact actions & badges) -->
         <template #cell-name="{ row: c }">
-          <div class="flex items-start gap-2 min-w-0">
-            <ContainerIcon :icon="c.icon" :size="20" class="shrink-0 mt-0.5" />
-            <div class="min-w-0 flex-1">
+          <div class="min-w-0">
               <div class="flex items-center gap-2">
                 <div class="font-medium truncate dd-text flex-1">{{ c.name }}</div>
                 <!-- Compact: inline action icons (top-right) -->
                 <div v-if="isCompact" class="flex items-center gap-0.5 shrink-0">
                   <button v-if="c.newTag && c.bouncer === 'blocked'"
                           class="w-7 h-7 dd-rounded flex items-center justify-center cursor-not-allowed dd-text-muted opacity-50"
-                          title="Blocked by Bouncer" @click.stop>
+                          v-tooltip.top="tt('Blocked by Bouncer')" @click.stop>
                     <i class="fa-solid fa-lock text-[11px]" />
                   </button>
                   <button v-else-if="c.newTag"
                           class="w-7 h-7 dd-rounded flex items-center justify-center transition-all hover:dd-bg-elevated hover:scale-110 active:scale-95"
                           style="color: var(--dd-primary);"
-                          title="Update" @click.stop="updateContainer(c.name)">
+                          v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
                     <AppIcon name="cloud-download" :size="14" />
                   </button>
                   <button v-else-if="c.status === 'running'"
                           class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-danger hover:dd-bg-elevated hover:scale-110 active:scale-95"
-                          title="Stop" @click.stop>
+                          v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
                     <AppIcon name="stop" :size="12" />
                   </button>
                   <button v-else
                           class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-success hover:dd-bg-elevated hover:scale-110 active:scale-95"
-                          title="Start" @click.stop>
+                          v-tooltip.top="tt('Start')" @click.stop>
                     <AppIcon name="play" :size="12" />
                   </button>
                   <button class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text hover:dd-bg-elevated hover:scale-110 active:scale-95"
                           :class="openActionsMenu === c.name ? 'dd-bg-elevated dd-text' : ''"
-                          title="More" @click.stop="toggleActionsMenu(c.name, $event)">
+                          v-tooltip.top="tt('More')" @click.stop="toggleActionsMenu(c.name, $event)">
                     <i class="fa-solid fa-ellipsis-vertical text-[11px]" />
                   </button>
                 </div>
@@ -411,12 +466,12 @@ function forceUpdate(name: string) {
                 <div class="flex items-center gap-1.5 ml-auto shrink-0">
                 <span v-if="c.updateKind" class="badge px-1.5 py-0 text-[9px]"
                       :style="{ backgroundColor: updateKindColor(c.updateKind).bg, color: updateKindColor(c.updateKind).text }"
-                      :title="c.updateKind">
+                      v-tooltip.top="tt(c.updateKind)">
                   <i :class="c.updateKind === 'major' ? 'fa-solid fa-angles-up' : c.updateKind === 'minor' ? 'fa-solid fa-angle-up' : c.updateKind === 'patch' ? 'fa-solid fa-hashtag' : 'fa-solid fa-fingerprint'" />
                 </span>
                 <span class="badge px-1.5 py-0 text-[9px]"
                       :style="{ backgroundColor: bouncerColor(c.bouncer).bg, color: bouncerColor(c.bouncer).text }"
-                      :title="c.bouncer">
+                      v-tooltip.top="tt(c.bouncer)">
                   <i :class="c.bouncer === 'safe' ? 'fa-solid fa-check' : c.bouncer === 'blocked' ? 'fa-solid fa-ban' : 'fa-solid fa-triangle-exclamation'" />
                 </span>
                 <span class="badge px-1.5 py-0 text-[9px]"
@@ -424,7 +479,7 @@ function forceUpdate(name: string) {
                         backgroundColor: c.status === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                         color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
                       }"
-                      :title="c.status">
+                      v-tooltip.top="tt(c.status)">
                   <i :class="c.status === 'running' ? 'fa-solid fa-circle-play' : 'fa-solid fa-circle-stop'" />
                 </span>
                 <span class="badge text-[7px] font-bold px-1.5 py-0"
@@ -433,7 +488,6 @@ function forceUpdate(name: string) {
                 </span>
                 </div>
               </div>
-            </div>
           </div>
         </template>
         <!-- Version comparison -->
@@ -493,28 +547,28 @@ function forceUpdate(name: string) {
             <div class="flex items-center justify-end gap-0.5">
               <button v-if="c.newTag && c.bouncer === 'blocked'"
                       class="w-8 h-8 dd-rounded flex items-center justify-center transition-all cursor-not-allowed dd-text-muted opacity-50"
-                      title="Blocked by Bouncer" @click.stop>
+                      v-tooltip.top="tt('Blocked by Bouncer')" @click.stop>
                 <i class="fa-solid fa-lock text-[13px]" />
               </button>
               <button v-else-if="c.newTag"
                       class="w-8 h-8 dd-rounded flex items-center justify-center transition-all hover:dd-bg-elevated hover:scale-110 active:scale-95"
                       style="color: var(--dd-primary);"
-                      title="Update" @click.stop="updateContainer(c.name)">
+                      v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
                 <AppIcon name="cloud-download" :size="16" />
               </button>
               <button v-else-if="c.status === 'running'"
                       class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-danger hover:dd-bg-elevated hover:scale-110 active:scale-95"
-                      title="Stop" @click.stop>
+                      v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
                 <AppIcon name="stop" :size="14" />
               </button>
               <button v-else
                       class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-success hover:dd-bg-elevated hover:scale-110 active:scale-95"
-                      title="Start" @click.stop>
+                      v-tooltip.top="tt('Start')" @click.stop>
                 <AppIcon name="play" :size="14" />
               </button>
               <button class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text hover:dd-bg-elevated hover:scale-110 active:scale-95"
                       :class="openActionsMenu === c.name ? 'dd-bg-elevated dd-text' : ''"
-                      title="More" @click.stop="toggleActionsMenu(c.name, $event)">
+                      v-tooltip.top="tt('More')" @click.stop="toggleActionsMenu(c.name, $event)">
                 <i class="fa-solid fa-ellipsis-vertical text-[13px]" />
               </button>
             </div>
@@ -555,16 +609,16 @@ function forceUpdate(name: string) {
             <div v-else class="flex items-center justify-end gap-1">
               <button v-if="c.status === 'running'"
                       class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-danger hover:dd-bg-elevated"
-                      title="Stop" @click.stop>
+                      v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
                 <AppIcon name="stop" :size="11" />
               </button>
               <button v-else
                       class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-success hover:dd-bg-elevated"
-                      title="Start" @click.stop>
+                      v-tooltip.top="tt('Start')" @click.stop>
                 <AppIcon name="play" :size="11" />
               </button>
               <button class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                      title="Restart" @click.stop>
+                      v-tooltip.top="tt('Restart')" @click.stop="confirmRestart(c.name)">
                 <AppIcon name="restart" :size="11" />
               </button>
             </div>
@@ -579,7 +633,7 @@ function forceUpdate(name: string) {
                  boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
                }">
             <button v-if="c.status === 'running'" class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
-                    @click="closeActionsMenu()">
+                    @click="closeActionsMenu(); confirmStop(c.name)">
               <i class="fa-solid fa-stop text-[9px] w-3 text-center" style="color: var(--dd-danger);" />
               Stop
             </button>
@@ -589,7 +643,7 @@ function forceUpdate(name: string) {
               Start
             </button>
             <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
-                    @click="closeActionsMenu()">
+                    @click="closeActionsMenu(); confirmRestart(c.name)">
               <i class="fa-solid fa-rotate-right text-[9px] w-3 text-center dd-text-muted" />
               Restart
             </button>
@@ -601,14 +655,14 @@ function forceUpdate(name: string) {
                 Skip this update
               </button>
               <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
-                      @click="forceUpdate(c.name); closeActionsMenu()">
+                      @click="closeActionsMenu(); confirmForceUpdate(c.name)">
                 <i class="fa-solid fa-bolt text-[9px] w-3 text-center dd-text-muted" />
                 Force update
               </button>
             </template>
             <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
             <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text-danger hover:dd-bg-elevated"
-                    @click="closeActionsMenu()">
+                    @click="closeActionsMenu(); confirmIgnore(c.name)">
               <i class="fa-solid fa-eye-slash text-[9px] w-3 text-center" />
               Ignore container
             </button>
@@ -679,21 +733,21 @@ function forceUpdate(name: string) {
             <div class="flex items-center gap-1.5">
               <button v-if="c.status === 'running'"
                       class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-danger hover:dd-bg-elevated"
-                      title="Stop" @click.stop>
+                      v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
                 <AppIcon name="stop" :size="14" />
               </button>
               <button v-else
                       class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-success hover:dd-text-success hover:dd-bg-elevated"
-                      title="Start" @click.stop>
+                      v-tooltip.top="tt('Start')" @click.stop>
                 <AppIcon name="play" :size="14" />
               </button>
               <button class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                      title="Restart" @click.stop>
+                      v-tooltip.top="tt('Restart')" @click.stop="confirmRestart(c.name)">
                 <AppIcon name="restart" :size="14" />
               </button>
               <button v-if="c.newTag"
                       class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-warning hover:dd-text-warning hover:dd-bg-elevated"
-                      title="Update" @click.stop>
+                      v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
                 <AppIcon name="cloud-download" :size="14" />
               </button>
             </div>
@@ -1043,7 +1097,8 @@ function forceUpdate(name: string) {
           <div class="flex items-center gap-2 shrink-0">
             <button v-if="selectedContainer.status === 'running'"
                     class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
-                    :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }">
+                    :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+                    @click="confirmStop(selectedContainer.name)">
               <AppIcon name="stop" :size="10" />
               Stop
             </button>
@@ -1054,13 +1109,15 @@ function forceUpdate(name: string) {
               Start
             </button>
             <button class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text"
-                    :style="{ border: '1px solid var(--dd-border-strong)' }">
+                    :style="{ border: '1px solid var(--dd-border-strong)' }"
+                    @click="confirmRestart(selectedContainer.name)">
               <AppIcon name="restart" :size="10" />
               Restart
             </button>
             <button v-if="selectedContainer.newTag"
                     class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold transition-all text-white"
-                    :style="{ background: 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))', boxShadow: '0 1px 3px rgba(0,150,199,0.3)' }">
+                    :style="{ background: 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))', boxShadow: '0 1px 3px rgba(0,150,199,0.3)' }"
+                    @click="updateContainer(selectedContainer.name)">
               <AppIcon name="cloud-download" :size="10" />
               Update
             </button>
@@ -1286,5 +1343,4 @@ function forceUpdate(name: string) {
 
       </div>
     </div>
-  </AppLayout>
 </template>

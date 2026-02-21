@@ -9,7 +9,7 @@ import { useIcons } from '@/composables/useIcons';
 import { getUser, logout } from '@/services/auth';
 import { getAllContainers } from '@/services/container';
 import { useTheme } from '@/theme/useTheme';
-import ThemeToggle from '@/components/ThemeToggle.vue';
+
 
 const router = useRouter();
 const route = useRoute();
@@ -83,6 +83,7 @@ const navGroups = computed<NavGroup[]>(() => [
       { label: 'Triggers', icon: 'triggers', route: '/triggers' },
       { label: 'Auth', icon: 'auth', route: '/auth' },
       { label: 'Agents', icon: 'agents', route: '/agents' },
+      { label: 'Playground', icon: 'containers', route: '/playground' },
     ],
   },
 ]);
@@ -221,8 +222,8 @@ onUnmounted(() => {
            :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <div class="flex items-center gap-2 overflow-hidden shrink-0">
           <img :src="whaleLogo" alt="Drydock"
-               class="h-5 w-auto shrink-0 transition-transform duration-300 dark:invert"
-               :style="isCollapsed ? { transform: 'scaleX(-1)' } : {}" />
+               class="h-5 w-auto shrink-0 transition-transform duration-300"
+               :style="[isCollapsed ? { transform: 'scaleX(-1)' } : {}, isDark ? { filter: 'invert(1)' } : {}]" />
           <span class="sidebar-label font-bold text-sm tracking-widest dd-text"
                 style="letter-spacing:0.15em;">DRYDOCK</span>
         </div>
@@ -240,17 +241,16 @@ onUnmounted(() => {
           </div>
 
           <div v-for="item in group.items" :key="item.route"
-               class="nav-item-wrapper relative"
+               class="nav-item-wrapper relative mt-0.5"
                @click="navigateTo(item.route)">
             <div
-              class="nav-item flex items-center dd-rounded cursor-pointer relative"
+              class="nav-item flex items-center gap-3 dd-rounded cursor-pointer relative"
               :class="[
                 route.path === item.route
                   ? 'bg-drydock-secondary/10 dark:bg-drydock-secondary/15 text-drydock-secondary'
                   : 'dd-text-secondary hover:dd-bg-elevated hover:dd-text',
-                isCollapsed ? 'justify-center w-9 h-9 mx-auto' : 'gap-3',
               ]"
-              :style="isCollapsed ? {} : { padding: '8px 12px' }">
+              style="padding: 6px 12px;">
               <div v-if="route.path === item.route"
                    class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-drydock-secondary"
                    style="height: 20px;" />
@@ -347,7 +347,7 @@ onUnmounted(() => {
 
         <!-- Right: theme, notifications, avatar -->
         <div class="flex items-center gap-2 justify-end">
-          <ThemeToggle class="w-8 h-8" />
+          <ThemeToggle />
 
           <button class="relative flex items-center justify-center w-8 h-8 dd-rounded transition-colors dd-text-secondary hover:dd-bg-elevated hover:dd-text">
             <AppIcon name="notifications" :size="14" />
@@ -372,7 +372,7 @@ onUnmounted(() => {
       <!-- MAIN CONTENT -->
       <main class="flex-1 overflow-y-auto p-4 sm:p-6"
             :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
-        <slot />
+        <router-view />
       </main>
     </div>
 

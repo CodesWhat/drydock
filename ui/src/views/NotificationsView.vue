@@ -107,7 +107,6 @@ onMounted(async () => {
 </script>
 
 <template>
-  <AppLayout>
       <!-- Filter bar -->
       <DataFilterBar
         v-model="notificationsViewMode"
@@ -226,5 +225,4 @@ onMounted(async () => {
         message="No rules match your filters"
         :show-clear="activeFilterCount > 0"
         @clear="searchQuery = ''" />
-  </AppLayout>
 </template>

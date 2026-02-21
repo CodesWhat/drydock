@@ -63,7 +63,6 @@ onMounted(async () => {
 </script>
 
 <template>
-  <AppLayout>
     <!-- Filter bar -->
     <DataFilterBar
       v-model="triggersViewMode"
@@ -213,5 +212,4 @@ onMounted(async () => {
       :show-clear="activeFilterCount > 0"
       @clear="clearFilters"
     />
-  </AppLayout>
 </template>

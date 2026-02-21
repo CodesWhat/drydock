@@ -8,8 +8,7 @@ import { getServer } from '../services/server';
 import { themeFamilies } from '../theme/palettes';
 import { useTheme } from '../theme/useTheme';
 
-const { themeFamily, themeVariant, isDark, setThemeFamily, setThemeVariant, transitionTheme } =
-  useTheme();
+const { themeFamily, themeVariant, isDark, setThemeFamily, transitionTheme } = useTheme();
 
 const { iconLibrary, setIconLibrary, iconScale, setIconScale } = useIcons();
 const { activeFont, setFont, fontLoading, isFontLoaded } = useFont();
@@ -83,10 +82,10 @@ async function handleClearIconCache() {
     cacheClearing.value = false;
   }
 }
+
 </script>
 
 <template>
-  <AppLayout>
       <!-- Tabs -->
       <div class="flex gap-1 mb-6"
            :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
@@ -257,32 +256,9 @@ async function handleClearIconCache() {
             <AppIcon :name="themeVariant === 'system' ? 'monitor' : isDark ? 'moon' : 'sun'" :size="14" class="text-drydock-secondary" />
             <h2 class="text-sm font-semibold dd-text">Theme</h2>
           </div>
-          <div class="p-5">
-            <div class="flex gap-2">
-              <button v-for="opt in [
-                { id: 'dark', label: 'Dark', icon: 'moon' },
-                { id: 'light', label: 'Light', icon: 'sun' },
-                { id: 'system', label: 'System', icon: 'monitor' },
-              ]" :key="opt.id"
-                      class="flex items-center gap-2.5 px-4 py-3 dd-rounded transition-colors"
-                      :class="themeVariant === opt.id ? 'ring-2 ring-drydock-secondary' : ''"
-                      :style="{
-                        backgroundColor: themeVariant === opt.id
-                          ? 'var(--dd-primary-muted)'
-                          : 'var(--dd-bg-inset)',
-                        border: themeVariant === opt.id
-                          ? '1.5px solid var(--dd-primary)'
-                          : '1px solid var(--dd-border-strong)',
-                      }"
-                      @click="transitionTheme(() => setThemeVariant(opt.id as any), $event)">
-                <AppIcon :name="opt.icon" :size="16"
-                         :class="themeVariant === opt.id ? 'text-drydock-secondary' : 'dd-text-muted'" />
-                <span class="text-[12px] font-semibold"
-                      :class="themeVariant === opt.id ? 'text-drydock-secondary' : 'dd-text-secondary'">
-                  {{ opt.label }}
-                </span>
-              </button>
-            </div>
+          <div class="p-5 flex items-center gap-4">
+            <ThemeToggle size="md" />
+            <span class="text-[12px] font-semibold dd-text-secondary capitalize">{{ themeVariant }}</span>
           </div>
         </div>
 
@@ -413,5 +389,4 @@ async function handleClearIconCache() {
         </div>
 
       </div><!-- end appearance tab -->
-  </AppLayout>
 </template>

@@ -54,7 +54,6 @@ onMounted(async () => {
 </script>
 
 <template>
-  <AppLayout>
     <!-- Filter bar -->
     <DataFilterBar
       v-model="watchersViewMode"
@@ -208,5 +207,4 @@ onMounted(async () => {
       :show-clear="activeFilterCount > 0"
       @clear="searchQuery = ''"
     />
-  </AppLayout>
 </template>

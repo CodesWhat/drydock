@@ -188,7 +188,6 @@ function closeAgentPanel() {
 </script>
 
 <template>
-  <AppLayout>
     <div class="flex flex-col" style="height: calc(100vh - 80px);">
       <!-- Content + detail panel flex wrapper -->
       <div class="flex gap-4 min-w-0 flex-1 min-h-0 pb-4">
@@ -633,5 +632,4 @@ function closeAgentPanel() {
 
       </div><!-- end flex wrapper -->
     </div>
-  </AppLayout>
 </template>
