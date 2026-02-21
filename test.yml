@@ -1,0 +1,83 @@
+config:
+  target: "http://localhost:3333"
+  environments:
+    ci:
+      target: "http://localhost:3000"
+      phases:
+        - duration: 20
+          arrivalRate: 5
+          name: "Warm up"
+        - duration: 40
+          arrivalRate: 15
+          name: "Ramp up"
+        - duration: 20
+          arrivalRate: 30
+          name: "Sustained load"
+  phases:
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 60
+      arrivalRate: 20
+      name: "Ramp up"
+    - duration: 30
+      arrivalRate: 50
+      name: "Sustained load"
+  defaults:
+    headers:
+      Accept: "application/json"
+      Authorization: "Basic YWRtaW46cGFzc3dvcmQ="
+  ensure:
+    thresholds:
+      - http.response_time.p99: 500
+      - http.response_time.p95: 200
+
+scenarios:
+  - name: "Health check"
+    weight: 30
+    flow:
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200
+
+  - name: "App info"
+    weight: 20
+    flow:
+      - get:
+          url: "/api/app"
+          expect:
+            - statusCode: 200
+
+  - name: "Browse containers"
+    weight: 30
+    flow:
+      - get:
+          url: "/api/app"
+      - think: 1
+      - get:
+          url: "/api/containers"
+
+  - name: "Container detail"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/containers"
+          capture:
+            - json: "$[0].id"
+              as: "containerId"
+      - think: 1
+      - get:
+          url: "/api/containers/{{ containerId }}"
+
+  - name: "Dashboard flow"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/app"
+      - think: 1
+      - get:
+          url: "/api/containers"
+      - think: 1
+      - get:
+          url: "/api/containers/groups"

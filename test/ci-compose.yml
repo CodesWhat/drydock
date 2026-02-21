@@ -1,0 +1,31 @@
+services:
+  drydock:
+    image: drydock:ci
+    container_name: drydock-ci
+    user: root
+    ports:
+      - "3000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DD_RUN_AS_ROOT=true
+      - DD_LOG_FORMAT=text
+      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - "DD_AUTH_BASIC_ADMIN_HASH={SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g="
+      - DD_SESSION_SECRET=ci-load-test-secret
+
+  nginx-test:
+    image: nginx:1.25.5
+    container_name: nginx-test
+    labels:
+      - dd.watch=true
+      - dd.display.name=Nginx Test
+
+  redis-test:
+    image: redis:7.2.0
+    container_name: redis-test
+    labels:
+      - dd.watch=true
+      - dd.display.name=Redis Test
