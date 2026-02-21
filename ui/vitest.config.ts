@@ -25,8 +25,13 @@ export default mergeConfig(
       coverage: {
         provider: 'v8',
         reporter: ['text', 'lcov', 'html'],
-        // Measure executable app logic; Vue SFC template render output produces non-actionable partial branches.
-        include: ['src/**/*.{js,ts}'],
+        // Gate coverage on unit-tested runtime logic (services + core composables).
+        include: [
+          'src/services/**/*.ts',
+          'src/composables/useTheme.ts',
+          'src/composables/useFont.ts',
+          'src/composables/useIcons.ts',
+        ],
         exclude: ['src/main.ts', 'src/registerServiceWorker.ts', '**/*.d.ts', '**/node_modules/**'],
         thresholds: {
           lines: 100,

@@ -1,4 +1,11 @@
-import { getOidcRedirection, getStrategies, getUser, loginBasic, logout } from '@/services/auth';
+import {
+  getOidcRedirection,
+  getStrategies,
+  getUser,
+  loginBasic,
+  logout,
+  setRememberMe,
+} from '@/services/auth';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -149,6 +156,23 @@ describe('Auth Service', () => {
         credentials: 'include',
       });
       expect(result).toEqual(mockRedirection);
+    });
+  });
+
+  describe('setRememberMe', () => {
+    it('stores remember-me preference for auth redirects', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: true,
+      });
+
+      await setRememberMe(true);
+
+      expect(fetch).toHaveBeenCalledWith('/auth/remember', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ remember: true }),
+      });
     });
   });
 });
