@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Gitea refactored to shared base class** — Gitea now extends `SelfHostedBasic` directly instead of duplicating its logic from `Custom`, reducing code and ensuring consistent behavior with Harbor, Nexus, and Artifactory.
+- **Lint tooling migrated from biome CLI to qlty** — Removed `@biomejs/biome` as a direct devDependency from all workspaces; biome is now managed centrally via qlty. Lint and format scripts updated to use `qlty check`/`qlty fmt`.
+- **Dependabot replaced with Renovate** — Switched dependency update bot for better monorepo grouping, auto-merge of patch updates, and pinned GitHub Actions digests.
+- **Socket Firewall switched to free mode** — The CI supply chain scan now uses `firewall-free` (blocks known malware, no token required) instead of `firewall-enterprise`.
+- **CI pipeline improvements** — Added npm and Docker layer caching, parallelized e2e/load-test jobs, reordered job dependencies for faster feedback, added harden-runner to all workflow jobs.
+- **Lefthook pre-push runs piped** — Commands now run sequentially with fail-fast instead of parallel, so failures surface immediately instead of hanging while other commands complete.
 
 ## [1.3.6] — 2026-02-20
 

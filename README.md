@@ -561,7 +561,7 @@ Here's what's coming.
 
 | Version | Theme | Highlights |
 | --- | --- | --- |
-| **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Guard, SBOM, 7 new registries, 4 new triggers, self-update fix, rollback fixes, GHCR auth fix, self-hosted TLS options, re2-wasm → re2js regex engine swap |
+| **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Guard, SBOM, 7 new registries, 4 new triggers, self-update fix, rollback fixes, GHCR auth fix, self-hosted TLS options, re2-wasm → re2js regex engine swap, CI caching + pipeline hardening, biome → qlty lint migration |
 | **v1.4.0** | UI Modernization | PrimeVue + Tailwind migration, Composition API, shared data components, design system tokens, dark/light theme, settings backend, icon proxy cache |
 | **v1.5.0** | Observability | Real-time log viewer, container resource monitoring, registry webhooks |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers |
