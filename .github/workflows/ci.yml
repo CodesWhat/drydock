@@ -9,8 +9,6 @@ on:
     secrets:
       CODECOV_TOKEN:
         required: false
-      SOCKET_TOKEN:
-        required: false
       ARTILLERY_CLOUD_API_KEY:
         required: false
 
@@ -58,8 +56,7 @@ jobs:
       - name: Setup Socket Firewall
         uses: SocketDev/action@4337a545deecc20f19a909e52db7a2f6ba292f42  # v1.2.0
         with:
-          mode: firewall-enterprise
-          socket-token: ${{ secrets.SOCKET_TOKEN }}
+          mode: firewall-free
 
       - name: Scan app dependencies
         run: sfw npm ci
