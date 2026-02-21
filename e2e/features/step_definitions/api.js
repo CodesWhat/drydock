@@ -226,6 +226,12 @@ Then(/^response header (.+) should be (.+)$/, function (header, expected) {
   }
 });
 
+Then(/^response header (.+) should contain (.+)$/, function (header, expected) {
+  const actual = this.responseHeaders.get(header);
+  assert.ok(actual, `Header ${header} not found`);
+  assert.ok(actual.includes(expected), `Expected header "${header}" value "${actual}" to contain "${expected}"`);
+});
+
 Then(
   /^response body path (.+) should be of type array with length (\d+)$/,
   function (path, length) {
