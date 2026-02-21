@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["scripts/*.mjs"],
+  "project": ["src/**/*.{ts,vue}", "tests/**/*.ts"],
+  "ignore": ["tests/_archive/**"],
+  "storybook": true,
+  "vitest": {
+    "config": "vitest.config.ts"
+  },
+  "vite": {
+    "config": "vite.config.ts"
+  },
+  "ignoreDependencies": [
+    "@iconify-json/*",
+    "@fontsource/*"
+  ]
+}

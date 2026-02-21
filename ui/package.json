@@ -15,7 +15,9 @@
     "test:unit": "vitest run --coverage",
     "test:unit:watch": "vitest",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "chromatic": "npx chromatic --project-token=chpt_fbb4947d8dfbaa8",
+    "knip": "knip"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.2.7",
@@ -51,6 +53,7 @@
     "@vue/test-utils": "^2.4.0",
     "chromatic": "^15.1.1",
     "jsdom": "^28.0.0",
+    "knip": "^5.84.1",
     "storybook": "^10.2.10",
     "typescript": "^5.9.3",
     "unplugin-vue-components": "^31.0.0",
