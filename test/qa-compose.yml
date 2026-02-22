@@ -168,6 +168,32 @@ services:
       - dd.display.name=MongoDB
       - dd.group=data
 
+  # ── Security scan test containers ──────────────────────
+
+  # Node 16 Alpine — EOL, newer versions have known CRITICAL CVEs
+  # After watcher finds update, trigger scan to get "blocked" bouncer status
+  node-vulnerable:
+    image: node:16.0.0-alpine
+    container_name: node-vulnerable
+    command: ["node", "-e", "setInterval(() => {}, 60000)"]
+    labels:
+      - dd.watch=true
+      - dd.display.name=Node (Vulnerable)
+      - dd.group=security-test
+      - dd.tag.include=^16\.\d+\.\d+-alpine$$
+
+  # Python 3.9 slim — older version with known HIGH vulns (not CRITICAL)
+  # Should show "unsafe" bouncer after scan (not blocked since only CRITICALs block)
+  python-unsafe:
+    image: python:3.9.0-slim
+    container_name: python-unsafe
+    command: ["python", "-c", "import time; time.sleep(999999)"]
+    labels:
+      - dd.watch=true
+      - dd.display.name=Python (Unsafe)
+      - dd.group=security-test
+      - dd.tag.include=^3\.9\.\d+-slim$$
+
   # ── Container at latest (no update available) ─────────
 
   # Alpine at latest — shows "up to date" state
