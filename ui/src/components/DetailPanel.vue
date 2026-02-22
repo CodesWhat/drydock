@@ -35,7 +35,7 @@ const panelFlex = computed(() =>
 
   <!-- Panel -->
   <aside v-if="open"
-         class="detail-panel-inline flex flex-col dd-rounded overflow-clip transition-all duration-300 ease-in-out"
+         class="detail-panel-inline flex flex-col min-w-0 dd-rounded overflow-clip transition-all duration-300 ease-in-out"
          :class="isMobile ? 'fixed top-0 right-0 h-full z-50' : 'sticky top-0'"
          :style="{
            flex: isMobile ? undefined : panelFlex,
@@ -91,7 +91,7 @@ const panelFlex = computed(() =>
     <slot name="tabs" />
 
     <!-- Main scrollable content -->
-    <div class="flex-1 overflow-y-auto">
+    <div class="flex-1 min-w-0 min-h-0 overflow-y-auto">
       <slot />
     </div>
   </aside>

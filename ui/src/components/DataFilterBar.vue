@@ -25,7 +25,7 @@ const defaultViewModes = [
 
 <template>
   <div class="shrink-0 mb-4">
-    <div class="px-3 py-2 dd-rounded relative z-[1]"
+    <div class="px-3 py-2 dd-rounded relative z-20"
          :style="{
            backgroundColor: 'var(--dd-bg-card)',
            border: '1px solid var(--dd-border-strong)',
