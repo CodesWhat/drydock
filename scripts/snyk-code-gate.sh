@@ -7,6 +7,12 @@
 # in CI for proper gating.
 set -uo pipefail
 
+export CI=1
+export TERM=dumb
+export NO_COLOR=1
+
 echo "Running Snyk Code SAST scan (informational)..."
-snyk code test --severity-threshold=high "$@" 2>&1 || true
+snyk code test --severity-threshold=high "$@" 2>&1 |
+	perl -pe 's/\e\[[0-9;?]*[ -\/]*[@-~]//g' ||
+	true
 echo "Snyk Code: scan complete (informational — see CI for gate)"

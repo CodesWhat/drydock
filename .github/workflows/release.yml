@@ -20,7 +20,6 @@ jobs:
     uses: ./.github/workflows/ci.yml
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
 
   release:
     name: Docker Build & Push
@@ -134,9 +133,26 @@ jobs:
         run: |
           artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
           cosign sign-blob --yes \
+            --bundle "${artifact}.bundle" \
             --output-signature "${artifact}.sig" \
             --output-certificate "${artifact}.pem" \
             "${artifact}"
+
+      - name: Attest release artifact provenance
+        if: startsWith(github.ref, 'refs/tags/')
+        id: attest_release_artifact
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f  # v3.2.0
+        with:
+          subject-path: dist/drydock-${{ github.ref_name }}.tar.gz
+
+      - name: Export release provenance asset
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          BUNDLE_PATH: ${{ steps.attest_release_artifact.outputs.bundle-path }}
+        run: |
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          cp "${BUNDLE_PATH}" "${artifact}.intoto.jsonl"
 
       - name: Upload signed release assets
         if: startsWith(github.ref, 'refs/tags/')
@@ -148,7 +164,9 @@ jobs:
           gh release upload "${RELEASE_TAG}" \
             "dist/drydock-${RELEASE_TAG}.tar.gz" \
             "dist/drydock-${RELEASE_TAG}.tar.gz.sha256" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.bundle" \
             "dist/drydock-${RELEASE_TAG}.tar.gz.sig" \
+            "dist/drydock-${RELEASE_TAG}.tar.gz.intoto.jsonl" \
             "dist/drydock-${RELEASE_TAG}.tar.gz.pem" \
             --clobber
 

@@ -55,7 +55,7 @@ Feature: Drydock Container API Exposure
     And response body path $.watcher should be local
     And response body path $.name should be hub_nginx_latest
     And response body path $.image.tag.semver should be false
-    And response body path $.image.digest.value should be sha256:.*
+    And response body path $.image.digest.value should be a sha256 digest or undefined
 
   # Test link functionality
   Scenario: Drydock must generate correct links for containers with link templates

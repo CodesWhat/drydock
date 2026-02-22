@@ -19,12 +19,31 @@ fi
 export DD_PORT="$DD_E2E_PORT"
 
 # Persist port for GitHub Actions (each step runs in a new shell)
-if [ -n "$GITHUB_ENV" ]; then
+if [ -n "${GITHUB_ENV:-}" ]; then
 	echo "DD_PORT=$DD_E2E_PORT" >>"$GITHUB_ENV"
 fi
 
+build_drydock_image() {
+	local attempt max_attempts
+	max_attempts=2
+
+	for attempt in $(seq 1 "$max_attempts"); do
+		if docker build -t drydock --build-arg DD_VERSION=local "$SCRIPT_DIR/.."; then
+			return 0
+		fi
+
+		if [ "$attempt" -lt "$max_attempts" ]; then
+			echo "⚠️ Docker build failed, pruning builder cache and retrying once..."
+			docker builder prune -af >/dev/null 2>&1 || true
+			sleep 1
+		fi
+	done
+
+	return 1
+}
+
 # Build drydock docker image
-docker build -t drydock --build-arg DD_VERSION=local "$SCRIPT_DIR/.."
+build_drydock_image
 
 # Run drydock docker image
 docker run -d \
