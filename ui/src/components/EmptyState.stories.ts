@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3';
+import { expect, fn, userEvent, within } from 'storybook/test';
 import EmptyState from './EmptyState.vue';
 
 const meta = {
@@ -27,5 +28,11 @@ export const WithClearButton: Story = {
     icon: 'filter',
     message: 'No containers match the active filters',
     showClear: true,
+    onClear: fn(),
+  },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Clear all filters' }));
+    await expect((args as Record<string, any>).onClear).toHaveBeenCalled();
   },
 };

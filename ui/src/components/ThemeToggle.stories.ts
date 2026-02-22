@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import ThemeToggle from './ThemeToggle.vue';
+import { useTheme } from '../theme/useTheme';
 
 const meta = {
   component: ThemeToggle,
@@ -41,4 +43,24 @@ export const Light: Story = {
       template: '<div class="light"><story /></div>',
     }),
   ],
+};
+
+export const SwitchVariant: Story = {
+  args: { size: 'md' },
+  render: (args) => ({
+    components: { ThemeToggle },
+    setup() {
+      const { setThemeVariant } = useTheme();
+      setThemeVariant('dark');
+      return { args };
+    },
+    template: '<div style="padding: 2rem;"><ThemeToggle v-bind="args" /></div>',
+  }),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByTitle('Light'));
+    await waitFor(() => {
+      expect(document.documentElement.classList.contains('light')).toBe(true);
+    });
+  },
 };

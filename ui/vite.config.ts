@@ -17,6 +17,7 @@ export default defineConfig({
     }),
     Components({
       resolvers: [PrimeVueResolver()],
+      dts: process.env.COMPONENTS_DTS === 'false' ? false : 'components.d.ts',
     }),
     tailwindcss(),
   ],

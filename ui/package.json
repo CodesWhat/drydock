@@ -1,6 +1,6 @@
 {
   "name": "drydock-ui",
-  "version": "1.4.0",
+  "version": "1.3.7",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -14,8 +14,9 @@
     "lint": "biome lint .",
     "test:unit": "vitest run --coverage",
     "test:unit:watch": "vitest",
-    "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build",
+    "test:storybook": "COMPONENTS_DTS=false storybook build --test --quiet",
+    "storybook": "COMPONENTS_DTS=false storybook dev -p 6006",
+    "build-storybook": "COMPONENTS_DTS=false storybook build",
     "chromatic": "npx chromatic --project-token=chpt_fbb4947d8dfbaa8",
     "knip": "knip"
   },
