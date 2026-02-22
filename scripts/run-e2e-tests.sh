@@ -6,8 +6,8 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # Always clean up on exit (success or failure)
 cleanup() {
-  echo "🧹 Cleaning up e2e environment..."
-  "$SCRIPT_DIR/cleanup-test-containers.sh"
+	echo "🧹 Cleaning up e2e environment..."
+	"$SCRIPT_DIR/cleanup-test-containers.sh"
 }
 trap cleanup EXIT
 
