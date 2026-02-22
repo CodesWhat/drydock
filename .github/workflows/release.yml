@@ -110,11 +110,11 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          images=""
-          for tag in ${TAGS}; do
-            images+="${tag}@${DIGEST} "
-          done
-          cosign sign --yes ${images}
+          images=()
+          while IFS= read -r tag; do
+            [ -n "${tag}" ] && images+=("${tag}@${DIGEST}")
+          done <<< "${TAGS}"
+          cosign sign --yes "${images[@]}"
 
       - name: Build release artifact
         if: startsWith(github.ref, 'refs/tags/')
