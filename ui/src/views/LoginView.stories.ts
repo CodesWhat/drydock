@@ -28,10 +28,12 @@ function installLoginMock(options: LoginMockOptions) {
   rememberPayloads = [];
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const raw = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const raw =
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const url = raw.startsWith('http') ? new URL(raw) : new URL(raw, 'http://localhost');
     const path = url.pathname;
-    const method = init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET');
+    const method =
+      init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET');
 
     if (path === '/auth/strategies' && method === 'GET') {
       return new Response(JSON.stringify(options.strategies), {
@@ -64,9 +66,7 @@ function installLoginMock(options: LoginMockOptions) {
     }
 
     if (path === '/auth/remember' && method === 'POST') {
-      const payload = (init?.body
-        ? JSON.parse(String(init.body))
-        : {}) as {
+      const payload = (init?.body ? JSON.parse(String(init.body)) : {}) as {
         remember?: boolean;
       };
       rememberPayloads.push(payload);

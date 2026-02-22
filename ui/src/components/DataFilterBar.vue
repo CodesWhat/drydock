@@ -1,19 +1,19 @@
 <script setup lang="ts">
 defineProps<{
-  modelValue: string
-  filteredCount: number
-  totalCount: number
-  countLabel?: string
-  showFilters: boolean
-  activeFilterCount?: number
-  viewModes?: Array<{ id: string; icon: string }>
-  showColumnPicker?: boolean
-  hideFilter?: boolean
+  modelValue: string;
+  filteredCount: number;
+  totalCount: number;
+  countLabel?: string;
+  showFilters: boolean;
+  activeFilterCount?: number;
+  viewModes?: Array<{ id: string; icon: string }>;
+  showColumnPicker?: boolean;
+  hideFilter?: boolean;
 }>();
 
 defineEmits<{
-  'update:modelValue': [mode: string]
-  'update:showFilters': [val: boolean]
+  'update:modelValue': [mode: string];
+  'update:showFilters': [val: boolean];
 }>();
 
 const defaultViewModes = [

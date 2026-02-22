@@ -133,7 +133,9 @@ export const IntegratedWorkspace: Story = {
           (row) => row.name.toLowerCase().includes(q) || row.server.toLowerCase().includes(q),
         );
       });
-      const selected = computed(() => filteredRows.value.find((row) => row.id === selectedId.value) ?? null);
+      const selected = computed(
+        () => filteredRows.value.find((row) => row.id === selectedId.value) ?? null,
+      );
 
       const columns = [
         { key: 'name', label: 'Container', width: '45%' },

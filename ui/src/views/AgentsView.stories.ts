@@ -87,7 +87,8 @@ const logFixtureByAgent: Record<string, AgentLogEntry[]> = {
 
 function installAgentsMock(data: AgentApiItem[]) {
   globalThis.fetch = async (input: RequestInfo | URL) => {
-    const raw = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const raw =
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const url = raw.startsWith('http') ? new URL(raw) : new URL(raw, 'http://localhost');
     const path = url.pathname;
 
@@ -209,4 +210,3 @@ export const Empty: Story = {
     });
   },
 };
-

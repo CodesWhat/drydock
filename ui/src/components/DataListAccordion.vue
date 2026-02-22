@@ -2,14 +2,14 @@
 import { ref } from 'vue';
 
 defineProps<{
-  items: any[]
-  itemKey: string | ((item: any) => string)
-  selectedKey?: string | null
+  items: any[];
+  itemKey: string | ((item: any) => string);
+  selectedKey?: string | null;
 }>();
 
 defineEmits<{
-  'item-click': [item: any]
-  toggle: [key: string]
+  'item-click': [item: any];
+  toggle: [key: string];
 }>();
 
 const expandedItems = ref<Set<string>>(new Set());

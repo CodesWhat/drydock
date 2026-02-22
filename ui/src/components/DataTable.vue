@@ -1,36 +1,41 @@
 <script setup lang="ts">
 export interface DataTableColumn {
-  key: string
-  label: string
-  align?: string
-  sortable?: boolean
-  width?: string
+  key: string;
+  label: string;
+  align?: string;
+  sortable?: boolean;
+  width?: string;
   /** Narrow icon-only column — no header text, tight padding, vertically centered */
-  icon?: boolean
+  icon?: boolean;
 }
 
 defineProps<{
-  columns: DataTableColumn[]
-  rows: any[]
-  rowKey: string | ((row: any) => string)
-  sortKey?: string
-  sortAsc?: boolean
-  selectedKey?: string | null
-  showActions?: boolean
-  compact?: boolean
+  columns: DataTableColumn[];
+  rows: any[];
+  rowKey: string | ((row: any) => string);
+  sortKey?: string;
+  sortAsc?: boolean;
+  selectedKey?: string | null;
+  showActions?: boolean;
+  compact?: boolean;
 }>();
 
 defineEmits<{
-  'update:sortKey': [key: string]
-  'update:sortAsc': [asc: boolean]
-  'row-click': [row: any]
+  'update:sortKey': [key: string];
+  'update:sortAsc': [asc: boolean];
+  'row-click': [row: any];
 }>();
 
 function getRowKey(row: any, rowKeyProp: string | ((row: any) => string)): string {
   return typeof rowKeyProp === 'function' ? rowKeyProp(row) : row[rowKeyProp];
 }
 
-function toggleSort(key: string, currentSortKey: string | undefined, currentSortAsc: boolean | undefined, emit: any) {
+function toggleSort(
+  key: string,
+  currentSortKey: string | undefined,
+  currentSortAsc: boolean | undefined,
+  emit: any,
+) {
   if (currentSortKey === key) {
     emit('update:sortAsc', !currentSortAsc);
   } else {

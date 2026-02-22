@@ -39,5 +39,6 @@ npm run build-storybook
 ```
 
 Notes:
+
 - `test:storybook` is the fast CI-oriented check (`storybook build --test --quiet`).
 - PR visual diffs are handled in GitHub Actions via the Chromatic workflow.

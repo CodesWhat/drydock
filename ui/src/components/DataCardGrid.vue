@@ -1,13 +1,13 @@
 <script setup lang="ts">
 defineProps<{
-  items: any[]
-  itemKey: string | ((item: any) => string)
-  selectedKey?: string | null
-  minWidth?: string
+  items: any[];
+  itemKey: string | ((item: any) => string);
+  selectedKey?: string | null;
+  minWidth?: string;
 }>();
 
 defineEmits<{
-  'item-click': [item: any]
+  'item-click': [item: any];
 }>();
 
 function getKey(item: any, itemKeyProp: string | ((item: any) => string)): string {

@@ -32,7 +32,8 @@ const triggerFixtures: TriggerApiItem[] = [
 
 function installTriggersMock(data: TriggerApiItem[]) {
   globalThis.fetch = async (input: RequestInfo | URL) => {
-    const raw = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const raw =
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const path = raw.startsWith('http') ? new URL(raw).pathname : raw;
 
     if (path === '/api/triggers') {
@@ -115,4 +116,3 @@ export const Empty: Story = {
     });
   },
 };
-

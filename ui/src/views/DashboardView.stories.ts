@@ -102,7 +102,8 @@ const agentsFixture = [
 
 function installDashboardMock() {
   globalThis.fetch = async (input: RequestInfo | URL) => {
-    const raw = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const raw =
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const path = raw.startsWith('http') ? new URL(raw).pathname : raw;
 
     if (path === '/api/containers') {
@@ -187,4 +188,3 @@ export const NavigationActions: Story = {
     await expect(canvas.getByText('Pending Updates')).toBeInTheDocument();
   },
 };
-

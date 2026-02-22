@@ -31,7 +31,9 @@ async function testTrigger(trigger: any) {
     testResult.value = { id: trigger.id, success: false };
   } finally {
     testingTrigger.value = null;
-    setTimeout(() => { testResult.value = null; }, 3000);
+    setTimeout(() => {
+      testResult.value = null;
+    }, 3000);
   }
 }
 

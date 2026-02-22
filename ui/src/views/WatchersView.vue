@@ -35,10 +35,7 @@ const tableColumns = [
 
 onMounted(async () => {
   try {
-    const [watcherData, containerData] = await Promise.all([
-      getAllWatchers(),
-      getAllContainers(),
-    ]);
+    const [watcherData, containerData] = await Promise.all([getAllWatchers(), getAllContainers()]);
 
     const containerCounts: Record<string, number> = {};
     for (const c of containerData) {

@@ -12,8 +12,12 @@ function demoConfirmStop() {
     rejectLabel: 'Cancel',
     acceptLabel: 'Stop',
     severity: 'danger',
-    accept: () => { lastConfirmResult.value = 'Stopped nginx-proxy'; },
-    reject: () => { lastConfirmResult.value = 'Cancelled stop'; },
+    accept: () => {
+      lastConfirmResult.value = 'Stopped nginx-proxy';
+    },
+    reject: () => {
+      lastConfirmResult.value = 'Cancelled stop';
+    },
   });
 }
 
@@ -24,8 +28,12 @@ function demoConfirmRestart() {
     rejectLabel: 'Cancel',
     acceptLabel: 'Restart',
     severity: 'warn',
-    accept: () => { lastConfirmResult.value = 'Restarted postgres-db'; },
-    reject: () => { lastConfirmResult.value = 'Cancelled restart'; },
+    accept: () => {
+      lastConfirmResult.value = 'Restarted postgres-db';
+    },
+    reject: () => {
+      lastConfirmResult.value = 'Cancelled restart';
+    },
   });
 }
 
@@ -36,8 +44,12 @@ function demoConfirmIgnore() {
     rejectLabel: 'Cancel',
     acceptLabel: 'Ignore',
     severity: 'danger',
-    accept: () => { lastConfirmResult.value = 'Ignored redis-cache'; },
-    reject: () => { lastConfirmResult.value = 'Cancelled ignore'; },
+    accept: () => {
+      lastConfirmResult.value = 'Ignored redis-cache';
+    },
+    reject: () => {
+      lastConfirmResult.value = 'Cancelled ignore';
+    },
   });
 }
 
@@ -71,7 +83,11 @@ const radiusPresets = [
 ];
 
 function loadRadius() {
-  try { return localStorage.getItem('drydock-radius') || 'sm'; } catch { return 'sm'; }
+  try {
+    return localStorage.getItem('drydock-radius') || 'sm';
+  } catch {
+    return 'sm';
+  }
 }
 const activeRadius = ref(loadRadius());
 function setRadius(id: string) {
@@ -81,7 +97,11 @@ function setRadius(id: string) {
   el.style.setProperty('--dd-radius', `${p.md}px`);
   el.style.setProperty('--dd-radius-sm', `${p.sm}px`);
   el.style.setProperty('--dd-radius-lg', `${p.lg}px`);
-  try { localStorage.setItem('drydock-radius', id); } catch { /* ignored */ }
+  try {
+    localStorage.setItem('drydock-radius', id);
+  } catch {
+    /* ignored */
+  }
 }
 // Apply saved radius on load
 setRadius(activeRadius.value);
@@ -104,18 +124,86 @@ const playgroundLogs = [
 ];
 
 const playgroundContainers = [
-  { name: 'nginx-proxy', image: 'nginx', tag: '1.25.3', newTag: '1.25.4', status: 'running', registry: 'dockerhub' },
-  { name: 'postgres-db', image: 'postgres', tag: '16.1', newTag: '16.2', status: 'running', registry: 'dockerhub' },
-  { name: 'redis-cache', image: 'redis', tag: '7.2.3', newTag: null, status: 'running', registry: 'dockerhub' },
-  { name: 'drydock', image: 'ghcr.io/drydock/drydock', tag: 'v1.3.0', newTag: 'v1.4.0', status: 'stopped', registry: 'ghcr' },
+  {
+    name: 'nginx-proxy',
+    image: 'nginx',
+    tag: '1.25.3',
+    newTag: '1.25.4',
+    status: 'running',
+    registry: 'dockerhub',
+  },
+  {
+    name: 'postgres-db',
+    image: 'postgres',
+    tag: '16.1',
+    newTag: '16.2',
+    status: 'running',
+    registry: 'dockerhub',
+  },
+  {
+    name: 'redis-cache',
+    image: 'redis',
+    tag: '7.2.3',
+    newTag: null,
+    status: 'running',
+    registry: 'dockerhub',
+  },
+  {
+    name: 'drydock',
+    image: 'ghcr.io/drydock/drydock',
+    tag: 'v1.3.0',
+    newTag: 'v1.4.0',
+    status: 'stopped',
+    registry: 'ghcr',
+  },
 ];
 
 const playgroundTableRows = [
-  { name: 'traefik', image: 'traefik', oldVer: '2.10.7', newVer: '3.0.1', status: 'updated', time: '12m ago', running: true },
-  { name: 'postgres-db', image: 'postgres', oldVer: '15.4', newVer: '16.1', status: 'pending', time: '34m ago', running: true },
-  { name: 'redis-cache', image: 'redis', oldVer: '7.0.12', newVer: '7.2.4', status: 'updated', time: '1h ago', running: true },
-  { name: 'nginx-proxy', image: 'nginx', oldVer: '1.24.0', newVer: '1.25.3', status: 'failed', time: '2h ago', running: false },
-  { name: 'grafana', image: 'grafana/grafana', oldVer: '10.1.5', newVer: '10.2.3', status: 'updated', time: '3h ago', running: true },
+  {
+    name: 'traefik',
+    image: 'traefik',
+    oldVer: '2.10.7',
+    newVer: '3.0.1',
+    status: 'updated',
+    time: '12m ago',
+    running: true,
+  },
+  {
+    name: 'postgres-db',
+    image: 'postgres',
+    oldVer: '15.4',
+    newVer: '16.1',
+    status: 'pending',
+    time: '34m ago',
+    running: true,
+  },
+  {
+    name: 'redis-cache',
+    image: 'redis',
+    oldVer: '7.0.12',
+    newVer: '7.2.4',
+    status: 'updated',
+    time: '1h ago',
+    running: true,
+  },
+  {
+    name: 'nginx-proxy',
+    image: 'nginx',
+    oldVer: '1.24.0',
+    newVer: '1.25.3',
+    status: 'failed',
+    time: '2h ago',
+    running: false,
+  },
+  {
+    name: 'grafana',
+    image: 'grafana/grafana',
+    oldVer: '10.1.5',
+    newVer: '10.2.3',
+    status: 'updated',
+    time: '3h ago',
+    running: true,
+  },
 ];
 </script>
 

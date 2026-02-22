@@ -8,7 +8,6 @@ import { getUser, logout } from '@/services/auth';
 import { getAllContainers } from '@/services/container';
 import { useTheme } from '@/theme/useTheme';
 
-
 const router = useRouter();
 const route = useRoute();
 const { icon } = useIcons();
@@ -126,7 +125,11 @@ onMounted(() => document.addEventListener('pointerdown', handleUserMenuClickOuts
 onUnmounted(() => document.removeEventListener('pointerdown', handleUserMenuClickOutside));
 async function handleSignOut() {
   showUserMenu.value = false;
-  try { await logout(); } finally { router.push('/login'); }
+  try {
+    await logout();
+  } finally {
+    router.push('/login');
+  }
 }
 
 // Search modal

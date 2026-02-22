@@ -23,7 +23,11 @@ function triggerTypeBadge(type: string) {
   if (type === 'mqtt')
     return { bg: 'var(--dd-caution-muted)', text: 'var(--dd-caution)', label: 'MQTT' };
   if (type === 'docker' || type === 'dockercompose')
-    return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)', label: type === 'dockercompose' ? 'Compose' : 'Docker' };
+    return {
+      bg: 'var(--dd-info-muted)',
+      text: 'var(--dd-info)',
+      label: type === 'dockercompose' ? 'Compose' : 'Docker',
+    };
   return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: type };
 }
 
@@ -42,7 +46,9 @@ const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 const filteredTriggers = computed(() => {
   if (!searchQuery.value) return triggersData.value;
   const q = searchQuery.value.toLowerCase();
-  return triggersData.value.filter((item) => item.name.toLowerCase().includes(q) || item.type.toLowerCase().includes(q));
+  return triggersData.value.filter(
+    (item) => item.name.toLowerCase().includes(q) || item.type.toLowerCase().includes(q),
+  );
 });
 
 const tableColumns = [

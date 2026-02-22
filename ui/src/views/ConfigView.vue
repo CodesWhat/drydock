@@ -82,7 +82,6 @@ async function handleClearIconCache() {
     cacheClearing.value = false;
   }
 }
-
 </script>
 
 <template>

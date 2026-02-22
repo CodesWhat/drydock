@@ -1,15 +1,18 @@
 <script setup lang="ts">
-withDefaults(defineProps<{
-  icon?: string
-  message: string
-  showClear?: boolean
-}>(), {
-  icon: 'filter',
-  showClear: false,
-});
+withDefaults(
+  defineProps<{
+    icon?: string;
+    message: string;
+    showClear?: boolean;
+  }>(),
+  {
+    icon: 'filter',
+    showClear: false,
+  },
+);
 
 defineEmits<{
-  clear: []
+  clear: [];
 }>();
 </script>
 

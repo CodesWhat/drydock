@@ -12,7 +12,8 @@ interface UserApi {
 
 function installProfileMock(user: UserApi | undefined) {
   globalThis.fetch = async (input: RequestInfo | URL) => {
-    const raw = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const raw =
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const path = raw.startsWith('http') ? new URL(raw).pathname : raw;
 
     if (path === '/auth/user') {

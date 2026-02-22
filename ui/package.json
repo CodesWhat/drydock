@@ -9,9 +9,9 @@
     "preview": "vite preview",
     "icons": "node scripts/extract-icons.mjs",
     "fonts": "node scripts/extract-fonts.mjs",
-    "format": "biome format --write .",
-    "lint:fix": "biome lint --write .",
-    "lint": "biome lint .",
+    "format": "qlty fmt --filter biome --no-progress .",
+    "lint:fix": "qlty check --fix --filter biome --no-progress .",
+    "lint": "qlty check --filter biome --no-progress .",
     "test:unit": "vitest run --coverage",
     "test:unit:watch": "vitest",
     "test:storybook": "COMPONENTS_DTS=false storybook build --test --quiet",
@@ -28,7 +28,6 @@
     "vue-router": "^5.0.2"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.7",
     "@chromatic-com/storybook": "^5.0.1",
     "@fontsource/comic-mono": "^5.2.5",
     "@fontsource/commit-mono": "^5.2.5",

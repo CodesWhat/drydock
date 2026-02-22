@@ -14,10 +14,12 @@ function installConfigMock(options: ConfigMockOptions = {}) {
   const cacheCleared = options.iconCacheCleared ?? 7;
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const raw = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const raw =
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const url = raw.startsWith('http') ? new URL(raw) : new URL(raw, 'http://localhost');
     const path = url.pathname;
-    const method = init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET');
+    const method =
+      init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET');
 
     if (path === '/api/server' && method === 'GET') {
       return new Response(

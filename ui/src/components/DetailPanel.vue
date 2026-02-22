@@ -1,22 +1,25 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-const props = withDefaults(defineProps<{
-  open: boolean
-  isMobile: boolean
-  size?: 'sm' | 'md' | 'lg'
-  showSizeControls?: boolean
-  showFullPage?: boolean
-}>(), {
-  size: 'sm',
-  showSizeControls: true,
-  showFullPage: false,
-});
+const props = withDefaults(
+  defineProps<{
+    open: boolean;
+    isMobile: boolean;
+    size?: 'sm' | 'md' | 'lg';
+    showSizeControls?: boolean;
+    showFullPage?: boolean;
+  }>(),
+  {
+    size: 'sm',
+    showSizeControls: true,
+    showFullPage: false,
+  },
+);
 
 defineEmits<{
-  'update:open': [val: boolean]
-  'update:size': [size: 'sm' | 'md' | 'lg']
-  'full-page': []
+  'update:open': [val: boolean];
+  'update:size': [size: 'sm' | 'md' | 'lg'];
+  'full-page': [];
 }>();
 
 const panelFlex = computed(() =>

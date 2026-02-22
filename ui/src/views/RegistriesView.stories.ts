@@ -41,7 +41,8 @@ const registryFixture: RegistryApiItem[] = [
 
 function installRegistriesMock(data: RegistryApiItem[]) {
   globalThis.fetch = async (input: RequestInfo | URL) => {
-    const raw = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const raw =
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const path = raw.startsWith('http') ? new URL(raw).pathname : raw;
 
     if (path === '/api/registries') {

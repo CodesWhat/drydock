@@ -27,7 +27,9 @@ const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 const filteredServers = computed(() => {
   if (!searchQuery.value) return servers.value;
   const q = searchQuery.value.toLowerCase();
-  return servers.value.filter((s) => s.name.toLowerCase().includes(q) || s.host.toLowerCase().includes(q));
+  return servers.value.filter(
+    (s) => s.name.toLowerCase().includes(q) || s.host.toLowerCase().includes(q),
+  );
 });
 
 const { isMobile } = useBreakpoints();
@@ -132,7 +134,7 @@ async function fetchServers() {
         host: `${agent.host}${agent.port ? `:${agent.port}` : ''}`,
         status: agentConnected ? 'connected' : 'disconnected',
         containers: agentCounts,
-        images: (watcherName && imageCounts[watcherName]) ? imageCounts[watcherName] : 0,
+        images: watcherName && imageCounts[watcherName] ? imageCounts[watcherName] : 0,
         lastSeen: agentConnected ? 'Just now' : 'Never',
       });
     }

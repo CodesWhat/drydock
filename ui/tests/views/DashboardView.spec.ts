@@ -328,7 +328,9 @@ describe('DashboardView', () => {
     });
 
     it('routes stat cards to the expected pages', async () => {
-      const wrapper = await mountDashboard([makeContainer({ updateKind: 'major', newTag: '2.0.0' })]);
+      const wrapper = await mountDashboard([
+        makeContainer({ updateKind: 'major', newTag: '2.0.0' }),
+      ]);
       const statCards = wrapper.findAll('.stat-card');
 
       const containersCard = statCards.find((c) => c.text().includes('Containers'));
@@ -348,7 +350,9 @@ describe('DashboardView', () => {
     });
 
     it('routes update view-all buttons with has-update filter', async () => {
-      const wrapper = await mountDashboard([makeContainer({ updateKind: 'minor', newTag: '1.2.0' })]);
+      const wrapper = await mountDashboard([
+        makeContainer({ updateKind: 'minor', newTag: '1.2.0' }),
+      ]);
       const updateLinks = wrapper.findAll('button').filter((b) => b.text().includes('View all'));
 
       await updateLinks[0]?.trigger('click');

@@ -449,7 +449,9 @@ html.dd-transitioning::view-transition-new(root) {
 /* Dropdown menu transition */
 .menu-fade-enter-active,
 .menu-fade-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
 }
 .menu-fade-enter-from,
 .menu-fade-leave-to {

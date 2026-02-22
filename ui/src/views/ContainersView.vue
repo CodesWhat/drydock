@@ -184,9 +184,7 @@ const sortedContainers = computed(() => {
 // Apply skip-update masking and merge ghost containers
 const displayContainers = computed(() => {
   const live = sortedContainers.value.map((c) =>
-    skippedUpdates.value.has(c.name)
-      ? { ...c, newTag: undefined, updateKind: undefined }
-      : c,
+    skippedUpdates.value.has(c.name) ? { ...c, newTag: undefined, updateKind: undefined } : c,
   );
   // Merge pending (ghost) containers that disappeared during action
   const liveNames = new Set(live.map((c) => c.name));
@@ -379,7 +377,6 @@ function confirmForceUpdate(name: string) {
     accept: () => forceUpdate(name),
   });
 }
-
 </script>
 
 <template>

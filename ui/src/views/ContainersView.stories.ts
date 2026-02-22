@@ -101,15 +101,19 @@ const containersFixture: ContainerApiItem[] = [
 ];
 
 const logsByContainerId: Record<string, string> = {
-  'c-api': '2026-02-20T10:00:00.000Z [info] API boot complete\n2026-02-20T10:00:05.100Z [info] healthcheck ok',
-  'c-web': '2026-02-20T10:01:00.000Z [warn] stale cache detected\n2026-02-20T10:01:03.250Z [info] refresh complete',
-  'c-worker': '2026-02-20T10:02:00.000Z [error] worker crashed\n2026-02-20T10:02:02.000Z [info] restart scheduled',
+  'c-api':
+    '2026-02-20T10:00:00.000Z [info] API boot complete\n2026-02-20T10:00:05.100Z [info] healthcheck ok',
+  'c-web':
+    '2026-02-20T10:01:00.000Z [warn] stale cache detected\n2026-02-20T10:01:03.250Z [info] refresh complete',
+  'c-worker':
+    '2026-02-20T10:02:00.000Z [error] worker crashed\n2026-02-20T10:02:02.000Z [info] restart scheduled',
   'c-db': '2026-02-20T10:03:00.000Z [info] checkpoint completed',
 };
 
 function installContainersMock(data: ContainerApiItem[]) {
   globalThis.fetch = async (input: RequestInfo | URL) => {
-    const raw = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const raw =
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const url = raw.startsWith('http') ? new URL(raw) : new URL(raw, 'http://localhost');
     const path = url.pathname;
 
@@ -244,4 +248,3 @@ export const Empty: Story = {
     });
   },
 };
-
