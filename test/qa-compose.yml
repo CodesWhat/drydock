@@ -49,6 +49,46 @@ services:
       # Uncomment to test; adjust cron to match/not-match current time
       # - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=0 2-6 * * *
       # - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ=UTC
+      # --- Remote Docker watcher (DinD) ---
+      - DD_WATCHER_REMOTE_HOST=docker-remote
+      - DD_WATCHER_REMOTE_PORT=2375
+      - DD_WATCHER_REMOTE_WATCHBYDEFAULT=true
+      - DD_WATCHER_REMOTE_CRON=*/2 * * * *
+      - DD_WATCHER_REMOTE_WATCHEVENTS=true
+    depends_on:
+      docker-remote:
+        condition: service_healthy
+
+  # ── Remote Docker host (DinD) ────────────────────────
+  docker-remote:
+    image: docker:27-dind
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    expose:
+      - "2375"
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # Test containers running on the remote Docker host
+  remote-bootstrap:
+    image: docker:27
+    depends_on:
+      docker-remote:
+        condition: service_healthy
+    environment:
+      - DOCKER_HOST=tcp://docker-remote:2375
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        docker pull nginx:1.24.0
+        docker run -d --name remote-nginx --label dd.watch=true --label "dd.display.name=Remote Nginx" --label dd.group=remote nginx:1.24.0
+        docker pull redis:7.0.0
+        docker run -d --name remote-redis --label dd.watch=true --label "dd.display.name=Remote Redis" --label dd.group=remote redis:7.0.0
 
   # ── Containers with updates available ──────────────────
 
