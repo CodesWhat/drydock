@@ -19,7 +19,7 @@ fi
 export DD_PORT="$DD_E2E_PORT"
 
 # Persist port for GitHub Actions (each step runs in a new shell)
-if [ -n "$GITHUB_ENV" ]; then
+if [ -n "${GITHUB_ENV:-}" ]; then
 	echo "DD_PORT=$DD_E2E_PORT" >>"$GITHUB_ENV"
 fi
 

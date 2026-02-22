@@ -53,6 +53,7 @@ run_test_container ghcr_radarr --label "$LABEL_WATCH" --label 'dd.tag.include=^\
 run_test_container gitlab_test --label "$LABEL_WATCH" --label 'dd.tag.include=^v16\.[01]\.0$' registry.gitlab.com/gitlab-org/gitlab-runner:v16.0.0
 
 # HUB
+# shellcheck disable=SC2016 # drydock resolves ${major}/${minor}/${patch} placeholders at runtime.
 run_test_container hub_homeassistant_202161 --label "$LABEL_WATCH" --label 'dd.tag.include=^\d+\.\d+.\d+$' --label 'dd.link.template=https://github.com/home-assistant/core/releases/tag/${major}.${minor}.${patch}' homeassistant/home-assistant:2021.6.1
 run_test_container hub_homeassistant_latest --label "$LABEL_WATCH" --label 'dd.watch.digest=true' --label 'dd.tag.include=^latest$' homeassistant/home-assistant
 run_test_container hub_nginx_120 --label "$LABEL_WATCH" --label 'dd.tag.include=^\d+\.\d+-alpine$' nginx:1.20-alpine

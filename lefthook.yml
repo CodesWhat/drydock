@@ -6,7 +6,7 @@ pre-commit:
       run: qlty fmt --no-progress {staged_files} && git add {staged_files}
 
 pre-push:
-  piped: true
+  piped: false
   commands:
     zizmor:
       glob: '.github/workflows/*.yml'
@@ -14,7 +14,7 @@ pre-push:
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
     qlty:
-      run: qlty check --no-progress
+      run: CI=1 qlty check --no-progress --skip-source-fetch --no-upgrade-check --summary
     snyk-deps:
       root: app/
       run: snyk test --severity-threshold=high --org=codeswhat
