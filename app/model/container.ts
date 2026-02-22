@@ -376,9 +376,7 @@ function hasRawUpdate(container: Container): boolean {
     container.image.digest.value !== undefined &&
     container.result.digest !== undefined
   ) {
-    return (
-      container.image.digest.value !== container.result.digest || tagOrCreatedUpdateAvailable
-    );
+    return container.image.digest.value !== container.result.digest || tagOrCreatedUpdateAvailable;
   }
   return tagOrCreatedUpdateAvailable;
 }
