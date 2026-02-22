@@ -12,7 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AppIcon: typeof import('./src/components/AppIcon.vue')['default']
-    ConfirmDialog: typeof import('primevue/confirmdialog')['default']
+    ConfirmDialog: typeof import('./src/components/ConfirmDialog.vue')['default']
     ContainerIcon: typeof import('./src/components/ContainerIcon.vue')['default']
     DataCardGrid: typeof import('./src/components/DataCardGrid.vue')['default']
     DataFilterBar: typeof import('./src/components/DataFilterBar.vue')['default']

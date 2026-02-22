@@ -1,7 +1,5 @@
-import Aura from '@primeuix/themes/aura';
-import PrimeVue from 'primevue/config';
-import ConfirmationService from 'primevue/confirmationservice';
-import Tooltip from 'primevue/tooltip';
+import ConfirmDialog from './components/ConfirmDialog.vue';
+import { tooltip as Tooltip } from './directives/tooltip';
 import { createApp } from 'vue';
 import App from './App.vue';
 import { registerIcons } from './boot/icons';
@@ -33,10 +31,7 @@ app.component('DataCardGrid', DataCardGrid);
 app.component('DataListAccordion', DataListAccordion);
 app.component('DetailPanel', DetailPanel);
 app.component('EmptyState', EmptyState);
+app.component('ConfirmDialog', ConfirmDialog);
 app.directive('tooltip', Tooltip);
-app.use(PrimeVue, {
-  theme: { preset: Aura, options: { darkModeSelector: '.dark' } },
-});
-app.use(ConfirmationService);
 app.use(router);
 app.mount('#app');

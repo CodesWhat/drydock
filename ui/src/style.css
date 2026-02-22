@@ -5,8 +5,13 @@
 @import "@fontsource/ibm-plex-mono/500.css";
 @import "@fontsource/ibm-plex-mono/600.css";
 @import "@fontsource/ibm-plex-mono/700.css";
-@import "primeicons/primeicons.css";
-@import "@fortawesome/fontawesome-free/css/all.min.css";
+
+html,
+body {
+  overflow: hidden;
+  height: 100%;
+  margin: 0;
+}
 
 /* Drydock design tokens */
 :root {
@@ -180,6 +185,9 @@
 }
 
 /* Hover variants */
+.hover\:dd-bg-hover:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
 .hover\:dd-bg-elevated:hover {
   background-color: var(--dd-bg-elevated);
 }
@@ -285,6 +293,17 @@ body {
 /* Stat card left border */
 .stat-card {
   border-left: 4px solid transparent;
+}
+
+/* Spinner speeds */
+.dd-spin {
+  animation: spin 1.5s linear infinite;
+}
+.dd-spin-slow {
+  animation: spin 2.5s linear infinite;
+}
+.dd-spin-fast {
+  animation: spin 0.8s linear infinite;
 }
 
 /* Donut chart */
@@ -427,126 +446,13 @@ html.dd-transitioning::view-transition-new(root) {
   }
 }
 
-/* ── PrimeVue overrides — match Drydock design tokens ── */
-
-/* Overlay mask */
-.p-overlay-mask {
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(2px);
+/* Dropdown menu transition */
+.menu-fade-enter-active,
+.menu-fade-leave-active {
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
-
-/* Dialog chrome */
-.p-dialog {
-  font-family: var(--drydock-font, "IBM Plex Mono", monospace);
-  background: var(--dd-bg-card) !important;
-  border: 1px solid var(--dd-border-strong) !important;
-  border-radius: var(--dd-radius-lg) !important;
-  color: var(--dd-text);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3) !important;
-  max-width: 420px;
-  min-width: 340px;
-}
-
-/* Header */
-.p-dialog-header {
-  padding: 16px 20px 12px;
-  border-bottom: 1px solid var(--dd-border) !important;
-  background: transparent !important;
-}
-.p-dialog-title {
-  font-size: 13px;
-  font-weight: 600 !important;
-  color: var(--dd-text) !important;
-}
-
-/* Close button */
-.p-dialog-close-button {
-  color: var(--dd-text-muted);
-  background: transparent !important;
-  border: none !important;
-  width: 28px !important;
-  height: 28px;
-  border-radius: var(--dd-radius) !important;
-}
-.p-dialog-close-button:hover {
-  color: var(--dd-text);
-  background: var(--dd-bg-elevated) !important;
-}
-
-/* Content */
-.p-dialog-content {
-  padding: 18px 20px;
-  background: transparent !important;
-  color: var(--dd-text-secondary) !important;
-  font-size: 12px !important;
-  line-height: 1.6;
-}
-
-/* Hide broken confirm icon */
-.p-confirmdialog-icon {
-  display: none;
-}
-
-/* Footer */
-.p-dialog-footer {
-  padding: 12px 20px 18px;
-  background: transparent !important;
-  gap: 10px !important;
-}
-
-/* PrimeVue buttons inside dialogs */
-.p-dialog-footer .p-button {
-  font-family: var(--drydock-font, "IBM Plex Mono", monospace);
-  font-size: 11px !important;
-  font-weight: 600 !important;
-  padding: 7px 16px !important;
-  border-radius: var(--dd-radius);
-  transition: background-color 0.15s ease, color 0.15s ease !important;
-}
-
-/* Danger/accept button — matches Danger button style */
-.p-confirmdialog-accept-button.p-button-danger {
-  background: var(--dd-danger-muted);
-  border: 1px solid var(--dd-danger) !important;
-  color: var(--dd-danger) !important;
-}
-.p-confirmdialog-accept-button.p-button-danger:hover {
-  background: color-mix(in srgb, var(--dd-danger) 25%, transparent);
-}
-
-/* Warn/accept button — matches Warning button style */
-.p-confirmdialog-accept-button.p-button-warn {
-  background: var(--dd-warning-muted);
-  border: 1px solid var(--dd-warning) !important;
-  color: var(--dd-warning) !important;
-}
-.p-confirmdialog-accept-button.p-button-warn:hover {
-  background: color-mix(in srgb, var(--dd-warning) 25%, transparent);
-}
-
-/* Cancel/secondary button — matches Secondary button style */
-.p-confirmdialog-reject-button {
-  background: var(--dd-bg-inset);
-  border: 1px solid var(--dd-border-strong) !important;
-  color: var(--dd-text) !important;
-}
-.p-confirmdialog-reject-button:hover {
-  background: var(--dd-bg-elevated);
-}
-
-/* PrimeVue tooltip overrides */
-.p-tooltip {
-  font-family: var(--drydock-font, "IBM Plex Mono", monospace);
-}
-.p-tooltip-text {
-  font-size: 11px !important;
-  padding: 4px 8px;
-  background: var(--dd-bg-card) !important;
-  color: var(--dd-text) !important;
-  border: 1px solid var(--dd-border-strong) !important;
-  border-radius: var(--dd-radius-sm);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
-}
-.p-tooltip-arrow {
-  display: none;
+.menu-fade-enter-from,
+.menu-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
