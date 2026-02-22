@@ -375,10 +375,14 @@ class Dockercompose extends Docker {
     let lastError;
     for (const composeCommand of commandsToTry) {
       try {
-        const { stdout, stderr } = await this.executeCommand(composeCommand.command, composeCommand.args, {
-          cwd: composeWorkingDirectory,
-          env: process.env,
-        });
+        const { stdout, stderr } = await this.executeCommand(
+          composeCommand.command,
+          composeCommand.args,
+          {
+            cwd: composeWorkingDirectory,
+            env: process.env,
+          },
+        );
         if (stdout.trim()) {
           logContainer.debug(
             `${composeCommand.label} ${composeArgs.join(' ')} stdout:\n${stdout.trim()}`,
@@ -398,7 +402,10 @@ class Dockercompose extends Docker {
           /docker: ['"]?compose['"]? is not a docker command/i.test(stderr);
         const executableMissing = e?.code === 'ENOENT';
 
-        if (composeCommand.command === 'docker' && (dockerComposePluginMissing || executableMissing)) {
+        if (
+          composeCommand.command === 'docker' &&
+          (dockerComposePluginMissing || executableMissing)
+        ) {
           logContainer.warn(
             `Cannot use docker compose for ${composeFilePath} (${e.message}); trying docker-compose`,
           );

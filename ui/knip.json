@@ -10,8 +10,5 @@
   "vite": {
     "config": "vite.config.ts"
   },
-  "ignoreDependencies": [
-    "@iconify-json/*",
-    "@fontsource/*"
-  ]
+  "ignoreDependencies": ["@iconify-json/*", "@fontsource/*"]
 }
