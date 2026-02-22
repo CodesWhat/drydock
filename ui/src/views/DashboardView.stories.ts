@@ -179,12 +179,12 @@ export const NavigationActions: Story = {
     const canvas = within(canvasElement);
 
     await waitFor(() => {
-      expect(canvas.getByText('Container Log')).toBeInTheDocument();
+      expect(canvas.getByText('Pending Updates')).toBeInTheDocument();
     });
 
     const viewAllButtons = canvas.getAllByRole('button', { name: /View all/i });
     await userEvent.click(viewAllButtons[0]);
-    await expect(canvas.getByText('Container Log')).toBeInTheDocument();
+    await expect(canvas.getByText('Pending Updates')).toBeInTheDocument();
   },
 };
 

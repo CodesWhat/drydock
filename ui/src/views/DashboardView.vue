@@ -47,8 +47,7 @@ const stats = computed(() => {
   const securityIssues = containers.value.filter(
     (c) => c.bouncer === 'blocked' || c.bouncer === 'unsafe',
   ).length;
-  const running = containers.value.filter((c) => c.status === 'running').length;
-  const uptime = total > 0 ? (running / total * 100).toFixed(1) : '100';
+  const images = new Set(containers.value.map((c) => c.image)).size;
   return [
     {
       label: 'Containers',
@@ -72,9 +71,9 @@ const stats = computed(() => {
       colorMuted: 'var(--dd-danger-muted)',
     },
     {
-      label: 'Uptime',
-      value: `${uptime}%`,
-      icon: 'uptime',
+      label: 'Images',
+      value: String(images),
+      icon: 'images',
       color: 'var(--dd-success)',
       colorMuted: 'var(--dd-success-muted)',
     },
@@ -154,6 +153,9 @@ const securityIssueCount = computed(() => {
 });
 const securityTotalCount = computed(() => containers.value.length);
 const DONUT_CIRCUMFERENCE = 301.6;
+
+// Total containers with any update for breakdown bar scaling
+const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind).length);
 </script>
 
 <template>
@@ -209,7 +211,7 @@ const DONUT_CIRCUMFERENCE = 301.6;
             <div class="flex items-center gap-2">
               <AppIcon name="recent-updates" :size="14" class="text-drydock-secondary" />
               <h2 class="text-sm font-semibold dd-text">
-                Container Log
+                Pending Updates
               </h2>
             </div>
             <button class="text-[11px] font-medium text-drydock-secondary hover:underline"
@@ -418,23 +420,23 @@ const DONUT_CIRCUMFERENCE = 301.6;
           <div class="p-5">
             <div class="grid grid-cols-4 gap-4">
               <div v-for="kind in [
-                { label: 'Major', count: containers.filter(c => c.updateKind === 'major').length, color: 'var(--dd-danger)', colorMuted: 'var(--dd-danger-muted)', icon: 'fa-solid fa-angles-up' },
-                { label: 'Minor', count: containers.filter(c => c.updateKind === 'minor').length, color: 'var(--dd-warning)', colorMuted: 'var(--dd-warning-muted)', icon: 'fa-solid fa-angle-up' },
-                { label: 'Patch', count: containers.filter(c => c.updateKind === 'patch').length, color: 'var(--dd-primary)', colorMuted: 'var(--dd-primary-muted)', icon: 'fa-solid fa-hashtag' },
-                { label: 'Digest', count: containers.filter(c => c.updateKind === 'digest').length, color: 'var(--dd-neutral)', colorMuted: 'var(--dd-neutral-muted)', icon: 'fa-solid fa-fingerprint' },
+                { label: 'Major', count: containers.filter(c => c.updateKind === 'major').length, color: 'var(--dd-danger)', colorMuted: 'var(--dd-danger-muted)', icon: 'chevrons-up' },
+                { label: 'Minor', count: containers.filter(c => c.updateKind === 'minor').length, color: 'var(--dd-warning)', colorMuted: 'var(--dd-warning-muted)', icon: 'chevron-up' },
+                { label: 'Patch', count: containers.filter(c => c.updateKind === 'patch').length, color: 'var(--dd-primary)', colorMuted: 'var(--dd-primary-muted)', icon: 'hashtag' },
+                { label: 'Digest', count: containers.filter(c => c.updateKind === 'digest').length, color: 'var(--dd-neutral)', colorMuted: 'var(--dd-neutral-muted)', icon: 'fingerprint' },
               ]" :key="kind.label"
                    class="text-center p-3 dd-rounded"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <div class="w-8 h-8 mx-auto dd-rounded flex items-center justify-center mb-2"
                      :style="{ backgroundColor: kind.colorMuted, color: kind.color }">
-                  <i :class="kind.icon" class="text-[12px]" />
+                  <AppIcon :name="kind.icon" :size="12" />
                 </div>
                 <div class="text-xl font-bold dd-text">{{ kind.count }}</div>
                 <div class="text-[10px] font-medium uppercase tracking-wider mt-0.5 dd-text-muted">{{ kind.label }}</div>
                 <!-- Mini bar -->
                 <div class="mt-2 h-1.5 dd-rounded-sm overflow-hidden" style="background: var(--dd-bg-elevated);">
                   <div class="h-full dd-rounded-sm transition-all"
-                       :style="{ width: Math.max(kind.count / 16 * 100, 4) + '%', backgroundColor: kind.color }" />
+                       :style="{ width: Math.max(kind.count / Math.max(totalUpdates, 1) * 100, 4) + '%', backgroundColor: kind.color }" />
                 </div>
               </div>
             </div>

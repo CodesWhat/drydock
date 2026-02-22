@@ -450,6 +450,42 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     heroicons: 'heroicons:chevron-down',
     iconoir: 'iconoir:nav-arrow-down',
   },
+  images: {
+    'fa6-solid': 'fa6-solid:images',
+    ph: 'ph:images',
+    'ph-duotone': 'ph:images-duotone',
+    lucide: 'lucide:images',
+    tabler: 'tabler:photo',
+    heroicons: 'heroicons:photo',
+    iconoir: 'iconoir:media-image-list',
+  },
+  'chevrons-up': {
+    'fa6-solid': 'fa6-solid:angles-up',
+    ph: 'ph:caret-double-up',
+    'ph-duotone': 'ph:caret-double-up-duotone',
+    lucide: 'lucide:chevrons-up',
+    tabler: 'tabler:chevrons-up',
+    heroicons: 'heroicons:chevron-double-up',
+    iconoir: 'iconoir:nav-arrow-up',
+  },
+  hashtag: {
+    'fa6-solid': 'fa6-solid:hashtag',
+    ph: 'ph:hash',
+    'ph-duotone': 'ph:hash-duotone',
+    lucide: 'lucide:hash',
+    tabler: 'tabler:hash',
+    heroicons: 'heroicons:hashtag',
+    iconoir: 'iconoir:hashtag',
+  },
+  fingerprint: {
+    'fa6-solid': 'fa6-solid:fingerprint',
+    ph: 'ph:fingerprint',
+    'ph-duotone': 'ph:fingerprint-duotone',
+    lucide: 'lucide:fingerprint-pattern',
+    tabler: 'tabler:fingerprint',
+    heroicons: 'heroicons:finger-print',
+    iconoir: 'iconoir:fingerprint',
+  },
 };
 
 /** All semantic icon names */

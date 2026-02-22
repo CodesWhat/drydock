@@ -127,21 +127,24 @@ describe('DashboardView', () => {
       expect(securityCard?.text()).toContain('2');
     });
 
-    it('computes uptime percentage from running containers', async () => {
+    it('computes unique images count', async () => {
       const containers = [
-        makeContainer({ status: 'running' }),
-        makeContainer({ id: 'c2', name: 'redis', status: 'running' }),
-        makeContainer({ id: 'c3', name: 'postgres', status: 'stopped' }),
-        makeContainer({ id: 'c4', name: 'mysql', status: 'stopped' }),
+        makeContainer({ image: 'nginx' }),
+        makeContainer({ id: 'c2', name: 'redis', image: 'redis' }),
+        makeContainer({ id: 'c3', name: 'nginx-2', image: 'nginx' }),
       ];
       const wrapper = await mountDashboard(containers);
-      // 2/4 = 50.0%
-      expect(wrapper.text()).toContain('50.0%');
+      const statCards = wrapper.findAll('.stat-card');
+      const imagesCard = statCards.find((c) => c.text().includes('Images'));
+      // 2 unique images: nginx, redis
+      expect(imagesCard?.text()).toContain('2');
     });
 
-    it('shows 100% uptime when no containers exist', async () => {
+    it('shows 0 images when no containers exist', async () => {
       const wrapper = await mountDashboard([]);
-      expect(wrapper.text()).toContain('100%');
+      const statCards = wrapper.findAll('.stat-card');
+      const imagesCard = statCards.find((c) => c.text().includes('Images'));
+      expect(imagesCard?.text()).toContain('0');
     });
   });
 
