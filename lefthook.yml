@@ -8,7 +8,7 @@ pre-push:
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
     qlty:
-      run: qlty check --no-progress
+      run: qlty check --no-progress --fix
     snyk-deps:
       root: app/
       run: snyk test --severity-threshold=high --org=codeswhat
