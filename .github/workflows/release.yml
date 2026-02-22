@@ -62,6 +62,8 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Log in to Quay.io
+        id: login_quay
+        continue-on-error: true
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3.7.0
         with:
           registry: quay.io
@@ -75,7 +77,6 @@ jobs:
           images: |
             ghcr.io/${{ github.repository }}
             docker.io/codeswhat/drydock
-            quay.io/codeswhat/drydock
           tags: |
             # branch name (main)
             type=ref,event=branch
@@ -115,6 +116,37 @@ jobs:
             images+="${tag}@${DIGEST} "
           done
           cosign sign --yes ${images}
+
+      - name: Mirror images to Quay.io (best effort)
+        if: steps.build.outcome == 'success' && steps.login_quay.outcome == 'success'
+        continue-on-error: true
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          for source_tag in ${TAGS}; do
+            case "${source_tag}" in
+              ghcr.io/*:*)
+                tag="${source_tag##*:}"
+                target_tag="quay.io/codeswhat/drydock:${tag}"
+                echo "Mirroring ${source_tag}@${DIGEST} -> ${target_tag}"
+                for attempt in 1 2 3; do
+                  if docker buildx imagetools create --tag "${target_tag}" "${source_tag}@${DIGEST}"; then
+                    break
+                  fi
+                  if [ "${attempt}" -eq 3 ]; then
+                    echo "::warning::Unable to mirror ${target_tag} to Quay.io after 3 attempts"
+                    break
+                  fi
+                  sleep $((attempt * 10))
+                done
+                ;;
+            esac
+          done
+
+      - name: Warn when Quay sync is skipped
+        if: steps.login_quay.outcome != 'success'
+        run: echo "::warning::Quay login failed; continuing release without Quay image publish."
 
       - name: Build release artifact
         if: startsWith(github.ref, 'refs/tags/')
