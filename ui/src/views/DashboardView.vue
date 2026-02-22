@@ -61,24 +61,36 @@ const stats = computed(() => {
       label: 'Updates Available',
       value: String(updatesAvailable),
       icon: 'updates',
-      color: 'var(--dd-warning)',
-      colorMuted: 'var(--dd-warning-muted)',
+      color: (() => {
+        if (updatesAvailable === 0) return 'var(--dd-success)';
+        const ratio = total > 0 ? updatesAvailable / total : 0;
+        if (ratio >= 0.75) return 'var(--dd-danger)';
+        if (ratio >= 0.5) return 'var(--dd-warning)';
+        return 'var(--dd-caution)';
+      })(),
+      colorMuted: (() => {
+        if (updatesAvailable === 0) return 'var(--dd-success-muted)';
+        const ratio = total > 0 ? updatesAvailable / total : 0;
+        if (ratio >= 0.75) return 'var(--dd-danger-muted)';
+        if (ratio >= 0.5) return 'var(--dd-warning-muted)';
+        return 'var(--dd-caution-muted)';
+      })(),
       route: { path: '/containers', query: { filterKind: 'any' } },
     },
     {
       label: 'Security Issues',
       value: String(securityIssues),
       icon: 'security',
-      color: 'var(--dd-danger)',
-      colorMuted: 'var(--dd-danger-muted)',
+      color: securityIssues > 0 ? 'var(--dd-danger)' : 'var(--dd-success)',
+      colorMuted: securityIssues > 0 ? 'var(--dd-danger-muted)' : 'var(--dd-success-muted)',
       route: '/security',
     },
     {
       label: 'Images',
       value: String(images),
       icon: 'images',
-      color: 'var(--dd-success)',
-      colorMuted: 'var(--dd-success-muted)',
+      color: 'var(--dd-primary)',
+      colorMuted: 'var(--dd-primary-muted)',
     },
   ];
 });
@@ -162,7 +174,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
+  <div class="flex-1 min-h-0 overflow-y-auto">
       <!-- LOADING STATE -->
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="text-sm dd-text-muted">Loading dashboard...</div>
@@ -228,7 +240,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                     @click="navigateTo({ path: '/containers', query: { filterKind: 'any' } })">View all &rarr;</button>
           </div>
 
-          <div class="overflow-x-auto">
+          <div>
             <table class="w-full text-xs">
               <thead>
                 <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
@@ -238,6 +250,9 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                   <th class="text-center px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Status</th>
                 </tr>
               </thead>
+            </table>
+            <div class="overflow-y-auto" style="max-height: 340px;">
+            <table class="w-full text-xs">
               <tbody>
                 <tr v-for="(row, i) in recentUpdates" :key="i"
                     class="transition-colors hover:dd-bg-elevated"
@@ -283,6 +298,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
         </div>
 
