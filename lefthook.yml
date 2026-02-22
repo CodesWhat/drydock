@@ -1,4 +1,10 @@
 ---
+pre-commit:
+  commands:
+    format:
+      glob: '*.{ts,js,json,vue,css}'
+      run: qlty fmt --no-progress {staged_files} && git add {staged_files}
+
 pre-push:
   piped: true
   commands:
@@ -8,7 +14,7 @@ pre-push:
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
     qlty:
-      run: qlty check --no-progress --fix
+      run: qlty check --no-progress
     snyk-deps:
       root: app/
       run: snyk test --severity-threshold=high --org=codeswhat
