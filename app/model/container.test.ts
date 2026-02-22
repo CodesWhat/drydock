@@ -842,6 +842,80 @@ test('model should not flag updateAvailable when digest watch is true but values
   expect(containerValidated.updateAvailable).toBeFalsy();
 });
 
+test('model should prefer tag update kind when both tag and digest changed with digest watch enabled', async () => {
+  const containerValidated = container.validate({
+    id: 'container-123456789',
+    name: 'test',
+    watcher: 'test',
+    image: {
+      id: 'image-123456789',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: true,
+        value: 'sha256:olddigest',
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+    result: {
+      tag: '1.1.0',
+      digest: 'sha256:newdigest',
+    },
+  });
+  expect(containerValidated.updateAvailable).toBeTruthy();
+  expect(containerValidated.updateKind).toEqual({
+    kind: 'tag',
+    localValue: '1.0.0',
+    remoteValue: '1.1.0',
+    semverDiff: 'minor',
+  });
+});
+
+test('model should flag updateAvailable when digest watch is true and tag changed even if digest matches', async () => {
+  const containerValidated = container.validate({
+    id: 'container-123456789',
+    name: 'test',
+    watcher: 'test',
+    image: {
+      id: 'image-123456789',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: true,
+        value: 'sha256:samedigest',
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+    result: {
+      tag: '1.1.0',
+      digest: 'sha256:samedigest',
+    },
+  });
+  expect(containerValidated.updateAvailable).toBeTruthy();
+  expect(containerValidated.updateKind).toEqual({
+    kind: 'tag',
+    localValue: '1.0.0',
+    remoteValue: '1.1.0',
+    semverDiff: 'minor',
+  });
+});
+
 test('resultChanged should return true when other container is undefined', async () => {
   const containerValidated = container.validate({
     id: 'container-123456789',

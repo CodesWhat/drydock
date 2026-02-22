@@ -333,15 +333,25 @@ function getRawUpdateKind(container: Container): ContainerUpdateKind {
     return unknownUpdateKind;
   }
 
-  // Digest watch mode takes precedence over tag-based updates.
+  // Prefer explicit tag updates when both tag and digest changes are present.
+  // Digest updates still apply when there is no tag update.
+  const tagUpdate = getRawTagUpdate(container);
+  if (tagUpdate.kind === 'tag') {
+    return tagUpdate;
+  }
+
   if (
     container.image.digest?.watch &&
     container.image.digest.value !== undefined &&
     container.result.digest !== undefined
   ) {
-    return getRawDigestUpdate(container);
+    const digestUpdate = getRawDigestUpdate(container);
+    if (digestUpdate.kind === 'digest') {
+      return digestUpdate;
+    }
   }
-  return getRawTagUpdate(container);
+
+  return tagUpdate;
 }
 
 function hasRawUpdate(container: Container): boolean {
@@ -349,26 +359,26 @@ function hasRawUpdate(container: Container): boolean {
     return false;
   }
 
-  if (
-    container.image.digest?.watch &&
-    container.image.digest.value !== undefined &&
-    container.result.digest !== undefined
-  ) {
-    return container.image.digest.value !== container.result.digest;
-  }
-
   const localTag = transformTag(container.transformTags, container.image.tag.value);
   const remoteTag = transformTag(container.transformTags, container.result.tag);
-  let updateAvailable = localTag !== remoteTag;
+  let tagOrCreatedUpdateAvailable = localTag !== remoteTag;
 
   // Fallback to image created date (especially for legacy v1 manifests)
   if (container.image.created !== undefined && container.result.created !== undefined) {
     const createdDate = new Date(container.image.created).getTime();
     const createdDateResult = new Date(container.result.created).getTime();
 
-    updateAvailable = updateAvailable || createdDate !== createdDateResult;
+    tagOrCreatedUpdateAvailable = tagOrCreatedUpdateAvailable || createdDate !== createdDateResult;
   }
-  return updateAvailable;
+
+  if (
+    container.image.digest?.watch &&
+    container.image.digest.value !== undefined &&
+    container.result.digest !== undefined
+  ) {
+    return container.image.digest.value !== container.result.digest || tagOrCreatedUpdateAvailable;
+  }
+  return tagOrCreatedUpdateAvailable;
 }
 
 function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKind): boolean {

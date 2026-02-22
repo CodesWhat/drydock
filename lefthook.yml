@@ -1,7 +1,18 @@
 ---
+pre-commit:
+  commands:
+    format:
+      glob: '*.{ts,js,json,vue,css}'
+      run: qlty fmt --no-progress {staged_files} && git add {staged_files}
+
 pre-push:
   piped: true
   commands:
+    zizmor:
+      glob: '.github/workflows/*.yml'
+      run: zizmor .github/workflows/
+      skip:
+        - run: '! command -v zizmor >/dev/null 2>&1'
     qlty:
       run: qlty check --no-progress
     snyk-deps:
