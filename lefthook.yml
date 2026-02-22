@@ -4,10 +4,16 @@
 # Each step matches a CI job exactly — if lefthook passes, CI passes.
 
 pre-commit:
+  piped: true
   commands:
-    format:
-      glob: '*.{ts,js,json,vue,css}'
-      run: qlty fmt --no-progress {staged_files} && git add {staged_files}
+    lint-fix:
+      glob: '*.{ts,js,json,vue,css,yml,yaml,sh,Dockerfile}'
+      run: qlty check --fix --no-progress {staged_files} && git add {staged_files}
+      priority: 1
+    lint-verify:
+      glob: '*.{ts,js,json,vue,css,yml,yaml,sh,Dockerfile}'
+      run: CI=1 qlty check --no-progress {staged_files}
+      priority: 2
 
 pre-push:
   piped: true
