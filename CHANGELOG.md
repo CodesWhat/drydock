@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.9] — 2026-02-22
+
+### Fixed
+
+- **Release signing broken by cosign v3 API change** — `cosign sign-blob` v3 silently ignores `--output-signature` and `--output-certificate` in keyless OIDC mode, producing an empty `.sig` file that fails upload. Release workflow now extracts signature and certificate from the cosign `.bundle` JSON as a fallback, handling both old (`base64Signature`/`cert`) and new (`messageSignature.signature`/`verificationMaterial.certificate.rawBytes`) bundle formats.
+- **Shellcheck SC2086 in release signing step** — Unquoted `${TAGS}` expansion in container image signing replaced with `read`-loop into array to eliminate word-splitting/globbing risk.
+
+### Changed
+
+- **CI and lefthook now run identical lint checks** — CI lint job previously ran `qlty check --filter biome` (1 plugin) while lefthook ran `qlty check` (17 plugins). Both now run `qlty check --all` from the repo root, ensuring local pre-push catches exactly what CI catches.
+- **Pre-commit hook auto-fixes lint issues** — `qlty check --fix` runs on staged files at commit time, followed by a verify step. Lint drift no longer accumulates until push time.
+- **Lefthook pre-push is sequential fail-fast** — Switched from `piped: false` (parallel) to `piped: true` with priority ordering so failures surface immediately with clear output.
+
 ## [1.3.8] — 2026-02-22
 
 ### Fixed

@@ -215,7 +215,7 @@ Then(/^response body should be valid json$/, function () {
 Then(
   /^response body path (.+) should be (?!of type )(?!a sha256 digest or undefined$)(.+)$/,
   function (path, expected) {
-  assertResponsePathValue(this, path, expected);
+    assertResponsePathValue(this, path, expected);
   },
 );
 
@@ -254,7 +254,9 @@ Then(
 
     throw (
       lastError ||
-      new Error(`Timed out after ${seconds}s waiting for response body path ${path} to match ${expected}`)
+      new Error(
+        `Timed out after ${seconds}s waiting for response body path ${path} to match ${expected}`,
+      )
     );
   },
 );

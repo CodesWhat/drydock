@@ -110,11 +110,11 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          images=""
-          for tag in ${TAGS}; do
-            images+="${tag}@${DIGEST} "
-          done
-          cosign sign --yes ${images}
+          images=()
+          while IFS= read -r tag; do
+            [ -n "${tag}" ] && images+=("${tag}@${DIGEST}")
+          done <<< "${TAGS}"
+          cosign sign --yes "${images[@]}"
 
       - name: Build release artifact
         if: startsWith(github.ref, 'refs/tags/')
@@ -138,6 +138,34 @@ jobs:
             --output-signature "${artifact}.sig" \
             --output-certificate "${artifact}.pem" \
             "${artifact}"
+
+          # Cosign v3 may only emit bundle output in some keyless flows.
+          # Materialize legacy signature/cert files from the bundle when needed.
+          if [ ! -s "${artifact}.sig" ]; then
+            sig_b64="$(jq -r '.base64Signature // .messageSignature.signature // empty' "${artifact}.bundle")"
+            if [ -n "${sig_b64}" ]; then
+              printf '%s' "${sig_b64}" | base64 --decode > "${artifact}.sig"
+            fi
+          fi
+
+          if [ ! -s "${artifact}.pem" ]; then
+            cert_pem="$(jq -r '.cert // empty' "${artifact}.bundle")"
+            if [ -n "${cert_pem}" ]; then
+              printf '%s\n' "${cert_pem}" > "${artifact}.pem"
+            else
+              cert_der_b64="$(jq -r '.verificationMaterial.certificate.rawBytes // empty' "${artifact}.bundle")"
+              if [ -n "${cert_der_b64}" ]; then
+                printf '%s' "${cert_der_b64}" | base64 --decode | openssl x509 -inform DER -out "${artifact}.pem"
+              fi
+            fi
+          fi
+
+          if [ ! -s "${artifact}.sig" ] || [ ! -s "${artifact}.pem" ]; then
+            echo "::error::Expected signature outputs were not generated"
+            ls -la dist
+            jq 'keys' "${artifact}.bundle" || true
+            exit 1
+          fi
 
       - name: Attest release artifact provenance
         if: startsWith(github.ref, 'refs/tags/')
