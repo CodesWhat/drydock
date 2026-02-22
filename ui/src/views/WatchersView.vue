@@ -2,8 +2,17 @@
 import { computed, onMounted, ref } from 'vue';
 import { getAllContainers } from '../services/container';
 import { getAllWatchers } from '../services/watcher';
+import { useBreakpoints } from '../composables/useBreakpoints';
 
+const { isMobile } = useBreakpoints();
 const watchersViewMode = ref<'table' | 'cards' | 'list'>('table');
+const selectedWatcher = ref<any | null>(null);
+const detailOpen = ref(false);
+
+function openDetail(w: any) {
+  selectedWatcher.value = w;
+  detailOpen.value = true;
+}
 
 const watchersData = ref<any[]>([]);
 const loading = ref(true);
@@ -90,6 +99,8 @@ onMounted(async () => {
       :columns="tableColumns"
       :rows="filteredWatchers"
       row-key="id"
+      :active-row="selectedWatcher?.id"
+      @row-click="openDetail($event)"
     >
       <template #cell-name="{ row }">
         <div class="flex items-center gap-2">
@@ -99,7 +110,9 @@ onMounted(async () => {
         </div>
       </template>
       <template #cell-status="{ row }">
-        <span class="badge text-[9px] font-bold"
+        <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
+              :style="{ backgroundColor: watcherStatusColor(row.status) }" />
+        <span class="badge text-[9px] font-bold hidden md:inline-flex"
               :style="{
                 backgroundColor: row.status === 'watching' ? 'var(--dd-success-muted)' : 'var(--dd-warning-muted)',
                 color: row.status === 'watching' ? 'var(--dd-success)' : 'var(--dd-warning)',
@@ -123,6 +136,8 @@ onMounted(async () => {
       v-if="watchersViewMode === 'cards'"
       :items="filteredWatchers"
       item-key="id"
+      :selected-key="selectedWatcher?.id"
+      @item-click="openDetail($event)"
     >
       <template #card="{ item: watcher }">
         <div class="px-4 pt-4 pb-2 flex items-start justify-between">
@@ -134,7 +149,9 @@ onMounted(async () => {
               <div class="text-[11px] truncate mt-0.5 dd-text-muted font-mono">{{ watcher.cron }}</div>
             </div>
           </div>
-          <span class="badge text-[9px] uppercase font-bold shrink-0 ml-2"
+          <span class="w-2 h-2 rounded-full shrink-0 ml-2 md:hidden"
+                :style="{ backgroundColor: watcherStatusColor(watcher.status) }" />
+          <span class="badge text-[9px] uppercase font-bold shrink-0 ml-2 hidden md:inline-flex"
                 :style="{
                   backgroundColor: watcher.status === 'watching' ? 'var(--dd-success-muted)' : 'var(--dd-warning-muted)',
                   color: watcher.status === 'watching' ? 'var(--dd-success)' : 'var(--dd-warning)',
@@ -166,13 +183,17 @@ onMounted(async () => {
       v-if="watchersViewMode === 'list'"
       :items="filteredWatchers"
       item-key="id"
+      :selected-key="selectedWatcher?.id"
+      @item-click="openDetail($event)"
     >
       <template #header="{ item: watcher }">
         <div class="w-2.5 h-2.5 rounded-full shrink-0"
              :style="{ backgroundColor: watcherStatusColor(watcher.status) }" />
         <AppIcon name="watchers" :size="14" class="dd-text-secondary" />
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ watcher.name }}</span>
-        <span class="badge text-[9px] uppercase font-bold shrink-0"
+        <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
+              :style="{ backgroundColor: watcherStatusColor(watcher.status) }" />
+        <span class="badge text-[9px] uppercase font-bold shrink-0 hidden md:inline-flex"
               :style="{
                 backgroundColor: watcher.status === 'watching' ? 'var(--dd-success-muted)' : 'var(--dd-warning-muted)',
                 color: watcher.status === 'watching' ? 'var(--dd-success)' : 'var(--dd-warning)',
@@ -215,5 +236,53 @@ onMounted(async () => {
       :show-clear="activeFilterCount > 0"
       @clear="searchQuery = ''"
     />
+
+    <template #panel>
+      <DetailPanel
+        :open="detailOpen"
+        :is-mobile="isMobile"
+        :show-size-controls="false"
+        :show-full-page="false"
+        @update:open="detailOpen = $event; if (!$event) selectedWatcher = null"
+      >
+        <template #header>
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="text-sm font-bold truncate dd-text">{{ selectedWatcher?.name }}</span>
+            <span v-if="selectedWatcher" class="badge text-[9px] font-bold shrink-0"
+                  :style="{
+                    backgroundColor: selectedWatcher.status === 'watching' ? 'var(--dd-success-muted)' : 'var(--dd-warning-muted)',
+                    color: selectedWatcher.status === 'watching' ? 'var(--dd-success)' : 'var(--dd-warning)',
+                  }">
+              {{ selectedWatcher.status }}
+            </span>
+          </div>
+        </template>
+
+        <template #subtitle>
+          <span class="text-[11px] font-mono dd-text-secondary">{{ selectedWatcher?.type }}</span>
+        </template>
+
+        <template v-if="selectedWatcher" #default>
+          <div class="p-4 space-y-5">
+            <div>
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Containers</div>
+              <div class="text-lg font-bold dd-text">{{ selectedWatcher.containers }}</div>
+            </div>
+            <div>
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Schedule</div>
+              <div class="text-[12px] font-mono dd-text">{{ selectedWatcher.cron || '\u2014' }}</div>
+            </div>
+            <div>
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Last Run</div>
+              <div class="text-[12px] dd-text">{{ selectedWatcher.lastRun }}</div>
+            </div>
+            <div v-for="(val, key) in selectedWatcher.config" :key="key">
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ key }}</div>
+              <div class="text-[12px] font-mono dd-text break-all">{{ val }}</div>
+            </div>
+          </div>
+        </template>
+      </DetailPanel>
+    </template>
   </DataViewLayout>
 </template>

@@ -234,7 +234,9 @@ const secActiveColumns = computed(() =>
                  v-model:sort-asc="securitySortAsc">
         <template #cell-severity="{ row }">
           <div class="flex items-start gap-2 min-w-0">
-            <span class="badge text-[9px] uppercase font-bold shrink-0"
+            <span class="w-2 h-2 rounded-full shrink-0 md:hidden inline-block mt-0.5"
+                  :style="{ backgroundColor: severityColor(row.severity).text }" />
+            <span class="badge text-[9px] uppercase font-bold shrink-0 hidden md:inline-flex"
                   :style="{ backgroundColor: severityColor(row.severity).bg, color: severityColor(row.severity).text }">
               {{ row.severity }}
             </span>
@@ -300,7 +302,9 @@ const secActiveColumns = computed(() =>
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
             <div class="min-w-0">
               <div class="flex items-center gap-2">
-                <span class="badge text-[9px] uppercase font-bold shrink-0"
+                <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
+                      :style="{ backgroundColor: severityColor(vuln.severity).text }" />
+                <span class="badge text-[9px] uppercase font-bold shrink-0 hidden md:inline-flex"
                       :style="{ backgroundColor: severityColor(vuln.severity).bg, color: severityColor(vuln.severity).text }">
                   {{ vuln.severity }}
                 </span>
@@ -342,9 +346,12 @@ const secActiveColumns = computed(() =>
       <!-- List view -->
       <DataListAccordion v-if="securityViewMode === 'list'"
                          :items="filteredSecurityVulns"
-                         item-key="id">
+                         item-key="id"
+                         :expandable="true">
         <template #header="{ item: vuln }">
-          <span class="badge text-[9px] uppercase font-bold shrink-0"
+          <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
+                :style="{ backgroundColor: severityColor(vuln.severity).text }" />
+          <span class="badge text-[9px] uppercase font-bold shrink-0 hidden md:inline-flex"
                 :style="{ backgroundColor: severityColor(vuln.severity).bg, color: severityColor(vuln.severity).text }">
             {{ vuln.severity }}
           </span>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useBreakpoints } from '../composables/useBreakpoints';
 import { getAllAuthentications } from '../services/authentication';
 
 const authViewMode = ref<'table' | 'cards' | 'list'>('table');
@@ -7,6 +8,15 @@ const authViewMode = ref<'table' | 'cards' | 'list'>('table');
 const authData = ref<any[]>([]);
 const loading = ref(true);
 const error = ref('');
+
+const { isMobile } = useBreakpoints();
+const selectedAuth = ref<any | null>(null);
+const detailOpen = ref(false);
+
+function openDetail(a: any) {
+  selectedAuth.value = a;
+  detailOpen.value = true;
+}
 
 function authTypeBadge(type: string) {
   if (type === 'basic')
@@ -77,7 +87,9 @@ onMounted(async () => {
         v-if="authViewMode === 'table'"
         :columns="tableColumns"
         :rows="filteredAuth"
-        row-key="id">
+        row-key="id"
+        :active-row="selectedAuth?.id"
+        @row-click="openDetail($event)">
         <template #cell-name="{ row }">
           <div class="flex items-center gap-2">
             <div class="w-2 h-2 rounded-full shrink-0"
@@ -92,7 +104,9 @@ onMounted(async () => {
           </span>
         </template>
         <template #cell-status="{ row }">
-          <span class="badge text-[9px] font-bold"
+          <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
+                :style="{ backgroundColor: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
+          <span class="badge text-[9px] font-bold hidden md:inline-flex"
                 :style="{
                   backgroundColor: row.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-neutral-muted)',
                   color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)',
@@ -109,7 +123,9 @@ onMounted(async () => {
       <DataCardGrid
         v-if="authViewMode === 'cards'"
         :items="filteredAuth"
-        item-key="id">
+        item-key="id"
+        :selected-key="selectedAuth?.id"
+        @item-click="openDetail($event)">
         <template #card="{ item: auth }">
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
             <div class="flex items-center gap-2.5 min-w-0">
@@ -134,7 +150,9 @@ onMounted(async () => {
           </div>
           <div class="px-4 py-2.5 mt-auto"
                :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
-            <span class="badge text-[9px] font-bold"
+            <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
+                  :style="{ backgroundColor: auth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
+            <span class="badge text-[9px] font-bold hidden md:inline-flex"
                   :style="{
                     backgroundColor: auth.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-neutral-muted)',
                     color: auth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)',
@@ -149,7 +167,9 @@ onMounted(async () => {
       <DataListAccordion
         v-if="authViewMode === 'list'"
         :items="filteredAuth"
-        item-key="id">
+        item-key="id"
+        :selected-key="selectedAuth?.id"
+        @item-click="openDetail($event)">
         <template #header="{ item: auth }">
           <div class="w-2.5 h-2.5 rounded-full shrink-0"
                :style="{ backgroundColor: auth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
@@ -185,5 +205,47 @@ onMounted(async () => {
         message="No providers match your filters"
         :show-clear="activeFilterCount > 0"
         @clear="searchQuery = ''" />
+
+    <template #panel>
+      <DetailPanel
+        :open="detailOpen"
+        :is-mobile="isMobile"
+        :show-size-controls="false"
+        :show-full-page="false"
+        @update:open="detailOpen = $event; if (!$event) selectedAuth = null"
+      >
+        <template #header>
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="text-sm font-bold truncate dd-text">{{ selectedAuth?.name }}</span>
+            <span v-if="selectedAuth" class="badge text-[9px] uppercase font-bold shrink-0"
+                  :style="{ backgroundColor: authTypeBadge(selectedAuth.type).bg, color: authTypeBadge(selectedAuth.type).text }">
+              {{ authTypeBadge(selectedAuth.type).label }}
+            </span>
+          </div>
+        </template>
+
+        <template #subtitle>
+          <span v-if="selectedAuth" class="badge text-[9px] font-bold"
+                :style="{
+                  backgroundColor: selectedAuth.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-neutral-muted)',
+                  color: selectedAuth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)',
+                }">
+            {{ selectedAuth.status }}
+          </span>
+        </template>
+
+        <template v-if="selectedAuth" #default>
+          <div class="p-4 space-y-5">
+            <div v-for="(val, key) in selectedAuth.config" :key="key">
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ key }}</div>
+              <div class="text-[12px] font-mono dd-text break-all">{{ val }}</div>
+            </div>
+            <div v-if="Object.keys(selectedAuth.config).length === 0">
+              <div class="text-[11px] dd-text-muted">No configuration properties</div>
+            </div>
+          </div>
+        </template>
+      </DetailPanel>
+    </template>
   </DataViewLayout>
 </template>

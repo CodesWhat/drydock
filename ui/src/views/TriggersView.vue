@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useBreakpoints } from '../composables/useBreakpoints';
 import { getAllTriggers, runTrigger } from '../services/trigger';
 
 const triggersViewMode = ref<'table' | 'cards' | 'list'>('table');
+const { isMobile } = useBreakpoints();
+const selectedTrigger = ref<any | null>(null);
+const detailOpen = ref(false);
+
+function openDetail(t: any) {
+  selectedTrigger.value = t;
+  detailOpen.value = true;
+}
 
 const triggersData = ref<any[]>([]);
 const loading = ref(true);
@@ -120,6 +129,8 @@ onMounted(async () => {
       :columns="tableColumns"
       :rows="filteredTriggers"
       row-key="id"
+      :active-row="selectedTrigger?.id"
+      @row-click="openDetail($event)"
     >
       <template #cell-name="{ row }">
         <div class="flex items-center gap-2">
@@ -135,7 +146,9 @@ onMounted(async () => {
         </span>
       </template>
       <template #cell-status="{ row }">
-        <span class="badge text-[9px] font-bold"
+        <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
+              :style="{ backgroundColor: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+        <span class="badge text-[9px] font-bold hidden md:inline-flex"
               :style="{
                 backgroundColor: row.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                 color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -153,6 +166,8 @@ onMounted(async () => {
       v-if="triggersViewMode === 'cards' && filteredTriggers.length > 0"
       :items="filteredTriggers"
       item-key="id"
+      :selected-key="selectedTrigger?.id"
+      @item-click="openDetail($event)"
     >
       <template #card="{ item }">
         <div class="px-4 pt-4 pb-2 flex items-start justify-between">
@@ -178,7 +193,9 @@ onMounted(async () => {
         </div>
         <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
              :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
-          <span class="badge text-[9px] font-bold"
+          <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
+                :style="{ backgroundColor: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+          <span class="badge text-[9px] font-bold hidden md:inline-flex"
                 :style="{
                   backgroundColor: item.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                   color: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -203,6 +220,8 @@ onMounted(async () => {
       v-if="triggersViewMode === 'list' && filteredTriggers.length > 0"
       :items="filteredTriggers"
       item-key="id"
+      :selected-key="selectedTrigger?.id"
+      @item-click="openDetail($event)"
     >
       <template #header="{ item }">
         <div class="w-2.5 h-2.5 rounded-full shrink-0"
@@ -252,5 +271,61 @@ onMounted(async () => {
       :show-clear="activeFilterCount > 0"
       @clear="clearFilters"
     />
+
+    <template #panel>
+      <DetailPanel
+        :open="detailOpen"
+        :is-mobile="isMobile"
+        :show-size-controls="false"
+        :show-full-page="false"
+        @update:open="detailOpen = $event; if (!$event) selectedTrigger = null"
+      >
+        <template #header>
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="text-sm font-bold truncate dd-text">{{ selectedTrigger?.name }}</span>
+            <span v-if="selectedTrigger" class="badge text-[9px] uppercase font-bold shrink-0"
+                  :style="{ backgroundColor: triggerTypeBadge(selectedTrigger.type).bg, color: triggerTypeBadge(selectedTrigger.type).text }">
+              {{ triggerTypeBadge(selectedTrigger.type).label }}
+            </span>
+          </div>
+        </template>
+
+        <template #subtitle>
+          <span v-if="selectedTrigger" class="badge text-[9px] font-bold"
+                :style="{
+                  backgroundColor: selectedTrigger.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
+                  color: selectedTrigger.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)',
+                }">
+            {{ selectedTrigger.status }}
+          </span>
+        </template>
+
+        <template v-if="selectedTrigger" #default>
+          <div class="p-4 space-y-5">
+            <div v-for="(val, key) in selectedTrigger.config" :key="key">
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ key }}</div>
+              <div class="text-[12px] font-mono dd-text break-all">{{ val }}</div>
+            </div>
+            <div v-if="Object.keys(selectedTrigger.config).length === 0">
+              <div class="text-[11px] dd-text-muted">No configuration properties</div>
+            </div>
+
+            <!-- Test trigger button -->
+            <div class="pt-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
+              <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold tracking-wide transition-all text-white"
+                      :style="{ background: testResult?.id === selectedTrigger.id
+                        ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
+                        : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))',
+                        boxShadow: '0 1px 3px rgba(0,150,199,0.3)' }"
+                      :disabled="testingTrigger !== null"
+                      @click.stop="testTrigger(selectedTrigger)">
+                <AppIcon :name="testingTrigger === selectedTrigger.id ? 'pending' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11" />
+                {{ testingTrigger === selectedTrigger.id ? 'Testing...' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test Trigger' }}
+              </button>
+            </div>
+          </div>
+        </template>
+      </DetailPanel>
+    </template>
   </DataViewLayout>
 </template>

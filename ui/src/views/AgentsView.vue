@@ -257,7 +257,7 @@ function closeAgentPanel() {
                   <div class="text-[10px] mt-0.5 truncate dd-text-muted">{{ row.host }}</div>
                   <!-- Compact mode: folded badge row -->
                   <div v-if="isCompact" class="flex items-center gap-1.5 mt-1.5">
-                    <span class="badge px-1.5 py-0 text-[9px]"
+                    <span class="badge px-1.5 py-0 text-[9px] hidden md:inline-flex"
                           :style="{
                             backgroundColor: row.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                             color: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -273,7 +273,7 @@ function closeAgentPanel() {
               </div>
             </template>
             <template #cell-status="{ row }">
-              <span class="badge text-[9px] font-bold"
+              <span class="badge text-[9px] font-bold hidden md:inline-flex"
                     :style="{
                       backgroundColor: row.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                       color: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -327,7 +327,7 @@ function closeAgentPanel() {
                     <div class="text-[11px] truncate mt-0.5 dd-text-muted">{{ agent.host }}</div>
                   </div>
                 </div>
-                <span class="badge text-[9px] uppercase tracking-wide font-bold shrink-0 ml-2"
+                <span class="badge text-[9px] uppercase tracking-wide font-bold shrink-0 ml-2 hidden md:inline-flex"
                       :style="{
                         backgroundColor: agent.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                         color: agent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -390,7 +390,7 @@ function closeAgentPanel() {
                 <div class="text-[10px] mt-0.5 truncate dd-text-muted">{{ agent.host }}</div>
               </div>
               <div class="flex items-center gap-1.5 shrink-0">
-                <span class="badge text-[9px] font-bold"
+                <span class="badge text-[9px] font-bold hidden md:inline-flex"
                       :style="{
                         backgroundColor: agent.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                         color: agent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useBreakpoints } from '../composables/useBreakpoints';
 import { getAllRegistries } from '../services/registry';
 
 const registriesViewMode = ref<'table' | 'cards' | 'list'>('table');
@@ -7,6 +8,37 @@ const registriesViewMode = ref<'table' | 'cards' | 'list'>('table');
 const registriesData = ref<any[]>([]);
 const loading = ref(true);
 const error = ref('');
+
+const { isMobile } = useBreakpoints();
+const selectedRegistry = ref<any | null>(null);
+const detailOpen = ref(false);
+
+function openDetail(reg: any) {
+  selectedRegistry.value = reg;
+  detailOpen.value = true;
+}
+
+/** Well-known default URLs for registry providers without explicit config. */
+const DEFAULT_URLS: Record<string, string> = {
+  hub: 'https://registry-1.docker.io',
+  ghcr: 'https://ghcr.io',
+  lscr: 'https://lscr.io',
+  quay: 'https://quay.io',
+  ecr: 'https://public.ecr.aws',
+  gar: 'https://gcr.io',
+  gcr: 'https://gcr.io',
+  acr: 'https://azurecr.io',
+  alicr: 'https://cr.aliyuncs.com',
+  codeberg: 'https://codeberg.org',
+  dhi: 'https://dhi.io',
+  docr: 'https://registry.digitalocean.com',
+  ibmcr: 'https://icr.io',
+  ocir: 'https://ocir.io',
+};
+
+function resolveUrl(reg: any): string {
+  return reg.config?.url || DEFAULT_URLS[reg.type] || '';
+}
 
 function registryTypeBadge(type: string) {
   if (type === 'hub') return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)', label: 'Hub' };
@@ -17,7 +49,12 @@ function registryTypeBadge(type: string) {
     return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)', label: 'ECR' };
   if (type === 'gitlab')
     return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)', label: 'GitLab' };
-  return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: type };
+  return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: type.toUpperCase() };
+}
+
+function isPrivate(reg: any): boolean {
+  const cfg = reg.config ?? {};
+  return !!(cfg.token || cfg.password || cfg.login || cfg.username);
 }
 
 const searchQuery = ref('');
@@ -27,12 +64,16 @@ const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 const filteredRegistries = computed(() => {
   if (!searchQuery.value) return registriesData.value;
   const q = searchQuery.value.toLowerCase();
-  return registriesData.value.filter((item) => item.name.toLowerCase().includes(q));
+  return registriesData.value.filter(
+    (item) =>
+      item.name.toLowerCase().includes(q) || item.type.toLowerCase().includes(q),
+  );
 });
 
 const tableColumns = [
   { key: 'name', label: 'Registry', sortable: false, width: '99%' },
   { key: 'type', label: 'Type', align: 'text-center', sortable: false },
+  { key: 'auth', label: 'Auth', align: 'text-center', sortable: false },
   { key: 'status', label: 'Status', align: 'text-center', sortable: false },
   { key: 'url', label: 'URL', align: 'text-right', sortable: false },
 ];
@@ -67,7 +108,7 @@ onMounted(async () => {
         <template #filters>
           <input v-model="searchQuery"
                  type="text"
-                 placeholder="Filter by name..."
+                 placeholder="Filter by name or type..."
                  class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
           <button v-if="searchQuery"
                   class="text-[10px] dd-text-muted hover:dd-text transition-colors"
@@ -81,13 +122,11 @@ onMounted(async () => {
       <DataTable v-if="registriesViewMode === 'table'"
                  :columns="tableColumns"
                  :rows="filteredRegistries"
-                 row-key="id">
+                 row-key="id"
+                 :active-row="selectedRegistry?.id"
+                 @row-click="openDetail($event)">
         <template #cell-name="{ row }">
-          <div class="flex items-center gap-2">
-            <div class="w-2 h-2 rounded-full shrink-0"
-                 :style="{ backgroundColor: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-            <span class="font-medium dd-text">{{ row.name }}</span>
-          </div>
+          <span class="font-medium dd-text">{{ row.name }}</span>
         </template>
         <template #cell-type="{ row }">
           <span class="badge text-[9px] uppercase font-bold"
@@ -95,8 +134,17 @@ onMounted(async () => {
             {{ registryTypeBadge(row.type).label }}
           </span>
         </template>
+        <template #cell-auth="{ row }">
+          <span class="hidden md:inline text-[11px] font-medium" :style="{ color: isPrivate(row) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
+            {{ isPrivate(row) ? 'Private' : 'Public' }}
+          </span>
+          <AppIcon v-if="isPrivate(row)" name="lock" :size="13" style="color: var(--dd-warning);" class="md:hidden" />
+          <AppIcon v-else name="eye" :size="13" class="dd-text-muted md:hidden" />
+        </template>
         <template #cell-status="{ row }">
-          <span class="badge text-[9px] font-bold"
+          <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
+                :style="{ backgroundColor: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+          <span class="badge text-[9px] font-bold hidden md:inline-flex"
                 :style="{
                   backgroundColor: row.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                   color: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -106,7 +154,7 @@ onMounted(async () => {
         </template>
         <template #cell-url="{ row }">
           <span class="whitespace-nowrap font-mono text-[10px] dd-text-secondary">
-            {{ row.config.url || '\u2014' }}
+            {{ resolveUrl(row) }}
           </span>
         </template>
         <template #empty>
@@ -120,16 +168,14 @@ onMounted(async () => {
       <!-- Card view -->
       <DataCardGrid v-if="registriesViewMode === 'cards'"
                     :items="filteredRegistries"
-                    item-key="id">
+                    item-key="id"
+                    :selected-key="selectedRegistry?.id"
+                    @item-click="openDetail($event)">
         <template #card="{ item: reg }">
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <div class="w-2.5 h-2.5 rounded-full shrink-0 mt-1"
-                   :style="{ backgroundColor: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-              <div class="min-w-0">
-                <div class="text-[15px] font-semibold truncate dd-text">{{ reg.name }}</div>
-                <div class="text-[11px] truncate mt-0.5 dd-text-muted font-mono">{{ reg.config.url || '\u2014' }}</div>
-              </div>
+            <div class="min-w-0">
+              <div class="text-[14px] font-semibold truncate dd-text">{{ reg.name }}</div>
+              <div class="text-[10px] truncate mt-0.5 dd-text-muted font-mono">{{ resolveUrl(reg) }}</div>
             </div>
             <span class="badge text-[9px] uppercase font-bold shrink-0 ml-2"
                   :style="{ backgroundColor: registryTypeBadge(reg.type).bg, color: registryTypeBadge(reg.type).text }">
@@ -138,15 +184,51 @@ onMounted(async () => {
           </div>
           <div class="px-4 py-3">
             <div class="grid grid-cols-2 gap-2 text-[11px]">
-              <div v-for="(val, key) in reg.config" :key="key">
-                <span class="dd-text-muted">{{ key }}</span>
-                <div class="font-semibold truncate dd-text">{{ val }}</div>
+              <div>
+                <span class="dd-text-muted">Auth</span>
+                <span class="ml-1 font-semibold" :style="{ color: isPrivate(reg) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
+                  {{ isPrivate(reg) ? 'Private' : 'Public' }}
+                </span>
+              </div>
+              <div>
+                <span class="dd-text-muted">Status</span>
+                <span class="ml-1 font-semibold" :style="{ color: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }">
+                  {{ reg.status }}
+                </span>
               </div>
             </div>
           </div>
-          <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
+          <div class="px-4 py-2.5 mt-auto"
                :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
-            <span class="badge text-[9px] font-bold"
+            <span class="text-[10px] dd-text-muted font-mono truncate">{{ resolveUrl(reg) }}</span>
+          </div>
+        </template>
+      </DataCardGrid>
+
+      <!-- List view -->
+      <DataListAccordion v-if="registriesViewMode === 'list'"
+                         :items="filteredRegistries"
+                         item-key="id"
+                         :selected-key="selectedRegistry?.id"
+                         @item-click="openDetail($event)">
+        <template #header="{ item: reg }">
+          <span class="badge text-[9px] uppercase font-bold shrink-0"
+                :style="{ backgroundColor: registryTypeBadge(reg.type).bg, color: registryTypeBadge(reg.type).text }">
+            {{ registryTypeBadge(reg.type).label }}
+          </span>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-semibold truncate dd-text">{{ reg.name }}</div>
+            <div class="text-[10px] font-mono dd-text-muted truncate mt-0.5">{{ resolveUrl(reg) }}</div>
+          </div>
+          <div class="flex items-center gap-3 shrink-0">
+            <span class="text-[11px] hidden md:inline font-medium" :style="{ color: isPrivate(reg) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
+              {{ isPrivate(reg) ? 'Private' : 'Public' }}
+            </span>
+            <AppIcon v-if="isPrivate(reg)" name="lock" :size="12" style="color: var(--dd-warning);" class="md:hidden" />
+            <AppIcon v-else name="eye" :size="12" class="dd-text-muted md:hidden" />
+            <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
+                  :style="{ backgroundColor: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+            <span class="badge text-[9px] font-bold hidden md:inline-flex"
                   :style="{
                     backgroundColor: reg.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                     color: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -155,38 +237,67 @@ onMounted(async () => {
             </span>
           </div>
         </template>
-      </DataCardGrid>
-
-      <!-- List view (accordion) -->
-      <DataListAccordion v-if="registriesViewMode === 'list'"
-                         :items="filteredRegistries"
-                         item-key="id">
-        <template #header="{ item: reg }">
-          <div class="w-2.5 h-2.5 rounded-full shrink-0"
-               :style="{ backgroundColor: reg.status === 'connected' ? 'var(--dd-success)' : reg.status === 'error' ? 'var(--dd-danger)' : 'var(--dd-neutral)' }" />
-          <AppIcon name="registries" :size="14" class="dd-text-secondary" />
-          <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ reg.name }}</span>
-          <span class="badge text-[9px] uppercase font-bold shrink-0"
-                :style="{ backgroundColor: registryTypeBadge(reg.type).bg, color: registryTypeBadge(reg.type).text }">
-            {{ registryTypeBadge(reg.type).label }}
-          </span>
+      </DataListAccordion>
+    <template #panel>
+      <DetailPanel
+        :open="detailOpen"
+        :is-mobile="isMobile"
+        :show-size-controls="false"
+        :show-full-page="false"
+        @update:open="detailOpen = $event; if (!$event) selectedRegistry = null"
+      >
+        <template #header>
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="badge text-[9px] uppercase font-bold shrink-0"
+                  :style="{ backgroundColor: selectedRegistry ? registryTypeBadge(selectedRegistry.type).bg : undefined, color: selectedRegistry ? registryTypeBadge(selectedRegistry.type).text : undefined }">
+              {{ selectedRegistry ? registryTypeBadge(selectedRegistry.type).label : '' }}
+            </span>
+            <span class="text-sm font-bold truncate dd-text">{{ selectedRegistry?.name }}</span>
+          </div>
         </template>
-        <template #details="{ item: reg }">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
-            <div v-for="(val, key) in reg.config" :key="key">
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">{{ key }}</div>
-              <div class="text-[12px] font-mono dd-text">{{ val }}</div>
-            </div>
+
+        <template #subtitle>
+          <span class="text-[11px] font-mono dd-text-secondary">{{ selectedRegistry ? resolveUrl(selectedRegistry) : '' }}</span>
+        </template>
+
+        <template v-if="selectedRegistry" #default>
+          <div class="p-4 space-y-5">
+            <!-- Status -->
             <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Status</div>
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Status</div>
               <span class="badge text-[10px] font-semibold"
                     :style="{
-                      backgroundColor: reg.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                      color: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                    }">{{ reg.status }}</span>
+                      backgroundColor: selectedRegistry.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
+                      color: selectedRegistry.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
+                    }">
+                {{ selectedRegistry.status }}
+              </span>
+            </div>
+
+            <!-- Auth type -->
+            <div>
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Authentication</div>
+              <div class="flex items-center gap-1.5 text-[12px]">
+                <AppIcon v-if="isPrivate(selectedRegistry)" name="lock" :size="12" style="color: var(--dd-warning);" />
+                <AppIcon v-else name="eye" :size="12" class="dd-text-muted" />
+                <span class="dd-text font-medium">{{ isPrivate(selectedRegistry) ? 'Private' : 'Public' }}</span>
+              </div>
+            </div>
+
+            <!-- URL -->
+            <div>
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">URL</div>
+              <div class="text-[12px] font-mono dd-text break-all">{{ resolveUrl(selectedRegistry) }}</div>
+            </div>
+
+            <!-- Configuration -->
+            <div v-for="(val, key) in selectedRegistry.config" :key="key">
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ key }}</div>
+              <div class="text-[12px] font-mono dd-text break-all">{{ val }}</div>
             </div>
           </div>
         </template>
-      </DataListAccordion>
+      </DetailPanel>
+    </template>
   </DataViewLayout>
 </template>

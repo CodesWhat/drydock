@@ -16,7 +16,6 @@ import {
 import type { Container } from '../types/container';
 import { mapApiContainers } from '../utils/container-mapper';
 import {
-  bouncerColor,
   parseServer,
   registryColorBg,
   registryColorText,
@@ -92,7 +91,23 @@ function getContainerLogs(containerName: string): string[] {
 
 // Breakpoints
 const { isMobile, windowNarrow } = useBreakpoints();
-const isCompact = computed(() => windowNarrow.value);
+
+// Detail panel (declared early so isCompact can react to panel state)
+const {
+  selectedContainer,
+  detailPanelOpen,
+  activeDetailTab,
+  panelSize,
+  containerFullPage,
+  panelFlex,
+  detailTabs,
+  selectContainer,
+  openFullPage,
+  closeFullPage,
+  closePanel,
+} = useDetailPanel();
+
+const isCompact = computed(() => windowNarrow.value || detailPanelOpen.value);
 
 // View mode
 const containerViewMode = ref<'table' | 'cards' | 'list'>('table');
@@ -209,21 +224,6 @@ const tableColumns = computed(() =>
     icon: col.key === 'icon',
   })),
 );
-
-// Detail panel
-const {
-  selectedContainer,
-  detailPanelOpen,
-  activeDetailTab,
-  panelSize,
-  containerFullPage,
-  panelFlex,
-  detailTabs,
-  selectContainer,
-  openFullPage,
-  closeFullPage,
-  closePanel,
-} = useDetailPanel();
 
 // Restore panel state on mount
 onMounted(() => {
@@ -492,8 +492,7 @@ function confirmForceUpdate(name: string) {
                     <AppIcon name="lock" :size="11" />
                   </button>
                   <button v-else-if="c.newTag"
-                          class="w-7 h-7 dd-rounded flex items-center justify-center transition-all hover:dd-bg-hover hover:scale-110 active:scale-95"
-                          style="color: var(--dd-primary);"
+                          class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
                           v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
                     <AppIcon name="cloud-download" :size="14" />
                   </button>
@@ -528,10 +527,11 @@ function confirmForceUpdate(name: string) {
                       v-tooltip.top="tt(c.updateKind)">
                   <AppIcon :name="c.updateKind === 'major' ? 'chevrons-up' : c.updateKind === 'minor' ? 'chevron-up' : c.updateKind === 'patch' ? 'hashtag' : 'fingerprint'" :size="12" />
                 </span>
-                <span class="badge px-1.5 py-0 text-[9px]"
-                      :style="{ backgroundColor: bouncerColor(c.bouncer).bg, color: bouncerColor(c.bouncer).text }"
-                      v-tooltip.top="tt(c.bouncer)">
-                  <AppIcon :name="c.bouncer === 'safe' ? 'check' : c.bouncer === 'blocked' ? 'blocked' : 'warning'" :size="12" />
+                <span v-if="c.bouncer === 'blocked'" v-tooltip.top="tt('Blocked')">
+                  <AppIcon name="blocked" :size="12" style="color: var(--dd-danger);" />
+                </span>
+                <span v-else-if="c.bouncer !== 'safe'" v-tooltip.top="tt(c.bouncer)">
+                  <AppIcon name="warning" :size="12" style="color: var(--dd-warning);" />
                 </span>
                 <span class="badge px-1.5 py-0 text-[9px]"
                       :style="{
@@ -570,7 +570,8 @@ function confirmForceUpdate(name: string) {
         </template>
         <!-- Status -->
         <template #cell-status="{ row: c }">
-          <span class="badge text-[9px] font-bold"
+          <span class="w-2 h-2 rounded-full shrink-0 md:hidden" :style="{ backgroundColor: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+          <span class="badge text-[9px] font-bold hidden md:inline-flex"
                 :style="{
                   backgroundColor: c.status === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                   color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -578,11 +579,14 @@ function confirmForceUpdate(name: string) {
             {{ c.status }}
           </span>
         </template>
-        <!-- Bouncer badge -->
+        <!-- Bouncer icon -->
         <template #cell-bouncer="{ row: c }">
-          <span class="badge text-[9px] uppercase font-bold"
-                :style="{ backgroundColor: bouncerColor(c.bouncer).bg, color: bouncerColor(c.bouncer).text }">
-            {{ c.bouncer }}
+          <span v-if="c.bouncer === 'safe'" class="dd-text-muted">–</span>
+          <span v-else-if="c.bouncer === 'blocked'" v-tooltip.top="tt('Blocked')" class="cursor-default">
+            <AppIcon name="blocked" :size="14" style="color: var(--dd-danger);" />
+          </span>
+          <span v-else v-tooltip.top="tt(c.bouncer)" class="cursor-default">
+            <AppIcon name="warning" :size="14" style="color: var(--dd-warning);" />
           </span>
         </template>
         <!-- Server -->
@@ -610,8 +614,7 @@ function confirmForceUpdate(name: string) {
                 <AppIcon name="lock" :size="13" />
               </button>
               <button v-else-if="c.newTag"
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-all hover:dd-bg-hover hover:scale-110 active:scale-95"
-                      style="color: var(--dd-primary);"
+                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
                       v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
                 <AppIcon name="cloud-download" :size="16" />
               </button>
@@ -651,14 +654,14 @@ function confirmForceUpdate(name: string) {
               </div>
               <!-- Updatable: gradient split button -->
               <div v-else class="inline-flex dd-rounded overflow-hidden" style="min-width: 110px;"
-                   :style="{ boxShadow: '0 1px 3px rgba(0,150,199,0.3)' }">
+                   :style="{ boxShadow: '0 1px 3px rgba(0,180,100,0.3)' }">
                 <button class="inline-flex items-center justify-center flex-1 whitespace-nowrap px-3 py-1.5 text-[11px] font-bold tracking-wide transition-all text-white"
-                        :style="{ background: 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))' }"
+                        :style="{ background: 'linear-gradient(135deg, var(--dd-success), var(--dd-info))' }"
                         @click.stop="updateContainer(c.name)">
                   <AppIcon name="updates" :size="11" class="mr-1" /> Update
                 </button>
                 <button class="inline-flex items-center justify-center w-7 text-white transition-all"
-                        :style="{ background: 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))', borderLeft: '1px solid rgba(255,255,255,0.2)' }"
+                        :style="{ background: 'linear-gradient(135deg, var(--dd-success), var(--dd-info))', borderLeft: '1px solid rgba(255,255,255,0.2)' }"
                         :class="openActionsMenu === c.name ? 'brightness-125' : ''"
                         @click.stop="toggleActionsMenu(c.name, $event)">
                   <AppIcon name="chevron-down" :size="11" />
@@ -667,12 +670,12 @@ function confirmForceUpdate(name: string) {
             </div>
             <div v-else class="flex items-center justify-end gap-1">
               <button v-if="c.status === 'running'"
-                      class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-danger hover:dd-bg-hover"
+                      class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-danger hover:dd-bg-hover"
                       v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
                 <AppIcon name="stop" :size="11" />
               </button>
               <button v-else
-                      class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-success hover:dd-bg-hover"
+                      class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-success hover:dd-bg-hover"
                       v-tooltip.top="tt('Start')" @click.stop>
                 <AppIcon name="play" :size="11" />
               </button>
@@ -708,15 +711,16 @@ function confirmForceUpdate(name: string) {
             </button>
             <template v-if="c.newTag">
               <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
+              <button v-if="c.bouncer === 'blocked'"
+                      class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
+                      @click="closeActionsMenu(); confirmForceUpdate(c.name)">
+                <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-warning)' }" />
+                Force update
+              </button>
               <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
                       @click="skipUpdate(c.name); closeActionsMenu()">
                 <AppIcon name="skip-forward" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
                 Skip this update
-              </button>
-              <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
-                      @click="closeActionsMenu(); confirmForceUpdate(c.name)">
-                <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
-                Force update
               </button>
             </template>
           </div>
@@ -760,17 +764,13 @@ function confirmForceUpdate(name: string) {
               <template v-if="c.newTag">
                 <span class="text-[11px] ml-1 dd-text-muted shrink-0">Latest</span>
                 <span class="px-1.5 py-0.5 dd-rounded-sm text-[11px] font-bold truncate max-w-[140px]"
-                      :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }"
+                      :style="{ backgroundColor: updateKindColor(c.updateKind).bg, color: updateKindColor(c.updateKind).text }"
                       :title="c.newTag">
                   {{ c.newTag }}
                 </span>
               </template>
               <template v-else>
-                <span class="flex items-center gap-1.5 text-[11px] font-medium ml-2"
-                      :style="{ color: 'var(--dd-success)' }">
-                  <AppIcon name="up-to-date" :size="10" />
-                  Up to date
-                </span>
+                <AppIcon name="check" :size="14" class="ml-1" style="color: var(--dd-success);" />
               </template>
             </div>
           </div>
@@ -781,18 +781,19 @@ function confirmForceUpdate(name: string) {
                  borderTop: '1px solid var(--dd-border-strong)',
                  backgroundColor: 'var(--dd-bg-elevated)',
                }">
-            <span class="text-[11px] font-semibold capitalize"
+            <span class="w-2 h-2 rounded-full shrink-0 md:hidden" :style="{ backgroundColor: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+            <span class="text-[11px] font-semibold capitalize hidden md:inline-flex"
                   :style="{ color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }">
               {{ c.status === 'running' ? 'Running' : 'Stopped' }}
             </span>
             <div class="flex items-center gap-1.5">
               <button v-if="c.status === 'running'"
-                      class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-danger hover:dd-bg-elevated"
+                      class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-danger hover:dd-bg-elevated"
                       v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
                 <AppIcon name="stop" :size="14" />
               </button>
               <button v-else
-                      class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-success hover:dd-text-success hover:dd-bg-elevated"
+                      class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-success hover:dd-bg-elevated"
                       v-tooltip.top="tt('Start')" @click.stop>
                 <AppIcon name="play" :size="14" />
               </button>
@@ -801,7 +802,7 @@ function confirmForceUpdate(name: string) {
                 <AppIcon name="restart" :size="14" />
               </button>
               <button v-if="c.newTag"
-                      class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-warning hover:dd-text-warning hover:dd-bg-elevated"
+                      class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-success hover:dd-bg-elevated"
                       v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
                 <AppIcon name="cloud-download" :size="14" />
               </button>
@@ -814,7 +815,8 @@ function confirmForceUpdate(name: string) {
       <DataListAccordion v-if="containerViewMode === 'list' && displayContainers.length > 0"
                          :items="displayContainers"
                          item-key="name"
-                         :selected-key="selectedContainer?.name">
+                         :selected-key="selectedContainer?.name"
+                         @item-click="selectContainer($event)">
         <template #header="{ item: c }">
           <AppIcon v-if="c._pending" name="spinner" :size="14" class="dd-spin dd-text-muted shrink-0" />
           <ContainerIcon v-else :icon="c.icon" :size="18" class="shrink-0" />
@@ -827,71 +829,21 @@ function confirmForceUpdate(name: string) {
                   :style="{ backgroundColor: updateKindColor(c.updateKind).bg, color: updateKindColor(c.updateKind).text }">
               {{ c.updateKind }}
             </span>
-            <span class="badge text-[9px] font-bold"
+            <span class="w-2 h-2 rounded-full shrink-0 md:hidden" :style="{ backgroundColor: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+            <span class="badge text-[9px] font-bold hidden md:inline-flex"
                   :style="{
                     backgroundColor: c.status === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                     color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
                   }">
               {{ c.status }}
             </span>
-            <span class="badge text-[9px] uppercase font-bold"
-                  :style="{ backgroundColor: bouncerColor(c.bouncer).bg, color: bouncerColor(c.bouncer).text }">
-              {{ c.bouncer }}
+            <span v-if="c.bouncer === 'blocked'" class="inline-flex items-center gap-0.5 text-[9px] font-bold uppercase" style="color: var(--dd-danger);">
+              <AppIcon name="blocked" :size="11" /> blocked
             </span>
             <span class="badge text-[7px] font-bold"
                   :style="{ backgroundColor: serverBadgeColor(c.server).bg, color: serverBadgeColor(c.server).text }">
               {{ parseServer(c.server).name }}
             </span>
-          </div>
-        </template>
-        <template #details="{ item: c }">
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 mt-2">
-            <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Image</div>
-              <div class="text-[12px] font-mono dd-text">{{ c.image }}</div>
-            </div>
-            <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Current Version</div>
-              <div class="text-[12px] font-mono dd-text">{{ c.currentTag }}</div>
-            </div>
-            <div v-if="c.newTag">
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Latest Version</div>
-              <div class="text-[12px] font-mono font-semibold" style="color: var(--dd-primary);">{{ c.newTag }}</div>
-            </div>
-            <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Registry</div>
-              <span class="badge text-[10px] uppercase font-bold"
-                    :style="{ backgroundColor: registryColorBg(c.registry), color: registryColorText(c.registry) }">
-                {{ registryLabel(c.registry) }}
-              </span>
-            </div>
-            <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Host</div>
-              <div class="text-[12px] dd-text">{{ c.server }}</div>
-            </div>
-            <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Bouncer</div>
-              <span class="badge text-[10px] uppercase font-bold"
-                    :style="{ backgroundColor: bouncerColor(c.bouncer).bg, color: bouncerColor(c.bouncer).text }">
-                {{ c.bouncer }}
-              </span>
-            </div>
-          </div>
-          <!-- Action buttons -->
-          <div class="mt-4 pt-3 flex items-center gap-2" :style="{ borderTop: '1px solid var(--dd-border-strong)' }">
-            <button v-if="c.newTag && c.bouncer !== 'blocked'"
-                    class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold tracking-wide transition-all text-white"
-                    :style="{ background: 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))', boxShadow: '0 1px 3px rgba(0,150,199,0.3)' }"
-                    @click.stop="updateContainer(c.name)">
-              <AppIcon name="cloud-download" :size="12" />
-              Update
-            </button>
-            <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-medium transition-colors dd-text-secondary hover:dd-bg-elevated"
-                    :style="{ border: '1px solid var(--dd-border-strong)' }"
-                    @click.stop="selectContainer(c)">
-              <AppIcon name="info" :size="12" />
-              Details
-            </button>
           </div>
         </template>
       </DataListAccordion>
@@ -1038,7 +990,7 @@ function confirmForceUpdate(name: string) {
                   {{ getContainerLogs(selectedContainer.name).length }} lines
                 </span>
               </div>
-              <div class="overflow-y-auto" style="max-height: calc(100vh - 400px);">
+              <div class="overflow-auto" style="max-height: calc(100vh - 400px);">
                 <div v-for="(line, i) in getContainerLogs(selectedContainer.name)" :key="i"
                      class="px-3 py-0.5 font-mono text-[10px] leading-relaxed whitespace-pre"
                      :style="{ borderBottom: i < getContainerLogs(selectedContainer.name).length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none' }">
@@ -1170,7 +1122,7 @@ function confirmForceUpdate(name: string) {
             </button>
             <button v-if="selectedContainer.newTag"
                     class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold transition-all text-white"
-                    :style="{ background: 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))', boxShadow: '0 1px 3px rgba(0,150,199,0.3)' }"
+                    :style="{ background: 'linear-gradient(135deg, var(--dd-success), var(--dd-info))', boxShadow: '0 1px 3px rgba(0,150,199,0.3)' }"
                     @click="updateContainer(selectedContainer.name)">
               <AppIcon name="cloud-download" :size="12" />
               Update
