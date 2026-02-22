@@ -4,7 +4,7 @@ services:
     container_name: drydock-ci
     user: root
     ports:
-      - "3000:3000"
+      - "${DD_LOAD_TEST_PORT:-3000}:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:

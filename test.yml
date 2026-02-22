@@ -1,7 +1,31 @@
 config:
   target: "http://localhost:3333"
   environments:
+    smoke:
+      target: "http://localhost:3000"
+      phases:
+        - duration: 10
+          arrivalRate: 1
+          name: "Smoke warm up"
+        - duration: 20
+          arrivalRate: 2
+          name: "Smoke steady"
+        - duration: 10
+          arrivalRate: 2
+          name: "Smoke sustain"
     ci:
+      target: "http://localhost:3000"
+      phases:
+        - duration: 10
+          arrivalRate: 2
+          name: "Warm up"
+        - duration: 20
+          arrivalRate: 4
+          name: "Ramp up"
+        - duration: 10
+          arrivalRate: 6
+          name: "Sustained load"
+    stress:
       target: "http://localhost:3000"
       phases:
         - duration: 20
@@ -14,14 +38,14 @@ config:
           arrivalRate: 30
           name: "Sustained load"
   phases:
-    - duration: 30
-      arrivalRate: 5
+    - duration: 10
+      arrivalRate: 2
       name: "Warm up"
-    - duration: 60
-      arrivalRate: 20
+    - duration: 20
+      arrivalRate: 4
       name: "Ramp up"
-    - duration: 30
-      arrivalRate: 50
+    - duration: 10
+      arrivalRate: 6
       name: "Sustained load"
   defaults:
     headers:
@@ -31,10 +55,12 @@ config:
     thresholds:
       - http.response_time.p99: 500
       - http.response_time.p95: 200
+      - vusers.failed: 0
+      - http.codes.429: 0
 
 scenarios:
   - name: "Health check"
-    weight: 30
+    weight: 20
     flow:
       - get:
           url: "/health"
@@ -49,35 +75,54 @@ scenarios:
           expect:
             - statusCode: 200
 
-  - name: "Browse containers"
-    weight: 30
+  - name: "Container inventory"
+    weight: 20
     flow:
       - get:
-          url: "/api/app"
+          url: "/api/containers"
+          expect:
+            - statusCode: 200
       - think: 1
       - get:
-          url: "/api/containers"
+          url: "/api/settings"
+          expect:
+            - statusCode: 200
 
-  - name: "Container detail"
+  - name: "Config data"
     weight: 10
     flow:
       - get:
-          url: "/api/containers"
-          capture:
-            - json: "$[0].id"
-              as: "containerId"
+          url: "/api/watchers"
+          expect:
+            - statusCode: 200
       - think: 1
       - get:
-          url: "/api/containers/{{ containerId }}"
+          url: "/api/triggers"
+          expect:
+            - statusCode: 200
+
+  - name: "Registry and server"
+    weight: 20
+    flow:
+      - get:
+          url: "/api/registries"
+          expect:
+            - statusCode: 200
+      - think: 1
+      - get:
+          url: "/api/server"
+          expect:
+            - statusCode: 200
 
   - name: "Dashboard flow"
     weight: 10
     flow:
       - get:
           url: "/api/app"
+          expect:
+            - statusCode: 200
       - think: 1
       - get:
           url: "/api/containers"
-      - think: 1
-      - get:
-          url: "/api/containers/groups"
+          expect:
+            - statusCode: 200
