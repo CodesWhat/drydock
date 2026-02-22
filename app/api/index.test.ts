@@ -43,6 +43,12 @@ vi.mock('cors', () => ({
   default: vi.fn(() => 'cors-middleware'),
 }));
 
+vi.mock('compression', () => {
+  const compression = vi.fn(() => 'compression-middleware');
+  compression.filter = vi.fn(() => true);
+  return { default: compression };
+});
+
 vi.mock('../log', () => ({
   default: {
     child: vi.fn(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() })),
@@ -153,6 +159,39 @@ describe('API Index', () => {
     expect(mockApp.use).toHaveBeenCalledWith('/api', 'api-router');
     expect(mockApp.use).toHaveBeenCalledWith('/metrics', 'prometheus-router');
     expect(mockApp.use).toHaveBeenCalledWith('/', 'ui-router');
+  });
+
+  test('should enable compression by default', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      compression: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockApp.use).toHaveBeenCalledWith('compression-middleware');
+  });
+
+  test('should disable compression when configured', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      compression: { enabled: false },
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const compressionCall = mockApp.use.mock.calls.find((c) => c[0] === 'compression-middleware');
+    expect(compressionCall).toBeUndefined();
   });
 
   test('should register json parser before auth init', async () => {

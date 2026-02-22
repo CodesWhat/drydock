@@ -199,6 +199,7 @@ test('getServerConfiguration should return configured api (new vars)', async () 
   configuration.ddEnvVars.DD_SERVER_PORT = '4000';
   delete configuration.ddEnvVars.DD_SERVER_METRICS_AUTH;
   expect(configuration.getServerConfiguration()).toStrictEqual({
+    compression: {},
     cors: {},
     enabled: true,
     feature: {
@@ -217,6 +218,7 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
   delete configuration.ddEnvVars.DD_SERVER_PORT;
   configuration.ddEnvVars.DD_SERVER_METRICS_AUTH = 'false';
   expect(configuration.getServerConfiguration()).toStrictEqual({
+    compression: {},
     cors: {},
     enabled: true,
     feature: {
@@ -231,6 +233,18 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
     tls: {},
     trustproxy: false,
   });
+});
+
+test('getServerConfiguration should allow tuning compression', async () => {
+  configuration.ddEnvVars.DD_SERVER_COMPRESSION_ENABLED = 'false';
+  configuration.ddEnvVars.DD_SERVER_COMPRESSION_THRESHOLD = '2048';
+  const config = configuration.getServerConfiguration();
+  expect(config.compression).toStrictEqual({
+    enabled: false,
+    threshold: 2048,
+  });
+  delete configuration.ddEnvVars.DD_SERVER_COMPRESSION_ENABLED;
+  delete configuration.ddEnvVars.DD_SERVER_COMPRESSION_THRESHOLD;
 });
 
 test('getServerConfiguration should accept trustproxy as number', async () => {

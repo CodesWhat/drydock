@@ -1,6 +1,7 @@
 // @ts-nocheck
 import fs from 'node:fs';
 import https from 'node:https';
+import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
 import logger from '../log/index.js';
@@ -37,6 +38,21 @@ export async function init() {
 
     // Replace undefined values by null to prevent them from being removed from json responses
     app.set('json replacer', (key, value) => (value === undefined ? null : value));
+
+    if (configuration.compression?.enabled !== false) {
+      app.use(
+        compression({
+          threshold: configuration.compression?.threshold ?? 1024,
+          // Avoid compressing SSE streams to prevent buffering and delayed events.
+          filter: (req, res) => {
+            if (req.path.startsWith('/api/events/')) {
+              return false;
+            }
+            return compression.filter(req, res);
+          },
+        }),
+      );
+    }
 
     if (configuration.cors.enabled) {
       log.warn(

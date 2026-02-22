@@ -211,6 +211,12 @@ export function getServerConfiguration() {
         methods: joi.string().default('GET,HEAD,PUT,PATCH,POST,DELETE'),
       })
       .default({}),
+    compression: joi
+      .object({
+        enabled: joi.boolean().default(true),
+        threshold: joi.number().integer().min(0).default(1024),
+      })
+      .default({}),
     feature: joi
       .object({
         delete: joi.boolean().default(true),

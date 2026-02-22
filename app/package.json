@@ -22,6 +22,7 @@
     "@slack/web-api": "^7.13.0",
     "axios": "1.13.5",
     "capitalize": "2.0.4",
+    "compression": "^1.8.1",
     "connect-loki": "1.2.0",
     "cors": "2.8.6",
     "dockerode": "4.0.9",
