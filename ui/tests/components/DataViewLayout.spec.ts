@@ -36,12 +36,13 @@ describe('DataViewLayout', () => {
     expect(root.classes()).toContain('flex-col');
   });
 
-  it('sets full viewport height minus header on root', () => {
+  it('uses flex-1 to fill available viewport height', () => {
     const wrapper = mount(DataViewLayout, {
       slots: { default: '<p>Content</p>' },
     });
     const root = wrapper.find('div');
-    expect(root.attributes('style')).toContain('calc(100vh - 48px)');
+    expect(root.classes()).toContain('flex-1');
+    expect(root.classes()).toContain('min-h-0');
   });
 
   it('has a flex row inside for main + panel layout', () => {
