@@ -436,14 +436,19 @@ describe('Dockercompose Trigger', () => {
       makeCompose({ filebrowser: { image: 'filebrowser/filebrowser:v2.59.0-s6' } }),
     );
 
-    const { getComposeFileSpy, writeComposeFileSpy, dockerTriggerSpy } =
+    const { getComposeFileSpy, writeComposeFileSpy, composeUpdateSpy } =
       spyOnProcessComposeHelpers(trigger);
 
     await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
 
     expect(getComposeFileSpy).not.toHaveBeenCalled();
     expect(writeComposeFileSpy).not.toHaveBeenCalled();
-    expect(dockerTriggerSpy).toHaveBeenCalledTimes(1);
+    expect(composeUpdateSpy).toHaveBeenCalledTimes(1);
+    expect(composeUpdateSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      'filebrowser',
+      container,
+    );
   });
 
   test('processComposeFile should warn when no containers belong to compose', async () => {
