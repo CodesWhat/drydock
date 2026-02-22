@@ -431,17 +431,17 @@ html.dd-transitioning::view-transition-new(root) {
 
 /* Overlay mask */
 .p-overlay-mask {
-  background: rgba(0, 0, 0, 0.6) !important;
+  background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(2px);
 }
 
 /* Dialog chrome */
 .p-dialog {
-  font-family: var(--drydock-font, "IBM Plex Mono", monospace) !important;
+  font-family: var(--drydock-font, "IBM Plex Mono", monospace);
   background: var(--dd-bg-card) !important;
   border: 1px solid var(--dd-border-strong) !important;
   border-radius: var(--dd-radius-lg) !important;
-  color: var(--dd-text) !important;
+  color: var(--dd-text);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3) !important;
   max-width: 420px;
   min-width: 340px;
@@ -449,104 +449,104 @@ html.dd-transitioning::view-transition-new(root) {
 
 /* Header */
 .p-dialog-header {
-  padding: 16px 20px 12px !important;
+  padding: 16px 20px 12px;
   border-bottom: 1px solid var(--dd-border) !important;
   background: transparent !important;
 }
 .p-dialog-title {
-  font-size: 13px !important;
+  font-size: 13px;
   font-weight: 600 !important;
   color: var(--dd-text) !important;
 }
 
 /* Close button */
 .p-dialog-close-button {
-  color: var(--dd-text-muted) !important;
+  color: var(--dd-text-muted);
   background: transparent !important;
   border: none !important;
   width: 28px !important;
-  height: 28px !important;
+  height: 28px;
   border-radius: var(--dd-radius) !important;
 }
 .p-dialog-close-button:hover {
-  color: var(--dd-text) !important;
+  color: var(--dd-text);
   background: var(--dd-bg-elevated) !important;
 }
 
 /* Content */
 .p-dialog-content {
-  padding: 18px 20px !important;
+  padding: 18px 20px;
   background: transparent !important;
   color: var(--dd-text-secondary) !important;
   font-size: 12px !important;
-  line-height: 1.6 !important;
+  line-height: 1.6;
 }
 
 /* Hide broken confirm icon */
 .p-confirmdialog-icon {
-  display: none !important;
+  display: none;
 }
 
 /* Footer */
 .p-dialog-footer {
-  padding: 12px 20px 18px !important;
+  padding: 12px 20px 18px;
   background: transparent !important;
   gap: 10px !important;
 }
 
 /* PrimeVue buttons inside dialogs */
 .p-dialog-footer .p-button {
-  font-family: var(--drydock-font, "IBM Plex Mono", monospace) !important;
+  font-family: var(--drydock-font, "IBM Plex Mono", monospace);
   font-size: 11px !important;
   font-weight: 600 !important;
   padding: 7px 16px !important;
-  border-radius: var(--dd-radius) !important;
+  border-radius: var(--dd-radius);
   transition: background-color 0.15s ease, color 0.15s ease !important;
 }
 
 /* Danger/accept button — matches Danger button style */
 .p-confirmdialog-accept-button.p-button-danger {
-  background: var(--dd-danger-muted) !important;
+  background: var(--dd-danger-muted);
   border: 1px solid var(--dd-danger) !important;
   color: var(--dd-danger) !important;
 }
 .p-confirmdialog-accept-button.p-button-danger:hover {
-  background: color-mix(in srgb, var(--dd-danger) 25%, transparent) !important;
+  background: color-mix(in srgb, var(--dd-danger) 25%, transparent);
 }
 
 /* Warn/accept button — matches Warning button style */
 .p-confirmdialog-accept-button.p-button-warn {
-  background: var(--dd-warning-muted) !important;
+  background: var(--dd-warning-muted);
   border: 1px solid var(--dd-warning) !important;
   color: var(--dd-warning) !important;
 }
 .p-confirmdialog-accept-button.p-button-warn:hover {
-  background: color-mix(in srgb, var(--dd-warning) 25%, transparent) !important;
+  background: color-mix(in srgb, var(--dd-warning) 25%, transparent);
 }
 
 /* Cancel/secondary button — matches Secondary button style */
 .p-confirmdialog-reject-button {
-  background: var(--dd-bg-inset) !important;
+  background: var(--dd-bg-inset);
   border: 1px solid var(--dd-border-strong) !important;
   color: var(--dd-text) !important;
 }
 .p-confirmdialog-reject-button:hover {
-  background: var(--dd-bg-elevated) !important;
+  background: var(--dd-bg-elevated);
 }
 
 /* PrimeVue tooltip overrides */
 .p-tooltip {
-  font-family: var(--drydock-font, "IBM Plex Mono", monospace) !important;
+  font-family: var(--drydock-font, "IBM Plex Mono", monospace);
 }
 .p-tooltip-text {
   font-size: 11px !important;
-  padding: 4px 8px !important;
+  padding: 4px 8px;
   background: var(--dd-bg-card) !important;
   color: var(--dd-text) !important;
   border: 1px solid var(--dd-border-strong) !important;
-  border-radius: var(--dd-radius-sm) !important;
+  border-radius: var(--dd-radius-sm);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
 }
 .p-tooltip-arrow {
-  display: none !important;
+  display: none;
 }
