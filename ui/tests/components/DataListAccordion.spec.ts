@@ -37,87 +37,109 @@ describe('DataListAccordion', () => {
     });
   });
 
-  describe('expansion toggle', () => {
-    it('starts collapsed (no details visible)', () => {
+  describe('click-through mode (default)', () => {
+    it('emits item-click with the item on row click', async () => {
+      const w = factory();
+      const rows = w.findAll('.space-y-2 > div');
+      await rows[1].trigger('click');
+      expect(w.emitted('item-click')?.[0]).toEqual([items[1]]);
+    });
+
+    it('emits item-click for each clicked row independently', async () => {
+      const w = factory();
+      const rows = w.findAll('.space-y-2 > div');
+      await rows[0].trigger('click');
+      await rows[2].trigger('click');
+      expect(w.emitted('item-click')).toHaveLength(2);
+      expect(w.emitted('item-click')?.[0]).toEqual([items[0]]);
+      expect(w.emitted('item-click')?.[1]).toEqual([items[2]]);
+    });
+
+    it('does not show chevron icons', () => {
+      const w = factory();
+      expect(w.findAll('.app-icon-stub')).toHaveLength(0);
+    });
+
+    it('does not show details slot content', () => {
       const w = factory(
         {},
-        {
-          details: ({ item }: any) => `Details: ${item.name}`,
-        },
+        { details: ({ item }: any) => `Details: ${item.name}` },
+      );
+      expect(w.text()).not.toContain('Details:');
+    });
+  });
+
+  describe('expandable mode', () => {
+    it('starts collapsed (no details visible)', () => {
+      const w = factory(
+        { expandable: true },
+        { details: ({ item }: any) => `Details: ${item.name}` },
       );
       expect(w.text()).not.toContain('Details:');
     });
 
-    it('expands on header click to show details', async () => {
+    it('expands on click to show details', async () => {
       const w = factory(
-        {},
+        { expandable: true },
         {
           header: ({ item }: any) => `Header: ${item.name}`,
           details: ({ item }: any) => `Details: ${item.name}`,
         },
       );
-      // Click the first item's header area
-      const headers = w.findAll('.cursor-pointer');
-      await headers[0].trigger('click');
+      const rows = w.findAll('.space-y-2 > div');
+      await rows[0].trigger('click');
       expect(w.text()).toContain('Details: Alpha');
     });
 
-    it('collapses on second header click', async () => {
+    it('collapses on second click', async () => {
       const w = factory(
-        {},
+        { expandable: true },
         {
           header: ({ item }: any) => `Header: ${item.name}`,
           details: ({ item }: any) => `Details: ${item.name}`,
         },
       );
-      const headers = w.findAll('.cursor-pointer');
-      await headers[0].trigger('click');
+      const rows = w.findAll('.space-y-2 > div');
+      await rows[0].trigger('click');
       expect(w.text()).toContain('Details: Alpha');
-      await headers[0].trigger('click');
+      await rows[0].trigger('click');
       expect(w.text()).not.toContain('Details: Alpha');
     });
 
-    it('emits toggle with item key on header click', async () => {
-      const w = factory();
-      const headers = w.findAll('.cursor-pointer');
-      await headers[1].trigger('click');
-      expect(w.emitted('toggle')?.[0]).toEqual(['2']);
+    it('does not emit item-click', async () => {
+      const w = factory({ expandable: true });
+      const rows = w.findAll('.space-y-2 > div');
+      await rows[0].trigger('click');
+      expect(w.emitted('item-click')).toBeUndefined();
+    });
+
+    it('shows chevron icons', () => {
+      const w = factory({ expandable: true });
+      expect(w.findAll('.app-icon-stub').length).toBeGreaterThanOrEqual(3);
     });
 
     it('allows multiple items to expand independently', async () => {
       const w = factory(
-        {},
-        {
-          details: ({ item }: any) => `Details: ${item.name}`,
-        },
+        { expandable: true },
+        { details: ({ item }: any) => `Details: ${item.name}` },
       );
-      const headers = w.findAll('.cursor-pointer');
-      await headers[0].trigger('click');
-      await headers[2].trigger('click');
+      const rows = w.findAll('.space-y-2 > div');
+      await rows[0].trigger('click');
+      await rows[2].trigger('click');
       expect(w.text()).toContain('Details: Alpha');
       expect(w.text()).toContain('Details: Gamma');
       expect(w.text()).not.toContain('Details: Beta');
     });
-  });
 
-  describe('chevron icon', () => {
-    it('shows chevron-down when collapsed', () => {
-      const w = factory();
-      const stubs = w.findAll('.app-icon-stub');
-      // Each item gets one chevron icon stub
-      expect(stubs.length).toBeGreaterThanOrEqual(3);
-    });
-
-    it('changes chevron direction when expanded', async () => {
-      const w = factory();
-      // Before click: all headers show chevron-down (template checks expandedItems)
-      const headerArea = w.findAll('.cursor-pointer')[0];
-      // The component conditionally renders chevron-up vs chevron-down
-      // After clicking, the DOM re-renders with the new icon name
-      await headerArea.trigger('click');
-      // Verify the toggle happened by checking expansion state (details become visible)
-      // The chevron icon name change is verified by the template's conditional binding
-      expect(w.emitted('toggle')?.[0]).toEqual(['1']);
+    it('passes expanded state to header slot', async () => {
+      const w = factory(
+        { expandable: true },
+        { header: ({ item, expanded }: any) => `${item.name}:${expanded}` },
+      );
+      const firstItem = w.findAll('.space-y-2 > div')[0];
+      expect(firstItem.text()).toContain('Alpha:false');
+      await firstItem.trigger('click');
+      expect(w.findAll('.space-y-2 > div')[0].text()).toContain('Alpha:true');
     });
   });
 
@@ -138,18 +160,13 @@ describe('DataListAccordion', () => {
   });
 
   describe('header slot', () => {
-    it('passes item and expanded state to header slot', async () => {
+    it('passes item to header slot', () => {
       const w = factory(
         {},
-        {
-          header: ({ item, expanded }: any) => `${item.name}:${expanded}`,
-        },
+        { header: ({ item }: any) => `${item.name}` },
       );
       const firstItem = w.findAll('.space-y-2 > div')[0];
-      expect(firstItem.text()).toContain('Alpha:false');
-
-      await w.findAll('.cursor-pointer')[0].trigger('click');
-      expect(w.findAll('.space-y-2 > div')[0].text()).toContain('Alpha:true');
+      expect(firstItem.text()).toContain('Alpha');
     });
   });
 });

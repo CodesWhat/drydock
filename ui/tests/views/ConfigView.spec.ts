@@ -4,6 +4,7 @@ const mockGetServer = vi.fn();
 const mockGetSettings = vi.fn();
 const mockUpdateSettings = vi.fn();
 const mockClearIconCache = vi.fn();
+const mockGetUser = vi.fn();
 
 vi.mock('@/services/server', () => ({
   getServer: (...args: any[]) => mockGetServer(...args),
@@ -13,6 +14,18 @@ vi.mock('@/services/settings', () => ({
   getSettings: (...args: any[]) => mockGetSettings(...args),
   updateSettings: (...args: any[]) => mockUpdateSettings(...args),
   clearIconCache: (...args: any[]) => mockClearIconCache(...args),
+}));
+
+vi.mock('@/services/auth', () => ({
+  getUser: (...args: any[]) => mockGetUser(...args),
+}));
+
+const mockRouteQuery = vi.hoisted(() => ({ value: {} as Record<string, string> }));
+
+vi.mock('vue-router', () => ({
+  useRoute: () => ({
+    query: mockRouteQuery.value,
+  }),
 }));
 
 vi.mock('@/theme/useTheme', () => ({
@@ -115,6 +128,8 @@ function factory() {
 describe('ConfigView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRouteQuery.value = {};
+    mockGetUser.mockResolvedValue({ username: 'admin', email: 'admin@test.com', role: 'admin', lastLogin: '2026-01-01', sessions: 2 });
     globalThis.fetch = vi.fn((url: string) => {
       if (typeof url === 'string' && url.includes('/api/app')) {
         return Promise.resolve({ json: () => Promise.resolve({ version: '1.4.0' }) } as Response);
@@ -304,6 +319,61 @@ describe('ConfigView', () => {
       const w = await mountAppearanceTab();
       const slider = w.find('input[type="range"]');
       expect(slider.exists()).toBe(true);
+    });
+  });
+
+  describe('profile tab', () => {
+    async function mountProfileTab() {
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalled());
+      await nextTick();
+
+      const tabs = w.findAll('button');
+      const profileTab = tabs.find((t) => t.text().includes('Profile'));
+      await profileTab?.trigger('click');
+      await nextTick();
+      return w;
+    }
+
+    it('renders profile tab button', async () => {
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalled());
+      await nextTick();
+
+      const tabs = w.findAll('button');
+      const profileTab = tabs.find((t) => t.text().includes('Profile'));
+      expect(profileTab).toBeDefined();
+    });
+
+    it('shows profile data after loading', async () => {
+      const w = await mountProfileTab();
+      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalled());
+      await nextTick();
+
+      const text = w.text();
+      expect(text).toContain('admin');
+      expect(text).toContain('admin@test.com');
+    });
+
+    it('selects profile tab from query param', async () => {
+      mockRouteQuery.value = { tab: 'profile' };
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalled());
+      await nextTick();
+      await nextTick();
+
+      const text = w.text();
+      expect(text).toContain('Username');
+      expect(text).toContain('Active Sessions');
     });
   });
 });
