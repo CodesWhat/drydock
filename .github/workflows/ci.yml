@@ -225,11 +225,14 @@ jobs:
         run: ./scripts/setup-test-containers.sh
 
       - name: Start drydock
+        id: drydock
         run: ./scripts/start-drydock.sh
 
       - name: Run Cucumber e2e tests
         run: npm run cucumber
         working-directory: e2e
+        env:
+          DD_PORT: ${{ steps.drydock.outputs.dd_port }}
 
       - name: Show drydock logs on failure
         if: failure()

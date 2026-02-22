@@ -45,7 +45,8 @@ build_drydock_image() {
 # Build drydock docker image
 build_drydock_image
 
-# Run drydock docker image
+# Use a random host port to avoid conflicts with local dev tools.
+# The actual port is queried after startup and exported as DD_PORT.
 docker run -d \
 	--name drydock \
 	--publish "${DD_E2E_PORT}:3000" \
@@ -70,12 +71,23 @@ docker run -d \
 	--env DD_AUTH_BASIC_JOHN_HASH='{SHA}1rToTufzHYhhemtgQhRRJy6/Gjo=' \
 	drydock
 
-echo "drydock started on http://localhost:${DD_E2E_PORT}"
+# Query the randomly assigned host port
+E2E_PORT=$(docker port drydock 3000/tcp | head -1 | cut -d: -f2)
+if [ -z "${E2E_PORT:-}" ]; then
+	E2E_PORT="$DD_E2E_PORT"
+fi
+
+# Expose port for GitHub Actions (persists to subsequent steps)
+if [ -n "$GITHUB_OUTPUT" ]; then
+	echo "dd_port=$E2E_PORT" >>"$GITHUB_OUTPUT"
+fi
+
+echo "drydock started on http://localhost:${E2E_PORT}"
 
 # Wait for health endpoint to be reachable (max 60s)
 echo "Waiting for drydock to be ready..."
 for i in $(seq 1 30); do
-	if curl -s --connect-timeout 2 "http://localhost:${DD_E2E_PORT}/health" >/dev/null 2>&1; then
+	if curl -s --connect-timeout 2 "http://localhost:${E2E_PORT}/health" >/dev/null 2>&1; then
 		echo "✅ drydock is healthy"
 		break
 	fi

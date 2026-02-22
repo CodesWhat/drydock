@@ -55,12 +55,15 @@ acquire_lock
 # Setup test containers
 "$SCRIPT_DIR/setup-test-containers.sh"
 
-# Start drydock (sourced so DD_PORT export propagates to cucumber)
-# shellcheck disable=SC1091
-source "$SCRIPT_DIR/start-drydock.sh"
+# Start drydock (uses random port to avoid conflicts)
+"$SCRIPT_DIR/start-drydock.sh"
 
-# Run e2e tests
+# Query the assigned port from the running container
+E2E_PORT=$(docker port drydock 3000/tcp | head -1 | cut -d: -f2)
+echo "🔌 Drydock available on port $E2E_PORT"
+
+# Run e2e tests with the dynamically assigned port
 echo "🏃 Running cucumber tests..."
-(cd "$SCRIPT_DIR/../e2e" && npm run cucumber)
+(cd "$SCRIPT_DIR/../e2e" && DD_PORT="$E2E_PORT" npm run cucumber)
 
 echo "✅ E2E tests completed!"
