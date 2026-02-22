@@ -1,12 +1,12 @@
 function getWatcherIcon() {
-  return 'fas fa-eye';
+  return 'sh-eye';
 }
 
 function getWatcherProviderIcon(type) {
   if (type === 'docker') {
-    return 'fab fa-docker';
+    return 'sh-docker';
   }
-  return 'fas fa-eye';
+  return 'sh-eye';
 }
 
 function getWatcherProviderColor(type) {

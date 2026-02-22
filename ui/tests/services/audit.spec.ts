@@ -43,6 +43,6 @@ describe('audit service', () => {
   });
 
   it('getAuditIcon returns the correct icon', () => {
-    expect(getAuditIcon()).toBe('fas fa-clock-rotate-left');
+    expect(getAuditIcon()).toBe('sh-clock-rotate-left');
   });
 });

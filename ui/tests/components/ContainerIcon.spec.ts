@@ -37,38 +37,30 @@ describe('ContainerIcon', () => {
     expect(img.attributes('src')).toBe('https://example.com/icon.png');
   });
 
-  it('renders FontAwesome <i> tag for fa prefix', () => {
-    const wrapper = mount(ContainerIcon, { props: { icon: 'fas fa-server' } });
-    expect(wrapper.find('img').exists()).toBe(false);
-    const icon = wrapper.find('i');
-    expect(icon.exists()).toBe(true);
-    expect(icon.classes()).toContain('fas');
-  });
-
-  it('renders Docker fallback <i> tag for unknown icon', () => {
+  it('renders unknown strings as selfhst proxy slug', () => {
     const wrapper = mount(ContainerIcon, { props: { icon: 'unknown-thing' } });
-    expect(wrapper.find('img').exists()).toBe(false);
-    const icon = wrapper.find('i');
-    expect(icon.exists()).toBe(true);
-    expect(icon.classes()).toContain('fab');
-    expect(icon.classes()).toContain('fa-docker');
+    const img = wrapper.find('img');
+    expect(img.exists()).toBe(true);
+    expect(img.attributes('src')).toBe('/api/icons/selfhst/unknown-thing');
   });
 
-  it('renders Docker fallback for empty icon string', () => {
+  it('renders AppIcon fallback for empty icon after error', async () => {
     const wrapper = mount(ContainerIcon, { props: { icon: '' } });
-    const icon = wrapper.find('i');
-    expect(icon.exists()).toBe(true);
-    expect(icon.classes()).toContain('fa-docker');
+    // Initially renders img (with undefined src) because failed is false
+    const img = wrapper.find('img');
+    expect(img.exists()).toBe(true);
+    // Trigger error to switch to AppIcon fallback
+    await img.trigger('error');
+    expect(wrapper.find('img').exists()).toBe(false);
+    expect(wrapper.html()).toContain('appicon');
   });
 
-  it('shows Docker fallback on image load error', async () => {
+  it('shows AppIcon fallback on image load error', async () => {
     const wrapper = mount(ContainerIcon, { props: { icon: 'sh-broken' } });
     expect(wrapper.find('img').exists()).toBe(true);
     await wrapper.find('img').trigger('error');
     expect(wrapper.find('img').exists()).toBe(false);
-    const fallback = wrapper.find('i');
-    expect(fallback.exists()).toBe(true);
-    expect(fallback.classes()).toContain('fa-docker');
+    expect(wrapper.html()).toContain('appicon');
   });
 
   it('applies the default size of 20', () => {
@@ -95,15 +87,17 @@ describe('ContainerIcon', () => {
     expect(wrapper.find('img').attributes('loading')).toBe('lazy');
   });
 
-  it('applies size to FontAwesome icon fontSize', () => {
-    const wrapper = mount(ContainerIcon, { props: { icon: 'fas fa-cog', size: 28 } });
-    const icon = wrapper.find('i');
-    expect(icon.attributes('style')).toContain('font-size: 28px');
+  it('applies size to proxy image container', () => {
+    const wrapper = mount(ContainerIcon, { props: { icon: 'sh-docker', size: 28 } });
+    const root = wrapper.find('div');
+    expect(root.attributes('style')).toContain('width: 28px');
+    expect(root.attributes('style')).toContain('height: 28px');
   });
 
-  it('applies size to Docker fallback fontSize', () => {
+  it('applies size to fallback container', () => {
     const wrapper = mount(ContainerIcon, { props: { icon: '', size: 36 } });
-    const icon = wrapper.find('i');
-    expect(icon.attributes('style')).toContain('font-size: 36px');
+    const root = wrapper.find('div');
+    expect(root.attributes('style')).toContain('width: 36px');
+    expect(root.attributes('style')).toContain('height: 36px');
   });
 });

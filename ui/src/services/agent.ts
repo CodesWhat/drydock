@@ -1,7 +1,7 @@
 const BASE_URL = '/api/agents';
 
 export function getAgentIcon() {
-  return 'fas fa-robot';
+  return 'sh-robot';
 }
 
 export async function getAgents() {

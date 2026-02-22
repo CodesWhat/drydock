@@ -14,5 +14,5 @@ export async function getAuditLog(
 }
 
 export function getAuditIcon() {
-  return 'fas fa-clock-rotate-left';
+  return 'sh-clock-rotate-left';
 }

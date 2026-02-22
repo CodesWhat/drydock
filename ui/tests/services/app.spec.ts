@@ -30,7 +30,7 @@ describe('Server Service', () => {
   });
 
   it('should return server icon', () => {
-    expect(getServerIcon()).toBe('fas fa-server');
+    expect(getServerIcon()).toBe('sh-server');
   });
 
   it('should get server data', async () => {
@@ -52,7 +52,7 @@ describe('Store Service', () => {
   });
 
   it('should return store icon', () => {
-    expect(getStoreIcon()).toBe('fas fa-copy');
+    expect(getStoreIcon()).toBe('sh-copy');
   });
 
   it('should get store data', async () => {

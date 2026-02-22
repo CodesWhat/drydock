@@ -1,5 +1,5 @@
 function getStoreIcon() {
-  return 'fas fa-copy';
+  return 'sh-copy';
 }
 
 async function getStore() {

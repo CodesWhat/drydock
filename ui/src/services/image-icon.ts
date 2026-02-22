@@ -291,5 +291,5 @@ export function getEffectiveDisplayIcon(displayIcon: string, imageName: string):
   }
 
   // Final fallback: Docker brand icon
-  return 'fab fa-docker';
+  return 'sh-docker';
 }

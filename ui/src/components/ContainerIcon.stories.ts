@@ -15,9 +15,9 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const FontAwesome: Story = {
+export const ProxyIcon: Story = {
   args: {
-    icon: 'fa-solid fa-database',
+    icon: 'sh-postgres',
     size: 20,
   },
 };
@@ -34,11 +34,10 @@ export const SizeScale: Story = {
     components: { ContainerIcon },
     template: `
       <div class="flex items-center gap-4">
-        <ContainerIcon icon="fa-solid fa-box" :size="16" />
-        <ContainerIcon icon="fa-solid fa-box" :size="24" />
-        <ContainerIcon icon="fa-solid fa-box" :size="32" />
+        <ContainerIcon icon="sh-nginx" :size="16" />
+        <ContainerIcon icon="sh-nginx" :size="24" />
+        <ContainerIcon icon="sh-nginx" :size="32" />
       </div>
     `,
   }),
 };
-

@@ -1,17 +1,17 @@
 function getAuthenticationIcon() {
-  return 'fas fa-lock';
+  return 'sh-lock';
 }
 
 function getAuthProviderIcon(type) {
   switch (type) {
     case 'basic':
-      return 'fas fa-key';
+      return 'sh-key';
     case 'oidc':
-      return 'fas fa-openid';
+      return 'sh-openid';
     case 'anonymous':
-      return 'fas fa-user-secret';
+      return 'sh-user-secret';
     default:
-      return 'fas fa-lock';
+      return 'sh-lock';
   }
 }
 

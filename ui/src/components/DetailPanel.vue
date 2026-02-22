@@ -62,7 +62,7 @@ const panelFlex = computed(() =>
                 class="flex items-center gap-1.5 px-2 py-1 dd-rounded text-[10px] font-semibold uppercase tracking-wide transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                 title="Open full page view"
                 @click="$emit('full-page')">
-          <i class="fa-solid fa-up-right-and-down-left-from-center text-[9px]" />
+          <AppIcon name="expand" :size="11" />
           Full Page
         </button>
         <slot name="toolbar" />

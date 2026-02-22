@@ -1,5 +1,5 @@
 function getContainerIcon() {
-  return 'fab fa-docker';
+  return 'sh-docker';
 }
 
 async function getAllContainers() {

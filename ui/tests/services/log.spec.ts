@@ -6,7 +6,7 @@ describe('Log Service', () => {
   });
 
   it('should return log icon', () => {
-    expect(getLogIcon()).toBe('fas fa-scroll');
+    expect(getLogIcon()).toBe('sh-scroll');
   });
 
   it('should get log', async () => {

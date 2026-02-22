@@ -13,18 +13,18 @@ describe('Authentication Service', () => {
   });
 
   it('returns the default authentication icon', () => {
-    expect(getAuthenticationIcon()).toBe('fas fa-lock');
+    expect(getAuthenticationIcon()).toBe('sh-lock');
   });
 
   it('returns provider icon for known authentication types', () => {
-    expect(getAuthProviderIcon('basic')).toBe('fas fa-key');
-    expect(getAuthProviderIcon('oidc')).toBe('fas fa-openid');
-    expect(getAuthProviderIcon('anonymous')).toBe('fas fa-user-secret');
+    expect(getAuthProviderIcon('basic')).toBe('sh-key');
+    expect(getAuthProviderIcon('oidc')).toBe('sh-openid');
+    expect(getAuthProviderIcon('anonymous')).toBe('sh-user-secret');
   });
 
   it('falls back to lock icon for unknown authentication types', () => {
-    expect(getAuthProviderIcon('unsupported')).toBe('fas fa-lock');
-    expect(getAuthProviderIcon(undefined)).toBe('fas fa-lock');
+    expect(getAuthProviderIcon('unsupported')).toBe('sh-lock');
+    expect(getAuthProviderIcon(undefined)).toBe('sh-lock');
   });
 
   it('returns provider color for known authentication types', () => {

@@ -38,26 +38,19 @@ const resolved = computed(() => {
   if (icon.startsWith('http://') || icon.startsWith('https://')) {
     return { type: 'url' as const, src: icon };
   }
-  if (icon.startsWith('fa')) {
-    return { type: 'fa' as const, className: icon };
-  }
-  return { type: 'fallback' as const };
+  // Treat anything else as a selfhst slug
+  return { type: 'proxy' as const, src: `/api/icons/selfhst/${icon}` };
 });
 </script>
 
 <template>
   <div class="inline-flex items-center justify-center shrink-0"
        :style="{ width: size + 'px', height: size + 'px' }">
-    <img v-if="(resolved.type === 'proxy' || resolved.type === 'url') && !failed"
+    <img v-if="!failed"
          :src="resolved.src"
          class="max-w-full max-h-full object-contain"
          loading="lazy"
          @error="failed = true" />
-    <i v-else-if="resolved.type === 'fa' && !failed"
-       :class="[resolved.className, 'dd-text-muted']"
-       :style="{ fontSize: size + 'px', lineHeight: 1 }" />
-    <i v-else
-       class="fab fa-docker dd-text-muted"
-       :style="{ fontSize: size + 'px', lineHeight: 1 }" />
+    <AppIcon v-else name="containers" :size="size" class="dd-text-muted" />
   </div>
 </template>

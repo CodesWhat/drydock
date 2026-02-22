@@ -21,7 +21,7 @@ describe('Container Service', () => {
 
   describe('getContainerIcon', () => {
     it('returns the docker icon', () => {
-      expect(getContainerIcon()).toBe('fab fa-docker');
+      expect(getContainerIcon()).toBe('sh-docker');
     });
   });
 

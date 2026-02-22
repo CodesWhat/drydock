@@ -15,33 +15,33 @@ describe('Trigger Service', () => {
 
   describe('getTriggerIcon', () => {
     it('returns the trigger icon', () => {
-      expect(getTriggerIcon()).toBe('fas fa-bolt');
+      expect(getTriggerIcon()).toBe('sh-bolt');
     });
   });
 
   describe('getTriggerProviderIcon', () => {
     it.each([
-      ['http', 'fas fa-globe'],
-      ['smtp', 'fas fa-envelope'],
-      ['slack', 'fab fa-slack'],
-      ['discord', 'fab fa-discord'],
-      ['telegram', 'fab fa-telegram'],
-      ['mqtt', 'fas fa-tower-broadcast'],
-      ['kafka', 'fas fa-bars-staggered'],
-      ['pushover', 'fas fa-bell'],
-      ['gotify', 'fas fa-bell'],
-      ['ntfy', 'fas fa-bell'],
-      ['ifttt', 'fas fa-wand-magic-sparkles'],
-      ['apprise', 'fas fa-paper-plane'],
-      ['command', 'fas fa-terminal'],
-      ['dockercompose', 'fab fa-docker'],
-      ['rocketchat', 'fas fa-comment'],
-      ['mattermost', 'fab fa-mattermost'],
-      ['teams', 'fab fa-microsoft'],
-      ['matrix', 'fas fa-hashtag'],
-      ['googlechat', 'fab fa-google'],
-      ['docker', 'fab fa-docker'],
-      ['unknown', 'fas fa-bolt'],
+      ['http', 'sh-globe'],
+      ['smtp', 'sh-envelope'],
+      ['slack', 'sh-slack'],
+      ['discord', 'sh-discord'],
+      ['telegram', 'sh-telegram'],
+      ['mqtt', 'sh-mqtt'],
+      ['kafka', 'sh-apache-kafka'],
+      ['pushover', 'sh-pushover'],
+      ['gotify', 'sh-gotify'],
+      ['ntfy', 'sh-ntfy'],
+      ['ifttt', 'sh-ifttt'],
+      ['apprise', 'sh-apprise'],
+      ['command', 'sh-terminal'],
+      ['dockercompose', 'sh-docker'],
+      ['rocketchat', 'sh-rocket-chat'],
+      ['mattermost', 'sh-mattermost'],
+      ['teams', 'sh-microsoft-teams'],
+      ['matrix', 'sh-matrix'],
+      ['googlechat', 'sh-google-chat'],
+      ['docker', 'sh-docker'],
+      ['unknown', 'sh-bolt'],
     ])('returns %s icon', (type, icon) => {
       expect(getTriggerProviderIcon(type)).toBe(icon);
     });

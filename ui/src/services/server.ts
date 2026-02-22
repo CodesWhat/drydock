@@ -1,5 +1,5 @@
 function getServerIcon() {
-  return 'fas fa-server';
+  return 'sh-server';
 }
 
 async function getServer() {

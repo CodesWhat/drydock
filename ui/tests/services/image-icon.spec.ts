@@ -25,6 +25,6 @@ describe('image-icon service', () => {
   });
 
   it('falls back to docker icon when inferred base name is too short', () => {
-    expect(getEffectiveDisplayIcon('mdi:docker', 'a')).toBe('fab fa-docker');
+    expect(getEffectiveDisplayIcon('mdi:docker', 'a')).toBe('sh-docker');
   });
 });

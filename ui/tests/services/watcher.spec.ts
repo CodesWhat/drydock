@@ -11,15 +11,15 @@ describe('Watcher Service', () => {
   });
 
   it('should return watcher icon', () => {
-    expect(getWatcherIcon()).toBe('fas fa-eye');
+    expect(getWatcherIcon()).toBe('sh-eye');
   });
 
   it('returns docker icon for docker provider', () => {
-    expect(getWatcherProviderIcon('docker')).toBe('fab fa-docker');
+    expect(getWatcherProviderIcon('docker')).toBe('sh-docker');
   });
 
   it('returns default icon for unknown provider', () => {
-    expect(getWatcherProviderIcon('kubernetes')).toBe('fas fa-eye');
+    expect(getWatcherProviderIcon('kubernetes')).toBe('sh-eye');
   });
 
   it('returns docker color for docker provider', () => {
