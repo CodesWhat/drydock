@@ -15,18 +15,18 @@
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.2.7",
-    "@fortawesome/fontawesome-free": "7.1.0",
+    "@fortawesome/fontawesome-free": "^7.2.0",
     "register-service-worker": "1.7.2",
     "vue": "^3.5.27",
-    "vue-router": "^5.0.2",
-    "vuetify": "^3.11.8"
+    "vue-router": "^5.0.3",
+    "vuetify": "^3.12.0"
   },
   "devDependencies": {
-    "@types/node": "^25.2.2",
+    "@types/node": "^25.3.0",
     "@vitejs/plugin-vue": "^6.0.4",
     "@vitest/coverage-v8": "^4.0.18",
     "@vue/test-utils": "^2.4.0",
-    "jsdom": "^28.0.0",
+    "jsdom": "^28.1.0",
     "sass": "1.97.3",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
