@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useTheme } from '../theme/useTheme';
 
 const props = withDefaults(
@@ -17,54 +17,49 @@ const variants = [
   { id: 'dark' as const, icon: 'moon' },
 ];
 
-const activeIndex = computed(() => variants.findIndex((v) => v.id === themeVariant.value));
+const expanded = ref(false);
 
-const cellSize = computed(() => (props.size === 'md' ? 32 : 24));
-const iconSize = computed(() => (props.size === 'md' ? 14 : 11));
-const pad = computed(() => (props.size === 'md' ? 3 : 2));
+const cellSize = computed(() => (props.size === 'md' ? 32 : 28));
+const iconSize = computed(() => (props.size === 'md' ? 14 : 12));
+
+const activeIndex = computed(() => variants.findIndex((v) => v.id === themeVariant.value));
 
 function select(id: 'light' | 'system' | 'dark', e: MouseEvent) {
   if (themeVariant.value === id) return;
   transitionTheme(() => setThemeVariant(id), e);
+  expanded.value = false;
+}
+
+function iconColor(id: string) {
+  if (id !== themeVariant.value) return 'dd-text-muted';
+  return isDark.value ? 'dd-text-info' : id === 'dark' ? 'dd-text-info' : 'dd-text-caution';
 }
 </script>
 
 <template>
   <div
-    class="theme-toggle dd-rounded-lg relative inline-flex items-center"
-    :style="{
-      padding: `${pad}px`,
-      backgroundColor: 'var(--dd-bg-inset)',
-      border: '1px solid var(--dd-border-strong)',
-    }"
+    class="theme-toggle relative inline-flex items-center overflow-hidden transition-all duration-200 ease-out"
+    :style="{ width: expanded ? `${variants.length * cellSize}px` : `${cellSize}px` }"
+    @mouseenter="expanded = true"
+    @mouseleave="expanded = false"
   >
-    <!-- Sliding indicator -->
+    <!-- Always render all 3 in fixed order: light, system, dark -->
+    <!-- When collapsed, translate so only the active icon is visible -->
     <div
-      class="theme-toggle-indicator dd-rounded absolute transition-transform duration-200 ease-out"
-      :style="{
-        width: `${cellSize}px`,
-        height: `${cellSize}px`,
-        top: `${pad}px`,
-        left: `${pad}px`,
-        transform: `translateX(${activeIndex * cellSize}px)`,
-        backgroundColor: 'var(--dd-bg-card)',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-      }"
-    />
-
-    <!-- Option buttons -->
-    <button
-      v-for="v in variants"
-      :key="v.id"
-      class="relative z-[1] flex items-center justify-center transition-colors"
-      :style="{ width: `${cellSize}px`, height: `${cellSize}px` }"
-      :class="themeVariant === v.id
-        ? (isDark ? 'dd-text-info' : v.id === 'dark' ? 'dd-text-info' : 'dd-text-caution')
-        : 'dd-text-muted'"
-      :title="v.id.charAt(0).toUpperCase() + v.id.slice(1)"
-      @click="select(v.id, $event)"
+      class="theme-toggle-track inline-flex items-center transition-transform duration-200 ease-out"
+      :style="{ transform: expanded ? 'translateX(0)' : `translateX(-${activeIndex * cellSize}px)` }"
     >
-      <AppIcon :name="v.icon" :size="iconSize" />
-    </button>
+      <button
+        v-for="v in variants"
+        :key="v.id"
+        class="flex-shrink-0 flex items-center justify-center rounded-md transition-colors"
+        :class="[iconColor(v.id), v.id !== themeVariant ? 'hover:dd-bg-elevated' : '']"
+        :style="{ width: `${cellSize}px`, height: `${cellSize}px` }"
+        :title="v.id.charAt(0).toUpperCase() + v.id.slice(1)"
+        @click="v.id === themeVariant ? (expanded = !expanded) : select(v.id, $event)"
+      >
+        <AppIcon :name="v.icon" :size="iconSize" />
+      </button>
+    </div>
   </div>
 </template>
