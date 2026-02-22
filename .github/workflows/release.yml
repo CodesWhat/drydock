@@ -134,6 +134,7 @@ jobs:
           artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
           cosign sign-blob --yes \
             --bundle "${artifact}.bundle" \
+            --new-bundle-format=false \
             --output-signature "${artifact}.sig" \
             --output-certificate "${artifact}.pem" \
             "${artifact}"
