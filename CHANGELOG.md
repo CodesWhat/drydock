@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.3.8] — 2026-02-21
+## [1.3.8] — 2026-02-22
 
 ### Fixed
 
 - **Docker Compose trigger silently no-ops for `updateKind: unknown`** — When the update model classifies a change as `unknown` (e.g. created-date-only updates, unrecognized tag formats), `getNewImageFullName` resolved the update image identically to the current image, causing both compose-update and runtime-update filters to return empty arrays and log "All containers already up to date". The runtime-update filter now also triggers when `container.updateAvailable === true`, ensuring containers with confirmed updates are recreated regardless of `updateKind` classification. Compose file rewrites remain gated on explicit tag deltas. ([#91](https://github.com/CodesWhat/drydock/issues/91))
+- **Digest watch masks tag updates, pulling old image** — When digest watch was enabled on a container with both a tag change and a digest change (e.g. `v2.59.0-s6` → `v2.60.0-s6`), the update model gave digest unconditional priority, returning `kind: 'digest'` instead of `kind: 'tag'`. The trigger then resolved the image to the current tag (correct for digest-only updates) instead of the new tag, pulling the old image. Tag updates now take priority over digest when both are present. This bug was inherited from the upstream project (WUD). ([#91](https://github.com/CodesWhat/drydock/issues/91))
+- **Database not persisted on container shutdown** — LokiJS relies on its autosave interval to flush data to disk, but the graceful shutdown handler called `process.exit()` before the next autosave tick could fire, causing any in-memory changes since the last autosave to be lost. This manifested as stale version numbers, lost update policies, and missing audit log entries after restarting the drydock container. Now explicitly saves the database during shutdown before exiting. This bug was inherited from the upstream project (WUD) but made deterministic by our graceful shutdown changes. ([#96](https://github.com/CodesWhat/drydock/issues/96))
 
 ## [1.3.7] — 2026-02-21
 

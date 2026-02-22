@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.3.8-blue" alt="Version"></a>
-  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-12.6K_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
+  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-13K_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
   <a href="https://quay.io/repository/codeswhat/drydock"><img src="https://img.shields.io/badge/Quay.io-image-ee0000?logo=redhat&logoColor=white" alt="Quay.io"></a>
   <br>
@@ -561,7 +561,7 @@ Here's what's coming.
 
 | Version | Theme | Highlights |
 | --- | --- | --- |
-| **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Guard, SBOM, 7 new registries, 4 new triggers, self-update fix, rollback fixes, GHCR auth fix, self-hosted TLS options, re2-wasm → re2js regex engine swap, CI caching + pipeline hardening, biome → qlty lint migration |
+| **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Guard, SBOM, 7 new registries, 4 new triggers, self-update fix, rollback fixes, GHCR auth fix, self-hosted TLS options, re2-wasm → re2js regex engine swap, compose trigger fixes, DB persistence on shutdown, CI pipeline hardening, biome → qlty lint migration |
 | **v1.4.0** | UI Modernization | PrimeVue + Tailwind migration, Composition API, shared data components, design system tokens, dark/light theme, settings backend, icon proxy cache |
 | **v1.5.0** | Observability | Real-time log viewer, container resource monitoring, registry webhooks |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers |
@@ -589,6 +589,8 @@ Here's what's coming.
 | Roadmap | See [Roadmap](#roadmap) section above |
 | Issues | [GitHub Issues](https://github.com/CodesWhat/drydock/issues) |
 | Discussions | [GitHub Discussions](https://github.com/CodesWhat/drydock/discussions) — feature requests & ideas welcome |
+
+<hr>
 
 <a id="star-history"></a>
 
