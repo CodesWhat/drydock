@@ -1,4 +1,8 @@
 ---
+# Lefthook configuration — mirrors CI pipeline for local/CI parity.
+# pre-push is piped (sequential, fail-fast) so failures surface clearly.
+# Each step matches a CI job exactly — if lefthook passes, CI passes.
+
 pre-commit:
   commands:
     format:
@@ -6,31 +10,55 @@ pre-commit:
       run: qlty fmt --no-progress {staged_files} && git add {staged_files}
 
 pre-push:
-  piped: false
+  piped: true
   commands:
+    # ── Lint: mirrors CI "Lint" job (qlty check --all from root) ──
+    qlty:
+      run: CI=1 qlty check --all --no-progress
+      priority: 1
+
+    # ── Build: mirrors CI "Build" job ─────────────────────────────
+    build-app:
+      root: app/
+      run: npm run build
+      priority: 2
+    build-ui:
+      root: ui/
+      run: npm run build
+      priority: 3
+
+    # ── Test: mirrors CI "Test & Coverage" job ────────────────────
+    test-app:
+      root: app/
+      run: npm test
+      priority: 4
+    test-ui:
+      root: ui/
+      run: npm run test:unit
+      priority: 5
+
+    # ── E2E: mirrors CI "E2E Tests" job ───────────────────────────
+    e2e:
+      run: ./scripts/run-e2e-tests.sh
+      priority: 6
+
+    # ── Advisory: mirrors CI advisory jobs (non-blocking) ─────────
     zizmor:
       glob: '.github/workflows/*.yml'
-      run: zizmor .github/workflows/
+      run: zizmor .github/workflows/ || true
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
-    qlty:
-      run: CI=1 qlty check --no-progress --skip-source-fetch --no-upgrade-check --summary
+      priority: 7
+
+    # ── Local security gates (not in CI, skip if tool missing) ────
     snyk-deps:
       root: app/
       run: ../scripts/snyk-deps-gate.sh --org=codeswhat
+      skip:
+        - run: '! command -v snyk >/dev/null 2>&1'
+      priority: 8
     snyk-code:
       run: scripts/snyk-code-gate.sh --org=codeswhat
-    build:
-      root: app/
-      run: npm run build
-    test:
-      root: app/
-      run: npm test
-    ui-build:
-      root: ui/
-      run: npm run build
-    ui-test:
-      root: ui/
-      run: npm run test:unit
-    e2e:
-      run: ./scripts/run-e2e-tests.sh
+      skip:
+        - run: '! command -v snyk >/dev/null 2>&1'
+      priority: 9

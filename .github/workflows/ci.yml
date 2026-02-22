@@ -92,36 +92,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238  # v6.2.0
-        with:
-          node-version: 24
-          cache: 'npm'
-          cache-dependency-path: |
-            app/package-lock.json
-            e2e/package-lock.json
-            ui/package-lock.json
-
       - name: Setup Qlty
         uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899  # v2.2.0
 
-      - name: Install dependencies
-        run: |
-          (cd app && npm ci)
-          (cd e2e && npm ci)
-          (cd ui && npm ci)
-
-      - name: Lint app
-        run: npm run lint
-        working-directory: app
-
-      - name: Lint e2e
-        run: npm run lint
-        working-directory: e2e
-
-      - name: Lint ui
-        run: npm run lint
-        working-directory: ui
+      - name: Qlty check (all plugins)
+        run: qlty check --all --no-progress
 
   test:
     name: Test & Coverage
