@@ -19,6 +19,7 @@ jobs:
   zizmor:
     name: Actions Security
     runs-on: ubuntu-latest
+    continue-on-error: true  # advisory — GitHub API rate limits cause intermittent 403
     permissions:
       contents: read
       security-events: write
@@ -43,6 +44,7 @@ jobs:
   supply-chain:
     name: Supply Chain Security
     runs-on: ubuntu-latest
+    continue-on-error: true  # advisory — Socket API can fail transiently
     permissions:
       contents: read
 
@@ -61,6 +63,7 @@ jobs:
         uses: SocketDev/action@4337a545deecc20f19a909e52db7a2f6ba292f42  # v1.2.0
         with:
           mode: firewall-free
+          firewall-version: '1.5.4'
 
       - name: Scan app dependencies
         run: sfw npm ci
