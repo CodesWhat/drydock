@@ -99,7 +99,7 @@ const stats = computed(() => {
 const recentUpdates = computed(() => {
   return containers.value
     .filter((c) => c.newTag)
-    .slice(0, 8)
+    .slice(0, 6)
     .map((c) => ({
       name: c.name,
       image: c.image,
@@ -174,7 +174,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 overflow-y-auto">
+  <div class="flex-1 min-h-0 min-w-0 overflow-y-auto pr-3">
       <!-- LOADING STATE -->
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="text-sm dd-text-muted">Loading dashboard...</div>
@@ -220,10 +220,10 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
       </div>
 
       <!-- WIDGET GRID -->
-      <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 min-w-0">
 
         <!-- Recent Updates Widget (2/3) -->
-        <div class="xl:col-span-2 dd-rounded overflow-hidden"
+        <div class="xl:col-span-2 dd-rounded overflow-hidden min-w-0"
              :style="{
                backgroundColor: 'var(--dd-bg-card)',
                border: '1px solid var(--dd-border-strong)',
@@ -233,7 +233,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
             <div class="flex items-center gap-2">
               <AppIcon name="recent-updates" :size="14" class="text-drydock-secondary" />
               <h2 class="text-sm font-semibold dd-text">
-                Pending Updates
+                Recent Updates
               </h2>
             </div>
             <button class="text-[11px] font-medium text-drydock-secondary hover:underline"
@@ -241,7 +241,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
           </div>
 
           <div>
-            <table class="w-full text-xs">
+            <table class="w-full text-xs table-fixed">
               <thead>
                 <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <th class="w-10 px-0 py-2.5" />
@@ -251,8 +251,8 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                 </tr>
               </thead>
             </table>
-            <div class="overflow-y-auto" style="max-height: 340px;">
-            <table class="w-full text-xs">
+            <div class="sm:overflow-y-auto sm:max-h-[340px]">
+            <table class="w-full text-xs table-fixed">
               <tbody>
                 <tr v-for="(row, i) in recentUpdates" :key="i"
                     class="transition-colors hover:dd-bg-elevated"
@@ -279,7 +279,9 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                     </div>
                   </td>
                   <td class="px-5 py-3 text-center align-middle">
-                    <span class="badge"
+                    <span class="w-2 h-2 rounded-full shrink-0 md:hidden inline-block"
+                          :style="{ backgroundColor: row.status === 'updated' ? 'var(--dd-success)' : row.status === 'pending' ? 'var(--dd-warning)' : 'var(--dd-danger)' }" />
+                    <span class="badge hidden md:inline-flex"
                           :style="{
                             backgroundColor: row.status === 'updated'
                               ? 'var(--dd-success-muted)'
@@ -289,10 +291,8 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                             color: row.status === 'updated' ? 'var(--dd-success)' : row.status === 'pending' ? 'var(--dd-warning)' : 'var(--dd-danger)',
                           }">
                       <AppIcon :name="row.status === 'updated' ? 'check' : row.status === 'pending' ? 'pending' : 'xmark'"
-                         :size="14" class="sm:hidden" />
-                      <AppIcon :name="row.status === 'updated' ? 'check' : row.status === 'pending' ? 'pending' : 'xmark'"
-                         :size="12" class="hidden sm:inline mr-1" />
-                      <span class="hidden sm:inline">{{ row.status }}</span>
+                         :size="12" class="mr-1" />
+                      {{ row.status }}
                     </span>
                   </td>
                 </tr>
@@ -365,7 +365,9 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                    class="flex items-start gap-3 p-2.5 dd-rounded"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <div class="shrink-0 mt-0.5">
-                  <span class="badge text-[9px]"
+                  <span class="w-2 h-2 rounded-full shrink-0 md:hidden inline-block"
+                        :style="{ backgroundColor: vuln.severity === 'CRITICAL' ? 'var(--dd-danger)' : 'var(--dd-warning)' }" />
+                  <span class="badge text-[9px] hidden md:inline-flex"
                         :style="{
                           backgroundColor: vuln.severity === 'CRITICAL'
                             ? 'var(--dd-danger-muted)'
@@ -416,7 +418,9 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                 <div class="text-[12px] font-semibold truncate dd-text">{{ server.name }}</div>
                 <div class="text-[10px] dd-text-muted">{{ server.containers.running }}/{{ server.containers.total }} containers</div>
               </div>
-              <span class="badge text-[9px] uppercase font-bold"
+              <span class="w-2 h-2 rounded-full shrink-0 md:hidden inline-block"
+                    :style="{ backgroundColor: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+              <span class="badge text-[9px] uppercase font-bold hidden md:inline-flex"
                     :style="{
                       backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                       color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -446,7 +450,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
           </div>
 
           <div class="p-5">
-            <div class="grid grid-cols-4 gap-4">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div v-for="kind in [
                 { label: 'Major', count: containers.filter(c => c.updateKind === 'major').length, color: 'var(--dd-danger)', colorMuted: 'var(--dd-danger-muted)', icon: 'chevrons-up' },
                 { label: 'Minor', count: containers.filter(c => c.updateKind === 'minor').length, color: 'var(--dd-warning)', colorMuted: 'var(--dd-warning-muted)', icon: 'chevron-up' },

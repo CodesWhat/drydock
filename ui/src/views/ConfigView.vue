@@ -1,23 +1,41 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
 import { type IconLibrary, iconMap, libraryLabels } from '../icons';
+import { getUser } from '../services/auth';
 import { clearIconCache, getSettings, updateSettings } from '../services/settings';
 import { getServer } from '../services/server';
 import { themeFamilies } from '../theme/palettes';
 import { useTheme } from '../theme/useTheme';
 
+const route = useRoute();
 const { themeFamily, themeVariant, isDark, setThemeFamily, transitionTheme } = useTheme();
 
 const { iconLibrary, setIconLibrary, iconScale, setIconScale } = useIcons();
 const { activeFont, setFont, fontLoading, isFontLoaded } = useFont();
 
-const activeSettingsTab = ref<'general' | 'appearance'>('general');
+type SettingsTab = 'general' | 'appearance' | 'profile';
+
+const VALID_TABS = new Set<SettingsTab>(['general', 'appearance', 'profile']);
+
+function tabFromQuery(): SettingsTab {
+  const raw = route.query.tab;
+  const val = Array.isArray(raw) ? raw[0] : raw;
+  return typeof val === 'string' && VALID_TABS.has(val as SettingsTab) ? (val as SettingsTab) : 'general';
+}
+
+const activeSettingsTab = ref<SettingsTab>(tabFromQuery());
+
+watch(() => route.query.tab, () => {
+  activeSettingsTab.value = tabFromQuery();
+});
 
 const settingsTabs = [
   { id: 'general' as const, label: 'General', icon: 'settings' },
   { id: 'appearance' as const, label: 'Appearance', icon: 'config' },
+  { id: 'profile' as const, label: 'Profile', icon: 'user' },
 ];
 
 const loading = ref(true);
@@ -26,6 +44,16 @@ const serverFields = ref<Array<{ label: string; value: string }>>([]);
 // Settings state
 const internetlessMode = ref(false);
 const settingsLoading = ref(false);
+
+// Profile state
+const profileData = ref({
+  username: '',
+  email: '',
+  role: '',
+  lastLogin: '',
+  sessions: 0,
+});
+const profileLoading = ref(true);
 
 onMounted(async () => {
   try {
@@ -56,6 +84,24 @@ onMounted(async () => {
     serverFields.value = [{ label: 'Error', value: 'Failed to load server info' }];
   } finally {
     loading.value = false;
+  }
+
+  // Fetch profile data
+  try {
+    const user = await getUser();
+    if (user) {
+      profileData.value = {
+        username: user.username ?? 'unknown',
+        email: user.email ?? '',
+        role: user.role ?? '',
+        lastLogin: user.lastLogin ?? '',
+        sessions: user.sessions ?? 0,
+      };
+    }
+  } catch {
+    // Profile will show empty fields
+  } finally {
+    profileLoading.value = false;
   }
 });
 
@@ -389,5 +435,59 @@ async function handleClearIconCache() {
         </div>
 
       </div><!-- end appearance tab -->
+
+      <!-- PROFILE TAB -->
+      <div v-if="activeSettingsTab === 'profile'" class="space-y-6">
+        <!-- Profile Card -->
+        <div class="dd-rounded overflow-hidden"
+             :style="{
+               backgroundColor: 'var(--dd-bg-card)',
+               border: '1px solid var(--dd-border-strong)',
+             }">
+          <div class="px-5 py-5 flex items-center gap-4"
+               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+            <div class="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold text-white shrink-0"
+                 style="background: linear-gradient(135deg, var(--dd-primary), var(--dd-success));">
+              {{ profileData.username.substring(0, 2).toUpperCase() }}
+            </div>
+            <div>
+              <div class="text-sm font-bold dd-text">{{ profileData.username }}</div>
+              <span v-if="profileData.role" class="badge text-[9px] font-semibold mt-1 inline-flex"
+                    :style="{ backgroundColor: 'var(--dd-primary-muted)', color: 'var(--dd-primary)' }">
+                {{ profileData.role }}
+              </span>
+            </div>
+          </div>
+          <div class="p-5 space-y-4">
+            <div v-if="profileLoading" class="text-[12px] dd-text-muted text-center py-4">Loading...</div>
+            <template v-else>
+              <div class="flex items-center justify-between py-2"
+                   :style="{ borderBottom: '1px solid var(--dd-border)' }">
+                <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Username</span>
+                <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.username }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2"
+                   :style="{ borderBottom: '1px solid var(--dd-border)' }">
+                <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Email</span>
+                <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.email || '—' }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2"
+                   :style="{ borderBottom: '1px solid var(--dd-border)' }">
+                <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Role</span>
+                <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.role || '—' }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2"
+                   :style="{ borderBottom: '1px solid var(--dd-border)' }">
+                <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Last Login</span>
+                <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.lastLogin || '—' }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2">
+                <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Active Sessions</span>
+                <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.sessions }}</span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div><!-- end profile tab -->
   </div>
 </template>
