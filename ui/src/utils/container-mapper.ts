@@ -22,6 +22,10 @@ function deriveServer(apiContainer: any): string {
   if (apiContainer.agent) {
     return apiContainer.agent;
   }
+  const watcher = apiContainer.watcher ?? '';
+  if (watcher && watcher !== 'local') {
+    return watcher.charAt(0).toUpperCase() + watcher.slice(1);
+  }
   return 'Local';
 }
 
