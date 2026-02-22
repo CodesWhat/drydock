@@ -279,7 +279,9 @@ class Dockercompose extends Docker {
     );
     const mappingsNeedingRuntimeUpdate = versionMappings.filter(
       ({ container, currentNormalized, updateNormalized }) =>
-        container.updateKind?.kind === 'digest' || currentNormalized !== updateNormalized,
+        container.updateAvailable === true ||
+        container.updateKind?.kind === 'digest' ||
+        currentNormalized !== updateNormalized,
     );
 
     if (mappingsNeedingRuntimeUpdate.length === 0) {

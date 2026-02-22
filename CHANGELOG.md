@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.8] — 2026-02-21
+
+### Fixed
+
+- **Docker Compose trigger silently no-ops for `updateKind: unknown`** — When the update model classifies a change as `unknown` (e.g. created-date-only updates, unrecognized tag formats), `getNewImageFullName` resolved the update image identically to the current image, causing both compose-update and runtime-update filters to return empty arrays and log "All containers already up to date". The runtime-update filter now also triggers when `container.updateAvailable === true`, ensuring containers with confirmed updates are recreated regardless of `updateKind` classification. Compose file rewrites remain gated on explicit tag deltas. ([#91](https://github.com/CodesWhat/drydock/issues/91))
+
 ## [1.3.7] — 2026-02-21
 
 ### Fixed
@@ -442,6 +448,7 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Update changelog | Upstream-specific |
 
 [Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.3.7...HEAD
+[1.3.8]: https://github.com/CodesWhat/drydock/compare/v1.3.7...v1.3.8
 [1.3.7]: https://github.com/CodesWhat/drydock/compare/v1.3.6...v1.3.7
 [1.3.6]: https://github.com/CodesWhat/drydock/compare/v1.3.5...v1.3.6
 [1.3.5]: https://github.com/CodesWhat/drydock/compare/v1.3.4...v1.3.5

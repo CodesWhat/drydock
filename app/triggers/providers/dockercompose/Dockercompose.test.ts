@@ -386,6 +386,31 @@ describe('Dockercompose Trigger', () => {
     expect(dockerTriggerSpy).toHaveBeenCalledWith(container);
   });
 
+  test('processComposeFile should trigger runtime update when update kind is unknown but update is available', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({
+      name: 'filebrowser',
+      imageName: 'filebrowser/filebrowser',
+      tagValue: 'v2.59.0-s6',
+      updateKind: 'unknown',
+      remoteValue: null,
+      updateAvailable: true,
+    });
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ filebrowser: { image: 'filebrowser/filebrowser:v2.59.0-s6' } }),
+    );
+
+    const { getComposeFileSpy, writeComposeFileSpy, dockerTriggerSpy } =
+      spyOnProcessComposeHelpers(trigger);
+
+    await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+
+    expect(getComposeFileSpy).not.toHaveBeenCalled();
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+    expect(dockerTriggerSpy).toHaveBeenCalledTimes(1);
+  });
+
   test('processComposeFile should warn when no containers belong to compose', async () => {
     const container = makeContainer({
       name: 'unknown',
