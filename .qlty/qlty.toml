@@ -46,6 +46,8 @@ exclude_patterns = [
   "prototypes/**/style.css",
   ".playwright-cli/**",
   "output/**",
+  "app/coverage/**",
+  "ui/coverage/**",
 ]
 
 test_patterns = [

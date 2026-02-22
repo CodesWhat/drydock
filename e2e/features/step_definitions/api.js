@@ -160,6 +160,7 @@ async function doGet(path) {
   } catch {
     this.responseJson = undefined;
   }
+  this.lastRequest = { method: 'GET', path };
 }
 
 async function doPost(path) {
@@ -175,6 +176,21 @@ async function doPost(path) {
     this.responseJson = JSON.parse(this.responseBody);
   } catch {
     this.responseJson = undefined;
+  }
+  this.lastRequest = { method: 'POST', path };
+}
+
+function assertResponsePathValue(context, path, expected) {
+  const resolvedPath = resolveTemplate(path, context.scenarioScope);
+  const actual = resolveJsonPath(context.responseJson, resolvedPath);
+  const actualStr = String(actual);
+  if (isDynamicPattern(expected)) {
+    assert.ok(
+      matchesDynamicPattern(actualStr, expected),
+      `Expected "${actualStr}" to match pattern ${expected}`,
+    );
+  } else {
+    assert.strictEqual(actualStr, expected);
   }
 }
 
@@ -196,19 +212,52 @@ Then(/^response body should be valid json$/, function () {
   assert.ok(this.responseJson !== undefined, 'Response body is not valid JSON');
 });
 
-Then(/^response body path (.+) should be (?!of type )(.+)$/, function (path, expected) {
+Then(
+  /^response body path (.+) should be (?!of type )(?!a sha256 digest or undefined$)(.+)$/,
+  function (path, expected) {
+  assertResponsePathValue(this, path, expected);
+  },
+);
+
+Then(/^response body path (.+) should be a sha256 digest or undefined$/, function (path) {
   const resolvedPath = resolveTemplate(path, this.scenarioScope);
   const actual = resolveJsonPath(this.responseJson, resolvedPath);
   const actualStr = String(actual);
-  if (isDynamicPattern(expected)) {
-    assert.ok(
-      matchesDynamicPattern(actualStr, expected),
-      `Expected "${actualStr}" to match pattern ${expected}`,
-    );
-  } else {
-    assert.strictEqual(actualStr, expected);
-  }
+  const isSha256Digest = matchesDynamicPattern(actualStr, 'sha256:.*');
+  assert.ok(
+    actualStr === 'undefined' || isSha256Digest,
+    `Expected "${actualStr}" to be a sha256 digest or undefined`,
+  );
 });
+
+Then(
+  /^within (\d+) seconds response body path (.+) should be (?!of type )(.+)$/,
+  async function (seconds, path, expected) {
+    const timeoutMs = Number(seconds) * 1000;
+    const deadline = Date.now() + timeoutMs;
+    let lastError;
+
+    while (Date.now() < deadline) {
+      try {
+        assertResponsePathValue(this, path, expected);
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+
+      if (this.lastRequest?.method !== 'GET' || !this.lastRequest?.path) {
+        break;
+      }
+      await doGet.call(this, this.lastRequest.path);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    throw (
+      lastError ||
+      new Error(`Timed out after ${seconds}s waiting for response body path ${path} to match ${expected}`)
+    );
+  },
+);
 
 Then(/^response body should contain (.+)$/, function (text) {
   assert.ok(this.responseBody.includes(text), `Expected response body to contain "${text}"`);

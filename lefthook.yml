@@ -17,7 +17,7 @@ pre-push:
       run: CI=1 qlty check --no-progress --skip-source-fetch --no-upgrade-check --summary
     snyk-deps:
       root: app/
-      run: snyk test --severity-threshold=high --org=codeswhat
+      run: ../scripts/snyk-deps-gate.sh --org=codeswhat
     snyk-code:
       run: scripts/snyk-code-gate.sh --org=codeswhat
     build:

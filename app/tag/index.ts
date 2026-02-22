@@ -77,7 +77,7 @@ export function diff(version1, version2) {
 }
 
 interface SafeRegex {
-  match(s: string): RegExpMatchArray | null;
+  exec(s: string): RegExpMatchArray | null;
 }
 
 /**
@@ -94,7 +94,7 @@ function safeRegExp(pattern: string): SafeRegex | null {
   try {
     const compiled = RE2JS.compile(pattern);
     return {
-      match(s: string): RegExpMatchArray | null {
+      exec(s: string): RegExpMatchArray | null {
         const m = compiled.matcher(s);
         if (!m.find()) return null;
         const result = [m.group(0)] as RegExpMatchArray;
@@ -133,7 +133,7 @@ export function transform(transformFormula, originalTag) {
       return originalTag;
     }
     const placeholders = replacement.match(/\$\d+/g) || [];
-    const originalTagMatches = compiledPattern.match(originalTag);
+    const originalTagMatches = compiledPattern.exec(originalTag);
     if (!originalTagMatches) {
       return originalTag;
     }
