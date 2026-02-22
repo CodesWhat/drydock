@@ -11,6 +11,7 @@ services:
       - DD_RUN_AS_ROOT=true
       - DD_LOG_FORMAT=text
       - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+      - DD_WATCHER_LOCAL_CRON=*/2 * * * *
       # Docker trigger (manual only — auto=false prevents auto-updating test containers)
       - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
       - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
@@ -39,9 +40,6 @@ services:
       - DD_REGISTRY_GITEA_PRIVATE_LOGIN=gitea-bot
       - DD_REGISTRY_GITEA_PRIVATE_PASSWORD=replace-me
       - DD_REGISTRY_GITEA_PRIVATE_CAFILE=/certs/internal-ca.pem
-      # Optional fallback when CA cannot be mounted (prefer CAFILE)
-      # - DD_REGISTRY_GITEA_PRIVATE_INSECURE=true
-      # Note: no private Hub registry -- test containers are public images
       # --- Update Guard (security scanning) ---
       - DD_SECURITY_SCANNER=trivy
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL
@@ -52,7 +50,9 @@ services:
       # - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=0 2-6 * * *
       # - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ=UTC
 
-  # Container with updates available and lifecycle hooks
+  # ── Containers with updates available ──────────────────
+
+  # Nginx with lifecycle hooks (tests hooks UI + group view)
   nginx-hooked:
     image: nginx:1.25.5
     pull_policy: never
@@ -65,7 +65,7 @@ services:
       - dd.hook.post=echo "post-update cleanup"
       - dd.hook.timeout=30000
 
-  # Container in same group, no hooks
+  # Redis in same group (tests group view)
   redis-cache:
     image: redis:7.2.0
     pull_policy: never
@@ -75,7 +75,7 @@ services:
       - dd.display.name=Redis Cache
       - dd.group=web-stack
 
-  # Container with auto-rollback
+  # Traefik with auto-rollback (tests rollback UI)
   traefik-proxy:
     image: traefik:v3.0.0
     pull_policy: never
@@ -88,7 +88,7 @@ services:
       - dd.rollback.window=120000
       - dd.rollback.interval=5000
 
-  # LSCR/GHCR public image (tests anonymous token exchange — #85)
+  # LSCR/GHCR public image (tests anonymous token exchange)
   lscr-nginx:
     image: ghcr.io/linuxserver/nginx:1.26.2
     pull_policy: never
@@ -98,7 +98,7 @@ services:
       - dd.display.name=LSCR Nginx (GHCR)
       - dd.tag.include=^\d+\.\d+\.\d+$$
 
-  # Ungrouped container
+  # PostgreSQL ungrouped (tests ungrouped container)
   postgres-db:
     image: postgres:16.0
     pull_policy: never
@@ -108,3 +108,51 @@ services:
     labels:
       - dd.watch=true
       - dd.display.name=PostgreSQL
+
+  # Mongo — old version with update (tests another registry + more data)
+  mongo-db:
+    image: mongo:7.0.0
+    pull_policy: never
+    container_name: mongo-db
+    labels:
+      - dd.watch=true
+      - dd.display.name=MongoDB
+      - dd.group=data
+
+  # ── Container at latest (no update available) ─────────
+
+  # Alpine at latest — shows "up to date" state
+  alpine-latest:
+    image: alpine:latest
+    pull_policy: always
+    container_name: alpine-latest
+    command: ["sleep", "infinity"]
+    labels:
+      - dd.watch=true
+      - dd.display.name=Alpine (Latest)
+      - dd.tag.include=^latest$$
+
+  # ── Log spammer (generates container log activity) ─────
+
+  # Busybox printing a line every 5s — populates dashboard container log
+  log-spammer:
+    image: busybox:1.36
+    pull_policy: never
+    container_name: log-spammer
+    command: ["sh", "-c", "i=0; while true; do i=$((i+1)); echo \"[$$i] drydock-qa heartbeat $(date -u +%H:%M:%S)\"; sleep 5; done"]
+    labels:
+      - dd.watch=true
+      - dd.display.name=Log Spammer
+      - dd.group=infra
+
+  # ── Stopped container (tests stopped status badge) ─────
+
+  # Memcached — starts then exits (shows "stopped" in container list)
+  memcached-stopped:
+    image: memcached:1.6.0
+    pull_policy: never
+    container_name: memcached-stopped
+    command: ["sh", "-c", "exit 0"]
+    labels:
+      - dd.watch=true
+      - dd.display.name=Memcached (Stopped)
