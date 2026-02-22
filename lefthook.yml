@@ -2,6 +2,11 @@
 pre-push:
   piped: true
   commands:
+    zizmor:
+      glob: '.github/workflows/*.yml'
+      run: zizmor .github/workflows/
+      skip:
+        - run: '! command -v zizmor >/dev/null 2>&1'
     qlty:
       run: qlty check --no-progress
     snyk-deps:
