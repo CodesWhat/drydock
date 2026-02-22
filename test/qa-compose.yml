@@ -42,6 +42,7 @@ services:
       - DD_REGISTRY_GITEA_PRIVATE_CAFILE=/certs/internal-ca.pem
       # --- Update Guard (security scanning) ---
       - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_TRIVY_SERVER=http://trivy-server:4954
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL
       - DD_SECURITY_SBOM_ENABLED=true
       - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json
@@ -58,6 +59,14 @@ services:
     depends_on:
       docker-remote:
         condition: service_healthy
+
+  # ── Trivy vulnerability scanner (client-server mode) ──
+  trivy-server:
+    image: aquasec/trivy:latest
+    container_name: trivy-server
+    command: ["server", "--listen", "0.0.0.0:4954"]
+    expose:
+      - "4954"
 
   # ── Remote Docker host (DinD) ────────────────────────
   docker-remote:
