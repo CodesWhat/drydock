@@ -245,3 +245,263 @@ jobs:
       - name: Cleanup
         if: always()
         run: ./scripts/cleanup-test-containers.sh
+
+  load-test-smoke:
+    name: Load Test (Smoke)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: [build]
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e  # v2.14.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238  # v6.2.0
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      - name: Run Artillery smoke test
+        env:
+          ARTILLERY_ENV: smoke
+          DD_LOAD_TEST_BUILD_CACHE: gha
+          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/smoke
+          ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
+        run: ./scripts/run-load-test.sh
+
+      - name: Summarize load test metrics (smoke)
+        if: always()
+        run: |
+          report="$(ls -1t artifacts/load-test/smoke/*.json 2>/dev/null | head -n1 || true)"
+          {
+            echo "### Load Test (Smoke)"
+            if [ -z "$report" ]; then
+              echo "- No Artillery JSON report was generated."
+              exit 0
+            fi
+            p95="$(jq -r '.aggregate.summaries["http.response_time"].p95 // "n/a"' "$report")"
+            p99="$(jq -r '.aggregate.summaries["http.response_time"].p99 // "n/a"' "$report")"
+            rate="$(jq -r '.aggregate.rates["http.request_rate"] // "n/a"' "$report")"
+            requests="$(jq -r '.aggregate.counters["http.requests"] // "n/a"' "$report")"
+            r429="$(jq -r '.aggregate.counters["http.codes.429"] // 0' "$report")"
+            failed="$(jq -r '.aggregate.counters["vusers.failed"] // 0' "$report")"
+            echo "- Report: \`$report\`"
+            echo "- http.response_time.p95: \`$p95\` ms"
+            echo "- http.response_time.p99: \`$p99\` ms"
+            echo "- http.request_rate: \`$rate\` req/s"
+            echo "- http.requests: \`$requests\`"
+            echo "- http.codes.429: \`$r429\`"
+            echo "- vusers.failed: \`$failed\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fetch load test baseline from main
+        id: load-test-baseline
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          base_dir="artifacts/load-test/baseline"
+          mkdir -p "${base_dir}"
+
+          api_get() {
+            local url="$1"
+            curl -fsSL \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${url}"
+          }
+
+          runs_url="${{ github.api_url }}/repos/${{ github.repository }}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=30"
+          runs_json="$(api_get "${runs_url}" || true)"
+          if [ -z "${runs_json}" ]; then
+            echo "Could not fetch workflow runs for baseline lookup."
+            echo "baseline_report=" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          mapfile -t run_ids < <(echo "${runs_json}" | jq -r '.workflow_runs[].id')
+
+          baseline_url=""
+          baseline_name=""
+          for run_id in "${run_ids[@]}"; do
+            artifacts_url="${{ github.api_url }}/repos/${{ github.repository }}/actions/runs/${run_id}/artifacts?per_page=100"
+            artifacts_json="$(api_get "${artifacts_url}" || true)"
+            if [ -z "${artifacts_json}" ]; then
+              continue
+            fi
+
+            baseline_url="$(echo "${artifacts_json}" | jq -r '.artifacts[] | select(.expired == false and (.name | startswith("load-test-ci-"))) | .archive_download_url' | head -n1)"
+            baseline_name="$(echo "${artifacts_json}" | jq -r '.artifacts[] | select(.expired == false and (.name | startswith("load-test-ci-"))) | .name' | head -n1)"
+
+            if [ -n "${baseline_url}" ] && [ "${baseline_url}" != "null" ]; then
+              break
+            fi
+          done
+
+          if [ -z "${baseline_url}" ] || [ "${baseline_url}" = "null" ]; then
+            echo "No non-expired load-test-ci artifact found on main yet."
+            echo "baseline_report=" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          zip_path="${base_dir}/baseline.zip"
+          if ! curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${baseline_url}" \
+            -o "${zip_path}"; then
+            echo "Failed to download baseline artifact: ${baseline_name}"
+            echo "baseline_report=" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          unpack_dir="${base_dir}/unpacked"
+          mkdir -p "${unpack_dir}"
+          unzip -oq "${zip_path}" -d "${unpack_dir}"
+
+          baseline_report="$(ls -1t "${unpack_dir}"/*.json 2>/dev/null | head -n1 || true)"
+          if [ -z "${baseline_report}" ]; then
+            echo "Downloaded baseline artifact did not include a json report."
+            echo "baseline_report=" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "baseline_artifact_name=${baseline_name}" >> "${GITHUB_OUTPUT}"
+          echo "baseline_report=${baseline_report}" >> "${GITHUB_OUTPUT}"
+
+      - name: Regression check against main baseline (advisory)
+        if: success()
+        env:
+          BASELINE_REPORT: ${{ steps.load-test-baseline.outputs.baseline_report }}
+          DD_LOAD_TEST_BASELINE_ARTIFACT_NAME: ${{ steps.load-test-baseline.outputs.baseline_artifact_name }}
+          DD_LOAD_TEST_MAX_P95_INCREASE_PCT: '20'
+          DD_LOAD_TEST_MAX_P99_INCREASE_PCT: '25'
+          DD_LOAD_TEST_MAX_RATE_DECREASE_PCT: '15'
+          DD_LOAD_TEST_REGRESSION_ENFORCE: 'false'
+        run: |
+          set -euo pipefail
+
+          current_report="$(ls -1t artifacts/load-test/smoke/*.json 2>/dev/null | head -n1 || true)"
+          if [ -z "${current_report}" ]; then
+            {
+              echo "### Load Test Regression Gate"
+              echo "- Current smoke report not found; skipping regression check."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          if [ -z "${BASELINE_REPORT}" ]; then
+            {
+              echo "### Load Test Regression Gate"
+              echo "- No baseline load-test-ci artifact from \`main\` is available yet; skipping regression check."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          ./scripts/check-load-test-regression.sh "${current_report}" "${BASELINE_REPORT}"
+
+      - name: Upload load test artifact (smoke)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: load-test-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/load-test/smoke/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  load-test-ci:
+    name: Load Test (CI)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    continue-on-error: true
+    needs: [build]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e  # v2.14.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238  # v6.2.0
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3.12.0
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      - name: Run Artillery load test
+        env:
+          ARTILLERY_ENV: ci
+          DD_LOAD_TEST_BUILD_CACHE: gha
+          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/ci
+          ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
+        run: ./scripts/run-load-test.sh
+
+      - name: Summarize load test metrics (ci)
+        if: always()
+        run: |
+          report="$(ls -1t artifacts/load-test/ci/*.json 2>/dev/null | head -n1 || true)"
+          {
+            echo "### Load Test (CI)"
+            if [ -z "$report" ]; then
+              echo "- No Artillery JSON report was generated."
+              exit 0
+            fi
+            p95="$(jq -r '.aggregate.summaries["http.response_time"].p95 // "n/a"' "$report")"
+            p99="$(jq -r '.aggregate.summaries["http.response_time"].p99 // "n/a"' "$report")"
+            rate="$(jq -r '.aggregate.rates["http.request_rate"] // "n/a"' "$report")"
+            requests="$(jq -r '.aggregate.counters["http.requests"] // "n/a"' "$report")"
+            r429="$(jq -r '.aggregate.counters["http.codes.429"] // 0' "$report")"
+            failed="$(jq -r '.aggregate.counters["vusers.failed"] // 0' "$report")"
+            echo "- Report: \`$report\`"
+            echo "- http.response_time.p95: \`$p95\` ms"
+            echo "- http.response_time.p99: \`$p99\` ms"
+            echo "- http.request_rate: \`$rate\` req/s"
+            echo "- http.requests: \`$requests\`"
+            echo "- http.codes.429: \`$r429\`"
+            echo "- vusers.failed: \`$failed\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload load test artifact (ci)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: load-test-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/load-test/ci/*.json
+          if-no-files-found: warn
+          retention-days: 30
