@@ -33,7 +33,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
+  <div class="flex-1 min-h-0 overflow-y-auto">
       <div class="dd-rounded overflow-hidden"
            :style="{
              backgroundColor: 'var(--dd-bg-card)',

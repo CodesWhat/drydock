@@ -22,8 +22,8 @@
 
 <template>
   <div class="flex flex-col flex-1 min-h-0">
-    <div class="flex gap-4 min-w-0 flex-1 min-h-0 pb-4">
-      <div class="flex-1 min-w-0 overflow-y-auto px-4 pt-4 pb-4">
+    <div class="flex gap-4 min-w-0 flex-1 min-h-0">
+      <div class="flex-1 min-w-0 overflow-y-auto">
         <slot />
       </div>
       <slot name="panel" />

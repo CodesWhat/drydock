@@ -1107,7 +1107,7 @@ function confirmForceUpdate(name: string) {
          class="flex flex-col flex-1 min-h-0">
 
       <!-- Full-page header -->
-      <div class="shrink-0 mx-4 mt-4 mb-4 dd-rounded overflow-hidden"
+      <div class="shrink-0 mb-4 dd-rounded overflow-hidden"
            :style="{
              backgroundColor: 'var(--dd-bg-card)',
              border: '1px solid var(--dd-border-strong)',
@@ -1199,7 +1199,7 @@ function confirmForceUpdate(name: string) {
       </div>
 
       <!-- Full-page tab content -->
-      <div class="flex-1 overflow-y-auto min-h-0 px-4 pb-4">
+      <div class="flex-1 overflow-y-auto min-h-0">
 
         <!-- Overview tab (full page) -->
         <div v-if="activeDetailTab === 'overview'" class="grid grid-cols-1 lg:grid-cols-2 gap-4">

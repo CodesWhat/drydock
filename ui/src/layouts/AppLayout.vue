@@ -327,8 +327,8 @@ onUnmounted(() => {
           </button>
 
           <nav class="flex items-center gap-1.5 text-[13px]">
-            <AppIcon :name="currentPageIcon" :size="14" class="leading-none dd-text-muted" />
-            <AppIcon name="chevron-right" :size="11" class="leading-none dd-text-muted" />
+            <AppIcon :name="currentPageIcon" :size="16" class="leading-none dd-text-muted" />
+            <AppIcon name="chevron-right" :size="13" class="leading-none dd-text-muted" />
             <span class="font-medium leading-none dd-text">
               {{ currentPageLabel }}
             </span>
@@ -353,7 +353,7 @@ onUnmounted(() => {
           <ThemeToggle />
 
           <button class="relative flex items-center justify-center w-8 h-8 dd-rounded transition-colors dd-text-secondary hover:dd-bg-elevated hover:dd-text">
-            <AppIcon name="notifications" :size="14" />
+            <AppIcon name="notifications" :size="18" />
             <span v-if="securityIssueCount" class="badge-pulse absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white"
                   style="background:var(--dd-danger);">{{ securityIssueCount }}</span>
           </button>
@@ -365,7 +365,7 @@ onUnmounted(() => {
                    style="background: linear-gradient(135deg, var(--dd-primary), var(--dd-success));">
                 {{ userInitials }}
               </div>
-              <AppIcon name="chevron-down" :size="10" class="dd-text-muted" />
+              <AppIcon name="chevron-down" :size="12" class="dd-text-muted" />
             </button>
             <Transition name="menu-fade">
               <div v-if="showUserMenu"
@@ -394,8 +394,8 @@ onUnmounted(() => {
       </header>
 
       <!-- MAIN CONTENT -->
-      <main class="flex-1 min-h-0 overflow-hidden flex flex-col"
-            :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+      <main class="flex-1 min-h-0 overflow-hidden flex flex-col p-4 sm:p-6"
+            :style="{ backgroundColor: 'var(--dd-bg)' }">
         <router-view />
       </main>
     </div>

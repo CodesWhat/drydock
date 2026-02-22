@@ -120,7 +120,7 @@ const playgroundTableRows = [
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
+  <div class="flex-1 min-h-0 overflow-y-auto">
   <div class="space-y-6">
 
     <!-- Spinner Preview -->

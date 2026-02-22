@@ -86,7 +86,7 @@ async function handleClearIconCache() {
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
+  <div class="flex-1 min-h-0 overflow-y-auto">
       <!-- Tabs -->
       <div class="flex gap-1 mb-6"
            :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
