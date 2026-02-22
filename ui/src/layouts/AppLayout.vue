@@ -85,9 +85,7 @@ const navGroups = computed<NavGroup[]>(() => [
   },
 ]);
 
-const hiddenPages: Record<string, { label: string; icon: string }> = {
-  '/profile': { label: 'Profile', icon: 'user' },
-};
+const hiddenPages: Record<string, { label: string; icon: string }> = {};
 
 const currentPageLabel = computed(() => {
   for (const group of navGroups.value) {
@@ -271,7 +269,7 @@ onUnmounted(() => {
       </nav>
 
       <!-- Sidebar search (mobile only) -->
-      <div v-if="isMobile" class="shrink-0 px-3 pt-3 pb-1">
+      <div v-if="isMobile" class="shrink-0 px-3 pt-3 pb-3">
         <button class="w-full flex items-center gap-2 dd-rounded px-3 py-2 text-xs transition-colors dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
                 :style="{ border: '1px solid var(--dd-border)' }"
                 @click="showSearch = true; isMobileMenuOpen = false">
@@ -379,7 +377,7 @@ onUnmounted(() => {
                   {{ currentUser?.username || 'User' }}
                 </div>
                 <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
-                        @click="showUserMenu = false; router.push('/profile')">
+                        @click="showUserMenu = false; router.push('/config?tab=profile')">
                   <AppIcon name="user" :size="11" class="dd-text-muted" />
                   Profile
                 </button>

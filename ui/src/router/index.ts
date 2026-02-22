@@ -15,7 +15,7 @@ export const viewLoaders = {
   watchers: () => import('../views/WatchersView.vue'),
   auth: () => import('../views/AuthView.vue'),
   notifications: () => import('../views/NotificationsView.vue'),
-  profile: () => import('../views/ProfileView.vue'),
+
   playground: () => import('../views/PlaygroundView.vue'),
 };
 
@@ -40,7 +40,7 @@ const routes = [
       createLazyRoute('/watchers', 'watchers'),
       createLazyRoute('/auth', 'auth'),
       createLazyRoute('/notifications', 'notifications'),
-      createLazyRoute('/profile', 'profile'),
+
       createLazyRoute('/playground', 'playground'),
     ],
   },

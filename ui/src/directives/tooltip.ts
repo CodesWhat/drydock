@@ -123,6 +123,7 @@ function bind(el: HTMLElement, binding: DirectiveBinding<BindingValue>) {
 
   el.addEventListener('mouseenter', state.show);
   el.addEventListener('mouseleave', state.hide);
+  el.addEventListener('mousedown', state.hide);
   el.addEventListener('focus', state.show);
   el.addEventListener('blur', state.hide);
   stateMap.set(el, state);
@@ -134,6 +135,7 @@ function unbind(el: HTMLElement) {
   state.hide();
   el.removeEventListener('mouseenter', state.show);
   el.removeEventListener('mouseleave', state.hide);
+  el.removeEventListener('mousedown', state.hide);
   el.removeEventListener('focus', state.show);
   el.removeEventListener('blur', state.hide);
   stateMap.delete(el);

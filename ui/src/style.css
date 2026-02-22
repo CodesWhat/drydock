@@ -212,6 +212,9 @@ body {
 .hover\:dd-text-warning:hover {
   color: var(--dd-warning);
 }
+.hover\:dd-text-primary:hover {
+  color: var(--dd-primary);
+}
 .hover\:dd-text-caution:hover {
   color: var(--dd-caution);
 }
