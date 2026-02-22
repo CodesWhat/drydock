@@ -34,7 +34,7 @@ const containersFixture: ContainerApiItem[] = [
     displayName: 'drydock-api',
     status: 'running',
     watcher: 'local',
-    displayIcon: 'fa-solid fa-box',
+    displayIcon: 'sh-box',
     image: {
       registry: { name: 'ghcr', url: 'https://ghcr.io' },
       name: 'ghcr.io/drydock/api',
@@ -52,7 +52,7 @@ const containersFixture: ContainerApiItem[] = [
     displayName: 'drydock-web',
     status: 'running',
     agent: 'edge-1',
-    displayIcon: 'fa-solid fa-globe',
+    displayIcon: 'sh-globe',
     image: {
       registry: { name: 'ghcr', url: 'https://ghcr.io' },
       name: 'ghcr.io/drydock/web',
@@ -70,7 +70,7 @@ const containersFixture: ContainerApiItem[] = [
     displayName: 'queue-worker',
     status: 'stopped',
     agent: 'edge-1',
-    displayIcon: 'fa-solid fa-gears',
+    displayIcon: 'sh-gears',
     image: {
       registry: { name: 'dockerhub', url: 'https://docker.io' },
       name: 'redis',
@@ -88,7 +88,7 @@ const containersFixture: ContainerApiItem[] = [
     displayName: 'postgres',
     status: 'running',
     agent: 'edge-2',
-    displayIcon: 'fa-solid fa-database',
+    displayIcon: 'sh-database',
     image: {
       registry: { name: 'dockerhub', url: 'https://docker.io' },
       name: 'postgres',

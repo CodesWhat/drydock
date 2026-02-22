@@ -43,7 +43,7 @@ function toggleSort(key: string, currentSortKey: string | undefined, currentSort
 <template>
   <div class="dd-rounded overflow-hidden"
        :style="{ border: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-card)' }">
-    <div class="overflow-x-auto">
+    <div class="overflow-hidden">
       <table class="w-full text-xs">
         <thead>
           <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
@@ -64,7 +64,7 @@ function toggleSort(key: string, currentSortKey: string | undefined, currentSort
         </thead>
         <tbody>
           <tr v-for="(row, i) in rows" :key="getRowKey(row, rowKey)"
-              class="cursor-pointer transition-colors hover:dd-bg-elevated"
+              class="cursor-pointer transition-colors hover:dd-bg-hover"
               :class="selectedKey != null && getRowKey(row, rowKey) === selectedKey ? 'ring-1 ring-inset ring-drydock-secondary' : ''"
               :style="{
                 backgroundColor: selectedKey != null && getRowKey(row, rowKey) === selectedKey

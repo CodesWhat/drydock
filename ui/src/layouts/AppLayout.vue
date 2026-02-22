@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import type InputText from 'primevue/inputtext';
-import type Menu from 'primevue/menu';
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import whaleLogo from '@/assets/whale-logo.png';
@@ -115,36 +113,26 @@ function navigateTo(navRoute: string) {
   if (isMobile.value) isMobileMenuOpen.value = false;
 }
 
-// User menu (PrimeVue Menu)
-const userMenu = ref<InstanceType<typeof Menu> | null>(null);
-const userMenuItems = computed(() => [
-  {
-    label: currentUser.value?.username || 'User',
-    items: [
-      { label: 'Profile', icon: 'fa-solid fa-user', command: () => router.push('/profile') },
-      {
-        label: 'Sign out',
-        icon: 'fa-solid fa-arrow-right-from-bracket',
-        class: 'dd-text-danger',
-        command: async () => {
-          try {
-            await logout();
-          } finally {
-            router.push('/login');
-          }
-        },
-      },
-    ],
-  },
-]);
-function toggleUserMenu(event: Event) {
-  userMenu.value?.toggle(event);
+// User menu
+const showUserMenu = ref(false);
+function toggleUserMenu() {
+  showUserMenu.value = !showUserMenu.value;
+}
+function handleUserMenuClickOutside(e: PointerEvent) {
+  const target = e.target as HTMLElement;
+  if (!target.closest('.user-menu-wrapper')) showUserMenu.value = false;
+}
+onMounted(() => document.addEventListener('pointerdown', handleUserMenuClickOutside));
+onUnmounted(() => document.removeEventListener('pointerdown', handleUserMenuClickOutside));
+async function handleSignOut() {
+  showUserMenu.value = false;
+  try { await logout(); } finally { router.push('/login'); }
 }
 
-// Search (PrimeVue Dialog)
+// Search modal
 const showSearch = ref(false);
 const searchQuery = ref('');
-const searchInput = ref<InstanceType<typeof InputText> | null>(null);
+const searchInput = ref<HTMLInputElement | null>(null);
 
 function handleKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -160,7 +148,7 @@ watch(showSearch, async (val) => {
   if (val) {
     searchQuery.value = '';
     await nextTick();
-    searchInput.value?.$el?.focus();
+    searchInput.value?.focus();
   }
 });
 
@@ -254,7 +242,7 @@ onUnmounted(() => {
               <div v-if="route.path === item.route"
                    class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-drydock-secondary"
                    style="height: 20px;" />
-              <AppIcon :name="item.icon" :size="14" class="shrink-0" style="width:18px; text-align:center;" />
+              <AppIcon :name="item.icon" :size="16" class="shrink-0" style="width:20px; text-align:center;" />
               <span class="sidebar-label text-[13px] font-medium">{{ item.label }}</span>
               <span v-if="item.badge && !isCollapsed"
                     class="sidebar-label ml-auto badge text-[10px]"
@@ -279,6 +267,19 @@ onUnmounted(() => {
         </div>
       </nav>
 
+      <!-- Sidebar search (mobile only) -->
+      <div v-if="isMobile" class="shrink-0 px-3 pt-3 pb-1">
+        <button class="w-full flex items-center gap-2 dd-rounded px-3 py-2 text-xs transition-colors dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
+                :style="{ border: '1px solid var(--dd-border)' }"
+                @click="showSearch = true; isMobileMenuOpen = false">
+          <AppIcon name="search" :size="12" />
+          <span class="sidebar-label">Search</span>
+          <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-muted">
+            <span class="text-[9px]">&#8984;</span>K
+          </kbd>
+        </button>
+      </div>
+
       <!-- Sidebar footer -->
       <div class="shrink-0 px-3 py-3 space-y-2"
            :style="{ borderTop: '1px solid var(--dd-border)' }">
@@ -299,7 +300,7 @@ onUnmounted(() => {
                   justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
                 }"
                 @click="sidebarCollapsed = !sidebarCollapsed">
-          <i :class="sidebarCollapsed ? 'pi pi-angle-double-right' : 'pi pi-angle-double-left'" class="text-sm" />
+          <AppIcon :name="sidebarCollapsed ? 'sidebar-expand' : 'sidebar-collapse'" :size="14" />
           <span class="sidebar-label">Collapse</span>
         </button>
       </div>
@@ -327,23 +328,25 @@ onUnmounted(() => {
 
           <nav class="flex items-center gap-1.5 text-[13px]">
             <AppIcon :name="currentPageIcon" :size="14" class="leading-none dd-text-muted" />
-            <i class="pi pi-angle-right text-[11px] leading-none dd-text-muted" />
+            <AppIcon name="chevron-right" :size="11" class="leading-none dd-text-muted" />
             <span class="font-medium leading-none dd-text">
               {{ currentPageLabel }}
             </span>
           </nav>
         </div>
 
-        <!-- Center: search trigger -->
-        <button class="flex items-center gap-2 dd-rounded px-3 py-1.5 text-xs transition-colors min-w-[220px] dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
+        <!-- Center: search trigger (hidden on mobile — shown in sidebar instead) -->
+        <button class="hidden sm:flex items-center gap-2 dd-rounded px-3 py-1.5 text-xs transition-colors min-w-[220px] dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
                 :style="{ border: '1px solid var(--dd-border)' }"
                 @click="showSearch = true">
-          <i class="pi pi-search text-[11px]" />
-          <span class="hidden sm:inline">Search</span>
-          <kbd class="hidden sm:inline-flex items-center gap-0.5 ml-auto px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-muted">
+          <AppIcon name="search" :size="12" />
+          <span>Search</span>
+          <kbd class="inline-flex items-center gap-0.5 ml-auto px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-muted">
             <span class="text-[9px]">&#8984;</span>K
           </kbd>
         </button>
+        <!-- Placeholder to keep grid balanced on mobile -->
+        <div class="sm:hidden" />
 
         <!-- Right: theme, notifications, avatar -->
         <div class="flex items-center gap-2 justify-end">
@@ -355,36 +358,73 @@ onUnmounted(() => {
                   style="background:var(--dd-danger);">{{ securityIssueCount }}</span>
           </button>
 
-          <div class="relative">
+          <div class="relative user-menu-wrapper">
             <button class="flex items-center gap-2 dd-rounded px-1.5 py-1 transition-colors hover:dd-bg-elevated"
                     @click="toggleUserMenu">
               <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white"
                    style="background: linear-gradient(135deg, var(--dd-primary), var(--dd-success));">
                 {{ userInitials }}
               </div>
-              <i class="pi pi-angle-down text-[10px] dd-text-muted" />
+              <AppIcon name="chevron-down" :size="10" class="dd-text-muted" />
             </button>
-            <Menu ref="userMenu" :model="userMenuItems" :popup="true" />
+            <Transition name="menu-fade">
+              <div v-if="showUserMenu"
+                   class="absolute right-0 top-full mt-1 min-w-[160px] py-1 dd-rounded-lg shadow-lg z-50"
+                   :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: '0 8px 24px rgba(0,0,0,0.25)' }">
+                <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider dd-text-muted"
+                     :style="{ borderBottom: '1px solid var(--dd-border)' }">
+                  {{ currentUser?.username || 'User' }}
+                </div>
+                <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
+                        @click="showUserMenu = false; router.push('/profile')">
+                  <AppIcon name="user" :size="11" class="dd-text-muted" />
+                  Profile
+                </button>
+                <div class="my-0.5" :style="{ borderTop: '1px solid var(--dd-border)' }" />
+                <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated"
+                        style="color: var(--dd-danger);"
+                        @click="handleSignOut">
+                  <AppIcon name="sign-out" :size="11" />
+                  Sign out
+                </button>
+              </div>
+            </Transition>
           </div>
         </div>
       </header>
 
       <!-- MAIN CONTENT -->
-      <main class="flex-1 overflow-y-auto p-4 sm:p-6"
+      <main class="flex-1 min-h-0 overflow-hidden flex flex-col"
             :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
         <router-view />
       </main>
     </div>
 
     <!-- Search Modal -->
-    <Dialog v-model:visible="showSearch" modal :closable="true" :showHeader="false"
-            :style="{ width: '500px', maxWidth: '90vw' }"
-            :pt="{ mask: { class: 'backdrop-blur-sm' } }">
-      <div class="p-4">
-        <InputText ref="searchInput" v-model="searchQuery"
-                   placeholder="Search containers, settings..."
-                   class="w-full" />
+    <Teleport to="body">
+      <div v-if="showSearch"
+           class="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm"
+           @pointerdown.self="showSearch = false">
+        <div class="flex items-start justify-center pt-[15vh] min-h-full px-4"
+             @pointerdown.self="showSearch = false">
+          <div class="relative w-full max-w-[500px] dd-rounded-lg overflow-hidden shadow-2xl"
+               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+            <div class="flex items-center gap-3 px-4 py-3"
+                 :style="{ borderBottom: '1px solid var(--dd-border)' }">
+              <AppIcon name="search" :size="14" class="dd-text-muted" />
+              <input ref="searchInput" v-model="searchQuery"
+                     type="text"
+                     placeholder="Search containers, settings..."
+                     class="flex-1 bg-transparent text-sm dd-text font-mono outline-none placeholder:dd-text-muted"
+                     @keydown.escape="showSearch = false" />
+              <kbd class="px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-muted">ESC</kbd>
+            </div>
+            <div class="px-4 py-6 text-center text-xs dd-text-muted">
+              Start typing to search...
+            </div>
+          </div>
+        </div>
       </div>
-    </Dialog>
+    </Teleport>
   </div>
 </template>

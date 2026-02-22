@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { useConfirm } from 'primevue/useconfirm';
+import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { ref } from 'vue';
 
-const confirm = useConfirm();
+const confirm = useConfirmDialog();
 const lastConfirmResult = ref('');
 
 function demoConfirmStop() {
   confirm.require({
     header: 'Stop Container',
     message: 'Stop nginx-proxy?',
-
-    rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
-    acceptProps: { label: 'Stop', severity: 'danger' },
+    rejectLabel: 'Cancel',
+    acceptLabel: 'Stop',
+    severity: 'danger',
     accept: () => { lastConfirmResult.value = 'Stopped nginx-proxy'; },
     reject: () => { lastConfirmResult.value = 'Cancelled stop'; },
   });
@@ -21,9 +21,9 @@ function demoConfirmRestart() {
   confirm.require({
     header: 'Restart Container',
     message: 'Restart postgres-db?',
-
-    rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
-    acceptProps: { label: 'Restart', severity: 'warn' },
+    rejectLabel: 'Cancel',
+    acceptLabel: 'Restart',
+    severity: 'warn',
     accept: () => { lastConfirmResult.value = 'Restarted postgres-db'; },
     reject: () => { lastConfirmResult.value = 'Cancelled restart'; },
   });
@@ -33,13 +33,35 @@ function demoConfirmIgnore() {
   confirm.require({
     header: 'Ignore Container',
     message: 'Ignore redis-cache? It will no longer be monitored for updates.',
-
-    rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
-    acceptProps: { label: 'Ignore', severity: 'danger' },
+    rejectLabel: 'Cancel',
+    acceptLabel: 'Ignore',
+    severity: 'danger',
     accept: () => { lastConfirmResult.value = 'Ignored redis-cache'; },
     reject: () => { lastConfirmResult.value = 'Cancelled ignore'; },
   });
 }
+
+const spinSpeed = ref<'dd-spin-fast' | 'dd-spin' | 'dd-spin-slow'>('dd-spin');
+const speedOptions = [
+  { cls: 'dd-spin-fast', label: 'Fast (0.8s)' },
+  { cls: 'dd-spin', label: 'Normal (1.5s)' },
+  { cls: 'dd-spin-slow', label: 'Slow (2.5s)' },
+] as const;
+
+const spinnerCandidates = [
+  { icon: 'ph:spinner-duotone', label: 'Spinner' },
+  { icon: 'ph:spinner-gap-duotone', label: 'Spinner Gap' },
+  { icon: 'ph:spinner-ball-duotone', label: 'Spinner Ball' },
+  { icon: 'ph:circle-notch-duotone', label: 'Circle Notch' },
+  { icon: 'ph:circle-dashed-duotone', label: 'Circle Dashed' },
+  { icon: 'ph:arrow-clockwise-duotone', label: 'Arrow Clockwise' },
+  { icon: 'ph:arrows-clockwise-duotone', label: 'Arrows Clockwise' },
+  { icon: 'ph:gear-duotone', label: 'Gear' },
+  { icon: 'ph:gear-fine-duotone', label: 'Gear Fine' },
+  { icon: 'ph:gear-six-duotone', label: 'Gear Six' },
+  { icon: 'ph:fan-duotone', label: 'Fan' },
+  { icon: 'ph:hourglass-duotone', label: 'Hourglass' },
+];
 
 const radiusPresets = [
   { id: 'none', label: 'None', sm: 0, md: 0, lg: 0 },
@@ -98,7 +120,42 @@ const playgroundTableRows = [
 </script>
 
 <template>
+  <div class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
   <div class="space-y-6">
+
+    <!-- Spinner Preview -->
+    <div class="dd-rounded overflow-hidden"
+         :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+      <div class="px-5 py-3.5 flex items-center gap-2"
+           :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+        <iconify-icon icon="ph:spinner-duotone" width="14" class="text-drydock-secondary dd-spin" />
+        <h2 class="text-sm font-semibold dd-text">Brand Spinner Candidates</h2>
+        <div class="flex items-center gap-1 ml-auto">
+          <button v-for="sp in speedOptions" :key="sp.cls"
+                  class="px-2.5 py-1 dd-rounded text-[10px] font-semibold transition-colors"
+                  :class="spinSpeed === sp.cls ? 'text-drydock-secondary' : 'dd-text-muted hover:dd-text'"
+                  :style="spinSpeed === sp.cls ? { backgroundColor: 'var(--dd-primary-muted)', border: '1px solid var(--dd-primary)' } : { border: '1px solid var(--dd-border-strong)' }"
+                  @click="spinSpeed = sp.cls">
+            {{ sp.label }}
+          </button>
+        </div>
+      </div>
+      <div class="p-5">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div v-for="s in spinnerCandidates" :key="s.icon"
+               class="flex flex-col items-center gap-3 px-4 py-5 dd-rounded transition-colors hover:dd-bg-elevated cursor-pointer"
+               :style="{ backgroundColor: 'var(--dd-bg-inset)', border: '1px solid var(--dd-border-strong)' }">
+            <div class="flex items-center gap-6">
+              <iconify-icon :icon="s.icon" width="20" class="dd-text-muted" :class="spinSpeed" />
+              <iconify-icon :icon="s.icon" width="28" class="dd-text" :class="spinSpeed" />
+              <iconify-icon :icon="s.icon" width="36" class="text-drydock-secondary" :class="spinSpeed" />
+            </div>
+            <div class="text-[11px] font-semibold dd-text">{{ s.label }}</div>
+            <div class="text-[9px] font-mono dd-text-muted">{{ s.icon }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Border Radius -->
     <div class="dd-rounded overflow-hidden"
@@ -524,12 +581,12 @@ const playgroundTableRows = [
             <button v-tooltip.top="{ value: 'Blocked by Bouncer', showDelay: 400 }"
                     class="w-8 h-8 dd-rounded flex items-center justify-center cursor-not-allowed dd-text-muted opacity-50"
                     :style="{ border: '1px solid var(--dd-border-strong)' }">
-              <i class="fa-solid fa-lock text-[13px]" />
+              <AppIcon name="lock" :size="13" />
             </button>
             <button v-tooltip.top="{ value: 'More actions', showDelay: 400 }"
                     class="w-8 h-8 dd-rounded flex items-center justify-center transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                     :style="{ border: '1px solid var(--dd-border-strong)' }">
-              <i class="fa-solid fa-ellipsis-vertical text-[13px]" />
+              <AppIcon name="more" :size="13" />
             </button>
           </div>
         </div>
@@ -550,7 +607,7 @@ const playgroundTableRows = [
             <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold"
                     :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
                     @click="demoConfirmIgnore">
-              <i class="fa-solid fa-eye-slash text-[9px] mr-1" />Ignore
+              <AppIcon name="eye-slash" :size="11" class="mr-1" />Ignore
             </button>
           </div>
           <div v-if="lastConfirmResult" class="mt-2 text-[11px] font-mono dd-text-secondary px-2.5 py-1.5 dd-rounded"
@@ -595,5 +652,6 @@ const playgroundTableRows = [
       </div>
     </div>
 
+  </div>
   </div>
 </template>

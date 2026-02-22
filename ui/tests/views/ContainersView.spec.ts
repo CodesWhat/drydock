@@ -4,6 +4,14 @@ import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
+const { mockRoute } = vi.hoisted(() => ({
+  mockRoute: { query: {} as Record<string, unknown> },
+}));
+
+vi.mock('vue-router', () => ({
+  useRoute: () => mockRoute,
+}));
+
 // --- Mock all services ---
 vi.mock('@/services/container', () => ({
   getAllContainers: vi.fn(),
@@ -35,14 +43,19 @@ const mockFilteredContainers = ref<Container[]>([]);
 const mockActiveFilterCount = ref(0);
 const mockShowFilters = ref(false);
 const mockClearFilters = vi.fn();
+const mockFilterStatus = ref('all');
+const mockFilterRegistry = ref('all');
+const mockFilterBouncer = ref('all');
+const mockFilterServer = ref('all');
+const mockFilterKind = ref('all');
 
 vi.mock('@/composables/useContainerFilters', () => ({
   useContainerFilters: vi.fn(() => ({
-    filterStatus: ref('all'),
-    filterRegistry: ref('all'),
-    filterBouncer: ref('all'),
-    filterServer: ref('all'),
-    filterKind: ref('all'),
+    filterStatus: mockFilterStatus,
+    filterRegistry: mockFilterRegistry,
+    filterBouncer: mockFilterBouncer,
+    filterServer: mockFilterServer,
+    filterKind: mockFilterKind,
     showFilters: mockShowFilters,
     activeFilterCount: mockActiveFilterCount,
     filteredContainers: mockFilteredContainers,
@@ -190,6 +203,11 @@ async function mountContainersView(containers: Container[] = []) {
   // Sync the filteredContainers mock with the containers we're providing
   mockFilteredContainers.value = containers;
   mockActiveFilterCount.value = 0;
+  mockFilterStatus.value = 'all';
+  mockFilterRegistry.value = 'all';
+  mockFilterBouncer.value = 'all';
+  mockFilterServer.value = 'all';
+  mockFilterKind.value = 'all';
   mockSelectedContainer.value = null;
   mockDetailPanelOpen.value = false;
   mockContainerFullPage.value = false;
@@ -206,6 +224,12 @@ describe('ContainersView', () => {
     vi.clearAllMocks();
     mockFilteredContainers.value = [];
     mockActiveFilterCount.value = 0;
+    mockFilterStatus.value = 'all';
+    mockFilterRegistry.value = 'all';
+    mockFilterBouncer.value = 'all';
+    mockFilterServer.value = 'all';
+    mockFilterKind.value = 'all';
+    mockRoute.query = {};
   });
 
   describe('loading containers', () => {
@@ -218,6 +242,20 @@ describe('ContainersView', () => {
       const containers = [makeContainer(), makeContainer({ id: 'c2', name: 'redis' })];
       await mountContainersView(containers);
       expect(mockFilteredContainers.value).toHaveLength(2);
+    });
+  });
+
+  describe('route query filters', () => {
+    it('applies filterKind from route query', async () => {
+      mockRoute.query = { filterKind: 'any' };
+      await mountContainersView([makeContainer({ newTag: '2.0.0', updateKind: 'major' })]);
+      expect(mockFilterKind.value).toBe('any');
+    });
+
+    it('falls back to all for an invalid filterKind query', async () => {
+      mockRoute.query = { filterKind: 'invalid-value' };
+      await mountContainersView([makeContainer()]);
+      expect(mockFilterKind.value).toBe('all');
     });
   });
 

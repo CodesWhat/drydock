@@ -385,7 +385,7 @@ onMounted(fetchServers);
               <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
                       :style="{ border: '1px solid var(--dd-border-strong)' }"
                       @click="fetchServers()">
-                <AppIcon name="restart" :size="10" />
+                <AppIcon name="restart" :size="11" />
                 Refresh
               </button>
             </div>

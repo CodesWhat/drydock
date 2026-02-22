@@ -246,11 +246,11 @@ const secActiveColumns = computed(() =>
                 <span v-if="row.fixedIn"
                       class="badge px-1.5 py-0 text-[9px]"
                       style="background: var(--dd-success-muted); color: var(--dd-success);">
-                  <AppIcon name="config" :size="9" />
+                  <AppIcon name="config" :size="11" />
                 </span>
                 <span v-else class="badge px-1.5 py-0 text-[9px]"
                       style="background: var(--dd-neutral-muted); color: var(--dd-neutral);">
-                  <AppIcon name="xmark" :size="9" />
+                  <AppIcon name="xmark" :size="11" />
                 </span>
                 <span class="badge text-[7px] font-bold px-1.5 py-0 dd-bg-elevated dd-text-secondary">
                   {{ row.image }}
@@ -323,7 +323,7 @@ const secActiveColumns = computed(() =>
             <span v-if="vuln.fixedIn"
                   class="text-[11px] font-medium flex items-center gap-1.5"
                   style="color: var(--dd-success);">
-              <AppIcon name="restart" :size="9" />
+              <AppIcon name="restart" :size="11" />
               Fix: {{ vuln.fixedIn }}
             </span>
             <span v-else class="text-[11px] dd-text-muted">No fix available</span>

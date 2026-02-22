@@ -3,6 +3,14 @@ import type { Container } from '@/types/container';
 import DashboardView from '@/views/DashboardView.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
+const { mockRouterPush } = vi.hoisted(() => ({
+  mockRouterPush: vi.fn(),
+}));
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: mockRouterPush }),
+}));
+
 vi.mock('@/services/container', () => ({
   getAllContainers: vi.fn(),
 }));
@@ -61,6 +69,7 @@ async function mountDashboard(containers: Container[] = [], agents: any[] = [], 
 describe('DashboardView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRouterPush.mockClear();
   });
 
   describe('loading state', () => {
@@ -316,6 +325,43 @@ describe('DashboardView', () => {
       const wrapper = await mountDashboard([makeContainer()]);
       const links = wrapper.findAll('button').filter((b) => b.text().includes('View all'));
       expect(links.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('routes stat cards to the expected pages', async () => {
+      const wrapper = await mountDashboard([makeContainer({ updateKind: 'major', newTag: '2.0.0' })]);
+      const statCards = wrapper.findAll('.stat-card');
+
+      const containersCard = statCards.find((c) => c.text().includes('Containers'));
+      await containersCard?.trigger('click');
+      expect(mockRouterPush).toHaveBeenCalledWith('/containers');
+
+      const updatesCard = statCards.find((c) => c.text().includes('Updates Available'));
+      await updatesCard?.trigger('click');
+      expect(mockRouterPush).toHaveBeenCalledWith({
+        path: '/containers',
+        query: { filterKind: 'any' },
+      });
+
+      const securityCard = statCards.find((c) => c.text().includes('Security Issues'));
+      await securityCard?.trigger('click');
+      expect(mockRouterPush).toHaveBeenCalledWith('/security');
+    });
+
+    it('routes update view-all buttons with has-update filter', async () => {
+      const wrapper = await mountDashboard([makeContainer({ updateKind: 'minor', newTag: '1.2.0' })]);
+      const updateLinks = wrapper.findAll('button').filter((b) => b.text().includes('View all'));
+
+      await updateLinks[0]?.trigger('click');
+      expect(mockRouterPush).toHaveBeenCalledWith({
+        path: '/containers',
+        query: { filterKind: 'any' },
+      });
+
+      await updateLinks[updateLinks.length - 1]?.trigger('click');
+      expect(mockRouterPush).toHaveBeenLastCalledWith({
+        path: '/containers',
+        query: { filterKind: 'any' },
+      });
     });
   });
 });

@@ -189,7 +189,7 @@ onMounted(async () => {
                     : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))' }"
                   :disabled="testingTrigger !== null"
                   @click.stop="testTrigger(item)">
-            <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="8" />
+            <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11" />
             {{ testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test' }}
           </button>
         </div>

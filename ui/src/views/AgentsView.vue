@@ -440,7 +440,7 @@ function closeAgentPanel() {
                 <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-medium transition-colors dd-text-secondary hover:dd-bg-elevated"
                         :style="{ border: '1px solid var(--dd-border-strong)' }"
                         @click.stop="selectAgent(agent)">
-                  <AppIcon name="info" :size="10" />
+                  <AppIcon name="info" :size="11" />
                   Details
                 </button>
               </div>
@@ -491,7 +491,7 @@ function closeAgentPanel() {
                         ? 'text-drydock-secondary'
                         : 'dd-text-muted hover:dd-text'"
                       @click="agentDetailTab = tab.id">
-                <AppIcon :name="tab.icon" :size="10" class="mr-1" />
+                <AppIcon :name="tab.icon" :size="12" class="mr-1" />
                 {{ tab.label }}
                 <div v-if="agentDetailTab === tab.id"
                      class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full" />

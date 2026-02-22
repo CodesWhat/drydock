@@ -87,12 +87,12 @@ async function handleOidc(name: string) {
 
 function oidcIcon(name: string): string {
   const lower = name.toLowerCase();
-  if (lower.includes('github')) return 'fa-brands fa-github';
-  if (lower.includes('gitlab')) return 'fa-brands fa-gitlab';
-  if (lower.includes('google')) return 'fa-brands fa-google';
-  if (lower.includes('microsoft') || lower.includes('azure')) return 'fa-brands fa-microsoft';
-  if (lower.includes('okta')) return 'fa-solid fa-key';
-  return 'fa-solid fa-right-to-bracket';
+  if (lower.includes('github')) return 'github';
+  if (lower.includes('gitlab')) return 'gitlab';
+  if (lower.includes('google')) return 'google';
+  if (lower.includes('microsoft') || lower.includes('azure')) return 'microsoft';
+  if (lower.includes('okta')) return 'key';
+  return 'sign-in';
 }
 </script>
 
@@ -100,7 +100,7 @@ function oidcIcon(name: string): string {
   <div class="min-h-screen flex items-center justify-center px-4 py-8 dd-bg">
     <!-- Loading state -->
     <div v-if="loading" class="dd-text-secondary">
-      <i class="fa-solid fa-spinner fa-spin mr-2" />
+      <AppIcon name="spinner" :size="14" class="dd-spin mr-2" />
       Loading...
     </div>
 
@@ -168,7 +168,7 @@ function oidcIcon(name: string): string {
             style="background-color: var(--dd-primary); color: #fff;"
           >
             <template v-if="submitting">
-              <i class="fa-solid fa-spinner fa-spin mr-2" />
+              <AppIcon name="spinner" :size="14" class="dd-spin mr-2" />
               Signing in...
             </template>
             <template v-else>Sign in</template>
@@ -192,7 +192,7 @@ function oidcIcon(name: string): string {
             style="background-color: var(--dd-bg-inset); border: 1px solid var(--dd-border-strong);"
             @click="handleOidc(strategy.name)"
           >
-            <i :class="oidcIcon(strategy.name)" class="text-[13px]" />
+            <AppIcon :name="oidcIcon(strategy.name)" :size="13" />
             {{ strategy.name }}
           </button>
         </div>

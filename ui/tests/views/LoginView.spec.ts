@@ -246,19 +246,19 @@ describe('LoginView', () => {
   });
 
   describe('OIDC icon selection', () => {
-    it('renders github icon class for GitHub provider', async () => {
+    it('renders github icon for GitHub provider', async () => {
       const wrapper = await mountLogin([{ type: 'oidc', name: 'GitHub' }]);
-      expect(wrapper.find('.fa-brands.fa-github').exists()).toBe(true);
+      expect(wrapper.find('.app-icon-stub[data-icon="github"]').exists()).toBe(true);
     });
 
-    it('renders google icon class for Google provider', async () => {
+    it('renders google icon for Google provider', async () => {
       const wrapper = await mountLogin([{ type: 'oidc', name: 'Google' }]);
-      expect(wrapper.find('.fa-brands.fa-google').exists()).toBe(true);
+      expect(wrapper.find('.app-icon-stub[data-icon="google"]').exists()).toBe(true);
     });
 
     it('renders generic icon for unknown provider', async () => {
       const wrapper = await mountLogin([{ type: 'oidc', name: 'CustomSSO' }]);
-      expect(wrapper.find('.fa-solid.fa-right-to-bracket').exists()).toBe(true);
+      expect(wrapper.find('.app-icon-stub[data-icon="sign-in"]').exists()).toBe(true);
     });
   });
 });

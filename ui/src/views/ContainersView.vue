@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { useConfirm } from 'primevue/useconfirm';
+import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useColumnVisibility } from '../composables/useColumnVisibility';
 import { useContainerFilters } from '../composables/useContainerFilters';
@@ -24,7 +25,7 @@ import {
   updateKindColor,
 } from '../utils/display';
 
-const confirm = useConfirm();
+const confirm = useConfirmDialog();
 
 // Loading and error state
 const loading = ref(true);
@@ -115,6 +116,23 @@ const {
   filteredContainers,
   clearFilters,
 } = useContainerFilters(containers);
+const route = useRoute();
+const VALID_FILTER_KINDS = new Set(['all', 'any', 'major', 'minor', 'patch', 'digest']);
+
+function applyFilterKindFromQuery(queryValue: unknown) {
+  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
+  if (typeof raw !== 'string') {
+    filterKind.value = 'all';
+    return;
+  }
+  filterKind.value = VALID_FILTER_KINDS.has(raw) ? raw : 'all';
+}
+
+applyFilterKindFromQuery(route.query.filterKind);
+watch(
+  () => route.query.filterKind,
+  (value) => applyFilterKindFromQuery(value),
+);
 
 const serverNames = computed(() => [...new Set(containers.value.map((c) => c.server))]);
 
@@ -333,8 +351,9 @@ function confirmStop(name: string) {
   confirm.require({
     header: 'Stop Container',
     message: `Stop ${name}?`,
-    rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
-    acceptProps: { label: 'Stop', severity: 'danger' },
+    rejectLabel: 'Cancel',
+    acceptLabel: 'Stop',
+    severity: 'danger',
     accept: () => executeAction(name, apiStopContainer),
   });
 }
@@ -343,8 +362,9 @@ function confirmRestart(name: string) {
   confirm.require({
     header: 'Restart Container',
     message: `Restart ${name}?`,
-    rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
-    acceptProps: { label: 'Restart', severity: 'warn' },
+    rejectLabel: 'Cancel',
+    acceptLabel: 'Restart',
+    severity: 'warn',
     accept: () => executeAction(name, apiRestartContainer),
   });
 }
@@ -353,8 +373,9 @@ function confirmForceUpdate(name: string) {
   confirm.require({
     header: 'Force Update',
     message: `Force update ${name}? This bypasses normal update checks.`,
-    rejectProps: { label: 'Cancel', severity: 'secondary', text: true },
-    acceptProps: { label: 'Force Update', severity: 'warn' },
+    rejectLabel: 'Cancel',
+    acceptLabel: 'Force Update',
+    severity: 'warn',
     accept: () => forceUpdate(name),
   });
 }
@@ -457,7 +478,7 @@ function confirmForceUpdate(name: string) {
                  @row-click="selectContainer($event)">
         <!-- Container icon (own column) -->
         <template #cell-icon="{ row: c }">
-          <i v-if="c._pending || actionInProgress === c.name" class="fa-solid fa-spinner fa-spin text-[14px] dd-text-muted" />
+          <AppIcon v-if="c._pending || actionInProgress === c.name" name="spinner" :size="14" class="dd-spin dd-text-muted" />
           <ContainerIcon v-else :icon="c.icon" :size="20" />
         </template>
 
@@ -471,49 +492,49 @@ function confirmForceUpdate(name: string) {
                   <button v-if="c.newTag && c.bouncer === 'blocked'"
                           class="w-7 h-7 dd-rounded flex items-center justify-center cursor-not-allowed dd-text-muted opacity-50"
                           v-tooltip.top="tt('Blocked by Bouncer')" @click.stop>
-                    <i class="fa-solid fa-lock text-[11px]" />
+                    <AppIcon name="lock" :size="11" />
                   </button>
                   <button v-else-if="c.newTag"
-                          class="w-7 h-7 dd-rounded flex items-center justify-center transition-all hover:dd-bg-elevated hover:scale-110 active:scale-95"
+                          class="w-7 h-7 dd-rounded flex items-center justify-center transition-all hover:dd-bg-hover hover:scale-110 active:scale-95"
                           style="color: var(--dd-primary);"
                           v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
                     <AppIcon name="cloud-download" :size="14" />
                   </button>
                   <button v-else-if="c.status === 'running'"
-                          class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-danger hover:dd-bg-elevated hover:scale-110 active:scale-95"
+                          class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95"
                           v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
                     <AppIcon name="stop" :size="12" />
                   </button>
                   <button v-else
-                          class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-success hover:dd-bg-elevated hover:scale-110 active:scale-95"
+                          class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
                           v-tooltip.top="tt('Start')" @click.stop>
                     <AppIcon name="play" :size="12" />
                   </button>
-                  <button class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text hover:dd-bg-elevated hover:scale-110 active:scale-95"
+                  <button class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95"
                           :class="openActionsMenu === c.name ? 'dd-bg-elevated dd-text' : ''"
                           v-tooltip.top="tt('More')" @click.stop="toggleActionsMenu(c.name, $event)">
-                    <i class="fa-solid fa-ellipsis-vertical text-[11px]" />
+                    <AppIcon name="more" :size="11" />
                   </button>
                 </div>
               </div>
               <div class="text-[10px] mt-0.5 truncate dd-text-muted">{{ c.image }}</div>
               <!-- Compact mode: folded badge row -->
-              <div v-if="isCompact" class="flex items-center gap-1.5 mt-1.5">
-                <span v-if="c.newTag" class="inline-flex items-center gap-0.5 text-[9px] font-semibold dd-text-secondary shrink-0">
-                  {{ c.currentTag }}
-                  <i class="fa-solid fa-arrow-right text-[7px] dd-text-muted mx-0.5" />
-                  <span style="color: var(--dd-primary);">{{ c.newTag }}</span>
+              <div v-if="isCompact" class="flex items-center gap-1.5 mt-1.5 min-w-0 overflow-hidden">
+                <span v-if="c.newTag" class="inline-flex items-center gap-0.5 text-[9px] font-semibold dd-text-secondary min-w-0">
+                  <span class="truncate max-w-[80px]">{{ c.currentTag }}</span>
+                  <AppIcon name="arrow-right" :size="11" class="dd-text-muted mx-0.5 shrink-0" />
+                  <span class="truncate max-w-[100px]" style="color: var(--dd-primary);" :title="c.newTag">{{ c.newTag }}</span>
                 </span>
                 <div class="flex items-center gap-1.5 ml-auto shrink-0">
                 <span v-if="c.updateKind" class="badge px-1.5 py-0 text-[9px]"
                       :style="{ backgroundColor: updateKindColor(c.updateKind).bg, color: updateKindColor(c.updateKind).text }"
                       v-tooltip.top="tt(c.updateKind)">
-                  <i :class="c.updateKind === 'major' ? 'fa-solid fa-angles-up' : c.updateKind === 'minor' ? 'fa-solid fa-angle-up' : c.updateKind === 'patch' ? 'fa-solid fa-hashtag' : 'fa-solid fa-fingerprint'" />
+                  <AppIcon :name="c.updateKind === 'major' ? 'chevrons-up' : c.updateKind === 'minor' ? 'chevron-up' : c.updateKind === 'patch' ? 'hashtag' : 'fingerprint'" :size="12" />
                 </span>
                 <span class="badge px-1.5 py-0 text-[9px]"
                       :style="{ backgroundColor: bouncerColor(c.bouncer).bg, color: bouncerColor(c.bouncer).text }"
                       v-tooltip.top="tt(c.bouncer)">
-                  <i :class="c.bouncer === 'safe' ? 'fa-solid fa-check' : c.bouncer === 'blocked' ? 'fa-solid fa-ban' : 'fa-solid fa-triangle-exclamation'" />
+                  <AppIcon :name="c.bouncer === 'safe' ? 'check' : c.bouncer === 'blocked' ? 'blocked' : 'warning'" :size="12" />
                 </span>
                 <span class="badge px-1.5 py-0 text-[9px]"
                       :style="{
@@ -521,7 +542,7 @@ function confirmForceUpdate(name: string) {
                         color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
                       }"
                       v-tooltip.top="tt(c.status)">
-                  <i :class="c.status === 'running' ? 'fa-solid fa-circle-play' : 'fa-solid fa-circle-stop'" />
+                  <AppIcon :name="c.status === 'running' ? 'play' : 'stop'" :size="12" />
                 </span>
                 <span class="badge text-[7px] font-bold px-1.5 py-0"
                       :style="{ backgroundColor: serverBadgeColor(c.server).bg, color: serverBadgeColor(c.server).text }">
@@ -533,13 +554,13 @@ function confirmForceUpdate(name: string) {
         </template>
         <!-- Version comparison -->
         <template #cell-version="{ row: c }">
-          <div v-if="c.newTag" class="flex items-center justify-center gap-1.5">
-            <span class="text-[11px] dd-text-secondary">{{ c.currentTag }}</span>
-            <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
-            <span class="text-[11px] font-semibold" style="color: var(--dd-primary);">{{ c.newTag }}</span>
+          <div v-if="c.newTag" class="flex items-center justify-center gap-1.5 min-w-0 max-w-[260px]">
+            <span class="text-[11px] dd-text-secondary truncate shrink-0 max-w-[100px]" :title="c.currentTag">{{ c.currentTag }}</span>
+            <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
+            <span class="text-[11px] font-semibold truncate max-w-[140px]" style="color: var(--dd-primary);" :title="c.newTag">{{ c.newTag }}</span>
           </div>
           <div v-else class="text-center">
-            <span class="text-[11px] dd-text-secondary">{{ c.currentTag }}</span>
+            <span class="text-[11px] dd-text-secondary truncate block max-w-[140px] mx-auto" :title="c.currentTag">{{ c.currentTag }}</span>
           </div>
         </template>
         <!-- Kind badge -->
@@ -589,28 +610,28 @@ function confirmForceUpdate(name: string) {
               <button v-if="c.newTag && c.bouncer === 'blocked'"
                       class="w-8 h-8 dd-rounded flex items-center justify-center transition-all cursor-not-allowed dd-text-muted opacity-50"
                       v-tooltip.top="tt('Blocked by Bouncer')" @click.stop>
-                <i class="fa-solid fa-lock text-[13px]" />
+                <AppIcon name="lock" :size="13" />
               </button>
               <button v-else-if="c.newTag"
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-all hover:dd-bg-elevated hover:scale-110 active:scale-95"
+                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-all hover:dd-bg-hover hover:scale-110 active:scale-95"
                       style="color: var(--dd-primary);"
                       v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
                 <AppIcon name="cloud-download" :size="16" />
               </button>
               <button v-else-if="c.status === 'running'"
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-danger hover:dd-bg-elevated hover:scale-110 active:scale-95"
+                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95"
                       v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
                 <AppIcon name="stop" :size="14" />
               </button>
               <button v-else
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-success hover:dd-bg-elevated hover:scale-110 active:scale-95"
+                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
                       v-tooltip.top="tt('Start')" @click.stop>
                 <AppIcon name="play" :size="14" />
               </button>
-              <button class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text hover:dd-bg-elevated hover:scale-110 active:scale-95"
+              <button class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95"
                       :class="openActionsMenu === c.name ? 'dd-bg-elevated dd-text' : ''"
                       v-tooltip.top="tt('More')" @click.stop="toggleActionsMenu(c.name, $event)">
-                <i class="fa-solid fa-ellipsis-vertical text-[13px]" />
+                <AppIcon name="more" :size="13" />
               </button>
             </div>
           </template>
@@ -622,13 +643,13 @@ function confirmForceUpdate(name: string) {
                    :style="{ border: '1px solid var(--dd-border-strong)' }">
                 <button class="inline-flex items-center justify-center flex-1 whitespace-nowrap px-3 py-1.5 text-[11px] font-bold tracking-wide cursor-not-allowed"
                         :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-text-muted)' }">
-                  <i class="fa-solid fa-lock text-[9px] mr-1" /> Blocked
+                  <AppIcon name="lock" :size="11" class="mr-1" /> Blocked
                 </button>
-                <button class="inline-flex items-center justify-center w-7 transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                <button class="inline-flex items-center justify-center w-7 transition-colors dd-text-muted hover:dd-text hover:dd-bg-hover"
                         :style="{ backgroundColor: 'var(--dd-bg)', borderLeft: '1px solid var(--dd-border-strong)' }"
                         :class="openActionsMenu === c.name ? 'dd-bg-elevated dd-text' : ''"
                         @click.stop="toggleActionsMenu(c.name, $event)">
-                  <i class="fa-solid fa-chevron-down text-[8px]" />
+                  <AppIcon name="chevron-down" :size="11" />
                 </button>
               </div>
               <!-- Updatable: gradient split button -->
@@ -637,28 +658,28 @@ function confirmForceUpdate(name: string) {
                 <button class="inline-flex items-center justify-center flex-1 whitespace-nowrap px-3 py-1.5 text-[11px] font-bold tracking-wide transition-all text-white"
                         :style="{ background: 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))' }"
                         @click.stop="updateContainer(c.name)">
-                  <AppIcon name="updates" :size="10" class="mr-1" /> Update
+                  <AppIcon name="updates" :size="11" class="mr-1" /> Update
                 </button>
                 <button class="inline-flex items-center justify-center w-7 text-white transition-all"
                         :style="{ background: 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))', borderLeft: '1px solid rgba(255,255,255,0.2)' }"
                         :class="openActionsMenu === c.name ? 'brightness-125' : ''"
                         @click.stop="toggleActionsMenu(c.name, $event)">
-                  <i class="fa-solid fa-chevron-down text-[8px]" />
+                  <AppIcon name="chevron-down" :size="11" />
                 </button>
               </div>
             </div>
             <div v-else class="flex items-center justify-end gap-1">
               <button v-if="c.status === 'running'"
-                      class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-danger hover:dd-bg-elevated"
+                      class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-danger hover:dd-bg-hover"
                       v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
                 <AppIcon name="stop" :size="11" />
               </button>
               <button v-else
-                      class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-success hover:dd-bg-elevated"
+                      class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-success hover:dd-bg-hover"
                       v-tooltip.top="tt('Start')" @click.stop>
                 <AppIcon name="play" :size="11" />
               </button>
-              <button class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+              <button class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text hover:dd-bg-hover"
                       v-tooltip.top="tt('Restart')" @click.stop="confirmRestart(c.name)">
                 <AppIcon name="restart" :size="11" />
               </button>
@@ -675,29 +696,29 @@ function confirmForceUpdate(name: string) {
                }">
             <button v-if="c.status === 'running'" class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
                     @click="closeActionsMenu(); confirmStop(c.name)">
-              <i class="fa-solid fa-stop text-[9px] w-3 text-center" style="color: var(--dd-danger);" />
+              <AppIcon name="stop" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-danger)' }" />
               Stop
             </button>
             <button v-else class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
                     @click="closeActionsMenu()">
-              <i class="fa-solid fa-play text-[9px] w-3 text-center" style="color: var(--dd-success);" />
+              <AppIcon name="play" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-success)' }" />
               Start
             </button>
             <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
                     @click="closeActionsMenu(); confirmRestart(c.name)">
-              <i class="fa-solid fa-rotate-right text-[9px] w-3 text-center dd-text-muted" />
+              <AppIcon name="restart" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
               Restart
             </button>
             <template v-if="c.newTag">
               <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
               <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
                       @click="skipUpdate(c.name); closeActionsMenu()">
-                <i class="fa-solid fa-forward text-[9px] w-3 text-center dd-text-muted" />
+                <AppIcon name="skip-forward" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
                 Skip this update
               </button>
               <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
                       @click="closeActionsMenu(); confirmForceUpdate(c.name)">
-                <i class="fa-solid fa-bolt text-[9px] w-3 text-center dd-text-muted" />
+                <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
                 Force update
               </button>
             </template>
@@ -715,7 +736,7 @@ function confirmForceUpdate(name: string) {
           <!-- Card header -->
           <div class="px-4 pt-4 pb-2 flex items-start justify-between" :class="{ 'opacity-50': c._pending }">
             <div class="flex items-center gap-2.5 min-w-0">
-              <i v-if="c._pending" class="fa-solid fa-spinner fa-spin text-[16px] dd-text-muted shrink-0" />
+              <AppIcon v-if="c._pending" name="spinner" :size="16" class="dd-spin dd-text-muted shrink-0" />
               <ContainerIcon v-else :icon="c.icon" :size="24" class="shrink-0" />
               <div class="min-w-0">
                 <div class="text-[15px] font-semibold truncate dd-text">
@@ -733,16 +754,17 @@ function confirmForceUpdate(name: string) {
           </div>
 
           <!-- Card body -- inline Current / Latest -->
-          <div class="px-4 py-3">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-[11px] dd-text-muted">Current</span>
-              <span class="text-[12px] font-bold dd-text">
+          <div class="px-4 py-3 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap min-w-0">
+              <span class="text-[11px] dd-text-muted shrink-0">Current</span>
+              <span class="text-[12px] font-bold dd-text truncate max-w-[120px]" :title="c.currentTag">
                 {{ c.currentTag }}
               </span>
               <template v-if="c.newTag">
-                <span class="text-[11px] ml-1 dd-text-muted">Latest</span>
-                <span class="px-1.5 py-0.5 dd-rounded-sm text-[11px] font-bold"
-                      :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }">
+                <span class="text-[11px] ml-1 dd-text-muted shrink-0">Latest</span>
+                <span class="px-1.5 py-0.5 dd-rounded-sm text-[11px] font-bold truncate max-w-[140px]"
+                      :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }"
+                      :title="c.newTag">
                   {{ c.newTag }}
                 </span>
               </template>
@@ -797,11 +819,11 @@ function confirmForceUpdate(name: string) {
                          item-key="name"
                          :selected-key="selectedContainer?.name">
         <template #header="{ item: c }">
-          <i v-if="c._pending" class="fa-solid fa-spinner fa-spin text-[14px] dd-text-muted shrink-0" />
+          <AppIcon v-if="c._pending" name="spinner" :size="14" class="dd-spin dd-text-muted shrink-0" />
           <ContainerIcon v-else :icon="c.icon" :size="18" class="shrink-0" />
           <div class="min-w-0 flex-1" :class="{ 'opacity-50': c._pending }">
             <div class="text-sm font-semibold truncate dd-text">{{ c.name }}</div>
-            <div class="text-[10px] mt-0.5 truncate dd-text-muted">{{ c.image }}:{{ c.currentTag }}</div>
+            <div class="text-[10px] mt-0.5 truncate dd-text-muted" :title="`${c.image}:${c.currentTag}`">{{ c.image }}:{{ c.currentTag }}</div>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
             <span v-if="c.updateKind" class="badge text-[9px] uppercase font-bold"
@@ -864,13 +886,13 @@ function confirmForceUpdate(name: string) {
                     class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold tracking-wide transition-all text-white"
                     :style="{ background: 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))', boxShadow: '0 1px 3px rgba(0,150,199,0.3)' }"
                     @click.stop="updateContainer(c.name)">
-              <AppIcon name="cloud-download" :size="10" />
+              <AppIcon name="cloud-download" :size="12" />
               Update
             </button>
             <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-medium transition-colors dd-text-secondary hover:dd-bg-elevated"
                     :style="{ border: '1px solid var(--dd-border-strong)' }"
                     @click.stop="selectContainer(c)">
-              <AppIcon name="info" :size="10" />
+              <AppIcon name="info" :size="12" />
               Details
             </button>
           </div>
@@ -935,7 +957,7 @@ function confirmForceUpdate(name: string) {
                       ? 'text-drydock-secondary'
                       : 'dd-text-muted hover:dd-text'"
                     @click="activeDetailTab = tab.id">
-              <AppIcon :name="tab.icon" :size="10" class="mr-1" />
+              <AppIcon :name="tab.icon" :size="12" class="mr-1" />
               {{ tab.label }}
               <div v-if="activeDetailTab === tab.id"
                    class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full" />
@@ -955,7 +977,7 @@ function confirmForceUpdate(name: string) {
                 <div v-for="port in selectedContainer.details.ports" :key="port"
                      class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-[11px] font-mono"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <AppIcon name="network" :size="9" class="dd-text-muted" />
+                  <AppIcon name="network" :size="11" class="dd-text-muted" />
                   <span class="dd-text">{{ port }}</span>
                 </div>
               </div>
@@ -968,7 +990,7 @@ function confirmForceUpdate(name: string) {
                 <div v-for="vol in selectedContainer.details.volumes" :key="vol"
                      class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-[11px] font-mono"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <AppIcon name="hard-drive" :size="9" class="dd-text-muted" />
+                  <AppIcon name="hard-drive" :size="11" class="dd-text-muted" />
                   <span class="truncate dd-text">{{ vol }}</span>
                 </div>
               </div>
@@ -1051,7 +1073,7 @@ function confirmForceUpdate(name: string) {
                 <div v-for="vol in selectedContainer.details.volumes" :key="vol"
                      class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-[11px] font-mono"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <AppIcon name="hard-drive" :size="9" class="dd-text-muted" />
+                  <AppIcon name="hard-drive" :size="11" class="dd-text-muted" />
                   <span class="truncate dd-text">{{ vol }}</span>
                 </div>
               </div>
@@ -1082,7 +1104,7 @@ function confirmForceUpdate(name: string) {
 
     <!-- CONTAINER FULL PAGE DETAIL VIEW -->
     <div v-if="containerFullPage && selectedContainer"
-         class="flex flex-col" style="height: calc(100vh - 48px);">
+         class="flex flex-col flex-1 min-h-0">
 
       <!-- Full-page header -->
       <div class="shrink-0 mx-4 mt-4 mb-4 dd-rounded overflow-hidden"
@@ -1095,7 +1117,7 @@ function confirmForceUpdate(name: string) {
             <button class="flex items-center gap-2 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                     :style="{ border: '1px solid var(--dd-border-strong)' }"
                     @click="closeFullPage">
-              <i class="fa-solid fa-arrow-left text-[10px]" />
+              <AppIcon name="arrow-left" :size="11" />
               Back
             </button>
             <div class="flex items-center gap-3 min-w-0">
@@ -1134,26 +1156,26 @@ function confirmForceUpdate(name: string) {
                     class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
                     :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
                     @click="confirmStop(selectedContainer.name)">
-              <AppIcon name="stop" :size="10" />
+              <AppIcon name="stop" :size="12" />
               Stop
             </button>
             <button v-else
                     class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
                     :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }">
-              <AppIcon name="play" :size="10" />
+              <AppIcon name="play" :size="12" />
               Start
             </button>
             <button class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text"
                     :style="{ border: '1px solid var(--dd-border-strong)' }"
                     @click="confirmRestart(selectedContainer.name)">
-              <AppIcon name="restart" :size="10" />
+              <AppIcon name="restart" :size="12" />
               Restart
             </button>
             <button v-if="selectedContainer.newTag"
                     class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold transition-all text-white"
                     :style="{ background: 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))', boxShadow: '0 1px 3px rgba(0,150,199,0.3)' }"
                     @click="updateContainer(selectedContainer.name)">
-              <AppIcon name="cloud-download" :size="10" />
+              <AppIcon name="cloud-download" :size="12" />
               Update
             </button>
           </div>
@@ -1168,7 +1190,7 @@ function confirmForceUpdate(name: string) {
                     ? 'text-drydock-secondary'
                     : 'dd-text-muted hover:dd-text'"
                   @click="activeDetailTab = tab.id">
-            <AppIcon :name="tab.icon" :size="11" class="mr-1.5" />
+            <AppIcon :name="tab.icon" :size="12" class="mr-1.5" />
             {{ tab.label }}
             <div v-if="activeDetailTab === tab.id"
                  class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full" />
@@ -1284,7 +1306,7 @@ function confirmForceUpdate(name: string) {
             <div class="px-4 py-3 flex items-center justify-between"
                  style="border-bottom: 1px solid rgba(255,255,255,0.08);">
               <div class="flex items-center gap-2">
-                <i class="fa-solid fa-terminal text-[10px]" style="color: #64748b;" />
+                <AppIcon name="terminal" :size="11" :style="{ color: '#64748b' }" />
                 <span class="text-[11px] font-semibold uppercase tracking-wider" style="color: #64748b;">
                   Container Logs
                 </span>

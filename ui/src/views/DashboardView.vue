@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, type RouteLocationRaw } from 'vue-router';
 import { getAgents } from '../services/agent';
 import { getAllContainers } from '../services/container';
 import { getServer } from '../services/server';
@@ -9,7 +9,7 @@ import { mapApiContainers } from '../utils/container-mapper';
 
 const router = useRouter();
 
-function navigateTo(route: string) {
+function navigateTo(route: RouteLocationRaw) {
   router.push(route);
 }
 
@@ -55,6 +55,7 @@ const stats = computed(() => {
       icon: 'containers',
       color: 'var(--dd-primary)',
       colorMuted: 'var(--dd-primary-muted)',
+      route: '/containers',
     },
     {
       label: 'Updates Available',
@@ -62,6 +63,7 @@ const stats = computed(() => {
       icon: 'updates',
       color: 'var(--dd-warning)',
       colorMuted: 'var(--dd-warning-muted)',
+      route: { path: '/containers', query: { filterKind: 'any' } },
     },
     {
       label: 'Security Issues',
@@ -69,6 +71,7 @@ const stats = computed(() => {
       icon: 'security',
       color: 'var(--dd-danger)',
       colorMuted: 'var(--dd-danger-muted)',
+      route: '/security',
     },
     {
       label: 'Images',
@@ -159,6 +162,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
 </script>
 
 <template>
+  <div class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
       <!-- LOADING STATE -->
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="text-sm dd-text-muted">Loading dashboard...</div>
@@ -173,28 +177,34 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
       <template v-else>
       <!-- STAT CARDS -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div v-for="stat in stats" :key="stat.label"
-             class="stat-card dd-rounded p-4"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               borderTop: '1px solid var(--dd-border-strong)',
-               borderRight: '1px solid var(--dd-border-strong)',
-               borderBottom: '1px solid var(--dd-border-strong)',
-               borderLeft: `4px solid ${stat.color}`,
-             }">
+        <component
+          :is="stat.route ? 'button' : 'div'"
+          v-for="stat in stats"
+          :key="stat.label"
+          :type="stat.route ? 'button' : undefined"
+          class="stat-card dd-rounded p-4 text-left w-full"
+          :class="stat.route ? 'cursor-pointer transition-colors hover:dd-bg-elevated' : ''"
+          :style="{
+            backgroundColor: 'var(--dd-bg-card)',
+            borderTop: '1px solid var(--dd-border-strong)',
+            borderRight: '1px solid var(--dd-border-strong)',
+            borderBottom: '1px solid var(--dd-border-strong)',
+            borderLeft: `4px solid ${stat.color}`,
+          }"
+          @click="stat.route && navigateTo(stat.route)">
           <div class="flex items-center justify-between mb-2">
             <span class="text-[11px] font-medium uppercase tracking-wider dd-text-muted">
               {{ stat.label }}
             </span>
-            <div class="w-8 h-8 dd-rounded flex items-center justify-center"
+            <div class="w-9 h-9 dd-rounded flex items-center justify-center"
                  :style="{ backgroundColor: stat.colorMuted, color: stat.color }">
-              <AppIcon :name="stat.icon" :size="14" />
+              <AppIcon :name="stat.icon" :size="20" />
             </div>
           </div>
           <div class="text-2xl font-bold dd-text">
             {{ stat.value }}
           </div>
-        </div>
+        </component>
       </div>
 
       <!-- WIDGET GRID -->
@@ -215,15 +225,15 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
               </h2>
             </div>
             <button class="text-[11px] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo('/containers')">View all &rarr;</button>
+                    @click="navigateTo({ path: '/containers', query: { filterKind: 'any' } })">View all &rarr;</button>
           </div>
 
           <div class="overflow-x-auto">
             <table class="w-full text-xs">
               <thead>
                 <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <th class="text-left px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Container</th>
-                  <th class="text-center px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Image</th>
+                  <th class="w-10 px-0 py-2.5" />
+                  <th class="text-left px-3 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Container</th>
                   <th class="text-center px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Version</th>
                   <th class="text-center px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Status</th>
                 </tr>
@@ -232,16 +242,16 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                 <tr v-for="(row, i) in recentUpdates" :key="i"
                     class="transition-colors hover:dd-bg-elevated"
                     :style="{ borderBottom: i < recentUpdates.length - 1 ? '1px solid var(--dd-border-strong)' : 'none' }">
-                  <td class="px-5 py-3 font-medium dd-text">
-                    <div class="flex items-center gap-2">
-                      <ContainerIcon :icon="row.icon" :size="16" class="shrink-0" />
-                      {{ row.name }}
+                  <td class="w-12 px-0 py-3">
+                    <div class="flex items-center justify-center">
+                      <ContainerIcon :icon="row.icon" :size="28" />
                     </div>
                   </td>
-                  <td class="px-5 py-3 text-center dd-text-secondary">
-                    {{ row.image }}
+                  <td class="px-3 py-3 align-middle">
+                    <div class="font-medium dd-text leading-tight">{{ row.name }}</div>
+                    <div class="text-[10px] dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
                   </td>
-                  <td class="px-5 py-3">
+                  <td class="px-5 py-3 align-middle">
                     <div class="grid items-center gap-1.5" style="grid-template-columns: 1fr auto 1fr;">
                       <span class="px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium text-right justify-self-end dd-bg-elevated dd-text-secondary">
                         {{ row.oldVer }}
@@ -253,7 +263,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                       </span>
                     </div>
                   </td>
-                  <td class="px-5 py-3 text-center">
+                  <td class="px-5 py-3 text-center align-middle">
                     <span class="badge"
                           :style="{
                             backgroundColor: row.status === 'updated'
@@ -264,8 +274,10 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                             color: row.status === 'updated' ? 'var(--dd-success)' : row.status === 'pending' ? 'var(--dd-warning)' : 'var(--dd-danger)',
                           }">
                       <AppIcon :name="row.status === 'updated' ? 'check' : row.status === 'pending' ? 'pending' : 'xmark'"
-                         :size="8" class="mr-1" />
-                      {{ row.status }}
+                         :size="14" class="sm:hidden" />
+                      <AppIcon :name="row.status === 'updated' ? 'check' : row.status === 'pending' ? 'pending' : 'xmark'"
+                         :size="12" class="hidden sm:inline mr-1" />
+                      <span class="hidden sm:inline">{{ row.status }}</span>
                     </span>
                   </td>
                 </tr>
@@ -414,7 +426,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
               </h2>
             </div>
             <button class="text-[11px] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo('/containers')">View all &rarr;</button>
+                    @click="navigateTo({ path: '/containers', query: { filterKind: 'any' } })">View all &rarr;</button>
           </div>
 
           <div class="p-5">
@@ -427,9 +439,9 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
               ]" :key="kind.label"
                    class="text-center p-3 dd-rounded"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                <div class="w-8 h-8 mx-auto dd-rounded flex items-center justify-center mb-2"
+                <div class="w-9 h-9 mx-auto dd-rounded flex items-center justify-center mb-2"
                      :style="{ backgroundColor: kind.colorMuted, color: kind.color }">
-                  <AppIcon :name="kind.icon" :size="12" />
+                  <AppIcon :name="kind.icon" :size="20" />
                 </div>
                 <div class="text-xl font-bold dd-text">{{ kind.count }}</div>
                 <div class="text-[10px] font-medium uppercase tracking-wider mt-0.5 dd-text-muted">{{ kind.label }}</div>
@@ -444,4 +456,5 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
         </div>
       </div>
       </template>
+  </div>
 </template>
