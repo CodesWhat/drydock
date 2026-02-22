@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as configuration from '../configuration/index.js';
 import * as prometheusWatcher from '../prometheus/watcher.js';
+import * as store from '../store/index.js';
 import Component from './Component.js';
 
 vi.mock('../configuration', () => ({
@@ -13,6 +14,10 @@ vi.mock('../configuration', () => ({
   getWatcherConfigurations: vi.fn(),
   getAuthenticationConfigurations: vi.fn(),
   getAgentConfigurations: vi.fn(),
+}));
+
+vi.mock('../store/index.js', () => ({
+  save: vi.fn().mockResolvedValue(undefined),
 }));
 
 let registries = {};
@@ -478,6 +483,7 @@ test('shutdown should deregister all and exit 0', async () => {
   registry.getState().watcher = {};
   registry.getState().authentication = {};
   await registry.testable_shutdown();
+  expect(store.save).toHaveBeenCalled();
   expect(exitSpy).toHaveBeenCalledWith(0);
   exitSpy.mockRestore();
 });
@@ -490,6 +496,21 @@ test('shutdown should exit 1 when deregisterAll throws', async () => {
   };
   registry.getState().trigger = { trigger1: component };
   await registry.testable_shutdown();
+  expect(exitSpy).toHaveBeenCalledWith(1);
+  exitSpy.mockRestore();
+});
+
+test('shutdown should exit 1 when store save fails', async () => {
+  const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+  const saveSpy = vi.mocked(store.save).mockRejectedValueOnce(new Error('save failed'));
+  const errorSpy = vi.spyOn(registry.testable_log, 'error');
+  registry.getState().trigger = {};
+  registry.getState().registry = {};
+  registry.getState().watcher = {};
+  registry.getState().authentication = {};
+  await registry.testable_shutdown();
+  expect(saveSpy).toHaveBeenCalled();
+  expect(errorSpy).toHaveBeenCalledWith('save failed');
   expect(exitSpy).toHaveBeenCalledWith(1);
   exitSpy.mockRestore();
 });

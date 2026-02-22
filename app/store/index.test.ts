@@ -14,11 +14,17 @@ const {
 } = vi.hoisted(() => {
   const STORE_CONFIG = { path: '/test/store', file: 'test.json' };
 
-  function createLokiMock(loadDbCallback = (options, callback) => callback(null)) {
+  function createLokiMock(
+    loadDbCallback = (options, callback) => callback(null),
+    saveDbCallback = (callback) => callback(null),
+  ) {
     return {
       // biome-ignore lint/complexity/useArrowFunction: mock constructor requires function expression
       default: vi.fn().mockImplementation(function () {
-        return { loadDatabase: vi.fn(loadDbCallback) };
+        return {
+          loadDatabase: vi.fn(loadDbCallback),
+          saveDatabase: vi.fn(saveDbCallback),
+        };
       }),
     };
   }
@@ -45,11 +51,12 @@ const {
   function registerCommonMocks(
     overrides: {
       loki?: Parameters<typeof createLokiMock>[0];
+      lokiSave?: Parameters<typeof createLokiMock>[1];
       fs?: Record<string, unknown>;
       config?: Record<string, unknown>;
     } = {},
   ) {
-    vi.doMock('lokijs', () => createLokiMock(overrides.loki));
+    vi.doMock('lokijs', () => createLokiMock(overrides.loki, overrides.lokiSave));
     vi.doMock('node:fs', () => createFsMock(overrides.fs));
     vi.doMock('../configuration', () => createConfigMock(overrides.config ?? STORE_CONFIG));
     vi.doMock('./app', createCollectionsMock);
@@ -98,6 +105,17 @@ describe('Store Module', () => {
     expect(container.createCollections).toHaveBeenCalled();
   });
 
+  test('should persist database on save', async () => {
+    fs.existsSync.mockReturnValue(true);
+    await store.init();
+
+    const Loki = await import('lokijs');
+    const dbInstance = Loki.default.mock.results.at(-1).value;
+
+    await store.save();
+    expect(dbInstance.saveDatabase).toHaveBeenCalled();
+  });
+
   test('should create directory if it does not exist', async () => {
     fs.existsSync.mockReturnValue(false);
 
@@ -139,6 +157,22 @@ describe('Store Module', () => {
     const container = await import('./container.js');
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
+  });
+
+  test('should skip save in memory mode', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      fs: { renameSync: vi.fn() },
+    });
+
+    const storeMemory = await import('./index.js');
+    await storeMemory.init({ memory: true });
+
+    const Loki = await import('lokijs');
+    const dbInstance = Loki.default.mock.results.at(-1).value;
+
+    await storeMemory.save();
+    expect(dbInstance.saveDatabase).not.toHaveBeenCalled();
   });
 
   test('should throw when store configuration is invalid', async () => {
@@ -203,5 +237,17 @@ describe('Store Module', () => {
     await storeMigrate.init();
 
     expect(mockFs.renameSync).toHaveBeenCalledWith('/test/store/wud.json', '/test/store/test.json');
+  });
+
+  test('should propagate save errors', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      lokiSave: (callback) => callback(new Error('Save failed')),
+      fs: { renameSync: vi.fn() },
+    });
+
+    const storeWithSaveError = await import('./index.js');
+    await storeWithSaveError.init();
+    await expect(storeWithSaveError.save()).rejects.toThrow('Save failed');
   });
 });
