@@ -1,10 +1,12 @@
 // @ts-nocheck
 import { execFile } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import yaml from 'yaml';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
+import * as backupStore from '../../../store/backup.js';
 import Docker from '../docker/Docker.js';
 
 const COMPOSE_COMMAND_TIMEOUT_MS = 60_000;
@@ -112,6 +114,15 @@ function doesContainerBelongToCompose(compose, container) {
  */
 class Dockercompose extends Docker {
   /**
+   * Per-container compose context stashed by processComposeFile for use
+   * inside performContainerUpdate (which runs via the shared lifecycle).
+   */
+  _composeContextMap = new Map<
+    string,
+    { composeFile: string; service: string; serviceDefinition: any }
+  >();
+
+  /**
    * Get the Trigger configuration schema.
    * @returns {*}
    */
@@ -181,6 +192,61 @@ class Dockercompose extends Docker {
       this.log.warn(`Default compose file path is invalid (${e.message})`);
       return null;
     }
+  }
+
+  /**
+   * Override: compose doesn't need to inspect the existing container
+   * (compose CLI handles the container lifecycle). Lighter context.
+   */
+  async createTriggerContext(container, logContainer) {
+    const watcher = this.getWatcher(container);
+    const { dockerApi } = watcher;
+    const registry = getState().registry[container.image.registry.name];
+    const auth = await registry.getAuthPull();
+    const newImage = this.getNewImageFullName(registry, container);
+    return {
+      dockerApi,
+      registry,
+      auth,
+      newImage,
+      currentContainer: null,
+      currentContainerSpec: null,
+    };
+  }
+
+  /**
+   * Override: use compose CLI for pull/recreate instead of Docker API.
+   */
+  async performContainerUpdate(context, container, logContainer) {
+    const { dockerApi, registry } = context;
+
+    if (this.configuration.prune) {
+      await this.pruneImages(dockerApi, registry, container, logContainer);
+    }
+
+    const baseImageName = registry
+      .getImageFullName(container.image, '__TAG__')
+      .replace(/:__TAG__$/, '');
+    backupStore.insertBackup({
+      id: crypto.randomUUID(),
+      containerId: container.id,
+      containerName: container.name,
+      imageName: baseImageName,
+      imageTag: container.image.tag.value,
+      imageDigest: container.image.digest?.repo,
+      timestamp: new Date().toISOString(),
+      triggerName: this.getId(),
+    });
+
+    const composeCtx = this._composeContextMap.get(container.name);
+    await this.updateContainerWithCompose(composeCtx.composeFile, composeCtx.service, container);
+    await this.runServicePostStartHooks(
+      container,
+      composeCtx.service,
+      composeCtx.serviceDefinition,
+    );
+
+    return !this.configuration.dryrun;
   }
 
   /**
@@ -320,11 +386,19 @@ class Dockercompose extends Docker {
       await this.writeComposeFile(composeFile, composeFileStr);
     }
 
-    // Refresh all containers requiring a runtime update via docker compose
-    // to keep compose state and runtime state aligned.
+    // Refresh all containers requiring a runtime update via the shared
+    // lifecycle orchestrator (security scan, hooks, backup, events).
     for (const { container, service } of mappingsNeedingRuntimeUpdate) {
-      await this.updateContainerWithCompose(composeFile, service, container);
-      await this.runServicePostStartHooks(container, service, compose.services[service]);
+      this._composeContextMap.set(container.name, {
+        composeFile,
+        service,
+        serviceDefinition: compose.services[service],
+      });
+      try {
+        await this.runContainerUpdateLifecycle(container);
+      } finally {
+        this._composeContextMap.delete(container.name);
+      }
     }
   }
 

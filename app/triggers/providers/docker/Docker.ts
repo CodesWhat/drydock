@@ -1042,6 +1042,15 @@ class Docker extends Trigger {
     return true;
   }
 
+  /**
+   * Perform the container update (pull, stop, recreate).
+   * Subclasses (e.g. Dockercompose) override this to use their own runtime
+   * mechanics while reusing the shared lifecycle orchestrator.
+   */
+  async performContainerUpdate(context, container, logContainer) {
+    return this.executeContainerUpdate(context, container, logContainer);
+  }
+
   getRollbackConfig(container) {
     const DEFAULT_ROLLBACK_WINDOW = 300000;
     const DEFAULT_ROLLBACK_INTERVAL = 10000;
@@ -1134,12 +1143,11 @@ class Docker extends Trigger {
   }
 
   /**
-   * Update the container.
-   * @param container the container
-   * @returns {Promise<void>}
+   * Shared per-container update lifecycle. Handles security scanning, hooks,
+   * backup pruning, rollback monitoring, and events. Delegates the actual
+   * runtime update to `performContainerUpdate()` which subclasses can override.
    */
-  async trigger(container) {
-    // Child logger for the container to process
+  async runContainerUpdateLifecycle(container) {
     const logContainer = this.log.child({ container: fullName(container) });
 
     try {
@@ -1163,7 +1171,7 @@ class Docker extends Trigger {
         return;
       }
 
-      const updated = await this.executeContainerUpdate(context, container, logContainer);
+      const updated = await this.performContainerUpdate(context, container, logContainer);
       if (!updated) {
         return;
       }
@@ -1191,6 +1199,15 @@ class Docker extends Trigger {
       });
       throw e;
     }
+  }
+
+  /**
+   * Update the container.
+   * @param container the container
+   * @returns {Promise<void>}
+   */
+  async trigger(container) {
+    await this.runContainerUpdateLifecycle(container);
   }
 
   /**
