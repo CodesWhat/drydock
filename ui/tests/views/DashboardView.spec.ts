@@ -34,6 +34,7 @@ import { getServer } from '@/services/server';
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
 const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
 const mockGetServer = getServer as ReturnType<typeof vi.fn>;
+const DASHBOARD_WIDGET_ORDER_STORAGE_KEY = 'dd-dashboard-widget-order-v1';
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
   return {
@@ -70,6 +71,7 @@ describe('DashboardView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRouterPush.mockClear();
+    localStorage.removeItem(DASHBOARD_WIDGET_ORDER_STORAGE_KEY);
   });
 
   describe('loading state', () => {
@@ -317,6 +319,83 @@ describe('DashboardView', () => {
       expect(wrapper.text()).toContain('Minor');
       expect(wrapper.text()).toContain('Patch');
       expect(wrapper.text()).toContain('Digest');
+    });
+  });
+
+  describe('dashboard widget ordering', () => {
+    it('hydrates widget order from localStorage', async () => {
+      localStorage.setItem(
+        DASHBOARD_WIDGET_ORDER_STORAGE_KEY,
+        JSON.stringify(['host-status', 'recent-updates', 'security-overview', 'update-breakdown']),
+      );
+
+      const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+
+      expect(wrapper.find('[data-widget-id="host-status"]').attributes('data-widget-order')).toBe('0');
+      expect(wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order')).toBe(
+        '1',
+      );
+      expect(
+        wrapper.find('[data-widget-id="security-overview"]').attributes('data-widget-order'),
+      ).toBe('2');
+    });
+
+    it('reorders widgets on drop and persists the new order', async () => {
+      const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+
+      const draggedWidget = wrapper.find('[data-widget-id="update-breakdown"]');
+      const targetWidget = wrapper.find('[data-widget-id="recent-updates"]');
+      const dataTransfer = {
+        setData: vi.fn(),
+        getData: vi.fn(() => 'update-breakdown'),
+        effectAllowed: 'move',
+        dropEffect: 'move',
+      };
+
+      await draggedWidget.trigger('dragstart', { dataTransfer });
+      await targetWidget.trigger('dragover', { dataTransfer });
+      await targetWidget.trigger('drop', { dataTransfer });
+      await draggedWidget.trigger('dragend');
+
+      expect(wrapper.find('[data-widget-id="update-breakdown"]').attributes('data-widget-order')).toBe(
+        '0',
+      );
+      expect(wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order')).toBe(
+        '1',
+      );
+      expect(JSON.parse(localStorage.getItem(DASHBOARD_WIDGET_ORDER_STORAGE_KEY) || '[]')).toEqual([
+        'update-breakdown',
+        'recent-updates',
+        'security-overview',
+        'host-status',
+      ]);
+    });
+
+    it('resets widget order to defaults', async () => {
+      localStorage.setItem(
+        DASHBOARD_WIDGET_ORDER_STORAGE_KEY,
+        JSON.stringify(['host-status', 'security-overview', 'recent-updates', 'update-breakdown']),
+      );
+
+      const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+      await wrapper.find('[data-testid="dashboard-reset-layout"]').trigger('click');
+
+      expect(wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order')).toBe(
+        '0',
+      );
+      expect(wrapper.find('[data-widget-id="security-overview"]').attributes('data-widget-order')).toBe(
+        '1',
+      );
+      expect(wrapper.find('[data-widget-id="host-status"]').attributes('data-widget-order')).toBe('2');
+      expect(wrapper.find('[data-widget-id="update-breakdown"]').attributes('data-widget-order')).toBe(
+        '3',
+      );
+      expect(JSON.parse(localStorage.getItem(DASHBOARD_WIDGET_ORDER_STORAGE_KEY) || '[]')).toEqual([
+        'recent-updates',
+        'security-overview',
+        'host-status',
+        'update-breakdown',
+      ]);
     });
   });
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter, type RouteLocationRaw } from 'vue-router';
 import { getAgents } from '../services/agent';
 import { getAllContainers } from '../services/container';
@@ -13,6 +13,45 @@ function navigateTo(route: RouteLocationRaw) {
   router.push(route);
 }
 
+const DASHBOARD_WIDGET_ORDER_STORAGE_KEY = 'dd-dashboard-widget-order-v1';
+const DASHBOARD_WIDGET_IDS = [
+  'recent-updates',
+  'security-overview',
+  'host-status',
+  'update-breakdown',
+] as const;
+type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
+
+function isDashboardWidgetId(value: unknown): value is DashboardWidgetId {
+  return (
+    typeof value === 'string' && (DASHBOARD_WIDGET_IDS as readonly string[]).includes(value)
+  );
+}
+
+function sanitizeWidgetOrder(rawOrder: unknown): DashboardWidgetId[] {
+  if (!Array.isArray(rawOrder)) {
+    return [...DASHBOARD_WIDGET_IDS];
+  }
+
+  const seen = new Set<DashboardWidgetId>();
+  const normalized: DashboardWidgetId[] = [];
+  for (const value of rawOrder) {
+    if (!isDashboardWidgetId(value) || seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    normalized.push(value);
+  }
+
+  for (const id of DASHBOARD_WIDGET_IDS) {
+    if (!seen.has(id)) {
+      normalized.push(id);
+    }
+  }
+
+  return normalized;
+}
+
 // Loading and error state
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -21,9 +60,101 @@ const error = ref<string | null>(null);
 const containers = ref<Container[]>([]);
 const serverInfo = ref<any>(null);
 const agents = ref<any[]>([]);
+const widgetOrder = ref<DashboardWidgetId[]>([...DASHBOARD_WIDGET_IDS]);
+const draggedWidgetId = ref<DashboardWidgetId | null>(null);
 
-// Fetch all dashboard data
-onMounted(async () => {
+function loadWidgetOrder() {
+  const rawStored = localStorage.getItem(DASHBOARD_WIDGET_ORDER_STORAGE_KEY);
+  if (!rawStored) {
+    widgetOrder.value = [...DASHBOARD_WIDGET_IDS];
+    return;
+  }
+  try {
+    widgetOrder.value = sanitizeWidgetOrder(JSON.parse(rawStored));
+  } catch {
+    widgetOrder.value = [...DASHBOARD_WIDGET_IDS];
+  }
+}
+
+function persistWidgetOrder(order: DashboardWidgetId[]) {
+  localStorage.setItem(DASHBOARD_WIDGET_ORDER_STORAGE_KEY, JSON.stringify(order));
+}
+
+watch(widgetOrder, (order) => {
+  persistWidgetOrder(order);
+});
+
+function widgetOrderIndex(widgetId: DashboardWidgetId) {
+  const index = widgetOrder.value.indexOf(widgetId);
+  return index >= 0 ? index : DASHBOARD_WIDGET_IDS.indexOf(widgetId);
+}
+
+function widgetOrderStyle(widgetId: DashboardWidgetId) {
+  return {
+    order: widgetOrderIndex(widgetId),
+  };
+}
+
+function moveWidget(draggedId: DashboardWidgetId, targetId: DashboardWidgetId) {
+  if (draggedId === targetId) {
+    return;
+  }
+
+  const nextOrder = [...widgetOrder.value];
+  const draggedIndex = nextOrder.indexOf(draggedId);
+  const targetIndex = nextOrder.indexOf(targetId);
+  if (draggedIndex < 0 || targetIndex < 0) {
+    return;
+  }
+
+  nextOrder.splice(draggedIndex, 1);
+  nextOrder.splice(targetIndex, 0, draggedId);
+  widgetOrder.value = nextOrder;
+}
+
+function onWidgetDragStart(widgetId: DashboardWidgetId, event: DragEvent) {
+  draggedWidgetId.value = widgetId;
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', widgetId);
+  }
+}
+
+function onWidgetDragOver(widgetId: DashboardWidgetId, event: DragEvent) {
+  if (!draggedWidgetId.value || draggedWidgetId.value === widgetId) {
+    return;
+  }
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move';
+  }
+}
+
+function onWidgetDrop(widgetId: DashboardWidgetId, event: DragEvent) {
+  event.preventDefault();
+  const transferWidgetId = event.dataTransfer?.getData('text/plain');
+  const draggedId = isDashboardWidgetId(transferWidgetId)
+    ? transferWidgetId
+    : draggedWidgetId.value;
+  if (!draggedId || draggedId === widgetId) {
+    draggedWidgetId.value = null;
+    return;
+  }
+  moveWidget(draggedId, widgetId);
+  draggedWidgetId.value = null;
+}
+
+function onWidgetDragEnd() {
+  draggedWidgetId.value = null;
+}
+
+function resetWidgetOrder() {
+  widgetOrder.value = [...DASHBOARD_WIDGET_IDS];
+}
+
+async function fetchDashboardData() {
+  loading.value = true;
+  error.value = null;
   try {
     const [containersRes, serverRes, agentsRes] = await Promise.all([
       getAllContainers(),
@@ -38,6 +169,11 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+}
+
+onMounted(async () => {
+  loadWidgetOrder();
+  await fetchDashboardData();
 });
 
 // Computed: stat cards
@@ -184,6 +320,11 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
       <div v-else-if="error" class="flex flex-col items-center justify-center py-16">
         <div class="text-sm font-medium dd-text-danger mb-2">Failed to load dashboard</div>
         <div class="text-xs dd-text-muted">{{ error }}</div>
+        <button
+          class="mt-4 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
+          @click="fetchDashboardData">
+          Retry
+        </button>
       </div>
 
       <template v-else>
@@ -219,15 +360,35 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
         </component>
       </div>
 
+      <div class="mb-3 flex items-center justify-between px-1 text-[10px] dd-text-muted">
+        <span>Drag dashboard widgets to reorder your layout</span>
+        <button
+          data-testid="dashboard-reset-layout"
+          class="px-2 py-1 dd-rounded text-[10px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
+          @click="resetWidgetOrder">
+          Reset layout
+        </button>
+      </div>
+
       <!-- WIDGET GRID -->
       <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 min-w-0">
 
         <!-- Recent Updates Widget (2/3) -->
-        <div class="xl:col-span-2 dd-rounded overflow-hidden min-w-0"
+        <div
+             data-widget-id="recent-updates"
+             :data-widget-order="widgetOrderIndex('recent-updates')"
+             draggable="true"
+             class="dashboard-widget xl:col-span-2 dd-rounded overflow-hidden min-w-0"
+             :class="{ 'opacity-60': draggedWidgetId === 'recent-updates' }"
              :style="{
+               ...widgetOrderStyle('recent-updates'),
                backgroundColor: 'var(--dd-bg-card)',
                border: '1px solid var(--dd-border-strong)',
-             }">
+             }"
+             @dragstart="onWidgetDragStart('recent-updates', $event)"
+             @dragover="onWidgetDragOver('recent-updates', $event)"
+             @drop="onWidgetDrop('recent-updates', $event)"
+             @dragend="onWidgetDragEnd">
           <div class="flex items-center justify-between px-5 py-3.5"
                :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
             <div class="flex items-center gap-2">
@@ -312,11 +473,21 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
         </div>
 
         <!-- Security Summary Widget (1/3) -->
-        <div class="dd-rounded overflow-hidden"
+        <div
+             data-widget-id="security-overview"
+             :data-widget-order="widgetOrderIndex('security-overview')"
+             draggable="true"
+             class="dashboard-widget dd-rounded overflow-hidden"
+             :class="{ 'opacity-60': draggedWidgetId === 'security-overview' }"
              :style="{
+               ...widgetOrderStyle('security-overview'),
                backgroundColor: 'var(--dd-bg-card)',
                border: '1px solid var(--dd-border-strong)',
-             }">
+             }"
+             @dragstart="onWidgetDragStart('security-overview', $event)"
+             @dragover="onWidgetDragOver('security-overview', $event)"
+             @drop="onWidgetDrop('security-overview', $event)"
+             @dragend="onWidgetDragEnd">
           <div class="flex items-center justify-between px-5 py-3.5"
                :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
             <div class="flex items-center gap-2">
@@ -407,11 +578,21 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
         </div>
 
         <!-- Host Status Widget (1/3) -->
-        <div class="dd-rounded overflow-hidden"
+        <div
+             data-widget-id="host-status"
+             :data-widget-order="widgetOrderIndex('host-status')"
+             draggable="true"
+             class="dashboard-widget dd-rounded overflow-hidden"
+             :class="{ 'opacity-60': draggedWidgetId === 'host-status' }"
              :style="{
+               ...widgetOrderStyle('host-status'),
                backgroundColor: 'var(--dd-bg-card)',
                border: '1px solid var(--dd-border-strong)',
-             }">
+             }"
+             @dragstart="onWidgetDragStart('host-status', $event)"
+             @dragover="onWidgetDragOver('host-status', $event)"
+             @drop="onWidgetDrop('host-status', $event)"
+             @dragend="onWidgetDragEnd">
           <div class="flex items-center justify-between px-5 py-3.5"
                :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
             <div class="flex items-center gap-2">
@@ -458,11 +639,21 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
         </div>
 
         <!-- Update Breakdown Widget (2/3) -->
-        <div class="xl:col-span-2 dd-rounded overflow-hidden"
+        <div
+             data-widget-id="update-breakdown"
+             :data-widget-order="widgetOrderIndex('update-breakdown')"
+             draggable="true"
+             class="dashboard-widget xl:col-span-2 dd-rounded overflow-hidden"
+             :class="{ 'opacity-60': draggedWidgetId === 'update-breakdown' }"
              :style="{
+               ...widgetOrderStyle('update-breakdown'),
                backgroundColor: 'var(--dd-bg-card)',
                border: '1px solid var(--dd-border-strong)',
-             }">
+             }"
+             @dragstart="onWidgetDragStart('update-breakdown', $event)"
+             @dragover="onWidgetDragOver('update-breakdown', $event)"
+             @drop="onWidgetDrop('update-breakdown', $event)"
+             @dragend="onWidgetDragEnd">
           <div class="flex items-center justify-between px-5 py-3.5"
                :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
             <div class="flex items-center gap-2">
