@@ -198,9 +198,6 @@ async function refreshSidebarData() {
     }
     containerCount.value = String(containers.length);
     const issues = containers.filter((c: Record<string, any>) => {
-      if (c.updateKind?.semverDiff === 'major' || c.updateKind === 'major') {
-        return true;
-      }
       const summary = c.security?.scan?.summary;
       return Number(summary?.critical || 0) > 0 || Number(summary?.high || 0) > 0;
     }).length;
