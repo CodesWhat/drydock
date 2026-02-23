@@ -53,7 +53,7 @@ function iconColor(id: string) {
         v-for="v in variants"
         :key="v.id"
         class="flex-shrink-0 flex items-center justify-center rounded-md transition-colors"
-        :class="[iconColor(v.id), v.id !== themeVariant ? 'hover:dd-bg-elevated' : '']"
+        :class="[iconColor(v.id), 'hover:dd-bg-elevated']"
         :style="{ width: `${cellSize}px`, height: `${cellSize}px` }"
         :title="v.id.charAt(0).toUpperCase() + v.id.slice(1)"
         @click="v.id === themeVariant ? (expanded = !expanded) : select(v.id, $event)"
