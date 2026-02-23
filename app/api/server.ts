@@ -2,6 +2,7 @@
 import express from 'express';
 import nocache from 'nocache';
 import { getServerConfiguration, getWebhookConfiguration } from '../configuration/index.js';
+import { getSecurityRuntimeStatus } from '../security/runtime.js';
 
 const router = express.Router();
 
@@ -23,6 +24,17 @@ function getServer(req, res) {
   });
 }
 
+async function getSecurityRuntime(req, res) {
+  try {
+    const runtimeStatus = await getSecurityRuntimeStatus();
+    res.status(200).json(runtimeStatus);
+  } catch (e: any) {
+    res.status(500).json({
+      error: `Error loading security runtime status (${e.message})`,
+    });
+  }
+}
+
 /**
  * Init Router.
  * @returns {*}
@@ -30,5 +42,6 @@ function getServer(req, res) {
 export function init() {
   router.use(nocache());
   router.get('/', getServer);
+  router.get('/security/runtime', getSecurityRuntime);
   return router;
 }

@@ -13,6 +13,13 @@ vi.mock('../configuration', () => ({
   })),
 }));
 
+vi.mock('../security/runtime.js', () => ({
+  getSecurityRuntimeStatus: vi.fn(async () => ({
+    ready: true,
+    scanner: { status: 'ready', command: 'trivy', commandAvailable: true },
+  })),
+}));
+
 // Mock express modules
 vi.mock('express', () => ({
   default: {
@@ -38,6 +45,7 @@ describe('Server Router', () => {
     expect(router).toBeDefined();
     expect(router.use).toHaveBeenCalled();
     expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
+    expect(router.get).toHaveBeenCalledWith('/security/runtime', expect.any(Function));
   });
 
   test('should call getServerConfiguration when route handler is called', async () => {
@@ -65,5 +73,27 @@ describe('Server Router', () => {
         webhook: { enabled: false },
       },
     });
+  });
+
+  test('should return security runtime status on runtime route', async () => {
+    const { getSecurityRuntimeStatus } = await import('../security/runtime.js');
+    const router = serverRouter.init();
+
+    const runtimeRoute = router.get.mock.calls.find((call) => call[0] === '/security/runtime');
+    const runtimeHandler = runtimeRoute[1];
+    const mockRes = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    };
+
+    await runtimeHandler({}, mockRes);
+
+    expect(getSecurityRuntimeStatus).toHaveBeenCalled();
+    expect(mockRes.status).toHaveBeenCalledWith(200);
+    expect(mockRes.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ready: true,
+      }),
+    );
   });
 });
