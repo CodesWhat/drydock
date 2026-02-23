@@ -174,7 +174,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 min-w-0 overflow-y-auto pr-3">
+  <div class="flex-1 min-h-0 min-w-0 overflow-y-auto pr-1 sm:pr-2">
       <!-- LOADING STATE -->
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="text-sm dd-text-muted">Loading dashboard...</div>
@@ -188,7 +188,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
 
       <template v-else>
       <!-- STAT CARDS -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <component
           :is="stat.route ? 'button' : 'div'"
           v-for="stat in stats"
@@ -232,7 +232,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
             <div class="flex items-center gap-2">
               <AppIcon name="recent-updates" :size="14" class="text-drydock-secondary" />
-              <h2 class="text-sm font-semibold dd-text">
+              <h2 class="text-xs font-semibold dd-text">
                 Recent Updates
               </h2>
             </div>
@@ -266,22 +266,31 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                     <div class="font-medium dd-text leading-tight">{{ row.name }}</div>
                     <div class="text-[10px] dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
                   </td>
-                  <td class="px-5 py-3 align-middle">
-                    <div class="grid items-center gap-1.5" style="grid-template-columns: 1fr auto 1fr;">
-                      <span class="px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium text-right justify-self-end dd-bg-elevated dd-text-secondary">
+                  <td class="px-5 py-3 align-middle overflow-hidden">
+                    <div class="grid items-center gap-1.5 min-w-0" style="grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);">
+                      <span class="px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium text-right justify-self-end dd-bg-elevated dd-text-secondary truncate max-w-full">
                         {{ row.oldVer }}
                       </span>
-                      <AppIcon name="arrow-right" :size="8" class="justify-self-center dd-text-muted" />
-                      <span class="px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium justify-self-start"
+                      <AppIcon name="arrow-right" :size="8" class="justify-self-center dd-text-muted shrink-0" />
+                      <span class="px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium justify-self-start truncate max-w-full"
                             style="background: var(--dd-primary-muted); color: var(--dd-primary);">
                         {{ row.newVer }}
                       </span>
                     </div>
                   </td>
                   <td class="px-5 py-3 text-center align-middle">
-                    <span class="w-2 h-2 rounded-full shrink-0 md:hidden inline-block"
-                          :style="{ backgroundColor: row.status === 'updated' ? 'var(--dd-success)' : row.status === 'pending' ? 'var(--dd-warning)' : 'var(--dd-danger)' }" />
-                    <span class="badge hidden md:inline-flex"
+                    <span class="badge px-1.5 py-0 text-[9px] md:!hidden"
+                          :style="{
+                            backgroundColor: row.status === 'updated'
+                              ? 'var(--dd-success-muted)'
+                              : row.status === 'pending'
+                                ? 'var(--dd-warning-muted)'
+                                : 'var(--dd-danger-muted)',
+                            color: row.status === 'updated' ? 'var(--dd-success)' : row.status === 'pending' ? 'var(--dd-warning)' : 'var(--dd-danger)',
+                          }">
+                      <AppIcon :name="row.status === 'updated' ? 'check' : row.status === 'pending' ? 'pending' : 'xmark'" :size="12" />
+                    </span>
+                    <span class="badge max-md:!hidden"
                           :style="{
                             backgroundColor: row.status === 'updated'
                               ? 'var(--dd-success-muted)'
@@ -312,7 +321,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
             <div class="flex items-center gap-2">
               <AppIcon name="security" :size="14" class="text-drydock-accent" />
-              <h2 class="text-sm font-semibold dd-text">
+              <h2 class="text-xs font-semibold dd-text">
                 Security Overview
               </h2>
             </div>
@@ -365,9 +374,16 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                    class="flex items-start gap-3 p-2.5 dd-rounded"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <div class="shrink-0 mt-0.5">
-                  <span class="w-2 h-2 rounded-full shrink-0 md:hidden inline-block"
-                        :style="{ backgroundColor: vuln.severity === 'CRITICAL' ? 'var(--dd-danger)' : 'var(--dd-warning)' }" />
-                  <span class="badge text-[9px] hidden md:inline-flex"
+                  <span class="badge px-1.5 py-0 text-[9px] md:!hidden"
+                        :style="{
+                          backgroundColor: vuln.severity === 'CRITICAL'
+                            ? 'var(--dd-danger-muted)'
+                            : 'var(--dd-warning-muted)',
+                          color: vuln.severity === 'CRITICAL' ? 'var(--dd-danger)' : 'var(--dd-warning)',
+                        }">
+                    <AppIcon :name="vuln.severity === 'CRITICAL' ? 'warning' : 'chevrons-up'" :size="12" />
+                  </span>
+                  <span class="badge text-[9px] max-md:!hidden"
                         :style="{
                           backgroundColor: vuln.severity === 'CRITICAL'
                             ? 'var(--dd-danger-muted)'
@@ -412,15 +428,25 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
             <div v-for="server in servers" :key="server.name"
                  class="flex items-center gap-3 p-3 dd-rounded"
                  :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              <div class="w-2.5 h-2.5 rounded-full shrink-0"
-                   :style="{ backgroundColor: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+              <span class="badge px-1.5 py-0 text-[9px] max-md:!hidden"
+                    :style="{
+                      backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
+                      color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
+                    }">
+                <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
+              </span>
               <div class="flex-1 min-w-0">
                 <div class="text-[12px] font-semibold truncate dd-text">{{ server.name }}</div>
                 <div class="text-[10px] dd-text-muted">{{ server.containers.running }}/{{ server.containers.total }} containers</div>
               </div>
-              <span class="w-2 h-2 rounded-full shrink-0 md:hidden inline-block"
-                    :style="{ backgroundColor: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-              <span class="badge text-[9px] uppercase font-bold hidden md:inline-flex"
+              <span class="badge px-1.5 py-0 text-[9px] md:!hidden"
+                    :style="{
+                      backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
+                      color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
+                    }">
+                <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
+              </span>
+              <span class="badge text-[9px] uppercase font-bold max-md:!hidden"
                     :style="{
                       backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                       color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
