@@ -3,6 +3,7 @@ import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { LOG_AUTO_FETCH_INTERVALS, useAutoFetchLogs, useLogViewport } from '../composables/useLogViewerBehavior';
 import { useColumnVisibility } from '../composables/useColumnVisibility';
 import { useContainerFilters } from '../composables/useContainerFilters';
 import { useDetailPanel } from '../composables/useDetailPanel';
@@ -95,10 +96,10 @@ async function recheckAll() {
 const containerLogsCache = ref<Record<string, string[]>>({});
 const containerLogsLoading = ref<Record<string, boolean>>({});
 
-async function loadContainerLogs(containerName: string) {
+async function loadContainerLogs(containerName: string, force = false) {
   const containerId = containerIdMap.value[containerName];
   if (!containerId) return;
-  if (containerLogsCache.value[containerName]) return;
+  if (!force && containerLogsCache.value[containerName]) return;
   containerLogsLoading.value[containerName] = true;
   try {
     const result = await fetchContainerLogs(containerId, 100);
@@ -121,6 +122,17 @@ function getContainerLogs(containerName: string): string[] {
   return containerLogsCache.value[containerName];
 }
 
+// Container log viewer behavior
+const { logContainer: containerLogRef, scrollBlocked: containerScrollBlocked, scrollToBottom: containerScrollToBottom, handleLogScroll: containerHandleLogScroll, resumeAutoScroll: containerResumeAutoScroll } = useLogViewport();
+
+async function refreshCurrentContainerLogs() {
+  if (selectedContainer.value) {
+    await loadContainerLogs(selectedContainer.value.name, true);
+  }
+}
+
+const { autoFetchInterval: containerAutoFetchInterval } = useAutoFetchLogs({ fetchFn: refreshCurrentContainerLogs, scrollToBottom: containerScrollToBottom, scrollBlocked: containerScrollBlocked });
+
 // Breakpoints
 const { isMobile, windowNarrow } = useBreakpoints();
 
@@ -140,6 +152,11 @@ const {
 } = useDetailPanel();
 
 const isCompact = computed(() => windowNarrow.value || detailPanelOpen.value);
+
+// Reset auto-fetch when switching containers or tabs
+watch([() => selectedContainer.value, () => activeDetailTab.value], () => {
+  containerAutoFetchInterval.value = 0;
+});
 
 function syncSelectedContainerReference() {
   if (!selectedContainer.value) {
@@ -1554,22 +1571,41 @@ function confirmForceUpdate(name: string) {
           <div v-if="activeDetailTab === 'logs'">
             <div class="dd-rounded overflow-hidden"
                  :style="{ backgroundColor: 'var(--dd-bg-code)' }">
-              <div class="px-3 py-2 flex items-center justify-between"
+              <div class="px-3 py-2 flex items-center justify-between gap-2"
                    style="border-bottom: 1px solid rgba(255,255,255,0.08);">
                 <span class="text-[10px] font-semibold uppercase tracking-wider" style="color: #64748b;">
                   Container Logs
                 </span>
-                <span class="text-[9px] font-mono" style="color: #475569;">
-                  {{ getContainerLogs(selectedContainer.name).length }} lines
-                </span>
+                <div class="flex items-center gap-2">
+                  <select v-model.number="containerAutoFetchInterval"
+                          class="px-1.5 py-1 dd-rounded text-[9px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                    <option v-for="opt in LOG_AUTO_FETCH_INTERVALS" :key="opt.value" :value="opt.value">
+                      {{ opt.label }}
+                    </option>
+                  </select>
+                  <span class="text-[9px] font-mono" style="color: #475569;">
+                    {{ getContainerLogs(selectedContainer.name).length }} lines
+                  </span>
+                </div>
               </div>
-              <div class="overflow-auto" style="max-height: calc(100vh - 400px);">
+              <div ref="containerLogRef" class="overflow-auto" style="max-height: calc(100vh - 400px);"
+                   @scroll="containerHandleLogScroll">
                 <div v-for="(line, i) in getContainerLogs(selectedContainer.name)" :key="i"
                      class="px-3 py-0.5 font-mono text-[10px] leading-relaxed whitespace-pre"
                      :style="{ borderBottom: i < getContainerLogs(selectedContainer.name).length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none' }">
                   <span style="color: #64748b;">{{ line.substring(0, 24) }}</span>
                   <span :style="{ color: line.includes('[error]') || line.includes('[crit]') || line.includes('[emerg]') ? '#ef4444' : line.includes('[warn]') ? '#f59e0b' : '#94a3b8' }">{{ line.substring(24) }}</span>
                 </div>
+              </div>
+              <div v-if="containerScrollBlocked && containerAutoFetchInterval > 0"
+                   class="flex items-center justify-between px-3 py-1.5 text-[9px]"
+                   style="border-top: 1px solid rgba(255,255,255,0.08);">
+                <span class="font-semibold" style="color: var(--dd-warning);">Auto-scroll paused</span>
+                <button class="px-2 py-0.5 dd-rounded text-[9px] font-semibold"
+                        :style="{ backgroundColor: 'var(--dd-warning)', color: 'var(--dd-bg)' }"
+                        @click="containerResumeAutoScroll">
+                  Resume
+                </button>
               </div>
             </div>
           </div>
@@ -2000,17 +2036,36 @@ function confirmForceUpdate(name: string) {
                 </span>
                 <span class="text-[11px] font-mono" style="color: #0096C7;">{{ selectedContainer.name }}</span>
               </div>
-              <span class="text-[10px] font-mono" style="color: #475569;">
-                {{ getContainerLogs(selectedContainer.name).length }} lines
-              </span>
+              <div class="flex items-center gap-2">
+                <select v-model.number="containerAutoFetchInterval"
+                        class="px-1.5 py-1 dd-rounded text-[10px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                  <option v-for="opt in LOG_AUTO_FETCH_INTERVALS" :key="opt.value" :value="opt.value">
+                    {{ opt.label }}
+                  </option>
+                </select>
+                <span class="text-[10px] font-mono" style="color: #475569;">
+                  {{ getContainerLogs(selectedContainer.name).length }} lines
+                </span>
+              </div>
             </div>
-            <div class="overflow-y-auto p-1" style="max-height: calc(100vh - 320px);">
+            <div ref="containerLogRef" class="overflow-y-auto p-1" style="max-height: calc(100vh - 320px);"
+                 @scroll="containerHandleLogScroll">
               <div v-for="(line, i) in getContainerLogs(selectedContainer.name)" :key="i"
                    class="px-3 py-0.5 font-mono text-[11px] leading-relaxed whitespace-pre hover:bg-white/[0.02]"
                    :style="{ borderBottom: i < getContainerLogs(selectedContainer.name).length - 1 ? '1px solid rgba(255,255,255,0.02)' : 'none' }">
                 <span style="color: #64748b;">{{ line.substring(0, 24) }}</span>
                 <span :style="{ color: line.includes('[error]') || line.includes('[crit]') || line.includes('[emerg]') ? '#ef4444' : line.includes('[warn]') || line.includes('[hint]') ? '#f59e0b' : '#94a3b8' }">{{ line.substring(24) }}</span>
               </div>
+            </div>
+            <div v-if="containerScrollBlocked && containerAutoFetchInterval > 0"
+                 class="flex items-center justify-between px-3 py-1.5 text-[10px]"
+                 style="border-top: 1px solid rgba(255,255,255,0.08);">
+              <span class="font-semibold" style="color: var(--dd-warning);">Auto-scroll paused</span>
+              <button class="px-2 py-0.5 dd-rounded text-[10px] font-semibold"
+                      :style="{ backgroundColor: 'var(--dd-warning)', color: 'var(--dd-bg)' }"
+                      @click="containerResumeAutoScroll">
+                Resume
+              </button>
             </div>
           </div>
         </div>

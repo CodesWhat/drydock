@@ -32,6 +32,20 @@ vi.mock('@/services/log', () => ({
   getLogEntries: (...args: any[]) => mockGetLogEntries(...args),
 }));
 
+const { mockScrollBlocked, mockAutoFetchInterval } = vi.hoisted(() => {
+  // Create minimal ref-like objects with __v_isRef so Vue's template compiler unwraps them
+  function fakeRef<T>(val: T) {
+    return { value: val, __v_isRef: true as const };
+  }
+  return { mockScrollBlocked: fakeRef(false), mockAutoFetchInterval: fakeRef(0) };
+});
+
+vi.mock('@/composables/useLogViewerBehavior', () => ({
+  useLogViewport: () => ({ logContainer: { value: null, __v_isRef: true }, scrollBlocked: mockScrollBlocked, scrollToBottom: vi.fn(), handleLogScroll: vi.fn(), resumeAutoScroll: vi.fn() }),
+  useAutoFetchLogs: () => ({ autoFetchInterval: mockAutoFetchInterval }),
+  LOG_AUTO_FETCH_INTERVALS: [{ label: 'Off', value: 0 }, { label: '2s', value: 2000 }, { label: '5s', value: 5000 }, { label: '10s', value: 10000 }, { label: '30s', value: 30000 }],
+}));
+
 const mockRouteQuery = vi.hoisted(() => ({ value: {} as Record<string, string> }));
 
 vi.mock('vue-router', () => ({
@@ -138,6 +152,8 @@ describe('ConfigView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRouteQuery.value = {};
+    mockScrollBlocked.value = false;
+    mockAutoFetchInterval.value = 0;
     mockGetUser.mockResolvedValue({ username: 'admin', email: 'admin@test.com', role: 'admin', lastLogin: '2026-01-01', sessions: 2 });
     mockGetAppInfos.mockResolvedValue({ version: '1.4.0' });
     mockGetLog.mockResolvedValue({ level: 'info' });
@@ -444,6 +460,37 @@ describe('ConfigView', () => {
           tail: 500,
         });
       });
+    });
+
+    it('renders auto-fetch interval selector', async () => {
+      const w = await mountLogsTab();
+      const selects = w.findAll('select');
+      const autoFetchSelect = selects.find((s) => s.text().includes('Off'));
+      expect(autoFetchSelect).toBeDefined();
+      expect(autoFetchSelect?.text()).toContain('2s');
+      expect(autoFetchSelect?.text()).toContain('5s');
+    });
+
+    it('renders refresh button', async () => {
+      const w = await mountLogsTab();
+      const refreshBtn = w.findAll('.app-icon-stub').find((el) => el.attributes('data-icon') === 'refresh');
+      expect(refreshBtn).toBeDefined();
+    });
+
+    it('shows scroll-paused indicator when scrollBlocked and auto-fetch active', async () => {
+      mockScrollBlocked.value = true;
+      mockAutoFetchInterval.value = 2000;
+      const w = await mountLogsTab();
+      expect(w.text()).toContain('Auto-scroll paused');
+      const resumeBtn = w.findAll('button').find((b) => b.text().includes('Resume'));
+      expect(resumeBtn).toBeDefined();
+    });
+
+    it('hides scroll-paused indicator when auto-fetch is off', async () => {
+      mockScrollBlocked.value = true;
+      mockAutoFetchInterval.value = 0;
+      const w = await mountLogsTab();
+      expect(w.text()).not.toContain('Auto-scroll paused');
     });
   });
 });

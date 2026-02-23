@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
+import { LOG_AUTO_FETCH_INTERVALS, useAutoFetchLogs, useLogViewport } from '../composables/useLogViewerBehavior';
 import { type IconLibrary, iconMap, libraryLabels } from '../icons';
 import { getAppInfos } from '../services/app';
 import { getUser } from '../services/auth';
@@ -17,6 +18,9 @@ const { themeFamily, themeVariant, isDark, setThemeFamily, transitionTheme } = u
 
 const { iconLibrary, setIconLibrary, iconScale, setIconScale } = useIcons();
 const { activeFont, setFont, fontLoading, isFontLoaded } = useFont();
+
+const { logContainer, scrollBlocked, scrollToBottom, handleLogScroll, resumeAutoScroll } = useLogViewport();
+const { autoFetchInterval } = useAutoFetchLogs({ fetchFn: refreshAppLogs, scrollToBottom, scrollBlocked });
 
 type SettingsTab = 'general' | 'appearance' | 'logs' | 'profile';
 
@@ -126,6 +130,9 @@ async function refreshAppLogs() {
     appLogLevel.value = logInfo?.level ?? 'unknown';
     appLogEntries.value = Array.isArray(entries) ? entries : [];
     appLogsLastFetched.value = new Date().toISOString();
+    if (!scrollBlocked.value) {
+      void nextTick(() => scrollToBottom());
+    }
   } catch (e: any) {
     appLogsError.value = e?.message || 'Failed to load application logs';
     appLogEntries.value = [];
@@ -143,9 +150,12 @@ function resetLogFilters() {
 
 watch(
   () => activeSettingsTab.value,
-  (tab) => {
+  (tab, oldTab) => {
     if (tab === 'logs' && appLogEntries.value.length === 0 && !appLogsLoading.value) {
       void refreshAppLogs();
+    }
+    if (oldTab === 'logs') {
+      autoFetchInterval.value = 0;
     }
   },
 );
@@ -570,6 +580,13 @@ async function handleClearIconCache() {
                 <option :value="1000">Tail 1000</option>
               </select>
 
+              <select v-model.number="autoFetchInterval"
+                      class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                <option v-for="opt in LOG_AUTO_FETCH_INTERVALS" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+
               <input v-model="appLogComponent"
                      type="text"
                      placeholder="Filter by component..."
@@ -586,6 +603,12 @@ async function handleClearIconCache() {
                       @click="resetLogFilters">
                 Reset
               </button>
+              <button class="p-1.5 dd-rounded transition-colors dd-text-muted hover:dd-text"
+                      :class="appLogsLoading ? 'opacity-50 pointer-events-none' : ''"
+                      title="Refresh"
+                      @click="refreshAppLogs">
+                <AppIcon name="refresh" :size="12" />
+              </button>
             </div>
 
             <div class="text-[10px] dd-text-muted">
@@ -600,12 +623,13 @@ async function handleClearIconCache() {
                  :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
               {{ appLogsError }}
             </div>
-            <div v-else
+            <div v-else ref="logContainer"
                  class="dd-rounded overflow-auto max-h-[420px] font-mono text-[11px]"
                  :style="{
                    backgroundColor: 'var(--dd-bg-inset)',
                    border: '1px solid var(--dd-border-strong)',
-                 }">
+                 }"
+                 @scroll="handleLogScroll">
               <div v-if="appLogEntries.length === 0"
                    class="px-3 py-4 dd-text-muted text-center">
                 No log entries found for current filters.
@@ -623,6 +647,16 @@ async function handleClearIconCache() {
                   <span class="dd-text break-all">{{ logMessage(entry) }}</span>
                 </div>
               </div>
+            </div>
+            <div v-if="scrollBlocked && autoFetchInterval > 0"
+                 class="flex items-center justify-between px-3 py-2 text-[10px]"
+                 :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-warning-muted)' }">
+              <span class="font-semibold" :style="{ color: 'var(--dd-warning)' }">Auto-scroll paused</span>
+              <button class="px-2 py-0.5 dd-rounded text-[10px] font-semibold transition-colors"
+                      :style="{ backgroundColor: 'var(--dd-warning)', color: 'var(--dd-bg)' }"
+                      @click="resumeAutoScroll">
+                Resume
+              </button>
             </div>
           </div>
         </div>

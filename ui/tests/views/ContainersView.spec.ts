@@ -120,16 +120,26 @@ vi.mock('@/composables/useSorting', () => ({
   })),
 }));
 
+const mockContainerScrollBlocked = ref(false);
+const mockContainerAutoFetchInterval = ref(0);
+
+vi.mock('@/composables/useLogViewerBehavior', () => ({
+  useLogViewport: () => ({ logContainer: ref(null), scrollBlocked: mockContainerScrollBlocked, scrollToBottom: vi.fn(), handleLogScroll: vi.fn(), resumeAutoScroll: vi.fn() }),
+  useAutoFetchLogs: () => ({ autoFetchInterval: mockContainerAutoFetchInterval }),
+  LOG_AUTO_FETCH_INTERVALS: [{ label: 'Off', value: 0 }, { label: '2s', value: 2000 }, { label: '5s', value: 5000 }, { label: '10s', value: 10000 }, { label: '30s', value: 30000 }],
+}));
+
 const mockSelectedContainer = ref<Container | null>(null);
 const mockDetailPanelOpen = ref(false);
 const mockContainerFullPage = ref(false);
+const mockActiveDetailTab = ref('overview');
 const mockSelectContainer = vi.fn();
 
 vi.mock('@/composables/useDetailPanel', () => ({
   useDetailPanel: vi.fn(() => ({
     selectedContainer: mockSelectedContainer,
     detailPanelOpen: mockDetailPanelOpen,
-    activeDetailTab: ref('overview'),
+    activeDetailTab: mockActiveDetailTab,
     panelSize: ref('sm'),
     containerFullPage: mockContainerFullPage,
     panelFlex: computed(() => '0 0 30%'),
@@ -224,6 +234,7 @@ async function mountContainersView(containers: Container[] = []) {
   mockSelectedContainer.value = null;
   mockDetailPanelOpen.value = false;
   mockContainerFullPage.value = false;
+  mockActiveDetailTab.value = 'overview';
 
   const wrapper = mountWithPlugins(ContainersView, {
     global: { stubs: childStubs },
@@ -242,6 +253,8 @@ describe('ContainersView', () => {
     mockFilterBouncer.value = 'all';
     mockFilterServer.value = 'all';
     mockFilterKind.value = 'all';
+    mockContainerScrollBlocked.value = false;
+    mockContainerAutoFetchInterval.value = 0;
     mockRoute.query = {};
   });
 
@@ -615,6 +628,44 @@ describe('ContainersView', () => {
 
       expect(mockGetContainerGroups).toHaveBeenCalled();
       expect(vm.groupMembershipMap).toEqual({ nginx: 'my-stack' });
+    });
+  });
+
+  describe('container logs auto-fetch', () => {
+    it('renders auto-fetch interval selector in logs tab', async () => {
+      const c = makeContainer();
+      const { getContainerLogs } = await import('@/services/container');
+      (getContainerLogs as ReturnType<typeof vi.fn>).mockResolvedValue({ logs: 'line1\nline2' });
+
+      const wrapper = await mountContainersView([c]);
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'logs';
+      await flushPromises();
+
+      const selects = wrapper.findAll('select');
+      const autoFetchSelect = selects.find((s) => s.text().includes('Off'));
+      expect(autoFetchSelect).toBeDefined();
+    });
+
+    it('shows scroll-paused indicator when scrollBlocked and auto-fetch active', async () => {
+      const c = makeContainer();
+      const { getContainerLogs } = await import('@/services/container');
+      (getContainerLogs as ReturnType<typeof vi.fn>).mockResolvedValue({ logs: 'line1\nline2' });
+
+      const wrapper = await mountContainersView([c]);
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'logs';
+      await flushPromises();
+      // Set after tab switch so the watcher reset has already fired
+      mockContainerScrollBlocked.value = true;
+      mockContainerAutoFetchInterval.value = 2000;
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.text()).toContain('Auto-scroll paused');
+      const resumeBtn = wrapper.findAll('button').find((b) => b.text().includes('Resume'));
+      expect(resumeBtn).toBeDefined();
     });
   });
 });
