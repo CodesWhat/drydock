@@ -107,6 +107,136 @@ function doesContainerBelongToCompose(compose, container) {
   return Boolean(getServiceKey(compose, container, currentImage));
 }
 
+function isCommentOrEmptyLine(line) {
+  const trimmed = line.trim();
+  return trimmed === '' || trimmed.startsWith('#');
+}
+
+function getLineIndentation(line) {
+  const indentation = line.match(/^[ \t]*/);
+  return indentation ? indentation[0] : '';
+}
+
+function parseYamlKeyLine(line) {
+  const match = line.match(/^[ \t]*(['"]?)([^'"]+)\1\s*:\s*(?:#.*)?$/);
+  if (!match) {
+    return undefined;
+  }
+  return match[2].trim();
+}
+
+/**
+ * Update only one compose service image line while preserving original
+ * formatting, comments, and key ordering elsewhere in the file.
+ */
+function updateComposeServiceImageInText(composeFileText, serviceName, newImage) {
+  const newline = composeFileText.includes('\r\n') ? '\r\n' : '\n';
+  const lines = composeFileText.split(/\r?\n/);
+
+  const servicesLineIndex = lines.findIndex((line) => /^[ \t]*services\s*:\s*(?:#.*)?$/.test(line));
+  if (servicesLineIndex < 0) {
+    throw new Error('Unable to locate services section in compose file');
+  }
+
+  const servicesIndent = getLineIndentation(lines[servicesLineIndex]).length;
+  let serviceIndent;
+  let serviceLineIndex = -1;
+  let serviceIndentation = '';
+
+  for (let lineIndex = servicesLineIndex + 1; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+    if (isCommentOrEmptyLine(line)) {
+      continue;
+    }
+
+    const lineIndentation = getLineIndentation(line);
+    const indentLength = lineIndentation.length;
+
+    if (indentLength <= servicesIndent) {
+      break;
+    }
+
+    if (serviceIndent === undefined) {
+      serviceIndent = indentLength;
+    }
+
+    if (indentLength !== serviceIndent) {
+      continue;
+    }
+
+    const key = parseYamlKeyLine(line);
+    if (key === serviceName) {
+      serviceLineIndex = lineIndex;
+      serviceIndentation = lineIndentation;
+      break;
+    }
+  }
+
+  if (serviceLineIndex < 0) {
+    throw new Error(`Unable to locate compose service ${serviceName}`);
+  }
+
+  let serviceEndLineIndex = lines.length;
+  for (let lineIndex = serviceLineIndex + 1; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+    if (isCommentOrEmptyLine(line)) {
+      continue;
+    }
+
+    const indentLength = getLineIndentation(line).length;
+    if (indentLength <= servicesIndent || indentLength === serviceIndent) {
+      serviceEndLineIndex = lineIndex;
+      break;
+    }
+  }
+
+  let fieldIndent;
+  let fieldIndentation = '';
+  let imageLineIndex = -1;
+
+  for (let lineIndex = serviceLineIndex + 1; lineIndex < serviceEndLineIndex; lineIndex++) {
+    const line = lines[lineIndex];
+    if (isCommentOrEmptyLine(line)) {
+      continue;
+    }
+
+    const lineIndentation = getLineIndentation(line);
+    const indentLength = lineIndentation.length;
+    if (indentLength <= serviceIndent) {
+      continue;
+    }
+
+    if (fieldIndent === undefined) {
+      fieldIndent = indentLength;
+      fieldIndentation = lineIndentation;
+    }
+
+    if (indentLength !== fieldIndent) {
+      continue;
+    }
+
+    if (/^[ \t]*image\s*:/.test(line)) {
+      imageLineIndex = lineIndex;
+      break;
+    }
+  }
+
+  if (imageLineIndex >= 0) {
+    const imageLine = lines[imageLineIndex];
+    const match = imageLine.match(/^([ \t]*image\s*:\s*)([^#]*?)(\s*(#.*)?)$/);
+    if (match) {
+      lines[imageLineIndex] = `${match[1]}${newImage}${match[3] || ''}`;
+    } else {
+      lines[imageLineIndex] = `${getLineIndentation(imageLine)}image: ${newImage}`;
+    }
+  } else {
+    const imageIndentation = fieldIndentation || `${serviceIndentation}  `;
+    lines.splice(serviceLineIndex + 1, 0, `${imageIndentation}image: ${newImage}`);
+  }
+
+  return lines.join(newline);
+}
+
 /**
  * Update a Docker compose stack with an updated one.
  */
@@ -228,6 +358,42 @@ class Dockercompose extends Docker {
     );
 
     return !this.configuration.dryrun;
+  }
+
+  /**
+   * Keep compose dry-run side-effect free: no prune and no backup records.
+   */
+  async runPreRuntimeUpdateLifecycle(context, container, logContainer) {
+    if (this.configuration.dryrun) {
+      logContainer.info('Skip prune/backup in compose dry-run mode');
+      return;
+    }
+    await super.runPreRuntimeUpdateLifecycle(context, container, logContainer);
+  }
+
+  /**
+   * Self-update for compose-managed Drydock service. This must stay in compose
+   * lifecycle instead of Docker API recreate to preserve compose ownership.
+   */
+  async executeSelfUpdate(context, container, logContainer) {
+    const composeCtx = this._composeContextMap.get(container.name);
+    if (!composeCtx) {
+      throw new Error(`Missing compose context for self-update container ${container.name}`);
+    }
+
+    if (this.configuration.dryrun) {
+      logContainer.info('Do not replace the existing container because dry-run mode is enabled');
+      return false;
+    }
+
+    this.insertContainerImageBackup(context, container);
+    await this.updateContainerWithCompose(composeCtx.composeFile, composeCtx.service, container);
+    await this.runServicePostStartHooks(
+      container,
+      composeCtx.service,
+      composeCtx.serviceDefinition,
+    );
+    return true;
   }
 
   /**
@@ -478,10 +644,52 @@ class Dockercompose extends Docker {
     );
   }
 
-  async updateContainerWithCompose(composeFile, service, container) {
+  async getContainerRunningState(container, logContainer) {
+    try {
+      const watcher = this.getWatcher(container);
+      const { dockerApi } = watcher;
+      const containerToInspect = dockerApi.getContainer(container.name);
+      const containerState = await containerToInspect.inspect();
+      return containerState?.State?.Running !== false;
+    } catch (e) {
+      logContainer.warn(
+        `Unable to inspect running state for ${container.name}; assuming running (${e.message})`,
+      );
+      return true;
+    }
+  }
+
+  async resolveComposeServiceContext(container, currentImage) {
+    const composeFile = this.getComposeFileForContainer(container);
+    if (!composeFile) {
+      throw new Error(`No compose file configured for ${container.name}`);
+    }
+
+    const compose = await this.getComposeFileAsObject(composeFile);
+    const service = getServiceKey(compose, container, currentImage);
+    if (!service || !compose?.services?.[service]) {
+      throw new Error(
+        `Unable to resolve compose service for ${container.name} from ${composeFile}`,
+      );
+    }
+
+    return { composeFile, compose, service };
+  }
+
+  async updateContainerWithCompose(composeFile, service, container, options = {}) {
     const logContainer = this.log.child({
       container: container.name,
     });
+
+    const {
+      shouldStart = undefined,
+      skipPull = false,
+      forceRecreate = false,
+    } = options as {
+      shouldStart?: boolean;
+      skipPull?: boolean;
+      forceRecreate?: boolean;
+    };
 
     if (this.configuration.dryrun) {
       logContainer.info(
@@ -490,9 +698,61 @@ class Dockercompose extends Docker {
       return;
     }
 
+    const serviceShouldStart =
+      shouldStart !== undefined
+        ? shouldStart
+        : await this.getContainerRunningState(container, logContainer);
+
     logContainer.info(`Refresh compose service ${service} from ${composeFile}`);
-    await this.runComposeCommand(composeFile, ['pull', service], logContainer);
-    await this.runComposeCommand(composeFile, ['up', '-d', '--no-deps', service], logContainer);
+    if (!skipPull) {
+      await this.runComposeCommand(composeFile, ['pull', service], logContainer);
+    }
+
+    const upArgs = ['up'];
+    if (serviceShouldStart) {
+      upArgs.push('-d');
+    } else {
+      upArgs.push('--no-start');
+    }
+    upArgs.push('--no-deps');
+    if (forceRecreate) {
+      upArgs.push('--force-recreate');
+    }
+    upArgs.push(service);
+    await this.runComposeCommand(composeFile, upArgs, logContainer);
+  }
+
+  async stopAndRemoveContainer(_currentContainer, _currentContainerSpec, container, logContainer) {
+    logContainer.info(
+      `Skip direct stop/remove for compose-managed container ${container.name}; using compose lifecycle`,
+    );
+  }
+
+  async recreateContainer(_dockerApi, currentContainerSpec, newImage, container, logContainer) {
+    const registry = getState().registry[container.image.registry.name];
+    const fallbackCurrentImage = registry.getImageFullName(
+      container.image,
+      container.image.tag.value,
+    );
+    const currentImage = currentContainerSpec?.Config?.Image || fallbackCurrentImage;
+    const { composeFile, service } = await this.resolveComposeServiceContext(
+      container,
+      currentImage,
+    );
+
+    const composeFileText = (await this.getComposeFile(composeFile)).toString();
+    const updatedComposeFileText = updateComposeServiceImageInText(
+      composeFileText,
+      service,
+      newImage,
+    );
+    await this.writeComposeFile(composeFile, updatedComposeFileText);
+
+    await this.updateContainerWithCompose(composeFile, service, container, {
+      shouldStart: currentContainerSpec?.State?.Running === true,
+      skipPull: true,
+      forceRecreate: true,
+    });
   }
 
   async runServicePostStartHooks(container, serviceKey, service) {
@@ -696,4 +956,5 @@ export {
   normalizeImplicitLatest as testable_normalizeImplicitLatest,
   normalizePostStartHooks as testable_normalizePostStartHooks,
   normalizePostStartEnvironmentValue as testable_normalizePostStartEnvironmentValue,
+  updateComposeServiceImageInText as testable_updateComposeServiceImageInText,
 };
