@@ -1,4 +1,4 @@
-import { type Ref, onUnmounted, ref, watch } from 'vue';
+import { type Ref, onScopeDispose, ref, watch } from 'vue';
 
 export function useLogViewport() {
   const logContainer = ref<HTMLElement | null>(null);
@@ -63,7 +63,7 @@ export function useAutoFetchLogs(options: AutoFetchOptions) {
     else stopAutoFetch();
   });
 
-  onUnmounted(() => stopAutoFetch());
+  onScopeDispose(() => stopAutoFetch());
 
   return { autoFetchInterval };
 }
