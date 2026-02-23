@@ -16,6 +16,7 @@ vi.mock('./authentication', mockInit);
 vi.mock('./icons', mockInit);
 vi.mock('./group', mockInit);
 vi.mock('./log', mockInit);
+vi.mock('./notification', mockInit);
 vi.mock('./settings', mockInit);
 vi.mock('./store', mockInit);
 vi.mock('./server', mockInit);
@@ -54,6 +55,7 @@ describe('API Router', () => {
     const iconsRouter = await import('./icons.js');
     const groupRouter = await import('./group.js');
     const logRouter = await import('./log.js');
+    const notificationRouter = await import('./notification.js');
     const settingsRouter = await import('./settings.js');
     const storeRouter = await import('./store.js');
     const serverRouter = await import('./server.js');
@@ -74,6 +76,7 @@ describe('API Router', () => {
     expect(iconsRouter.init).toHaveBeenCalled();
     expect(groupRouter.init).toHaveBeenCalled();
     expect(logRouter.init).toHaveBeenCalled();
+    expect(notificationRouter.init).toHaveBeenCalled();
     expect(settingsRouter.init).toHaveBeenCalled();
     expect(storeRouter.init).toHaveBeenCalled();
     expect(serverRouter.init).toHaveBeenCalled();

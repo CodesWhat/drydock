@@ -15,6 +15,7 @@ import * as app from './app.js';
 import * as audit from './audit.js';
 import * as backup from './backup.js';
 import * as container from './container.js';
+import * as notification from './notification.js';
 import * as settings from './settings.js';
 
 // Store Configuration Schema
@@ -39,6 +40,7 @@ function createCollections() {
   audit.createCollections(db);
   backup.createCollections(db);
   container.createCollections(db);
+  notification.createCollections(db);
   settings.createCollections(db);
 }
 

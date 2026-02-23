@@ -12,6 +12,7 @@ import * as containerActionsRouter from './container-actions.js';
 import * as groupRouter from './group.js';
 import * as iconsRouter from './icons.js';
 import * as logRouter from './log.js';
+import * as notificationRouter from './notification.js';
 import * as previewRouter from './preview.js';
 import * as registryRouter from './registry.js';
 import * as serverRouter from './server.js';
@@ -76,6 +77,9 @@ export function init() {
 
   // Mount trigger router
   router.use('/triggers', triggerRouter.init());
+
+  // Mount notification rules router
+  router.use('/notifications', notificationRouter.init());
 
   // Mount watcher router
   router.use('/watchers', watcherRouter.init());
