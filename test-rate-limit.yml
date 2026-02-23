@@ -15,6 +15,7 @@ config:
     headers:
       Accept: "application/json"
       Authorization: "Basic YWRtaW46cGFzc3dvcmQ="
+  processor: "./test/load-test.processor.cjs"
   ensure:
     thresholds:
       - vusers.failed: 0
@@ -22,13 +23,9 @@ config:
 scenarios:
   - name: "Scan endpoint rate-limit burst"
     flow:
-      - post:
-          url: "/api/containers/watch"
-          expect:
-            - statusCode: 200
-          capture:
-            - json: "$[0].id"
-              as: "containerId"
+      # Resolve a container id outside measured HTTP steps so scan latency
+      # reflects rate-limit behavior instead of watch setup cost.
+      - function: "ensureContainerId"
       # In the CI/local test stack the scanner is typically disabled, so
       # pre-limit requests can be 400. We only assert that the limiter
       # returns 429 once the burst exceeds max=5.

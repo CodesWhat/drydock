@@ -282,11 +282,22 @@ jobs:
         run: npm ci
         working-directory: e2e
 
-      - name: Run Artillery smoke test
+      - name: Run Artillery smoke test (advisory)
+        continue-on-error: true
         env:
           ARTILLERY_ENV: smoke
           DD_LOAD_TEST_BUILD_CACHE: gha
           DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/smoke
+          ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
+        run: ./scripts/run-load-test.sh
+
+      - name: Run Artillery behavior test (advisory)
+        continue-on-error: true
+        env:
+          ARTILLERY_FILE: ./test-behavior.yml
+          ARTILLERY_ENV: behavior
+          DD_LOAD_TEST_BUILD_CACHE: gha
+          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/behavior
           ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
         run: ./scripts/run-load-test.sh
 
@@ -304,51 +315,54 @@ jobs:
         if: always()
         run: |
           report="$(ls -1t artifacts/load-test/smoke/*.json 2>/dev/null | head -n1 || true)"
-          {
-            echo "### Load Test (Smoke)"
-            if [ -z "$report" ]; then
-              echo "- No Artillery JSON report was generated."
-              exit 0
-            fi
-            p95="$(jq -r '.aggregate.summaries["http.response_time"].p95 // "n/a"' "$report")"
-            p99="$(jq -r '.aggregate.summaries["http.response_time"].p99 // "n/a"' "$report")"
-            rate="$(jq -r '.aggregate.rates["http.request_rate"] // "n/a"' "$report")"
-            requests="$(jq -r '.aggregate.counters["http.requests"] // "n/a"' "$report")"
-            r429="$(jq -r '.aggregate.counters["http.codes.429"] // 0' "$report")"
-            failed="$(jq -r '.aggregate.counters["vusers.failed"] // 0' "$report")"
-            echo "- Report: \`$report\`"
-            echo "- http.response_time.p95: \`$p95\` ms"
-            echo "- http.response_time.p99: \`$p99\` ms"
-            echo "- http.request_rate: \`$rate\` req/s"
-            echo "- http.requests: \`$requests\`"
-            echo "- http.codes.429: \`$r429\`"
-            echo "- vusers.failed: \`$failed\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Smoke)"
 
       - name: Summarize load test metrics (rate-limit)
         if: always()
         run: |
           report="$(ls -1t artifacts/load-test/rate-limit/*.json 2>/dev/null | head -n1 || true)"
-          {
-            echo "### Load Test (Rate-limit)"
-            if [ -z "$report" ]; then
-              echo "- No Artillery JSON report was generated."
-              exit 0
-            fi
-            p95="$(jq -r '.aggregate.summaries["http.response_time"].p95 // "n/a"' "$report")"
-            p99="$(jq -r '.aggregate.summaries["http.response_time"].p99 // "n/a"' "$report")"
-            rate="$(jq -r '.aggregate.rates["http.request_rate"] // "n/a"' "$report")"
-            requests="$(jq -r '.aggregate.counters["http.requests"] // "n/a"' "$report")"
-            r429="$(jq -r '.aggregate.counters["http.codes.429"] // 0' "$report")"
-            failed="$(jq -r '.aggregate.counters["vusers.failed"] // 0' "$report")"
-            echo "- Report: \`$report\`"
-            echo "- http.response_time.p95: \`$p95\` ms"
-            echo "- http.response_time.p99: \`$p99\` ms"
-            echo "- http.request_rate: \`$rate\` req/s"
-            echo "- http.requests: \`$requests\`"
-            echo "- http.codes.429: \`$r429\`"
-            echo "- vusers.failed: \`$failed\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Rate-limit)"
+
+      - name: Summarize load test metrics (behavior)
+        if: always()
+        run: |
+          report="$(ls -1t artifacts/load-test/behavior/*.json 2>/dev/null | head -n1 || true)"
+          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Behavior)"
+
+      - name: Correctness check (smoke, advisory)
+        if: always()
+        env:
+          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false'
+          DD_LOAD_TEST_MAX_5XX: '0'
+          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
+          DD_LOAD_TEST_MIN_429: '0'
+          DD_LOAD_TEST_MAX_429: '0'
+        run: |
+          report="$(ls -1t artifacts/load-test/smoke/*.json 2>/dev/null | head -n1 || true)"
+          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Smoke)"
+
+      - name: Correctness check (behavior, advisory)
+        if: always()
+        env:
+          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false'
+          DD_LOAD_TEST_MAX_5XX: '0'
+          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
+          DD_LOAD_TEST_MIN_429: '0'
+          DD_LOAD_TEST_MAX_429: '0'
+        run: |
+          report="$(ls -1t artifacts/load-test/behavior/*.json 2>/dev/null | head -n1 || true)"
+          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Behavior)"
+
+      - name: Correctness check (rate-limit, advisory)
+        if: always()
+        env:
+          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false'
+          DD_LOAD_TEST_MAX_5XX: '0'
+          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
+          DD_LOAD_TEST_MIN_429: '1'
+        run: |
+          report="$(ls -1t artifacts/load-test/rate-limit/*.json 2>/dev/null | head -n1 || true)"
+          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Rate-limit)"
 
       - name: Fetch load test baseline from main
         id: load-test-baseline
@@ -476,11 +490,19 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+      - name: Upload load test artifact (behavior)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: load-test-behavior-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/load-test/behavior/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
   load-test-ci:
     name: Load Test (CI)
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
-    continue-on-error: true
     needs: [build]
     permissions:
       contents: read
@@ -518,30 +540,76 @@ jobs:
           ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
         run: ./scripts/run-load-test.sh
 
+      - name: Run Artillery behavior test
+        env:
+          ARTILLERY_FILE: ./test-behavior.yml
+          ARTILLERY_ENV: behavior
+          DD_LOAD_TEST_BUILD_CACHE: gha
+          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/behavior
+          ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
+        run: ./scripts/run-load-test.sh
+
+      - name: Run Artillery rate-limit burst
+        env:
+          ARTILLERY_FILE: ./test-rate-limit.yml
+          ARTILLERY_ENV: ratelimit
+          DD_LOAD_TEST_BUILD_CACHE: gha
+          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/rate-limit
+          ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
+        run: ./scripts/run-load-test.sh
+
       - name: Summarize load test metrics (ci)
         if: always()
         run: |
           report="$(ls -1t artifacts/load-test/ci/*.json 2>/dev/null | head -n1 || true)"
-          {
-            echo "### Load Test (CI)"
-            if [ -z "$report" ]; then
-              echo "- No Artillery JSON report was generated."
-              exit 0
-            fi
-            p95="$(jq -r '.aggregate.summaries["http.response_time"].p95 // "n/a"' "$report")"
-            p99="$(jq -r '.aggregate.summaries["http.response_time"].p99 // "n/a"' "$report")"
-            rate="$(jq -r '.aggregate.rates["http.request_rate"] // "n/a"' "$report")"
-            requests="$(jq -r '.aggregate.counters["http.requests"] // "n/a"' "$report")"
-            r429="$(jq -r '.aggregate.counters["http.codes.429"] // 0' "$report")"
-            failed="$(jq -r '.aggregate.counters["vusers.failed"] // 0' "$report")"
-            echo "- Report: \`$report\`"
-            echo "- http.response_time.p95: \`$p95\` ms"
-            echo "- http.response_time.p99: \`$p99\` ms"
-            echo "- http.request_rate: \`$rate\` req/s"
-            echo "- http.requests: \`$requests\`"
-            echo "- http.codes.429: \`$r429\`"
-            echo "- vusers.failed: \`$failed\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+          ./scripts/summarize-load-test-report.sh "$report" "Load Test (CI)"
+
+      - name: Summarize load test metrics (behavior)
+        if: always()
+        run: |
+          report="$(ls -1t artifacts/load-test/behavior/*.json 2>/dev/null | head -n1 || true)"
+          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Behavior)"
+
+      - name: Summarize load test metrics (rate-limit)
+        if: always()
+        run: |
+          report="$(ls -1t artifacts/load-test/rate-limit/*.json 2>/dev/null | head -n1 || true)"
+          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Rate-limit)"
+
+      - name: Correctness check (ci, enforced)
+        if: always()
+        env:
+          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'true'
+          DD_LOAD_TEST_MAX_5XX: '0'
+          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
+          DD_LOAD_TEST_MIN_429: '0'
+          DD_LOAD_TEST_MAX_429: '0'
+        run: |
+          report="$(ls -1t artifacts/load-test/ci/*.json 2>/dev/null | head -n1 || true)"
+          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (CI)"
+
+      - name: Correctness check (behavior, enforced)
+        if: always()
+        env:
+          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'true'
+          DD_LOAD_TEST_MAX_5XX: '0'
+          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
+          DD_LOAD_TEST_MIN_429: '0'
+          DD_LOAD_TEST_MAX_429: '0'
+        run: |
+          report="$(ls -1t artifacts/load-test/behavior/*.json 2>/dev/null | head -n1 || true)"
+          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Behavior)"
+
+      - name: Correctness check (rate-limit, enforced)
+        if: always()
+        env:
+          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'true'
+          DD_LOAD_TEST_MAX_5XX: '0'
+          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
+          DD_LOAD_TEST_MIN_429: '1'
+        run: |
+          report="$(ls -1t artifacts/load-test/rate-limit/*.json 2>/dev/null | head -n1 || true)"
+          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Rate-limit)"
 
       - name: Upload load test artifact (ci)
         if: always()
@@ -549,5 +617,23 @@ jobs:
         with:
           name: load-test-ci-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/load-test/ci/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload load test artifact (behavior)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: load-test-behavior-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/load-test/behavior/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload load test artifact (rate-limit)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: load-test-rate-limit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/load-test/rate-limit/*.json
           if-no-files-found: warn
           retention-days: 30

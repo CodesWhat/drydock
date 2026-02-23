@@ -52,6 +52,7 @@ services:
       - ./migration/tls.crt:/usr/local/share/ca-certificates/mock-oidc-tls.crt:ro
     environment:
       - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
       - DD_AUTH_OIDC_MOCK_DISCOVERY=https://mock-oidc-tls/default/.well-known/openid-configuration
       - DD_AUTH_OIDC_MOCK_CLIENTID=test-client
       - DD_AUTH_OIDC_MOCK_CLIENTSECRET=test-secret

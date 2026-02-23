@@ -9,6 +9,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
       - DD_LOG_FORMAT=text
       - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
       - DD_WATCHER_LOCAL_CRON=*/2 * * * *

@@ -167,6 +167,42 @@ async function probeConnectedAgentLogs() {
 	}
 }
 
+function extractContainerId(payload) {
+	if (!Array.isArray(payload) || payload.length === 0) {
+		return null;
+	}
+	const firstContainer = payload.find((entry) => entry && typeof entry.id === 'string');
+	return firstContainer?.id || null;
+}
+
+async function ensureContainerId(context) {
+	if (context?.vars?.containerId) {
+		return;
+	}
+
+	const containersResponse = await requestJson('/api/containers');
+	if (containersResponse.status === 200) {
+		const containerId = extractContainerId(containersResponse.body);
+		if (containerId) {
+			context.vars.containerId = containerId;
+			return;
+		}
+	}
+
+	const watchResponse = await requestJson('/api/containers/watch', { method: 'POST' });
+	if (watchResponse.status !== 200) {
+		throw new Error(
+			`Failed to prepare container for rate-limit scan test (watch status ${watchResponse.status})`,
+		);
+	}
+
+	const watchedContainerId = extractContainerId(watchResponse.body);
+	if (!watchedContainerId) {
+		throw new Error('Failed to prepare container for rate-limit scan test (no container found)');
+	}
+	context.vars.containerId = watchedContainerId;
+}
+
 function dropAuthorization(requestParams, _context, _events, next) {
 	requestParams.headers = requestParams.headers || {};
 	delete requestParams.headers.Authorization;
@@ -176,6 +212,7 @@ function dropAuthorization(requestParams, _context, _events, next) {
 
 module.exports = {
 	dropAuthorization,
+	ensureContainerId,
 	probeConnectedAgentLogs,
 	probeSseReconnect,
 };
