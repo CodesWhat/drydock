@@ -17,6 +17,7 @@ export function useDetailPanel() {
     { id: 'logs', label: 'Logs', icon: 'logs' },
     { id: 'environment', label: 'Environment', icon: 'config' },
     { id: 'labels', label: 'Labels', icon: 'containers' },
+    { id: 'actions', label: 'Actions', icon: 'triggers' },
   ];
 
   function savePanelState() {
