@@ -14,6 +14,7 @@ vi.mock('vue-router', () => ({
 
 // --- Mock all services ---
 vi.mock('@/services/container', () => ({
+  deleteContainer: vi.fn(),
   getAllContainers: vi.fn(),
   getContainerGroups: vi.fn().mockResolvedValue([]),
   getContainerLogs: vi.fn(),

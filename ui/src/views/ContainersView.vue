@@ -9,6 +9,7 @@ import { useContainerFilters } from '../composables/useContainerFilters';
 import { useDetailPanel } from '../composables/useDetailPanel';
 import { useSorting } from '../composables/useSorting';
 import {
+  deleteContainer as apiDeleteContainer,
   getContainerLogs as fetchContainerLogs,
   getAllContainers,
   getContainerGroups,
@@ -855,6 +856,29 @@ async function forceUpdate(name: string) {
   await executeAction(name, apiUpdateContainer);
 }
 
+async function deleteContainer(name: string) {
+  const containerId = containerIdMap.value[name];
+  if (!containerId || actionInProgress.value) {
+    return false;
+  }
+  actionInProgress.value = name;
+  try {
+    await apiDeleteContainer(containerId);
+    skippedUpdates.value.delete(name);
+    if (selectedContainer.value?.name === name) {
+      closeFullPage();
+      closePanel();
+    }
+    await loadContainers();
+    return true;
+  } catch (e: any) {
+    error.value = e?.message || `Failed to delete ${name}`;
+    return false;
+  } finally {
+    actionInProgress.value = null;
+  }
+}
+
 // Tooltip shorthand — shows on 400ms delay
 const tt = (label: string) => ({ value: label, showDelay: 400 });
 
@@ -889,6 +913,17 @@ function confirmForceUpdate(name: string) {
     acceptLabel: 'Force Update',
     severity: 'warn',
     accept: () => forceUpdate(name),
+  });
+}
+
+function confirmDelete(name: string) {
+  confirm.require({
+    header: 'Delete Container',
+    message: `Delete ${name}? This will remove it from Drydock tracking until rediscovered.`,
+    rejectLabel: 'Cancel',
+    acceptLabel: 'Delete',
+    severity: 'danger',
+    accept: () => deleteContainer(name),
   });
 }
 </script>
@@ -1327,6 +1362,13 @@ function confirmForceUpdate(name: string) {
                 Skip this update
               </button>
             </template>
+            <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
+            <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated"
+                    style="color: var(--dd-danger);"
+                    @click="closeActionsMenu(); confirmDelete(c.name)">
+              <AppIcon name="trash" :size="12" class="w-3 text-center inline-flex justify-center" />
+              Delete
+            </button>
           </div>
         </template>
       </Teleport>
@@ -1924,6 +1966,12 @@ function confirmForceUpdate(name: string) {
                     @click="updateContainer(selectedContainer.name)">
               <AppIcon name="cloud-download" :size="12" />
               Update
+            </button>
+            <button class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
+                    :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+                    @click="confirmDelete(selectedContainer.name)">
+              <AppIcon name="trash" :size="12" />
+              Delete
             </button>
           </div>
         </div>
