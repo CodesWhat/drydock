@@ -593,7 +593,6 @@ class Dockercompose extends Docker {
       },
     ];
 
-    let lastError;
     for (const composeCommand of commandsToTry) {
       try {
         const { stdout, stderr } = await this.executeCommand(
@@ -616,7 +615,6 @@ class Dockercompose extends Docker {
         }
         return;
       } catch (e) {
-        lastError = e;
         const stderr = `${e?.stderr || ''}`;
         const dockerComposePluginMissing =
           composeCommand.command === 'docker' &&
@@ -638,10 +636,6 @@ class Dockercompose extends Docker {
         );
       }
     }
-
-    throw new Error(
-      `Cannot run docker compose command ${composeArgs.join(' ')} for ${composeFilePath} (${lastError?.message || 'unknown error'})`,
-    );
   }
 
   async getContainerRunningState(container, logContainer) {
@@ -706,6 +700,8 @@ class Dockercompose extends Docker {
     logContainer.info(`Refresh compose service ${service} from ${composeFile}`);
     if (!skipPull) {
       await this.runComposeCommand(composeFile, ['pull', service], logContainer);
+    } else {
+      logContainer.debug(`Skip compose pull for ${service} from ${composeFile}`);
     }
 
     const upArgs = ['up'];
