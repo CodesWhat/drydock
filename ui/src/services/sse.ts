@@ -14,6 +14,7 @@ class SseService {
   private eventBus: SseEventBus | undefined;
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private selfUpdateMode = false;
+  private consecutiveErrors = 0;
 
   connect(eventBus: SseEventBus): void {
     this.eventBus = eventBus;
@@ -28,6 +29,7 @@ class SseService {
     this.eventSource = new EventSource('/api/events/ui');
 
     this.eventSource.addEventListener('dd:connected', () => {
+      this.consecutiveErrors = 0;
       this.eventBus?.emit('sse:connected');
     });
 
@@ -49,8 +51,13 @@ class SseService {
     });
 
     this.eventSource.onerror = (): void => {
+      this.consecutiveErrors++;
       if (this.selfUpdateMode) {
         this.eventBus?.emit('connection-lost');
+      } else if (this.consecutiveErrors >= 2) {
+        // Server likely down — emit connection-lost after 2 consecutive failures
+        this.eventBus?.emit('connection-lost');
+        this.scheduleReconnect();
       } else {
         this.scheduleReconnect();
       }
@@ -73,6 +80,7 @@ class SseService {
     }
     this.eventBus = undefined;
     this.selfUpdateMode = false;
+    this.consecutiveErrors = 0;
     return;
   }
 }

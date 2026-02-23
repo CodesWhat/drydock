@@ -6,6 +6,7 @@ import { useBreakpoints } from '@/composables/useBreakpoints';
 import { useIcons } from '@/composables/useIcons';
 import { getUser, logout } from '@/services/auth';
 import { getAllContainers } from '@/services/container';
+import sseService from '@/services/sse';
 import { useTheme } from '@/theme/useTheme';
 
 const router = useRouter();
@@ -130,6 +131,9 @@ async function handleSignOut() {
   }
 }
 
+// About modal
+const showAbout = ref(false);
+
 // Search modal
 const showSearch = ref(false);
 const searchQuery = ref('');
@@ -153,22 +157,99 @@ watch(showSearch, async (val) => {
   }
 });
 
+// Server connectivity monitor
+const connectionLost = ref(false);
+const selfUpdateInProgress = ref(false);
+let connectivityTimer: ReturnType<typeof setInterval> | undefined;
+
+async function checkConnectivity() {
+  try {
+    const res = await fetch('/auth/user', { credentials: 'include', redirect: 'manual' });
+    if (connectionLost.value && (res.ok || res.status === 401)) {
+      // Server is back — redirect to login (session likely expired)
+      connectionLost.value = false;
+      clearInterval(connectivityTimer);
+      router.push('/login');
+    }
+  } catch {
+    // Network error — server is unreachable
+    connectionLost.value = true;
+  }
+}
+
+const connectionOverlayTitle = computed(() =>
+  selfUpdateInProgress.value ? 'Applying Update' : 'Connection Lost',
+);
+const connectionOverlayMessage = computed(() =>
+  selfUpdateInProgress.value
+    ? 'Drydock is restarting after a self-update. Reconnecting when the service is back...'
+    : 'The server is unreachable. Waiting for it to come back online...',
+);
+const connectionOverlayStatus = computed(() =>
+  selfUpdateInProgress.value ? 'Restarting service' : 'Reconnecting',
+);
+
+async function refreshSidebarData() {
+  try {
+    const containers = await getAllContainers().catch(() => []);
+    if (!Array.isArray(containers)) {
+      return;
+    }
+    containerCount.value = String(containers.length);
+    const issues = containers.filter((c: Record<string, any>) => {
+      if (c.updateKind?.semverDiff === 'major' || c.updateKind === 'major') {
+        return true;
+      }
+      const summary = c.security?.scan?.summary;
+      return Number(summary?.critical || 0) > 0 || Number(summary?.high || 0) > 0;
+    }).length;
+    securityIssueCount.value = issues > 0 ? String(issues) : '';
+  } catch {
+    // Sidebar works without badge data
+  }
+}
+
+function emitUiSseEvent(name: string) {
+  globalThis.dispatchEvent(new CustomEvent(name));
+}
+
+function handleSseEvent(event: string) {
+  if (event === 'sse:connected') {
+    connectionLost.value = false;
+    selfUpdateInProgress.value = false;
+    emitUiSseEvent('dd:sse-connected');
+    return;
+  }
+  if (event === 'self-update') {
+    selfUpdateInProgress.value = true;
+    connectionLost.value = true;
+    emitUiSseEvent('dd:sse-self-update');
+    return;
+  }
+  if (event === 'scan-started') {
+    emitUiSseEvent('dd:sse-scan-started');
+    return;
+  }
+  if (event === 'scan-completed') {
+    emitUiSseEvent('dd:sse-scan-completed');
+    refreshSidebarData();
+    return;
+  }
+  if (event === 'connection-lost') {
+    connectionLost.value = true;
+  }
+}
+
 onMounted(async () => {
   globalThis.addEventListener('keydown', handleKeydown);
+  sseService.connect({
+    emit: (event) => handleSseEvent(event),
+  });
+  // Start connectivity polling (every 10s)
+  connectivityTimer = setInterval(checkConnectivity, 10_000);
   // Fetch sidebar badge data and user info
   try {
-    const [containers, user] = await Promise.all([
-      getAllContainers().catch(() => []),
-      getUser().catch(() => null),
-    ]);
-    if (Array.isArray(containers)) {
-      containerCount.value = String(containers.length);
-      const issues = containers.filter(
-        (c: Record<string, unknown>) =>
-          c.updateKind === 'major' || c.result?.vulnerabilities?.length,
-      ).length;
-      if (issues > 0) securityIssueCount.value = String(issues);
-    }
+    const [, user] = await Promise.all([refreshSidebarData(), getUser().catch(() => null)]);
     if (user) currentUser.value = user;
   } catch {
     // Sidebar works without badge data
@@ -176,6 +257,8 @@ onMounted(async () => {
 });
 onUnmounted(() => {
   globalThis.removeEventListener('keydown', handleKeydown);
+  if (connectivityTimer) clearInterval(connectivityTimer);
+  sseService.disconnect();
 });
 </script>
 
@@ -206,7 +289,7 @@ onUnmounted(() => {
       }">
 
       <!-- Logo -->
-      <div class="flex items-center h-12 shrink-0 overflow-hidden"
+      <div class="flex items-center justify-between h-12 shrink-0 overflow-hidden"
            :class="isCollapsed ? 'justify-center px-1' : 'px-3'"
            :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <div class="flex items-center gap-2 overflow-hidden shrink-0">
@@ -216,6 +299,11 @@ onUnmounted(() => {
           <span class="sidebar-label font-bold text-sm tracking-widest dd-text"
                 style="letter-spacing:0.15em;">DRYDOCK</span>
         </div>
+        <button v-if="isMobile"
+                class="p-1 dd-text-muted hover:dd-text transition-colors"
+                @click="isMobileMenuOpen = false">
+          <AppIcon name="close" :size="14" />
+        </button>
       </div>
 
       <!-- Nav groups -->
@@ -268,8 +356,8 @@ onUnmounted(() => {
         </div>
       </nav>
 
-      <!-- Sidebar search (mobile only) -->
-      <div v-if="isMobile" class="shrink-0 px-3 pt-3 pb-3">
+      <!-- Sidebar search -->
+      <div class="shrink-0 px-3 pt-3 pb-3">
         <button class="w-full flex items-center gap-2 dd-rounded px-3 py-2 text-xs transition-colors dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
                 :style="{ border: '1px solid var(--dd-border)' }"
                 @click="showSearch = true; isMobileMenuOpen = false">
@@ -282,27 +370,19 @@ onUnmounted(() => {
       </div>
 
       <!-- Sidebar footer -->
-      <div class="shrink-0 px-3 py-3 space-y-2"
+      <div class="shrink-0 px-3 py-2.5 flex items-center gap-1"
+           :class="isCollapsed ? 'flex-col' : 'flex-row justify-between'"
            :style="{ borderTop: '1px solid var(--dd-border)' }">
-        <div class="flex items-center justify-between"
-             :style="isCollapsed ? { justifyContent: 'center' } : {}">
-          <span class="text-[10px] font-medium px-1.5 py-0.5 dd-rounded-sm dd-bg-card dd-text-muted">
-            v1.4.0
-          </span>
-          <a v-if="!isCollapsed"
-             href="#" class="text-[10px] font-medium px-1.5 py-0.5 dd-rounded-sm no-underline hover:underline dd-bg-card dd-text-muted hover:dd-text">
-            Docs
-          </a>
-        </div>
+        <button class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                title="About Drydock"
+                @click="showAbout = true">
+          <AppIcon name="info" :size="14" />
+        </button>
         <button v-if="!isMobile"
-                class="w-full flex items-center gap-2 dd-rounded text-xs font-medium transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                :style="{
-                  padding: sidebarCollapsed ? '6px 0' : '6px 8px',
-                  justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
-                }"
+                class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
                 @click="sidebarCollapsed = !sidebarCollapsed">
           <AppIcon :name="sidebarCollapsed ? 'sidebar-expand' : 'sidebar-collapse'" :size="14" />
-          <span class="sidebar-label">Collapse</span>
         </button>
       </div>
     </aside>
@@ -336,18 +416,8 @@ onUnmounted(() => {
           </nav>
         </div>
 
-        <!-- Center: search trigger (hidden on mobile — shown in sidebar instead) -->
-        <button class="hidden sm:flex items-center gap-2 dd-rounded px-3 py-1.5 text-xs transition-colors min-w-[220px] dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
-                :style="{ border: '1px solid var(--dd-border)' }"
-                @click="showSearch = true">
-          <AppIcon name="search" :size="12" />
-          <span>Search</span>
-          <kbd class="inline-flex items-center gap-0.5 ml-auto px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-muted">
-            <span class="text-[9px]">&#8984;</span>K
-          </kbd>
-        </button>
-        <!-- Placeholder to keep grid balanced on mobile -->
-        <div class="sm:hidden" />
+        <!-- Center spacer (search moved to sidebar) -->
+        <div />
 
         <!-- Right: theme, notifications, avatar -->
         <div class="flex items-center gap-2 justify-end">
@@ -395,11 +465,51 @@ onUnmounted(() => {
       </header>
 
       <!-- MAIN CONTENT -->
-      <main class="flex-1 min-h-0 overflow-hidden flex flex-col p-4 sm:p-6"
+      <main class="flex-1 min-h-0 overflow-hidden flex flex-col pl-4 pr-1 py-4 sm:pl-6 sm:pr-2 sm:py-6"
             :style="{ backgroundColor: 'var(--dd-bg)' }">
         <router-view />
       </main>
     </div>
+
+    <!-- About Modal -->
+    <Teleport to="body">
+      <div v-if="showAbout"
+           class="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm"
+           @pointerdown.self="showAbout = false">
+        <div class="flex items-start justify-center pt-[20vh] min-h-full px-4"
+             @pointerdown.self="showAbout = false">
+          <div class="relative w-full max-w-[340px] dd-rounded-lg overflow-hidden shadow-2xl"
+               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+            <div class="flex flex-col items-center pt-6 pb-4 px-6">
+              <img :src="whaleLogo" alt="Drydock" class="h-12 w-auto mb-3" :style="{ filter: 'invert(1)' }" />
+              <h2 class="text-base font-bold dd-text">Drydock</h2>
+              <span class="text-[11px] dd-text-muted mt-0.5">Docker Container Update Manager</span>
+              <span class="badge text-[10px] font-semibold mt-2 dd-bg-elevated dd-text-secondary">v1.4.0</span>
+            </div>
+            <div class="px-6 pb-5 flex flex-col gap-2"
+                 :style="{ borderTop: '1px solid var(--dd-border)' }">
+              <div class="pt-3 flex flex-col gap-1.5">
+                <a href="https://drydock.dev" target="_blank" rel="noopener"
+                   class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-[12px] font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
+                  <AppIcon name="expand" :size="12" class="dd-text-muted" />
+                  Documentation
+                </a>
+                <a href="https://github.com/CodesWhat/drydock" target="_blank" rel="noopener"
+                   class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-[12px] font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
+                  <AppIcon name="github" :size="12" class="dd-text-muted" />
+                  GitHub
+                </a>
+                <a href="https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md" target="_blank" rel="noopener"
+                   class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-[12px] font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
+                  <AppIcon name="recent-updates" :size="12" class="dd-text-muted" />
+                  Changelog
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Search Modal -->
     <Teleport to="body">
@@ -426,6 +536,32 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
+    </Teleport>
+
+    <!-- Connection Lost Overlay -->
+    <Teleport to="body">
+      <Transition name="menu-fade">
+        <div v-if="connectionLost"
+             class="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center">
+          <div class="w-full max-w-[320px] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
+               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+            <div class="flex flex-col items-center px-6 py-8 gap-3">
+              <div class="w-10 h-10 rounded-full flex items-center justify-center mb-1"
+                   :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
+                <AppIcon name="warning" :size="18" :style="{ color: 'var(--dd-danger)' }" />
+              </div>
+              <h2 class="text-sm font-bold dd-text">{{ connectionOverlayTitle }}</h2>
+              <p class="text-[11px] dd-text-muted leading-relaxed">
+                {{ connectionOverlayMessage }}
+              </p>
+              <div class="flex items-center gap-2 mt-1">
+                <AppIcon name="spinner" :size="12" class="dd-spin dd-text-muted" />
+                <span class="text-[10px] dd-text-muted">{{ connectionOverlayStatus }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
     </Teleport>
   </div>
 </template>
