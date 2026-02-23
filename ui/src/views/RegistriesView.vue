@@ -73,7 +73,6 @@ const filteredRegistries = computed(() => {
 const tableColumns = [
   { key: 'name', label: 'Registry', sortable: false, width: '99%' },
   { key: 'type', label: 'Type', align: 'text-center', sortable: false },
-  { key: 'auth', label: 'Auth', align: 'text-center', sortable: false },
   { key: 'status', label: 'Status', align: 'text-center', sortable: false },
   { key: 'url', label: 'URL', align: 'text-right', sortable: false },
 ];
@@ -126,28 +125,27 @@ onMounted(async () => {
                  :active-row="selectedRegistry?.id"
                  @row-click="openDetail($event)">
         <template #cell-name="{ row }">
-          <span class="font-medium dd-text">{{ row.name }}</span>
+          <span class="font-medium dd-text">{{ registryTypeBadge(row.type).label }}</span>
         </template>
         <template #cell-type="{ row }">
-          <span class="badge text-[9px] uppercase font-bold"
-                :style="{ backgroundColor: registryTypeBadge(row.type).bg, color: registryTypeBadge(row.type).text }">
-            {{ registryTypeBadge(row.type).label }}
+          <span v-if="isPrivate(row)" class="badge text-[9px] font-bold max-md:!hidden"
+                :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+            Private
           </span>
-        </template>
-        <template #cell-auth="{ row }">
-          <span class="hidden md:inline text-[11px] font-medium" :style="{ color: isPrivate(row) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
-            {{ isPrivate(row) ? 'Private' : 'Public' }}
+          <span v-else class="badge text-[9px] font-bold max-md:!hidden"
+                :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-neutral)' }">
+            Public
           </span>
-          <AppIcon v-if="isPrivate(row)" name="lock" :size="13" style="color: var(--dd-warning);" class="md:hidden" />
-          <AppIcon v-else name="eye" :size="13" class="dd-text-muted md:hidden" />
+          <span v-if="isPrivate(row)" class="badge px-1.5 py-0 text-[9px] md:!hidden" style="background: var(--dd-warning-muted); color: var(--dd-warning);"><AppIcon name="lock" :size="12" /></span>
+          <span v-else class="badge px-1.5 py-0 text-[9px] md:!hidden" style="background: var(--dd-neutral-muted); color: var(--dd-neutral);"><AppIcon name="eye" :size="12" /></span>
         </template>
         <template #cell-status="{ row }">
-          <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
-                :style="{ backgroundColor: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-          <span class="badge text-[9px] font-bold hidden md:inline-flex"
+          <AppIcon :name="row.status === 'connected' ? 'check' : row.status === 'error' ? 'xmark' : 'warning'" :size="13" class="shrink-0 md:!hidden"
+                   :style="{ color: row.status === 'connected' ? 'var(--dd-success)' : row.status === 'error' ? 'var(--dd-danger)' : 'var(--dd-warning)' }" />
+          <span class="badge text-[9px] font-bold max-md:!hidden"
                 :style="{
-                  backgroundColor: row.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                  color: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
+                  backgroundColor: row.status === 'connected' ? 'var(--dd-success-muted)' : row.status === 'error' ? 'var(--dd-danger-muted)' : 'var(--dd-warning-muted)',
+                  color: row.status === 'connected' ? 'var(--dd-success)' : row.status === 'error' ? 'var(--dd-danger)' : 'var(--dd-warning)',
                 }">
             {{ row.status }}
           </span>
@@ -224,11 +222,11 @@ onMounted(async () => {
             <span class="text-[11px] hidden md:inline font-medium" :style="{ color: isPrivate(reg) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
               {{ isPrivate(reg) ? 'Private' : 'Public' }}
             </span>
-            <AppIcon v-if="isPrivate(reg)" name="lock" :size="12" style="color: var(--dd-warning);" class="md:hidden" />
-            <AppIcon v-else name="eye" :size="12" class="dd-text-muted md:hidden" />
-            <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
-                  :style="{ backgroundColor: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-            <span class="badge text-[9px] font-bold hidden md:inline-flex"
+            <span v-if="isPrivate(reg)" class="badge px-1.5 py-0 text-[9px] md:!hidden" style="background: var(--dd-warning-muted); color: var(--dd-warning);"><AppIcon name="lock" :size="12" /></span>
+            <span v-else class="badge px-1.5 py-0 text-[9px] md:!hidden" style="background: var(--dd-neutral-muted); color: var(--dd-neutral);"><AppIcon name="eye" :size="12" /></span>
+            <AppIcon :name="reg.status === 'connected' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
+                     :style="{ color: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+            <span class="badge text-[9px] font-bold max-md:!hidden"
                   :style="{
                     backgroundColor: reg.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                     color: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
