@@ -108,7 +108,7 @@ function colStyle(col: DataTableColumn): Record<string, string> {
       <table ref="tableRef" class="w-full text-xs" :style="Object.keys(colWidths).length > 0 ? { tableLayout: 'fixed' } : {}">
         <thead>
           <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-            <th v-for="col in columns" :key="col.key"
+            <th v-for="(col, colIdx) in columns" :key="col.key"
                 :data-col-key="col.key"
                 :class="[
                   col.icon ? 'text-center pl-5 pr-0' : ['text-center', 'px-5'],
@@ -121,7 +121,7 @@ function colStyle(col: DataTableColumn): Record<string, string> {
               {{ col.label }}
               <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-[8px]">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
               <!-- Resize handle -->
-              <div v-if="!col.icon"
+              <div v-if="!col.icon && colIdx < columns.length - 1"
                    class="absolute top-0 right-0 w-2 h-full cursor-col-resize z-10 flex items-center justify-center transition-colors hover:bg-drydock-secondary/20"
                    @mousedown="onResizeStart(col.key, $event)">
                 <div class="w-px h-3/5 rounded-full opacity-25 hover:opacity-60 transition-opacity"
