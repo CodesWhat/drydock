@@ -56,7 +56,7 @@ services:
       - 3000:3000
 ```
 
-<Callout type="info">If you need a **read-only** socket mount (`:ro`), set `DD_RUN_AS_ROOT=true` to skip Drydock's privilege drop. See the [Docker Socket Security](/docs/configuration/watchers/#docker-socket-security) section for details.</Callout>
+<Callout type="info">If you need a **read-only** socket mount (`:ro`), break-glass root mode requires both `DD_RUN_AS_ROOT=true` and `DD_ALLOW_INSECURE_ROOT=true`. Prefer socket proxy mode for least privilege. See [Docker Socket Security](/docs/configuration/watchers/#docker-socket-security) for details.</Callout>
 </Tab>
 <Tab value="Docker CLI">
 
@@ -72,9 +72,38 @@ docker run -d --name drydock \
 
 <Callout type="info">The official image is published on Github Container Registry: `codeswhat/drydock`</Callout>
 
+## Migrating from WUD
+
+If you are coming from What's Up Docker, you can switch images and keep your existing config (`WUD_*` env vars and `wud.*` labels still work).
+
+To rewrite your local config to drydock naming (`DD_*` and `dd.*`), run:
+
+```bash
+# preview changes only
+docker exec -it drydock node dist/index.js config migrate --dry-run
+
+# apply changes to specific files
+docker exec -it drydock node dist/index.js config migrate --file .env --file compose.yaml
+```
+
+`config migrate` reads/writes only local files in your deployment. It does not send usage data to external services.
+
 ## Open the UI
 
 [Open the UI](http://localhost:3000) in a browser and check that everything is working as expected.
+
+## First 5 minutes in the UI
+
+1. Open the command palette with `Cmd/Ctrl+K`.
+2. Use prefix scopes to narrow search quickly:
+   - `/` pages
+   - `@` runtime resources (containers, agents, triggers, watchers)
+   - `#` config resources (registries, auth, notifications, settings)
+3. Leave the query empty to use recent results.
+4. Open **Notifications** and tune event rules (`update-available`, `update-applied`, `update-failed`, `security-alert`, `agent-disconnect`) plus trigger assignments.
+5. Reorder dashboard widgets by drag/drop; layout persists locally and can be reset.
+
+<Callout type="info">Keyboard shortcuts: `Enter` confirms action dialogs, `Escape` cancels dialogs and closes detail panels.</Callout>
 
 ## Add your first trigger
 

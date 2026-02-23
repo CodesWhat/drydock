@@ -13,6 +13,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Remote watcher auth now fails closed by default** — Docker remote watcher auth no longer silently skips authentication when credentials are incomplete, unsupported auth types are configured, or HTTPS/TLS is missing. Added explicit insecure override `DD_WATCHER_{watcher_name}_AUTH_INSECURE=true` for legacy fail-open behavior when intentionally required.
+- **Registry token exchange and HTTP trigger auth now fail closed** — Registry bearer-token flows now error on token endpoint failures or missing token fields instead of falling back to anonymous/unauthenticated requests. HTTP trigger auth now errors on unsupported auth types and incomplete BASIC/BEARER credentials instead of sending unauthenticated requests.
+- **Watcher logger fallback is no longer silent** — When watcher logger initialization fails, drydock now falls back to structured stderr JSON logging instead of a no-op logger. Added Prometheus counter `dd_watcher_logger_init_failures_total{type,name}` to surface and alert on logger-init failures.
+- **Root-mode Docker socket access now requires explicit break-glass acknowledgment** — Runtime startup now fails closed if `DD_RUN_AS_ROOT=true` is set without `DD_ALLOW_INSECURE_ROOT=true`. Added entrypoint/runtime guards and secure-first permission guidance that prioritizes socket proxy and least privilege.
+- **Docker Compose image patching is now service-scoped and parser-based** — Replaced fallback-heavy regex/indent heuristics and global `replaceAll` writes with structured YAML edits that target only `services.<name>.image`. This preserves comments/formatting outside the edited value and avoids unintended rewrites of matching strings in non-image fields.
+
+### Added
+
+- **Split load-test profile set and correctness helpers** — Added dedicated behavior profile `test-behavior.yml` plus reusable report tooling with `scripts/summarize-load-test-report.sh` and `scripts/check-load-test-correctness.sh` for consistent metrics summaries and correctness checks.
+- **`config migrate` CLI for WUD→drydock config rewrite** — Added `node dist/index.js config migrate` to convert legacy `WUD_*` env vars and `wud.*` labels to `DD_*`/`dd.*` across local config files (`.env`, compose files). Supports `--dry-run` preview mode and targeted `--file` selection.
+- **Legacy compatibility usage metric** — Added Prometheus counter `dd_legacy_input_total{source,key}` to track local runtime consumption of legacy inputs (`WUD_*` env vars and `wud.*` labels) without external telemetry.
+- **One-time legacy deprecation warnings** — Startup now warns when `WUD_*` env vars are detected, and watcher/trigger paths emit one-time warnings when falling back to `wud.*` labels.
+- **Notification rule management API and persistence** — Added `/api/notifications` read/update endpoints backed by persisted notification rules for `update-available`, `update-applied`, `update-failed`, `security-alert`, and `agent-disconnect`.
+- **Rule-aware runtime dispatch controls** — Trigger event dispatch now resolves notification rules at runtime so per-event settings actively control which triggers fire.
+- **Audit coverage for security and agent runtime events** — Added explicit audit timeline entries for `security-alert` and `agent-disconnect` events.
+
+### Changed
+
+- **Staged load-test CI gates by branch risk** — Pull requests now run smoke/behavior/rate-limit load tests in advisory mode, while push runs enforce correctness checks (`5xx`, failed VUs, and expected rate-limit `429` behavior). Latency regression drift checks remain advisory until baselines stabilize.
+- **Rate-limit benchmark now isolates scan path latency** — `test-rate-limit.yml` resolves a `containerId` through `test/load-test.processor.cjs` before measured requests so p95/p99 focuses on `/api/containers/:id/scan` limiter behavior instead of `/api/containers/watch` setup cost.
+- **Notifications view is now full rule management** — Replaced read-only trigger projection with editable notification rules (enable/disable and trigger assignments) that save directly through `/api/notifications`.
+- **Command palette now spans pages, runtime, and config with scope prefixes** — Cmd/Ctrl+K search now supports prefix scopes (`/` pages, `@` runtime, `#` config), recent results, grouped sections, and deep-link results for containers, agents, triggers, watchers, registries, auth, and notification rules.
+- **Dashboard widgets can be drag-reordered with persisted layout** — Dashboard widget ordering now supports drag/drop reordering with local persistence and a reset-to-default action.
+- **Operator keyboard and state polish across views** — Confirm dialogs now support Enter/Escape, detail panels close on Escape, and dashboard/profile views have explicit loading/error/retry handling.
+
 ## [1.3.7] — 2026-02-21
 
 ### Fixed

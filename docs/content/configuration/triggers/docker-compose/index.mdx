@@ -43,6 +43,8 @@ You can switch to Compose-native updates with `ENGINE=composecli`, which runs:
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). but only supports the `batch` mode.</Callout>
 
+<Callout type="info">Legacy compatibility: compose file label fallback `wud.compose.file` is still accepted when `dd.compose.file` is not present. Prefer `dd.compose.file` for new configs, and use `node dist/index.js config migrate` to rewrite existing labels.</Callout>
+
 <Callout type="warn">
 `ENGINE=composecli` requires `docker compose` (or `docker-compose`) to be available in the Drydock runtime. In this mode, Drydock runs Compose commands directly instead of recreating containers through the Docker API path.
 </Callout>
@@ -50,6 +52,16 @@ You can switch to Compose-native updates with `ENGINE=composecli`, which runs:
 <Callout type="warn">This trigger will only work with locally watched containers.</Callout>
 
 <Callout type="warn">Do not forget to mount the docker-compose.yml file in the drydock container.</Callout>
+
+## Compose file patch behavior
+
+When a tag-based update requires a compose file change, Drydock patches Compose content in a service-scoped way:
+
+- Only the target `services.<service>.image` value is edited.
+- Comments and surrounding formatting are preserved outside that scalar value.
+- Drydock does not use global string replacement for image tags, so matching strings in other fields (for example environment values) are not rewritten.
+
+<Callout type="info">If a service uses flow-style mapping without an `image` key (for example `nginx: { restart: always }`), Drydock will not auto-insert `image`. Convert that service to block-style YAML first.</Callout>
 
 ## Troubleshooting: `permission denied` (`EACCES`)
 
@@ -89,9 +101,9 @@ services:
 
 <Callout type="info">`COMPOSE_FILES_GID` should match the GID that owns the mounted compose files on the host. The group must have write permission on the file.</Callout>
 
-### Option 3: Run as root (quick fix)
+### Option 3: Break-glass root mode (less secure)
 
-Set `DD_RUN_AS_ROOT=true` to skip the privilege drop:
+Set both flags to explicitly acknowledge insecure root mode; setting only `DD_RUN_AS_ROOT=true` fails closed at startup.
 
 ```yaml
 services:
@@ -99,9 +111,10 @@ services:
     image: codeswhat/drydock
     environment:
       - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
 ```
 
-<Callout type="warn">Running as root trades the privilege-drop security boundary for full file access. This is fine for home-lab setups but may not meet your security requirements.</Callout>
+<Callout type="warn">Running as root trades away the privilege-drop security boundary for full file access. Use this only as a temporary fallback; prefer `group_add`/permissions or socket-proxy mode.</Callout>
 
 <Callout type="warn">Do **not** mount the compose file as read-only (`:ro`) — the trigger must write updated image tags back to the file.</Callout>
 

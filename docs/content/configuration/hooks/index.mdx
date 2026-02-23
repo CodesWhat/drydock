@@ -23,7 +23,7 @@ Lifecycle hooks let you run shell commands before or after a container is update
 | `dd.hook.pre.abort` | boolean | `true` | Abort the update if the pre-hook exits with a non-zero code |
 | `dd.hook.timeout` | number (ms) | `60000` | Maximum execution time for each hook |
 
-<Callout type="info">Legacy `wud.hook.*` labels are also supported for backward compatibility.</Callout>
+<Callout type="info">Legacy `wud.hook.*` labels are still supported for backward compatibility. When used, drydock logs a one-time deprecation warning and records the fallback in `dd_legacy_input_total`. You can rewrite labels with `node dist/index.js config migrate`.</Callout>
 
 ## Hook environment variables
 

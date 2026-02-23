@@ -3,6 +3,7 @@ title: "DHI (Docker Hardened Images)"
 description: "The dhi registry lets you configure Docker Hardened Images integration."
 ---
 
+import { Callout } from 'fumadocs-ui/components/callout';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 The `dhi` registry lets you configure [Docker Hardened Images](https://docs.docker.com/dhi/get-started/) integration.
@@ -20,6 +21,8 @@ Supported credentials:
 | `DD_REGISTRY_DHI_PUBLIC_PASSWORD` | ⚪ | Docker ID password or access token | `DD_REGISTRY_DHI_PUBLIC_LOGIN` must be defined | |
 | `DD_REGISTRY_DHI_PUBLIC_TOKEN` | ⚪ | Alias for password/access token (deprecated; replaced by `DD_REGISTRY_DHI_PUBLIC_PASSWORD`) | `DD_REGISTRY_DHI_PUBLIC_LOGIN` must be defined | |
 | `DD_REGISTRY_DHI_PUBLIC_AUTH` | ⚪ | Base64 auth string (`login:password`) | `DD_REGISTRY_DHI_PUBLIC_LOGIN/PASSWORD` must not be set | |
+
+<Callout type="warn">Registry auth now fails closed for invalid combinations. `LOGIN` must be paired with `PASSWORD` (or `TOKEN` alias), and `AUTH` cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`.</Callout>
 
 ## Examples
 

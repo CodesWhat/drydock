@@ -28,6 +28,8 @@ Don't forget to configure authentication if you're using [Docker Hub Private Rep
 | `DD_REGISTRY_HUB_PUBLIC_TOKEN` | ⚪ | A valid Docker Hub Token (deprecated; replaced by `DD_REGISTRY_HUB_PUBLIC_PASSWORD` | DD_REGISTRY_HUB_PUBLIC_LOGIN must be defined | |
 | `DD_REGISTRY_HUB_PUBLIC_AUTH` | ⚪ | A valid Docker Hub Base64 Auth String | DD_REGISTRY_HUB_PUBLIC_LOGIN/TOKEN  must not be defined | |
 
+<Callout type="warn">Registry auth now fails closed for invalid combinations. `LOGIN` must be paired with `PASSWORD` (or `TOKEN` alias), and `AUTH` cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`.</Callout>
+
 ## Examples
 
 ### Configure Authentication using Login/Token

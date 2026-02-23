@@ -89,7 +89,27 @@ drydock_trigger_count{type="mock",name="example",status="success"} 1
 # HELP drydock_watcher_total The number of watched containers
 # TYPE drydock_watcher_total gauge
 drydock_watcher_total{type="docker",name="local"} 6
+
+# HELP dd_watcher_logger_init_failures_total The number of watcher logger initialization failures
+# TYPE dd_watcher_logger_init_failures_total counter
+dd_watcher_logger_init_failures_total{type="docker",name="local"} 0
+
+# HELP dd_legacy_input_total Total number of legacy compatibility fallbacks consumed
+# TYPE dd_legacy_input_total counter
+dd_legacy_input_total{source="env",key="WUD_SERVER_PORT"} 1
+dd_legacy_input_total{source="label",key="wud.watch"} 3
 ```
+
+When a watcher logger cannot be initialized, drydock falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total`.
+
+`dd_legacy_input_total` tracks local fallback usage of legacy `WUD_*` env vars and `wud.*` labels so you can monitor migration progress in your own Prometheus/Grafana stack. No data is sent to external services.
+
+### Audit timeline event coverage
+
+Use the audit API (`/api/audit`) and Audit UI view to track runtime events alongside metrics. Current event coverage includes:
+
+- `security-alert` when security scans detect high/critical issues.
+- `agent-disconnect` when a connected agent transitions to disconnected state.
 
 #### Standard process metrics
 

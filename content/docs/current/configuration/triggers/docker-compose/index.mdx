@@ -34,9 +34,21 @@ The trigger will:
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). but only supports the `batch` mode.</Callout>
 
+<Callout type="info">Legacy compatibility: compose file label fallback `wud.compose.file` is still accepted when `dd.compose.file` is not present. Prefer `dd.compose.file` for new configs, and use `node dist/index.js config migrate` to rewrite existing labels.</Callout>
+
 <Callout type="warn">This trigger will only work with locally watched containers.</Callout>
 
 <Callout type="warn">Do not forget to mount the docker-compose.yml file in the drydock container.</Callout>
+
+## Compose file patch behavior
+
+When a tag-based update requires a compose file change, Drydock patches Compose content in a service-scoped way:
+
+- Only the target `services.<service>.image` value is edited.
+- Comments and surrounding formatting are preserved outside that scalar value.
+- Drydock does not use global string replacement for image tags, so matching strings in other fields (for example environment values) are not rewritten.
+
+<Callout type="info">If a service uses flow-style mapping without an `image` key (for example `nginx: { restart: always }`), Drydock will not auto-insert `image`. Convert that service to block-style YAML first.</Callout>
 
 ## Troubleshooting: `permission denied` (`EACCES`)
 
@@ -46,13 +58,13 @@ If logs show an error like:
 EACCES: permission denied, access '/drydock/.../docker-compose.yml'
 ```
 
-the mounted compose file (or parent directory) is not readable by the Drydock process.
+the mounted compose file (or parent directory) is not writable by the Drydock process. This trigger needs read and write access to update image tags in the compose file.
 
 Ways to fix:
 
-- Grant read access on the mounted path for the user/group used by the Drydock container.
-- Add the host group that owns the compose files with `group_add` so Drydock can read them.
-- Quick workaround: set `DD_RUN_AS_ROOT=true` to skip privilege drop (less secure).
+- Grant read and write access on the mounted path for the user/group used by the Drydock container.
+- Add the host group that owns the compose files with `group_add` so Drydock can read and write them.
+- Break-glass workaround (less secure): set both `DD_RUN_AS_ROOT=true` and `DD_ALLOW_INSECURE_ROOT=true`; setting only `DD_RUN_AS_ROOT=true` fails closed at startup.
 
 Example using `group_add`:
 
@@ -63,12 +75,13 @@ services:
     group_add:
       - "${COMPOSE_FILES_GID}"
     volumes:
-      - /var/lib/docker/volumes/portainer_data/_data/compose:/drydock:ro
+      - /var/lib/docker/volumes/portainer_data/_data/compose:/drydock
     environment:
       - DD_TRIGGER_DOCKERCOMPOSE_EXAMPLE_FILE=/drydock/5/docker-compose.yml
 ```
 
 <Callout type="info">`COMPOSE_FILES_GID` should match the GID that owns the mounted compose files on the host.</Callout>
+<Callout type="warn">Do **not** mount the compose file as read-only (`:ro`) — the trigger must write updated image tags back to the file.</Callout>
 
 ## Examples
 

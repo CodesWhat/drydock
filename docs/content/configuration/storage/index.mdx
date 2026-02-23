@@ -72,5 +72,5 @@ mkdir -p /path-on-my-host
 chown 1000:1000 /path-on-my-host
 ```
 
-Alternatively, set `DD_RUN_AS_ROOT=true` to run as root (see [Docker Socket Security](/docs/configuration/watchers#docker-socket-security)).
+Alternatively, use break-glass root mode by setting both `DD_RUN_AS_ROOT=true` and `DD_ALLOW_INSECURE_ROOT=true` (see [Docker Socket Security](/docs/configuration/watchers#docker-socket-security)).
 </Callout>

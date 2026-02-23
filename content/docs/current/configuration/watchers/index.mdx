@@ -18,8 +18,9 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 | --- | :---: | --- | --- | --- |
 | `DD_WATCHER_{watcher_name}_CAFILE` | ⚪ | CA pem file path (only for TLS connection) | | |
 | `DD_WATCHER_{watcher_name}_AUTH_BEARER` | ⚪ | Bearer token for remote Docker API auth (HTTPS only) | | |
+| `DD_WATCHER_{watcher_name}_AUTH_INSECURE` | ⚪ | Allow fail-open remote auth fallback when auth is invalid or non-HTTPS | `true`, `false` | `false` |
 | `DD_WATCHER_{watcher_name}_AUTH_PASSWORD` | ⚪ | Password for remote Docker API basic auth (HTTPS only) | | |
-| `DD_WATCHER_{watcher_name}_AUTH_TYPE` | ⚪ | Auth mode for remote Docker API auth | `BASIC`, `BEARER` | auto-detected from provided credentials |
+| `DD_WATCHER_{watcher_name}_AUTH_TYPE` | ⚪ | Auth mode for remote Docker API auth | `BASIC`, `BEARER`, `OIDC` | auto-detected from provided credentials |
 | `DD_WATCHER_{watcher_name}_AUTH_USER` | ⚪ | Username for remote Docker API basic auth (HTTPS only) | | |
 | `DD_WATCHER_{watcher_name}_CERTFILE` | ⚪ | Certificate pem file path (only for TLS connection) | | |
 | `DD_WATCHER_{watcher_name}_CRON` | ⚪ | Scheduling options | [Valid CRON expression](https://crontab.guru/) | `0 * * * *` (every hour) |
@@ -57,7 +58,11 @@ You just need to give them different names.</Callout>
 <Callout type="warn">If the Docker remote API is secured with TLS, don't forget to mount and configure the TLS certificates.
 [See dockerd documentation](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket)</Callout>
 
-<Callout type="warn">Remote watcher auth (`AUTH_*`) is only applied on HTTPS connections (`PROTOCOL=https`) or TLS certificate-based connections.</Callout>
+<Callout type="warn">Remote watcher auth (`AUTH_*`) is fail-closed by default and requires HTTPS (`PROTOCOL=https`) or TLS certificate-based connections. Set `AUTH_INSECURE=true` only if you intentionally need legacy fail-open behavior.</Callout>
+
+<Callout type="info">Legacy compatibility: `wud.*` labels are still accepted as fallback to `dd.*`. When a fallback is used, drydock emits a one-time warning for that key and increments `dd_legacy_input_total{source="label",key="<legacy_key>"}`. To rewrite configs in place, run `node dist/index.js config migrate --dry-run` then `node dist/index.js config migrate --file <path>`.</Callout>
+
+<Callout type="info">If watcher logger initialization fails, drydock automatically falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total{type,name}`. Alert on non-zero increases to catch degraded logging early.</Callout>
 
 <Callout type="info">When `MAINTENANCE_WINDOW` is configured and a check is skipped outside the allowed schedule, drydock queues one pending check and runs it automatically when the next maintenance window opens.</Callout>
 
@@ -240,9 +245,10 @@ Drydock runs as a non-root user by default for security. This means a **read-onl
 
 There are two ways to resolve this:
 
-### Option 1: `DD_RUN_AS_ROOT=true` (quick fix)
+### Option 1: Break-glass root mode (less secure)
 
-Set the `DD_RUN_AS_ROOT` environment variable to skip Drydock's privilege drop and run as root — the same approach used by Portainer, Watchtower, and other Docker management tools.
+If you cannot use a socket proxy yet, you can explicitly opt into root mode. This is a break-glass path and should not be your default.
+Both flags are required; setting only `DD_RUN_AS_ROOT=true` fails closed at startup.
 
 ```yaml
 services:
@@ -252,11 +258,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
     ports:
       - 3000:3000
 ```
 
-<Callout type="warn">Running as root trades the privilege-drop security boundary for `:ro` socket compatibility. This is safe for most home-lab and single-host setups but may not meet your security requirements in multi-tenant or production environments.</Callout>
+<Callout type="warn">Running as root trades away the privilege-drop security boundary. Use this only as a temporary break-glass fallback; prefer socket proxy mode for long-term deployments.</Callout>
 
 ### Option 2: Socket proxy (recommended)
 
@@ -375,6 +382,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | Valid JavaScript Regex | |
 | `dd.tag.include` | ⚪ | Regex to include specific tags only | Valid JavaScript Regex | |
 | `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` (see below) | |
+| `dd.tag.family` | ⚪ | Tag family policy for semver updates | `strict` (default) or `loose` | `strict` |
 | `dd.trigger.exclude` | ⚪ | Optional list of triggers to exclude | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.trigger.include` | ⚪ | Optional list of triggers to include | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.watch.digest` | ⚪ | Watch this container digest | Valid Boolean | `false` |
