@@ -196,7 +196,6 @@ jobs:
           build-args: DD_VERSION=ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
   e2e:
     name: E2E Tests
     runs-on: ubuntu-latest

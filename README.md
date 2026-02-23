@@ -73,9 +73,7 @@ docker run -d \
   codeswhat/drydock:latest
 ```
 
-`codeswhat/drydock:latest` is the heavy/default image (includes local `trivy` + `cosign` binaries).
-
-Use `codeswhat/drydock:latest-thin` when you want a slimmer runtime and plan to use Trivy server mode (or provide your own scanner/verifier binaries via `DD_SECURITY_*_COMMAND`).
+The image includes `trivy` and `cosign` binaries for local vulnerability scanning and image verification.
 
 <details>
 <summary><strong>Docker Compose</strong></summary>
@@ -127,10 +125,6 @@ docker pull ghcr.io/codeswhat/drydock:latest
 
 # Quay.io
 docker pull quay.io/codeswhat/drydock:latest
-
-# Thin variants
-docker pull ghcr.io/codeswhat/drydock:latest-thin
-docker pull quay.io/codeswhat/drydock:latest-thin
 ```
 
 </details>
@@ -325,7 +319,7 @@ Available on GHCR, Docker Hub, and Quay.io for flexible deployment
 
 Security scanning is disabled by default and is enabled with `DD_SECURITY_SCANNER=trivy`.
 
-> **v1.5.0+:** Heavy/default tags include both `trivy` and `cosign` for local CLI mode. Thin tags (`*-thin`) omit these binaries and are best paired with Trivy server mode.
+> The image includes both `trivy` and `cosign` for local CLI mode. Trivy server mode is also supported via `DD_SECURITY_TRIVY_SERVER`.
 
 ```yaml
 services:
@@ -469,6 +463,24 @@ See:
 
 </details>
 
+<details>
+<summary><strong>OIDC session cookie policy (SameSite)</strong></summary>
+
+For OIDC providers hosted on a different domain (Auth0, Authentik, Authelia, etc.), drydock defaults to:
+
+- `DD_SERVER_COOKIE_SAMESITE=lax`
+
+This keeps login callbacks compatible while still reducing CSRF risk for normal cross-site requests.
+
+You can override with:
+
+- `DD_SERVER_COOKIE_SAMESITE=strict` for fully same-site deployments
+- `DD_SERVER_COOKIE_SAMESITE=none` for fully cross-site/embed scenarios (HTTPS required; drydock forces `Secure` cookies automatically)
+
+If OIDC callback logs or UI errors show "OIDC session is missing or expired", verify this setting first.
+
+</details>
+
 <hr>
 
 <h2 align="center" id="migrating-from-wud">Migrating from WUD</h2>
@@ -574,6 +586,7 @@ docker exec -it <drydock-container> node dist/index.js config migrate --dry-run
 | **Container update policy** | Skip/snooze specific versions per container via API and UI |
 | **Metrics auth toggle** | `DD_SERVER_METRICS_AUTH=false` to expose `/metrics` without auth |
 | **Trust proxy config** | `DD_SERVER_TRUSTPROXY` — set to `1` (hop count) behind a reverse proxy, or `false` (default) for direct exposure |
+| **Session cookie policy** | `DD_SERVER_COOKIE_SAMESITE` — `lax` (default, OIDC-friendly), `strict`, or `none` (forces secure cookies) |
 | **NTFY provider-level threshold** | Set threshold at the ntfy provider level, not just per-trigger |
 | **Docker pull progress logging** | Rate-limited pull progress during compose updates |
 | **Registry lookup image override** | `lookupImage` field to override tag lookup image |
