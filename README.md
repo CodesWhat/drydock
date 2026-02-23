@@ -73,6 +73,10 @@ docker run -d \
   codeswhat/drydock:latest
 ```
 
+`codeswhat/drydock:latest` is the heavy/default image (includes local `trivy` + `cosign` binaries).
+
+Use `codeswhat/drydock:latest-thin` when you want a slimmer runtime and plan to use Trivy server mode (or provide your own scanner/verifier binaries via `DD_SECURITY_*_COMMAND`).
+
 <details>
 <summary><strong>Docker Compose</strong></summary>
 
@@ -123,6 +127,10 @@ docker pull ghcr.io/codeswhat/drydock:latest
 
 # Quay.io
 docker pull quay.io/codeswhat/drydock:latest
+
+# Thin variants
+docker pull ghcr.io/codeswhat/drydock:latest-thin
+docker pull quay.io/codeswhat/drydock:latest-thin
 ```
 
 </details>
@@ -289,7 +297,7 @@ DVD-style animated overlay during drydock's own container update with auto-recon
 <tr>
 <td align="center" width="33%">
 <h3>Icon CDN</h3>
-Auto-resolved container icons via selfhst/icons with homarr-labs fallback
+Auto-resolved container icons via selfhst/icons with homarr-labs fallback and bundled selfhst seeds for internetless startup
 </td>
 <td align="center" width="33%">
 <h3>Mobile Responsive</h3>
@@ -317,7 +325,7 @@ Available on GHCR, Docker Hub, and Quay.io for flexible deployment
 
 Security scanning is disabled by default and is enabled with `DD_SECURITY_SCANNER=trivy`.
 
-> **v1.3.0+:** The official drydock image now includes both `trivy` and `cosign` — no custom image required for local CLI mode.
+> **v1.5.0+:** Heavy/default tags include both `trivy` and `cosign` for local CLI mode. Thin tags (`*-thin`) omit these binaries and are best paired with Trivy server mode.
 
 ```yaml
 services:
@@ -581,7 +589,7 @@ docker exec -it <drydock-container> node dist/index.js config migrate --dry-run
 | **Grafana dashboard** | Importable JSON template for Prometheus metrics overview |
 | **Update Guard** | Safe-pull gate for Docker updates: Trivy vulnerability scan + optional cosign signature verification + SBOM generation + on-demand scan from UI/API |
 | **Font Awesome 6 icons** | Migrated from MDI to FA6 with support for `fab:`/`far:`/`fas:` prefix syntax |
-| **Icon CDN** | Auto-resolve container icons via selfhst/icons (`sh-` prefix) with homarr-labs fallback, plus `hl-`/`si-` and custom URL support |
+| **Icon CDN** | Auto-resolve container icons via selfhst/icons (`sh-` prefix) with homarr-labs fallback, bundled selfhst top icons for internetless startup, plus `hl-`/`si-` and custom URL support |
 | **Mobile responsive UI** | Optimized mobile breakpoints for dashboard, containers, and self-update overlay |
 | **Container actions** | Start/stop/restart/update containers via API and UI, gated by `DD_SERVER_FEATURE_CONTAINERACTIONS` |
 | **Webhook API** | Token-authenticated HTTP endpoints for CI/CD integration to trigger watch cycles and updates, gated by `DD_SERVER_WEBHOOK_ENABLED` and `DD_SERVER_WEBHOOK_TOKEN` |

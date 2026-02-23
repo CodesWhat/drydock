@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "vite",
     "serve": "vite",
-    "build": "vite build",
+    "build": "npm run icons && npm run fonts && vite build",
     "preview": "vite preview",
     "icons": "node scripts/extract-icons.mjs",
     "fonts": "node scripts/extract-fonts.mjs",

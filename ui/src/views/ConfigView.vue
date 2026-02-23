@@ -398,7 +398,7 @@ async function handleClearIconCache() {
               <div>
                 <div class="text-[12px] font-semibold dd-text">Cached Icons</div>
                 <div class="text-[10px] dd-text-muted mt-0.5">
-                  Container icons are cached to disk on first fetch
+                  Common icons are bundled; other icons are cached to disk on first fetch
                 </div>
               </div>
               <div class="flex items-center gap-2">
