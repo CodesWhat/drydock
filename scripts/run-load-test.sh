@@ -95,11 +95,13 @@ if is_port_in_use "${DD_LOAD_TEST_PORT}"; then
 	exit 1
 fi
 
-export DD_LOAD_TEST_PORT
-
 if [ -z "${DD_LOAD_TEST_TARGET}" ]; then
 	DD_LOAD_TEST_TARGET="http://127.0.0.1:${DD_LOAD_TEST_PORT}"
 fi
+
+export DD_LOAD_TEST_PORT
+export DD_LOAD_TEST_TARGET
+
 echo "Using load test target: ${DD_LOAD_TEST_TARGET}"
 
 echo "Building drydock test image..."

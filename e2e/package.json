@@ -14,7 +14,8 @@
     "test:cleanup": "../scripts/cleanup-test-containers.sh",
     "load:smoke": "ARTILLERY_ENV=smoke ../scripts/run-load-test.sh",
     "load:ci": "ARTILLERY_ENV=ci ../scripts/run-load-test.sh",
-    "load:stress": "ARTILLERY_ENV=stress ../scripts/run-load-test.sh"
+    "load:stress": "ARTILLERY_ENV=stress ../scripts/run-load-test.sh",
+    "load:rate-limit": "ARTILLERY_FILE=./test-rate-limit.yml ARTILLERY_ENV=ratelimit ../scripts/run-load-test.sh"
   },
   "author": "CodesWhat",
   "repository": "CodesWhat/drydock",

@@ -290,12 +290,47 @@ jobs:
           ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
         run: ./scripts/run-load-test.sh
 
+      - name: Run Artillery rate-limit burst (advisory)
+        continue-on-error: true
+        env:
+          ARTILLERY_FILE: ./test-rate-limit.yml
+          ARTILLERY_ENV: ratelimit
+          DD_LOAD_TEST_BUILD_CACHE: gha
+          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/rate-limit
+          ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
+        run: ./scripts/run-load-test.sh
+
       - name: Summarize load test metrics (smoke)
         if: always()
         run: |
           report="$(ls -1t artifacts/load-test/smoke/*.json 2>/dev/null | head -n1 || true)"
           {
             echo "### Load Test (Smoke)"
+            if [ -z "$report" ]; then
+              echo "- No Artillery JSON report was generated."
+              exit 0
+            fi
+            p95="$(jq -r '.aggregate.summaries["http.response_time"].p95 // "n/a"' "$report")"
+            p99="$(jq -r '.aggregate.summaries["http.response_time"].p99 // "n/a"' "$report")"
+            rate="$(jq -r '.aggregate.rates["http.request_rate"] // "n/a"' "$report")"
+            requests="$(jq -r '.aggregate.counters["http.requests"] // "n/a"' "$report")"
+            r429="$(jq -r '.aggregate.counters["http.codes.429"] // 0' "$report")"
+            failed="$(jq -r '.aggregate.counters["vusers.failed"] // 0' "$report")"
+            echo "- Report: \`$report\`"
+            echo "- http.response_time.p95: \`$p95\` ms"
+            echo "- http.response_time.p99: \`$p99\` ms"
+            echo "- http.request_rate: \`$rate\` req/s"
+            echo "- http.requests: \`$requests\`"
+            echo "- http.codes.429: \`$r429\`"
+            echo "- vusers.failed: \`$failed\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize load test metrics (rate-limit)
+        if: always()
+        run: |
+          report="$(ls -1t artifacts/load-test/rate-limit/*.json 2>/dev/null | head -n1 || true)"
+          {
+            echo "### Load Test (Rate-limit)"
             if [ -z "$report" ]; then
               echo "- No Artillery JSON report was generated."
               exit 0
@@ -429,6 +464,15 @@ jobs:
         with:
           name: load-test-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/load-test/smoke/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload load test artifact (rate-limit)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: load-test-rate-limit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/load-test/rate-limit/*.json
           if-no-files-found: warn
           retention-days: 30
 

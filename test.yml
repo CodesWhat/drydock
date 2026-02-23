@@ -47,6 +47,7 @@ config:
     - duration: 10
       arrivalRate: 6
       name: "Sustained load"
+  processor: "./test/load-test.processor.cjs"
   defaults:
     headers:
       Accept: "application/json"
@@ -60,7 +61,7 @@ config:
 
 scenarios:
   - name: "Health check"
-    weight: 15
+    weight: 10
     flow:
       - get:
           url: "/health"
@@ -68,7 +69,7 @@ scenarios:
             - statusCode: 200
 
   - name: "App info"
-    weight: 15
+    weight: 10
     flow:
       - get:
           url: "/api/app"
@@ -76,7 +77,7 @@ scenarios:
             - statusCode: 200
 
   - name: "Container inventory"
-    weight: 15
+    weight: 10
     flow:
       - get:
           url: "/api/containers"
@@ -89,7 +90,7 @@ scenarios:
             - statusCode: 200
 
   - name: "Config data"
-    weight: 10
+    weight: 8
     flow:
       - get:
           url: "/api/watchers"
@@ -102,7 +103,7 @@ scenarios:
             - statusCode: 200
 
   - name: "Registry and server"
-    weight: 15
+    weight: 10
     flow:
       - get:
           url: "/api/registries"
@@ -115,7 +116,7 @@ scenarios:
             - statusCode: 200
 
   - name: "Dashboard flow"
-    weight: 10
+    weight: 8
     flow:
       - get:
           url: "/api/app"
@@ -140,8 +141,42 @@ scenarios:
           expect:
             - statusCode: 200
 
-  - name: "Container log route"
-    weight: 5
+  - name: "Auth lifecycle"
+    weight: 8
+    flow:
+      - post:
+          url: "/auth/remember"
+          json:
+            remember: true
+          expect:
+            - statusCode: 200
+      - post:
+          url: "/auth/login"
+          json:
+            remember: true
+          expect:
+            - statusCode: 200
+      - get:
+          url: "/auth/user"
+          expect:
+            - statusCode: 200
+      - post:
+          url: "/auth/logout"
+          expect:
+            - statusCode: 200
+      - get:
+          url: "/auth/user"
+          beforeRequest: "dropAuthorization"
+          expect:
+            - statusCode: 401
+
+  - name: "SSE reconnect probe"
+    weight: 6
+    flow:
+      - function: "probeSseReconnect"
+
+  - name: "Container log route (missing)"
+    weight: 4
     flow:
       - get:
           url: "/api/containers"
@@ -153,8 +188,23 @@ scenarios:
           expect:
             - statusCode: 404
 
-  - name: "Agent log source route"
-    weight: 5
+  - name: "Container log route (happy path)"
+    weight: 6
+    flow:
+      - post:
+          url: "/api/containers/watch"
+          expect:
+            - statusCode: 200
+          capture:
+            - json: "$[0].id"
+              as: "containerId"
+      - get:
+          url: "/api/containers/{{ containerId }}/logs?tail=100&since=0&timestamps=false"
+          expect:
+            - statusCode: 200
+
+  - name: "Agent log source route (missing)"
+    weight: 4
     flow:
       - get:
           url: "/api/agents"
@@ -165,3 +215,38 @@ scenarios:
           url: "/api/agents/__missing__/log/entries?tail=100"
           expect:
             - statusCode: 404
+
+  - name: "Agent log route (happy path when available)"
+    weight: 2
+    flow:
+      - function: "probeConnectedAgentLogs"
+
+  - name: "Write path updates"
+    weight: 4
+    flow:
+      - post:
+          url: "/api/containers/watch"
+          expect:
+            - statusCode: 200
+          capture:
+            - json: "$[0].id"
+              as: "containerId"
+      - patch:
+          url: "/api/containers/{{ containerId }}/update-policy"
+          json:
+            action: "clear"
+          expect:
+            - statusCode: 200
+      - get:
+          url: "/api/notifications"
+          expect:
+            - statusCode: 200
+          capture:
+            - json: "$[0].id"
+              as: "notificationRuleId"
+      - put:
+          url: "/api/notifications/{{ notificationRuleId }}"
+          json:
+            enabled: true
+          expect:
+            - statusCode: 200

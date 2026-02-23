@@ -1,0 +1,48 @@
+config:
+  target: "http://localhost:3333"
+  environments:
+    ratelimit:
+      target: "http://localhost:3000"
+      phases:
+        - duration: 1
+          arrivalCount: 1
+          name: "Rate-limit burst"
+  phases:
+    - duration: 1
+      arrivalCount: 1
+      name: "Rate-limit burst"
+  defaults:
+    headers:
+      Accept: "application/json"
+      Authorization: "Basic YWRtaW46cGFzc3dvcmQ="
+  ensure:
+    thresholds:
+      - vusers.failed: 0
+
+scenarios:
+  - name: "Scan endpoint rate-limit burst"
+    flow:
+      - post:
+          url: "/api/containers/watch"
+          expect:
+            - statusCode: 200
+          capture:
+            - json: "$[0].id"
+              as: "containerId"
+      # In the CI/local test stack the scanner is typically disabled, so
+      # pre-limit requests can be 400. We only assert that the limiter
+      # returns 429 once the burst exceeds max=5.
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+          expect:
+            - statusCode: 429
