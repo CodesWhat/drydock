@@ -30,7 +30,7 @@ const defaultViewModes = [
            backgroundColor: 'var(--dd-bg-card)',
            border: '1px solid var(--dd-border-strong)',
          }">
-      <div class="flex items-center gap-2.5">
+      <div class="flex items-center gap-2.5 relative">
         <!-- Filter toggle button -->
         <div v-if="!hideFilter" class="relative">
           <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
@@ -50,7 +50,7 @@ const defaultViewModes = [
         <!-- Extra buttons (column picker, settings — left side) -->
         <slot name="extra-buttons" />
 
-        <!-- Left slot (extra controls) -->
+        <!-- Left slot (extra controls, after extra-buttons) -->
         <slot name="left" />
 
         <!-- Right side: count + view mode switcher -->
