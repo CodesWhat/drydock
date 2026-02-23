@@ -4,9 +4,16 @@ import { useRoute, useRouter } from 'vue-router';
 import whaleLogo from '@/assets/whale-logo.png';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import { useIcons } from '@/composables/useIcons';
+import { getAgents } from '@/services/agent';
+import { getAllAuthentications } from '@/services/authentication';
 import { getUser, logout } from '@/services/auth';
 import { getAllContainers } from '@/services/container';
+import { getEffectiveDisplayIcon } from '@/services/image-icon';
+import { getAllNotificationRules } from '@/services/notification';
+import { getAllRegistries } from '@/services/registry';
 import sseService from '@/services/sse';
+import { getAllTriggers } from '@/services/trigger';
+import { getAllWatchers } from '@/services/watcher';
 import { useTheme } from '@/theme/useTheme';
 
 const router = useRouter();
@@ -47,6 +54,35 @@ interface NavItem {
 interface NavGroup {
   label: string;
   items: NavItem[];
+}
+interface SearchContainerIndexItem {
+  id: string;
+  name: string;
+  displayName: string;
+  icon: string;
+  image: string;
+  status: string;
+  host: string;
+}
+interface SearchResultItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  icon: string;
+  containerIcon?: string;
+  route: string;
+  query?: Record<string, string>;
+  kind:
+    | 'page'
+    | 'setting'
+    | 'container'
+    | 'agent'
+    | 'trigger'
+    | 'watcher'
+    | 'registry'
+    | 'auth'
+    | 'notification';
+  searchable: string;
 }
 
 const navGroups = computed<NavGroup[]>(() => [
@@ -117,6 +153,55 @@ function navigateTo(navRoute: string) {
   if (isMobile.value) isMobileMenuOpen.value = false;
 }
 
+const staticSearchResults = computed<SearchResultItem[]>(() => {
+  const pageResults: SearchResultItem[] = navGroups.value.flatMap((group) =>
+    group.items.map((item) => ({
+      id: `page:${item.route}`,
+      title: item.label,
+      subtitle: `Page · ${item.route}`,
+      icon: item.icon,
+      route: item.route,
+      kind: 'page',
+      searchable: `${item.label} ${item.route} ${group.label}`.toLowerCase(),
+    })),
+  );
+
+  const settingsResults: SearchResultItem[] = [
+    {
+      id: 'settings:appearance',
+      title: 'Appearance Settings',
+      subtitle: 'Config · Appearance',
+      icon: 'config',
+      route: '/config',
+      query: { tab: 'appearance' },
+      kind: 'setting',
+      searchable: 'appearance settings config theme color font icon library',
+    },
+    {
+      id: 'settings:profile',
+      title: 'Profile Settings',
+      subtitle: 'Config · Profile',
+      icon: 'user',
+      route: '/config',
+      query: { tab: 'profile' },
+      kind: 'setting',
+      searchable: 'profile settings config account user',
+    },
+    {
+      id: 'settings:logs',
+      title: 'Application Logs',
+      subtitle: 'Config · Logs',
+      icon: 'logs',
+      route: '/config',
+      query: { tab: 'logs' },
+      kind: 'setting',
+      searchable: 'logs application logs config troubleshooting',
+    },
+  ];
+
+  return [...pageResults, ...settingsResults];
+});
+
 // User menu
 const showUserMenu = ref(false);
 function toggleUserMenu() {
@@ -144,6 +229,573 @@ const showAbout = ref(false);
 const showSearch = ref(false);
 const searchQuery = ref('');
 const searchInput = ref<HTMLInputElement | null>(null);
+const searchActiveIndex = ref(0);
+const searchContainers = ref<SearchContainerIndexItem[]>([]);
+const searchResourceResults = ref<SearchResultItem[]>([]);
+const searchResourcesLoading = ref(false);
+type SearchScope = 'all' | 'pages' | 'containers' | 'runtime' | 'config';
+type SearchPrefix = '/' | '@' | '#';
+interface SearchScopeOption {
+  id: SearchScope;
+  label: string;
+  kinds: SearchResultItem['kind'][];
+}
+interface SearchGroupDefinition {
+  id: string;
+  label: string;
+  kinds: SearchResultItem['kind'][];
+}
+interface SearchResultGroup {
+  id: string;
+  label: string;
+  items: SearchResultItem[];
+}
+interface ParsedSearchQuery {
+  text: string;
+  scopeOverride?: SearchScope;
+  prefix?: SearchPrefix;
+}
+
+const SEARCH_SCOPE_OPTIONS: SearchScopeOption[] = [
+  { id: 'all', label: 'All', kinds: [] },
+  { id: 'pages', label: 'Pages', kinds: ['page', 'setting'] },
+  { id: 'containers', label: 'Containers', kinds: ['container'] },
+  { id: 'runtime', label: 'Runtime', kinds: ['agent', 'trigger', 'watcher'] },
+  {
+    id: 'config',
+    label: 'Config',
+    kinds: ['registry', 'auth', 'notification'],
+  },
+];
+
+const SEARCH_GROUP_DEFINITIONS: SearchGroupDefinition[] = [
+  { id: 'navigation', label: 'Navigation', kinds: ['page', 'setting'] },
+  { id: 'containers', label: 'Containers', kinds: ['container'] },
+  { id: 'runtime', label: 'Runtime', kinds: ['agent', 'trigger', 'watcher'] },
+  {
+    id: 'configuration',
+    label: 'Configuration',
+    kinds: ['registry', 'auth', 'notification'],
+  },
+];
+
+const SEARCH_RECENT_STORAGE_KEY = 'dd-cmdk-recent-v1';
+const SEARCH_RECENT_MAX_ITEMS = 8;
+const SEARCH_SCOPE_ORDER: SearchScope[] = SEARCH_SCOPE_OPTIONS.map((option) => option.id);
+const EMPTY_QUERY_GROUP_LIMIT = 4;
+const searchScope = ref<SearchScope>('all');
+
+function scopeFromSearchPrefix(prefix: string): SearchScope | undefined {
+  if (prefix === '/') return 'pages';
+  if (prefix === '@') return 'runtime';
+  if (prefix === '#') return 'config';
+  return undefined;
+}
+
+function parseSearchQuery(rawQuery: string): ParsedSearchQuery {
+  const trimmedStart = rawQuery.trimStart();
+  if (!trimmedStart) {
+    return { text: '' };
+  }
+  const prefixCandidate = trimmedStart.charAt(0);
+  const scopeOverride = scopeFromSearchPrefix(prefixCandidate);
+  if (!scopeOverride) {
+    return { text: trimmedStart.trim() };
+  }
+  return {
+    text: trimmedStart.slice(1).trim(),
+    scopeOverride,
+    prefix: prefixCandidate as SearchPrefix,
+  };
+}
+
+function normalizeSearchValue(value: unknown): string {
+  return `${value ?? ''}`.trim();
+}
+
+function loadRecentSearchResults(): SearchResultItem[] {
+  try {
+    const raw = localStorage.getItem(SEARCH_RECENT_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .filter((item): item is SearchResultItem => {
+        return (
+          item &&
+          typeof item === 'object' &&
+          typeof item.id === 'string' &&
+          typeof item.title === 'string' &&
+          typeof item.subtitle === 'string' &&
+          typeof item.icon === 'string' &&
+          typeof item.route === 'string' &&
+          typeof item.kind === 'string'
+        );
+      })
+      .slice(0, SEARCH_RECENT_MAX_ITEMS);
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentSearchResults(items: SearchResultItem[]) {
+  try {
+    localStorage.setItem(SEARCH_RECENT_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+const recentSearchResults = ref<SearchResultItem[]>(loadRecentSearchResults());
+
+function recordRecentSearchResult(result: SearchResultItem) {
+  const nextResults = [
+    { ...result },
+    ...recentSearchResults.value.filter((item) => item.id !== result.id),
+  ].slice(0, SEARCH_RECENT_MAX_ITEMS);
+  recentSearchResults.value = nextResults;
+  saveRecentSearchResults(nextResults);
+}
+
+const containerSearchResults = computed<SearchResultItem[]>(() =>
+  searchContainers.value.map((container) => ({
+    id: `container:${container.id}`,
+    title: container.displayName,
+    subtitle: `Container · ${container.image} · ${container.status} · ${container.host}`,
+    icon: 'containers',
+    containerIcon: container.icon,
+    route: '/containers',
+    query: { q: container.displayName },
+    kind: 'container',
+    searchable: `${container.displayName} ${container.name} ${container.image} ${container.status} ${container.host}`.toLowerCase(),
+  })),
+);
+
+function isSearchResultInScope(result: SearchResultItem, scope: SearchScope): boolean {
+  if (scope === 'all') {
+    return true;
+  }
+  const scopeOption = SEARCH_SCOPE_OPTIONS.find((option) => option.id === scope);
+  if (!scopeOption) {
+    return true;
+  }
+  return scopeOption.kinds.includes(result.kind);
+}
+
+function searchScopeChipStyles(scope: SearchScope, active: boolean) {
+  if (active) {
+    return {
+      backgroundColor: 'var(--dd-primary-muted)',
+      borderColor: 'var(--dd-primary)',
+      color: 'var(--dd-primary)',
+    };
+  }
+  if (scope === 'all') {
+    return {
+      backgroundColor: 'var(--dd-bg-elevated)',
+      borderColor: 'var(--dd-border-strong)',
+      color: 'var(--dd-text-secondary)',
+    };
+  }
+  return {
+    backgroundColor: 'var(--dd-bg-card)',
+    borderColor: 'var(--dd-border)',
+    color: 'var(--dd-text-muted)',
+  };
+}
+
+function buildSearchIndexResults(
+  resources: {
+    agents?: unknown;
+    triggers?: unknown;
+    watchers?: unknown;
+    registries?: unknown;
+    authentications?: unknown;
+    notificationRules?: unknown;
+  },
+): SearchResultItem[] {
+  const results: SearchResultItem[] = [];
+
+  const agents = Array.isArray(resources.agents) ? resources.agents : [];
+  agents.forEach((agent: any) => {
+    const name = normalizeSearchValue(agent.name || agent.id || 'agent');
+    const host = normalizeSearchValue(agent.host);
+    const port = normalizeSearchValue(agent.port);
+    const hostLabel = host ? `${host}${port ? `:${port}` : ''}` : 'unknown host';
+    const status = agent.connected ? 'connected' : 'disconnected';
+    results.push({
+      id: `agent:${name}`,
+      title: name,
+      subtitle: `Agent · ${status} · ${hostLabel}`,
+      icon: 'agents',
+      route: '/agents',
+      query: { q: name },
+      kind: 'agent',
+      searchable: `${name} ${hostLabel} ${status} agent`.toLowerCase(),
+    });
+  });
+
+  const triggers = Array.isArray(resources.triggers) ? resources.triggers : [];
+  triggers.forEach((trigger: any) => {
+    const name = normalizeSearchValue(trigger.name || trigger.id || 'trigger');
+    const type = normalizeSearchValue(trigger.type || 'unknown');
+    const id = normalizeSearchValue(trigger.id || `${type}.${name}`);
+    results.push({
+      id: `trigger:${id}`,
+      title: name,
+      subtitle: `Trigger · ${type}`,
+      icon: 'triggers',
+      route: '/triggers',
+      query: { q: name },
+      kind: 'trigger',
+      searchable: `${name} ${id} ${type} trigger`.toLowerCase(),
+    });
+  });
+
+  const watchers = Array.isArray(resources.watchers) ? resources.watchers : [];
+  watchers.forEach((watcher: any) => {
+    const name = normalizeSearchValue(watcher.name || watcher.id || 'watcher');
+    const type = normalizeSearchValue(watcher.type || 'unknown');
+    const id = normalizeSearchValue(watcher.id || `${type}.${name}`);
+    results.push({
+      id: `watcher:${id}`,
+      title: name,
+      subtitle: `Watcher · ${type}`,
+      icon: 'watchers',
+      route: '/watchers',
+      query: { q: name },
+      kind: 'watcher',
+      searchable: `${name} ${id} ${type} watcher`.toLowerCase(),
+    });
+  });
+
+  const registries = Array.isArray(resources.registries) ? resources.registries : [];
+  registries.forEach((registry: any) => {
+    const name = normalizeSearchValue(registry.name || registry.id || 'registry');
+    const type = normalizeSearchValue(registry.type || 'unknown');
+    const id = normalizeSearchValue(registry.id || `${type}.${name}`);
+    results.push({
+      id: `registry:${id}`,
+      title: name,
+      subtitle: `Registry · ${type}`,
+      icon: 'registries',
+      route: '/registries',
+      query: { q: name },
+      kind: 'registry',
+      searchable: `${name} ${id} ${type} registry`.toLowerCase(),
+    });
+  });
+
+  const authentications = Array.isArray(resources.authentications) ? resources.authentications : [];
+  authentications.forEach((authentication: any) => {
+    const name = normalizeSearchValue(authentication.name || authentication.id || 'authentication');
+    const type = normalizeSearchValue(authentication.type || 'unknown');
+    const id = normalizeSearchValue(authentication.id || `${type}.${name}`);
+    results.push({
+      id: `auth:${id}`,
+      title: name,
+      subtitle: `Auth · ${type}`,
+      icon: 'auth',
+      route: '/auth',
+      query: { q: name },
+      kind: 'auth',
+      searchable: `${name} ${id} ${type} auth authentication`.toLowerCase(),
+    });
+  });
+
+  const notificationRules = Array.isArray(resources.notificationRules)
+    ? resources.notificationRules
+    : [];
+  notificationRules.forEach((rule: any) => {
+    const name = normalizeSearchValue(rule.name || rule.id || 'notification');
+    const id = normalizeSearchValue(rule.id || name);
+    results.push({
+      id: `notification:${id}`,
+      title: name,
+      subtitle: `Notification rule · ${id}`,
+      icon: 'notifications',
+      route: '/notifications',
+      query: { q: name },
+      kind: 'notification',
+      searchable: `${name} ${id} notification rule alerts`.toLowerCase(),
+    });
+  });
+
+  return results;
+}
+
+async function refreshSearchResources() {
+  searchResourcesLoading.value = true;
+  try {
+    const [agents, triggers, watchers, registries, authentications, notificationRules] =
+      await Promise.all([
+        getAgents().catch(() => []),
+        getAllTriggers().catch(() => []),
+        getAllWatchers().catch(() => []),
+        getAllRegistries().catch(() => []),
+        getAllAuthentications().catch(() => []),
+        getAllNotificationRules().catch(() => []),
+      ]);
+    searchResourceResults.value = buildSearchIndexResults({
+      agents,
+      triggers,
+      watchers,
+      registries,
+      authentications,
+      notificationRules,
+    });
+  } finally {
+    searchResourcesLoading.value = false;
+  }
+}
+
+const allSearchResults = computed<SearchResultItem[]>(() => [
+  ...staticSearchResults.value,
+  ...searchResourceResults.value,
+  ...containerSearchResults.value,
+]);
+
+const parsedSearchQuery = computed<ParsedSearchQuery>(() => parseSearchQuery(searchQuery.value));
+const effectiveSearchScope = computed<SearchScope>(
+  () => parsedSearchQuery.value.scopeOverride || searchScope.value,
+);
+
+const scopePrefixLabel = computed(() => {
+  if (parsedSearchQuery.value.scopeOverride === 'pages') return '/ pages';
+  if (parsedSearchQuery.value.scopeOverride === 'runtime') return '@ runtime';
+  if (parsedSearchQuery.value.scopeOverride === 'config') return '# config';
+  return '';
+});
+
+const searchResultById = computed(() => {
+  const map = new Map<string, SearchResultItem>();
+  allSearchResults.value.forEach((result) => {
+    map.set(result.id, result);
+  });
+  return map;
+});
+
+const hydratedRecentSearchResults = computed<SearchResultItem[]>(() =>
+  recentSearchResults.value.map((result) => searchResultById.value.get(result.id) || result),
+);
+
+const scopedRecentSearchResults = computed<SearchResultItem[]>(() =>
+  hydratedRecentSearchResults.value
+    .filter((result) => isSearchResultInScope(result, effectiveSearchScope.value))
+    .slice(0, 5),
+);
+
+function scoreSearchResult(result: SearchResultItem, queryNormalized: string): number {
+  if (!queryNormalized) {
+    return result.kind === 'page' || result.kind === 'setting' ? 110 : 80;
+  }
+  const title = result.title.toLowerCase();
+  const subtitle = result.subtitle.toLowerCase();
+
+  if (title === queryNormalized) {
+    return 120;
+  }
+  if (title.startsWith(queryNormalized)) {
+    return 110;
+  }
+  if (title.includes(queryNormalized)) {
+    return 95;
+  }
+  if (subtitle.includes(queryNormalized)) {
+    return 80;
+  }
+  if (result.searchable.includes(queryNormalized)) {
+    return 60;
+  }
+  return -1;
+}
+
+const rankedSearchResults = computed<SearchResultItem[]>(() => {
+  const queryNormalized = parsedSearchQuery.value.text.toLowerCase();
+  return allSearchResults.value
+    .map((result) => ({ result, score: scoreSearchResult(result, queryNormalized) }))
+    .filter(({ score }) => score >= 0)
+    .sort((left, right) => right.score - left.score || left.result.title.localeCompare(right.result.title))
+    .map(({ result }) => result);
+});
+
+const searchScopeCounts = computed<Record<SearchScope, number>>(() => {
+  const counts: Record<SearchScope, number> = {
+    all: rankedSearchResults.value.length,
+    pages: 0,
+    containers: 0,
+    runtime: 0,
+    config: 0,
+  };
+
+  rankedSearchResults.value.forEach((result) => {
+    if (isSearchResultInScope(result, 'pages')) counts.pages += 1;
+    if (isSearchResultInScope(result, 'containers')) counts.containers += 1;
+    if (isSearchResultInScope(result, 'runtime')) counts.runtime += 1;
+    if (isSearchResultInScope(result, 'config')) counts.config += 1;
+  });
+
+  return counts;
+});
+
+const scopedSearchResults = computed<SearchResultItem[]>(() =>
+  rankedSearchResults.value.filter((result) => isSearchResultInScope(result, effectiveSearchScope.value)),
+);
+
+const groupedSearchResults = computed<SearchResultGroup[]>(() => {
+  const groups: SearchResultGroup[] = [];
+  const queryNormalized = parsedSearchQuery.value.text.toLowerCase();
+  const seenResultIds = new Set<string>();
+
+  if (!queryNormalized) {
+    const recentItems = scopedRecentSearchResults.value.filter((result) => {
+      if (seenResultIds.has(result.id)) {
+        return false;
+      }
+      seenResultIds.add(result.id);
+      return true;
+    });
+    if (recentItems.length > 0) {
+      groups.push({
+        id: 'recent',
+        label: 'Recent',
+        items: recentItems,
+      });
+    }
+  }
+
+  const baseResults = scopedSearchResults.value.filter((result) => !seenResultIds.has(result.id));
+
+  if (queryNormalized) {
+    const limitedResults = baseResults.slice(0, 24);
+    SEARCH_GROUP_DEFINITIONS.forEach((groupDefinition) => {
+      const groupItems = limitedResults.filter((result) =>
+        groupDefinition.kinds.includes(result.kind),
+      );
+      if (groupItems.length > 0) {
+        groups.push({
+          id: groupDefinition.id,
+          label: groupDefinition.label,
+          items: groupItems,
+        });
+      }
+    });
+    return groups;
+  }
+
+  SEARCH_GROUP_DEFINITIONS.forEach((groupDefinition) => {
+    const groupItems = baseResults
+      .filter((result) => groupDefinition.kinds.includes(result.kind))
+      .slice(0, EMPTY_QUERY_GROUP_LIMIT);
+    if (groupItems.length > 0) {
+      groups.push({
+        id: groupDefinition.id,
+        label: groupDefinition.label,
+        items: groupItems,
+      });
+    }
+  });
+
+  return groups;
+});
+
+const searchResults = computed<SearchResultItem[]>(() =>
+  groupedSearchResults.value.flatMap((group) => group.items),
+);
+
+const searchResultIndexById = computed(() => {
+  const indexMap = new Map<string, number>();
+  searchResults.value.forEach((result, index) => {
+    indexMap.set(result.id, index);
+  });
+  return indexMap;
+});
+
+function isSearchResultActive(resultId: string): boolean {
+  return searchResultIndexById.value.get(resultId) === searchActiveIndex.value;
+}
+
+function setActiveSearchResult(resultId: string) {
+  const index = searchResultIndexById.value.get(resultId);
+  if (index !== undefined) {
+    searchActiveIndex.value = index;
+  }
+}
+
+watch(searchResults, (results) => {
+  if (results.length === 0) {
+    searchActiveIndex.value = 0;
+    return;
+  }
+  if (searchActiveIndex.value >= results.length) {
+    searchActiveIndex.value = results.length - 1;
+  }
+});
+
+function moveSearchSelection(offset: number) {
+  if (searchResults.value.length === 0) {
+    return;
+  }
+  const next = searchActiveIndex.value + offset;
+  if (next < 0) {
+    searchActiveIndex.value = searchResults.value.length - 1;
+    return;
+  }
+  searchActiveIndex.value = next % searchResults.value.length;
+}
+
+function applySearchScope(nextScope: SearchScope) {
+  searchScope.value = nextScope;
+  if (parsedSearchQuery.value.scopeOverride) {
+    searchQuery.value = parsedSearchQuery.value.text;
+  }
+}
+
+async function selectSearchResult(result: SearchResultItem | undefined) {
+  if (!result) {
+    return;
+  }
+  recordRecentSearchResult(result);
+  showSearch.value = false;
+  await router.push({
+    path: result.route,
+    query: result.query || undefined,
+  });
+}
+
+function cycleSearchScope(step = 1) {
+  const currentIndex = SEARCH_SCOPE_ORDER.indexOf(effectiveSearchScope.value);
+  const startIndex = currentIndex >= 0 ? currentIndex : 0;
+  const totalScopes = SEARCH_SCOPE_ORDER.length;
+  const nextIndex = (startIndex + step + totalScopes) % totalScopes;
+  applySearchScope(SEARCH_SCOPE_ORDER[nextIndex]);
+}
+
+function handleSearchInputKeydown(event: KeyboardEvent) {
+  if (event.key === 'Tab') {
+    event.preventDefault();
+    cycleSearchScope(event.shiftKey ? -1 : 1);
+    return;
+  }
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    moveSearchSelection(1);
+    return;
+  }
+  if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    moveSearchSelection(-1);
+    return;
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    void selectSearchResult(searchResults.value[searchActiveIndex.value]);
+  }
+}
 
 function handleKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -158,8 +810,14 @@ function handleKeydown(e: KeyboardEvent) {
 watch(showSearch, async (val) => {
   if (val) {
     searchQuery.value = '';
+    searchScope.value = 'all';
+    searchActiveIndex.value = 0;
+    void refreshSidebarData();
+    void refreshSearchResources();
     await nextTick();
     searchInput.value?.focus();
+  } else {
+    searchActiveIndex.value = 0;
   }
 });
 
@@ -167,6 +825,7 @@ watch(showSearch, async (val) => {
 const connectionLost = ref(false);
 const selfUpdateInProgress = ref(false);
 let connectivityTimer: ReturnType<typeof setInterval> | undefined;
+const sidebarDataLoading = ref(false);
 
 async function checkConnectivity() {
   try {
@@ -196,12 +855,30 @@ const connectionOverlayStatus = computed(() =>
 );
 
 async function refreshSidebarData() {
+  sidebarDataLoading.value = true;
   try {
     const containers = await getAllContainers().catch(() => []);
     if (!Array.isArray(containers)) {
+      searchContainers.value = [];
       return;
     }
     containerCount.value = String(containers.length);
+    searchContainers.value = containers.map((container: Record<string, any>) => {
+      const displayName = String(container.displayName || container.name || container.id || 'container');
+      const displayIcon = String(container.displayIcon || '');
+      const imageName = String(container.image?.name || '');
+      const imageTag = String(container.image?.tag?.value || '');
+      const image = imageName ? `${imageName}${imageTag ? `:${imageTag}` : ''}` : 'unknown image';
+      return {
+        id: String(container.id || displayName),
+        name: String(container.name || displayName),
+        displayName,
+        icon: getEffectiveDisplayIcon(displayIcon, imageName),
+        image,
+        status: String(container.status || 'unknown'),
+        host: String(container.agent || container.watcher || 'local'),
+      };
+    });
     const issues = containers.filter((c: Record<string, any>) => {
       const summary = c.security?.scan?.summary;
       return Number(summary?.critical || 0) > 0 || Number(summary?.high || 0) > 0;
@@ -209,6 +886,8 @@ async function refreshSidebarData() {
     securityIssueCount.value = issues > 0 ? String(issues) : '';
   } catch {
     // Sidebar works without badge data
+  } finally {
+    sidebarDataLoading.value = false;
   }
 }
 
@@ -252,7 +931,11 @@ onMounted(async () => {
   connectivityTimer = setInterval(checkConnectivity, 10_000);
   // Fetch sidebar badge data and user info
   try {
-    const [, user] = await Promise.all([refreshSidebarData(), getUser().catch(() => null)]);
+    const [, , user] = await Promise.all([
+      refreshSidebarData(),
+      refreshSearchResources(),
+      getUser().catch(() => null),
+    ]);
     if (user) currentUser.value = user;
   } catch {
     // Sidebar works without badge data
@@ -521,20 +1204,91 @@ onUnmounted(() => {
            @pointerdown.self="showSearch = false">
         <div class="flex items-start justify-center pt-[15vh] min-h-full px-4"
              @pointerdown.self="showSearch = false">
-          <div class="relative w-full max-w-[500px] dd-rounded-lg overflow-hidden shadow-2xl"
+          <div class="relative w-full max-w-[560px] dd-rounded-lg overflow-hidden shadow-2xl"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <div class="flex items-center gap-3 px-4 py-3"
                  :style="{ borderBottom: '1px solid var(--dd-border)' }">
               <AppIcon name="search" :size="14" class="dd-text-muted" />
               <input ref="searchInput" v-model="searchQuery"
                      type="text"
-                     placeholder="Search containers, settings..."
+                     placeholder="Jump to pages, containers, agents, triggers..."
                      class="flex-1 bg-transparent text-sm dd-text font-mono outline-none placeholder:dd-text-muted"
-                     @keydown.escape="showSearch = false" />
+                     @keydown.escape="showSearch = false"
+                     @keydown="handleSearchInputKeydown" />
+              <span v-if="scopePrefixLabel"
+                    class="px-1.5 py-0.5 text-[10px] uppercase tracking-wide font-semibold dd-rounded-sm dd-bg-elevated dd-text-secondary">
+                {{ scopePrefixLabel }}
+              </span>
               <kbd class="px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-muted">ESC</kbd>
             </div>
-            <div class="px-4 py-6 text-center text-xs dd-text-muted">
-              Start typing to search...
+            <div class="px-3 py-2 flex items-center gap-1.5"
+                 :style="{ borderBottom: '1px solid var(--dd-border)' }">
+              <button
+                v-for="scopeOption in SEARCH_SCOPE_OPTIONS"
+                :key="scopeOption.id"
+                class="inline-flex items-center gap-1 px-2 py-1 text-[10px] uppercase tracking-wide font-semibold border dd-rounded transition-colors"
+                :style="searchScopeChipStyles(scopeOption.id, scopeOption.id === effectiveSearchScope)"
+                @click="applySearchScope(scopeOption.id)">
+                {{ scopeOption.label }}
+                <span class="text-[9px] opacity-80">{{ searchScopeCounts[scopeOption.id] }}</span>
+              </button>
+              <span class="ml-auto text-[10px] dd-text-muted">
+                {{ searchResults.length }} shown
+              </span>
+            </div>
+            <div class="max-h-[360px] overflow-y-auto py-1">
+              <template v-for="(group, groupIndex) in groupedSearchResults" :key="group.id">
+                <div class="px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] dd-text-muted"
+                     :style="groupIndex > 0 ? { borderTop: '1px solid var(--dd-border)' } : {}">
+                  {{ group.label }}
+                </div>
+                <button
+                  v-for="result in group.items"
+                  :key="result.id"
+                  class="w-full px-4 py-2.5 text-left flex items-center gap-3 transition-colors"
+                  :class="isSearchResultActive(result.id) ? 'dd-bg-elevated' : 'hover:dd-bg-elevated'"
+                  @mouseenter="setActiveSearchResult(result.id)"
+                  @click="selectSearchResult(result)">
+                  <div class="w-7 h-7 dd-rounded flex items-center justify-center shrink-0"
+                       :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+                    <ContainerIcon
+                      v-if="result.kind === 'container' && result.containerIcon"
+                      :icon="result.containerIcon"
+                      :size="16" />
+                    <AppIcon v-else :name="result.icon" :size="13" class="dd-text-muted" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <div class="text-[12px] font-semibold truncate dd-text">{{ result.title }}</div>
+                    <div class="text-[10px] truncate dd-text-muted">{{ result.subtitle }}</div>
+                  </div>
+                  <AppIcon name="chevron-right" :size="11" class="dd-text-muted shrink-0" />
+                </button>
+              </template>
+              <div v-if="searchResults.length === 0"
+                   class="px-4 py-6 text-center text-xs dd-text-muted">
+                <span v-if="sidebarDataLoading || searchResourcesLoading">Refreshing search index...</span>
+                <span v-else-if="parsedSearchQuery.text">No matches for "{{ parsedSearchQuery.text }}".</span>
+                <span v-else>Type to search pages, containers, agents, triggers, watchers, and settings.</span>
+              </div>
+            </div>
+            <div class="px-4 py-2.5 flex items-center justify-between text-[10px] dd-text-muted"
+                 :style="{ borderTop: '1px solid var(--dd-border)' }">
+              <span>
+                <span v-if="scopePrefixLabel">Prefix scope active; use </span>
+                <span v-else>
+                  Type
+                  <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">/</kbd>,
+                  <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">@</kbd>, or
+                  <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">#</kbd>; use
+                </span>
+                <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">Tab</kbd>
+                <span> to change scope</span>
+              </span>
+              <span>
+                <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">↑↓</kbd> move
+                ·
+                <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">Enter</kbd> open
+              </span>
             </div>
           </div>
         </div>

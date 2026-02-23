@@ -456,6 +456,7 @@ watch(
 
 // Filters
 const {
+  filterSearch,
   filterStatus,
   filterRegistry,
   filterBouncer,
@@ -477,6 +478,17 @@ function applyFilterKindFromQuery(queryValue: unknown) {
   }
   filterKind.value = VALID_FILTER_KINDS.has(raw) ? raw : 'all';
 }
+
+function applyFilterSearchFromQuery(queryValue: unknown) {
+  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
+  filterSearch.value = typeof raw === 'string' ? raw : '';
+}
+
+applyFilterSearchFromQuery(route.query.q);
+watch(
+  () => route.query.q,
+  (value) => applyFilterSearchFromQuery(value),
+);
 
 applyFilterKindFromQuery(route.query.filterKind);
 watch(
@@ -885,6 +897,13 @@ function confirmForceUpdate(name: string) {
     <ConfirmDialog />
     <!-- MAIN CONTAINERS LIST (not full page) -->
     <DataViewLayout v-if="!containerFullPage">
+      <div v-if="error"
+           class="mb-3 px-3 py-2 text-[11px] dd-rounded"
+           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+        {{ error }}
+      </div>
+
+      <div v-if="loading" class="text-[11px] dd-text-muted py-3 px-1">Loading containers...</div>
 
       <!-- FILTER BAR -->
       <DataFilterBar
@@ -894,6 +913,10 @@ function confirmForceUpdate(name: string) {
         :total-count="containers.length"
         :active-filter-count="activeFilterCount">
         <template #filters>
+          <input v-model="filterSearch"
+                 type="text"
+                 placeholder="Search name or image..."
+                 class="flex-1 min-w-[140px] max-w-[260px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
           <select v-model="filterStatus"
                   class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
             <option value="all">Status</option>
@@ -928,7 +951,7 @@ function confirmForceUpdate(name: string) {
             <option value="patch">Patch</option>
             <option value="digest">Digest</option>
           </select>
-          <button v-if="activeFilterCount > 0"
+          <button v-if="activeFilterCount > 0 || filterSearch"
                   class="text-[10px] font-medium px-2 py-1 dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                   @click="clearFilters">
             Clear all
@@ -1451,7 +1474,7 @@ function confirmForceUpdate(name: string) {
       <EmptyState v-if="filteredContainers.length === 0"
                   icon="filter"
                   message="No containers match your filters"
-                  :show-clear="activeFilterCount > 0"
+                  :show-clear="activeFilterCount > 0 || !!filterSearch"
                   @clear="clearFilters" />
 
       <template #panel>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { getAllAuthentications } from '../services/authentication';
 
@@ -8,6 +9,7 @@ const authViewMode = ref<'table' | 'cards' | 'list'>('table');
 const authData = ref<any[]>([]);
 const loading = ref(true);
 const error = ref('');
+const route = useRoute();
 
 const { isMobile } = useBreakpoints();
 const selectedAuth = ref<any | null>(null);
@@ -29,6 +31,17 @@ function authTypeBadge(type: string) {
 const searchQuery = ref('');
 const showFilters = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
+
+function applySearchFromQuery(queryValue: unknown) {
+  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
+  searchQuery.value = typeof raw === 'string' ? raw : '';
+}
+
+applySearchFromQuery(route.query.q);
+watch(
+  () => route.query.q,
+  (value) => applySearchFromQuery(value),
+);
 
 const filteredAuth = computed(() => {
   if (!searchQuery.value) return authData.value;
@@ -62,6 +75,16 @@ onMounted(async () => {
 
 <template>
   <DataViewLayout>
+      <div v-if="error"
+           class="mb-3 px-3 py-2 text-[11px] dd-rounded"
+           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+        {{ error }}
+      </div>
+
+      <div v-if="loading" class="text-[11px] dd-text-muted py-3 px-1">
+        Loading authentication providers...
+      </div>
+
       <!-- Filter bar -->
       <DataFilterBar
         v-model="authViewMode"
@@ -84,7 +107,7 @@ onMounted(async () => {
 
       <!-- Table view -->
       <DataTable
-        v-if="authViewMode === 'table'"
+        v-if="authViewMode === 'table' && !loading"
         :columns="tableColumns"
         :rows="filteredAuth"
         row-key="id"
@@ -117,7 +140,7 @@ onMounted(async () => {
 
       <!-- Card view -->
       <DataCardGrid
-        v-if="authViewMode === 'cards'"
+        v-if="authViewMode === 'cards' && !loading"
         :items="filteredAuth"
         item-key="id"
         :selected-key="selectedAuth?.id"
@@ -157,7 +180,7 @@ onMounted(async () => {
 
       <!-- List view (accordion) -->
       <DataListAccordion
-        v-if="authViewMode === 'list'"
+        v-if="authViewMode === 'list' && !loading"
         :items="filteredAuth"
         item-key="id"
         :selected-key="selectedAuth?.id"
@@ -190,7 +213,7 @@ onMounted(async () => {
 
       <!-- Empty state (cards/list) -->
       <EmptyState
-        v-if="(authViewMode === 'cards' || authViewMode === 'list') && filteredAuth.length === 0"
+        v-if="(authViewMode === 'cards' || authViewMode === 'list') && filteredAuth.length === 0 && !loading"
         icon="filter"
         message="No providers match your filters"
         :show-clear="activeFilterCount > 0"

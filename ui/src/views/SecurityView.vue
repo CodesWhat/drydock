@@ -289,6 +289,14 @@ onUnmounted(() => {
 
 <template>
   <DataViewLayout>
+      <div v-if="error"
+           class="mb-3 px-3 py-2 text-[11px] dd-rounded"
+           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+        {{ error }}
+      </div>
+
+      <div v-if="loading" class="text-[11px] dd-text-muted py-3 px-1">Loading vulnerability data...</div>
+
       <!-- Filter bar -->
       <DataFilterBar
         v-model="securityViewMode"
@@ -331,7 +339,7 @@ onUnmounted(() => {
       </DataFilterBar>
 
       <!-- Table view — grouped by image -->
-      <DataTable v-if="securityViewMode === 'table'"
+      <DataTable v-if="securityViewMode === 'table' && !loading"
                  :columns="tableColumns"
                  :rows="filteredSummaries"
                  row-key="image"
@@ -433,7 +441,7 @@ onUnmounted(() => {
       </DataTable>
 
       <!-- Card view — one card per image -->
-      <DataCardGrid v-if="securityViewMode === 'cards'"
+      <DataCardGrid v-if="securityViewMode === 'cards' && !loading"
                     :items="filteredSummaries"
                     item-key="image"
                     :selected-key="selectedImage?.image"
@@ -482,7 +490,7 @@ onUnmounted(() => {
       </DataCardGrid>
 
       <!-- Empty state for cards -->
-      <div v-if="securityViewMode === 'cards' && filteredSummaries.length === 0"
+      <div v-if="securityViewMode === 'cards' && filteredSummaries.length === 0 && !loading"
            class="flex flex-col items-center justify-center py-16 dd-rounded"
            :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
         <AppIcon name="security" :size="24" class="mb-3 dd-text-muted" />
@@ -510,7 +518,7 @@ onUnmounted(() => {
       </div>
 
       <!-- List view — one row per image, expandable -->
-      <DataListAccordion v-if="securityViewMode === 'list'"
+      <DataListAccordion v-if="securityViewMode === 'list' && !loading"
                          :items="filteredSummaries"
                          item-key="image"
                          :selected-key="selectedImage?.image"
@@ -540,7 +548,7 @@ onUnmounted(() => {
       </DataListAccordion>
 
       <!-- Empty state for list -->
-      <div v-if="securityViewMode === 'list' && filteredSummaries.length === 0"
+      <div v-if="securityViewMode === 'list' && filteredSummaries.length === 0 && !loading"
            class="flex flex-col items-center justify-center py-16 dd-rounded"
            :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
         <AppIcon name="security" :size="24" class="mb-3 dd-text-muted" />

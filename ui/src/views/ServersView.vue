@@ -152,6 +152,14 @@ onMounted(fetchServers);
 
 <template>
   <DataViewLayout>
+    <div v-if="error"
+         class="mb-3 px-3 py-2 text-[11px] dd-rounded"
+         :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+      {{ error }}
+    </div>
+
+    <div v-if="loading" class="text-[11px] dd-text-muted py-3 px-1">Loading server data...</div>
+
     <!-- Filter bar -->
     <DataFilterBar
       v-model="serversViewMode"
@@ -175,7 +183,7 @@ onMounted(fetchServers);
 
         <!-- Table view -->
         <DataTable
-          v-if="serversViewMode === 'table' && filteredServers.length > 0"
+          v-if="serversViewMode === 'table' && filteredServers.length > 0 && !loading"
           :columns="tableColumns"
           :rows="filteredServers"
           row-key="id"
@@ -218,7 +226,7 @@ onMounted(fetchServers);
 
         <!-- Card view -->
         <DataCardGrid
-          v-if="serversViewMode === 'cards'"
+          v-if="serversViewMode === 'cards' && !loading"
           :items="filteredServers"
           item-key="id"
           :selected-key="selectedServer?.id"
@@ -278,7 +286,7 @@ onMounted(fetchServers);
 
         <!-- List view -->
         <DataListAccordion
-          v-if="serversViewMode === 'list'"
+          v-if="serversViewMode === 'list' && !loading"
           :items="filteredServers"
           item-key="id"
           :selected-key="selectedServer?.id"

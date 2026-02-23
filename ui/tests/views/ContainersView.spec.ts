@@ -58,6 +58,7 @@ const mockFilteredContainers = ref<Container[]>([]);
 const mockActiveFilterCount = ref(0);
 const mockShowFilters = ref(false);
 const mockClearFilters = vi.fn();
+const mockFilterSearch = ref('');
 const mockFilterStatus = ref('all');
 const mockFilterRegistry = ref('all');
 const mockFilterBouncer = ref('all');
@@ -66,6 +67,7 @@ const mockFilterKind = ref('all');
 
 vi.mock('@/composables/useContainerFilters', () => ({
   useContainerFilters: vi.fn(() => ({
+    filterSearch: mockFilterSearch,
     filterStatus: mockFilterStatus,
     filterRegistry: mockFilterRegistry,
     filterBouncer: mockFilterBouncer,
@@ -226,6 +228,7 @@ async function mountContainersView(containers: Container[] = []) {
   // Sync the filteredContainers mock with the containers we're providing
   mockFilteredContainers.value = containers;
   mockActiveFilterCount.value = 0;
+  mockFilterSearch.value = '';
   mockFilterStatus.value = 'all';
   mockFilterRegistry.value = 'all';
   mockFilterBouncer.value = 'all';
@@ -248,6 +251,7 @@ describe('ContainersView', () => {
     vi.clearAllMocks();
     mockFilteredContainers.value = [];
     mockActiveFilterCount.value = 0;
+    mockFilterSearch.value = '';
     mockFilterStatus.value = 'all';
     mockFilterRegistry.value = 'all';
     mockFilterBouncer.value = 'all';
@@ -272,6 +276,12 @@ describe('ContainersView', () => {
   });
 
   describe('route query filters', () => {
+    it('applies search query from route query', async () => {
+      mockRoute.query = { q: 'nginx' };
+      await mountContainersView([makeContainer()]);
+      expect(mockFilterSearch.value).toBe('nginx');
+    });
+
     it('applies filterKind from route query', async () => {
       mockRoute.query = { filterKind: 'any' };
       await mountContainersView([makeContainer({ newTag: '2.0.0', updateKind: 'major' })]);

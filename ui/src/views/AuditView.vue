@@ -218,6 +218,14 @@ onMounted(fetchAudit);
 
 <template>
   <DataViewLayout>
+    <div v-if="error"
+         class="mb-3 px-3 py-2 text-[11px] dd-rounded"
+         :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+      {{ error }}
+    </div>
+
+    <div v-if="loading" class="text-[11px] dd-text-muted py-3 px-1">Loading audit log...</div>
+
     <!-- Filter bar -->
     <DataFilterBar
       v-model="auditViewMode"
@@ -246,7 +254,7 @@ onMounted(fetchAudit);
 
     <!-- Table view -->
     <DataTable
-      v-if="auditViewMode === 'table' && filteredEntries.length > 0"
+      v-if="auditViewMode === 'table' && filteredEntries.length > 0 && !loading"
       :columns="tableColumns"
       :rows="filteredEntries"
       row-key="id"
@@ -284,7 +292,7 @@ onMounted(fetchAudit);
 
     <!-- Card view -->
     <DataCardGrid
-      v-if="auditViewMode === 'cards'"
+      v-if="auditViewMode === 'cards' && !loading"
       :items="filteredEntries"
       item-key="id"
       :selected-key="selectedEntry?.id"
@@ -325,7 +333,7 @@ onMounted(fetchAudit);
 
     <!-- List view (accordion) -->
     <DataListAccordion
-      v-if="auditViewMode === 'list'"
+      v-if="auditViewMode === 'list' && !loading"
       :items="filteredEntries"
       item-key="id"
       :selected-key="selectedEntry?.id"

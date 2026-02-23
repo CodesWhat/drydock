@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { getAllRegistries } from '../services/registry';
 
@@ -8,6 +9,7 @@ const registriesViewMode = ref<'table' | 'cards' | 'list'>('table');
 const registriesData = ref<any[]>([]);
 const loading = ref(true);
 const error = ref('');
+const route = useRoute();
 
 const { isMobile } = useBreakpoints();
 const selectedRegistry = ref<any | null>(null);
@@ -61,6 +63,17 @@ const searchQuery = ref('');
 const showFilters = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
+function applySearchFromQuery(queryValue: unknown) {
+  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
+  searchQuery.value = typeof raw === 'string' ? raw : '';
+}
+
+applySearchFromQuery(route.query.q);
+watch(
+  () => route.query.q,
+  (value) => applySearchFromQuery(value),
+);
+
 const filteredRegistries = computed(() => {
   if (!searchQuery.value) return registriesData.value;
   const q = searchQuery.value.toLowerCase();
@@ -97,6 +110,14 @@ onMounted(async () => {
 
 <template>
   <DataViewLayout>
+      <div v-if="error"
+           class="mb-3 px-3 py-2 text-[11px] dd-rounded"
+           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+        {{ error }}
+      </div>
+
+      <div v-if="loading" class="text-[11px] dd-text-muted py-3 px-1">Loading registries...</div>
+
       <!-- Filter bar -->
       <DataFilterBar
         v-model="registriesViewMode"
@@ -118,7 +139,7 @@ onMounted(async () => {
       </DataFilterBar>
 
       <!-- Table view -->
-      <DataTable v-if="registriesViewMode === 'table'"
+      <DataTable v-if="registriesViewMode === 'table' && !loading"
                  :columns="tableColumns"
                  :rows="filteredRegistries"
                  row-key="id"
@@ -164,7 +185,7 @@ onMounted(async () => {
       </DataTable>
 
       <!-- Card view -->
-      <DataCardGrid v-if="registriesViewMode === 'cards'"
+      <DataCardGrid v-if="registriesViewMode === 'cards' && !loading"
                     :items="filteredRegistries"
                     item-key="id"
                     :selected-key="selectedRegistry?.id"
@@ -204,7 +225,7 @@ onMounted(async () => {
       </DataCardGrid>
 
       <!-- List view -->
-      <DataListAccordion v-if="registriesViewMode === 'list'"
+      <DataListAccordion v-if="registriesViewMode === 'list' && !loading"
                          :items="filteredRegistries"
                          item-key="id"
                          :selected-key="selectedRegistry?.id"
@@ -236,6 +257,14 @@ onMounted(async () => {
           </div>
         </template>
       </DataListAccordion>
+
+      <EmptyState
+        v-if="(registriesViewMode === 'cards' || registriesViewMode === 'list') && filteredRegistries.length === 0 && !loading"
+        icon="registries"
+        message="No registries match your filters"
+        :show-clear="activeFilterCount > 0"
+        @clear="searchQuery = ''" />
+
     <template #panel>
       <DetailPanel
         :open="detailOpen"

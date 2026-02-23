@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { getAgents } from '../services/agent';
 import { getLogEntries } from '../services/log';
@@ -31,6 +32,7 @@ interface AgentLog {
 }
 
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
+const route = useRoute();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -111,6 +113,17 @@ const searchQuery = ref('');
 const showFilters = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
+function applySearchFromQuery(queryValue: unknown) {
+  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
+  searchQuery.value = typeof raw === 'string' ? raw : '';
+}
+
+applySearchFromQuery(route.query.q);
+watch(
+  () => route.query.q,
+  (value) => applySearchFromQuery(value),
+);
+
 const filteredAgents = computed(() => {
   if (!searchQuery.value) return agentsData.value;
   const q = searchQuery.value.toLowerCase();
@@ -189,6 +202,14 @@ function closeAgentPanel() {
 
 <template>
   <DataViewLayout>
+          <div v-if="error"
+               class="mb-3 px-3 py-2 text-[11px] dd-rounded"
+               :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+            {{ error }}
+          </div>
+
+          <div v-if="loading" class="text-[11px] dd-text-muted py-3 px-1">Loading agents...</div>
+
           <!-- Filter bar -->
           <DataFilterBar
             v-model="agentViewMode"
@@ -238,7 +259,7 @@ function closeAgentPanel() {
           </DataFilterBar>
 
           <!-- Table view -->
-          <DataTable v-if="agentViewMode === 'table'"
+          <DataTable v-if="agentViewMode === 'table' && !loading"
                      :columns="agentActiveColumns"
                      :rows="sortedAgents"
                      row-key="id"
@@ -311,7 +332,7 @@ function closeAgentPanel() {
           </DataTable>
 
           <!-- Card view -->
-          <DataCardGrid v-if="agentViewMode === 'cards'"
+          <DataCardGrid v-if="agentViewMode === 'cards' && !loading"
                         :items="sortedAgents"
                         item-key="id"
                         :selected-key="selectedAgent?.id ?? null"
@@ -378,7 +399,7 @@ function closeAgentPanel() {
           </DataCardGrid>
 
           <!-- List view -->
-          <DataListAccordion v-if="agentViewMode === 'list'"
+          <DataListAccordion v-if="agentViewMode === 'list' && !loading"
                              :items="sortedAgents"
                              item-key="id"
                              :selected-key="selectedAgent?.id ?? null">

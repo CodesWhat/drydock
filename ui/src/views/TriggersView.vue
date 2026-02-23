@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { getAllTriggers, runTrigger } from '../services/trigger';
 
 const triggersViewMode = ref<'table' | 'cards' | 'list'>('table');
 const { isMobile } = useBreakpoints();
+const route = useRoute();
 const selectedTrigger = ref<any | null>(null);
 const detailOpen = ref(false);
 
@@ -66,6 +68,17 @@ const searchQuery = ref('');
 const showFilters = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
+function applySearchFromQuery(queryValue: unknown) {
+  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
+  searchQuery.value = typeof raw === 'string' ? raw : '';
+}
+
+applySearchFromQuery(route.query.q);
+watch(
+  () => route.query.q,
+  (value) => applySearchFromQuery(value),
+);
+
 const filteredTriggers = computed(() => {
   if (!searchQuery.value) return triggersData.value;
   const q = searchQuery.value.toLowerCase();
@@ -102,6 +115,14 @@ onMounted(async () => {
 
 <template>
   <DataViewLayout>
+    <div v-if="error"
+         class="mb-3 px-3 py-2 text-[11px] dd-rounded"
+         :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+      {{ error }}
+    </div>
+
+    <div v-if="loading" class="text-[11px] dd-text-muted py-3 px-1">Loading triggers...</div>
+
     <!-- Filter bar -->
     <DataFilterBar
       v-model="triggersViewMode"
@@ -125,7 +146,7 @@ onMounted(async () => {
 
     <!-- Table view -->
     <DataTable
-      v-if="triggersViewMode === 'table' && filteredTriggers.length > 0"
+      v-if="triggersViewMode === 'table' && !loading"
       :columns="tableColumns"
       :rows="filteredTriggers"
       row-key="id"
@@ -159,7 +180,7 @@ onMounted(async () => {
 
     <!-- Card view -->
     <DataCardGrid
-      v-if="triggersViewMode === 'cards' && filteredTriggers.length > 0"
+      v-if="triggersViewMode === 'cards' && filteredTriggers.length > 0 && !loading"
       :items="filteredTriggers"
       item-key="id"
       :selected-key="selectedTrigger?.id"
@@ -209,7 +230,7 @@ onMounted(async () => {
 
     <!-- List view (accordion) -->
     <DataListAccordion
-      v-if="triggersViewMode === 'list' && filteredTriggers.length > 0"
+      v-if="triggersViewMode === 'list' && filteredTriggers.length > 0 && !loading"
       :items="filteredTriggers"
       item-key="id"
       :selected-key="selectedTrigger?.id"
@@ -255,7 +276,7 @@ onMounted(async () => {
 
     <!-- Empty state -->
     <EmptyState
-      v-if="filteredTriggers.length === 0"
+      v-if="filteredTriggers.length === 0 && !loading"
       icon="triggers"
       message="No triggers match your filters"
       :show-clear="activeFilterCount > 0"

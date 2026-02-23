@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { getAllContainers } from '../services/container';
 import { getAllWatchers } from '../services/watcher';
 import { useBreakpoints } from '../composables/useBreakpoints';
 
 const { isMobile } = useBreakpoints();
+const route = useRoute();
 const watchersViewMode = ref<'table' | 'cards' | 'list'>('table');
 const selectedWatcher = ref<any | null>(null);
 const detailOpen = ref(false);
@@ -27,6 +29,17 @@ function watcherStatusColor(status: string) {
 const searchQuery = ref('');
 const showFilters = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
+
+function applySearchFromQuery(queryValue: unknown) {
+  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
+  searchQuery.value = typeof raw === 'string' ? raw : '';
+}
+
+applySearchFromQuery(route.query.q);
+watch(
+  () => route.query.q,
+  (value) => applySearchFromQuery(value),
+);
 
 const filteredWatchers = computed(() => {
   if (!searchQuery.value) return watchersData.value;
@@ -72,6 +85,14 @@ onMounted(async () => {
 
 <template>
   <DataViewLayout>
+    <div v-if="error"
+         class="mb-3 px-3 py-2 text-[11px] dd-rounded"
+         :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+      {{ error }}
+    </div>
+
+    <div v-if="loading" class="text-[11px] dd-text-muted py-3 px-1">Loading watchers...</div>
+
     <!-- Filter bar -->
     <DataFilterBar
       v-model="watchersViewMode"
@@ -95,7 +116,7 @@ onMounted(async () => {
 
     <!-- Table view -->
     <DataTable
-      v-if="watchersViewMode === 'table' && filteredWatchers.length > 0"
+      v-if="watchersViewMode === 'table' && filteredWatchers.length > 0 && !loading"
       :columns="tableColumns"
       :rows="filteredWatchers"
       row-key="id"
@@ -133,7 +154,7 @@ onMounted(async () => {
 
     <!-- Card view -->
     <DataCardGrid
-      v-if="watchersViewMode === 'cards'"
+      v-if="watchersViewMode === 'cards' && !loading"
       :items="filteredWatchers"
       item-key="id"
       :selected-key="selectedWatcher?.id"
@@ -180,7 +201,7 @@ onMounted(async () => {
 
     <!-- List view (accordion) -->
     <DataListAccordion
-      v-if="watchersViewMode === 'list'"
+      v-if="watchersViewMode === 'list' && !loading"
       :items="filteredWatchers"
       item-key="id"
       :selected-key="selectedWatcher?.id"
