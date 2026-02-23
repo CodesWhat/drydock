@@ -175,6 +175,25 @@ describe('AuditView', () => {
       expect(wrapper.find('.data-table').exists()).toBe(true);
       expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('');
     });
+
+    it('accepts security-alert as a valid action filter from route query', async () => {
+      mockRoute.query = {
+        action: 'security-alert',
+      };
+      mockGetAuditLog.mockResolvedValue({
+        entries: [makeEntry({ action: 'security-alert', status: 'error' })],
+        total: 1,
+      });
+
+      const wrapper = await mountAuditView();
+
+      expect(mockGetAuditLog).toHaveBeenCalledWith({
+        page: 1,
+        limit: 50,
+        action: 'security-alert',
+      });
+      expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('security-alert');
+    });
   });
 
   describe('filtering', () => {

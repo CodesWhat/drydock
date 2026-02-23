@@ -21,6 +21,8 @@ const actionTypes = [
   'update-available',
   'update-applied',
   'update-failed',
+  'security-alert',
+  'agent-disconnect',
   'container-added',
   'container-removed',
   'rollback',
@@ -151,6 +153,8 @@ function actionIcon(action: string) {
   if (action.includes('update-available')) return 'updates';
   if (action.includes('update-applied')) return 'check';
   if (action.includes('update-failed')) return 'xmark';
+  if (action.includes('security-alert')) return 'security';
+  if (action.includes('agent-disconnect')) return 'network';
   if (action.includes('rollback') || action === 'auto-rollback') return 'restart';
   if (action.includes('start')) return 'play';
   if (action.includes('stop')) return 'stop';
@@ -163,10 +167,14 @@ function actionIcon(action: string) {
   return 'info';
 }
 
+function targetLabel(action: string) {
+  return action.includes('agent-disconnect') ? 'Agent' : 'Container';
+}
+
 const tableColumns = [
   { key: 'timestamp', label: 'Time', width: '15%', sortable: false },
   { key: 'action', label: 'Event', width: '20%', sortable: false },
-  { key: 'containerName', label: 'Container', width: '99%', sortable: false },
+  { key: 'containerName', label: 'Target', width: '99%', sortable: false },
   { key: 'status', label: 'Status', align: 'text-center', sortable: false },
   { key: 'details', label: 'Details', align: 'text-right', sortable: false },
 ];
@@ -221,7 +229,7 @@ onMounted(fetchAudit);
       <template #filters>
         <input v-model="searchQuery"
                type="text"
-               placeholder="Filter by container or event..."
+               placeholder="Filter by target or event..."
                class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
         <select v-model="actionFilter"
                 class="px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-border-strong">
@@ -342,7 +350,7 @@ onMounted(fetchAudit);
             <div class="text-[12px] font-mono dd-text">{{ formatTimestamp(entry.timestamp) }}</div>
           </div>
           <div>
-            <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Container</div>
+            <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">{{ targetLabel(entry.action) }}</div>
             <div class="text-[12px] font-mono dd-text">{{ entry.containerName }}</div>
           </div>
           <div v-if="entry.containerImage">
@@ -428,7 +436,7 @@ onMounted(fetchAudit);
               <div class="text-[12px] font-medium dd-text">{{ actionLabel(selectedEntry.action) }}</div>
             </div>
             <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Container</div>
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ targetLabel(selectedEntry.action) }}</div>
               <div class="text-[12px] font-mono dd-text break-all">{{ selectedEntry.containerName }}</div>
             </div>
             <div v-if="selectedEntry.containerImage">
