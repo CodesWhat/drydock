@@ -344,6 +344,13 @@ describe('Docker Watcher', () => {
     docker = new Docker();
   });
 
+  afterEach(async () => {
+    vi.useRealTimers();
+    if (docker) {
+      await docker.deregisterComponent();
+    }
+  });
+
   describe('Configuration', () => {
     test('should create instance', async () => {
       expect(docker).toBeDefined();
@@ -1129,6 +1136,9 @@ describe('Docker Watcher', () => {
       await eventHandlers.data(Buffer.from('{"Action":"create","id":"container123"}\n'));
 
       expect(mockStream.on).toHaveBeenCalledWith('data', expect.any(Function));
+      expect(mockStream.on).toHaveBeenCalledWith('error', expect.any(Function));
+      expect(mockStream.on).toHaveBeenCalledWith('close', expect.any(Function));
+      expect(mockStream.on).toHaveBeenCalledWith('end', expect.any(Function));
       expect(docker.onDockerEvent).toHaveBeenCalledWith(
         Buffer.from('{"Action":"create","id":"container123"}\n'),
       );
@@ -1153,6 +1163,126 @@ describe('Docker Watcher', () => {
       });
 
       await expect(docker.listenDockerEvents()).resolves.toBeUndefined();
+    });
+
+    test('should reconnect docker events stream after stream failure', async () => {
+      vi.useFakeTimers();
+      try {
+        const eventHandlers: Record<string, (...args: any[]) => void> = {};
+        const mockStream = {
+          on: vi.fn((eventName, handler) => {
+            eventHandlers[eventName] = handler;
+          }),
+          removeAllListeners: vi.fn(),
+          destroy: vi.fn(),
+        };
+        mockDockerApi.getEvents.mockImplementation((options, callback) => {
+          callback(null, mockStream);
+        });
+
+        await docker.register('watcher', 'docker', 'test', {
+          watchevents: false,
+        });
+        docker.configuration.watchevents = true;
+        docker.isDockerEventsListenerActive = true;
+        docker.log = createMockLog(['warn', 'debug', 'info']);
+
+        await docker.listenDockerEvents();
+        expect(docker.dockerEventsReconnectDelayMs).toBe(1000);
+
+        eventHandlers.error(new Error('Stream dropped'));
+        expect(docker.log.warn).toHaveBeenCalledWith(expect.stringContaining('reconnect attempt #1'));
+        expect(docker.dockerEventsReconnectTimeout).toBeDefined();
+        expect(docker.dockerEventsReconnectDelayMs).toBe(2000);
+
+        const reconnectTimeout = docker.dockerEventsReconnectTimeout;
+        eventHandlers.close();
+        expect(docker.dockerEventsReconnectTimeout).toBe(reconnectTimeout);
+
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(mockDockerApi.getEvents).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('should exponentially back off reconnect delay on repeated getEvents failures', async () => {
+      vi.useFakeTimers();
+      try {
+        const recoveredStream = {
+          on: vi.fn(),
+          removeAllListeners: vi.fn(),
+          destroy: vi.fn(),
+        };
+        mockDockerApi.getEvents
+          .mockImplementationOnce((options, callback) => {
+            callback(new Error('Connection failed (1)'));
+          })
+          .mockImplementationOnce((options, callback) => {
+            callback(new Error('Connection failed (2)'));
+          })
+          .mockImplementation((options, callback) => {
+            callback(null, recoveredStream);
+          });
+
+        await docker.register('watcher', 'docker', 'test', {
+          watchevents: false,
+        });
+        docker.configuration.watchevents = true;
+        docker.isDockerEventsListenerActive = true;
+        docker.log = createMockLog(['warn', 'debug', 'info']);
+
+        await docker.listenDockerEvents();
+        expect(docker.dockerEventsReconnectAttempt).toBe(1);
+        expect(docker.dockerEventsReconnectDelayMs).toBe(2000);
+
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(docker.dockerEventsReconnectAttempt).toBe(2);
+        expect(docker.dockerEventsReconnectDelayMs).toBe(4000);
+
+        await vi.advanceTimersByTimeAsync(2000);
+        expect(mockDockerApi.getEvents).toHaveBeenCalledTimes(3);
+        expect(docker.dockerEventsReconnectAttempt).toBe(0);
+        expect(docker.dockerEventsReconnectDelayMs).toBe(1000);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('should stop reconnect scheduling when watcher is deregistered', async () => {
+      vi.useFakeTimers();
+      try {
+        const eventHandlers: Record<string, (...args: any[]) => void> = {};
+        const mockStream = {
+          on: vi.fn((eventName, handler) => {
+            eventHandlers[eventName] = handler;
+          }),
+          removeAllListeners: vi.fn(),
+          destroy: vi.fn(),
+        };
+        mockDockerApi.getEvents.mockImplementation((options, callback) => {
+          callback(null, mockStream);
+        });
+
+        await docker.register('watcher', 'docker', 'test', {
+          watchevents: false,
+        });
+        docker.configuration.watchevents = true;
+        docker.isDockerEventsListenerActive = true;
+        docker.log = createMockLog(['warn', 'debug', 'info']);
+
+        await docker.listenDockerEvents();
+        eventHandlers.end();
+        expect(docker.dockerEventsReconnectTimeout).toBeDefined();
+        expect(mockStream.removeAllListeners).toHaveBeenCalled();
+
+        await docker.deregisterComponent();
+        await vi.advanceTimersByTimeAsync(5000);
+
+        expect(mockDockerApi.getEvents).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     test('should process create/destroy events', async () => {

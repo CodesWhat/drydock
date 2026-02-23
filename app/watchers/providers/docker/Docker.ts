@@ -261,6 +261,8 @@ const START_WATCHER_DELAY_MS = 1000;
 
 // Debounce delay used when performing a watch after a docker event has been received
 const DEBOUNCED_WATCH_CRON_MS = 5000;
+const DOCKER_EVENTS_RECONNECT_BASE_DELAY_MS = 1000;
+const DOCKER_EVENTS_RECONNECT_MAX_DELAY_MS = 30 * 1000;
 const MAINTENANCE_WINDOW_QUEUE_POLL_MS = 60 * 1000;
 const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
 const OIDC_ACCESS_TOKEN_REFRESH_WINDOW_MS = 30 * 1000;
@@ -1278,6 +1280,11 @@ class Docker extends Watcher {
   public watchCronTimeout: any;
   public watchCronDebounced: any;
   public listenDockerEventsTimeout: any;
+  public dockerEventsReconnectTimeout: any;
+  public dockerEventsReconnectDelayMs: number = DOCKER_EVENTS_RECONNECT_BASE_DELAY_MS;
+  public dockerEventsReconnectAttempt: number = 0;
+  public dockerEventsStream: any;
+  public isDockerEventsListenerActive: boolean = false;
   public maintenanceWindowQueueTimeout: any;
   public maintenanceWindowWatchQueued: boolean = false;
   public dockerEventsBuffer = '';
@@ -1522,11 +1529,14 @@ class Docker extends Watcher {
 
     // listen to docker events
     if (this.configuration.watchevents) {
+      this.isDockerEventsListenerActive = true;
       this.watchCronDebounced = debounce(this.watchFromCron.bind(this), DEBOUNCED_WATCH_CRON_MS);
       this.listenDockerEventsTimeout = setTimeout(
         this.listenDockerEvents.bind(this),
         START_WATCHER_DELAY_MS,
       );
+    } else {
+      this.isDockerEventsListenerActive = false;
     }
   }
 
@@ -2126,18 +2136,106 @@ class Docker extends Watcher {
    * @returns {Promise<void>}
    */
   async deregisterComponent() {
+    this.isDockerEventsListenerActive = false;
+
     if (this.watchCron) {
       this.watchCron.stop();
       delete this.watchCron;
     }
     if (this.watchCronTimeout) {
       clearTimeout(this.watchCronTimeout);
+      delete this.watchCronTimeout;
     }
     if (this.listenDockerEventsTimeout) {
       clearTimeout(this.listenDockerEventsTimeout);
-      delete this.watchCronDebounced;
+      delete this.listenDockerEventsTimeout;
     }
+    if (this.dockerEventsReconnectTimeout) {
+      clearTimeout(this.dockerEventsReconnectTimeout);
+      delete this.dockerEventsReconnectTimeout;
+    }
+    this.cleanupDockerEventsStream(true);
+    delete this.watchCronDebounced;
     this.clearMaintenanceWindowQueue();
+  }
+
+  private resetDockerEventsReconnectBackoff() {
+    this.dockerEventsReconnectAttempt = 0;
+    this.dockerEventsReconnectDelayMs = DOCKER_EVENTS_RECONNECT_BASE_DELAY_MS;
+  }
+
+  private cleanupDockerEventsStream(destroy = false) {
+    if (!this.dockerEventsStream) {
+      return;
+    }
+
+    const stream = this.dockerEventsStream;
+    this.dockerEventsStream = undefined;
+
+    if (typeof stream.removeAllListeners === 'function') {
+      stream.removeAllListeners('data');
+      stream.removeAllListeners('error');
+      stream.removeAllListeners('close');
+      stream.removeAllListeners('end');
+    }
+
+    if (destroy && typeof stream.destroy === 'function') {
+      stream.destroy();
+    }
+  }
+
+  private scheduleDockerEventsReconnect(reason: string, err?: any) {
+    this.ensureLogger();
+    if (!this.configuration.watchevents || !this.isDockerEventsListenerActive) {
+      return;
+    }
+
+    if (this.dockerEventsReconnectTimeout) {
+      if (this.log && typeof this.log.debug === 'function') {
+        this.log.debug(
+          `Docker event stream reconnect already scheduled; ignoring "${reason}" signal`,
+        );
+      }
+      return;
+    }
+
+    this.cleanupDockerEventsStream();
+    this.dockerEventsBuffer = '';
+    this.dockerEventsReconnectAttempt += 1;
+    const reconnectDelayMs = this.dockerEventsReconnectDelayMs;
+    const errorMessage = err?.message ? ` (${err.message})` : '';
+    if (this.log && typeof this.log.warn === 'function') {
+      this.log.warn(
+        `Docker event stream ${reason}${errorMessage}; reconnect attempt #${this.dockerEventsReconnectAttempt} in ${reconnectDelayMs}ms`,
+      );
+    }
+    this.dockerEventsReconnectDelayMs = Math.min(
+      this.dockerEventsReconnectDelayMs * 2,
+      DOCKER_EVENTS_RECONNECT_MAX_DELAY_MS,
+    );
+    this.dockerEventsReconnectTimeout = setTimeout(async () => {
+      delete this.dockerEventsReconnectTimeout;
+      if (!this.configuration.watchevents || !this.isDockerEventsListenerActive) {
+        return;
+      }
+      try {
+        await this.listenDockerEvents();
+      } catch (reconnectError: any) {
+        if (this.log && typeof this.log.warn === 'function') {
+          this.log.warn(
+            `Docker event stream reconnect attempt #${this.dockerEventsReconnectAttempt} failed (${reconnectError.message})`,
+          );
+        }
+        this.scheduleDockerEventsReconnect('reconnect failure', reconnectError);
+      }
+    }, reconnectDelayMs);
+  }
+
+  private onDockerEventsStreamFailure(stream: any, reason: string, err?: any) {
+    if (stream !== this.dockerEventsStream) {
+      return;
+    }
+    this.scheduleDockerEventsReconnect(reason, err);
   }
 
   /**
@@ -2149,12 +2247,23 @@ class Docker extends Watcher {
     if (!this.log || typeof this.log.info !== 'function') {
       return;
     }
+    if (!this.configuration.watchevents || !this.isDockerEventsListenerActive) {
+      return;
+    }
+    if (this.dockerEventsReconnectTimeout) {
+      clearTimeout(this.dockerEventsReconnectTimeout);
+      delete this.dockerEventsReconnectTimeout;
+    }
+
     try {
       await this.ensureRemoteAuthHeaders();
     } catch (e: any) {
       this.log.warn(`Unable to initialize remote watcher auth for docker events (${e.message})`);
+      this.scheduleDockerEventsReconnect('auth initialization failure', e);
       return;
     }
+
+    this.cleanupDockerEventsStream(true);
     this.dockerEventsBuffer = '';
     this.log.info('Listening to docker events');
     const options: Dockerode.GetEventsOptions = {
@@ -2179,8 +2288,16 @@ class Docker extends Watcher {
           this.log.warn(`Unable to listen to Docker events [${err.message}]`);
           this.log.debug(err);
         }
+        this.scheduleDockerEventsReconnect('connection failure', err);
       } else {
+        this.dockerEventsStream = stream;
+        this.resetDockerEventsReconnectBackoff();
         stream.on('data', (chunk: any) => this.onDockerEvent(chunk));
+        stream.on('error', (streamError: any) =>
+          this.onDockerEventsStreamFailure(stream, 'error', streamError),
+        );
+        stream.on('close', () => this.onDockerEventsStreamFailure(stream, 'close'));
+        stream.on('end', () => this.onDockerEventsStreamFailure(stream, 'end'));
       }
     });
   }
