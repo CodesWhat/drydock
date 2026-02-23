@@ -122,8 +122,11 @@ function colStyle(col: DataTableColumn): Record<string, string> {
               <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-[8px]">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
               <!-- Resize handle -->
               <div v-if="!col.icon"
-                   class="absolute top-0 right-0 w-1.5 h-full cursor-col-resize z-10 group hover:bg-drydock-secondary/30 transition-colors"
-                   @mousedown="onResizeStart(col.key, $event)" />
+                   class="absolute top-0 right-0 w-2 h-full cursor-col-resize z-10 flex items-center justify-center transition-colors hover:bg-drydock-secondary/20"
+                   @mousedown="onResizeStart(col.key, $event)">
+                <div class="w-px h-3/5 rounded-full opacity-25 hover:opacity-60 transition-opacity"
+                     style="background: var(--dd-text-muted)" />
+              </div>
             </th>
             <th v-if="showActions" class="text-right px-4 py-2.5 font-semibold uppercase tracking-wider text-[10px] whitespace-nowrap dd-text-muted">Actions</th>
           </tr>
