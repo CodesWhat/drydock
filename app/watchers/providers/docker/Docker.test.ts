@@ -2726,6 +2726,47 @@ describe('Docker Watcher', () => {
       expect(result.image.created).toBe('2023-01-01');
     });
 
+    test('should backfill digest value for store container when repo digest exists', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      docker.log = createMockLog(['debug']);
+      const existingContainer = {
+        id: '123',
+        error: undefined,
+        image: {
+          digest: { repo: 'sha256:samedigest' },
+          id: 'same-image-id',
+          created: '2023-01-01',
+        },
+      };
+      storeContainer.getContainer.mockReturnValue(existingContainer);
+      mockImage.inspect.mockResolvedValue({
+        Id: 'same-image-id',
+        RepoDigests: ['nginx@sha256:samedigest'],
+        Created: '2023-01-01',
+      });
+
+      const result = await docker.addImageDetailsToContainer({
+        Id: '123',
+        Image: 'nginx:latest',
+      });
+
+      expect(result.image.digest.value).toBe('sha256:samedigest');
+    });
+
+    test('should set digest value from repo digest for new container details', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: { Image: 'nginx:latest' },
+        imageDetails: { RepoDigests: ['nginx@sha256:abc123'] },
+        parsedImage: { domain: 'docker.io', path: 'library/nginx', tag: 'latest' },
+        semverValue: null,
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result.image.digest.repo).toBe('sha256:abc123');
+      expect(result.image.digest.value).toBe('sha256:abc123');
+    });
+
     test('should add image details to new container', async () => {
       const container = await setupContainerDetailTest(docker, {
         container: { Image: 'nginx:1.0.0' },

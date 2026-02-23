@@ -2838,11 +2838,19 @@ class Docker extends Watcher {
         const currentImage = await this.dockerApi.getImage(container.Image).inspect();
         const freshDigestRepo = getRepoDigest(currentImage);
         const freshImageId = currentImage.Id;
+        // Keep local digest value populated for digest-watch containers, even when
+        // image id/repo digest are unchanged from cached state.
+        if (freshDigestRepo !== undefined && containerInStore.image.digest.value === undefined) {
+          containerInStore.image.digest.value = freshDigestRepo;
+        }
         if (
           freshDigestRepo !== containerInStore.image.digest.repo ||
           freshImageId !== containerInStore.image.id
         ) {
           containerInStore.image.digest.repo = freshDigestRepo;
+          if (freshDigestRepo !== undefined) {
+            containerInStore.image.digest.value = freshDigestRepo;
+          }
           containerInStore.image.id = freshImageId;
           if (currentImage.Created) {
             containerInStore.image.created = currentImage.Created;
@@ -2892,6 +2900,7 @@ class Docker extends Watcher {
 
     const isSemver = parseSemver(transformTag(resolvedConfig.transformTags, tagName)) != null;
     const watchDigest = isDigestToWatch(resolvedConfig.watchDigest, parsedImage, isSemver);
+    const repoDigest = getRepoDigest(image);
     if (!isSemver && !watchDigest) {
       this.ensureLogger();
       this.log.warn(
@@ -2931,7 +2940,8 @@ class Docker extends Watcher {
         },
         digest: {
           watch: watchDigest,
-          repo: getRepoDigest(image),
+          repo: repoDigest,
+          value: repoDigest,
         },
         architecture: image.Architecture,
         os: image.Os,
