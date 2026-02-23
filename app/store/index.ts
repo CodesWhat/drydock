@@ -17,6 +17,7 @@ import * as backup from './backup.js';
 import * as container from './container.js';
 import * as notification from './notification.js';
 import * as settings from './settings.js';
+import * as updateOperation from './update-operation.js';
 
 // Store Configuration Schema
 const configurationSchema = joi.object().keys({
@@ -42,6 +43,7 @@ function createCollections() {
   container.createCollections(db);
   notification.createCollections(db);
   settings.createCollections(db);
+  updateOperation.createCollections(db);
 }
 
 /**

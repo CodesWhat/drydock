@@ -65,6 +65,7 @@ const {
     vi.doMock('./container', createCollectionsMock);
     vi.doMock('./notification', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
+    vi.doMock('./update-operation', createCollectionsMock);
     vi.doMock('../log', createLogMock);
   }
 
@@ -90,6 +91,7 @@ vi.mock('./backup', createCollectionsMock);
 vi.mock('./container', createCollectionsMock);
 vi.mock('./notification', createCollectionsMock);
 vi.mock('./settings', createCollectionsMock);
+vi.mock('./update-operation', createCollectionsMock);
 vi.mock('../log', createLogMock);
 
 describe('Store Module', () => {
@@ -106,11 +108,13 @@ describe('Store Module', () => {
     const container = await import('./container.js');
     const notification = await import('./notification.js');
     const settings = await import('./settings.js');
+    const updateOperation = await import('./update-operation.js');
 
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
     expect(notification.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
+    expect(updateOperation.createCollections).toHaveBeenCalled();
   });
 
   test('should persist database on save', async () => {
@@ -165,10 +169,12 @@ describe('Store Module', () => {
     const container = await import('./container.js');
     const notification = await import('./notification.js');
     const settings = await import('./settings.js');
+    const updateOperation = await import('./update-operation.js');
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
     expect(notification.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
+    expect(updateOperation.createCollections).toHaveBeenCalled();
   });
 
   test('should skip save in memory mode', async () => {
@@ -207,6 +213,7 @@ describe('Store Module', () => {
     vi.doMock('./container', createCollectionsMock);
     vi.doMock('./notification', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
+    vi.doMock('./update-operation', createCollectionsMock);
     vi.doMock('../log', createLogMock);
 
     const storeDefault = await import('./index.js');
