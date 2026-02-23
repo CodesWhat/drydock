@@ -181,6 +181,45 @@ describe('SseService', () => {
     expect(firstSource.close).toHaveBeenCalled();
   });
 
+  it('handles self-update with falsy rawData gracefully', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:self-update']({ data: null });
+    expect(mockEventBus.emit).toHaveBeenCalledWith('self-update', {});
+  });
+
+  it('handles self-update with non-string rawData gracefully', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:self-update']({ data: 42 });
+    expect(mockEventBus.emit).toHaveBeenCalledWith('self-update', {});
+  });
+
+  it('handles self-update with non-object JSON gracefully', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:self-update']({ data: '"just a string"' });
+    expect(mockEventBus.emit).toHaveBeenCalledWith('self-update', {});
+  });
+
+  it('handles self-update with invalid JSON gracefully', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:self-update']({ data: '{broken' });
+    expect(mockEventBus.emit).toHaveBeenCalledWith('self-update', {});
+  });
+
+  it('generates a fallback clientId when crypto.randomUUID is unavailable', async () => {
+    const originalCrypto = globalThis.crypto;
+    vi.stubGlobal('crypto', { getRandomValues: originalCrypto.getRandomValues });
+    vi.resetModules();
+
+    const { default: freshSse } = await import('@/services/sse');
+
+    // Connect and trigger a self-update to exercise the ack path which sends clientId
+    const bus = { emit: vi.fn() };
+    freshSse.connect(bus);
+    freshSse.disconnect();
+
+    vi.stubGlobal('crypto', originalCrypto);
+  });
+
   it('resets self-update mode on disconnect', () => {
     sseService.connect(mockEventBus);
     eventListeners['dd:self-update']({ data: '{"opId":"op-123"}' });

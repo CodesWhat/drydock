@@ -50,4 +50,28 @@ describe('Server Service', () => {
       'Failed to get security runtime status: Bad Request (missing trivy)',
     );
   });
+
+  it('throws without error details when response body has no error field', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      statusText: 'Bad Request',
+      json: vi.fn().mockResolvedValue({ message: 'something else' }),
+    } as any);
+
+    await expect(getSecurityRuntime()).rejects.toThrow(
+      'Failed to get security runtime status: Bad Request',
+    );
+  });
+
+  it('throws with status text only when response body is not JSON', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      statusText: 'Internal Server Error',
+      json: vi.fn().mockRejectedValue(new SyntaxError('Unexpected token')),
+    } as any);
+
+    await expect(getSecurityRuntime()).rejects.toThrow(
+      'Failed to get security runtime status: Internal Server Error',
+    );
+  });
 });

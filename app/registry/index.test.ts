@@ -199,7 +199,7 @@ test('registerRegistries should warn when registration errors occur', async () =
   };
   await registry.testable_registerRegistries();
   expect(spyLog).toHaveBeenCalledWith(
-    'Some registries failed to register (Error when registering component hub ("login" must be a string))',
+    'Some registries failed to register (Error when registering component hub ("value" does not match any of the allowed types))',
   );
 });
 
