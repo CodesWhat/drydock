@@ -2,10 +2,18 @@
 import joi from 'joi';
 import * as event from '../../event/index.js';
 import log from '../../log/index.js';
+import * as notificationStore from '../../store/notification.js';
+import * as storeContainer from '../../store/container.js';
 import Trigger from './Trigger.js';
 
 vi.mock('../../log');
 vi.mock('../../event');
+vi.mock('../../store/notification.js', () => ({
+  isTriggerEnabledForRule: vi.fn(() => true),
+}));
+vi.mock('../../store/container.js', () => ({
+  getContainers: vi.fn(() => []),
+}));
 vi.mock('../../prometheus/trigger', () => ({
   getTriggerCounter: () => ({
     inc: () => ({}),
@@ -31,6 +39,8 @@ const configurationValid = {
 
 beforeEach(async () => {
   vi.resetAllMocks();
+  notificationStore.isTriggerEnabledForRule.mockReturnValue(true);
+  storeContainer.getContainers.mockReturnValue([]);
   trigger = new Trigger();
   trigger.log = log;
   trigger.configuration = { ...configurationValid };
@@ -788,7 +798,7 @@ test('init should register for notification resolution when resolvenotifications
 
 test('deregister should unregister containerUpdateApplied handler when resolvenotifications was true', async () => {
   const unregisterUpdateApplied = vi.fn();
-  trigger.unregisterContainerUpdateApplied = unregisterUpdateApplied;
+  trigger.unregisterContainerUpdateAppliedForResolution = unregisterUpdateApplied;
   await trigger.deregister();
   expect(unregisterUpdateApplied).toHaveBeenCalled();
 });
@@ -824,6 +834,311 @@ test('handleContainerUpdateApplied should warn on dismiss error and still clean 
 
   expect(spyLog).toHaveBeenCalledWith(expect.stringContaining('dismiss failed'));
   expect(trigger.notificationResults.has('docker.local/nginx')).toBe(false);
+});
+
+test('handleContainerReport should skip when update-available rule suppresses this trigger', async () => {
+  notificationStore.isTriggerEnabledForRule.mockImplementation((ruleId) => ruleId !== 'update-available');
+  const spy = vi.spyOn(trigger, 'trigger');
+
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  });
+
+  expect(spy).not.toHaveBeenCalled();
+});
+
+test('handleContainerUpdateAppliedEvent should run trigger when rule allows and container is found', async () => {
+  const container = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+  storeContainer.getContainers.mockReturnValue([container]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateAppliedEvent('local_container1');
+
+  expect(triggerSpy).toHaveBeenCalledWith(container);
+});
+
+test('handleContainerUpdateAppliedEvent should skip when rule disables trigger dispatch', async () => {
+  const container = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+  notificationStore.isTriggerEnabledForRule.mockImplementation((ruleId) => ruleId !== 'update-applied');
+  storeContainer.getContainers.mockReturnValue([container]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateAppliedEvent('local_container1');
+
+  expect(triggerSpy).not.toHaveBeenCalled();
+});
+
+test('handleContainerUpdateAppliedEvent should skip when container cannot be found', async () => {
+  storeContainer.getContainers.mockReturnValue([]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateAppliedEvent('local_missing');
+
+  expect(triggerSpy).not.toHaveBeenCalled();
+});
+
+test('handleContainerUpdateFailedEvent should run batch trigger when configured in batch mode', async () => {
+  const container = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+  trigger.configuration.mode = 'batch';
+  storeContainer.getContainers.mockReturnValue([container]);
+  const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateFailedEvent({
+    containerName: 'local_container1',
+    error: 'boom',
+  });
+
+  expect(triggerBatchSpy).toHaveBeenCalledWith([container]);
+});
+
+test('handleContainerUpdateFailedEvent should skip when threshold is not reached', async () => {
+  const container = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+  trigger.configuration.mode = 'simple';
+  trigger.configuration.threshold = 'minor';
+  storeContainer.getContainers.mockReturnValue([container]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateFailedEvent({
+    containerName: 'local_container1',
+    error: 'boom',
+  });
+
+  expect(triggerSpy).not.toHaveBeenCalled();
+});
+
+test('handleContainerUpdateFailedEvent should skip when mustTrigger returns false', async () => {
+  const container = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    triggerExclude: 'update',
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+  trigger.configuration.mode = 'simple';
+  trigger.configuration.threshold = 'all';
+  trigger.type = 'docker';
+  trigger.name = 'update';
+  storeContainer.getContainers.mockReturnValue([container]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateFailedEvent({
+    containerName: 'local_container1',
+    error: 'boom',
+  });
+
+  expect(triggerSpy).not.toHaveBeenCalled();
+});
+
+test('handleSecurityAlertEvent should dispatch using payload container when provided', async () => {
+  const container = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleSecurityAlertEvent({
+    containerName: 'local_container1',
+    details: 'high=1',
+    container,
+  });
+
+  expect(triggerSpy).toHaveBeenCalledWith(container);
+  expect(storeContainer.getContainers).not.toHaveBeenCalled();
+});
+
+test('handleSecurityAlertEvent should resolve container from store when payload container is missing', async () => {
+  const container = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+  storeContainer.getContainers.mockReturnValue([container]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleSecurityAlertEvent({
+    containerName: 'local_container1',
+    details: 'high=1',
+  });
+
+  expect(triggerSpy).toHaveBeenCalledWith(container);
+});
+
+test('handleSecurityAlertEvent should catch trigger execution errors', async () => {
+  const container = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+  const warnSpy = vi.spyOn(log, 'warn');
+  const debugSpy = vi.spyOn(log, 'debug');
+  vi.spyOn(trigger, 'trigger').mockRejectedValue(new Error('dispatch failed'));
+
+  await trigger.handleSecurityAlertEvent({
+    containerName: 'local_container1',
+    details: 'high=1',
+    container,
+  });
+
+  expect(warnSpy).toHaveBeenCalledWith('Error handling security-alert event (dispatch failed)');
+  expect(debugSpy).toHaveBeenCalledWith(expect.any(Error));
+});
+
+test('handleAgentDisconnectedEvent should bypass threshold filtering', async () => {
+  trigger.configuration.threshold = 'major-only';
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleAgentDisconnectedEvent({
+    agentName: 'edge-a',
+    reason: 'disconnected',
+  });
+
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'edge-a',
+      watcher: 'agent',
+      status: 'disconnected',
+    }),
+  );
+});
+
+test('handleAgentDisconnectedEvent should use disconnected fallback values when reason is missing', async () => {
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleAgentDisconnectedEvent({
+    agentName: 'edge-a',
+  });
+
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      updateKind: expect.objectContaining({
+        localValue: 'disconnected',
+        remoteValue: 'disconnected',
+      }),
+      error: undefined,
+    }),
+  );
+});
+
+test('dispatchContainerForEvent should fallback to all threshold when threshold is undefined', async () => {
+  const container = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+  trigger.configuration.threshold = undefined;
+  storeContainer.getContainers.mockReturnValue([container]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateAppliedEvent('local_container1');
+
+  expect(triggerSpy).toHaveBeenCalledWith(container);
+});
+
+test('handleContainerReports should skip when update-available rule disables trigger dispatch', async () => {
+  notificationStore.isTriggerEnabledForRule.mockImplementation((ruleId) => ruleId !== 'update-available');
+  const spy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+  await trigger.handleContainerReports([
+    {
+      changed: true,
+      container: {
+        name: 'container1',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'major' },
+      },
+    },
+  ]);
+
+  expect(spy).not.toHaveBeenCalled();
+});
+
+test('init should wire auto dispatch callbacks for update/security/agent events', async () => {
+  let onUpdateApplied;
+  let onUpdateFailed;
+  let onSecurityAlert;
+  let onAgentDisconnected;
+
+  vi.spyOn(event, 'registerContainerUpdateApplied').mockImplementation((cb) => {
+    onUpdateApplied = cb;
+    return vi.fn();
+  });
+  vi.spyOn(event, 'registerContainerUpdateFailed').mockImplementation((cb) => {
+    onUpdateFailed = cb;
+    return vi.fn();
+  });
+  vi.spyOn(event, 'registerSecurityAlert').mockImplementation((cb) => {
+    onSecurityAlert = cb;
+    return vi.fn();
+  });
+  vi.spyOn(event, 'registerAgentDisconnected').mockImplementation((cb) => {
+    onAgentDisconnected = cb;
+    return vi.fn();
+  });
+
+  const updateAppliedSpy = vi
+    .spyOn(trigger, 'handleContainerUpdateAppliedEvent')
+    .mockResolvedValue(undefined);
+  const updateFailedSpy = vi
+    .spyOn(trigger, 'handleContainerUpdateFailedEvent')
+    .mockResolvedValue(undefined);
+  const securityAlertSpy = vi.spyOn(trigger, 'handleSecurityAlertEvent').mockResolvedValue(undefined);
+  const agentDisconnectedSpy = vi
+    .spyOn(trigger, 'handleAgentDisconnectedEvent')
+    .mockResolvedValue(undefined);
+
+  trigger.configuration.auto = true;
+  trigger.configuration.mode = 'simple';
+  await trigger.init();
+
+  await onUpdateApplied('container-a');
+  await onUpdateFailed({ containerName: 'container-b', error: 'boom' });
+  await onSecurityAlert({ containerName: 'container-c', details: 'high=1' });
+  await onAgentDisconnected({ agentName: 'edge-a', reason: 'disconnected' });
+
+  expect(updateAppliedSpy).toHaveBeenCalledWith('container-a');
+  expect(updateFailedSpy).toHaveBeenCalledWith({
+    containerName: 'container-b',
+    error: 'boom',
+  });
+  expect(securityAlertSpy).toHaveBeenCalledWith({
+    containerName: 'container-c',
+    details: 'high=1',
+  });
+  expect(agentDisconnectedSpy).toHaveBeenCalledWith({
+    agentName: 'edge-a',
+    reason: 'disconnected',
+  });
 });
 
 test('dismiss should be a no-op by default', async () => {

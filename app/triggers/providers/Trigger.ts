@@ -1,8 +1,9 @@
 import * as event from '../../event/index.js';
-import { registerContainerUpdateApplied } from '../../event/index.js';
 import { type Container, fullName } from '../../model/container.js';
 import { getTriggerCounter } from '../../prometheus/trigger.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
+import * as notificationStore from '../../store/notification.js';
+import * as storeContainer from '../../store/container.js';
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
 import {
   isThresholdReached as isThresholdReachedHelper,
@@ -11,6 +12,81 @@ import {
 } from './trigger-threshold.js';
 
 type SupportedThreshold = (typeof SUPPORTED_THRESHOLDS)[number];
+type NotificationRuleId =
+  | 'update-available'
+  | 'update-applied'
+  | 'update-failed'
+  | 'security-alert'
+  | 'agent-disconnect';
+
+interface ContainerUpdateFailedPayload {
+  containerName: string;
+  error: string;
+}
+
+interface SecurityAlertPayload {
+  containerName: string;
+  details: string;
+  status?: string;
+  summary?: {
+    unknown: number;
+    low: number;
+    medium: number;
+    high: number;
+    critical: number;
+  };
+  blockingCount?: number;
+  container?: Container;
+}
+
+interface AgentDisconnectedPayload {
+  agentName: string;
+  reason?: string;
+}
+
+interface EventDispatchOptions extends notificationStore.NotificationRuleDispatchOptions {
+  skipThreshold?: boolean;
+}
+
+function buildAgentDisconnectedContainer(agentName: string, reason?: string): Container {
+  return {
+    id: `agent-${agentName}`,
+    name: agentName,
+    displayName: agentName,
+    displayIcon: 'mdi:server-network-off',
+    status: 'disconnected',
+    watcher: 'agent',
+    image: {
+      id: `agent-image-${agentName}`,
+      registry: {
+        name: 'agent',
+        url: 'agent://local',
+      },
+      name: agentName,
+      tag: {
+        value: 'disconnected',
+        semver: false,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'unknown',
+      os: 'unknown',
+    },
+    updateAvailable: false,
+    updateKind: {
+      kind: 'tag',
+      localValue: reason || 'disconnected',
+      remoteValue: reason || 'disconnected',
+      semverDiff: 'patch',
+    },
+    error: reason
+      ? {
+          message: reason,
+        }
+      : undefined,
+  };
+}
 
 function isSupportedThreshold(value: string): value is SupportedThreshold {
   return SUPPORTED_THRESHOLDS.includes(value as SupportedThreshold);
@@ -49,7 +125,11 @@ class Trigger extends Component {
   public strictAgentMatch = false;
   private unregisterContainerReport?: () => void;
   private unregisterContainerReports?: () => void;
-  private unregisterContainerUpdateApplied?: () => void;
+  private unregisterContainerUpdateAppliedForAutoDispatch?: () => void;
+  private unregisterContainerUpdateFailed?: () => void;
+  private unregisterSecurityAlert?: () => void;
+  private unregisterAgentDisconnected?: () => void;
+  private unregisterContainerUpdateAppliedForResolution?: () => void;
   private readonly notificationResults: Map<string, any> = new Map();
 
   static getSupportedThresholds() {
@@ -139,12 +219,113 @@ class Trigger extends Component {
     return false;
   }
 
+  private isTriggerEnabledForRule(
+    ruleId: NotificationRuleId,
+    options: notificationStore.NotificationRuleDispatchOptions = {},
+  ) {
+    return notificationStore.isTriggerEnabledForRule(ruleId, this.getId(), options);
+  }
+
+  private findContainerByBusinessId(containerName: string): Container | undefined {
+    return storeContainer.getContainers().find((container) => fullName(container) === containerName);
+  }
+
+  private async dispatchContainerForEvent(
+    ruleId: NotificationRuleId,
+    container: Container | undefined,
+    options: EventDispatchOptions = {},
+  ) {
+    if (!this.isTriggerEnabledForRule(ruleId, options)) {
+      return;
+    }
+
+    if (!container) {
+      this.log.debug(`No container found for ${ruleId} event => ignore`);
+      return;
+    }
+
+    const threshold = (this.configuration.threshold ?? 'all').toLowerCase();
+    if (!options.skipThreshold && !Trigger.isThresholdReached(container, threshold)) {
+      this.log.debug(`Threshold not reached for ${ruleId} event => ignore`);
+      return;
+    }
+
+    if (!this.mustTrigger(container)) {
+      this.log.debug(`Trigger conditions not met for ${ruleId} event => ignore`);
+      return;
+    }
+
+    try {
+      if (this.configuration.mode?.toLowerCase() === 'batch') {
+        await this.triggerBatch([container]);
+      } else {
+        await this.trigger(container);
+      }
+    } catch (e: any) {
+      this.log.warn(`Error handling ${ruleId} event (${e.message})`);
+      this.log.debug(e);
+    }
+  }
+
+  async handleContainerUpdateAppliedEvent(containerName: string) {
+    await this.dispatchContainerForEvent(
+      'update-applied',
+      this.findContainerByBusinessId(containerName),
+      {
+        allowAllWhenNoTriggers: false,
+        defaultWhenRuleMissing: false,
+      },
+    );
+  }
+
+  async handleContainerUpdateFailedEvent(payload: ContainerUpdateFailedPayload) {
+    await this.dispatchContainerForEvent(
+      'update-failed',
+      this.findContainerByBusinessId(payload.containerName),
+      {
+        allowAllWhenNoTriggers: false,
+        defaultWhenRuleMissing: false,
+      },
+    );
+  }
+
+  async handleSecurityAlertEvent(payload: SecurityAlertPayload) {
+    const container = payload.container || this.findContainerByBusinessId(payload.containerName);
+    await this.dispatchContainerForEvent('security-alert', container, {
+      allowAllWhenNoTriggers: false,
+      defaultWhenRuleMissing: false,
+    });
+  }
+
+  async handleAgentDisconnectedEvent(payload: AgentDisconnectedPayload) {
+    await this.dispatchContainerForEvent(
+      'agent-disconnect',
+      buildAgentDisconnectedContainer(payload.agentName, payload.reason),
+      {
+        allowAllWhenNoTriggers: false,
+        defaultWhenRuleMissing: false,
+        skipThreshold: true,
+      },
+    );
+  }
+
   /**
    * Handle container report (simple mode).
    * @param containerReport
    * @returns {Promise<void>}
    */
   async handleContainerReport(containerReport: ContainerReport) {
+    // Keep backward compatibility: if update-available has no explicit trigger
+    // allow-list yet, legacy auto trigger behavior remains enabled.
+    if (
+      !this.isTriggerEnabledForRule('update-available', {
+        allowAllWhenNoTriggers: true,
+        defaultWhenRuleMissing: true,
+      })
+    ) {
+      return;
+    }
+
     // Filter on changed containers with update available and passing trigger threshold
     if (
       (containerReport.changed || !this.configuration.once) &&
@@ -191,6 +372,17 @@ class Trigger extends Component {
    * @returns {Promise<void>}
    */
   async handleContainerReports(containerReports: ContainerReport[]) {
+    // Keep backward compatibility: if update-available has no explicit trigger
+    // allow-list yet, legacy auto trigger behavior remains enabled.
+    if (
+      !this.isTriggerEnabledForRule('update-available', {
+        allowAllWhenNoTriggers: true,
+        defaultWhenRuleMissing: true,
+      })
+    ) {
+      return;
+    }
+
     // Filter on containers with update available and passing trigger threshold
     try {
       const containerReportsFiltered = containerReports
@@ -288,13 +480,42 @@ class Trigger extends Component {
           },
         );
       }
+
+      this.unregisterContainerUpdateAppliedForAutoDispatch = event.registerContainerUpdateApplied(
+        async (containerName) => this.handleContainerUpdateAppliedEvent(containerName),
+        {
+          id: this.getId(),
+          order: this.configuration.order,
+        },
+      );
+      this.unregisterContainerUpdateFailed = event.registerContainerUpdateFailed(
+        async (payload) => this.handleContainerUpdateFailedEvent(payload),
+        {
+          id: this.getId(),
+          order: this.configuration.order,
+        },
+      );
+      this.unregisterSecurityAlert = event.registerSecurityAlert(
+        async (payload) => this.handleSecurityAlertEvent(payload),
+        {
+          id: this.getId(),
+          order: this.configuration.order,
+        },
+      );
+      this.unregisterAgentDisconnected = event.registerAgentDisconnected(
+        async (payload) => this.handleAgentDisconnectedEvent(payload),
+        {
+          id: this.getId(),
+          order: this.configuration.order,
+        },
+      );
     } else {
       this.log.info(`Registering for manual execution`);
     }
     if (this.configuration.resolvenotifications) {
       this.log.info('Registering for notification resolution');
-      this.unregisterContainerUpdateApplied = registerContainerUpdateApplied(async (containerId) =>
-        this.handleContainerUpdateApplied(containerId),
+      this.unregisterContainerUpdateAppliedForResolution = event.registerContainerUpdateApplied(
+        async (containerId) => this.handleContainerUpdateApplied(containerId),
       );
     }
   }
@@ -306,8 +527,20 @@ class Trigger extends Component {
     this.unregisterContainerReports?.();
     this.unregisterContainerReports = undefined;
 
-    this.unregisterContainerUpdateApplied?.();
-    this.unregisterContainerUpdateApplied = undefined;
+    this.unregisterContainerUpdateAppliedForAutoDispatch?.();
+    this.unregisterContainerUpdateAppliedForAutoDispatch = undefined;
+
+    this.unregisterContainerUpdateFailed?.();
+    this.unregisterContainerUpdateFailed = undefined;
+
+    this.unregisterSecurityAlert?.();
+    this.unregisterSecurityAlert = undefined;
+
+    this.unregisterAgentDisconnected?.();
+    this.unregisterAgentDisconnected = undefined;
+
+    this.unregisterContainerUpdateAppliedForResolution?.();
+    this.unregisterContainerUpdateAppliedForResolution = undefined;
   }
 
   /**
