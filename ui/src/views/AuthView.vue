@@ -91,11 +91,7 @@ onMounted(async () => {
         :active-row="selectedAuth?.id"
         @row-click="openDetail($event)">
         <template #cell-name="{ row }">
-          <div class="flex items-center gap-2">
-            <div class="w-2 h-2 rounded-full shrink-0"
-                 :style="{ backgroundColor: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
-            <span class="font-medium dd-text">{{ row.name }}</span>
-          </div>
+          <span class="font-medium dd-text">{{ row.name }}</span>
         </template>
         <template #cell-type="{ row }">
           <span class="badge text-[9px] uppercase font-bold"
@@ -128,12 +124,8 @@ onMounted(async () => {
         @item-click="openDetail($event)">
         <template #card="{ item: auth }">
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <div class="w-2.5 h-2.5 rounded-full shrink-0 mt-1"
-                   :style="{ backgroundColor: auth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
-              <div class="min-w-0">
-                <div class="text-[15px] font-semibold truncate dd-text">{{ auth.name }}</div>
-              </div>
+            <div class="min-w-0">
+              <div class="text-[15px] font-semibold truncate dd-text">{{ auth.name }}</div>
             </div>
             <span class="badge text-[9px] uppercase font-bold shrink-0 ml-2"
                   :style="{ backgroundColor: authTypeBadge(auth.type).bg, color: authTypeBadge(auth.type).text }">
@@ -171,8 +163,6 @@ onMounted(async () => {
         :selected-key="selectedAuth?.id"
         @item-click="openDetail($event)">
         <template #header="{ item: auth }">
-          <div class="w-2.5 h-2.5 rounded-full shrink-0"
-               :style="{ backgroundColor: auth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
           <AppIcon name="auth" :size="14" class="dd-text-secondary" />
           <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ auth.name }}</span>
           <span class="badge text-[9px] uppercase font-bold shrink-0"
