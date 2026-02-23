@@ -2,10 +2,15 @@ import { defineComponent, nextTick } from 'vue';
 
 const mockGetAllContainers = vi.fn();
 const mockScanContainer = vi.fn();
+const mockGetSecurityRuntime = vi.fn();
 
 vi.mock('@/services/container', () => ({
   getAllContainers: (...args: any[]) => mockGetAllContainers(...args),
   scanContainer: (...args: any[]) => mockScanContainer(...args),
+}));
+
+vi.mock('@/services/server', () => ({
+  getSecurityRuntime: (...args: any[]) => mockGetSecurityRuntime(...args),
 }));
 
 vi.mock('@/composables/useBreakpoints', () => ({
@@ -76,18 +81,61 @@ const stubs: Record<string, any> = {
     props: ['name', 'size'],
     template: '<span class="app-icon-stub" />',
   }),
+  RouterLink: defineComponent({
+    props: ['to'],
+    template: '<a><slot /></a>',
+  }),
 };
 
 function factory() {
   return mount(SecurityView, { global: { stubs }, shallow: false });
 }
 
+function readyRuntimeStatus() {
+  return {
+    checkedAt: '2026-02-23T00:00:00.000Z',
+    ready: true,
+    scanner: {
+      enabled: true,
+      command: 'trivy',
+      commandAvailable: true,
+      status: 'ready',
+      message: 'Trivy client is ready',
+      scanner: 'trivy',
+      server: '',
+    },
+    signature: {
+      enabled: false,
+      command: '',
+      commandAvailable: null,
+      status: 'disabled',
+      message: 'Signature verification is disabled',
+    },
+    sbom: {
+      enabled: false,
+      formats: [],
+    },
+    requirements: [],
+  };
+}
+
 describe('SecurityView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetSecurityRuntime.mockResolvedValue(readyRuntimeStatus());
   });
 
   describe('data loading', () => {
+    it('loads security runtime status on mount', async () => {
+      mockGetAllContainers.mockResolvedValue([makeContainer()]);
+      const w = factory();
+      await vi.waitFor(() => {
+        expect(mockGetSecurityRuntime).toHaveBeenCalledOnce();
+      });
+      await nextTick();
+      expect(w.text()).toContain('Vulnerability scanner is ready');
+    });
+
     it('fetches containers on mount and groups vulnerabilities by image', async () => {
       mockGetAllContainers.mockResolvedValue([makeContainer()]);
       const w = factory();

@@ -84,6 +84,40 @@ function installSecurityMock(data: SecurityContainerApi[]) {
       });
     }
 
+    if (path === '/api/server/security/runtime') {
+      return new Response(
+        JSON.stringify({
+          checkedAt: new Date().toISOString(),
+          ready: true,
+          scanner: {
+            enabled: true,
+            command: 'trivy',
+            commandAvailable: true,
+            status: 'ready',
+            message: 'Trivy client is ready',
+            scanner: 'trivy',
+            server: '',
+          },
+          signature: {
+            enabled: false,
+            command: '',
+            commandAvailable: null,
+            status: 'disabled',
+            message: 'Signature verification is disabled',
+          },
+          sbom: {
+            enabled: false,
+            formats: [],
+          },
+          requirements: [],
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
     return new Response(JSON.stringify({ error: `No mock for ${path}` }), {
       status: 404,
       headers: { 'Content-Type': 'application/json' },
