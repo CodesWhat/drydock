@@ -192,9 +192,11 @@ onMounted(fetchServers);
             <span class="font-mono text-[10px] dd-text-secondary">{{ row.host }}</span>
           </template>
           <template #cell-status="{ row }">
-            <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
-                  :style="{ backgroundColor: statusColor(row.status) }" />
-            <span class="badge text-[9px] font-bold uppercase hidden md:inline-flex"
+            <span class="badge px-1.5 py-0 text-[9px] md:!hidden"
+                  :style="{ backgroundColor: statusBg(row.status), color: statusColor(row.status) }">
+              <AppIcon :name="row.status === 'connected' ? 'check' : 'xmark'" :size="12" />
+            </span>
+            <span class="badge text-[9px] font-bold uppercase max-md:!hidden"
                   :style="{ backgroundColor: statusBg(row.status), color: statusColor(row.status) }">
               {{ row.status }}
             </span>
@@ -231,7 +233,11 @@ onMounted(fetchServers);
                   <div class="text-[11px] truncate mt-0.5 dd-text-muted font-mono">{{ server.host }}</div>
                 </div>
               </div>
-              <span class="badge text-[9px] uppercase font-bold shrink-0 ml-2 hidden md:inline-flex"
+              <span class="badge px-1.5 py-0 text-[9px] shrink-0 ml-2 md:!hidden"
+                    :style="{ backgroundColor: statusBg(server.status), color: statusColor(server.status) }">
+                <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
+              </span>
+              <span class="badge text-[9px] uppercase font-bold shrink-0 ml-2 max-md:!hidden"
                     :style="{ backgroundColor: statusBg(server.status), color: statusColor(server.status) }">
                 {{ server.status }}
               </span>

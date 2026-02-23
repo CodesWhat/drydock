@@ -110,9 +110,9 @@ onMounted(async () => {
         </div>
       </template>
       <template #cell-status="{ row }">
-        <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
-              :style="{ backgroundColor: watcherStatusColor(row.status) }" />
-        <span class="badge text-[9px] font-bold hidden md:inline-flex"
+        <AppIcon :name="row.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 md:!hidden"
+                 :style="{ color: watcherStatusColor(row.status) }" />
+        <span class="badge text-[9px] font-bold max-md:!hidden"
               :style="{
                 backgroundColor: row.status === 'watching' ? 'var(--dd-success-muted)' : 'var(--dd-warning-muted)',
                 color: row.status === 'watching' ? 'var(--dd-success)' : 'var(--dd-warning)',
@@ -149,9 +149,9 @@ onMounted(async () => {
               <div class="text-[11px] truncate mt-0.5 dd-text-muted font-mono">{{ watcher.cron }}</div>
             </div>
           </div>
-          <span class="w-2 h-2 rounded-full shrink-0 ml-2 md:hidden"
-                :style="{ backgroundColor: watcherStatusColor(watcher.status) }" />
-          <span class="badge text-[9px] uppercase font-bold shrink-0 ml-2 hidden md:inline-flex"
+          <AppIcon :name="watcher.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 ml-2 md:!hidden"
+                   :style="{ color: watcherStatusColor(watcher.status) }" />
+          <span class="badge text-[9px] uppercase font-bold shrink-0 ml-2 max-md:!hidden"
                 :style="{
                   backgroundColor: watcher.status === 'watching' ? 'var(--dd-success-muted)' : 'var(--dd-warning-muted)',
                   color: watcher.status === 'watching' ? 'var(--dd-success)' : 'var(--dd-warning)',
@@ -191,9 +191,9 @@ onMounted(async () => {
              :style="{ backgroundColor: watcherStatusColor(watcher.status) }" />
         <AppIcon name="watchers" :size="14" class="dd-text-secondary" />
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ watcher.name }}</span>
-        <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
-              :style="{ backgroundColor: watcherStatusColor(watcher.status) }" />
-        <span class="badge text-[9px] uppercase font-bold shrink-0 hidden md:inline-flex"
+        <AppIcon :name="watcher.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 md:!hidden"
+                 :style="{ color: watcherStatusColor(watcher.status) }" />
+        <span class="badge text-[9px] uppercase font-bold shrink-0 max-md:!hidden"
               :style="{
                 backgroundColor: watcher.status === 'watching' ? 'var(--dd-success-muted)' : 'var(--dd-warning-muted)',
                 color: watcher.status === 'watching' ? 'var(--dd-success)' : 'var(--dd-warning)',

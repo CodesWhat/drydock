@@ -104,9 +104,9 @@ onMounted(async () => {
           </span>
         </template>
         <template #cell-status="{ row }">
-          <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
-                :style="{ backgroundColor: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
-          <span class="badge text-[9px] font-bold hidden md:inline-flex"
+          <AppIcon :name="row.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
+                   :style="{ color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
+          <span class="badge text-[9px] font-bold max-md:!hidden"
                 :style="{
                   backgroundColor: row.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-neutral-muted)',
                   color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)',
@@ -150,9 +150,9 @@ onMounted(async () => {
           </div>
           <div class="px-4 py-2.5 mt-auto"
                :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
-            <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
-                  :style="{ backgroundColor: auth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
-            <span class="badge text-[9px] font-bold hidden md:inline-flex"
+            <AppIcon :name="auth.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
+                     :style="{ color: auth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
+            <span class="badge text-[9px] font-bold max-md:!hidden"
                   :style="{
                     backgroundColor: auth.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-neutral-muted)',
                     color: auth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)',
