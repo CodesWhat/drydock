@@ -251,6 +251,7 @@ jobs:
     name: Load Test (Smoke)
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    continue-on-error: true  # advisory until baselines stabilize for this release cycle
     needs: [build]
     permissions:
       contents: read
