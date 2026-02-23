@@ -145,10 +145,6 @@ vi.mock('@/composables/useDetailPanel', () => ({
   })),
 }));
 
-vi.mock('primevue/useconfirm', () => ({
-  useConfirm: vi.fn(() => ({ require: vi.fn() })),
-}));
-
 // --- Stub child components ---
 const childStubs = {
   DataViewLayout: {

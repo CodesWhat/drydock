@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **PrimeVue 4 + Tailwind CSS 4 UI stack** — Complete frontend migration from Vuetify 3 to PrimeVue 4 with Tailwind CSS 4 for styling. All 13 views rebuilt with Composition API and shared component library.
+- **Tailwind CSS 4 UI stack** — Complete frontend migration from Vuetify 3 to Tailwind CSS 4 with custom shared components. All 13 views rebuilt with Composition API.
 - **Shared data components** — Reusable DataTable, DataCardGrid, DataListAccordion, DataFilterBar, DetailPanel, DataViewLayout, and EmptyState components used consistently across all views with table/cards/list view modes.
 - **4 color themes** — Drydock (navy tones), GitHub (clean/familiar), Dracula (bold purple), and Catppuccin (warm pastels). Each with dark and light variants. Circle-reveal transition animation between themes.
 - **7 icon libraries** — Phosphor Duotone (default), Phosphor, Lucide, Tabler, Heroicons, Iconoir, and Font Awesome. Switchable in Config > Appearance with icon size slider.
@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Docker Compose trigger** — Refresh compose services via Docker Compose CLI when updates are detected.
 - **Dashboard live data** — Stat cards (containers, updates, security issues, uptime) computed from real container data. Container log, security overview donut chart, host status, and update breakdown widgets.
 - **View wiring** — Watcher container counts, trigger Test buttons with success/failure feedback, host images count, and registry self-hosted port matching all wired to live API data.
-- **Full UI test suite** — 592 tests across 41 files covering shared components, composables, views, and utilities. Shared mount helper with PrimeVue plugin and router stubs.
+- **Full UI test suite** — 592 tests across 41 files covering shared components, composables, views, and utilities. Shared mount helper with directive stubs and router mocks.
 
 ### Changed
 

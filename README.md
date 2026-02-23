@@ -562,7 +562,7 @@ Here's what's coming.
 | Version | Theme | Highlights |
 | --- | --- | --- |
 | **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Guard, SBOM, 7 new registries, 4 new triggers, self-update fix, rollback fixes, GHCR auth fix, self-hosted TLS options, re2-wasm → re2js regex engine swap, compose trigger fixes, DB persistence on shutdown, CI caching + pipeline hardening, biome → qlty lint migration |
-| **v1.4.0** ✅ | UI Modernization | PrimeVue 4 + Tailwind CSS 4 migration, 4 color themes (Drydock/GitHub/Dracula/Catppuccin), 7 icon libraries, 6 font families, shared data components (DataTable/DataCardGrid/DataListAccordion/DataFilterBar/DetailPanel/EmptyState), settings backend + icon proxy cache, container ghost state during updates, SSE real-time updates, remember-me auth |
+| **v1.4.0** ✅ | UI Modernization | Tailwind CSS 4 migration with custom component library, 4 color themes (Drydock/GitHub/Dracula/Catppuccin), 7 icon libraries, 6 font families, shared data components (DataTable/DataCardGrid/DataListAccordion/DataFilterBar/DetailPanel/EmptyState), settings backend + icon proxy cache, container ghost state during updates, SSE real-time updates, remember-me auth |
 | **v1.5.0** | Observability | Real-time log viewer, container resource monitoring, registry webhooks |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers |
 | **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring |

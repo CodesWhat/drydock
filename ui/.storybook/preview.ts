@@ -1,14 +1,12 @@
 import type { Preview } from '@storybook/vue3';
 import { setup } from '@storybook/vue3';
-import Aura from '@primeuix/themes/aura';
-import PrimeVue from 'primevue/config';
-import ConfirmationService from 'primevue/confirmationservice';
-import Tooltip from 'primevue/tooltip';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { registerIcons } from '../src/boot/icons';
 import AppIcon from '../src/components/AppIcon.vue';
 import ContainerIcon from '../src/components/ContainerIcon.vue';
 import EmptyState from '../src/components/EmptyState.vue';
+import ConfirmDialog from '../src/components/ConfirmDialog.vue';
+import { tooltip as Tooltip } from '../src/directives/tooltip';
 import '../src/theme/tokens.css';
 import '../src/style.css';
 
@@ -36,14 +34,11 @@ const router = createRouter({
 
 setup((app) => {
   app.use(router);
-  app.use(PrimeVue, {
-    theme: { preset: Aura, options: { darkModeSelector: '.dark' } },
-  });
-  app.use(ConfirmationService);
   app.directive('tooltip', Tooltip);
   app.component('AppIcon', AppIcon);
   app.component('ContainerIcon', ContainerIcon);
   app.component('EmptyState', EmptyState);
+  app.component('ConfirmDialog', ConfirmDialog);
 });
 
 const preview: Preview = {
