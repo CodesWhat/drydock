@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import whaleLogo from '../assets/whale-logo.png';
 import { getOidcRedirection, getStrategies, loginBasic, setRememberMe } from '../services/auth';
@@ -49,6 +49,8 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+
+  startConnectivityPolling();
 });
 
 function navigateAfterLogin() {
@@ -94,6 +96,40 @@ function oidcIcon(name: string): string {
   if (lower.includes('okta')) return 'key';
   return 'sign-in';
 }
+
+// Server connectivity monitor
+const connectionLost = ref(false);
+let connectivityTimer: ReturnType<typeof setInterval> | undefined;
+
+async function checkConnectivity() {
+  try {
+    const res = await fetch('/auth/strategies', { redirect: 'manual' });
+    if (connectionLost.value && res.ok) {
+      connectionLost.value = false;
+      // Reload strategies now that the server is back
+      try {
+        const data = await getStrategies();
+        strategies.value = data;
+        hasBasic.value = data.some((s: Strategy) => s.type === 'basic');
+        oidcStrategies.value = data.filter((s: Strategy) => s.type === 'oidc');
+        error.value = '';
+      } catch {
+        // Strategies will be retried on next poll
+      }
+    }
+  } catch {
+    connectionLost.value = true;
+  }
+}
+
+function startConnectivityPolling() {
+  if (connectivityTimer) clearInterval(connectivityTimer);
+  connectivityTimer = setInterval(checkConnectivity, 10_000);
+}
+
+onUnmounted(() => {
+  if (connectivityTimer) clearInterval(connectivityTimer);
+});
 </script>
 
 <template>
@@ -214,6 +250,30 @@ function oidcIcon(name: string): string {
         </div>
       </div>
     </div>
+
+    <!-- Connection Lost Overlay -->
+    <Transition name="fade">
+      <div v-if="connectionLost"
+           class="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center">
+        <div class="w-full max-w-[320px] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
+             :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+          <div class="flex flex-col items-center px-6 py-8 gap-3">
+            <div class="w-10 h-10 rounded-full flex items-center justify-center mb-1"
+                 :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
+              <AppIcon name="warning" :size="18" :style="{ color: 'var(--dd-danger)' }" />
+            </div>
+            <h2 class="text-sm font-bold dd-text">Connection Lost</h2>
+            <p class="text-[11px] dd-text-muted leading-relaxed">
+              The server is unreachable. Waiting for it to come back online...
+            </p>
+            <div class="flex items-center gap-2 mt-1">
+              <AppIcon name="spinner" :size="12" class="dd-spin dd-text-muted" />
+              <span class="text-[10px] dd-text-muted">Reconnecting</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -224,5 +284,11 @@ function oidcIcon(name: string): string {
 @keyframes bounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-8px); }
+}
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
 }
 </style>

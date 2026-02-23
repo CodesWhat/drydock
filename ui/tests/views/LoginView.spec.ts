@@ -245,6 +245,74 @@ describe('LoginView', () => {
     });
   });
 
+  describe('connectivity monitor', () => {
+    const originalFetch = globalThis.fetch;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+      vi.useRealTimers();
+    });
+
+    it('does not show connection lost overlay initially', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      expect(wrapper.text()).not.toContain('Connection Lost');
+    });
+
+    it('shows connection lost overlay when server is unreachable', async () => {
+      // Stub fetch to simulate network failure
+      globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+
+      // Advance timer to trigger connectivity check
+      await vi.advanceTimersByTimeAsync(10_000);
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Connection Lost');
+      expect(wrapper.text()).toContain('Reconnecting');
+    });
+
+    it('hides overlay and reloads strategies when server recovers', async () => {
+      // Start with fetch failing
+      const mockFetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+      globalThis.fetch = mockFetch;
+
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+
+      // Server goes down
+      await vi.advanceTimersByTimeAsync(10_000);
+      await flushPromises();
+      expect(wrapper.text()).toContain('Connection Lost');
+
+      // Server comes back
+      mockFetch.mockResolvedValue(new Response('', { status: 200 }));
+      mockGetStrategies.mockResolvedValue([{ type: 'basic', name: 'basic' }]);
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      await flushPromises();
+
+      expect(wrapper.text()).not.toContain('Connection Lost');
+      // getStrategies called: once on mount + once on reconnect
+      expect(mockGetStrategies).toHaveBeenCalledTimes(2);
+    });
+
+    it('shows warning icon and reconnecting text in overlay', async () => {
+      globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      await flushPromises();
+
+      expect(wrapper.find('.app-icon-stub[data-icon="warning"]').exists()).toBe(true);
+      expect(wrapper.text()).toContain('Reconnecting');
+    });
+  });
+
   describe('OIDC icon selection', () => {
     it('renders github icon for GitHub provider', async () => {
       const wrapper = await mountLogin([{ type: 'oidc', name: 'GitHub' }]);
