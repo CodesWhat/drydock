@@ -60,7 +60,7 @@ config:
 
 scenarios:
   - name: "Health check"
-    weight: 20
+    weight: 15
     flow:
       - get:
           url: "/health"
@@ -68,7 +68,7 @@ scenarios:
             - statusCode: 200
 
   - name: "App info"
-    weight: 20
+    weight: 15
     flow:
       - get:
           url: "/api/app"
@@ -76,7 +76,7 @@ scenarios:
             - statusCode: 200
 
   - name: "Container inventory"
-    weight: 20
+    weight: 15
     flow:
       - get:
           url: "/api/containers"
@@ -102,7 +102,7 @@ scenarios:
             - statusCode: 200
 
   - name: "Registry and server"
-    weight: 20
+    weight: 15
     flow:
       - get:
           url: "/api/registries"
@@ -126,3 +126,42 @@ scenarios:
           url: "/api/containers"
           expect:
             - statusCode: 200
+
+  - name: "Server log polling"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/log/entries?tail=200"
+          expect:
+            - statusCode: 200
+      - think: 1
+      - get:
+          url: "/api/log/entries?level=info&tail=100&since=0"
+          expect:
+            - statusCode: 200
+
+  - name: "Container log route"
+    weight: 5
+    flow:
+      - get:
+          url: "/api/containers"
+          expect:
+            - statusCode: 200
+      - think: 1
+      - get:
+          url: "/api/containers/__missing__/logs?tail=100"
+          expect:
+            - statusCode: 404
+
+  - name: "Agent log source route"
+    weight: 5
+    flow:
+      - get:
+          url: "/api/agents"
+          expect:
+            - statusCode: 200
+      - think: 1
+      - get:
+          url: "/api/agents/__missing__/log/entries?tail=100"
+          expect:
+            - statusCode: 404

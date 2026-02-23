@@ -8,8 +8,10 @@ COMPOSE_FILE="${REPO_ROOT}/test/ci-compose.yml"
 ARTILLERY_FILE="${ARTILLERY_FILE:-${REPO_ROOT}/test.yml}"
 ARTILLERY_ENV="${ARTILLERY_ENV:-ci}"
 COMPOSE_PROJECT="${COMPOSE_PROJECT:-drydock-loadtest}"
-DD_LOAD_TEST_PORT="${DD_LOAD_TEST_PORT:-3000}"
-DD_LOAD_TEST_TARGET="${DD_LOAD_TEST_TARGET:-http://localhost:${DD_LOAD_TEST_PORT}}"
+DD_LOAD_TEST_PORT="${DD_LOAD_TEST_PORT:-}"
+DD_LOAD_TEST_TARGET="${DD_LOAD_TEST_TARGET:-}"
+DD_LOAD_TEST_RANDOM_PORT_MIN="${DD_LOAD_TEST_RANDOM_PORT_MIN:-20000}"
+DD_LOAD_TEST_RANDOM_PORT_MAX="${DD_LOAD_TEST_RANDOM_PORT_MAX:-60999}"
 ARTILLERY_VERSION="${ARTILLERY_VERSION:-2.0.30}"
 DD_LOAD_TEST_BUILD_CACHE="${DD_LOAD_TEST_BUILD_CACHE:-none}"
 DD_LOAD_TEST_ARTIFACT_DIR="${DD_LOAD_TEST_ARTIFACT_DIR:-}"
@@ -33,6 +35,72 @@ cleanup() {
 trap cleanup EXIT
 
 cd "${REPO_ROOT}"
+
+is_port_in_use() {
+	local port="$1"
+
+	if command -v lsof >/dev/null 2>&1; then
+		lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1
+		return $?
+	fi
+
+	if command -v nc >/dev/null 2>&1; then
+		nc -z 127.0.0.1 "${port}" >/dev/null 2>&1
+		return $?
+	fi
+
+	return 1
+}
+
+pick_random_port() {
+	local min="$1"
+	local max="$2"
+	local candidate
+
+	for _ in $(seq 1 100); do
+		candidate=$((min + RANDOM % (max - min + 1)))
+		if ! is_port_in_use "${candidate}"; then
+			echo "${candidate}"
+			return 0
+		fi
+	done
+
+	return 1
+}
+
+if [ -z "${DD_LOAD_TEST_PORT}" ]; then
+	if ! [[ "${DD_LOAD_TEST_RANDOM_PORT_MIN}" =~ ^[0-9]+$ ]] || ! [[ "${DD_LOAD_TEST_RANDOM_PORT_MAX}" =~ ^[0-9]+$ ]]; then
+		echo "DD_LOAD_TEST_RANDOM_PORT_MIN/MAX must be numeric"
+		exit 1
+	fi
+	if [ "${DD_LOAD_TEST_RANDOM_PORT_MIN}" -ge "${DD_LOAD_TEST_RANDOM_PORT_MAX}" ]; then
+		echo "DD_LOAD_TEST_RANDOM_PORT_MIN must be lower than DD_LOAD_TEST_RANDOM_PORT_MAX"
+		exit 1
+	fi
+
+	DD_LOAD_TEST_PORT="$(pick_random_port "${DD_LOAD_TEST_RANDOM_PORT_MIN}" "${DD_LOAD_TEST_RANDOM_PORT_MAX}" || true)"
+	if [ -z "${DD_LOAD_TEST_PORT}" ]; then
+		echo "Unable to find a free random load test port."
+		exit 1
+	fi
+	echo "Selected random load test port: ${DD_LOAD_TEST_PORT}"
+elif ! [[ "${DD_LOAD_TEST_PORT}" =~ ^[0-9]+$ ]]; then
+	echo "DD_LOAD_TEST_PORT must be numeric"
+	exit 1
+fi
+
+if is_port_in_use "${DD_LOAD_TEST_PORT}"; then
+	echo "Port ${DD_LOAD_TEST_PORT} is already in use; choose a free port."
+	echo "Example: DD_LOAD_TEST_PORT=3800 DD_LOAD_TEST_TARGET=http://127.0.0.1:3800 npm run load:smoke"
+	exit 1
+fi
+
+export DD_LOAD_TEST_PORT
+
+if [ -z "${DD_LOAD_TEST_TARGET}" ]; then
+	DD_LOAD_TEST_TARGET="http://127.0.0.1:${DD_LOAD_TEST_PORT}"
+fi
+echo "Using load test target: ${DD_LOAD_TEST_TARGET}"
 
 echo "Building drydock test image..."
 if [ "${DD_LOAD_TEST_BUILD_CACHE}" = "gha" ]; then
