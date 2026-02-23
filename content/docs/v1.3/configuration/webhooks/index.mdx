@@ -1,0 +1,113 @@
+---
+title: "Webhooks"
+description: "Trigger container watches and updates from external systems like CI/CD pipelines."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+## Overview
+
+The webhook API lets external systems trigger container watches and updates. This is useful for CI/CD integration — after pushing a new image, your pipeline can tell drydock to check for updates immediately instead of waiting for the next scheduled watch cycle.
+
+## Configuration
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_SERVER_FEATURE_WEBHOOK` | ⚪ | Enable webhook endpoints | `true`, `false` | `true` |
+| `DD_SERVER_WEBHOOK_TOKEN` | 🔴 | Bearer token for webhook authentication | Any string | — |
+
+<Callout type="warn">Webhooks require a `DD_SERVER_WEBHOOK_TOKEN` to be set. Without it, webhook endpoints will reject all requests.</Callout>
+
+## Endpoints
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/api/webhook/watch` | Trigger a watch cycle on all watchers |
+| `POST` | `/api/webhook/watch/:containerName` | Watch a specific container by name |
+| `POST` | `/api/webhook/update/:containerName` | Trigger an update on a specific container |
+
+## Authentication
+
+All webhook requests require a Bearer token in the `Authorization` header:
+
+```
+Authorization: Bearer your-token-here
+```
+
+## Rate limiting
+
+Webhook endpoints are rate-limited to **30 requests per 15-minute window** per client IP.
+
+## Examples
+
+### Watch all containers
+
+```bash
+curl -X POST https://drydock.example.com/api/webhook/watch \
+  -H "Authorization: Bearer your-token-here"
+```
+
+### Watch a specific container
+
+```bash
+curl -X POST https://drydock.example.com/api/webhook/watch/myapp \
+  -H "Authorization: Bearer your-token-here"
+```
+
+### Update a specific container
+
+```bash
+curl -X POST https://drydock.example.com/api/webhook/update/myapp \
+  -H "Authorization: Bearer your-token-here"
+```
+
+## CI/CD integration
+
+### GitHub Actions
+
+```yaml
+- name: Notify drydock
+  run: |
+    curl -X POST https://drydock.example.com/api/webhook/watch/myapp \
+      -H "Authorization: Bearer ${{ secrets.DRYDOCK_WEBHOOK_TOKEN }}"
+```
+
+### GitLab CI
+
+```yaml
+notify_drydock:
+  stage: deploy
+  script:
+    - curl -X POST https://drydock.example.com/api/webhook/watch/myapp
+        -H "Authorization: Bearer $DRYDOCK_WEBHOOK_TOKEN"
+```
+
+## Docker Compose example
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      - DD_SERVER_WEBHOOK_TOKEN=my-secret-token
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "3000:3000"
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run -d \
+  -e DD_SERVER_WEBHOOK_TOKEN=my-secret-token \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -p 3000:3000 \
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

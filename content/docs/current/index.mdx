@@ -1,0 +1,55 @@
+---
+title: "Introduction"
+description: "Open source container update monitoring built in TypeScript. Auto-discover containers, detect image updates across 22 registries, and trigger notifications via 20+ services."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Drydock monitors your Docker containers for image updates. It auto-discovers running containers, checks 22 registries for new versions, and triggers notifications or automated updates via 20+ services.
+
+## 🔍 How it works
+
+🐳 **Watchers** scan Docker hosts to discover containers to monitor.
+
+📦 **Registries** query remote Docker registries to find update candidates.
+
+⚡ **Triggers** perform actions when updates are available — notify, update, or run custom scripts.
+
+## ✨ Key features
+
+- 🔎 Auto-discovery of running containers
+- 📦 22 registry integrations (Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, and more)
+- 🔔 20+ trigger types (Slack, Discord, Telegram, SMTP, webhooks, Docker auto-update, and more)
+- 🧪 Dry-run preview before applying updates
+- 💾 Image backup and one-click rollback
+- 🔄 Auto-rollback on health check failure
+- 🪝 Pre/post-update lifecycle hooks
+- 🔁 Graceful self-update
+- 🌐 Distributed agents for remote Docker hosts
+- 📊 Prometheus metrics and Grafana dashboard
+- 🔐 OIDC authentication support
+- 🛡️ Update Guard — vulnerability scanning, signature verification, and SBOM
+- 🛠️ Full REST API, webhooks, and audit log
+
+## 🚀 Quick start
+
+```bash
+docker run -d --name drydock \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -p 3000:3000 \
+  codeswhat/drydock
+```
+
+<Callout type="info">
+See the [Quick Start guide](/docs/quickstart) for detailed setup options including socket proxy configuration.
+</Callout>
+
+## 📚 Next steps
+
+- [Configure registries](/docs/configuration/registries) — set up private image access
+- [Set up triggers](/docs/configuration/triggers) — enable notifications and auto-updates
+- [Configure webhooks](/docs/configuration/webhooks) — integrate with CI/CD pipelines
+- [Lifecycle hooks](/docs/configuration/hooks) — run commands before and after updates
+- [Backup & rollback](/docs/configuration/rollback) — automatic backups and one-click restore
+- [Enable authentication](/docs/configuration/authentications) — secure your instance
+- [Monitor with Prometheus](/docs/monitoring) — add observability

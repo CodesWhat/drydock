@@ -1,0 +1,67 @@
+---
+title: "Container Actions"
+description: "Start, stop, restart, update, and delete containers directly from drydock."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+## Overview
+
+Drydock provides direct container management actions through both the UI and API. These actions let you control containers without leaving the drydock interface.
+
+## Available actions
+
+| Action | API endpoint | Description |
+| --- | --- | --- |
+| **Start** | `POST /api/containers/:id/start` | Start a stopped container |
+| **Stop** | `POST /api/containers/:id/stop` | Stop a running container |
+| **Restart** | `POST /api/containers/:id/restart` | Restart a container |
+| **Update** | `POST /api/containers/:id/update` | Pull new image and recreate container |
+| **Delete** | `DELETE /api/containers/:id` | Remove container from drydock tracking |
+
+## Feature flags
+
+Container actions can be individually toggled with environment variables:
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_SERVER_FEATURE_CONTAINERACTIONS` | ⚪ | Enable start, stop, restart, and update actions | `true`, `false` | `true` |
+| `DD_SERVER_FEATURE_DELETE` | ⚪ | Enable container deletion | `true`, `false` | `true` |
+
+<Callout type="info">When a feature flag is disabled, the corresponding buttons are hidden in the UI and the API endpoints return `403 Forbidden`.</Callout>
+
+## Update action
+
+The update action triggers the Docker trigger for the selected container. It will:
+
+1. Pull the latest image
+2. Backup the current image
+3. Run lifecycle hooks (if configured)
+4. Stop and remove the current container
+5. Create and start the new container
+6. Monitor health (if auto-rollback is enabled)
+
+See [Lifecycle Hooks](/docs/configuration/hooks) and [Backup & Rollback](/docs/configuration/rollback) for related configuration.
+
+## Preview
+
+Before updating, you can preview what will change using the dry-run endpoint:
+
+`POST /api/containers/:id/preview`
+
+This returns the proposed changes without executing them.
+
+## Metrics
+
+All container actions are tracked via Prometheus counters. See [Monitoring](/docs/monitoring) for details.
+
+## Example — disable all actions
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      - DD_SERVER_FEATURE_CONTAINERACTIONS=false
+      - DD_SERVER_FEATURE_DELETE=false
+```

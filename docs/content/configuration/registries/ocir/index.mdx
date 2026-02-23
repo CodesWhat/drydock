@@ -1,0 +1,84 @@
+---
+title: "OCIR (Oracle Cloud Infrastructure Registry)"
+description: "The ocir registry lets you configure Oracle Cloud Infrastructure Registry integration."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `ocir` registry lets you configure [OCIR](https://docs.oracle.com/en-us/iaas/Content/Registry/Concepts/registryoverview.htm) integration.
+
+Drydock automatically detects OCIR registries by matching `*.ocir.io` hostnames.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_OCIR_{REGISTRY_NAME}_LOGIN` | ⚪ | OCI username (e.g. `tenancy/user`) | DD_REGISTRY_OCIR_\{REGISTRY_NAME\}_PASSWORD must be defined | |
+| `DD_REGISTRY_OCIR_{REGISTRY_NAME}_PASSWORD` | ⚪ | Auth token | DD_REGISTRY_OCIR_\{REGISTRY_NAME\}_LOGIN must be defined | |
+| `DD_REGISTRY_OCIR_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | DD_REGISTRY_OCIR_\{REGISTRY_NAME\}_LOGIN/PASSWORD must not be defined | |
+
+## Examples
+
+### Configure with login and password
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_OCIR_PRIVATE_LOGIN=tenancy/oracleidentitycloudservice/user@example.com
+      - DD_REGISTRY_OCIR_PRIVATE_PASSWORD=xxxxx
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_OCIR_PRIVATE_LOGIN=tenancy/oracleidentitycloudservice/user@example.com" \
+  -e "DD_REGISTRY_OCIR_PRIVATE_PASSWORD=xxxxx" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Configure with base64 auth
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_OCIR_PRIVATE_AUTH=dGVuYW5jeS91c2VyOnh4eHh4
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_OCIR_PRIVATE_AUTH=dGVuYW5jeS91c2VyOnh4eHh4" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+## How to create an Auth Token on Oracle Cloud
+
+### Go to your OCI Console and open the Auth Tokens page
+
+Navigate to **Identity & Security > Users > Your User > Auth Tokens**.
+
+### Generate token
+
+Click **Generate Token**, give it a description, and copy the generated token value.
+
+Use your full OCI username (e.g. `tenancy/oracleidentitycloudservice/user@example.com`) as the login and the generated token as the password.

@@ -1,0 +1,77 @@
+---
+title: "HARBOR"
+description: "The harbor registry lets you configure a self-hosted Harbor integration."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `harbor` registry lets you configure a self-hosted [Harbor](https://goharbor.io/) integration.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_HARBOR_{REGISTRY_NAME}_URL` | 🔴 | Registry URL (e.g. `https://harbor.acme.com`) | | |
+| `DD_REGISTRY_HARBOR_{REGISTRY_NAME}_LOGIN` | ⚪ | Harbor username | DD_REGISTRY_HARBOR_\{REGISTRY_NAME\}_PASSWORD must be defined | |
+| `DD_REGISTRY_HARBOR_{REGISTRY_NAME}_PASSWORD` | ⚪ | Harbor password | DD_REGISTRY_HARBOR_\{REGISTRY_NAME\}_LOGIN must be defined | |
+| `DD_REGISTRY_HARBOR_{REGISTRY_NAME}_AUTH` | ⚪ | Base64 encoded `login:password` string | DD_REGISTRY_HARBOR_\{REGISTRY_NAME\}_LOGIN/PASSWORD must not be defined | |
+| `DD_REGISTRY_HARBOR_{REGISTRY_NAME}_CAFILE` | ⚪ | Path to a custom CA bundle (PEM) for private/self-signed certificates | Absolute or relative file path in the container | |
+| `DD_REGISTRY_HARBOR_{REGISTRY_NAME}_INSECURE` | ⚪ | Disable TLS certificate verification (use only for trusted internal networks) | `true`, `false` | `false` |
+
+Use `CAFILE` whenever possible. `INSECURE=true` is a fallback for environments where you cannot mount a CA bundle.
+
+## Examples
+
+### Configure for anonymous access
+
+<Tabs items={["Docker Compose (Anonymous)", "Docker (Anonymous)"]}>
+<Tab value="Docker Compose (Anonymous)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_HARBOR_PRIVATE_URL=https://harbor.acme.com
+```
+
+</Tab>
+<Tab value="Docker (Anonymous)">
+```bash
+docker run \
+  -e "DD_REGISTRY_HARBOR_PRIVATE_URL=https://harbor.acme.com" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Configure with credentials
+
+<Tabs items={["Docker Compose (Basic Auth)", "Docker (Basic Auth)"]}>
+<Tab value="Docker Compose (Basic Auth)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_HARBOR_PRIVATE_URL=https://harbor.acme.com
+      - DD_REGISTRY_HARBOR_PRIVATE_LOGIN=john
+      - DD_REGISTRY_HARBOR_PRIVATE_PASSWORD=doe
+```
+
+</Tab>
+<Tab value="Docker (Basic Auth)">
+```bash
+docker run \
+  -e "DD_REGISTRY_HARBOR_PRIVATE_URL=https://harbor.acme.com" \
+  -e "DD_REGISTRY_HARBOR_PRIVATE_LOGIN=john" \
+  -e "DD_REGISTRY_HARBOR_PRIVATE_PASSWORD=doe" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

@@ -1,0 +1,84 @@
+---
+title: "Ntfy"
+description: "The ntfy trigger lets you send container update notifications via Ntfy."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/triggers/ntfy/ntfy.png)
+
+The `ntfy` trigger lets you send container update notifications via [Ntfy](https://ntfy.sh/).
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_TRIGGER_NTFY_{trigger_name}_AUTH_PASSWORD` | ⚪ | Password (if basic auth is enabled) | | |
+| `DD_TRIGGER_NTFY_{trigger_name}_AUTH_TOKEN` | ⚪ | Bearer token (if bearer auth is enabled) | | |
+| `DD_TRIGGER_NTFY_{trigger_name}_AUTH_USER` | ⚪ | User (if basic auth is enabled) | | |
+| `DD_TRIGGER_NTFY_{trigger_name}_PRIORITY` | ⚪ | The Ntfy message priority | Integer between `0` and `5` [see here](https://docs.ntfy.sh/publish/#message-priority) | |
+| `DD_TRIGGER_NTFY_{trigger_name}_TOPIC` | 🔴 | The Ntfy topic name | | |
+| `DD_TRIGGER_NTFY_{trigger_name}_URL` | 🔴 | The Ntfy server url | The `http` or `https` gotify server address | `https://notify.sh` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+## Examples
+
+### Configure the trigger to publish to the official public ntfy service
+
+<Tabs items={["Docker Compose (Public)", "Docker (Public)"]}>
+<Tab value="Docker Compose (Public)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_TRIGGER_NTFY_THRESHOLD=minor
+      - DD_TRIGGER_NTFY_SH_TOPIC=xxxxyyyyzzzz
+```
+
+</Tab>
+<Tab value="Docker (Public)">
+```bash
+docker run \
+  -e DD_TRIGGER_NTFY_THRESHOLD="minor" \
+  -e DD_TRIGGER_NTFY_SH_TOPIC="xxxxyyyyzzzz" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Configure the trigger to publish to a private ntfy service with basic auth enabled
+
+<Tabs items={["Docker Compose (Private with Auth)", "Docker (Private with Auth)"]}>
+<Tab value="Docker Compose (Private with Auth)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_TRIGGER_NTFY_PRIVATE_URL=http://ntfy.local
+      - DD_TRIGGER_NTFY_PRIVATE_TOPIC=xxxxyyyyzzzz
+      - DD_TRIGGER_NTFY_PRIVATE_AUTH_USER=john
+      - DD_TRIGGER_NTFY_PRIVATE_AUTH_PASSWORD=doe
+```
+
+</Tab>
+<Tab value="Docker (Private with Auth)">
+```bash
+docker run \
+  -e DD_TRIGGER_NTFY_PRIVATE_URL="http://ntfy.local" \
+  -e DD_TRIGGER_NTFY_PRIVATE_TOPIC="xxxxyyyyzzzz" \
+  -e DD_TRIGGER_NTFY_PRIVATE_AUTH_USER="john" \
+  -e DD_TRIGGER_NTFY_PRIVATE_AUTH_PASSWORD="doe" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

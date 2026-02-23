@@ -1,0 +1,58 @@
+---
+title: "Log API"
+description: "API endpoints for log configuration and log entries."
+---
+
+## Get Log configuration
+
+Returns the current logger configuration.
+
+```bash
+curl http://drydock:3000/api/log
+
+{
+  "level":"debug"
+}
+```
+
+## Get application log entries
+
+Returns log entries from the in-memory ring buffer (last 1,000 entries).
+
+```bash
+curl http://drydock:3000/api/log/entries
+```
+
+### Query parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `level` | string | Filter by log level (`debug`, `info`, `warn`, `error`) |
+| `component` | string | Filter by component name |
+| `tail` | integer | Number of most recent entries to return |
+| `since` | integer | Unix timestamp (seconds) — only return entries after this time |
+
+### Example
+
+```bash
+curl "http://drydock:3000/api/log/entries?level=error&tail=50"
+
+[
+  {
+    "timestamp": "2026-02-16T12:00:00.000Z",
+    "level": "error",
+    "component": "registry:hub",
+    "msg": "Rate limit exceeded"
+  }
+]
+```
+
+## Get agent log entries
+
+Returns log entries from a connected agent, proxied through the controller.
+
+```bash
+curl http://drydock:3000/api/agents/:name/log/entries
+```
+
+Accepts the same query parameters as the application log entries endpoint above.

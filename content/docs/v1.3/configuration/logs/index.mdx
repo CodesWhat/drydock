@@ -1,0 +1,101 @@
+---
+title: "Logs"
+description: "Configure drydock log output and use the built-in log viewers to monitor application and container activity."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+## Server Log Configuration
+
+Control drydock's own log output with environment variables.
+
+### Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| ---------------- | :--------------: | ----------- | --------------------------- | --------------------------- |
+| `DD_LOG_LEVEL` | ⚪ | Log level | error info debug trace | `info` |
+| `DD_LOG_FORMAT` | ⚪ | Log format | text json | `text` |
+
+### Examples
+
+#### Set debug level
+
+<Tabs items={["Docker Compose (Debug Level)", "Docker (Debug Level)"]}>
+<Tab value="Docker Compose (Debug Level)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_LOG_LEVEL=debug
+```
+
+</Tab>
+<Tab value="Docker (Debug Level)">
+```bash
+docker run -e DD_LOG_LEVEL=debug ... codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+#### Set json format (for ElasticSearch ingestion for example)
+
+<Tabs items={["Docker (JSON Format)", "Docker Compose (JSON Format)"]}>
+<Tab value="Docker (JSON Format)">
+
+```bash
+docker run -e DD_LOG_FORMAT=json ... codeswhat/drydock
+```
+
+</Tab>
+<Tab value="Docker Compose (JSON Format)">
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_LOG_FORMAT=json
+```
+</Tab>
+</Tabs>
+
+## Application Log Viewer
+
+The **Configuration > Logs** page provides a terminal-style viewer for drydock's own runtime logs — startup events, polling cycles, registry checks, trigger executions, and errors.
+
+Logs are stored in an in-memory ring buffer (last 1,000 entries). They are not persisted to disk.
+
+### Toolbar controls
+
+| Control | Description |
+| --- | --- |
+| **Source** | Switch between the controller's logs and any connected agent's logs. Disconnected agents appear disabled. Only visible when agents are configured. |
+| **Level** | Filter by log level: `all`, `debug`, `info`, `warn`, `error`. Note: entries below your configured `DD_LOG_LEVEL` are never captured, so they won't appear regardless of this filter. |
+| **Lines** | Number of entries to fetch: 50, 100, 500, or 1,000. |
+| **Auto fetch** | Automatically poll for new entries at a chosen interval: Off, 2s, 5s, 10s, or 30s. |
+| **Refresh** | Manual one-shot fetch. |
+
+### Scroll lock
+
+When auto fetch is active, the viewer auto-scrolls to the newest entry after each fetch. If you scroll up to read earlier entries, **scroll lock** activates automatically — a warning chip appears and auto-scroll pauses so your reading position is preserved. Click **Resume** to jump back to the bottom and re-enable auto-scroll.
+
+## Container Log Viewer
+
+Each container has a **Logs** tab in its detail expansion panel. This shows the container's stdout/stderr output directly in the UI — no need to shell into the host.
+
+### Toolbar controls
+
+| Control | Description |
+| --- | --- |
+| **Lines** | Number of tail lines to fetch: 50, 100, or 500. |
+| **Auto fetch** | Poll for new log output at a chosen interval: Off, 2s, 5s, 10s, or 30s. |
+| **Refresh** | Manual one-shot fetch. |
+
+Scroll lock and resume work the same way as the application log viewer.
+
+### Agent containers
+
+Container logs work for both local and remote agent containers. For agent-managed containers, drydock proxies the log request through the agent connection automatically.

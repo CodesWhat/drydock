@@ -1,0 +1,58 @@
+---
+title: "Gotify"
+description: "The gotify trigger lets you send container update notifications via Gotify."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/triggers/gotify/gotify.png)
+
+The `gotify` trigger lets you send container update notifications via [Gotify](https://gotify.net/).
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_TRIGGER_GOTIFY_{trigger_name}_PRIORITY` | ⚪ | The Gotify message priority | Integer greater or equal than `0` | |
+| `DD_TRIGGER_GOTIFY_{trigger_name}_TOKEN` | 🔴 | The Gotify app token url | A valid gotify app token | |
+| `DD_TRIGGER_GOTIFY_{trigger_name}_URL` | 🔴 | The Gotify server url | The `http` or `https` gotify server address | |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+## Examples
+
+### Create an app on Gotify
+
+![image](/docs/assets/configuration/triggers/gotify/gotify_01.png)
+
+### Get the Gotify app token
+
+![image](/docs/assets/configuration/triggers/gotify/gotify_02.png)
+
+### Configure the trigger
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_TRIGGER_GOTIFY_LOCAL_URL=http://gotify.localhost
+      - DD_TRIGGER_GOTIFY_LOCAL_TOKEN=AWp8A.TbBO3xpn4
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_TRIGGER_GOTIFY_LOCAL_URL="http://gotify.localhost" \
+  -e DD_TRIGGER_GOTIFY_LOCAL_TOKEN="AWp8A.TbBO3xpn4" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

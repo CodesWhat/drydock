@@ -1,0 +1,52 @@
+---
+title: "NEXUS (Sonatype Nexus)"
+description: "The nexus registry lets you configure a Sonatype Nexus Docker Registry integration."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `nexus` registry lets you configure a [Sonatype Nexus](https://www.sonatype.com/products/sonatype-nexus-repository) Docker Registry integration.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_NEXUS_{REGISTRY_NAME}_URL` | 🔴 | Registry URL (e.g. `https://nexus.acme.com`) | | |
+| `DD_REGISTRY_NEXUS_{REGISTRY_NAME}_LOGIN` | ⚪ | Nexus username | DD_REGISTRY_NEXUS_\{REGISTRY_NAME\}_PASSWORD must be defined | |
+| `DD_REGISTRY_NEXUS_{REGISTRY_NAME}_PASSWORD` | ⚪ | Nexus password | DD_REGISTRY_NEXUS_\{REGISTRY_NAME\}_LOGIN must be defined | |
+| `DD_REGISTRY_NEXUS_{REGISTRY_NAME}_AUTH` | ⚪ | Base64 encoded `login:password` string | DD_REGISTRY_NEXUS_\{REGISTRY_NAME\}_LOGIN/PASSWORD must not be defined | |
+| `DD_REGISTRY_NEXUS_{REGISTRY_NAME}_CAFILE` | ⚪ | Path to a custom CA bundle (PEM) for private/self-signed certificates | Absolute or relative file path in the container | |
+| `DD_REGISTRY_NEXUS_{REGISTRY_NAME}_INSECURE` | ⚪ | Disable TLS certificate verification (use only for trusted internal networks) | `true`, `false` | `false` |
+
+Use `CAFILE` whenever possible. `INSECURE=true` is a fallback for environments where you cannot mount a CA bundle.
+
+## Examples
+
+### Configure with credentials
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_NEXUS_PRIVATE_URL=https://nexus.acme.com
+      - DD_REGISTRY_NEXUS_PRIVATE_LOGIN=john
+      - DD_REGISTRY_NEXUS_PRIVATE_PASSWORD=doe
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_NEXUS_PRIVATE_URL=https://nexus.acme.com" \
+  -e "DD_REGISTRY_NEXUS_PRIVATE_LOGIN=john" \
+  -e "DD_REGISTRY_NEXUS_PRIVATE_PASSWORD=doe" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

@@ -1,0 +1,76 @@
+---
+title: "Storage"
+description: "Persist drydock state by mounting /store as a volume."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+If you want the state to persist after the container removal, you need to mount  ```/store``` as a volume.
+
+## Examples
+
+### Using a named volume (recommended)
+
+Named volumes are managed by Docker and avoid host file ownership issues:
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    volumes:
+      - drydock-data:/store
+
+volumes:
+  drydock-data:
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -v drydock-data:/store
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Using a bind mount
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    volumes:
+      - /path-on-my-host:/store
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -v /path-on-my-host:/store
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+<Callout type="warn">Drydock runs as a non-root user (UID 1000) by default. When using a bind mount, the host directory must be writable by UID 1000 or the database will not persist. Pre-create the directory with the correct ownership:
+
+```bash
+mkdir -p /path-on-my-host
+chown 1000:1000 /path-on-my-host
+```
+
+Alternatively, set `DD_RUN_AS_ROOT=true` to run as root (see [Docker Socket Security](/docs/configuration/watchers#docker-socket-security)).
+</Callout>

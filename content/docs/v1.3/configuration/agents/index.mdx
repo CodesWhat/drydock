@@ -1,0 +1,80 @@
+---
+title: "Agents"
+description: "Agent Mode allows running Drydock in a distributed manner across multiple Docker hosts."
+---
+
+The **Agent Mode** allows running drydock in a distributed manner.
+
+- **Agent Node**: Runs near the Docker socket (or other container sources). It performs discovery and update checks.
+- **Controller Node**: The central instance. It manages its own local watchers AND connects to remote Agents. It aggregates containers from Agents, and handles persistence, UI, and Notifications.
+
+## Architecture
+
+The Controller connects to one or more Agents via HTTP/HTTPS. The Agent pushes real-time updates (container changes, new versions found) to the Controller using Server-Sent Events (SSE).
+
+## Agent Configuration
+
+To run drydock in Agent mode, start the application with the `--agent` command line flag.
+
+### Agent Environment Variables
+
+| Env var | Required | Description | Default |
+| :--- | :---: | :--- | :--- |
+| `DD_AGENT_SECRET` | 🔴 | Secret token for authentication (must match Controller configuration) | |
+| `DD_AGENT_SECRET_FILE` | ⚪ | Path to file containing the secret token | |
+| `DD_SERVER_PORT` | ⚪ | Port to listen on | `3000` |
+| `DD_SERVER_TLS_*` | ⚪ | Standard [Server](/docs/configuration/server) TLS options | |
+| `DD_WATCHER_{name}_*` | 🔴 | [Watcher](/docs/configuration/watchers) configuration (At least one is required) | |
+| `DD_REGISTRY_{name}_*` | ⚪ | [Registry](/docs/configuration/registries) configuration (For update checks) | |
+
+### Agent Example (Docker Compose)
+
+```yaml
+services:
+  drydock-agent:
+    image: codeswhat/drydock
+    command: --agent
+    environment:
+      - DD_AGENT_SECRET=mysecretkey
+      - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+      - DD_LOG_LEVEL=debug
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+```
+
+## Controller Configuration
+
+To connect a Controller to an Agent, use the `DD_AGENT_{name}_*` environment variables.
+
+### Controller Environment Variables
+
+| Env var | Required | Description | Default |
+| :--- | :---: | :--- | :--- |
+| `DD_AGENT_{name}_SECRET` | 🔴 | Secret token to authenticate with the Agent | |
+| `DD_AGENT_{name}_SECRET_FILE` | ⚪ | Path to file containing the secret token | |
+| `DD_AGENT_{name}_HOST` | 🔴 | Hostname or IP of the Agent | |
+| `DD_AGENT_{name}_PORT` | ⚪ | Port of the Agent | `3000` |
+| `DD_AGENT_{name}_CAFILE` | ⚪ | CA certificate path for TLS connection | |
+| `DD_AGENT_{name}_CERTFILE` | ⚪ | Client certificate path for TLS connection | |
+| `DD_AGENT_{name}_KEYFILE` | ⚪ | Client key path for TLS connection | |
+
+### Controller Example (Docker Compose)
+
+```yaml
+services:
+  drydock-controller:
+    image: codeswhat/drydock
+    environment:
+      - DD_AGENT_REMOTE1_HOST=192.168.1.50
+      - DD_AGENT_REMOTE1_SECRET=mysecretkey
+    ports:
+      - 3000:3000
+```
+
+## Features in Agent Mode
+
+- **Watchers**: Run on the Agent to discover containers.
+- **Registries**: Configured on the Agent to check for updates.
+- **Triggers**:
+  - `docker` and `dockercompose` triggers are executed **on the Agent** (allowing update of remote containers).
+  - Notification triggers (e.g. `smtp`, `discord`) are executed **on the Controller**.

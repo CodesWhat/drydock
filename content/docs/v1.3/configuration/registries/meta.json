@@ -1,0 +1,27 @@
+{
+  "title": "Registries",
+  "pages": [
+    "index",
+    "acr",
+    "alicr",
+    "artifactory",
+    "custom",
+    "docr",
+    "dhi",
+    "ecr",
+    "forgejo",
+    "gar",
+    "gcr",
+    "ghcr",
+    "gitea",
+    "gitlab",
+    "harbor",
+    "hub",
+    "ibmcr",
+    "lscr",
+    "nexus",
+    "ocir",
+    "trueforge",
+    "quay"
+  ]
+}

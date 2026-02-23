@@ -1,0 +1,113 @@
+---
+title: "Pushover"
+description: "The pushover trigger lets you send realtime notifications to your devices (Android, iPhone...) using the Pushover Service."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/triggers/pushover/pushover.png)
+
+The `pushover` trigger lets you send realtime notifications to your devices (Android, iPhone...) using the [Pushover Service](https://pushover.net/).
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_TRIGGER_PUSHOVER_{trigger_name}_DEVICE` | ⚪ | Optional device(s) to notify | Coma separated list of devices (e.g. dev1,dev2) ([see here](https://pushover.net/api#identifiers)) | |
+| `DD_TRIGGER_PUSHOVER_{trigger_name}_EXPIRE` | ⚪ | Optional notification expire in seconds (only when priority=2) | [see here](https://pushover.net/api#priority) | |
+| `DD_TRIGGER_PUSHOVER_{trigger_name}_HTML` | ⚪ | Allow HTML formatting in message body (supported in Pushover 2.3+) | [see here](https://pushover.net/api#html) | `0` |
+| `DD_TRIGGER_PUSHOVER_{trigger_name}_PRIORITY` | ⚪ | The notification priority | [see here](https://pushover.net/api#priority) | `0` |
+| `DD_TRIGGER_PUSHOVER_{trigger_name}_RETRY` | ⚪ | Optional notification retry in seconds (only when priority=2) | [see here](https://pushover.net/api#priority) | |
+| `DD_TRIGGER_PUSHOVER_{trigger_name}_SOUND` | ⚪ | The notification sound | [see here](https://pushover.net/api#sounds) | `pushover` |
+| `DD_TRIGGER_PUSHOVER_{trigger_name}_TOKEN` | 🔴 | The API token | | |
+| `DD_TRIGGER_PUSHOVER_{trigger_name}_TTL` | ⚪ | Optional message time to live (in seconds) | [see here](https://pushover.net/api#ttl) | |
+| `DD_TRIGGER_PUSHOVER_{trigger_name}_USER` | 🔴 | The User key | | |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+## Examples
+
+### Configuration
+
+#### Minimal
+
+<Tabs items={["Docker Compose (Minimal)", "Docker (Minimal)"]}>
+<Tab value="Docker Compose (Minimal)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_TRIGGER_PUSHOVER_1_TOKEN=*****************************
+      - DD_TRIGGER_PUSHOVER_1_USER=******************************
+```
+
+</Tab>
+<Tab value="Docker (Minimal)">
+```bash
+docker run \
+  -e DD_TRIGGER_PUSHOVER_1_TOKEN="*****************************" \
+  -e DD_TRIGGER_PUSHOVER_1_USER="******************************" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+#### Full
+
+<Tabs items={["Docker Compose (Full)", "Docker (Full)"]}>
+<Tab value="Docker Compose (Full)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+        - DD_TRIGGER_PUSHOVER_1_TOKEN=*****************************
+        - DD_TRIGGER_PUSHOVER_1_USER=******************************
+        - DD_TRIGGER_PUSHOVER_1_DEVICE=myIphone,mySamsung
+        - DD_TRIGGER_PUSHOVER_1_SOUND=cosmic
+        - DD_TRIGGER_PUSHOVER_1_PRIORITY=2
+        - DD_TRIGGER_PUSHOVER_1_EXPIRE=600
+        - DD_TRIGGER_PUSHOVER_1_RETRY=60
+```
+
+</Tab>
+<Tab value="Docker (Full)">
+```bash
+docker run \
+    -e DD_TRIGGER_PUSHOVER_1_TOKEN="*****************************" \
+    -e DD_TRIGGER_PUSHOVER_1_USER="******************************" \
+    -e DD_TRIGGER_PUSHOVER_1_DEVICE="myIphone,mySamsung" \
+    -e DD_TRIGGER_PUSHOVER_1_SOUND="cosmic" \
+    -e DD_TRIGGER_PUSHOVER_1_PRIORITY="2" \
+    -e DD_TRIGGER_PUSHOVER_1_EXPIRE="600" \
+    -e DD_TRIGGER_PUSHOVER_1_RETRY="60" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+## How to get the User key
+
+[Open Pushover Settings](https://pushover.net/settings)
+
+The key is printed under the section `Reset User Key`.
+
+## How to get an API token
+
+### Register a new application
+
+[Register a Pushover Application](https://pushover.net/apps/build)
+
+![image](/docs/assets/configuration/triggers/pushover/pushover_register.png)
+
+### Copy the API token
+
+![image](/docs/assets/configuration/triggers/pushover/pushover_api_token.png)

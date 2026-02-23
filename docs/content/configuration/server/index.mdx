@@ -1,0 +1,170 @@
+---
+title: "Server"
+description: "You can adjust the server configuration with the following environment variables."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+You can adjust the server configuration with the following environment variables.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_PUBLIC_URL` | ⚪ | Public-facing URL for OIDC callbacks and links (auto-detected from request if not set) | URL (e.g., `https://drydock.example.com`) | auto-detected |
+| `DD_SERVER_ENABLED` | ⚪ | If REST API must be exposed | `true`, `false` | `true` |
+| `DD_SERVER_PORT` | ⚪ | Http listener port | from `0` to `65535` | `3000` |
+| `DD_SERVER_TRUSTPROXY` | ⚪ | Trust X-Forwarded-For headers when behind a reverse proxy | `true`, `false`, or hop count (`1`, `2`, etc.) | `false` |
+| `DD_SERVER_TLS_ENABLED` | ⚪ | Enable HTTPS+TLS | `true`, `false` | `false` |
+| `DD_SERVER_TLS_KEY` | ⚪ | TLS server key (required when `DD_SERVER_TLS_ENABLED` is enabled) | File path to the key file | |
+| `DD_SERVER_TLS_CERT` | ⚪ | TLS server certificate (required when `DD_SERVER_TLS_ENABLED` is enabled) | File path to the cert file | |
+| `DD_SERVER_CORS_ENABLED` | ⚪ | Enable [CORS](https://developer.mozilla.org/fr/docs/Web/HTTP/CORS) Requests | `true`, `false` | `false` |
+| `DD_SERVER_CORS_ORIGIN` | ⚪ | Supported CORS origin | | `*` |
+| `DD_SERVER_CORS_METHODS` | ⚪ | Supported CORS methods | Comma separated list of valid HTTP verbs | `GET,HEAD,PUT,PATCH,POST,DELETE` |
+| `DD_SERVER_FEATURE_CONTAINERACTIONS` | ⚪ | Enable start, stop, restart, and update actions via API and UI | `true`, `false` | `true` |
+| `DD_SERVER_FEATURE_DELETE` | ⚪ | If deleting operations are enabled through API & UI | `true`, `false` | `true` |
+| `DD_SERVER_FEATURE_WEBHOOK` | ⚪ | Enable the webhook API endpoints | `true`, `false` | `true` |
+| `DD_SERVER_WEBHOOK_TOKEN` | ⚪ | Bearer token for webhook authentication (required when webhooks enabled) | Any string | |
+| `DD_SERVER_METRICS_AUTH` | ⚪ | Require authentication on `/metrics` endpoint | `true`, `false` | `true` |
+| `DD_SESSION_SECRET` | ⚪ | Override the auto-generated session secret for cookie signing | Any string | auto-generated |
+| `DD_RUN_AS_ROOT` | ⚪ | Skip privilege drop from root to `node` user (required for read-only socket mounts) | `true`, `false` | `false` |
+
+## Examples
+
+### Disable http listener
+
+<Tabs items={["Docker Compose (Disable Listener)", "Docker (Disable Listener)"]}>
+<Tab value="Docker Compose (Disable Listener)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_SERVER_ENABLED=false
+```
+
+</Tab>
+<Tab value="Docker (Disable Listener)">
+```bash
+docker run \
+  -e DD_SERVER_ENABLED=false \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Set http listener port to 8080
+
+<Tabs items={["Docker Compose (Custom Port)", "Docker (Custom Port)"]}>
+<Tab value="Docker Compose (Custom Port)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_SERVER_PORT=8080
+```
+
+</Tab>
+<Tab value="Docker (Custom Port)">
+```bash
+docker run \
+  -e DD_SERVER_PORT=8080 \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Enable HTTPS
+
+<Tabs items={["Docker Compose (HTTPS)", "Docker (HTTPS)"]}>
+<Tab value="Docker Compose (HTTPS)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_SERVER_TLS_ENABLED=true
+      - DD_SERVER_TLS_KEY=/drydock_certs/server.key
+      - DD_SERVER_TLS_CERT=/drydock_certs/server.crt
+```
+
+</Tab>
+<Tab value="Docker (HTTPS)">
+```bash
+docker run \
+  -e "DD_SERVER_TLS_ENABLED=true" \
+  -e "DD_SERVER_TLS_KEY=/drydock_certs/server.key" \
+  -e "DD_SERVER_TLS_CERT=/drydock_certs/server.crt" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Reverse proxy (trust proxy)
+
+<Tabs items={["Docker Compose (Trust Proxy)", "Docker (Trust Proxy)"]}>
+<Tab value="Docker Compose (Trust Proxy)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_SERVER_TRUSTPROXY=1
+```
+
+</Tab>
+<Tab value="Docker (Trust Proxy)">
+```bash
+docker run \
+  -e DD_SERVER_TRUSTPROXY=1 \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Secrets from files
+
+Any `DD_*` environment variable can be loaded from a file by appending `__FILE` to the variable name and setting the value to the file path. This is useful for Docker secrets and other secret management tools.
+
+<Tabs items={["Docker Compose (Secrets from Files)", "Docker (Secrets from Files)"]}>
+<Tab value="Docker Compose (Secrets from Files)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_SERVER_WEBHOOK_TOKEN__FILE=/run/secrets/webhook_token
+    secrets:
+      - webhook_token
+
+secrets:
+  webhook_token:
+    file: ./webhook_token.txt
+```
+
+</Tab>
+<Tab value="Docker (Secrets from Files)">
+```bash
+docker run \
+  -e DD_SERVER_WEBHOOK_TOKEN__FILE=/run/secrets/webhook_token \
+  -v ./webhook_token.txt:/run/secrets/webhook_token:ro \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

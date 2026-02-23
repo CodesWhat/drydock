@@ -1,0 +1,169 @@
+---
+title: "Docker"
+description: "The docker trigger lets you replace existing containers with their updated versions."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/triggers/docker/docker.png)
+
+The `docker` trigger lets you replace existing containers with their updated versions.
+
+The trigger will:
+
+- Clone the existing container specification
+- Pull the new image
+- Stop the existing container
+- Remove the existing container
+- Create the new container
+- Start the new container (if the previous one was running)
+- Remove the previous image (optionally)
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| ------------------------------------------ | :--------------: | ----------------------------------------------------- | ---------------- | -------------------------- |
+| `DD_TRIGGER_DOCKER_{trigger_name}_PRUNE` | ⚪ | If old image versions must be pruned | `true`, `false` | `false` |
+| `DD_TRIGGER_DOCKER_{trigger_name}_DRYRUN` | ⚪ | When enabled, only pull the new image ahead of time | `true`, `false` | `false` |
+| `DD_TRIGGER_DOCKER_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of image backups to retain per container | Integer | `3` |
+| `DD_TRIGGER_DOCKER_{trigger_name}_AUTOREMOVETIMEOUT` | ⚪ | Wait timeout for container auto-removal (ms) | Integer | `10000` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+<Callout type="info">This trigger picks up the Docker configuration from the [configured Docker watchers](/docs/configuration/watchers) so it can handle updates on Local **and** Remote Docker hosts.</Callout>
+
+## Image Backup & Rollback
+
+Every time a container is updated, Drydock automatically backs up the previous image metadata. Backups are retained per container up to the `BACKUPCOUNT` limit (default: 3), with older backups pruned automatically.
+
+You can roll back to any retained backup via the API:
+
+```
+POST /api/backup/{id}/rollback
+```
+
+Optionally pass a specific backup ID in the request body:
+
+```json
+{ "backupId": "uuid" }
+```
+
+If omitted, the most recent backup is used. Rollback pulls the backup image, stops the current container, recreates it with the backup image, and starts it.
+
+## Auto-Rollback
+
+Drydock can automatically roll back a container update if the container becomes unhealthy. This requires the container to have a Docker `HEALTHCHECK` defined.
+
+Configure auto-rollback using container labels:
+
+| Label | Description | Default |
+| --- | --- | --- |
+| `dd.rollback.auto` | Enable auto-rollback on health failure | `false` |
+| `dd.rollback.window` | Monitoring window in milliseconds | `300000` (5 min) |
+| `dd.rollback.interval` | Health check poll interval in milliseconds | `10000` (10 sec) |
+
+After a successful update, if `dd.rollback.auto` is enabled, Drydock polls the container health status at the configured interval. If the container becomes `unhealthy` within the monitoring window, an automatic rollback is triggered. If the window expires without failure, the container is considered stable.
+
+## Lifecycle Hooks
+
+You can run commands before and after a container update using container labels:
+
+| Label | Description | Default |
+| --- | --- | --- |
+| `dd.hook.pre` | Command to run before the update | |
+| `dd.hook.post` | Command to run after the update | |
+| `dd.hook.pre.abort` | Abort the update if the pre-hook fails | `true` |
+| `dd.hook.timeout` | Hook timeout in milliseconds | `60000` (1 min) |
+
+Hooks execute via `/bin/sh -c` inside the Drydock container. The following environment variables are available to hook commands:
+
+| Variable | Description |
+| --- | --- |
+| `DD_CONTAINER_NAME` | Container name |
+| `DD_CONTAINER_ID` | Container ID |
+| `DD_IMAGE_NAME` | Image name (without registry) |
+| `DD_IMAGE_TAG` | Current image tag |
+| `DD_UPDATE_KIND` | `tag` or `digest` |
+| `DD_UPDATE_FROM` | Current tag or digest |
+| `DD_UPDATE_TO` | New tag or digest |
+
+A non-zero exit code or timeout is treated as failure. When `dd.hook.pre.abort` is `true` (the default), a failed pre-hook prevents the update from proceeding.
+
+<Callout type="info">Lifecycle hooks are **not** executed during self-updates.</Callout>
+
+## Self-Update
+
+Drydock can update itself. When it detects that its own container has an available update, it performs a safe self-replacement sequence:
+
+1. Notifies connected UI clients (full-screen overlay)
+2. Backs up the current image metadata
+3. Pulls the new image while the current container is still running
+4. Renames the old container to `drydock-old-{timestamp}`
+5. Creates a new container with the original name and new image
+6. Spawns a temporary helper container (with the Docker socket) that stops the old container and starts the new one
+7. The UI auto-reconnects to the new instance
+
+If any step fails, Drydock falls back to the previous container automatically.
+
+<Callout type="warn">Self-update requires the Docker socket to be bind-mounted at `/var/run/docker.sock` and a Docker trigger to be enabled.</Callout>
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_TRIGGER_DOCKER_EXAMPLE_PRUNE=true
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_TRIGGER_DOCKER_EXAMPLE_PRUNE=true" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Auto-rollback with health checks
+
+Add these labels to a container to enable automatic rollback if it becomes unhealthy after an update:
+
+```yaml
+services:
+  myapp:
+    image: myapp:latest
+    labels:
+      - dd.watch=true
+      - dd.rollback.auto=true
+      - dd.rollback.window=300000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+```
+
+### Lifecycle hooks
+
+Run a database migration before updating and a cache clear after:
+
+```yaml
+services:
+  myapp:
+    image: myapp:latest
+    labels:
+      - dd.watch=true
+      - dd.hook.pre=curl -X POST http://myapp:8080/prepare-update
+      - dd.hook.post=curl -X POST http://myapp:8080/clear-cache
+      - dd.hook.pre.abort=true
+      - dd.hook.timeout=30000
+```

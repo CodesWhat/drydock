@@ -1,0 +1,140 @@
+---
+title: "Docker-Compose"
+description: "The dockercompose trigger lets you update docker-compose.yml files & replace existing containers with their updated versions."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/triggers/docker-compose/docker-compose.png)
+
+The `dockercompose` trigger lets you update docker-compose.yml files & replace existing containers with their updated versions.
+
+The trigger will:
+
+- Update the related docker-compose.yml file
+- Clone the existing container specification
+- Pull the new image
+- Stop the existing container
+- Remove the existing container
+- Create the new container
+- Start the new container (if the previous one was running)
+- Run `post_start` hooks declared on the updated service (if any)
+- Remove the previous image (optionally)
+
+By default, runtime updates use the Docker API (`ENGINE=dockerapi`).
+
+You can switch to Compose-native updates with `ENGINE=composecli`, which runs:
+
+- `docker compose pull <services>`
+- `docker compose up -d --no-deps <services>`
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_FILE` | 🔴 | The docker-compose.yml file location | | |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_BACKUP` | ⚪ | Backup the docker-compose.yml file as `.back` before updating? | `true`, `false` | `false` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_PRUNE` | ⚪ | If the old image must be pruned after upgrade | `true`, `false` | `false` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_DRYRUN` | ⚪ | When enabled, only pull the new image ahead of time | `true`, `false` | `false` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_ENGINE` | ⚪ | Runtime update engine | `dockerapi`, `composecli` | `dockerapi` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILELABEL` | ⚪ | Container label name used to locate the compose file per container | Label name | `dd.compose.file` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_COMPOSETIMEOUT` | ⚪ | Timeout (ms) for each Compose CLI command when `ENGINE=composecli` | Integer >= `1000` | `300000` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). but only supports the `batch` mode.</Callout>
+
+<Callout type="warn">
+`ENGINE=composecli` requires `docker compose` (or `docker-compose`) to be available in the Drydock runtime. In this mode, Drydock runs Compose commands directly instead of recreating containers through the Docker API path.
+</Callout>
+
+<Callout type="warn">This trigger will only work with locally watched containers.</Callout>
+
+<Callout type="warn">Do not forget to mount the docker-compose.yml file in the drydock container.</Callout>
+
+## Troubleshooting: `permission denied` (`EACCES`)
+
+If logs show an error like:
+
+```text
+EACCES: permission denied, access '/drydock/.../docker-compose.yml'
+```
+
+the mounted compose file (or parent directory) is not writable by the Drydock process. This trigger needs **read and write** access because it updates image tags in the compose file when a new version is found.
+
+Drydock runs as a non-root user (`node`, UID 1000) by default. If the compose file on the host is owned by `root` or another user, the container process cannot write to it.
+
+### Option 1: Fix file ownership on the host (recommended)
+
+Make the compose file writable by UID 1000:
+
+```bash
+chown 1000:1000 /path/to/docker-compose.yml
+```
+
+### Option 2: Use `group_add` to share access
+
+Add the host group that owns the compose files so Drydock can read and write them:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    group_add:
+      - "${COMPOSE_FILES_GID}"
+    volumes:
+      - /var/lib/docker/volumes/portainer_data/_data/compose:/drydock
+    environment:
+      - DD_TRIGGER_DOCKERCOMPOSE_EXAMPLE_FILE=/drydock/5/docker-compose.yml
+```
+
+<Callout type="info">`COMPOSE_FILES_GID` should match the GID that owns the mounted compose files on the host. The group must have write permission on the file.</Callout>
+
+### Option 3: Run as root (quick fix)
+
+Set `DD_RUN_AS_ROOT=true` to skip the privilege drop:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      - DD_RUN_AS_ROOT=true
+```
+
+<Callout type="warn">Running as root trades the privilege-drop security boundary for full file access. This is fine for home-lab setups but may not meet your security requirements.</Callout>
+
+<Callout type="warn">Do **not** mount the compose file as read-only (`:ro`) — the trigger must write updated image tags back to the file.</Callout>
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker", "Label"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    volumes:
+    - /etc/my-services/docker-compose.yml:/drydock/docker-compose.yml
+    environment:
+      - DD_TRIGGER_DOCKERCOMPOSE_EXAMPLE_FILE=/drydock/docker-compose.yml
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -v /etc/my-services/docker-compose.yml:/drydock/docker-compose.yml
+  -e "DD_TRIGGER_DOCKERCOMPOSE_EXAMPLE_FILE=/drydock/docker-compose.yml" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+<Tab value="Label">
+```yaml
+labels:
+  dd.compose.file: "/my/path/docker-compose.yaml
+```
+</Tab>
+</Tabs>

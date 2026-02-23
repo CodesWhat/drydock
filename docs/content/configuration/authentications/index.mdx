@@ -1,0 +1,18 @@
+---
+title: "Authentication"
+description: "drydock allows Anonymous access by default."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+drydock allows `Anonymous` access by default.
+
+You can enable 1 or multiple authentication strategies using `DD_AUTH_*` env vars.
+
+<Callout type="warn">Please pay attention that all API routes & all UI views will be authenticated.</Callout>
+
+Currently, the following strategies are supported:
+
+<Callout type="info">[**Basic**](/docs/configuration/authentications/basic)</Callout>
+
+<Callout type="info">[**Openid Connect**](/docs/configuration/authentications/oidc)</Callout>

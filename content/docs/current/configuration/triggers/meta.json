@@ -1,0 +1,26 @@
+{
+  "title": "Triggers",
+  "pages": [
+    "index",
+    "apprise",
+    "command",
+    "discord",
+    "docker",
+    "docker-compose",
+    "google-chat",
+    "gotify",
+    "http",
+    "ifttt",
+    "kafka",
+    "matrix",
+    "mattermost",
+    "mqtt",
+    "ntfy",
+    "pushover",
+    "rocketchat",
+    "slack",
+    "smtp",
+    "teams",
+    "telegram"
+  ]
+}
