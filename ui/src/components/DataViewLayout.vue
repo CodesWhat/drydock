@@ -23,7 +23,7 @@
 <template>
   <div class="flex flex-col flex-1 min-h-0">
     <div class="flex gap-4 min-w-0 flex-1 min-h-0">
-      <div class="flex-1 min-w-0 overflow-auto pr-1 sm:pr-2">
+      <div class="flex-1 min-w-0 overflow-auto pr-4 pb-6">
         <slot />
       </div>
       <slot name="panel" />

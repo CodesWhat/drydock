@@ -208,7 +208,7 @@ const playgroundTableRows = [
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 overflow-y-auto">
+  <DataViewLayout>
   <div class="space-y-6">
 
     <!-- Spinner Preview -->
@@ -741,5 +741,5 @@ const playgroundTableRows = [
     </div>
 
   </div>
-  </div>
+  </DataViewLayout>
 </template>

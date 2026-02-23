@@ -4,7 +4,9 @@ import { useRoute } from 'vue-router';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
 import { type IconLibrary, iconMap, libraryLabels } from '../icons';
+import { getAppInfos } from '../services/app';
 import { getUser } from '../services/auth';
+import { getLog, getLogEntries } from '../services/log';
 import { clearIconCache, getSettings, updateSettings } from '../services/settings';
 import { getServer } from '../services/server';
 import { themeFamilies } from '../theme/palettes';
@@ -16,9 +18,9 @@ const { themeFamily, themeVariant, isDark, setThemeFamily, transitionTheme } = u
 const { iconLibrary, setIconLibrary, iconScale, setIconScale } = useIcons();
 const { activeFont, setFont, fontLoading, isFontLoaded } = useFont();
 
-type SettingsTab = 'general' | 'appearance' | 'profile';
+type SettingsTab = 'general' | 'appearance' | 'logs' | 'profile';
 
-const VALID_TABS = new Set<SettingsTab>(['general', 'appearance', 'profile']);
+const VALID_TABS = new Set<SettingsTab>(['general', 'appearance', 'logs', 'profile']);
 
 function tabFromQuery(): SettingsTab {
   const raw = route.query.tab;
@@ -35,6 +37,7 @@ watch(() => route.query.tab, () => {
 const settingsTabs = [
   { id: 'general' as const, label: 'General', icon: 'settings' },
   { id: 'appearance' as const, label: 'Appearance', icon: 'config' },
+  { id: 'logs' as const, label: 'Logs', icon: 'logs' },
   { id: 'profile' as const, label: 'Profile', icon: 'user' },
 ];
 
@@ -55,13 +58,103 @@ const profileData = ref({
 });
 const profileLoading = ref(true);
 
+// App logs state
+interface AppLogEntry {
+  timestamp?: string | number;
+  level?: string;
+  component?: string;
+  msg?: string;
+  message?: string;
+}
+
+const appLogLevel = ref('unknown');
+const appLogEntries = ref<AppLogEntry[]>([]);
+const appLogsLoading = ref(false);
+const appLogsError = ref('');
+const appLogLevelFilter = ref('all');
+const appLogTail = ref(100);
+const appLogComponent = ref('');
+const appLogsLastFetched = ref('');
+
+function formatLogTimestamp(timestamp: string | number | undefined): string {
+  if (timestamp === undefined || timestamp === null) {
+    return 'unknown';
+  }
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return String(timestamp);
+  }
+  return date.toLocaleString();
+}
+
+function formatLastFetched(iso: string): string {
+  if (!iso) {
+    return 'never';
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return 'never';
+  }
+  return date.toLocaleTimeString();
+}
+
+function logMessage(entry: AppLogEntry): string {
+  return entry.msg || entry.message || '';
+}
+
+function getLevelColor(level: string | undefined): string {
+  const value = (level || '').toLowerCase();
+  if (value === 'error') return 'var(--dd-danger)';
+  if (value === 'warn' || value === 'warning') return 'var(--dd-warning)';
+  if (value === 'info') return 'var(--dd-info)';
+  if (value === 'debug') return 'var(--dd-text-secondary)';
+  return 'var(--dd-text-secondary)';
+}
+
+async function refreshAppLogs() {
+  appLogsLoading.value = true;
+  appLogsError.value = '';
+  try {
+    const [logInfo, entries] = await Promise.all([
+      getLog().catch(() => ({ level: 'unknown' })),
+      getLogEntries({
+        level: appLogLevelFilter.value,
+        component: appLogComponent.value.trim() || undefined,
+        tail: appLogTail.value,
+      }),
+    ]);
+    appLogLevel.value = logInfo?.level ?? 'unknown';
+    appLogEntries.value = Array.isArray(entries) ? entries : [];
+    appLogsLastFetched.value = new Date().toISOString();
+  } catch (e: any) {
+    appLogsError.value = e?.message || 'Failed to load application logs';
+    appLogEntries.value = [];
+  } finally {
+    appLogsLoading.value = false;
+  }
+}
+
+function resetLogFilters() {
+  appLogLevelFilter.value = 'all';
+  appLogTail.value = 100;
+  appLogComponent.value = '';
+  void refreshAppLogs();
+}
+
+watch(
+  () => activeSettingsTab.value,
+  (tab) => {
+    if (tab === 'logs' && appLogEntries.value.length === 0 && !appLogsLoading.value) {
+      void refreshAppLogs();
+    }
+  },
+);
+
 onMounted(async () => {
   try {
     const [serverData, appData, settings] = await Promise.all([
       getServer().catch(() => null),
-      fetch('/api/app')
-        .then((r) => r.json())
-        .catch(() => null),
+      getAppInfos().catch(() => null),
       getSettings().catch(() => null),
     ]);
     const config = serverData?.configuration ?? {};
@@ -103,6 +196,10 @@ onMounted(async () => {
   } finally {
     profileLoading.value = false;
   }
+
+  if (activeSettingsTab.value === 'logs') {
+    void refreshAppLogs();
+  }
 });
 
 async function toggleInternetlessMode() {
@@ -131,7 +228,7 @@ async function handleClearIconCache() {
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 overflow-y-auto">
+  <DataViewLayout>
       <!-- Tabs -->
       <div class="flex gap-1 mb-6"
            :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
@@ -436,6 +533,101 @@ async function handleClearIconCache() {
 
       </div><!-- end appearance tab -->
 
+      <!-- LOGS TAB -->
+      <div v-if="activeSettingsTab === 'logs'" class="space-y-6">
+        <div class="dd-rounded overflow-hidden"
+             :style="{
+               backgroundColor: 'var(--dd-bg-card)',
+               border: '1px solid var(--dd-border-strong)',
+             }">
+          <div class="px-5 py-3.5 flex items-center justify-between gap-3"
+               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+            <div class="flex items-center gap-2">
+              <AppIcon name="logs" :size="14" class="text-drydock-secondary" />
+              <h2 class="text-sm font-semibold dd-text">Application Logs</h2>
+            </div>
+            <div class="text-[10px] dd-text-muted">
+              Server Level: <span class="font-semibold dd-text capitalize">{{ appLogLevel }}</span>
+            </div>
+          </div>
+
+          <div class="p-5 space-y-4">
+            <div class="flex flex-wrap items-center gap-2">
+              <select v-model="appLogLevelFilter"
+                      class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                <option value="all">All Levels</option>
+                <option value="debug">Debug</option>
+                <option value="info">Info</option>
+                <option value="warn">Warn</option>
+                <option value="error">Error</option>
+              </select>
+
+              <select v-model.number="appLogTail"
+                      class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                <option :value="50">Tail 50</option>
+                <option :value="100">Tail 100</option>
+                <option :value="500">Tail 500</option>
+                <option :value="1000">Tail 1000</option>
+              </select>
+
+              <input v-model="appLogComponent"
+                     type="text"
+                     placeholder="Filter by component..."
+                     class="flex-1 min-w-[180px] max-w-[280px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-placeholder dd-border-strong"
+                     @keyup.enter="refreshAppLogs" />
+
+              <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
+                      :class="appLogsLoading ? 'opacity-50 pointer-events-none' : ''"
+                      @click="refreshAppLogs">
+                Apply
+              </button>
+              <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text"
+                      :class="appLogsLoading ? 'opacity-50 pointer-events-none' : ''"
+                      @click="resetLogFilters">
+                Reset
+              </button>
+            </div>
+
+            <div class="text-[10px] dd-text-muted">
+              Last fetched: {{ formatLastFetched(appLogsLastFetched) }}
+            </div>
+
+            <div v-if="appLogsLoading" class="text-[12px] dd-text-muted text-center py-6">
+              Loading logs...
+            </div>
+            <div v-else-if="appLogsError"
+                 class="text-[11px] px-3 py-2 dd-rounded"
+                 :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+              {{ appLogsError }}
+            </div>
+            <div v-else
+                 class="dd-rounded overflow-auto max-h-[420px] font-mono text-[11px]"
+                 :style="{
+                   backgroundColor: 'var(--dd-bg-inset)',
+                   border: '1px solid var(--dd-border-strong)',
+                 }">
+              <div v-if="appLogEntries.length === 0"
+                   class="px-3 py-4 dd-text-muted text-center">
+                No log entries found for current filters.
+              </div>
+              <div v-else>
+                <div v-for="(entry, index) in appLogEntries" :key="index"
+                     class="px-3 py-2 flex gap-3 items-start"
+                     :style="{ borderBottom: index < appLogEntries.length - 1 ? '1px solid var(--dd-border)' : 'none' }">
+                  <span class="shrink-0 tabular-nums dd-text-muted">{{ formatLogTimestamp(entry.timestamp) }}</span>
+                  <span class="shrink-0 uppercase font-semibold"
+                        :style="{ color: getLevelColor(entry.level) }">
+                    {{ entry.level || 'info' }}
+                  </span>
+                  <span class="shrink-0 dd-text-secondary">{{ entry.component || '-' }}</span>
+                  <span class="dd-text break-all">{{ logMessage(entry) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- end logs tab -->
+
       <!-- PROFILE TAB -->
       <div v-if="activeSettingsTab === 'profile'" class="space-y-6">
         <!-- Profile Card -->
@@ -489,5 +681,5 @@ async function handleClearIconCache() {
           </div>
         </div>
       </div><!-- end profile tab -->
-  </div>
+  </DataViewLayout>
 </template>

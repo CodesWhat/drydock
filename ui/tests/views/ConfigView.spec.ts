@@ -1,10 +1,17 @@
 import { defineComponent, nextTick } from 'vue';
 
 const mockGetServer = vi.fn();
+const mockGetAppInfos = vi.fn();
 const mockGetSettings = vi.fn();
 const mockUpdateSettings = vi.fn();
 const mockClearIconCache = vi.fn();
 const mockGetUser = vi.fn();
+const mockGetLog = vi.fn();
+const mockGetLogEntries = vi.fn();
+
+vi.mock('@/services/app', () => ({
+  getAppInfos: (...args: any[]) => mockGetAppInfos(...args),
+}));
 
 vi.mock('@/services/server', () => ({
   getServer: (...args: any[]) => mockGetServer(...args),
@@ -18,6 +25,11 @@ vi.mock('@/services/settings', () => ({
 
 vi.mock('@/services/auth', () => ({
   getUser: (...args: any[]) => mockGetUser(...args),
+}));
+
+vi.mock('@/services/log', () => ({
+  getLog: (...args: any[]) => mockGetLog(...args),
+  getLogEntries: (...args: any[]) => mockGetLogEntries(...args),
 }));
 
 const mockRouteQuery = vi.hoisted(() => ({ value: {} as Record<string, string> }));
@@ -103,9 +115,6 @@ vi.mock('@/theme/palettes', () => ({
 import { mount } from '@vue/test-utils';
 import ConfigView from '@/views/ConfigView.vue';
 
-// Mock global fetch for /api/app
-const originalFetch = globalThis.fetch;
-
 const stubs: Record<string, any> = {
   AppIcon: defineComponent({
     props: ['name', 'size'],
@@ -130,16 +139,9 @@ describe('ConfigView', () => {
     vi.clearAllMocks();
     mockRouteQuery.value = {};
     mockGetUser.mockResolvedValue({ username: 'admin', email: 'admin@test.com', role: 'admin', lastLogin: '2026-01-01', sessions: 2 });
-    globalThis.fetch = vi.fn((url: string) => {
-      if (typeof url === 'string' && url.includes('/api/app')) {
-        return Promise.resolve({ json: () => Promise.resolve({ version: '1.4.0' }) } as Response);
-      }
-      return originalFetch(url);
-    }) as any;
-  });
-
-  afterAll(() => {
-    globalThis.fetch = originalFetch;
+    mockGetAppInfos.mockResolvedValue({ version: '1.4.0' });
+    mockGetLog.mockResolvedValue({ level: 'info' });
+    mockGetLogEntries.mockResolvedValue([]);
   });
 
   describe('on mount', () => {
@@ -157,6 +159,7 @@ describe('ConfigView', () => {
       factory();
       await vi.waitFor(() => {
         expect(mockGetServer).toHaveBeenCalledOnce();
+        expect(mockGetAppInfos).toHaveBeenCalledOnce();
         expect(mockGetSettings).toHaveBeenCalledOnce();
       });
     });
@@ -185,8 +188,8 @@ describe('ConfigView', () => {
 
     it('shows default values when server fetch fails', async () => {
       mockGetServer.mockRejectedValue(new Error('fail'));
+      mockGetAppInfos.mockRejectedValue(new Error('fail'));
       mockGetSettings.mockRejectedValue(new Error('fail'));
-      globalThis.fetch = vi.fn(() => Promise.reject(new Error('fail'))) as any;
 
       const w = factory();
       await vi.waitFor(() => {
@@ -374,6 +377,73 @@ describe('ConfigView', () => {
       const text = w.text();
       expect(text).toContain('Username');
       expect(text).toContain('Active Sessions');
+    });
+  });
+
+  describe('logs tab', () => {
+    async function mountLogsTab() {
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalled());
+      await nextTick();
+
+      const tabs = w.findAll('button');
+      const logsTab = tabs.find((t) => t.text().includes('Logs'));
+      await logsTab?.trigger('click');
+      await vi.waitFor(() => expect(mockGetLogEntries).toHaveBeenCalled());
+      await nextTick();
+      return w;
+    }
+
+    it('fetches and displays application logs', async () => {
+      mockGetLog.mockResolvedValue({ level: 'debug' });
+      mockGetLogEntries.mockResolvedValue([
+        {
+          timestamp: '2026-02-23T10:15:00.000Z',
+          level: 'error',
+          component: 'watcher',
+          msg: 'something failed',
+        },
+      ]);
+
+      const w = await mountLogsTab();
+
+      expect(mockGetLog).toHaveBeenCalled();
+      expect(mockGetLogEntries).toHaveBeenLastCalledWith({
+        level: 'all',
+        component: undefined,
+        tail: 100,
+      });
+      expect(w.text()).toContain('Application Logs');
+      expect(w.text()).toContain('Server Level');
+      expect(w.text()).toContain('something failed');
+    });
+
+    it('applies log filters when clicking Apply', async () => {
+      const w = await mountLogsTab();
+
+      const selects = w.findAll('select');
+      expect(selects.length).toBeGreaterThanOrEqual(2);
+      await selects[0].setValue('error');
+      await selects[1].setValue('500');
+
+      const componentInput = w.find('input[placeholder="Filter by component..."]');
+      expect(componentInput.exists()).toBe(true);
+      await componentInput.setValue('api');
+
+      const applyButton = w.findAll('button').find((b) => b.text().includes('Apply'));
+      expect(applyButton).toBeDefined();
+      await applyButton?.trigger('click');
+
+      await vi.waitFor(() => {
+        expect(mockGetLogEntries).toHaveBeenLastCalledWith({
+          level: 'error',
+          component: 'api',
+          tail: 500,
+        });
+      });
     });
   });
 });
