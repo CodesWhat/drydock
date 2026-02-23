@@ -300,16 +300,11 @@ async function handleClearIconCache() {
                   Block all outbound requests (container icons, external fetches)
                 </div>
               </div>
-              <button
-                class="relative w-10 h-5 dd-rounded-lg transition-colors"
-                :class="settingsLoading ? 'opacity-50 pointer-events-none' : ''"
-                :style="{
-                  backgroundColor: internetlessMode ? 'var(--dd-primary)' : 'var(--dd-border-strong)',
-                }"
-                @click="toggleInternetlessMode">
-                <span class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform"
-                      :class="internetlessMode ? 'translate-x-5' : 'translate-x-0'" />
-              </button>
+              <ToggleSwitch
+                :model-value="internetlessMode"
+                :disabled="settingsLoading"
+                @update:model-value="toggleInternetlessMode"
+              />
             </div>
           </div>
         </div>

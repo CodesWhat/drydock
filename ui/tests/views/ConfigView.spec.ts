@@ -128,8 +128,12 @@ vi.mock('@/theme/palettes', () => ({
 
 import { mount } from '@vue/test-utils';
 import ConfigView from '@/views/ConfigView.vue';
+import ToggleSwitch from '@/components/ToggleSwitch.vue';
 
 const stubs: Record<string, any> = {
+  DataViewLayout: defineComponent({
+    template: '<div class="data-view-layout-stub"><slot /></div>',
+  }),
   AppIcon: defineComponent({
     props: ['name', 'size'],
     template: '<span class="app-icon-stub" :data-icon="name" />',
@@ -145,7 +149,7 @@ const stubs: Record<string, any> = {
 };
 
 function factory() {
-  return mount(ConfigView, { global: { stubs }, shallow: false });
+  return mount(ConfigView, { global: { stubs, components: { ToggleSwitch } }, shallow: false });
 }
 
 describe('ConfigView', () => {
