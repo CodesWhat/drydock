@@ -1,17 +1,27 @@
 import { mount } from '@vue/test-utils';
 import DetailPanel from '@/components/DetailPanel.vue';
 
+const mountedWrappers: Array<ReturnType<typeof mount>> = [];
+
 function factory(props: Record<string, any> = {}, slots: Record<string, any> = {}) {
-  return mount(DetailPanel, {
+  const wrapper = mount(DetailPanel, {
     props: { open: true, isMobile: false, ...props },
     slots,
     global: {
       stubs: { AppIcon: { template: '<span class="app-icon-stub" />', props: ['name', 'size'] } },
     },
   });
+  mountedWrappers.push(wrapper);
+  return wrapper;
 }
 
 describe('DetailPanel', () => {
+  afterEach(() => {
+    while (mountedWrappers.length) {
+      mountedWrappers.pop()?.unmount();
+    }
+  });
+
   describe('visibility', () => {
     it('renders panel when open is true', () => {
       const w = factory({ open: true });
@@ -65,6 +75,18 @@ describe('DetailPanel', () => {
       expect(closeBtn).toBeDefined();
       await closeBtn?.trigger('click');
       expect(w.emitted('update:open')?.[0]).toEqual([false]);
+    });
+
+    it('emits update:open false when Escape is pressed while open', async () => {
+      const w = factory({ open: true });
+      globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(w.emitted('update:open')?.[0]).toEqual([false]);
+    });
+
+    it('does not emit close on Escape when panel is already closed', async () => {
+      const w = factory({ open: false });
+      globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(w.emitted('update:open')).toBeUndefined();
     });
   });
 

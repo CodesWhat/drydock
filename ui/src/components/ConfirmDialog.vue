@@ -4,9 +4,39 @@ import { useConfirmDialog } from '../composables/useConfirmDialog';
 
 const { visible, current, accept, reject, dismiss } = useConfirmDialog();
 
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  const tag = target.tagName.toLowerCase();
+  if (tag === 'textarea') {
+    return true;
+  }
+  if (tag !== 'input') {
+    return false;
+  }
+  const input = target as HTMLInputElement;
+  return input.type !== 'checkbox' && input.type !== 'radio' && input.type !== 'button';
+}
+
 function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && visible.value) {
+  if (!visible.value || !current.value) {
+    return;
+  }
+  if (e.key === 'Escape') {
     dismiss();
+    return;
+  }
+  if (
+    e.key === 'Enter' &&
+    !e.metaKey &&
+    !e.ctrlKey &&
+    !e.altKey &&
+    !e.shiftKey &&
+    !isTextEntryTarget(e.target)
+  ) {
+    e.preventDefault();
+    accept();
   }
 }
 

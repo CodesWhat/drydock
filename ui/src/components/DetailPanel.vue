@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 
 const props = withDefaults(
   defineProps<{
@@ -16,7 +16,7 @@ const props = withDefaults(
   },
 );
 
-defineEmits<{
+const emit = defineEmits<{
   'update:open': [val: boolean];
   'update:size': [size: 'sm' | 'md' | 'lg'];
   'full-page': [];
@@ -25,13 +25,28 @@ defineEmits<{
 const panelFlex = computed(() =>
   props.size === 'sm' ? '0 0 30%' : props.size === 'md' ? '0 0 45%' : '0 0 70%',
 );
+
+function closePanel() {
+  emit('update:open', false);
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || !props.open) {
+    return;
+  }
+  event.preventDefault();
+  closePanel();
+}
+
+onMounted(() => globalThis.addEventListener('keydown', handleKeydown));
+onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
 </script>
 
 <template>
   <!-- Mobile overlay -->
   <div v-if="open && isMobile"
        class="fixed inset-0 bg-black/50 z-40"
-       @click="$emit('update:open', false)" />
+       @click="closePanel" />
 
   <!-- Panel -->
   <aside v-if="open"
@@ -71,7 +86,7 @@ const panelFlex = computed(() =>
         <slot name="toolbar" />
       </div>
       <button class="flex items-center justify-center w-7 h-7 dd-rounded text-xs font-medium transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-              @click="$emit('update:open', false)">
+              @click="closePanel">
         <AppIcon name="xmark" :size="14" />
       </button>
     </div>
