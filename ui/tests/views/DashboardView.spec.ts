@@ -170,7 +170,7 @@ describe('DashboardView', () => {
       expect(wrapper.text()).toContain('7.0.0');
     });
 
-    it('limits recent updates to 8 entries', async () => {
+    it('limits recent updates to 6 entries', async () => {
       const containers = Array.from({ length: 12 }, (_, i) =>
         makeContainer({
           id: `c${i}`,
@@ -180,7 +180,7 @@ describe('DashboardView', () => {
       );
       const wrapper = await mountDashboard(containers);
       const rows = wrapper.findAll('tbody tr');
-      expect(rows.length).toBe(8);
+      expect(rows.length).toBe(6);
     });
 
     it('does not show containers without newTag in the recent updates table', async () => {
