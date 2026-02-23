@@ -7,6 +7,7 @@ const log = logger.child({ component: 'prometheus' });
 
 import { getPrometheusConfiguration } from '../configuration/index.js';
 import * as audit from './audit.js';
+import * as compatibility from './compatibility.js';
 import * as container from './container.js';
 import * as containerActions from './container-actions.js';
 import * as registry from './registry.js';
@@ -25,6 +26,7 @@ export function init() {
   }
   log.info('Init Prometheus module');
   collectDefaultMetrics();
+  compatibility.init();
   container.init();
   registry.init();
   trigger.init();

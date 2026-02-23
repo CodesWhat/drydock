@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import joi from 'joi';
 import setValue from 'set-value';
+import { recordLegacyInput } from '../prometheus/compatibility.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
@@ -52,6 +53,7 @@ export function replaceSecrets(ddEnvVars) {
 
 // 1. Get a copy of all dd-related env vars (DD_ primary, WUD_ legacy fallback)
 export const ddEnvVars = {};
+const mappedLegacyEnvVars = new Set<string>();
 
 // First, collect legacy WUD_ vars and remap to DD_ keys
 Object.keys(process.env)
@@ -59,7 +61,21 @@ Object.keys(process.env)
   .forEach((envVar) => {
     const ddKey = `DD_${envVar.substring(4)}`; // WUD_FOO → DD_FOO
     ddEnvVars[ddKey] = process.env[envVar];
+    const envVarUpper = envVar.toUpperCase();
+    mappedLegacyEnvVars.add(envVarUpper);
+    recordLegacyInput('env', envVarUpper);
   });
+
+if (mappedLegacyEnvVars.size > 0) {
+  const legacyEnvVarNames = Array.from(mappedLegacyEnvVars).sort();
+  const MAX_LEGACY_ENV_WARNING_KEYS = 10;
+  const envVarPreview = legacyEnvVarNames.slice(0, MAX_LEGACY_ENV_WARNING_KEYS).join(', ');
+  const additionalCount = legacyEnvVarNames.length - MAX_LEGACY_ENV_WARNING_KEYS;
+  const suffix = additionalCount > 0 ? ` (+${additionalCount} more)` : '';
+  console.warn(
+    `Detected legacy WUD_* environment variables. Please migrate to DD_* equivalents: ${envVarPreview}${suffix}`,
+  );
+}
 
 // Then, collect DD_ vars (overrides WUD_ if both set)
 Object.keys(process.env)

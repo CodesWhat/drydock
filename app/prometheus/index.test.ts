@@ -20,6 +20,10 @@ vi.mock('./container', () => ({
   init: vi.fn(),
 }));
 
+vi.mock('./compatibility', () => ({
+  init: vi.fn(),
+}));
+
 vi.mock('./trigger', () => ({
   init: vi.fn(),
 }));
@@ -56,6 +60,7 @@ describe('Prometheus Module', () => {
   test('should initialize all prometheus components when enabled', async () => {
     const { collectDefaultMetrics } = await import('prom-client');
     const container = await import('./container.js');
+    const compatibility = await import('./compatibility.js');
     const trigger = await import('./trigger.js');
     const watcher = await import('./watcher.js');
     const registry = await import('./registry.js');
@@ -66,6 +71,7 @@ describe('Prometheus Module', () => {
     prometheus.init();
 
     expect(collectDefaultMetrics).toHaveBeenCalled();
+    expect(compatibility.init).toHaveBeenCalled();
     expect(container.init).toHaveBeenCalled();
     expect(registry.init).toHaveBeenCalled();
     expect(trigger.init).toHaveBeenCalled();
@@ -81,6 +87,7 @@ describe('Prometheus Module', () => {
 
     const { collectDefaultMetrics } = await import('prom-client');
     const container = await import('./container.js');
+    const compatibility = await import('./compatibility.js');
     const trigger = await import('./trigger.js');
     const watcher = await import('./watcher.js');
     const registry = await import('./registry.js');
@@ -91,6 +98,7 @@ describe('Prometheus Module', () => {
     prometheus.init();
 
     expect(collectDefaultMetrics).not.toHaveBeenCalled();
+    expect(compatibility.init).not.toHaveBeenCalled();
     expect(container.init).not.toHaveBeenCalled();
     expect(registry.init).not.toHaveBeenCalled();
     expect(trigger.init).not.toHaveBeenCalled();
