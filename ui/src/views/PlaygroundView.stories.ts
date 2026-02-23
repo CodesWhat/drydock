@@ -37,14 +37,14 @@ export const Default: Story = {
     const canvas = within(canvasElement);
 
     await waitFor(() => {
-      expect(canvas.getByText('Border Radius')).toBeInTheDocument();
+      expect(canvas.getByText('Color Theme')).toBeInTheDocument();
     });
-    await expect(canvas.getByText('Terminal / Log View')).toBeInTheDocument();
-    await expect(canvas.getByText('Tooltips & Confirm Dialogs')).toBeInTheDocument();
+    await expect(canvas.getByText('Border Radius')).toBeInTheDocument();
+    await expect(canvas.getByText('Brand Spinner')).toBeInTheDocument();
   },
 };
 
-export const RadiusAndTableActions: Story = {
+export const ComponentsTab: Story = {
   loaders: [
     async () => {
       resetPlaygroundState();
@@ -55,18 +55,63 @@ export const RadiusAndTableActions: Story = {
     const canvas = within(canvasElement);
 
     await waitFor(() => {
-      expect(canvas.getByRole('button', { name: 'Large' })).toBeInTheDocument();
+      expect(canvas.getByRole('button', { name: /Components/ })).toBeInTheDocument();
     });
 
-    await userEvent.click(canvas.getByRole('button', { name: 'Large' }));
+    await userEvent.click(canvas.getByRole('button', { name: /Components/ }));
 
     await waitFor(() => {
-      expect(document.documentElement.style.getPropertyValue('--dd-radius')).toBe('12px');
+      expect(canvas.getByText('Buttons')).toBeInTheDocument();
+    });
+    await expect(canvas.getByText('Container Cards')).toBeInTheDocument();
+    await expect(canvas.getByText('Tooltips & Confirm Dialogs')).toBeInTheDocument();
+  },
+};
+
+export const TokensTab: Story = {
+  loaders: [
+    async () => {
+      resetPlaygroundState();
+      return {};
+    },
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+
+    await waitFor(() => {
+      expect(canvas.getByRole('button', { name: /Tokens/ })).toBeInTheDocument();
     });
 
-    const buttonsModeButton = canvas.getByRole('button', { name: 'Buttons Full split buttons' });
-    await userEvent.click(buttonsModeButton);
-    await expect(buttonsModeButton.className).toContain('ring-2');
+    await userEvent.click(canvas.getByRole('button', { name: /Tokens/ }));
+
+    await waitFor(() => {
+      expect(canvas.getByText('Color Tokens')).toBeInTheDocument();
+    });
+    await expect(canvas.getByText('Typography')).toBeInTheDocument();
+    await expect(canvas.getByText('Terminal / Log View')).toBeInTheDocument();
+    await expect(canvas.getByText('Status Bar')).toBeInTheDocument();
+  },
+};
+
+export const RadiusPresets: Story = {
+  loaders: [
+    async () => {
+      resetPlaygroundState();
+      return {};
+    },
+  ],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+
+    await waitFor(() => {
+      expect(canvas.getByRole('button', { name: 'Round' })).toBeInTheDocument();
+    });
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Round' }));
+
+    await waitFor(() => {
+      expect(document.documentElement.style.getPropertyValue('--dd-radius')).toBe('16px');
+    });
   },
 };
 
@@ -80,6 +125,12 @@ export const ConfirmDialogFlow: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const body = within(document.body);
+
+    // Navigate to Components tab first
+    await waitFor(() => {
+      expect(canvas.getByRole('button', { name: /Components/ })).toBeInTheDocument();
+    });
+    await userEvent.click(canvas.getByRole('button', { name: /Components/ }));
 
     await waitFor(() => {
       expect(canvas.getByText('Confirm Dialogs (click)')).toBeInTheDocument();
