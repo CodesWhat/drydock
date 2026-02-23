@@ -177,6 +177,26 @@ describe('API Index', () => {
     expect(mockApp.use).toHaveBeenCalledWith('compression-middleware');
   });
 
+  test('compression filter should skip SSE routes and defer to default filter otherwise', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      compression: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    const compressionModule = await import('compression');
+    await indexRouter.init();
+
+    const compressionOptions = compressionModule.default.mock.calls[0][0];
+    expect(compressionOptions.filter({ path: '/api/events/stream' }, {})).toBe(false);
+    expect(compressionOptions.filter({ path: '/api/containers' }, {})).toBe(true);
+    expect(compressionModule.default.filter).toHaveBeenCalledWith({ path: '/api/containers' }, {});
+  });
+
   test('should disable compression when configured', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,

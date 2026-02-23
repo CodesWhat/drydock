@@ -462,6 +462,20 @@ describe('Icons Router', () => {
       expect(res.json).toHaveBeenCalledWith({ cleared: 0 });
     });
 
+    test('should continue when listing files for a cache directory fails', async () => {
+      mockReaddir
+        .mockResolvedValueOnce([{ name: 'homarr', isDirectory: () => true }])
+        .mockRejectedValueOnce(new Error('EACCES'));
+      const handler = getDeleteHandler();
+      const res = createResponse();
+
+      await handler({}, res);
+
+      expect(mockUnlink).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ cleared: 0 });
+    });
+
     test('should ignore individual file unlink failures', async () => {
       mockReaddir
         .mockResolvedValueOnce([{ name: 'homarr', isDirectory: () => true }])
@@ -474,6 +488,46 @@ describe('Icons Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ cleared: 2 });
+    });
+
+    test('should return 500 when cache traversal throws unexpectedly', async () => {
+      mockReaddir.mockResolvedValueOnce([
+        {
+          name: 'broken',
+          isDirectory: () => {
+            throw new Error('dir entry failure');
+          },
+        },
+      ]);
+      const handler = getDeleteHandler();
+      const res = createResponse();
+
+      await handler({}, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('dir entry failure'),
+      });
+    });
+
+    test('should stringify non-Error failures when cache traversal throws', async () => {
+      mockReaddir.mockResolvedValueOnce([
+        {
+          name: 'broken',
+          isDirectory: () => {
+            throw 'dir traversal failed';
+          },
+        },
+      ]);
+      const handler = getDeleteHandler();
+      const res = createResponse();
+
+      await handler({}, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Failed to clear icon cache: dir traversal failed',
+      });
     });
   });
 });

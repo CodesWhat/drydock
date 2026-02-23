@@ -581,6 +581,43 @@ test('callback should return 401 when login fails with error', async () => {
   expect401Json(res);
 });
 
+test('callback should set long-lived cookie when rememberMe is true', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const session = createSessionWithPending({
+    'valid-state': createPendingCheck(),
+  });
+  session.cookie = {};
+  session.rememberMe = true;
+
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(req.session.cookie.maxAge).toBe(3600 * 1000 * 24 * 30);
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+test('callback should convert cookie to session cookie when rememberMe is false', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const session = createSessionWithPending({
+    'valid-state': createPendingCheck(),
+  });
+  session.cookie = { maxAge: 12345, expires: new Date() };
+  session.rememberMe = false;
+
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(req.session.cookie.expires).toBe(false);
+  expect(req.session.cookie.maxAge).toBeNull();
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
 test('callback should return 401 when authorizationCodeGrant throws', async () => {
   openidClientMock.authorizationCodeGrant = vi.fn().mockRejectedValue(new Error('grant failed'));
 

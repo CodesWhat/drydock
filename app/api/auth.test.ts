@@ -380,6 +380,24 @@ describe('Auth Router', () => {
       expect(res.json).toHaveBeenCalledWith({ username: 'john' });
     });
 
+    test('login should convert remember-me cookie to a session cookie when remember is false', () => {
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        body: { remember: false },
+        user: { username: 'john' },
+        session: { rememberMe: true, cookie: { maxAge: 12345, expires: new Date() } },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(req.session.rememberMe).toBe(false);
+      expect(req.session.cookie.expires).toBe(false);
+      expect(req.session.cookie.maxAge).toBeNull();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+    });
+
     test('logout should call req.logout and return logoutUrl', () => {
       const handler = getRouteHandler('post', '/logout');
       const req = {
