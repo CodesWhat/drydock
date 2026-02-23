@@ -1,12 +1,10 @@
 // @ts-nocheck
 import { execFile } from 'node:child_process';
-import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import yaml from 'yaml';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
-import * as backupStore from '../../../store/backup.js';
 import Docker from '../docker/Docker.js';
 
 const COMPOSE_COMMAND_TIMEOUT_MS = 60_000;
@@ -217,28 +215,11 @@ class Dockercompose extends Docker {
   /**
    * Override: use compose CLI for pull/recreate instead of Docker API.
    */
-  async performContainerUpdate(context, container, logContainer) {
-    const { dockerApi, registry } = context;
-
-    if (this.configuration.prune) {
-      await this.pruneImages(dockerApi, registry, container, logContainer);
-    }
-
-    const baseImageName = registry
-      .getImageFullName(container.image, '__TAG__')
-      .replace(/:__TAG__$/, '');
-    backupStore.insertBackup({
-      id: crypto.randomUUID(),
-      containerId: container.id,
-      containerName: container.name,
-      imageName: baseImageName,
-      imageTag: container.image.tag.value,
-      imageDigest: container.image.digest?.repo,
-      timestamp: new Date().toISOString(),
-      triggerName: this.getId(),
-    });
-
+  async performContainerUpdate(_context, container) {
     const composeCtx = this._composeContextMap.get(container.name);
+    if (!composeCtx) {
+      throw new Error(`Missing compose context for container ${container.name}`);
+    }
     await this.updateContainerWithCompose(composeCtx.composeFile, composeCtx.service, container);
     await this.runServicePostStartHooks(
       container,
@@ -387,7 +368,7 @@ class Dockercompose extends Docker {
     }
 
     // Refresh all containers requiring a runtime update via the shared
-    // lifecycle orchestrator (security scan, hooks, backup, events).
+    // lifecycle orchestrator (security gate, hooks, prune/backup, events).
     for (const { container, service } of mappingsNeedingRuntimeUpdate) {
       this._composeContextMap.set(container.name, {
         composeFile,

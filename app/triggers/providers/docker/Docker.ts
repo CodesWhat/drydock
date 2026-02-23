@@ -724,7 +724,7 @@ class Docker extends Trigger {
   }
 
   async executeSelfUpdate(context, container, logContainer) {
-    const { dockerApi, registry, auth, newImage, currentContainer, currentContainerSpec } = context;
+    const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
 
     if (this.configuration.dryrun) {
       logContainer.info('Do not replace the existing container because dry-run mode is enabled');
@@ -738,21 +738,8 @@ class Docker extends Trigger {
       );
     }
 
-    // Insert backup before starting the update (store the Docker-pullable
-    // base image name, not the internal registry-prefixed name)
-    const baseImageName = registry
-      .getImageFullName(container.image, '__TAG__')
-      .replace(/:__TAG__$/, '');
-    backupStore.insertBackup({
-      id: crypto.randomUUID(),
-      containerId: container.id,
-      containerName: container.name,
-      imageName: baseImageName,
-      imageTag: container.image.tag.value,
-      imageDigest: container.image.digest?.repo,
-      timestamp: new Date().toISOString(),
-      triggerName: this.getId(),
-    });
+    // Insert backup before starting the update.
+    this.insertContainerImageBackup(context, container);
 
     // Pull the new image while we're still alive
     await this.pullImage(dockerApi, auth, newImage, logContainer);
@@ -992,13 +979,8 @@ class Docker extends Trigger {
     };
   }
 
-  async executeContainerUpdate(context, container, logContainer) {
-    const { dockerApi, registry, auth, newImage, currentContainer, currentContainerSpec } = context;
-
-    if (this.configuration.prune) {
-      await this.pruneImages(dockerApi, registry, container, logContainer);
-    }
-
+  insertContainerImageBackup(context, container) {
+    const { registry } = context;
     // Store the Docker-pullable image reference (e.g. "nginx") not the
     // internal registry-prefixed name (e.g. "hub.public/library/nginx").
     // Use a sentinel tag to extract just the base name, since
@@ -1016,6 +998,20 @@ class Docker extends Trigger {
       timestamp: new Date().toISOString(),
       triggerName: this.getId(),
     });
+  }
+
+  async runPreRuntimeUpdateLifecycle(context, container, logContainer) {
+    const { dockerApi, registry } = context;
+
+    if (this.configuration.prune) {
+      await this.pruneImages(dockerApi, registry, container, logContainer);
+    }
+
+    this.insertContainerImageBackup(context, container);
+  }
+
+  async executeContainerUpdate(context, container, logContainer) {
+    const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
 
     await this.pullImage(dockerApi, auth, newImage, logContainer);
 
@@ -1144,8 +1140,9 @@ class Docker extends Trigger {
 
   /**
    * Shared per-container update lifecycle. Handles security scanning, hooks,
-   * backup pruning, rollback monitoring, and events. Delegates the actual
-   * runtime update to `performContainerUpdate()` which subclasses can override.
+   * prune/backup preparation, backup pruning, rollback monitoring, and events.
+   * Delegates the actual runtime update to `performContainerUpdate()` which
+   * subclasses can override.
    */
   async runContainerUpdateLifecycle(container) {
     const logContainer = this.log.child({ container: fullName(container) });
@@ -1171,6 +1168,7 @@ class Docker extends Trigger {
         return;
       }
 
+      await this.runPreRuntimeUpdateLifecycle(context, container, logContainer);
       const updated = await this.performContainerUpdate(context, container, logContainer);
       if (!updated) {
         return;

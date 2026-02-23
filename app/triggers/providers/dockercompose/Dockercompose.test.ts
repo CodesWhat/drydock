@@ -202,6 +202,9 @@ function spyOnProcessComposeHelpers(triggerInstance, composeFileContent = 'image
   const postHookSpy = vi.spyOn(triggerInstance, 'runPostUpdateHook').mockResolvedValue();
   const pruneImagesSpy = vi.spyOn(triggerInstance, 'pruneImages').mockResolvedValue();
   const cleanupOldImagesSpy = vi.spyOn(triggerInstance, 'cleanupOldImages').mockResolvedValue();
+  const rollbackMonitorSpy = vi
+    .spyOn(triggerInstance, 'maybeStartAutoRollbackMonitor')
+    .mockResolvedValue();
   return {
     getComposeFileSpy,
     writeComposeFileSpy,
@@ -213,6 +216,7 @@ function spyOnProcessComposeHelpers(triggerInstance, composeFileContent = 'image
     postHookSpy,
     pruneImagesSpy,
     cleanupOldImagesSpy,
+    rollbackMonitorSpy,
   };
 }
 
@@ -1473,17 +1477,19 @@ describe('Dockercompose Trigger', () => {
     vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
       makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
     );
-    const { pruneImagesSpy, cleanupOldImagesSpy, postHookSpy } =
+    const { pruneImagesSpy, cleanupOldImagesSpy, postHookSpy, rollbackMonitorSpy } =
       spyOnProcessComposeHelpers(trigger);
 
     await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
 
-    // pruneImages runs (inside performContainerUpdate, matches Docker behavior)
+    // pruneImages runs in shared lifecycle before runtime strategy
     expect(pruneImagesSpy).toHaveBeenCalledTimes(1);
     // cleanupOldImages is skipped (performContainerUpdate returns false in dryrun)
     expect(cleanupOldImagesSpy).not.toHaveBeenCalled();
     // Post-update hook is skipped in dryrun
     expect(postHookSpy).not.toHaveBeenCalled();
+    // Rollback monitor is skipped in dryrun
+    expect(rollbackMonitorSpy).not.toHaveBeenCalled();
     // No update event emitted
     expect(emitContainerUpdateApplied).not.toHaveBeenCalled();
   });
@@ -1553,7 +1559,7 @@ describe('Dockercompose Trigger', () => {
     vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
       makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
     );
-    const { maybeScanSpy, preHookSpy, postHookSpy, composeUpdateSpy } =
+    const { maybeScanSpy, preHookSpy, postHookSpy, composeUpdateSpy, rollbackMonitorSpy } =
       spyOnProcessComposeHelpers(trigger);
 
     await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
@@ -1563,6 +1569,8 @@ describe('Dockercompose Trigger', () => {
     // Pre/post update hooks
     expect(preHookSpy).toHaveBeenCalledTimes(1);
     expect(postHookSpy).toHaveBeenCalledTimes(1);
+    // Rollback monitor phase
+    expect(rollbackMonitorSpy).toHaveBeenCalledTimes(1);
     // Compose update
     expect(composeUpdateSpy).toHaveBeenCalledTimes(1);
     // Backup inserted
@@ -1587,7 +1595,8 @@ describe('Dockercompose Trigger', () => {
     vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
       makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
     );
-    const { maybeScanSpy, preHookSpy, postHookSpy } = spyOnProcessComposeHelpers(trigger);
+    const { maybeScanSpy, preHookSpy, postHookSpy, rollbackMonitorSpy } =
+      spyOnProcessComposeHelpers(trigger);
 
     await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
 
@@ -1597,6 +1606,8 @@ describe('Dockercompose Trigger', () => {
     expect(preHookSpy).toHaveBeenCalledTimes(1);
     // Post-update hook skipped (performContainerUpdate returns false in dryrun)
     expect(postHookSpy).not.toHaveBeenCalled();
+    // Rollback monitoring does not start because runtime update returns false in dryrun
+    expect(rollbackMonitorSpy).not.toHaveBeenCalled();
     // Backup always inserted (recorded before dryrun gate, matches Docker)
     expect(backupStore.insertBackup).toHaveBeenCalledTimes(1);
     // No update event (performContainerUpdate returned false)
@@ -1618,6 +1629,7 @@ describe('Dockercompose Trigger', () => {
       trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
     ).rejects.toThrow('compose pull failed');
 
+    expect(emitContainerUpdateApplied).not.toHaveBeenCalled();
     expect(emitContainerUpdateFailed).toHaveBeenCalledWith({
       containerName: 'test_nginx',
       error: 'compose pull failed',
