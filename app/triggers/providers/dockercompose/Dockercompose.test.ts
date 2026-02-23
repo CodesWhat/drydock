@@ -70,11 +70,17 @@ vi.mock('node:fs/promises', async (importOriginal) => {
       copyFile: vi.fn().mockResolvedValue(undefined),
       readFile: vi.fn().mockResolvedValue(Buffer.from('')),
       writeFile: vi.fn().mockResolvedValue(undefined),
+      rename: vi.fn().mockResolvedValue(undefined),
+      unlink: vi.fn().mockResolvedValue(undefined),
+      stat: vi.fn().mockResolvedValue({ mtimeMs: Date.now() }),
     },
     access: vi.fn().mockResolvedValue(undefined),
     copyFile: vi.fn().mockResolvedValue(undefined),
     readFile: vi.fn().mockResolvedValue(Buffer.from('')),
     writeFile: vi.fn().mockResolvedValue(undefined),
+    rename: vi.fn().mockResolvedValue(undefined),
+    unlink: vi.fn().mockResolvedValue(undefined),
+    stat: vi.fn().mockResolvedValue({ mtimeMs: Date.now() }),
   };
 });
 
@@ -187,7 +193,21 @@ function makeExecMocks({
  * Set up the common spies used by processComposeFile tests that exercise
  * the write / trigger / hooks path.
  */
-function spyOnProcessComposeHelpers(triggerInstance, composeFileContent = 'image: nginx:1.0.0') {
+function spyOnProcessComposeHelpers(
+  triggerInstance,
+  composeFileContent = [
+    'services:',
+    '  nginx:',
+    '    image: nginx:1.0.0',
+    '  redis:',
+    '    image: redis:7.0.0',
+    '  filebrowser:',
+    '    image: filebrowser/filebrowser:v2.59.0-s6',
+    '  drydock:',
+    '    image: codeswhat/drydock:1.0.0',
+    '',
+  ].join('\n'),
+) {
   const getComposeFileSpy = vi
     .spyOn(triggerInstance, 'getComposeFile')
     .mockResolvedValue(Buffer.from(composeFileContent));
@@ -558,8 +578,68 @@ describe('Dockercompose Trigger', () => {
     );
     expect(writeComposeFileSpy).toHaveBeenCalledWith(
       '/opt/drydock/test/stack.yml',
-      'image: nginx:1.1.0',
+      expect.stringContaining('image: nginx:1.1.0'),
     );
+    expect(writeComposeFileSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      expect.not.stringContaining('image: nginx:1.0.0'),
+    );
+  });
+
+  test('processComposeFile should only patch target image field and keep other matching strings unchanged', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+
+    const container = makeContainer();
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+
+    const composeWithOtherImageStrings = [
+      'services:',
+      '  nginx:',
+      '    image: nginx:1.0.0',
+      '    environment:',
+      '      - MIRROR_IMAGE=nginx:1.0.0',
+      '',
+    ].join('\n');
+    const { writeComposeFileSpy } = spyOnProcessComposeHelpers(trigger, composeWithOtherImageStrings);
+
+    await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+
+    const [, updatedCompose] = writeComposeFileSpy.mock.calls[0];
+    expect(updatedCompose).toContain('    image: nginx:1.1.0');
+    expect(updatedCompose).toContain('MIRROR_IMAGE=nginx:1.0.0');
+  });
+
+  test('processComposeFile should fail when the same service resolves to conflicting image updates', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+
+    const containerA = makeContainer({
+      name: 'nginx-a',
+      remoteValue: '1.1.0',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const containerB = makeContainer({
+      name: 'nginx-b',
+      remoteValue: '1.2.0',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+
+    const { writeComposeFileSpy, composeUpdateSpy } = spyOnProcessComposeHelpers(trigger);
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [containerA, containerB]),
+    ).rejects.toThrow('Conflicting compose image updates for service nginx');
+
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+    expect(composeUpdateSpy).not.toHaveBeenCalled();
   });
 
   test('processComposeFile should not backup when backup is false', async () => {
@@ -686,7 +766,9 @@ describe('Dockercompose Trigger', () => {
       makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
     );
 
-    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from('image: nginx:1.0.0'));
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
     vi.spyOn(trigger, 'writeComposeFile').mockRejectedValue(new Error('disk full'));
     const composeUpdateSpy = vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
     const hooksSpy = vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
@@ -1458,6 +1540,47 @@ describe('Dockercompose Trigger', () => {
     expect(mockLog.error).toHaveBeenCalledWith(expect.stringContaining('write failed'));
   });
 
+  test('writeComposeFile should write atomically through temp file + rename under lock', async () => {
+    await trigger.writeComposeFile('/opt/drydock/test/compose.yml', 'data');
+
+    expect(fs.writeFile).toHaveBeenCalledWith(
+      '/opt/drydock/test/compose.yml.drydock.lock',
+      expect.any(String),
+      { flag: 'wx' },
+    );
+    expect(fs.writeFile).toHaveBeenCalledWith(
+      expect.stringContaining('/opt/drydock/test/.compose.yml.tmp-'),
+      'data',
+    );
+    expect(fs.rename).toHaveBeenCalledWith(
+      expect.stringContaining('/opt/drydock/test/.compose.yml.tmp-'),
+      '/opt/drydock/test/compose.yml',
+    );
+    expect(fs.unlink).toHaveBeenCalledWith('/opt/drydock/test/compose.yml.drydock.lock');
+  });
+
+  test('writeComposeFile should remove stale lock and continue', async () => {
+    const lockBusyError: any = new Error('lock exists');
+    lockBusyError.code = 'EEXIST';
+    fs.writeFile
+      .mockRejectedValueOnce(lockBusyError)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+    fs.stat.mockResolvedValueOnce({
+      mtimeMs: Date.now() - 200_000,
+    });
+
+    await trigger.writeComposeFile('/opt/drydock/test/compose.yml', 'data');
+
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Removed stale compose file lock'),
+    );
+    expect(fs.rename).toHaveBeenCalledWith(
+      expect.stringContaining('/opt/drydock/test/.compose.yml.tmp-'),
+      '/opt/drydock/test/compose.yml',
+    );
+  });
+
   test('getComposeFileAsObject should throw on yaml parse error', async () => {
     vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from('invalid: yaml: [[['));
 
@@ -1805,42 +1928,38 @@ describe('Dockercompose Trigger', () => {
     expect(updated).toContain('image: nginx:1.2.0');
   });
 
+  test('updateComposeServiceImageInText should preserve quote style when replacing image value', () => {
+    const compose = ['services:', '  nginx:', "    image: 'nginx:1.1.0'", ''].join('\n');
+
+    const updated = testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0');
+
+    expect(updated).toContain("image: 'nginx:1.2.0'");
+  });
+
+  test('updateComposeServiceImageInText should update image in flow-style service mapping', () => {
+    const compose = ['services:', '  nginx: { image: "nginx:1.1.0", restart: always }', ''].join(
+      '\n',
+    );
+
+    const updated = testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0');
+
+    expect(updated).toContain('nginx: { image: "nginx:1.2.0", restart: always }');
+  });
+
+  test('updateComposeServiceImageInText should throw for flow-style services without image key', () => {
+    const compose = ['services:', '  nginx: { restart: always }', ''].join('\n');
+
+    expect(() => testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0')).toThrow(
+      'Unable to insert compose image for flow-style service nginx without image key',
+    );
+  });
+
   test('updateComposeServiceImageInText should throw when services section is missing', () => {
     const compose = ['version: "3"', 'x-service: value', ''].join('\n');
 
     expect(() => testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0')).toThrow(
       'Unable to locate services section in compose file',
     );
-  });
-
-  test('updateComposeServiceImageInText should ignore non-key service lines before matching target service', () => {
-    const compose = ['services:', '  - not-a-service-key', '  nginx:', '    image: nginx:1.1.0', ''].join(
-      '\n',
-    );
-
-    const updated = testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0');
-
-    expect(updated).toContain('    image: nginx:1.2.0');
-  });
-
-  test('updateComposeServiceImageInText should stop scanning services when indentation exits services block', () => {
-    const compose = ['services:', 'root-key: value', '  nginx:', '    image: nginx:1.1.0', ''].join(
-      '\n',
-    );
-
-    expect(() => testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0')).toThrow(
-      'Unable to locate compose service nginx',
-    );
-  });
-
-  test('updateComposeServiceImageInText should skip malformed field indentation before image key', () => {
-    const compose = ['services:', '  nginx:', ' bad-indentation: true', '    image: nginx:1.1.0', ''].join(
-      '\n',
-    );
-
-    const updated = testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0');
-
-    expect(updated).toContain('    image: nginx:1.2.0');
   });
 
   test('updateComposeServiceImageInText should insert image using default field indentation when service has no fields', () => {
@@ -1850,50 +1969,6 @@ describe('Dockercompose Trigger', () => {
 
     expect(updated).toContain('  nginx:');
     expect(updated).toContain('    image: nginx:1.2.0');
-  });
-
-  test('updateComposeServiceImageInText should fallback when indentation matcher returns null', () => {
-    const compose = ['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n');
-    const originalMatch = String.prototype.match;
-    const stringMatchSpy = vi.spyOn(String.prototype, 'match').mockImplementation(function (pattern) {
-      if (
-        pattern instanceof RegExp &&
-        pattern.source === '^[ \\t]*' &&
-        `${this}`.startsWith('    image:')
-      ) {
-        return null;
-      }
-      return originalMatch.call(`${this}`, pattern);
-    });
-
-    try {
-      const updated = testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0');
-      expect(updated).toContain('image: nginx:1.2.0');
-    } finally {
-      stringMatchSpy.mockRestore();
-    }
-  });
-
-  test('updateComposeServiceImageInText should fallback to rewriting image line when regex match is unavailable', () => {
-    const compose = ['services:', '  nginx:', '    image: nginx:1.1.0 # current', ''].join('\n');
-    const originalMatch = String.prototype.match;
-    const stringMatchSpy = vi.spyOn(String.prototype, 'match').mockImplementation(function (pattern) {
-      if (
-        pattern instanceof RegExp &&
-        pattern.source === '^([ \\t]*image\\s*:\\s*)([^#]*?)(\\s*(#.*)?)$' &&
-        `${this}`.includes('image:')
-      ) {
-        return null;
-      }
-      return originalMatch.call(`${this}`, pattern);
-    });
-
-    try {
-      const updated = testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0');
-      expect(updated).toContain('    image: nginx:1.2.0');
-    } finally {
-      stringMatchSpy.mockRestore();
-    }
   });
 
   test('updateComposeServiceImageInText should throw when service is missing', () => {
@@ -2050,6 +2125,10 @@ describe('Dockercompose Trigger', () => {
     vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
       makeCompose({ drydock: { image: 'codeswhat/drydock:1.0.0' } }),
     );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  drydock:', '    image: codeswhat/drydock:1.0.0', ''].join('\n')),
+    );
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
     const notifySpy = vi.spyOn(trigger, 'maybeNotifySelfUpdate').mockResolvedValue();
     const executeSelfUpdateSpy = vi.spyOn(trigger, 'executeSelfUpdate').mockResolvedValue(true);
     const postHookSpy = vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();

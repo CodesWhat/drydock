@@ -9,6 +9,12 @@ import Docker from '../docker/Docker.js';
 
 const COMPOSE_COMMAND_TIMEOUT_MS = 60_000;
 const COMPOSE_COMMAND_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+const COMPOSE_FILE_LOCK_SUFFIX = '.drydock.lock';
+const COMPOSE_FILE_LOCK_RETRY_MS = 100;
+const COMPOSE_FILE_LOCK_MAX_WAIT_MS = 10_000;
+const COMPOSE_FILE_LOCK_STALE_MS = 120_000;
+const ROOT_MODE_BREAK_GLASS_HINT =
+  'use socket proxy or adjust file permissions/group_add; break-glass root mode requires DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true';
 
 function getServiceKey(compose, container, currentImage) {
   const composeServiceName = container.labels?.['com.docker.compose.service'];
@@ -92,6 +98,12 @@ function normalizePostStartEnvironment(environment) {
   );
 }
 
+function sleep(durationMs) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
+}
+
 /**
  * Return true if the container belongs to the compose file.
  * @param compose
@@ -107,22 +119,42 @@ function doesContainerBelongToCompose(compose, container) {
   return Boolean(getServiceKey(compose, container, currentImage));
 }
 
-function isCommentOrEmptyLine(line) {
-  const trimmed = line.trim();
-  return trimmed === '' || trimmed.startsWith('#');
+function getLineStartOffset(text, offset) {
+  const beforeOffset = Math.max(0, offset - 1);
+  const lineBreakIndex = text.lastIndexOf('\n', beforeOffset);
+  return lineBreakIndex < 0 ? 0 : lineBreakIndex + 1;
 }
 
-function getLineIndentation(line) {
-  const indentation = line.match(/^[ \t]*/);
-  return indentation ? indentation[0] : '';
+function getLineIndentationAtOffset(text, offset) {
+  const lineStart = getLineStartOffset(text, offset);
+  return text.slice(lineStart, offset);
 }
 
-function parseYamlKeyLine(line) {
-  const match = line.match(/^[ \t]*(['"]?)([^'"]+)\1\s*:\s*(?:#.*)?$/);
-  if (!match) {
+function getPreferredChildIndentation(parentIndentation) {
+  if (parentIndentation.includes('\t')) {
+    return `${parentIndentation}\t`;
+  }
+  return `${parentIndentation}  `;
+}
+
+function getMapPairByKey(mapNode, keyName) {
+  if (!yaml.isMap(mapNode)) {
     return undefined;
   }
-  return match[2].trim();
+  return mapNode.items.find((pair) => {
+    const pairKeyValue = pair?.key?.value ?? pair?.key?.source;
+    return `${pairKeyValue}` === keyName;
+  });
+}
+
+function formatReplacementImageValue(currentImageValueText, newImage) {
+  if (currentImageValueText.startsWith("'") && currentImageValueText.endsWith("'")) {
+    return `'${newImage.replace(/'/g, "''")}'`;
+  }
+  if (currentImageValueText.startsWith('"') && currentImageValueText.endsWith('"')) {
+    return JSON.stringify(newImage);
+  }
+  return newImage;
 }
 
 /**
@@ -131,110 +163,76 @@ function parseYamlKeyLine(line) {
  */
 function updateComposeServiceImageInText(composeFileText, serviceName, newImage) {
   const newline = composeFileText.includes('\r\n') ? '\r\n' : '\n';
-  const lines = composeFileText.split(/\r?\n/);
+  const composeDoc = yaml.parseDocument(composeFileText, {
+    maxAliasCount: 10000,
+    keepSourceTokens: true,
+    keepNodeTypes: true,
+  });
+  if (composeDoc.errors?.length > 0) {
+    throw composeDoc.errors[0];
+  }
 
-  const servicesLineIndex = lines.findIndex((line) => /^[ \t]*services\s*:\s*(?:#.*)?$/.test(line));
-  if (servicesLineIndex < 0) {
+  const servicesNode = composeDoc.get('services', true);
+  if (!yaml.isMap(servicesNode)) {
     throw new Error('Unable to locate services section in compose file');
   }
 
-  const servicesIndent = getLineIndentation(lines[servicesLineIndex]).length;
-  let serviceIndent;
-  let serviceLineIndex = -1;
-  let serviceIndentation = '';
-
-  for (let lineIndex = servicesLineIndex + 1; lineIndex < lines.length; lineIndex++) {
-    const line = lines[lineIndex];
-    if (isCommentOrEmptyLine(line)) {
-      continue;
-    }
-
-    const lineIndentation = getLineIndentation(line);
-    const indentLength = lineIndentation.length;
-
-    if (indentLength <= servicesIndent) {
-      break;
-    }
-
-    if (serviceIndent === undefined) {
-      serviceIndent = indentLength;
-    }
-
-    if (indentLength !== serviceIndent) {
-      continue;
-    }
-
-    const key = parseYamlKeyLine(line);
-    if (key === serviceName) {
-      serviceLineIndex = lineIndex;
-      serviceIndentation = lineIndentation;
-      break;
-    }
-  }
-
-  if (serviceLineIndex < 0) {
+  const servicePair = getMapPairByKey(servicesNode, serviceName);
+  if (!servicePair) {
     throw new Error(`Unable to locate compose service ${serviceName}`);
   }
 
-  let serviceEndLineIndex = lines.length;
-  for (let lineIndex = serviceLineIndex + 1; lineIndex < lines.length; lineIndex++) {
-    const line = lines[lineIndex];
-    if (isCommentOrEmptyLine(line)) {
-      continue;
+  const serviceValueNode = servicePair.value;
+  if (yaml.isMap(serviceValueNode)) {
+    const imagePair = getMapPairByKey(serviceValueNode, 'image');
+    if (imagePair) {
+      const imageValueRange = imagePair?.value?.range;
+      if (!Array.isArray(imageValueRange) || imageValueRange.length < 2) {
+        throw new Error(`Unable to locate compose image value for service ${serviceName}`);
+      }
+      const imageValueStart = imageValueRange[0];
+      const imageValueEnd = imageValueRange[1];
+      const currentImageValueText = composeFileText.slice(imageValueStart, imageValueEnd);
+      const formattedImage = formatReplacementImageValue(currentImageValueText, newImage);
+      return `${composeFileText.slice(0, imageValueStart)}${formattedImage}${composeFileText.slice(
+        imageValueEnd,
+      )}`;
     }
 
-    const indentLength = getLineIndentation(line).length;
-    if (indentLength <= servicesIndent || indentLength === serviceIndent) {
-      serviceEndLineIndex = lineIndex;
-      break;
+    if (serviceValueNode?.srcToken?.type === 'flow-collection') {
+      throw new Error(
+        `Unable to insert compose image for flow-style service ${serviceName} without image key`,
+      );
     }
+  } else if (!(yaml.isScalar(serviceValueNode) && serviceValueNode.value === null)) {
+    throw new Error(`Unable to patch compose service ${serviceName} because it is not a map`);
   }
 
-  let fieldIndent;
-  let fieldIndentation = '';
-  let imageLineIndex = -1;
-
-  for (let lineIndex = serviceLineIndex + 1; lineIndex < serviceEndLineIndex; lineIndex++) {
-    const line = lines[lineIndex];
-    if (isCommentOrEmptyLine(line)) {
-      continue;
-    }
-
-    const lineIndentation = getLineIndentation(line);
-    const indentLength = lineIndentation.length;
-    if (indentLength <= serviceIndent) {
-      continue;
-    }
-
-    if (fieldIndent === undefined) {
-      fieldIndent = indentLength;
-      fieldIndentation = lineIndentation;
-    }
-
-    if (indentLength !== fieldIndent) {
-      continue;
-    }
-
-    if (/^[ \t]*image\s*:/.test(line)) {
-      imageLineIndex = lineIndex;
-      break;
-    }
+  const serviceKeyOffset = servicePair?.key?.range?.[0];
+  if (typeof serviceKeyOffset !== 'number') {
+    throw new Error(`Unable to locate compose service ${serviceName}`);
   }
 
-  if (imageLineIndex >= 0) {
-    const imageLine = lines[imageLineIndex];
-    const match = imageLine.match(/^([ \t]*image\s*:\s*)([^#]*?)(\s*(#.*)?)$/);
-    if (match) {
-      lines[imageLineIndex] = `${match[1]}${newImage}${match[3] || ''}`;
-    } else {
-      lines[imageLineIndex] = `${getLineIndentation(imageLine)}image: ${newImage}`;
-    }
-  } else {
-    const imageIndentation = fieldIndentation || `${serviceIndentation}  `;
-    lines.splice(serviceLineIndex + 1, 0, `${imageIndentation}image: ${newImage}`);
+  const serviceIndentation = getLineIndentationAtOffset(composeFileText, serviceKeyOffset);
+  const imageIndentation = getPreferredChildIndentation(serviceIndentation);
+  const lineBreakOffset = composeFileText.indexOf('\n', serviceKeyOffset);
+
+  if (lineBreakOffset >= 0) {
+    const insertionOffset = lineBreakOffset + 1;
+    return `${composeFileText.slice(0, insertionOffset)}${imageIndentation}image: ${newImage}${newline}${composeFileText.slice(insertionOffset)}`;
   }
 
-  return lines.join(newline);
+  const needsLeadingNewline = composeFileText.length > 0;
+  const separator = needsLeadingNewline ? newline : '';
+  return `${composeFileText}${separator}${imageIndentation}image: ${newImage}`;
+}
+
+function updateComposeServiceImagesInText(composeFileText, serviceImageUpdates) {
+  let updatedComposeText = composeFileText;
+  for (const [serviceName, newImage] of serviceImageUpdates.entries()) {
+    updatedComposeText = updateComposeServiceImageInText(updatedComposeText, serviceName, newImage);
+  }
+  return updatedComposeText;
 }
 
 /**
@@ -249,6 +247,8 @@ class Dockercompose extends Docker {
     string,
     { composeFile: string; service: string; serviceDefinition: any }
   >();
+
+  _composeFileLocksHeld = new Set<string>();
 
   /**
    * Get the Trigger configuration schema.
@@ -276,7 +276,7 @@ class Dockercompose extends Docker {
       } catch (e) {
         const reason =
           e.code === 'EACCES'
-            ? 'permission denied (run as root or adjust file permissions)'
+            ? `permission denied (${ROOT_MODE_BREAK_GLASS_HINT})`
             : 'does not exist';
         this.log.error(`The default file ${this.configuration.file} ${reason}`);
         throw e;
@@ -320,6 +320,115 @@ class Dockercompose extends Docker {
       this.log.warn(`Default compose file path is invalid (${e.message})`);
       return null;
     }
+  }
+
+  buildComposeServiceImageUpdates(mappingsNeedingComposeUpdate) {
+    const serviceImageUpdates = new Map<string, string>();
+    mappingsNeedingComposeUpdate.forEach(({ service, update }) => {
+      const existingUpdate = serviceImageUpdates.get(service);
+      if (existingUpdate !== undefined && existingUpdate !== update) {
+        throw new Error(
+          `Conflicting compose image updates for service ${service} (${existingUpdate} vs ${update})`,
+        );
+      }
+      serviceImageUpdates.set(service, update);
+    });
+    return serviceImageUpdates;
+  }
+
+  async maybeReleaseStaleComposeFileLock(lockFilePath) {
+    try {
+      const lockFileStats = await fs.stat(lockFilePath);
+      const lockAgeMs = Date.now() - lockFileStats.mtimeMs;
+      if (lockAgeMs <= COMPOSE_FILE_LOCK_STALE_MS) {
+        return false;
+      }
+      await fs.unlink(lockFilePath);
+      this.log.warn(`Removed stale compose file lock ${lockFilePath}`);
+      return true;
+    } catch (e) {
+      if (e?.code === 'ENOENT') {
+        return true;
+      }
+      this.log.warn(`Could not inspect compose file lock ${lockFilePath} (${e.message})`);
+      return false;
+    }
+  }
+
+  async withComposeFileLock(file, operation) {
+    const filePath = resolveConfiguredPath(file, {
+      label: 'Compose file path',
+    });
+    if (this._composeFileLocksHeld.has(filePath)) {
+      return operation(filePath);
+    }
+
+    const lockFilePath = `${filePath}${COMPOSE_FILE_LOCK_SUFFIX}`;
+    const lockWaitStartedAt = Date.now();
+    while (true) {
+      try {
+        await fs.writeFile(lockFilePath, `${process.pid}:${Date.now()}\n`, { flag: 'wx' });
+        this._composeFileLocksHeld.add(filePath);
+        break;
+      } catch (e) {
+        if (e?.code !== 'EEXIST') {
+          throw e;
+        }
+        const staleLockReleased = await this.maybeReleaseStaleComposeFileLock(lockFilePath);
+        if (staleLockReleased) {
+          continue;
+        }
+        if (Date.now() - lockWaitStartedAt >= COMPOSE_FILE_LOCK_MAX_WAIT_MS) {
+          throw new Error(`Timed out waiting for compose file lock ${lockFilePath}`);
+        }
+        await sleep(COMPOSE_FILE_LOCK_RETRY_MS);
+      }
+    }
+
+    try {
+      return await operation(filePath);
+    } finally {
+      this._composeFileLocksHeld.delete(filePath);
+      try {
+        await fs.unlink(lockFilePath);
+      } catch (e) {
+        if (e?.code !== 'ENOENT') {
+          this.log.warn(`Could not remove compose file lock ${lockFilePath} (${e.message})`);
+        }
+      }
+    }
+  }
+
+  async writeComposeFileAtomic(filePath, data) {
+    const composeDirectory = path.dirname(filePath);
+    const composeFileName = path.basename(filePath);
+    const temporaryFilePath = path.join(
+      composeDirectory,
+      `.${composeFileName}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    );
+    await fs.writeFile(temporaryFilePath, data);
+    try {
+      await fs.rename(temporaryFilePath, filePath);
+    } catch (e) {
+      try {
+        await fs.unlink(temporaryFilePath);
+      } catch {
+        // ignore temp cleanup errors to preserve the original write error
+      }
+      throw e;
+    }
+  }
+
+  async mutateComposeFile(file, updateComposeText) {
+    return this.withComposeFileLock(file, async (filePath) => {
+      const composeFileText = (await this.getComposeFile(filePath)).toString();
+      const updatedComposeFileText = updateComposeText(composeFileText);
+      if (updatedComposeFileText === composeFileText) {
+        return false;
+      }
+      await this.writeComposeFile(filePath, updatedComposeFileText);
+      return true;
+    });
   }
 
   /**
@@ -438,7 +547,7 @@ class Dockercompose extends Docker {
       } catch (e) {
         const reason =
           e.code === 'EACCES'
-            ? 'permission denied (run as root or adjust file permissions)'
+            ? `permission denied (${ROOT_MODE_BREAK_GLASS_HINT})`
             : 'does not exist';
         this.log.warn(`Compose file ${composeFile} for container ${container.name} ${reason}`);
         continue;
@@ -521,16 +630,13 @@ class Dockercompose extends Docker {
         await this.backup(composeFile, backupFile);
       }
 
-      // Read the compose file as a string
-      let composeFileStr = (await this.getComposeFile(composeFile)).toString();
-
-      // Replace only versions requiring updates
-      mappingsNeedingComposeUpdate.forEach(({ current, update }) => {
-        composeFileStr = composeFileStr.replaceAll(current, update);
-      });
-
-      // Write docker-compose.yml file back
-      await this.writeComposeFile(composeFile, composeFileStr);
+      // Replace only the targeted compose service image values.
+      const serviceImageUpdates = this.buildComposeServiceImageUpdates(
+        mappingsNeedingComposeUpdate,
+      );
+      await this.mutateComposeFile(composeFile, (composeFileText) =>
+        updateComposeServiceImagesInText(composeFileText, serviceImageUpdates),
+      );
     }
 
     // Refresh all containers requiring a runtime update via the shared
@@ -736,13 +842,9 @@ class Dockercompose extends Docker {
       currentImage,
     );
 
-    const composeFileText = (await this.getComposeFile(composeFile)).toString();
-    const updatedComposeFileText = updateComposeServiceImageInText(
-      composeFileText,
-      service,
-      newImage,
+    await this.mutateComposeFile(composeFile, (composeFileText) =>
+      updateComposeServiceImageInText(composeFileText, service, newImage),
     );
-    await this.writeComposeFile(composeFile, updatedComposeFileText);
 
     await this.updateContainerWithCompose(composeFile, service, container, {
       shouldStart: currentContainerSpec?.State?.Running === true,
@@ -904,7 +1006,9 @@ class Dockercompose extends Docker {
       label: 'Compose file path',
     });
     try {
-      await fs.writeFile(filePath, data);
+      await this.withComposeFileLock(filePath, async () => {
+        await this.writeComposeFileAtomic(filePath, data);
+      });
     } catch (e) {
       this.log.error(`Error when writing ${filePath} (${e.message})`);
       this.log.debug(e);
