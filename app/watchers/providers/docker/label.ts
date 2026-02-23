@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Supported Docker labels (dd.* preferred, wud.* legacy fallback).
  */
@@ -26,6 +25,11 @@ export const wudTagExclude = 'wud.tag.exclude';
  */
 export const ddTagTransform = 'dd.tag.transform';
 export const wudTagTransform = 'wud.tag.transform';
+
+/**
+ * Optional tag family policy ('strict' by default, or 'loose' to allow cross-family updates).
+ */
+export const ddTagFamily = 'dd.tag.family';
 
 /**
  * Optional path in Docker inspect JSON to derive the running tag value.

@@ -316,6 +316,9 @@ describe('Docker Watcher', () => {
     mockPrometheus.getMaintenanceSkipCounter.mockReturnValue({
       labels: vi.fn().mockReturnValue({ inc: vi.fn() }),
     });
+    mockPrometheus.getLoggerInitFailureCounter.mockReturnValue({
+      labels: vi.fn().mockReturnValue({ inc: vi.fn() }),
+    });
 
     // Setup maintenance helpers
     maintenance.isInMaintenanceWindow.mockReturnValue(true);
@@ -400,6 +403,20 @@ describe('Docker Watcher', () => {
         },
         { host: 'docker-proxy.example.com' },
       );
+      expect(() => docker.validateConfiguration(config)).not.toThrow();
+    });
+
+    test('should validate configuration with insecure remote auth override', async () => {
+      const config = {
+        host: 'docker-proxy.example.com',
+        port: 443,
+        protocol: 'https',
+        auth: {
+          type: 'bearer',
+          bearer: 'test-token',
+          insecure: true,
+        },
+      };
       expect(() => docker.validateConfiguration(config)).not.toThrow();
     });
   });
@@ -508,7 +525,21 @@ describe('Docker Watcher', () => {
       });
     });
 
-    test('should skip auth headers when remote watcher is not HTTPS', async () => {
+    test('should fail closed when remote watcher auth is configured without HTTPS', async () => {
+      await expect(
+        docker.register('watcher', 'docker', 'test', {
+          host: 'localhost',
+          port: 2375,
+          protocol: 'http',
+          auth: {
+            type: 'bearer',
+            bearer: 'my-secret-token',
+          },
+        }),
+      ).rejects.toThrow('HTTPS is required for remote auth');
+    });
+
+    test('should allow insecure auth fallback when auth.insecure=true', async () => {
       await docker.register('watcher', 'docker', 'test', {
         host: 'localhost',
         port: 2375,
@@ -516,6 +547,7 @@ describe('Docker Watcher', () => {
         auth: {
           type: 'bearer',
           bearer: 'my-secret-token',
+          insecure: true,
         },
       });
       expect(mockDockerode).toHaveBeenCalledWith({
@@ -2153,6 +2185,166 @@ describe('Docker Watcher', () => {
       expect(result).toEqual({ tag: '1.3' });
     });
 
+    test('should ignore semver tags with mismatched numeric zero-padding style', async () => {
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: '5.1.4', semver: true },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue(['20.04.1', '5.1.5', '5.1.4']),
+      };
+      registry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+
+      const rank = {
+        '5.1.4': 514,
+        '5.1.5': 515,
+        '20.04.1': 200401,
+      };
+      mockTag.isGreater.mockImplementation(
+        (version1, version2) => rank[version1] >= rank[version2],
+      );
+
+      const mockLogChild = { error: vi.fn(), warn: vi.fn() };
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result).toEqual({ tag: '5.1.5' });
+    });
+
+    test('should keep updates within inferred suffix family by default', async () => {
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: '1.2.3-ls132', semver: true },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.4-ls133', '1.2.3-ls132']),
+      };
+      registry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+
+      const rank = {
+        '1.2.3-ls132': 1230,
+        '1.2.4-ls133': 1240,
+        '1.2.4': 1241,
+      };
+      mockTag.isGreater.mockImplementation(
+        (version1, version2) => rank[version1] >= rank[version2],
+      );
+
+      const mockLogChild = { error: vi.fn(), warn: vi.fn() };
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result).toEqual({ tag: '1.2.4-ls133' });
+    });
+
+    test('should allow cross-family semver updates when tagFamily is loose', async () => {
+      const container = {
+        tagFamily: 'loose',
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: '1.2.3-ls132', semver: true },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.4-ls133', '1.2.3-ls132']),
+      };
+      registry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+
+      const rank = {
+        '1.2.3-ls132': 1230,
+        '1.2.4-ls133': 1240,
+        '1.2.4': 1241,
+      };
+      mockTag.isGreater.mockImplementation(
+        (version1, version2) => rank[version1] >= rank[version2],
+      );
+
+      const mockLogChild = { error: vi.fn(), warn: vi.fn() };
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result).toEqual({ tag: '1.2.4' });
+    });
+
+    test('should fall back to strict mode when tagFamily is invalid', async () => {
+      const container = {
+        tagFamily: 'unsupported',
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: '1.2.3-ls132', semver: true },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.4-ls133', '1.2.3-ls132']),
+      };
+      registry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+
+      const rank = {
+        '1.2.3-ls132': 1230,
+        '1.2.4-ls133': 1240,
+        '1.2.4': 1241,
+      };
+      mockTag.isGreater.mockImplementation(
+        (version1, version2) => rank[version1] >= rank[version2],
+      );
+
+      const mockLogChild = { error: vi.fn(), warn: vi.fn() };
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result).toEqual({ tag: '1.2.4-ls133' });
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Invalid tag family policy'),
+      );
+    });
+
+    test('should log one-pass semver candidate filter counters in strict mode', async () => {
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: 'v1.0.0', semver: true },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue(['latest', 'v1.0.0', 'v1.1.0', 'v2.0.0', '1.2.0']),
+      };
+      registry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+
+      const rank = {
+        'v1.0.0': 100,
+        'v1.1.0': 110,
+        'v2.0.0': 200,
+      };
+      mockTag.isGreater.mockImplementation(
+        (version1, version2) => (rank[version1] || 0) > (rank[version2] || 0),
+      );
+
+      const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result).toEqual({ tag: 'v2.0.0' });
+      expect(mockLogChild.debug).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Tag candidate filter counters (strict): input=5, prefix=3, semver=3, family=3, greater=2, output=2',
+        ),
+      );
+    });
+
     test('should best-effort suggest semver tag when current tag is outside include filter', async () => {
       const container = {
         includeTags: '^1\\.',
@@ -2182,13 +2374,16 @@ describe('Docker Watcher', () => {
         rank[version] ? { major: 1, minor: 0, patch: 0 } : null,
       );
 
-      const mockLogChild = { error: vi.fn(), warn: vi.fn() };
+      const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
       expect(result).toEqual({ tag: '1.9.0' });
       expect(mockLogChild.warn).toHaveBeenCalledWith(
         expect.stringContaining('does not match includeTags regex'),
+      );
+      expect(mockLogChild.debug).toHaveBeenCalledWith(
+        expect.stringContaining('greater=skipped'),
       );
     });
 
@@ -2553,6 +2748,43 @@ describe('Docker Watcher', () => {
       expect(result.linkTemplate).toBe(
         'https://www.home-assistant.io/changelogs/core-${major}${minor}${patch}',
       );
+    });
+
+    test('should apply tagFamily from container labels', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'docker.io/library/nginx:1.0.0',
+          Names: ['/nginx'],
+          Labels: { 'dd.tag.family': 'loose' },
+        },
+        parsedImage: { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' },
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result.tagFamily).toBe('loose');
+    });
+
+    test('should apply imgset tagFamily when label is missing', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        registerConfig: {
+          imgset: {
+            nginx: {
+              image: 'library/nginx',
+              tag: { family: 'loose' },
+            },
+          },
+        },
+        container: {
+          Image: 'docker.io/library/nginx:1.0.0',
+          Names: ['/nginx'],
+        },
+        parsedImage: { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' },
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result.tagFamily).toBe('loose');
     });
 
     test('should apply imgset watchDigest when label is missing', async () => {
@@ -3126,7 +3358,7 @@ describe('Docker Watcher', () => {
   });
 
   describe('Additional Coverage - applyRemoteAuthHeaders', () => {
-    test('should warn when credentials are incomplete', async () => {
+    test('should fail closed when credentials are incomplete', async () => {
       // Bypass validation by setting configuration directly after register
       await docker.register('watcher', 'docker', 'test', {
         host: 'localhost',
@@ -3134,15 +3366,10 @@ describe('Docker Watcher', () => {
         protocol: 'https',
       });
       docker.configuration.auth = { type: '' };
-      const logMock = createMockLog(['warn', 'info', 'debug']);
-      docker.log = logMock;
-      docker.initWatcher();
-      expect(logMock.warn).toHaveBeenCalledWith(
-        expect.stringContaining('credentials are incomplete'),
-      );
+      expect(() => docker.initWatcher()).toThrow('credentials are incomplete');
     });
 
-    test('should warn when basic auth declared but credentials missing', async () => {
+    test('should fail closed when basic auth is declared but credentials are missing', async () => {
       await docker.register('watcher', 'docker', 'test', {
         host: 'localhost',
         port: 443,
@@ -3150,15 +3377,10 @@ describe('Docker Watcher', () => {
       });
       // Need hasOidcConfig to bypass first guard, but authType=basic to reach the basic-incomplete path
       docker.configuration.auth = { type: 'basic', oidc: { tokenurl: 'https://idp/token' } };
-      const logMock = createMockLog(['warn', 'info', 'debug']);
-      docker.log = logMock;
-      docker.initWatcher();
-      expect(logMock.warn).toHaveBeenCalledWith(
-        expect.stringContaining('basic credentials are incomplete'),
-      );
+      expect(() => docker.initWatcher()).toThrow('basic credentials are incomplete');
     });
 
-    test('should warn when bearer auth declared but token missing', async () => {
+    test('should fail closed when bearer auth is declared but token is missing', async () => {
       await docker.register('watcher', 'docker', 'test', {
         host: 'localhost',
         port: 443,
@@ -3166,23 +3388,32 @@ describe('Docker Watcher', () => {
       });
       // Need hasOidcConfig to bypass first guard, but authType=bearer to reach the bearer-missing path
       docker.configuration.auth = { type: 'bearer', oidc: { tokenurl: 'https://idp/token' } };
-      const logMock = createMockLog(['warn', 'info', 'debug']);
-      docker.log = logMock;
-      docker.initWatcher();
-      expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining('bearer token is missing'));
+      expect(() => docker.initWatcher()).toThrow('bearer token is missing');
     });
 
-    test('should warn when auth type is unsupported', async () => {
+    test('should fail closed when auth type is unsupported', async () => {
       await docker.register('watcher', 'docker', 'test', {
         host: 'localhost',
         port: 443,
         protocol: 'https',
       });
       docker.configuration.auth = { type: 'custom', user: 'x', password: 'y' };
+      expect(() => docker.initWatcher()).toThrow('is unsupported');
+    });
+
+    test('should warn and continue when auth.insecure=true and credentials are incomplete', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        host: 'localhost',
+        port: 443,
+        protocol: 'https',
+      });
+      docker.configuration.auth = { type: '', insecure: true };
       const logMock = createMockLog(['warn', 'info', 'debug']);
       docker.log = logMock;
       docker.initWatcher();
-      expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining('unsupported'));
+      expect(logMock.warn).toHaveBeenCalledWith(
+        expect.stringContaining('continuing because auth.insecure=true'),
+      );
     });
   });
 
@@ -3289,15 +3520,35 @@ describe('Docker Watcher', () => {
   });
 
   describe('Additional Coverage - ensureRemoteAuthHeaders and listenDockerEvents', () => {
-    test('should skip auth when protocol is not HTTPS', async () => {
+    test('should fail closed when OIDC auth is configured without HTTPS', async () => {
       await docker.register('watcher', 'docker', 'test', {
         host: 'localhost',
         port: 2375,
         protocol: 'http',
-        auth: { type: 'oidc', oidc: { tokenurl: 'https://idp/token' } },
       });
+      docker.configuration.auth = { type: 'oidc', oidc: { tokenurl: 'https://idp/token' } };
+      await expect(docker.ensureRemoteAuthHeaders()).rejects.toThrow('HTTPS is required for OIDC auth');
+      expect(mockAxios.post).not.toHaveBeenCalled();
+    });
+
+    test('should allow non-HTTPS OIDC fallback when auth.insecure=true', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        host: 'localhost',
+        port: 2375,
+        protocol: 'http',
+      });
+      docker.configuration.auth = {
+        type: 'oidc',
+        insecure: true,
+        oidc: { tokenurl: 'https://idp/token' },
+      };
+      const logMock = createMockLog(['warn', 'info', 'debug']);
+      docker.log = logMock;
       await docker.ensureRemoteAuthHeaders();
       expect(mockAxios.post).not.toHaveBeenCalled();
+      expect(logMock.warn).toHaveBeenCalledWith(
+        expect.stringContaining('continuing because auth.insecure=true'),
+      );
     });
 
     test('should warn when ensureRemoteAuthHeaders fails in listenDockerEvents', async () => {
@@ -4202,6 +4453,58 @@ describe('Docker Watcher', () => {
       expect(filtered).toEqual(['1.2.4', '1.3.0']);
     });
 
+    test('filterBySegmentCount should enforce numeric zero-padding style by segment', () => {
+      const filtered = testable_filterBySegmentCount(['5.1.5', '20.04.1', '5.01.6'], {
+        transformTags: undefined,
+        image: {
+          tag: {
+            value: '5.1.4',
+          },
+        },
+      });
+
+      expect(filtered).toEqual(['5.1.5']);
+    });
+
+    test('filterBySegmentCount should allow non-padded segments when current tag is padded', () => {
+      const filtered = testable_filterBySegmentCount(['20.10.1', '20.04.2'], {
+        transformTags: undefined,
+        image: {
+          tag: {
+            value: '20.04.1',
+          },
+        },
+      });
+
+      expect(filtered).toEqual(['20.10.1', '20.04.2']);
+    });
+
+    test('filterBySegmentCount should preserve current prefix family', () => {
+      const filtered = testable_filterBySegmentCount(['1.2.4', 'v1.2.4'], {
+        transformTags: undefined,
+        image: {
+          tag: {
+            value: 'v1.2.3',
+          },
+        },
+      });
+
+      expect(filtered).toEqual(['v1.2.4']);
+    });
+
+    test('filterBySegmentCount should preserve suffix family template', () => {
+      const filtered = testable_filterBySegmentCount(['1.2.4', '1.2.4-ls133', '1.2.4-r1'], {
+        transformTags: undefined,
+        image: {
+          tag: {
+            value: '1.2.3-ls132',
+          },
+        },
+      });
+
+      expect(filtered).toEqual(['1.2.4-ls133']);
+    });
+
     test('getContainerName should extract first docker name entry and strip slash', () => {
       expect(testable_getContainerName({ Names: ['/my-container'] })).toBe('my-container');
     });
@@ -4534,21 +4837,46 @@ describe('Docker Watcher', () => {
   });
 
   describe('Additional Coverage - ensureLogger catch block', () => {
-    test('should create fallback silent logger when log.child throws', async () => {
+    test('should create stderr fallback logger when log.child throws', async () => {
       docker.log = undefined;
+      const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const loggerInitFailureCounter = {
+        labels: vi.fn().mockReturnValue({ inc: vi.fn() }),
+      };
+      mockPrometheus.getLoggerInitFailureCounter.mockReturnValue(loggerInitFailureCounter);
       const originalModule = await import('../../../log/index.js');
       const origChild = originalModule.default.child;
-      originalModule.default.child = () => {
-        throw new Error('log init failed');
-      };
-      docker.ensureLogger();
-      expect(docker.log).toBeDefined();
-      docker.log.info('test');
-      docker.log.warn('test');
-      docker.log.error('test');
-      docker.log.debug('test');
-      expect(docker.log.child()).toBe(docker.log);
-      originalModule.default.child = origChild;
+      try {
+        originalModule.default.child = () => {
+          throw new Error('log init failed');
+        };
+
+        docker.ensureLogger();
+
+        expect(docker.log).toBeDefined();
+        docker.log.info('test');
+        docker.log.warn('test');
+        docker.log.error('test');
+        docker.log.debug('test');
+        docker.log.child({ scope: 'child' }).warn('child-test');
+
+        expect(loggerInitFailureCounter.labels).toHaveBeenCalledWith({
+          type: 'docker',
+          name: 'default',
+        });
+        expect(stderrSpy).toHaveBeenCalled();
+
+        const firstPayload = JSON.parse(`${stderrSpy.mock.calls[0][0]}`);
+        expect(firstPayload.level).toBe('error');
+        expect(firstPayload.msg).toContain('Failed to initialize watcher logger');
+        expect(firstPayload.fallback).toBe('stderr-json');
+
+        const childPayload = JSON.parse(`${stderrSpy.mock.calls[stderrSpy.mock.calls.length - 1][0]}`);
+        expect(childPayload.scope).toBe('child');
+      } finally {
+        originalModule.default.child = origChild;
+        stderrSpy.mockRestore();
+      }
     });
   });
 });

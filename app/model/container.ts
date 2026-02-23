@@ -71,6 +71,7 @@ export interface Container {
   includeTags?: string;
   excludeTags?: string;
   transformTags?: string;
+  tagFamily?: string;
   linkTemplate?: string;
   link?: string;
   triggerInclude?: string;
@@ -105,6 +106,7 @@ const schema = joi.object({
   includeTags: joi.string(),
   excludeTags: joi.string(),
   transformTags: joi.string(),
+  tagFamily: joi.string(),
   linkTemplate: joi.string(),
   link: joi.string(),
   triggerInclude: joi.string(),

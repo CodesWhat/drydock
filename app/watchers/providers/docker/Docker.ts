@@ -22,7 +22,12 @@ import {
   fullName,
   validate as validateContainer,
 } from '../../../model/container.js';
-import { getMaintenanceSkipCounter, getWatchContainerGauge } from '../../../prometheus/watcher.js';
+import {
+  getLoggerInitFailureCounter,
+  getMaintenanceSkipCounter,
+  getWatchContainerGauge,
+} from '../../../prometheus/watcher.js';
+import { failClosedAuth } from '../../../security/auth.js';
 import type { ComponentConfiguration } from '../../../registry/Component.js';
 import * as registry from '../../../registry/index.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
@@ -32,12 +37,14 @@ import {
   parse as parseSemver,
   transform as transformTag,
 } from '../../../tag/index.js';
+import { recordLegacyInput } from '../../../prometheus/compatibility.js';
 import Watcher from '../../Watcher.js';
 import {
   ddDisplayIcon,
   ddDisplayName,
   ddInspectTagPath,
   ddLinkTemplate,
+  ddTagFamily,
   ddRegistryLookupImage,
   ddRegistryLookupUrl,
   ddTagExclude,
@@ -73,6 +80,7 @@ export interface DockerWatcherConfiguration extends ComponentConfiguration {
     user?: string;
     password?: string;
     bearer?: string;
+    insecure?: boolean;
     oidc?: any;
   };
   cafile?: string;
@@ -93,8 +101,28 @@ export interface DockerWatcherConfiguration extends ComponentConfiguration {
 /**
  * Get a label value, preferring the dd.* key over the wud.* fallback.
  */
+const warnedLegacyLabelFallbacks = new Set<string>();
+
 function getLabel(labels: Record<string, string>, ddKey: string, wudKey?: string) {
-  return labels[ddKey] ?? (wudKey ? labels[wudKey] : undefined);
+  const ddValue = labels[ddKey];
+  if (ddValue !== undefined || !wudKey) {
+    return ddValue;
+  }
+
+  const wudValue = labels[wudKey];
+  if (wudValue === undefined) {
+    return undefined;
+  }
+
+  recordLegacyInput('label', wudKey);
+  if (!warnedLegacyLabelFallbacks.has(wudKey)) {
+    warnedLegacyLabelFallbacks.add(wudKey);
+    log.warn(
+      `Legacy Docker label "${wudKey}" is deprecated. Please migrate to "${ddKey}" before fallback support is removed.`,
+    );
+  }
+
+  return wudValue;
 }
 
 interface SafeRegex {
@@ -123,6 +151,109 @@ function safeRegExp(pattern: string, logger: any): SafeRegex | null {
     logger.warn(`Invalid regex pattern "${pattern}": ${e.message}`);
     return null;
   }
+}
+
+function serializeFallbackLogValue(value: unknown): unknown {
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+    };
+  }
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  return value;
+}
+
+function stringifyFallbackLogRecord(record: Record<string, unknown>) {
+  const seen = new WeakSet<object>();
+  return JSON.stringify(record, (_key, value) => {
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+
+    if (value instanceof Error) {
+      return serializeFallbackLogValue(value);
+    }
+
+    if (value && typeof value === 'object') {
+      if (seen.has(value as object)) {
+        return '[Circular]';
+      }
+      seen.add(value as object);
+    }
+
+    return value;
+  });
+}
+
+function writeFallbackLogRecord(
+  level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal',
+  bindings: Record<string, unknown>,
+  args: unknown[],
+) {
+  const [first, second, ...rest] = args;
+
+  const record: Record<string, unknown> = {
+    ts: new Date().toISOString(),
+    level,
+    logger: 'drydock-watcher-fallback',
+    ...bindings,
+  };
+
+  if (typeof first === 'string') {
+    record.msg = first;
+    if (second !== undefined) {
+      record.context = serializeFallbackLogValue(second);
+    }
+  } else if (first !== undefined) {
+    if (typeof second === 'string') {
+      record.msg = second;
+      record.context = serializeFallbackLogValue(first);
+    } else {
+      record.msg = 'watcher logger fallback event';
+      record.context = serializeFallbackLogValue(first);
+      if (second !== undefined) {
+        rest.unshift(second);
+      }
+    }
+  } else {
+    record.msg = 'watcher logger fallback event';
+  }
+
+  if (rest.length > 0) {
+    record.args = rest.map((arg) => serializeFallbackLogValue(arg));
+  }
+
+  try {
+    process.stderr.write(`${stringifyFallbackLogRecord(record)}\n`);
+  } catch {
+    try {
+      process.stderr.write(`${record.level}: ${record.msg}\n`);
+    } catch {
+      // Ignore stderr write failures: fallback logging must never break runtime flow.
+    }
+  }
+}
+
+function createStderrFallbackLogger(bindings: Record<string, unknown> = {}) {
+  const fallbackLogger = {
+    trace: (...args: unknown[]) => writeFallbackLogRecord('trace', bindings, args),
+    debug: (...args: unknown[]) => writeFallbackLogRecord('debug', bindings, args),
+    info: (...args: unknown[]) => writeFallbackLogRecord('info', bindings, args),
+    warn: (...args: unknown[]) => writeFallbackLogRecord('warn', bindings, args),
+    error: (...args: unknown[]) => writeFallbackLogRecord('error', bindings, args),
+    fatal: (...args: unknown[]) => writeFallbackLogRecord('fatal', bindings, args),
+    child: (childBindings: Record<string, unknown> = {}) =>
+      createStderrFallbackLogger({
+        ...bindings,
+        ...(childBindings && typeof childBindings === 'object' ? childBindings : {}),
+      }),
+  };
+
+  return fallbackLogger as unknown as typeof log;
 }
 
 // The delay before starting the watcher when the app is started
@@ -170,6 +301,7 @@ interface ResolvedImgset {
   includeTags?: string;
   excludeTags?: string;
   transformTags?: string;
+  tagFamily?: string;
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
@@ -185,6 +317,7 @@ interface ContainerLabelOverrides {
   includeTags?: string;
   excludeTags?: string;
   transformTags?: string;
+  tagFamily?: string;
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
@@ -203,6 +336,7 @@ interface ResolvedContainerLabelOverrides {
   includeTags?: string;
   excludeTags?: string;
   transformTags?: string;
+  tagFamily?: string;
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
@@ -337,37 +471,217 @@ function getPrefixFilterWarning(currentPrefix: string): string {
   return 'No tags found starting with a number (no prefix); check your regex filters';
 }
 
-function filterByCurrentPrefix(tags: string[], container: Container, logContainer: any): string[] {
-  const currentTag = container.image.tag.value;
-  const currentPrefix = getCurrentPrefix(currentTag);
-  const filtered = tags.filter((tag) =>
-    currentPrefix ? tag.startsWith(currentPrefix) : startsWithDigit(tag),
-  );
+function hasLeadingZero(value: string): boolean {
+  return value.length > 1 && value.startsWith('0');
+}
 
-  if (filtered.length === 0) {
-    logContainer.warn(getPrefixFilterWarning(currentPrefix));
+interface NumericTagShape {
+  prefix: string;
+  numericSegments: string[];
+  suffix: string;
+}
+
+type TagFamilyPolicy = 'strict' | 'loose';
+
+interface SemverCandidateFilterStats {
+  input: number;
+  afterPrefix: number;
+  afterSemver: number;
+  afterFamily: number;
+  afterGreater: number;
+  output: number;
+  prefixSkipped: boolean;
+  greaterSkipped: boolean;
+}
+
+function getNumericTagShapeFromTransformedTag(transformedTag: string): NumericTagShape | null {
+  const tagShape = /^(.*?)(\d+(?:\.\d+)*)(.*)$/.exec(transformedTag);
+  if (!tagShape) {
+    return null;
+  }
+  const [, prefix, numericPart, suffix] = tagShape;
+  return {
+    prefix,
+    numericSegments: numericPart.split('.'),
+    suffix,
+  };
+}
+
+function getNumericTagShape(tag: string, transformTags: string | undefined): NumericTagShape | null {
+  const transformedTag = transformTag(transformTags, tag);
+  return getNumericTagShapeFromTransformedTag(transformedTag);
+}
+
+function normalizeSuffixTemplate(suffix: string): string {
+  return suffix.toLowerCase().replace(/\d+/g, '#');
+}
+
+function isSuffixCompatible(referenceSuffix: string, candidateSuffix: string): boolean {
+  if (referenceSuffix === '') {
+    return candidateSuffix === '';
+  }
+  if (candidateSuffix === '') {
+    return false;
+  }
+  const referenceTemplate = normalizeSuffixTemplate(referenceSuffix);
+  const candidateTemplate = normalizeSuffixTemplate(candidateSuffix);
+  return (
+    candidateTemplate === referenceTemplate ||
+    candidateTemplate.startsWith(referenceTemplate) ||
+    referenceTemplate.startsWith(candidateTemplate)
+  );
+}
+
+function getTagFamilyPolicy(container: Container, logContainer: any): TagFamilyPolicy {
+  if (!container.tagFamily) {
+    return 'strict';
+  }
+  const normalizedPolicy = container.tagFamily.trim().toLowerCase();
+  if (normalizedPolicy === 'strict' || normalizedPolicy === 'loose') {
+    return normalizedPolicy;
+  }
+  logContainer.warn(
+    `Invalid tag family policy "${container.tagFamily}", falling back to "strict"`,
+  );
+  return 'strict';
+}
+
+function isStrictFamilyMatch(referenceShape: NumericTagShape, candidateShape: NumericTagShape): boolean {
+  if (candidateShape.prefix !== referenceShape.prefix) {
+    return false;
   }
 
-  return filtered;
+  if (!isSuffixCompatible(referenceShape.suffix, candidateShape.suffix)) {
+    return false;
+  }
+
+  return candidateShape.numericSegments.every(
+    (segment, index) =>
+      !(!hasLeadingZero(referenceShape.numericSegments[index]) && hasLeadingZero(segment)),
+  );
+}
+
+function filterSemverCandidatesOnePass(
+  tags: string[],
+  container: Container,
+  tagFamilyPolicy: TagFamilyPolicy,
+  applyPrefixFilter: boolean,
+  allowIncludeFilterRecovery: boolean,
+): { filteredTags: string[]; currentPrefix: string; stats: SemverCandidateFilterStats } {
+  const currentTag = container.image.tag.value;
+  const currentPrefix = getCurrentPrefix(currentTag);
+  const currentTransformedTag = transformTag(container.transformTags, currentTag);
+  const referenceShape = getNumericTagShapeFromTransformedTag(currentTransformedTag);
+  const referenceGroups = referenceShape?.numericSegments.length;
+
+  const stats: SemverCandidateFilterStats = {
+    input: tags.length,
+    afterPrefix: 0,
+    afterSemver: 0,
+    afterFamily: 0,
+    afterGreater: 0,
+    output: 0,
+    prefixSkipped: !applyPrefixFilter,
+    greaterSkipped: allowIncludeFilterRecovery,
+  };
+
+  const filteredTags: string[] = [];
+
+  for (const tag of tags) {
+    if (applyPrefixFilter) {
+      const hasExpectedPrefix = currentPrefix ? tag.startsWith(currentPrefix) : startsWithDigit(tag);
+      if (!hasExpectedPrefix) {
+        continue;
+      }
+    }
+    stats.afterPrefix += 1;
+
+    const transformedTag = transformTag(container.transformTags, tag);
+    if (parseSemver(transformedTag) === null) {
+      continue;
+    }
+    stats.afterSemver += 1;
+
+    let familyMatch = true;
+    if (referenceShape && referenceGroups !== undefined) {
+      const candidateShape = getNumericTagShapeFromTransformedTag(transformedTag);
+      if (!candidateShape || candidateShape.numericSegments.length !== referenceGroups) {
+        familyMatch = false;
+      } else if (tagFamilyPolicy === 'strict') {
+        familyMatch = isStrictFamilyMatch(referenceShape, candidateShape);
+      }
+    }
+
+    if (!familyMatch) {
+      continue;
+    }
+    stats.afterFamily += 1;
+
+    if (!allowIncludeFilterRecovery) {
+      if (!isGreaterSemver(transformedTag, currentTransformedTag)) {
+        continue;
+      }
+    }
+    stats.afterGreater += 1;
+
+    filteredTags.push(tag);
+  }
+
+  stats.output = filteredTags.length;
+  return { filteredTags, currentPrefix, stats };
+}
+
+function logSemverCandidateFilterStats(
+  logContainer: any,
+  tagFamilyPolicy: TagFamilyPolicy,
+  stats: SemverCandidateFilterStats,
+): void {
+  if (typeof logContainer?.debug !== 'function') {
+    return;
+  }
+
+  const prefixDropped = stats.prefixSkipped ? 0 : stats.input - stats.afterPrefix;
+  const semverDropped = stats.afterPrefix - stats.afterSemver;
+  const familyDropped = stats.afterSemver - stats.afterFamily;
+  const greaterDropped = stats.greaterSkipped ? 0 : stats.afterFamily - stats.afterGreater;
+  const prefixCounter = stats.prefixSkipped ? 'skipped' : `${stats.afterPrefix}`;
+  const greaterCounter = stats.greaterSkipped ? 'skipped' : `${stats.afterGreater}`;
+
+  logContainer.debug(
+    `Tag candidate filter counters (${tagFamilyPolicy}): input=${stats.input}, prefix=${prefixCounter}, semver=${stats.afterSemver}, family=${stats.afterFamily}, greater=${greaterCounter}, output=${stats.output}; dropped(prefix=${prefixDropped}, semver=${semverDropped}, family=${familyDropped}, greater=${greaterDropped})`,
+  );
 }
 
 /**
- * Filter tags to only those with the same number of numeric segments as the current tag.
+ * Filter tags to only those with the same number of numeric segments
+ * and inferred family as the current tag.
  */
 function filterBySegmentCount(tags: string[], container: Container): string[] {
-  const numericPart = /(\d+(\.\d+)*)/.exec(
-    transformTag(container.transformTags, container.image.tag.value),
-  );
-
-  if (!numericPart) {
+  const referenceShape = getNumericTagShape(container.image.tag.value, container.transformTags);
+  if (!referenceShape) {
     return tags;
   }
 
-  const referenceGroups = numericPart[0].split('.').length;
+  const referenceGroups = referenceShape.numericSegments.length;
+
   return tags.filter((tag) => {
-    const tagNumericPart = /(\d+(\.\d+)*)/.exec(transformTag(container.transformTags, tag));
-    if (!tagNumericPart) return false;
-    return tagNumericPart[0].split('.').length === referenceGroups;
+    const candidateShape = getNumericTagShape(tag, container.transformTags);
+    if (!candidateShape || candidateShape.numericSegments.length !== referenceGroups) {
+      return false;
+    }
+
+    if (candidateShape.prefix !== referenceShape.prefix) {
+      return false;
+    }
+
+    if (!isSuffixCompatible(referenceShape.suffix, candidateShape.suffix)) {
+      return false;
+    }
+
+    return candidateShape.numericSegments.every(
+      (segment, index) =>
+        !(!hasLeadingZero(referenceShape.numericSegments[index]) && hasLeadingZero(segment)),
+    );
   });
 }
 
@@ -425,21 +739,27 @@ function getTagCandidates(container: Container, tags: string[], logContainer: an
     logContainer.warn('No tags found after filtering; check you regex filters');
   }
 
-  if (!container.includeTags) {
-    filteredTags = filterByCurrentPrefix(filteredTags, container, logContainer);
+  const tagFamilyPolicy = getTagFamilyPolicy(container, logContainer);
+  const { filteredTags: semverTagCandidates, currentPrefix, stats } = filterSemverCandidatesOnePass(
+    filteredTags,
+    container,
+    tagFamilyPolicy,
+    !container.includeTags,
+    allowIncludeFilterRecovery,
+  );
+  filteredTags = semverTagCandidates;
+
+  if (!container.includeTags && stats.afterPrefix === 0) {
+    logContainer.warn(getPrefixFilterWarning(currentPrefix));
   }
 
-  filteredTags = filterSemverOnly(filteredTags, container.transformTags);
-  filteredTags = filterBySegmentCount(filteredTags, container);
-
-  if (!allowIncludeFilterRecovery) {
-    filteredTags = filteredTags.filter((tag) =>
-      isGreaterSemver(
-        transformTag(container.transformTags, tag),
-        transformTag(container.transformTags, container.image.tag.value),
-      ),
+  if (tagFamilyPolicy === 'strict' && stats.afterSemver > 0 && stats.afterFamily === 0) {
+    logContainer.warn(
+      `No tags found in the same inferred family as "${container.image.tag.value}". Set dd.tag.family=loose to allow cross-family semver updates.`,
     );
   }
+
+  logSemverCandidateFilterStats(logContainer, tagFamilyPolicy, stats);
 
   sortSemverDescending(filteredTags, container.transformTags);
   return filteredTags;
@@ -718,6 +1038,7 @@ function getResolvedImgsetConfiguration(name: string, imgsetConfiguration: any) 
       'transformTags',
       'transform',
     ]),
+    tagFamily: getFirstConfigString(imgsetConfiguration, ['tag.family', 'tagFamily']),
     linkTemplate: getFirstConfigString(imgsetConfiguration, ['link.template', 'linkTemplate']),
     displayName: getFirstConfigString(imgsetConfiguration, ['display.name', 'displayName']),
     displayIcon: getFirstConfigString(imgsetConfiguration, ['display.icon', 'displayIcon']),
@@ -872,6 +1193,7 @@ function resolveLabelsFromContainer(
 ) {
   const resolvedOverrides: ResolvedContainerLabelOverrides = {
     lookupImage: resolveLookupImageFromContainerLabels(containerLabels, overrides),
+    tagFamily: overrides.tagFamily || getLabel(containerLabels, ddTagFamily),
   };
 
   for (const { key, ddKey, wudKey } of containerLabelOverrideMappings) {
@@ -905,6 +1227,7 @@ function mergeConfigWithImgset(
       labelOverrides.transformTags,
       matchingImgset?.transformTags,
     ),
+    tagFamily: getContainerConfigValue(labelOverrides.tagFamily, matchingImgset?.tagFamily),
     linkTemplate: getContainerConfigValue(
       labelOverrides.linkTemplate,
       matchingImgset?.linkTemplate,
@@ -970,15 +1293,21 @@ class Docker extends Watcher {
           component: `watcher.docker.${this.name || 'default'}`,
         });
       } catch (error) {
-        console.warn('Failed to initialize watcher logger, using no-op logger fallback');
-        // Fallback to silent logger if log module fails
-        this.log = {
-          info: () => {},
-          warn: () => {},
-          error: () => {},
-          debug: () => {},
-          child: () => this.log,
-        } as unknown as typeof log;
+        const watcherName = this.name || 'default';
+        const watcherType = this.type || 'docker';
+        this.log = createStderrFallbackLogger({
+          component: `watcher.docker.${watcherName}`,
+          fallback: 'stderr-json',
+        });
+
+        getLoggerInitFailureCounter()?.labels({ type: watcherType, name: watcherName }).inc();
+
+        this.log.error(
+          {
+            error: serializeFallbackLogValue(error),
+          },
+          'Failed to initialize watcher logger; using stderr fallback logger',
+        );
       }
     }
   }
@@ -994,6 +1323,7 @@ class Docker extends Watcher {
         user: this.joi.string(),
         password: this.joi.string(),
         bearer: this.joi.string(),
+        insecure: this.joi.boolean().default(false),
         oidc: this.joi.object().unknown(true),
       }),
       cafile: this.joi.string(),
@@ -1017,10 +1347,12 @@ class Docker extends Watcher {
             include: this.joi.string(),
             exclude: this.joi.string(),
             transform: this.joi.string(),
+            tagFamily: this.joi.string().valid('strict', 'loose'),
             tag: this.joi.object({
               include: this.joi.string(),
               exclude: this.joi.string(),
               transform: this.joi.string(),
+              family: this.joi.string().valid('strict', 'loose'),
             }),
             link: this.joi.object({
               template: this.joi.string(),
@@ -1065,11 +1397,12 @@ class Docker extends Watcher {
       maintenancewindowqueued: hasMaintenanceWindow ? this.maintenanceWindowWatchQueued : false,
       maintenancenextwindow: nextMaintenanceWindow,
       auth: this.configuration.auth
-        ? {
+          ? {
             type: this.configuration.auth.type,
             user: Docker.mask(this.configuration.auth.user),
             password: Docker.mask(this.configuration.auth.password),
             bearer: Docker.mask(this.configuration.auth.bearer),
+            insecure: this.configuration.auth.insecure,
             oidc: this.configuration.auth.oidc
               ? {
                   ...this.configuration.auth.oidc,
@@ -1271,6 +1604,19 @@ class Docker extends Watcher {
       }
     }
     return { authType, hasBearer, hasBasic, hasOidcConfig };
+  }
+
+  isRemoteAuthInsecureModeEnabled() {
+    return this.configuration.auth?.insecure === true;
+  }
+
+  handleRemoteAuthFailure(message: string) {
+    this.ensureLogger();
+    failClosedAuth(message, {
+      allowInsecure: this.isRemoteAuthInsecureModeEnabled(),
+      logger: this.log,
+      insecureFlagName: 'auth.insecure',
+    });
   }
 
   setRemoteAuthorizationHeader(authorizationValue: string) {
@@ -1690,6 +2036,9 @@ class Docker extends Watcher {
         key: this.configuration.keyfile,
       } as Dockerode.DockerOptions)
     ) {
+      this.handleRemoteAuthFailure(
+        `Unable to authenticate remote watcher ${this.name}: HTTPS is required for OIDC auth (set protocol=https or TLS certificates)`,
+      );
       return;
     }
 
@@ -1714,21 +2063,23 @@ class Docker extends Watcher {
 
     const { authType, hasBearer, hasBasic, hasOidcConfig } = this.getRemoteAuthResolution(auth);
     if (!hasBearer && !hasBasic && !hasOidcConfig && authType !== 'oidc') {
-      this.log.warn(`Skip remote watcher auth for ${this.name} because credentials are incomplete`);
+      this.handleRemoteAuthFailure(
+        `Unable to authenticate remote watcher ${this.name}: credentials are incomplete`,
+      );
       return;
     }
 
     if (!this.isHttpsRemoteWatcher(options)) {
-      this.log.warn(
-        `Skip remote watcher auth for ${this.name} because HTTPS is required (set protocol=https or TLS certificates)`,
+      this.handleRemoteAuthFailure(
+        `Unable to authenticate remote watcher ${this.name}: HTTPS is required for remote auth (set protocol=https or TLS certificates)`,
       );
       return;
     }
 
     if (authType === 'basic') {
       if (!hasBasic) {
-        this.log.warn(
-          `Skip remote watcher auth for ${this.name} because basic credentials are incomplete`,
+        this.handleRemoteAuthFailure(
+          `Unable to authenticate remote watcher ${this.name}: basic credentials are incomplete`,
         );
         return;
       }
@@ -1742,7 +2093,9 @@ class Docker extends Watcher {
 
     if (authType === 'bearer') {
       if (!hasBearer) {
-        this.log.warn(`Skip remote watcher auth for ${this.name} because bearer token is missing`);
+        this.handleRemoteAuthFailure(
+          `Unable to authenticate remote watcher ${this.name}: bearer token is missing`,
+        );
         return;
       }
       options.headers = {
@@ -1763,8 +2116,8 @@ class Docker extends Watcher {
       return;
     }
 
-    this.log.warn(
-      `Skip remote watcher auth for ${this.name} because auth type "${auth.type}" is unsupported`,
+    this.handleRemoteAuthFailure(
+      `Unable to authenticate remote watcher ${this.name}: auth type "${authType || auth.type}" is unsupported`,
     );
   }
 
@@ -2122,6 +2475,7 @@ class Docker extends Watcher {
         includeTags: getLabel(container.Labels, ddTagInclude, wudTagInclude),
         excludeTags: getLabel(container.Labels, ddTagExclude, wudTagExclude),
         transformTags: getLabel(container.Labels, ddTagTransform, wudTagTransform),
+        tagFamily: getLabel(container.Labels, ddTagFamily),
         linkTemplate: getLabel(container.Labels, ddLinkTemplate, wudLinkTemplate),
         displayName: getLabel(container.Labels, ddDisplayName, wudDisplayName),
         displayIcon: getLabel(container.Labels, ddDisplayIcon, wudDisplayIcon),
@@ -2436,6 +2790,7 @@ class Docker extends Watcher {
       includeTags: resolvedConfig.includeTags,
       excludeTags: resolvedConfig.excludeTags,
       transformTags: resolvedConfig.transformTags,
+      tagFamily: resolvedConfig.tagFamily,
       linkTemplate: resolvedConfig.linkTemplate,
       displayName: getContainerDisplayName(
         containerName,
