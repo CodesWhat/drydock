@@ -24,6 +24,7 @@ vi.mock('../store/container.js', () => ({
   deleteContainer: vi.fn(),
 }));
 vi.mock('../event/index.js', () => ({
+  emitAgentDisconnected: vi.fn().mockResolvedValue(undefined),
   emitContainerReport: vi.fn(),
 }));
 vi.mock('../registry/index.js', () => ({
@@ -340,6 +341,37 @@ describe('AgentClient', () => {
       client.scheduleReconnect(1000); // second call should be ignored
       vi.advanceTimersByTime(1000);
       expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    test('should emit agent-disconnect only on connected -> disconnected transition', () => {
+      client.isConnected = true;
+      client.scheduleReconnect(1000);
+      expect(event.emitAgentDisconnected).toHaveBeenCalledWith({
+        agentName: 'test-agent',
+        reason: 'SSE connection lost',
+      });
+    });
+
+    test('should not emit agent-disconnect when already disconnected', () => {
+      client.isConnected = false;
+      client.scheduleReconnect(1000);
+      expect(event.emitAgentDisconnected).not.toHaveBeenCalled();
+    });
+
+    test('should log debug when agent-disconnect emission fails', async () => {
+      event.emitAgentDisconnected.mockRejectedValueOnce(new Error('emit failed'));
+      client.isConnected = true;
+
+      client.scheduleReconnect(1000);
+      await Promise.resolve();
+
+      expect(event.emitAgentDisconnected).toHaveBeenCalledWith({
+        agentName: 'test-agent',
+        reason: 'SSE connection lost',
+      });
+      expect(client.log.debug).toHaveBeenCalledWith(
+        'Failed to emit agent disconnected event (emit failed)',
+      );
     });
   });
 

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
-import { emitContainerReport } from '../event/index.js';
+import { emitAgentDisconnected, emitContainerReport } from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import type { Container, ContainerReport } from '../model/container.js';
@@ -187,7 +187,16 @@ export class AgentClient {
     if (this.reconnectTimer) {
       return;
     }
+    const wasConnected = this.isConnected;
     this.isConnected = false;
+    if (wasConnected) {
+      void emitAgentDisconnected({
+        agentName: this.name,
+        reason: 'SSE connection lost',
+      }).catch((e: any) => {
+        this.log.debug(`Failed to emit agent disconnected event (${e.message})`);
+      });
+    }
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.startSse();
