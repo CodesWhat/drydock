@@ -41,12 +41,111 @@ const { mockScrollBlocked, mockAutoFetchInterval } = vi.hoisted(() => {
 });
 
 vi.mock('@/composables/useLogViewerBehavior', () => ({
-  useLogViewport: () => ({ logContainer: { value: null, __v_isRef: true }, scrollBlocked: mockScrollBlocked, scrollToBottom: vi.fn(), handleLogScroll: vi.fn(), resumeAutoScroll: vi.fn() }),
+  useLogViewport: () => ({
+    logContainer: { value: null, __v_isRef: true },
+    scrollBlocked: mockScrollBlocked,
+    scrollToBottom: vi.fn(),
+    handleLogScroll: vi.fn(),
+    resumeAutoScroll: vi.fn(),
+  }),
   useAutoFetchLogs: () => ({ autoFetchInterval: mockAutoFetchInterval }),
-  LOG_AUTO_FETCH_INTERVALS: [{ label: 'Off', value: 0 }, { label: '2s', value: 2000 }, { label: '5s', value: 5000 }, { label: '10s', value: 10000 }, { label: '30s', value: 30000 }],
+  LOG_AUTO_FETCH_INTERVALS: [
+    { label: 'Off', value: 0 },
+    { label: '2s', value: 2000 },
+    { label: '5s', value: 5000 },
+    { label: '10s', value: 10000 },
+    { label: '30s', value: 30000 },
+  ],
 }));
 
 const mockRouteQuery = vi.hoisted(() => ({ value: {} as Record<string, string> }));
+
+const {
+  mockFontOptions,
+  mockActiveFont,
+  mockFontLoading,
+  mockSetFont,
+  mockIsFontLoaded,
+  resetMockFontState,
+} = vi.hoisted(() => {
+  const mockFontOptions = [
+    {
+      id: 'ibm-plex-mono',
+      label: 'IBM Plex Mono',
+      family: '"IBM Plex Mono", monospace',
+      weights: [300, 400, 500, 600, 700],
+      bundled: true,
+    },
+    {
+      id: 'jetbrains-mono',
+      label: 'JetBrains Mono',
+      family: '"JetBrains Mono", monospace',
+      weights: [300, 400, 500, 600, 700],
+      bundled: false,
+    },
+    {
+      id: 'source-code-pro',
+      label: 'Source Code Pro',
+      family: '"Source Code Pro", monospace',
+      weights: [300, 400, 500, 600, 700],
+      bundled: false,
+    },
+    {
+      id: 'inconsolata',
+      label: 'Inconsolata',
+      family: '"Inconsolata", monospace',
+      weights: [300, 400, 500, 600, 700],
+      bundled: false,
+    },
+    {
+      id: 'commit-mono',
+      label: 'Commit Mono',
+      family: '"Commit Mono", monospace',
+      weights: [400],
+      bundled: false,
+    },
+    {
+      id: 'comic-mono',
+      label: 'Comic Mono',
+      family: '"Comic Mono", monospace',
+      weights: [400],
+      bundled: false,
+    },
+  ] as const;
+
+  const mockActiveFont = { value: 'ibm-plex-mono', __v_isRef: true as const };
+  const mockFontLoading = { value: false, __v_isRef: true as const };
+  const mockSetFont = vi.fn(async (id: string) => {
+    const selected = mockFontOptions.find((font) => font.id === id);
+    if (!selected) {
+      return;
+    }
+    mockActiveFont.value = selected.id;
+    localStorage.setItem('drydock-font-family', selected.id);
+    document.documentElement.style.setProperty('--drydock-font', selected.family);
+    document.documentElement.style.setProperty('--font-mono', selected.family);
+  });
+  const mockIsFontLoaded = vi.fn(() => true);
+
+  const resetMockFontState = () => {
+    mockActiveFont.value = 'ibm-plex-mono';
+    mockFontLoading.value = false;
+    mockSetFont.mockClear();
+    mockIsFontLoaded.mockClear();
+    localStorage.removeItem('drydock-font-family');
+    document.documentElement.style.setProperty('--drydock-font', '"IBM Plex Mono", monospace');
+    document.documentElement.style.setProperty('--font-mono', '"IBM Plex Mono", monospace');
+  };
+
+  return {
+    mockFontOptions,
+    mockActiveFont,
+    mockFontLoading,
+    mockSetFont,
+    mockIsFontLoaded,
+    resetMockFontState,
+  };
+});
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -66,27 +165,12 @@ vi.mock('@/theme/useTheme', () => ({
 
 vi.mock('@/composables/useFont', () => ({
   useFont: () => ({
-    activeFont: { value: 'ibm-plex-mono' },
-    setFont: vi.fn(),
-    fontLoading: { value: false },
-    isFontLoaded: vi.fn(() => true),
+    activeFont: mockActiveFont,
+    setFont: mockSetFont,
+    fontLoading: mockFontLoading,
+    isFontLoaded: mockIsFontLoaded,
   }),
-  fontOptions: [
-    {
-      id: 'ibm-plex-mono',
-      label: 'IBM Plex Mono',
-      family: '"IBM Plex Mono"',
-      weights: [400],
-      bundled: true,
-    },
-    {
-      id: 'jetbrains-mono',
-      label: 'JetBrains Mono',
-      family: '"JetBrains Mono"',
-      weights: [400],
-      bundled: false,
-    },
-  ],
+  fontOptions: mockFontOptions,
 }));
 
 vi.mock('@/composables/useIcons', () => ({
@@ -158,7 +242,14 @@ describe('ConfigView', () => {
     mockRouteQuery.value = {};
     mockScrollBlocked.value = false;
     mockAutoFetchInterval.value = 0;
-    mockGetUser.mockResolvedValue({ username: 'admin', email: 'admin@test.com', role: 'admin', lastLogin: '2026-01-01', sessions: 2 });
+    resetMockFontState();
+    mockGetUser.mockResolvedValue({
+      username: 'admin',
+      email: 'admin@test.com',
+      role: 'admin',
+      lastLogin: '2026-01-01',
+      sessions: 2,
+    });
     mockGetAppInfos.mockResolvedValue({ version: '1.4.0' });
     mockGetLog.mockResolvedValue({ level: 'info' });
     mockGetLogEntries.mockResolvedValue([]);
@@ -332,6 +423,38 @@ describe('ConfigView', () => {
       expect(w.text()).toContain('JetBrains Mono');
     });
 
+    it('updates global app shell font tokens when each font is selected', async () => {
+      const w = await mountAppearanceTab();
+      const appShellProbe = document.createElement('div');
+      appShellProbe.className = 'font-mono';
+      appShellProbe.style.fontFamily = 'var(--font-mono)';
+      document.body.appendChild(appShellProbe);
+
+      try {
+        for (const font of mockFontOptions) {
+          const fontButton = w.findAll('button').find((btn) => btn.text().includes(font.label));
+          expect(fontButton).toBeDefined();
+
+          await fontButton?.trigger('click');
+          await nextTick();
+
+          await vi.waitFor(() => {
+            expect(mockSetFont).toHaveBeenCalledWith(font.id);
+            expect(mockActiveFont.value).toBe(font.id);
+          });
+
+          const rootStyles = getComputedStyle(document.documentElement);
+          expect(rootStyles.getPropertyValue('--drydock-font').trim()).toBe(font.family);
+          expect(rootStyles.getPropertyValue('--font-mono').trim()).toBe(font.family);
+          expect(localStorage.getItem('drydock-font-family')).toBe(font.id);
+          // App shell text uses Tailwind's `font-mono`, which resolves from --font-mono.
+          expect(appShellProbe.style.fontFamily).toBe('var(--font-mono)');
+        }
+      } finally {
+        appShellProbe.remove();
+      }
+    });
+
     it('renders icon library options', async () => {
       const w = await mountAppearanceTab();
       expect(w.text()).toContain('Phosphor Duotone');
@@ -394,16 +517,14 @@ describe('ConfigView', () => {
     });
 
     it('retries profile fetch from refresh button', async () => {
-      mockGetUser
-        .mockRejectedValueOnce(new Error('first failure'))
-        .mockResolvedValueOnce({
-          username: 'admin',
-          displayName: 'Admin User',
-          email: 'admin@test.com',
-          role: 'admin',
-          provider: 'basic',
-          sessions: 2,
-        });
+      mockGetUser.mockRejectedValueOnce(new Error('first failure')).mockResolvedValueOnce({
+        username: 'admin',
+        displayName: 'Admin User',
+        email: 'admin@test.com',
+        role: 'admin',
+        provider: 'basic',
+        sessions: 2,
+      });
 
       const w = await mountProfileTab();
       await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalledTimes(1));
@@ -511,7 +632,9 @@ describe('ConfigView', () => {
 
     it('renders refresh button', async () => {
       const w = await mountLogsTab();
-      const refreshBtn = w.findAll('.app-icon-stub').find((el) => el.attributes('data-icon') === 'refresh');
+      const refreshBtn = w
+        .findAll('.app-icon-stub')
+        .find((el) => el.attributes('data-icon') === 'refresh');
       expect(refreshBtn).toBeDefined();
     });
 
