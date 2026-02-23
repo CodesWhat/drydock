@@ -132,8 +132,13 @@ demo/
 # Generated lazy-loaded font assets (built by scripts/extract-fonts.mjs)
 ui/public/fonts/
 
-# Docs content (local editing, copied to drydock-website)
-docs/content/
+# Website local artifacts
+.vercel/
+.source/
+
+# Generated from content/docs/current for Turbopack compatibility
+# Canonical docs are versioned at content/docs/*
+apps/web/content/docs/
 
 # Storybook build output
 storybook-static/
