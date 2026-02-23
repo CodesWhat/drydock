@@ -63,6 +63,7 @@ const navGroups = computed<NavGroup[]>(() => [
         badge: securityIssueCount.value || undefined,
         badgeColor: 'red',
       },
+      { label: 'Audit', icon: 'audit', route: '/audit' },
     ],
   },
   {

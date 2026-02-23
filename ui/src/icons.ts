@@ -54,6 +54,15 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     heroicons: 'heroicons:shield-check',
     iconoir: 'iconoir:shield-check',
   },
+  audit: {
+    'fa6-solid': 'fa6-solid:clock-rotate-left',
+    ph: 'ph:clock-counter-clockwise',
+    'ph-duotone': 'ph:clock-counter-clockwise-duotone',
+    lucide: 'lucide:history',
+    tabler: 'tabler:history',
+    heroicons: 'heroicons:clock',
+    iconoir: 'iconoir:history',
+  },
   logs: {
     'fa6-solid': 'fa6-solid:scroll',
     ph: 'ph:scroll',
