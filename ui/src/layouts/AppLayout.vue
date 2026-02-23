@@ -32,6 +32,11 @@ watch(isMobile, (val) => {
   if (!val) isMobileMenuOpen.value = false;
 });
 
+// Close mobile menu on any route change (safety net for non-sidebar navigation)
+watch(() => route.path, () => {
+  if (isMobile.value) isMobileMenuOpen.value = false;
+});
+
 interface NavItem {
   label: string;
   icon: string;
