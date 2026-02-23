@@ -2,6 +2,20 @@ function getContainerIcon() {
   return 'sh-docker';
 }
 
+interface ContainerGroupMember {
+  id: string;
+  name: string;
+  displayName: string;
+  updateAvailable: boolean;
+}
+
+interface ContainerGroup {
+  name: string | null;
+  containers: ContainerGroupMember[];
+  containerCount: number;
+  updatesAvailable: number;
+}
+
 async function getAllContainers() {
   const response = await fetch('/api/containers', { credentials: 'include' });
   if (!response.ok) {
@@ -107,6 +121,14 @@ async function updateContainerPolicy(containerId, action, payload = {}) {
   return response.json();
 }
 
+async function getContainerGroups(): Promise<ContainerGroup[]> {
+  const response = await fetch('/api/containers/groups', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get container groups: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 async function scanContainer(containerId) {
   const response = await fetch(`/api/containers/${containerId}/scan`, {
     method: 'POST',
@@ -128,6 +150,7 @@ async function scanContainer(containerId) {
 export {
   getContainerIcon,
   getAllContainers,
+  getContainerGroups,
   refreshAllContainers,
   refreshContainer,
   deleteContainer,
@@ -137,3 +160,5 @@ export {
   scanContainer,
   updateContainerPolicy,
 };
+
+export type { ContainerGroup, ContainerGroupMember };

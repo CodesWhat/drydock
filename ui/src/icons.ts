@@ -693,6 +693,15 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     heroicons: 'heroicons:arrows-pointing-out',
     iconoir: 'iconoir:expand',
   },
+  stack: {
+    'fa6-solid': 'fa6-solid:boxes-stacked',
+    ph: 'ph:stack',
+    'ph-duotone': 'ph:stack-duotone',
+    lucide: 'lucide:layers',
+    tabler: 'tabler:stack-2',
+    heroicons: 'heroicons:square-3-stack-3d',
+    iconoir: 'iconoir:stack',
+  },
   microsoft: {
     'fa6-solid': 'fa6-brands:microsoft',
     ph: 'ph:microsoft-outlook-logo',

@@ -10,11 +10,13 @@ import { useSorting } from '../composables/useSorting';
 import {
   getContainerLogs as fetchContainerLogs,
   getAllContainers,
+  getContainerGroups,
   getContainerTriggers,
   refreshAllContainers,
   runTrigger as runContainerTrigger,
   updateContainerPolicy,
 } from '../services/container';
+import type { ContainerGroup } from '../services/container';
 import {
   startContainer as apiStartContainer,
   restartContainer as apiRestartContainer,
@@ -62,6 +64,9 @@ async function loadContainers() {
     }
     containerIdMap.value = idMap;
     containerMetaMap.value = metaMap;
+    if (groupByStack.value) {
+      await loadGroups();
+    }
   } catch (e: any) {
     error.value = e.message || 'Failed to load containers';
   } finally {
@@ -522,6 +527,106 @@ const displayContainers = computed(() => {
   return [...live, ...ghosts];
 });
 
+// Grouping / stacks
+const groupByStack = ref(localStorage.getItem('dd-group-by-stack') === 'true');
+const groupMembershipMap = ref<Record<string, string>>({});
+const collapsedGroups = ref(new Set<string>());
+const groupUpdateInProgress = ref(new Set<string>());
+
+watch(
+  () => groupByStack.value,
+  (v) => {
+    localStorage.setItem('dd-group-by-stack', String(v));
+    if (v && Object.keys(groupMembershipMap.value).length === 0) {
+      loadGroups();
+    }
+  },
+);
+
+function toggleGroupCollapse(key: string) {
+  const next = new Set(collapsedGroups.value);
+  if (next.has(key)) {
+    next.delete(key);
+  } else {
+    next.add(key);
+  }
+  collapsedGroups.value = next;
+}
+
+async function loadGroups() {
+  try {
+    const groups: ContainerGroup[] = await getContainerGroups();
+    const map: Record<string, string> = {};
+    for (const group of groups) {
+      if (!group.name) continue;
+      for (const c of group.containers) {
+        const uiName = c.displayName || c.name;
+        map[uiName] = group.name;
+      }
+    }
+    groupMembershipMap.value = map;
+  } catch {
+    groupMembershipMap.value = {};
+  }
+}
+
+interface RenderGroup {
+  key: string;
+  name: string | null;
+  containers: typeof displayContainers.value;
+  containerCount: number;
+  updatesAvailable: number;
+  updatableCount: number;
+}
+
+const groupedContainers = computed<RenderGroup[]>(() => {
+  const map = groupMembershipMap.value;
+  const buckets: Record<string, typeof displayContainers.value> = {};
+  for (const c of displayContainers.value) {
+    const groupName = map[c.name] ?? null;
+    const key = groupName ?? '__ungrouped__';
+    if (!buckets[key]) buckets[key] = [];
+    buckets[key].push(c);
+  }
+  const named: RenderGroup[] = [];
+  let ungrouped: RenderGroup | null = null;
+  for (const [key, containers] of Object.entries(buckets)) {
+    const group: RenderGroup = {
+      key,
+      name: key === '__ungrouped__' ? null : key,
+      containers,
+      containerCount: containers.length,
+      updatesAvailable: containers.filter((c) => c.newTag).length,
+      updatableCount: containers.filter((c) => c.newTag && c.bouncer !== 'blocked').length,
+    };
+    if (key === '__ungrouped__') {
+      ungrouped = group;
+    } else {
+      named.push(group);
+    }
+  }
+  named.sort((a, b) => a.key.localeCompare(b.key));
+  if (ungrouped) named.push(ungrouped);
+  return named;
+});
+
+const renderGroups = computed<RenderGroup[]>(() => {
+  if (!groupByStack.value) {
+    return [
+      {
+        key: '__flat__',
+        name: null,
+        containers: displayContainers.value,
+        containerCount: displayContainers.value.length,
+        updatesAvailable: displayContainers.value.filter((c) => c.newTag).length,
+        updatableCount: displayContainers.value.filter((c) => c.newTag && c.bouncer !== 'blocked')
+          .length,
+      },
+    ];
+  }
+  return groupedContainers.value;
+});
+
 // Column visibility
 const { allColumns, visibleColumns, activeColumns, showColumnPicker, toggleColumn } =
   useColumnVisibility(isCompact);
@@ -668,6 +773,36 @@ async function executeAction(name: string, action: (id: string) => Promise<any>)
   }
 }
 
+function setGroupUpdateState(groupKey: string, updating: boolean) {
+  const next = new Set(groupUpdateInProgress.value);
+  if (updating) {
+    next.add(groupKey);
+  } else {
+    next.delete(groupKey);
+  }
+  groupUpdateInProgress.value = next;
+}
+
+async function updateAllInGroup(group: RenderGroup) {
+  if (groupUpdateInProgress.value.has(group.key)) {
+    return;
+  }
+  const updatableContainers = group.containers.filter((container) => {
+    return container.newTag && container.bouncer !== 'blocked';
+  });
+  if (updatableContainers.length === 0) {
+    return;
+  }
+  setGroupUpdateState(group.key, true);
+  try {
+    for (const container of updatableContainers) {
+      await executeAction(container.name, apiUpdateContainer);
+    }
+  } finally {
+    setGroupUpdateState(group.key, false);
+  }
+}
+
 async function startContainer(name: string) {
   await executeAction(name, apiStartContainer);
 }
@@ -795,6 +930,13 @@ function confirmForceUpdate(name: string) {
         </template>
         <template #left>
           <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
+                  :class="groupByStack ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
+                  :style="{ borderColor: groupByStack ? 'var(--dd-primary)' : 'var(--dd-border-strong)' }"
+                  v-tooltip.top="tt('Group by stack')"
+                  @click="groupByStack = !groupByStack">
+            <AppIcon name="stack" :size="11" />
+          </button>
+          <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
                   :class="rechecking ? 'dd-text-muted cursor-wait' : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
                   :style="{ borderColor: 'var(--dd-border-strong)' }"
                   :disabled="rechecking"
@@ -824,10 +966,49 @@ function confirmForceUpdate(name: string) {
         </button>
       </div>
 
+      <!-- GROUPED / FLAT CONTAINER VIEWS -->
+      <template v-if="filteredContainers.length > 0">
+      <template v-for="group in renderGroups" :key="group.key">
+
+        <!-- Group header (only shown when grouping is active) -->
+        <div v-if="groupByStack && group.key !== '__flat__'"
+             class="flex items-center gap-2 px-3 py-2 cursor-pointer select-none dd-rounded transition-colors hover:dd-bg-elevated"
+             :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }"
+             :class="group.key === renderGroups[0]?.key ? '' : 'mt-3'"
+             @click="toggleGroupCollapse(group.key)">
+          <AppIcon :name="collapsedGroups.has(group.key) ? 'chevron-right' : 'chevron-down'" :size="10" class="dd-text-muted shrink-0" />
+          <AppIcon name="stack" :size="12" class="dd-text-muted shrink-0" />
+          <span class="text-[12px] font-semibold dd-text">{{ group.name ?? 'Ungrouped' }}</span>
+          <span class="badge text-[9px] font-bold dd-bg-elevated dd-text-muted">{{ group.containerCount }}</span>
+          <span v-if="group.updatesAvailable > 0" class="badge text-[9px] font-bold"
+                :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }">
+            {{ group.updatesAvailable }} update{{ group.updatesAvailable === 1 ? '' : 's' }}
+          </span>
+          <button
+            v-if="group.updatableCount > 0"
+            class="ml-auto inline-flex items-center gap-1 px-2 py-1 dd-rounded border text-[10px] font-semibold transition-colors"
+            :class="groupUpdateInProgress.has(group.key) || actionInProgress
+              ? 'dd-text-muted cursor-wait'
+              : 'dd-text hover:dd-bg-elevated'"
+            :style="{ borderColor: 'var(--dd-border-strong)' }"
+            :disabled="groupUpdateInProgress.has(group.key) || actionInProgress !== null"
+            v-tooltip.top="tt('Update all in group')"
+            @click.stop="updateAllInGroup(group)">
+            <AppIcon
+              :name="groupUpdateInProgress.has(group.key) ? 'spinner' : 'cloud-download'"
+              :size="11"
+              :class="groupUpdateInProgress.has(group.key) ? 'dd-spin' : ''" />
+            <span>Update all</span>
+          </button>
+        </div>
+
+        <!-- Group body (collapsible) -->
+        <div v-show="!collapsedGroups.has(group.key)">
+
       <!-- TABLE VIEW -->
-      <DataTable v-if="containerViewMode === 'table' && filteredContainers.length > 0"
+      <DataTable v-if="containerViewMode === 'table'"
                  :columns="tableColumns"
-                 :rows="displayContainers"
+                 :rows="group.containers"
                  row-key="name"
                  :sort-key="containerSortKey"
                  :sort-asc="containerSortAsc"
@@ -1111,8 +1292,8 @@ function confirmForceUpdate(name: string) {
       </Teleport>
 
       <!-- CONTAINER CARD GRID -->
-      <DataCardGrid v-if="containerViewMode === 'cards' && displayContainers.length > 0"
-                    :items="displayContainers"
+      <DataCardGrid v-if="containerViewMode === 'cards'"
+                    :items="group.containers"
                     item-key="name"
                     :selected-key="selectedContainer?.name"
                     @item-click="selectContainer($event)">
@@ -1198,8 +1379,8 @@ function confirmForceUpdate(name: string) {
       </DataCardGrid>
 
       <!-- LIST VIEW -->
-      <DataListAccordion v-if="containerViewMode === 'list' && displayContainers.length > 0"
-                         :items="displayContainers"
+      <DataListAccordion v-if="containerViewMode === 'list'"
+                         :items="group.containers"
                          item-key="name"
                          :selected-key="selectedContainer?.name"
                          @item-click="selectContainer($event)">
@@ -1244,6 +1425,10 @@ function confirmForceUpdate(name: string) {
           </div>
         </template>
       </DataListAccordion>
+
+        </div><!-- /group body -->
+      </template><!-- /v-for group -->
+      </template><!-- /filteredContainers.length > 0 -->
 
       <!-- EMPTY STATE -->
       <EmptyState v-if="filteredContainers.length === 0"
