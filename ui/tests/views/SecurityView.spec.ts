@@ -13,6 +13,7 @@ vi.mock('@/composables/useBreakpoints', () => ({
 }));
 
 import { mount } from '@vue/test-utils';
+import { clearIconCache, updateSettings } from '@/services/settings';
 import SecurityView from '@/views/SecurityView.vue';
 
 function makeContainer(overrides: Record<string, any> = {}) {
@@ -362,6 +363,42 @@ describe('SecurityView', () => {
       await nextTick();
 
       expect(w.find('.dt').attributes('data-rows')).toBe('0');
+    });
+  });
+
+  describe('settings service coverage guard', () => {
+    beforeEach(() => {
+      global.fetch = vi.fn();
+    });
+
+    it('falls back to HTTP status when updateSettings error body has no error field', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        json: vi.fn().mockResolvedValue({}),
+      } as any);
+
+      await expect(updateSettings({ internetlessMode: true })).rejects.toThrow('HTTP 502');
+    });
+
+    it('falls back to HTTP status when clearIconCache error body has no error field', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: vi.fn().mockResolvedValue({}),
+      } as any);
+
+      await expect(clearIconCache()).rejects.toThrow('HTTP 503');
+    });
+
+    it('falls back to Unknown error when clearIconCache error body is not JSON', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: vi.fn().mockRejectedValue(new Error('not json')),
+      } as any);
+
+      await expect(clearIconCache()).rejects.toThrow('Unknown error');
     });
   });
 });

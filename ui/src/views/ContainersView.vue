@@ -972,9 +972,9 @@ function confirmForceUpdate(name: string) {
 
         <!-- Group header (only shown when grouping is active) -->
         <div v-if="groupByStack && group.key !== '__flat__'"
-             class="flex items-center gap-2 px-3 py-2 cursor-pointer select-none dd-rounded transition-colors hover:dd-bg-elevated"
-             :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }"
-             :class="group.key === renderGroups[0]?.key ? '' : 'mt-3'"
+             class="flex items-center gap-2 px-3 py-2.5 mb-3 cursor-pointer select-none dd-rounded transition-colors hover:dd-bg-elevated"
+             :style="{ backgroundColor: 'var(--dd-bg-elevated)', border: '1px solid var(--dd-border-strong)' }"
+             :class="group.key === renderGroups[0]?.key ? '' : 'mt-6'"
              @click="toggleGroupCollapse(group.key)">
           <AppIcon :name="collapsedGroups.has(group.key) ? 'chevron-right' : 'chevron-down'" :size="10" class="dd-text-muted shrink-0" />
           <AppIcon name="stack" :size="12" class="dd-text-muted shrink-0" />

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { getAuditLog } from '../services/audit';
 
@@ -16,8 +17,53 @@ interface AuditEntry {
   details?: string;
 }
 
+const actionTypes = [
+  'update-available',
+  'update-applied',
+  'update-failed',
+  'container-added',
+  'container-removed',
+  'rollback',
+  'preview',
+  'container-start',
+  'container-stop',
+  'container-restart',
+  'webhook-watch',
+  'webhook-watch-container',
+  'webhook-update',
+  'hook-pre-success',
+  'hook-pre-failed',
+  'hook-post-success',
+  'hook-post-failed',
+  'auto-rollback',
+];
+
+const route = useRoute();
 const { isMobile } = useBreakpoints();
-const auditViewMode = ref<'table' | 'cards' | 'list'>('table');
+
+function firstQueryValue(value: unknown): string | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return typeof raw === 'string' ? raw : undefined;
+}
+
+function parsePageQuery(value: unknown): number {
+  const raw = firstQueryValue(value);
+  if (!raw || !/^\d+$/.test(raw)) return 1;
+  return Math.max(1, Number.parseInt(raw, 10));
+}
+
+function parseViewModeQuery(value: unknown): 'table' | 'cards' | 'list' {
+  const raw = firstQueryValue(value);
+  if (raw === 'cards' || raw === 'list') return raw;
+  return 'table';
+}
+
+function parseActionQuery(value: unknown): string {
+  const raw = firstQueryValue(value);
+  return raw && actionTypes.includes(raw) ? raw : '';
+}
+
+const auditViewMode = ref<'table' | 'cards' | 'list'>(parseViewModeQuery(route.query.view));
 const selectedEntry = ref<AuditEntry | null>(null);
 const detailOpen = ref(false);
 
@@ -31,14 +77,14 @@ const loading = ref(true);
 const error = ref('');
 
 // Pagination
-const page = ref(1);
+const page = ref(parsePageQuery(route.query.page));
 const limit = ref(50);
 const total = ref(0);
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit.value)));
 
 // Filters
-const searchQuery = ref('');
-const actionFilter = ref('');
+const searchQuery = ref(firstQueryValue(route.query.q) ?? '');
+const actionFilter = ref(parseActionQuery(route.query.action));
 const showFilters = ref(false);
 const activeFilterCount = computed(() => {
   let count = 0;
@@ -66,27 +112,6 @@ const filteredEntries = computed(() => {
   }
   return result;
 });
-
-const actionTypes = [
-  'update-available',
-  'update-applied',
-  'update-failed',
-  'container-added',
-  'container-removed',
-  'rollback',
-  'preview',
-  'container-start',
-  'container-stop',
-  'container-restart',
-  'webhook-watch',
-  'webhook-watch-container',
-  'webhook-update',
-  'hook-pre-success',
-  'hook-pre-failed',
-  'hook-post-success',
-  'hook-post-failed',
-  'auto-rollback',
-];
 
 function statusColor(status: string) {
   if (status === 'success') return 'var(--dd-success)';
@@ -163,6 +188,15 @@ async function fetchAudit() {
 }
 
 watch([page, actionFilter], () => fetchAudit());
+watch(
+  () => [route.query.page, route.query.action, route.query.q, route.query.view],
+  ([nextPage, nextAction, nextSearch, nextView]) => {
+    page.value = parsePageQuery(nextPage);
+    actionFilter.value = parseActionQuery(nextAction);
+    searchQuery.value = firstQueryValue(nextSearch) ?? '';
+    auditViewMode.value = parseViewModeQuery(nextView);
+  },
+);
 
 function prevPage() {
   if (page.value > 1) page.value--;

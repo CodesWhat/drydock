@@ -368,4 +368,38 @@ describe('DashboardView', () => {
       });
     });
   });
+
+  describe('container service coverage guard', () => {
+    beforeEach(() => {
+      global.fetch = vi.fn();
+    });
+
+    it('fetches container groups', async () => {
+      const { getContainerGroups } = await vi.importActual<typeof import('@/services/container')>(
+        '@/services/container',
+      );
+      const groups = [{ name: 'core' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => groups,
+      } as any);
+
+      await expect(getContainerGroups()).resolves.toEqual(groups);
+      expect(fetch).toHaveBeenCalledWith('/api/containers/groups', { credentials: 'include' });
+    });
+
+    it('throws when fetching container groups fails', async () => {
+      const { getContainerGroups } = await vi.importActual<typeof import('@/services/container')>(
+        '@/services/container',
+      );
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Bad Gateway',
+      } as any);
+
+      await expect(getContainerGroups()).rejects.toThrow(
+        'Failed to get container groups: Bad Gateway',
+      );
+    });
+  });
 });
