@@ -71,14 +71,20 @@ describe('useDetailPanel', () => {
   });
 
   describe('detailTabs', () => {
-    it('should have 4 tabs', () => {
+    it('should have 5 tabs', () => {
       const { detailTabs } = useDetailPanel();
-      expect(detailTabs).toHaveLength(4);
+      expect(detailTabs).toHaveLength(5);
     });
 
     it('should have correct tab ids', () => {
       const { detailTabs } = useDetailPanel();
-      expect(detailTabs.map((t) => t.id)).toEqual(['overview', 'logs', 'environment', 'labels']);
+      expect(detailTabs.map((t) => t.id)).toEqual([
+        'overview',
+        'logs',
+        'environment',
+        'labels',
+        'actions',
+      ]);
     });
   });
 

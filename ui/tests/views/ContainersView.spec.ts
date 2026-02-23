@@ -16,12 +16,26 @@ vi.mock('vue-router', () => ({
 vi.mock('@/services/container', () => ({
   getAllContainers: vi.fn(),
   getContainerLogs: vi.fn(),
+  getContainerTriggers: vi.fn().mockResolvedValue([]),
+  refreshAllContainers: vi.fn().mockResolvedValue([]),
+  runTrigger: vi.fn().mockResolvedValue({}),
+  updateContainerPolicy: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock('@/services/container-actions', () => ({
+  startContainer: vi.fn(),
   updateContainer: vi.fn(),
   stopContainer: vi.fn(),
   restartContainer: vi.fn(),
+}));
+
+vi.mock('@/services/backup', () => ({
+  getBackups: vi.fn().mockResolvedValue([]),
+  rollback: vi.fn().mockResolvedValue({}),
+}));
+
+vi.mock('@/services/preview', () => ({
+  previewContainer: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock('@/utils/container-mapper', () => ({
@@ -121,6 +135,7 @@ vi.mock('@/composables/useDetailPanel', () => ({
     detailTabs: [
       { id: 'overview', label: 'Overview', icon: 'info' },
       { id: 'logs', label: 'Logs', icon: 'logs' },
+      { id: 'actions', label: 'Actions', icon: 'triggers' },
     ],
     selectContainer: mockSelectContainer,
     openFullPage: vi.fn(),
