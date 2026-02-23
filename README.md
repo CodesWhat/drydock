@@ -48,6 +48,7 @@
 - [Documentation](https://drydock.codeswhat.com/docs)
 - [Quick Start](#quick-start)
 - [Screenshots](#screenshots)
+- [UI Workflow](#ui-workflow)
 - [Features](#features)
 - [Update Guard](#update-guard)
 - [Supported Registries](#supported-registries)
@@ -86,6 +87,30 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 ```
+
+</details>
+
+<details>
+<summary><strong>Docker socket access (secure-first)</strong></summary>
+
+`drydock` needs Docker API access to monitor/update containers.
+
+- Recommended: use a socket proxy and point Drydock to it (`DD_WATCHER_DOCKER_SOCKET=tcp://dockerproxy:2375`).
+- Direct socket mounts are supported, but root mode is break-glass only.
+
+If you must use break-glass root mode, set both flags explicitly:
+
+```yaml
+environment:
+  - DD_RUN_AS_ROOT=true
+  - DD_ALLOW_INSECURE_ROOT=true
+```
+
+If `DD_RUN_AS_ROOT=true` is set without `DD_ALLOW_INSECURE_ROOT=true`, startup now fails closed by design.
+
+See the docs for full guidance:
+- [Docker Socket Security](https://drydock.codeswhat.com/docs/configuration/watchers/#docker-socket-security)
+- [Docker Compose Trigger Permissions](https://drydock.codeswhat.com/docs/configuration/triggers/docker-compose/#permissions-and-compose-cli-access)
 
 </details>
 
@@ -175,6 +200,17 @@ Accepted values: `false` (default — no proxy), `true` (trust all), a number (h
 </tr>
 </table>
 
+<h3 align="center" id="ui-workflow">UI Workflow (v1.4 Finish-Off)</h3>
+
+- **Global command palette (`Cmd/Ctrl+K`)** — Search pages, containers, agents, triggers, watchers, registries, auth, and notification rules from one place.
+- **Prefix scopes** — Use `/` for pages, `@` for runtime resources, and `#` for config/settings search.
+- **Recent-first navigation** — Empty query shows recent results to speed up repeat actions.
+- **Container-aware visuals** — Container search rows render resolved image icons instead of generic placeholders.
+- **Notifications as active control plane** — `/notifications` now edits per-event rules and trigger assignments that directly gate runtime dispatch.
+- **Dashboard layout persistence** — Drag/drop dashboard widgets to reorder; layout persists locally with a reset option.
+- **Profile/runtime status clarity** — Config profile/server/settings panels include explicit loading, error, and refresh flows.
+- **Keyboard flow polish** — Confirm dialogs support `Enter`/`Escape`; detail panels close with `Escape`.
+
 <hr>
 
 <h2 align="center" id="features">Features</h2>
@@ -197,7 +233,7 @@ Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and m
 <tr>
 <td align="center">
 <h3>Docker Compose Updates</h3>
-Auto-pull and recreate services via docker-compose with multi-network support
+Auto-pull and recreate services via docker-compose with service-scoped compose image patching
 </td>
 <td align="center">
 <h3>Distributed Agents</h3>
@@ -408,6 +444,23 @@ All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) 
 
 </details>
 
+<details>
+<summary><strong>Auth hardening defaults (fail-closed)</strong></summary>
+
+As of 2026 hardening updates, auth-related remote flows now fail closed by default:
+
+- **Remote Docker watcher auth** fails when credentials are incomplete, auth type is unsupported, or HTTPS/TLS is missing.
+  - Break-glass override is explicit: `DD_WATCHER_{watcher_name}_AUTH_INSECURE=true`
+- **Registry bearer token exchange** fails when token endpoints error or return no token (no silent anonymous fallback).
+- **HTTP trigger auth** fails when `AUTH_TYPE` is unsupported or required `BASIC`/`BEARER` values are missing.
+
+See:
+- [Watcher auth configuration](https://drydock.codeswhat.com/docs/configuration/watchers)
+- [HTTP trigger configuration](https://drydock.codeswhat.com/docs/configuration/triggers/http)
+- [Registry configuration](https://drydock.codeswhat.com/docs/configuration/registries)
+
+</details>
+
 <hr>
 
 <h2 align="center" id="migrating-from-wud">Migrating from WUD</h2>
@@ -427,13 +480,29 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 | WUD (legacy) | drydock (new) | Status |
 | --- | --- | --- |
 | `WUD_` env vars | `DD_` env vars | Both work — `WUD_` vars are automatically mapped to their `DD_` equivalents at startup. If both are set, `DD_` takes priority. |
-| `wud.*` container labels | `dd.*` container labels | Both work — all `wud.*` labels (`wud.watch`, `wud.tag.include`, `wud.display.name`, etc.) are recognized alongside their `dd.*` counterparts. |
+| `wud.*` container labels | `dd.*` container labels | Both work for legacy-equivalent settings — core `wud.*` labels (`wud.watch`, `wud.tag.include`, `wud.display.name`, etc.) are recognized alongside `dd.*`; newer drydock-only labels are `dd.*` only. |
 | `/store/wud.json` state file | `/store/dd.json` state file | Automatic migration — on first start, if `wud.json` exists and `dd.json` does not, drydock renames it in place. No data loss. |
 | Session store (connect-loki) | Session store (connect-loki) | Auto-healed — WUD's session data is incompatible (different secret key), but drydock automatically regenerates corrupt sessions instead of failing. No manual cleanup needed. |
 | Docker socket mount | Docker socket mount | Unchanged — same `/var/run/docker.sock` bind mount. |
 | Health endpoint `/health` | Health endpoint `/health` | Unchanged — same path, same port (default 3000). |
 
 **In short:** swap the image, restart the container, done. Your watchers, triggers, registries, and authentication config all carry over with zero changes.
+
+If you want to rewrite existing config files to the drydock naming convention in one pass, use:
+
+```bash
+# from the app directory
+node dist/index.js config migrate --dry-run
+node dist/index.js config migrate --file .env --file compose.yaml
+```
+
+For containerized installs:
+
+```bash
+docker exec -it <drydock-container> node dist/index.js config migrate --dry-run
+```
+
+`config migrate` only reads and updates your local config files. It does not call home or send usage data to external services.
 
 </details>
 
@@ -558,6 +627,16 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 <h2 align="center" id="roadmap">Roadmap</h2>
 
 Here's what's coming.
+
+### WUD Compatibility Roadmap (Migration-first)
+
+| Target | Plan |
+| --- | --- |
+| **March 2026** ✅ | Local compatibility telemetry + one-time startup warnings for legacy `WUD_*` / `wud.*` usage |
+| **April 2026** ✅ | `config migrate` command to auto-convert legacy env vars/labels in user config files |
+| **June 2026** | Optional CI strict migration check mode: block new `WUD_*` / `wud.*` additions while allowing budgeted legacy exceptions |
+| **August 2026** | TypeScript suppression governance: no new `@ts-nocheck`; require rationale + issue link for `@ts-expect-error` |
+| **Future major (no fixed date)** | Keep runtime legacy compatibility by default; only remove `WUD_*` / `wud.*` fallbacks if maintenance or security feasibility requires it, after explicit deprecation notice and migration tooling |
 
 | Version | Theme | Highlights |
 | --- | --- | --- |
