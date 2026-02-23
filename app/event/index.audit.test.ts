@@ -112,4 +112,125 @@ describe('event default audit listeners', () => {
     expect(mockInc).toHaveBeenCalledWith({ action: 'container-added' });
     expect(mockInc).toHaveBeenCalledWith({ action: 'container-removed' });
   });
+
+  test('should record security-alert audits', async () => {
+    const event = await loadEventModule();
+
+    await event.emitSecurityAlert({
+      containerName: 'docker_local_nginx',
+      details: 'critical=1, high=2',
+      blockingCount: 3,
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'security-alert',
+        containerName: 'docker_local_nginx',
+        status: 'error',
+        details: 'critical=1, high=2; blocking=3',
+      }),
+    );
+    expect(mockInc).toHaveBeenCalledWith({ action: 'security-alert' });
+  });
+
+  test('should omit blocking suffix when security alert blockingCount is not positive', async () => {
+    const event = await loadEventModule();
+
+    await event.emitSecurityAlert({
+      containerName: 'docker_local_nginx',
+      details: 'critical=1, high=2',
+      blockingCount: 0,
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'security-alert',
+        details: 'critical=1, high=2',
+      }),
+    );
+  });
+
+  test('should deduplicate repeated security-alert audits within the dedupe window', async () => {
+    const event = await loadEventModule();
+
+    await event.emitSecurityAlert({
+      containerName: 'docker_local_nginx',
+      details: 'critical=1, high=2',
+      blockingCount: 3,
+    });
+    await event.emitSecurityAlert({
+      containerName: 'docker_local_nginx',
+      details: 'critical=1, high=2',
+      blockingCount: 3,
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(1);
+    expect(mockInc).toHaveBeenCalledTimes(1);
+    expect(mockInc).toHaveBeenCalledWith({ action: 'security-alert' });
+  });
+
+  test('should record agent-disconnect audits', async () => {
+    const event = await loadEventModule();
+
+    await event.emitAgentDisconnected({
+      agentName: 'edge-a',
+      reason: 'SSE connection lost',
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'agent-disconnect',
+        containerName: 'edge-a',
+        status: 'error',
+        details: 'SSE connection lost',
+      }),
+    );
+    expect(mockInc).toHaveBeenCalledWith({ action: 'agent-disconnect' });
+  });
+
+  test('should record agent-disconnect audits without a reason', async () => {
+    const event = await loadEventModule();
+
+    await event.emitAgentDisconnected({
+      agentName: 'edge-b',
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'agent-disconnect',
+        containerName: 'edge-b',
+        details: undefined,
+      }),
+    );
+  });
+
+  test('should deduplicate repeated agent-disconnect audits within the dedupe window', async () => {
+    const event = await loadEventModule();
+
+    await event.emitAgentDisconnected({
+      agentName: 'edge-a',
+      reason: 'SSE connection lost',
+    });
+    await event.emitAgentDisconnected({
+      agentName: 'edge-a',
+      reason: 'SSE connection lost',
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(1);
+    expect(mockInc).toHaveBeenCalledTimes(1);
+    expect(mockInc).toHaveBeenCalledWith({ action: 'agent-disconnect' });
+  });
+
+  test('should prune stale audit dedupe cache entries', async () => {
+    const event = await loadEventModule();
+    const cache = new Map<string, number>([
+      ['stale', 0],
+      ['recent', 10 * 60 * 1000 + 1],
+    ]);
+
+    event.pruneAuditDedupeCacheForTests(cache, 10 * 60 * 1000 + 1, 5 * 60 * 1000);
+
+    expect(cache.has('stale')).toBe(false);
+    expect(cache.has('recent')).toBe(true);
+  });
 });

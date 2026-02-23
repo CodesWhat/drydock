@@ -147,6 +147,50 @@ test('deregistration of containerUpdateApplied handler should work', async () =>
   expect(handler).not.toHaveBeenCalled();
 });
 
+test('emitSecurityAlert should call registered handlers with payload', async () => {
+  const handler = vi.fn();
+  const payload = {
+    containerName: 'docker_local_nginx',
+    details: 'high=1, critical=0',
+    status: 'passed',
+  };
+  event.registerSecurityAlert(handler, { order: 10 });
+  await event.emitSecurityAlert(payload);
+  expect(handler).toHaveBeenCalledWith(payload);
+});
+
+test('deregistration of security alert handler should work', async () => {
+  const handler = vi.fn();
+  const deregister = event.registerSecurityAlert(handler, { order: 10 });
+  deregister();
+  await event.emitSecurityAlert({
+    containerName: 'docker_local_nginx',
+    details: 'high=2',
+  });
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test('emitAgentDisconnected should call registered handlers with payload', async () => {
+  const handler = vi.fn();
+  const payload = {
+    agentName: 'edge-a',
+    reason: 'SSE stream ended',
+  };
+  event.registerAgentDisconnected(handler, { order: 10 });
+  await event.emitAgentDisconnected(payload);
+  expect(handler).toHaveBeenCalledWith(payload);
+});
+
+test('deregistration of agent disconnected handler should work', async () => {
+  const handler = vi.fn();
+  const deregister = event.registerAgentDisconnected(handler, { order: 10 });
+  deregister();
+  await event.emitAgentDisconnected({
+    agentName: 'edge-a',
+  });
+  expect(handler).not.toHaveBeenCalled();
+});
+
 test('handler with non-finite order should default to 100', async () => {
   const calls: string[] = [];
   event.registerContainerReport(

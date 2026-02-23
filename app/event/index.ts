@@ -14,6 +14,8 @@ const DD_WATCHER_START = 'dd:watcher-start';
 const DD_WATCHER_STOP = 'dd:watcher-stop';
 
 const DEFAULT_HANDLER_ORDER = 100;
+const SECURITY_ALERT_AUDIT_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
+const AGENT_DISCONNECT_AUDIT_DEDUPE_WINDOW_MS = 60 * 1000;
 
 interface EventHandlerRegistrationOptions {
   order?: number;
@@ -31,7 +33,11 @@ const containerReportHandlers: OrderedEventHandler[] = [];
 const containerReportsHandlers: OrderedEventHandler[] = [];
 const containerUpdateAppliedHandlers: OrderedEventHandler[] = [];
 const containerUpdateFailedHandlers: OrderedEventHandler[] = [];
+const securityAlertHandlers: OrderedEventHandler[] = [];
+const agentDisconnectedHandlers: OrderedEventHandler[] = [];
 let handlerRegistrationSequence = 0;
+const securityAlertAuditSeenAt = new Map<string, number>();
+const agentDisconnectedAuditSeenAt = new Map<string, number>();
 
 function registerOrderedEventHandler(
   handlers: OrderedEventHandler[],
@@ -70,6 +76,34 @@ async function emitOrderedHandlers(handlers: OrderedEventHandler[], payload: any
   for (const handler of handlersOrdered) {
     await handler.handler(payload);
   }
+}
+
+function pruneAuditDedupeCache(
+  cache: Map<string, number>,
+  now: number,
+  dedupeWindowMs: number,
+): void {
+  const oldestAllowedTimestamp = now - dedupeWindowMs * 2;
+  for (const [key, timestamp] of cache.entries()) {
+    if (timestamp < oldestAllowedTimestamp) {
+      cache.delete(key);
+    }
+  }
+}
+
+function isDuplicateAuditEvent(
+  cache: Map<string, number>,
+  key: string,
+  dedupeWindowMs: number,
+): boolean {
+  const now = Date.now();
+  const previousTimestamp = cache.get(key);
+  if (previousTimestamp && now - previousTimestamp < dedupeWindowMs) {
+    return true;
+  }
+  cache.set(key, now);
+  pruneAuditDedupeCache(cache, now, dedupeWindowMs);
+  return false;
 }
 
 /**
@@ -140,6 +174,70 @@ export function registerContainerUpdateFailed(
   options: EventHandlerRegistrationOptions = {},
 ) {
   return registerOrderedEventHandler(containerUpdateFailedHandlers, handler, options);
+}
+
+/**
+ * Emit SecurityAlert event.
+ * @param payload
+ */
+export async function emitSecurityAlert(payload: {
+  containerName: string;
+  details: string;
+  status?: string;
+  summary?: {
+    unknown: number;
+    low: number;
+    medium: number;
+    high: number;
+    critical: number;
+  };
+  blockingCount?: number;
+  container?: any;
+}) {
+  await emitOrderedHandlers(securityAlertHandlers, payload);
+}
+
+/**
+ * Register to SecurityAlert event.
+ * @param handler
+ */
+export function registerSecurityAlert(
+  handler: (payload: {
+    containerName: string;
+    details: string;
+    status?: string;
+    summary?: {
+      unknown: number;
+      low: number;
+      medium: number;
+      high: number;
+      critical: number;
+    };
+    blockingCount?: number;
+    container?: any;
+  }) => any,
+  options: EventHandlerRegistrationOptions = {},
+) {
+  return registerOrderedEventHandler(securityAlertHandlers, handler, options);
+}
+
+/**
+ * Emit AgentDisconnected event.
+ * @param payload
+ */
+export async function emitAgentDisconnected(payload: { agentName: string; reason?: string }) {
+  await emitOrderedHandlers(agentDisconnectedHandlers, payload);
+}
+
+/**
+ * Register to AgentDisconnected event.
+ * @param handler
+ */
+export function registerAgentDisconnected(
+  handler: (payload: { agentName: string; reason?: string }) => any,
+  options: EventHandlerRegistrationOptions = {},
+) {
+  return registerOrderedEventHandler(agentDisconnectedHandlers, handler, options);
 }
 
 /**
@@ -269,6 +367,60 @@ registerContainerUpdateFailed(
   { id: 'audit', order: 200 },
 );
 
+registerSecurityAlert(
+  async (payload) => {
+    const dedupeKey = `${payload.containerName}|${payload.details}`;
+    if (
+      isDuplicateAuditEvent(
+        securityAlertAuditSeenAt,
+        dedupeKey,
+        SECURITY_ALERT_AUDIT_DEDUPE_WINDOW_MS,
+      )
+    ) {
+      return;
+    }
+    const blockingCount =
+      Number.isFinite(payload.blockingCount) && payload.blockingCount > 0
+        ? `; blocking=${payload.blockingCount}`
+        : '';
+    auditStore.insertAudit({
+      id: '',
+      timestamp: new Date().toISOString(),
+      action: 'security-alert',
+      containerName: payload.containerName,
+      status: 'error',
+      details: `${payload.details}${blockingCount}`,
+    });
+    getAuditCounter()?.inc({ action: 'security-alert' });
+  },
+  { id: 'audit', order: 200 },
+);
+
+registerAgentDisconnected(
+  async (payload) => {
+    const dedupeKey = `${payload.agentName}|${payload.reason || ''}`;
+    if (
+      isDuplicateAuditEvent(
+        agentDisconnectedAuditSeenAt,
+        dedupeKey,
+        AGENT_DISCONNECT_AUDIT_DEDUPE_WINDOW_MS,
+      )
+    ) {
+      return;
+    }
+    auditStore.insertAudit({
+      id: '',
+      timestamp: new Date().toISOString(),
+      action: 'agent-disconnect',
+      containerName: payload.agentName,
+      status: 'error',
+      details: payload.reason,
+    });
+    getAuditCounter()?.inc({ action: 'agent-disconnect' });
+  },
+  { id: 'audit', order: 200 },
+);
+
 registerContainerAdded((containerAdded) => {
   auditStore.insertAudit({
     id: '',
@@ -294,11 +446,24 @@ registerContainerRemoved((containerRemoved) => {
 });
 
 // Testing helper.
+export function pruneAuditDedupeCacheForTests(
+  cache: Map<string, number>,
+  now: number,
+  dedupeWindowMs: number,
+) {
+  pruneAuditDedupeCache(cache, now, dedupeWindowMs);
+}
+
+// Testing helper.
 export function clearAllListenersForTests() {
   eventEmitter.removeAllListeners();
   containerReportHandlers.length = 0;
   containerReportsHandlers.length = 0;
   containerUpdateAppliedHandlers.length = 0;
   containerUpdateFailedHandlers.length = 0;
+  securityAlertHandlers.length = 0;
+  agentDisconnectedHandlers.length = 0;
+  securityAlertAuditSeenAt.clear();
+  agentDisconnectedAuditSeenAt.clear();
   handlerRegistrationSequence = 0;
 }
