@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
-import { getAllContainers } from '../services/container';
+import { getAllContainers, scanContainer } from '../services/container';
 
 interface Vulnerability {
   id: string;
@@ -13,6 +13,17 @@ interface Vulnerability {
   publishedDate: string;
 }
 
+interface ImageSummary {
+  image: string;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  total: number;
+  fixable: number;
+  vulns: Vulnerability[];
+}
+
 function severityColor(sev: string) {
   if (sev === 'CRITICAL') return { bg: 'var(--dd-danger-muted)', text: 'var(--dd-danger)' };
   if (sev === 'HIGH') return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' };
@@ -20,7 +31,14 @@ function severityColor(sev: string) {
   return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)' };
 }
 
-const { windowNarrow: isCompact } = useBreakpoints();
+function severityIcon(sev: string): string {
+  if (sev === 'CRITICAL') return 'warning';
+  if (sev === 'HIGH') return 'chevrons-up';
+  if (sev === 'MEDIUM') return 'neutral';
+  return 'chevron-down';
+}
+
+const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -59,7 +77,32 @@ async function fetchVulnerabilities() {
   }
 }
 
-onMounted(fetchVulnerabilities);
+function handleSseScanCompleted() {
+  fetchVulnerabilities();
+}
+
+const scanning = ref(false);
+const scanProgress = ref({ done: 0, total: 0 });
+
+async function scanAllContainers() {
+  scanning.value = true;
+  scanProgress.value = { done: 0, total: 0 };
+  try {
+    const containers = await getAllContainers();
+    scanProgress.value.total = containers.length;
+    for (const container of containers) {
+      try {
+        await scanContainer(container.id);
+      } catch {
+        // Individual scan failures shouldn't stop the batch
+      }
+      scanProgress.value.done++;
+    }
+    await fetchVulnerabilities();
+  } finally {
+    scanning.value = false;
+  }
+}
 
 // -- View mode --
 const securityViewMode = ref<'table' | 'cards' | 'list'>('table');
@@ -67,51 +110,108 @@ const securityViewMode = ref<'table' | 'cards' | 'list'>('table');
 // -- Filters --
 const showSecFilters = ref(false);
 const secFilterSeverity = ref('all');
-const secFilterStatus = ref('all');
-const secFilterImage = ref('all');
 const secFilterFix = ref('all');
-
-const secImageNames = computed(() =>
-  [...new Set(securityVulnerabilities.value.map((v) => v.image))].sort(),
-);
 
 const activeSecFilterCount = computed(
   () =>
-    [secFilterSeverity, secFilterStatus, secFilterImage, secFilterFix].filter(
+    [secFilterSeverity, secFilterFix].filter(
       (f) => f.value !== 'all',
     ).length,
 );
 
 function clearSecFilters() {
   secFilterSeverity.value = 'all';
-  secFilterStatus.value = 'all';
-  secFilterImage.value = 'all';
   secFilterFix.value = 'all';
 }
 
 // -- Sorting --
-const securitySortField = ref('severity');
-const securitySortAsc = ref(true);
+const securitySortField = ref('critical');
+const securitySortAsc = ref(false);
 
 const severityOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
-const filteredSecurityVulns = computed(() => {
-  let list = [...securityVulnerabilities.value];
+// -- Group vulnerabilities by image --
+const imageSummaries = computed<ImageSummary[]>(() => {
+  const map = new Map<string, ImageSummary>();
 
-  if (secFilterSeverity.value !== 'all') {
-    list = list.filter((v) => v.severity === secFilterSeverity.value);
+  for (const v of securityVulnerabilities.value) {
+    let summary = map.get(v.image);
+    if (!summary) {
+      summary = { image: v.image, critical: 0, high: 0, medium: 0, low: 0, total: 0, fixable: 0, vulns: [] };
+      map.set(v.image, summary);
+    }
+    if (v.severity === 'CRITICAL') summary.critical++;
+    else if (v.severity === 'HIGH') summary.high++;
+    else if (v.severity === 'MEDIUM') summary.medium++;
+    else summary.low++;
+    if (v.fixedIn) summary.fixable++;
+    summary.total++;
+    summary.vulns.push(v);
   }
-  if (secFilterImage.value !== 'all') {
-    list = list.filter((v) => v.image === secFilterImage.value);
+
+  // Sort vulns within each image by severity
+  for (const s of map.values()) {
+    s.vulns.sort((a, b) => (severityOrder[a.severity] ?? 99) - (severityOrder[b.severity] ?? 99));
+  }
+
+  return [...map.values()];
+});
+
+const filteredSummaries = computed(() => {
+  let list = [...imageSummaries.value];
+
+  // Filter: only include images that have vulns matching the severity filter
+  if (secFilterSeverity.value !== 'all') {
+    const sev = secFilterSeverity.value;
+    list = list.filter((s) => {
+      if (sev === 'CRITICAL') return s.critical > 0;
+      if (sev === 'HIGH') return s.high > 0;
+      if (sev === 'MEDIUM') return s.medium > 0;
+      return s.low > 0;
+    });
   }
   if (secFilterFix.value !== 'all') {
-    list = list.filter((v) =>
-      secFilterFix.value === 'yes' ? v.fixedIn !== null : v.fixedIn === null,
+    list = list.filter((s) =>
+      secFilterFix.value === 'yes' ? s.fixable > 0 : s.fixable < s.total,
     );
   }
 
   const field = securitySortField.value;
   const asc = securitySortAsc.value;
+  list.sort((a, b) => {
+    let cmp = 0;
+    if (field === 'image') {
+      cmp = a.image.localeCompare(b.image);
+    } else {
+      const av = (a as Record<string, unknown>)[field] as number ?? 0;
+      const bv = (b as Record<string, unknown>)[field] as number ?? 0;
+      cmp = av - bv;
+    }
+    return asc ? cmp : -cmp;
+  });
+
+  return list;
+});
+
+// -- Detail panel --
+const selectedImage = ref<ImageSummary | null>(null);
+const detailOpen = ref(false);
+
+function openDetail(summary: ImageSummary) {
+  selectedImage.value = summary;
+  detailOpen.value = true;
+}
+
+// Detail panel vuln sort
+const detailSortField = ref('severity');
+const detailSortAsc = ref(true);
+
+const selectedImageVulns = computed(() => {
+  if (!selectedImage.value) return [];
+  let list = [...selectedImage.value.vulns];
+
+  const field = detailSortField.value;
+  const asc = detailSortAsc.value;
   list.sort((a, b) => {
     let cmp = 0;
     if (field === 'severity') {
@@ -123,35 +223,68 @@ const filteredSecurityVulns = computed(() => {
     }
     return asc ? cmp : -cmp;
   });
-
   return list;
 });
 
-// -- Column visibility --
-const secAllColumns = [
-  { key: 'severity', label: 'Severity', align: 'text-left', width: '99%', required: true },
-  { key: 'cve', label: 'CVE', align: 'text-left', required: false },
-  { key: 'package', label: 'Package', align: 'text-left', required: false },
-  { key: 'fixedIn', label: 'Fix', align: 'text-center', required: false },
-  { key: 'image', label: 'Image', align: 'text-left', required: false },
-  { key: 'published', label: 'Published', align: 'text-right', required: false },
-];
+// -- Table columns --
+const tableColumns = computed(() => {
+  if (isCompact.value) {
+    return [
+      { key: 'image', label: 'Image', align: 'text-left', width: '99%' },
+      { key: 'total', label: 'Total', align: 'text-center', sortable: true },
+    ];
+  }
+  return [
+    { key: 'image', label: 'Image', align: 'text-left', width: '99%' },
+    { key: 'critical', label: 'Critical', align: 'text-center', sortable: true },
+    { key: 'high', label: 'High', align: 'text-center', sortable: true },
+    { key: 'medium', label: 'Medium', align: 'text-center', sortable: true },
+    { key: 'low', label: 'Low', align: 'text-center', sortable: true },
+    { key: 'fixable', label: 'Fixable', align: 'text-center', sortable: true },
+    { key: 'total', label: 'Total', align: 'text-center', sortable: true },
+  ];
+});
 
-const secVisibleColumns = ref<Set<string>>(new Set(secAllColumns.map((c) => c.key)));
-const showSecColumnPicker = ref(false);
-
-function toggleSecColumn(key: string) {
-  const col = secAllColumns.find((c) => c.key === key);
-  if (col?.required) return;
-  if (secVisibleColumns.value.has(key)) secVisibleColumns.value.delete(key);
-  else secVisibleColumns.value.add(key);
+// Highest severity for an image (used for compact mode indicator)
+function highestSeverity(summary: ImageSummary): string {
+  if (summary.critical > 0) return 'CRITICAL';
+  if (summary.high > 0) return 'HIGH';
+  if (summary.medium > 0) return 'MEDIUM';
+  return 'LOW';
 }
 
-const secActiveColumns = computed(() =>
-  secAllColumns.filter(
-    (c) => secVisibleColumns.value.has(c.key) && (!isCompact.value || c.required),
-  ),
-);
+// -- Column picker (kept for non-compact table) --
+const showSecColumnPicker = ref(false);
+const secColumnPickerStyle = ref<Record<string, string>>({});
+
+function toggleSecColumnPicker(event: MouseEvent) {
+  showSecColumnPicker.value = !showSecColumnPicker.value;
+  if (showSecColumnPicker.value) {
+    const btn = event.currentTarget as HTMLElement;
+    const rect = btn.getBoundingClientRect();
+    secColumnPickerStyle.value = {
+      position: 'fixed',
+      top: `${rect.bottom + 4}px`,
+      left: `${rect.left}px`,
+    };
+  }
+}
+
+function handleGlobalClick() {
+  showSecColumnPicker.value = false;
+}
+onMounted(() => {
+  fetchVulnerabilities();
+  document.addEventListener('click', handleGlobalClick);
+  globalThis.addEventListener('dd:sse-scan-completed', handleSseScanCompleted as EventListener);
+});
+onUnmounted(() => {
+  document.removeEventListener('click', handleGlobalClick);
+  globalThis.removeEventListener(
+    'dd:sse-scan-completed',
+    handleSseScanCompleted as EventListener,
+  );
+});
 </script>
 
 <template>
@@ -160,9 +293,10 @@ const secActiveColumns = computed(() =>
       <DataFilterBar
         v-model="securityViewMode"
         v-model:showFilters="showSecFilters"
-        :filtered-count="filteredSecurityVulns.length"
-        :total-count="securityVulnerabilities.length"
-        :active-filter-count="activeSecFilterCount">
+        :filtered-count="filteredSummaries.length"
+        :total-count="imageSummaries.length"
+        :active-filter-count="activeSecFilterCount"
+        count-label="images">
         <template #filters>
           <select v-model="secFilterSeverity"
                   class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
@@ -171,17 +305,6 @@ const secActiveColumns = computed(() =>
             <option value="HIGH">High</option>
             <option value="MEDIUM">Medium</option>
             <option value="LOW">Low</option>
-          </select>
-          <select v-model="secFilterStatus"
-                  class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
-            <option value="all">Status</option>
-            <option value="clean">Clean</option>
-            <option value="issues">Issues</option>
-          </select>
-          <select v-model="secFilterImage"
-                  class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
-            <option value="all">Image</option>
-            <option v-for="img in secImageNames" :key="img" :value="img">{{ img }}</option>
           </select>
           <select v-model="secFilterFix"
                   class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
@@ -195,219 +318,321 @@ const secActiveColumns = computed(() =>
             Clear all
           </button>
         </template>
-        <template #extra-buttons>
-          <div v-if="securityViewMode === 'table'" class="relative">
-            <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
-                    :class="showSecColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
-                    :style="{ borderColor: 'var(--dd-border-strong)' }"
-                    title="Toggle columns"
-                    @click.stop="showSecColumnPicker = !showSecColumnPicker">
-              <AppIcon name="config" :size="10" />
-            </button>
-            <div v-if="showSecColumnPicker" @click.stop
-                 class="absolute right-0 top-9 z-50 min-w-[160px] py-1.5 dd-rounded shadow-lg"
-                 :style="{
-                   backgroundColor: 'var(--dd-bg-card)',
-                   border: '1px solid var(--dd-border-strong)',
-                   boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-                 }">
-              <div class="px-3 py-1 text-[9px] font-bold uppercase tracking-wider dd-text-muted">Columns</div>
-              <button v-for="col in secAllColumns" :key="col.key"
-                      class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated"
-                      :class="col.required ? 'dd-text-muted cursor-not-allowed' : 'dd-text'"
-                      @click="toggleSecColumn(col.key)">
-                <AppIcon :name="secVisibleColumns.has(col.key) ? 'check' : 'square'" :size="10"
-                         :style="secVisibleColumns.has(col.key) ? { color: 'var(--dd-primary)' } : {}" />
-                {{ col.label }}
+        <template #left>
+          <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
+                  :class="scanning ? 'dd-text-muted cursor-wait' : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
+                  :style="{ borderColor: 'var(--dd-border-strong)' }"
+                  :disabled="scanning"
+                  title="Scan all containers for vulnerabilities"
+                  @click="scanAllContainers">
+            <AppIcon name="restart" :size="11" :class="{ 'animate-spin': scanning }" />
+          </button>
+        </template>
+      </DataFilterBar>
+
+      <!-- Table view — grouped by image -->
+      <DataTable v-if="securityViewMode === 'table'"
+                 :columns="tableColumns"
+                 :rows="filteredSummaries"
+                 row-key="image"
+                 :selected-key="selectedImage?.image"
+                 v-model:sort-key="securitySortField"
+                 v-model:sort-asc="securitySortAsc"
+                 @row-click="openDetail($event)">
+        <template #cell-image="{ row }">
+          <div class="flex items-center gap-2 min-w-0">
+            <AppIcon :name="severityIcon(highestSeverity(row))" :size="13" class="shrink-0 md:!hidden"
+                     :style="{ color: severityColor(highestSeverity(row)).text }" />
+            <span class="font-medium dd-text truncate">{{ row.image }}</span>
+          </div>
+        </template>
+        <template #cell-critical="{ row }">
+          <span v-if="row.critical > 0" class="badge text-[9px] font-bold"
+                :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+            {{ row.critical }}
+          </span>
+          <span v-else class="text-[10px] dd-text-muted">&mdash;</span>
+        </template>
+        <template #cell-high="{ row }">
+          <span v-if="row.high > 0" class="badge text-[9px] font-bold"
+                :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+            {{ row.high }}
+          </span>
+          <span v-else class="text-[10px] dd-text-muted">&mdash;</span>
+        </template>
+        <template #cell-medium="{ row }">
+          <span v-if="row.medium > 0" class="badge text-[9px] font-bold"
+                :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution)' }">
+            {{ row.medium }}
+          </span>
+          <span v-else class="text-[10px] dd-text-muted">&mdash;</span>
+        </template>
+        <template #cell-low="{ row }">
+          <span v-if="row.low > 0" class="badge text-[9px] font-bold"
+                :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
+            {{ row.low }}
+          </span>
+          <span v-else class="text-[10px] dd-text-muted">&mdash;</span>
+        </template>
+        <template #cell-fixable="{ row }">
+          <span v-if="row.fixable > 0" class="text-[10px] font-medium" style="color: var(--dd-success);">
+            {{ row.fixable }}<span class="dd-text-muted">/{{ row.total }}</span>
+          </span>
+          <span v-else class="text-[10px] dd-text-muted">0</span>
+        </template>
+        <template #cell-total="{ row }">
+          <div class="flex items-center gap-1.5">
+            <!-- Compact mode: inline severity pills -->
+            <template v-if="isCompact">
+              <span v-if="row.critical > 0" class="badge text-[8px] font-bold px-1 py-0"
+                    :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+                C{{ row.critical }}
+              </span>
+              <span v-if="row.high > 0" class="badge text-[8px] font-bold px-1 py-0"
+                    :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+                H{{ row.high }}
+              </span>
+              <span v-if="row.medium > 0" class="badge text-[8px] font-bold px-1 py-0"
+                    :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution)' }">
+                M{{ row.medium }}
+              </span>
+              <span v-if="row.low > 0" class="badge text-[8px] font-bold px-1 py-0"
+                    :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
+                L{{ row.low }}
+              </span>
+            </template>
+            <span class="text-[11px] font-semibold dd-text">{{ row.total }}</span>
+          </div>
+        </template>
+        <template #empty>
+          <div class="flex flex-col items-center justify-center py-16">
+            <AppIcon name="security" :size="24" class="mb-3 dd-text-muted" />
+            <p class="text-sm font-medium mb-1 dd-text-secondary">
+              {{ securityVulnerabilities.length === 0 ? 'No vulnerability data yet' : 'No images match your filters' }}
+            </p>
+            <p v-if="securityVulnerabilities.length === 0" class="text-xs dd-text-muted mb-3">
+              Run a scan to check your containers for known vulnerabilities
+            </p>
+            <div class="flex items-center gap-2 mt-2">
+              <button v-if="activeSecFilterCount > 0"
+                      class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20"
+                      @click="clearSecFilters">
+                Clear all filters
+              </button>
+              <button v-if="securityVulnerabilities.length === 0"
+                      class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
+                      :class="scanning ? 'dd-text-muted cursor-wait dd-bg-elevated' : 'text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20'"
+                      :disabled="scanning"
+                      @click="scanAllContainers">
+                <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
+                {{ scanning ? `Scanning ${scanProgress.done}/${scanProgress.total}...` : 'Scan Now' }}
               </button>
             </div>
           </div>
         </template>
-      </DataFilterBar>
-
-      <!-- Table view -->
-      <DataTable v-if="securityViewMode === 'table'"
-                 :columns="secActiveColumns"
-                 :rows="filteredSecurityVulns"
-                 row-key="id"
-                 v-model:sort-key="securitySortField"
-                 v-model:sort-asc="securitySortAsc">
-        <template #cell-severity="{ row }">
-          <div class="flex items-start gap-2 min-w-0">
-            <span class="w-2 h-2 rounded-full shrink-0 md:hidden inline-block mt-0.5"
-                  :style="{ backgroundColor: severityColor(row.severity).text }" />
-            <span class="badge text-[9px] uppercase font-bold shrink-0 hidden md:inline-flex"
-                  :style="{ backgroundColor: severityColor(row.severity).bg, color: severityColor(row.severity).text }">
-              {{ row.severity }}
-            </span>
-            <!-- Compact mode: folded info -->
-            <div v-if="isCompact" class="min-w-0 flex-1">
-              <div class="font-medium font-mono text-[11px] truncate dd-text">{{ row.id }}</div>
-              <div class="text-[10px] mt-0.5 truncate dd-text-muted">{{ row.package }} {{ row.version }}</div>
-              <div class="flex items-center gap-1.5 mt-1.5">
-                <span v-if="row.fixedIn"
-                      class="badge px-1.5 py-0 text-[9px]"
-                      style="background: var(--dd-success-muted); color: var(--dd-success);">
-                  <AppIcon name="config" :size="11" />
-                </span>
-                <span v-else class="badge px-1.5 py-0 text-[9px]"
-                      style="background: var(--dd-neutral-muted); color: var(--dd-neutral);">
-                  <AppIcon name="xmark" :size="11" />
-                </span>
-                <span class="badge text-[7px] font-bold px-1.5 py-0 dd-bg-elevated dd-text-secondary">
-                  {{ row.image }}
-                </span>
-                <span class="text-[9px] dd-text-muted ml-auto">{{ row.publishedDate }}</span>
-              </div>
-            </div>
-          </div>
-        </template>
-        <template #cell-cve="{ row }">
-          <span class="font-medium font-mono dd-text">{{ row.id }}</span>
-        </template>
-        <template #cell-package="{ row }">
-          <div>
-            <span class="font-medium dd-text">{{ row.package }}</span>
-            <span class="ml-1.5 text-[10px] dd-text-muted">{{ row.version }}</span>
-          </div>
-        </template>
-        <template #cell-fixedIn="{ row }">
-          <span v-if="row.fixedIn"
-                class="px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium"
-                style="background: var(--dd-success-muted); color: var(--dd-success);">
-            {{ row.fixedIn }}
-          </span>
-          <span v-else class="text-[10px] dd-text-muted">No fix</span>
-        </template>
-        <template #cell-image="{ row }">
-          <span class="dd-text-secondary">{{ row.image }}</span>
-        </template>
-        <template #cell-published="{ row }">
-          <span class="dd-text-muted">{{ row.publishedDate }}</span>
-        </template>
-        <template #empty>
-          <EmptyState icon="security"
-                      message="No vulnerabilities match your filters"
-                      :show-clear="activeSecFilterCount > 0"
-                      @clear="clearSecFilters" />
-        </template>
       </DataTable>
 
-      <!-- Card view -->
+      <!-- Card view — one card per image -->
       <DataCardGrid v-if="securityViewMode === 'cards'"
-                    :items="filteredSecurityVulns"
-                    item-key="id"
-                    min-width="300px">
-        <template #card="{ item: vuln }">
+                    :items="filteredSummaries"
+                    item-key="image"
+                    :selected-key="selectedImage?.image"
+                    min-width="280px"
+                    @item-click="openDetail($event)">
+        <template #card="{ item: summary }">
           <div class="px-4 pt-4 pb-2 flex items-start justify-between">
             <div class="min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
-                      :style="{ backgroundColor: severityColor(vuln.severity).text }" />
-                <span class="badge text-[9px] uppercase font-bold shrink-0 hidden md:inline-flex"
-                      :style="{ backgroundColor: severityColor(vuln.severity).bg, color: severityColor(vuln.severity).text }">
-                  {{ vuln.severity }}
-                </span>
-                <span class="font-mono text-[12px] font-semibold truncate dd-text">{{ vuln.id }}</span>
-              </div>
-              <div class="text-[11px] mt-1.5 dd-text-muted">
-                {{ vuln.package }} <span class="dd-text-secondary">{{ vuln.version }}</span>
-              </div>
+              <div class="text-[14px] font-semibold truncate dd-text">{{ summary.image }}</div>
+              <div class="text-[10px] mt-0.5 dd-text-muted">{{ summary.total }} vulnerabilities</div>
+            </div>
+            <AppIcon :name="severityIcon(highestSeverity(summary))" :size="16" class="shrink-0 ml-2"
+                     :style="{ color: severityColor(highestSeverity(summary)).text }" />
+          </div>
+          <div class="px-4 py-3">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span v-if="summary.critical > 0" class="badge text-[9px] font-bold"
+                    :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+                {{ summary.critical }} Critical
+              </span>
+              <span v-if="summary.high > 0" class="badge text-[9px] font-bold"
+                    :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+                {{ summary.high }} High
+              </span>
+              <span v-if="summary.medium > 0" class="badge text-[9px] font-bold"
+                    :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution)' }">
+                {{ summary.medium }} Medium
+              </span>
+              <span v-if="summary.low > 0" class="badge text-[9px] font-bold"
+                    :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
+                {{ summary.low }} Low
+              </span>
             </div>
           </div>
-          <div class="px-4 py-3 flex items-center gap-3">
-            <span class="text-[10px] dd-text-muted">Image</span>
-            <span class="text-[11px] font-medium dd-text">{{ vuln.image }}</span>
-          </div>
           <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
-               :style="{
-                 borderTop: '1px solid var(--dd-border-strong)',
-                 backgroundColor: 'var(--dd-bg-elevated)',
-               }">
-            <span v-if="vuln.fixedIn"
-                  class="text-[11px] font-medium flex items-center gap-1.5"
+               :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
+            <span v-if="summary.fixable > 0" class="text-[11px] font-medium flex items-center gap-1"
                   style="color: var(--dd-success);">
-              <AppIcon name="restart" :size="11" />
-              Fix: {{ vuln.fixedIn }}
+              <AppIcon name="check" :size="11" />
+              {{ summary.fixable }} fixable
             </span>
-            <span v-else class="text-[11px] dd-text-muted">No fix available</span>
-            <span class="text-[10px] dd-text-muted">{{ vuln.publishedDate }}</span>
+            <span v-else class="text-[11px] dd-text-muted">No fixes available</span>
+            <span class="text-[10px] dd-text-muted">{{ summary.total }} total</span>
           </div>
         </template>
       </DataCardGrid>
 
       <!-- Empty state for cards -->
-      <EmptyState v-if="securityViewMode === 'cards' && filteredSecurityVulns.length === 0"
-                  icon="security"
-                  message="No vulnerabilities match your filters"
-                  :show-clear="activeSecFilterCount > 0"
-                  @clear="clearSecFilters" />
+      <div v-if="securityViewMode === 'cards' && filteredSummaries.length === 0"
+           class="flex flex-col items-center justify-center py-16 dd-rounded"
+           :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+        <AppIcon name="security" :size="24" class="mb-3 dd-text-muted" />
+        <p class="text-sm font-medium mb-1 dd-text-secondary">
+          {{ securityVulnerabilities.length === 0 ? 'No vulnerability data yet' : 'No images match your filters' }}
+        </p>
+        <p v-if="securityVulnerabilities.length === 0" class="text-xs dd-text-muted mb-3">
+          Run a scan to check your containers for known vulnerabilities
+        </p>
+        <div class="flex items-center gap-2 mt-2">
+          <button v-if="activeSecFilterCount > 0"
+                  class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20"
+                  @click="clearSecFilters">
+            Clear all filters
+          </button>
+          <button v-if="securityVulnerabilities.length === 0"
+                  class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
+                  :class="scanning ? 'dd-text-muted cursor-wait dd-bg-elevated' : 'text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20'"
+                  :disabled="scanning"
+                  @click="scanAllContainers">
+            <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
+            {{ scanning ? `Scanning ${scanProgress.done}/${scanProgress.total}...` : 'Scan Now' }}
+          </button>
+        </div>
+      </div>
 
-      <!-- List view -->
+      <!-- List view — one row per image, expandable -->
       <DataListAccordion v-if="securityViewMode === 'list'"
-                         :items="filteredSecurityVulns"
-                         item-key="id"
-                         :expandable="true">
-        <template #header="{ item: vuln }">
-          <span class="w-2 h-2 rounded-full shrink-0 md:hidden"
-                :style="{ backgroundColor: severityColor(vuln.severity).text }" />
-          <span class="badge text-[9px] uppercase font-bold shrink-0 hidden md:inline-flex"
-                :style="{ backgroundColor: severityColor(vuln.severity).bg, color: severityColor(vuln.severity).text }">
-            {{ vuln.severity }}
-          </span>
-          <span class="text-sm font-semibold font-mono flex-1 min-w-0 truncate dd-text">{{ vuln.id }}</span>
-          <span class="text-[11px] dd-text-secondary shrink-0">{{ vuln.package }}</span>
-          <span v-if="vuln.fixedIn" class="badge text-[9px] font-bold shrink-0"
-                :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }">
-            Fix: {{ vuln.fixedIn }}
-          </span>
-          <span v-else class="badge text-[9px] font-bold shrink-0"
-                :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-neutral)' }">
-            No fix
-          </span>
-        </template>
-        <template #details="{ item: vuln }">
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 mt-2">
-            <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">CVE</div>
-              <div class="text-[12px] font-mono dd-text">{{ vuln.id }}</div>
-            </div>
-            <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Package</div>
-              <div class="text-[12px] font-mono dd-text">{{ vuln.package }} {{ vuln.version }}</div>
-            </div>
-            <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Image</div>
-              <div class="text-[12px] dd-text">{{ vuln.image }}</div>
-            </div>
-            <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Severity</div>
-              <span class="badge text-[10px] uppercase font-bold"
-                    :style="{ backgroundColor: severityColor(vuln.severity).bg, color: severityColor(vuln.severity).text }">
-                {{ vuln.severity }}
-              </span>
-            </div>
-            <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Fix Available</div>
-              <span v-if="vuln.fixedIn" class="badge text-[10px] font-bold"
-                    :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }">
-                {{ vuln.fixedIn }}
-              </span>
-              <span v-else class="text-[12px] dd-text-muted">No fix available</span>
-            </div>
-            <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Published</div>
-              <div class="text-[12px] dd-text">{{ vuln.publishedDate }}</div>
-            </div>
+                         :items="filteredSummaries"
+                         item-key="image"
+                         :selected-key="selectedImage?.image"
+                         @item-click="openDetail($event)">
+        <template #header="{ item: summary }">
+          <AppIcon :name="severityIcon(highestSeverity(summary))" :size="13" class="shrink-0"
+                   :style="{ color: severityColor(highestSeverity(summary)).text }" />
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-semibold truncate dd-text">{{ summary.image }}</div>
+            <div class="text-[10px] dd-text-muted mt-0.5">{{ summary.total }} vulnerabilities</div>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <span v-if="summary.critical > 0" class="badge text-[8px] font-bold px-1.5 py-0"
+                  :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+              {{ summary.critical }}C
+            </span>
+            <span v-if="summary.high > 0" class="badge text-[8px] font-bold px-1.5 py-0"
+                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+              {{ summary.high }}H
+            </span>
+            <span v-if="summary.fixable > 0" class="badge text-[8px] font-bold px-1.5 py-0"
+                  :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }">
+              {{ summary.fixable }} fix
+            </span>
           </div>
         </template>
       </DataListAccordion>
 
       <!-- Empty state for list -->
-      <EmptyState v-if="securityViewMode === 'list' && filteredSecurityVulns.length === 0"
-                  icon="security"
-                  message="No vulnerabilities match your filters"
-                  :show-clear="activeSecFilterCount > 0"
-                  @clear="clearSecFilters" />
+      <div v-if="securityViewMode === 'list' && filteredSummaries.length === 0"
+           class="flex flex-col items-center justify-center py-16 dd-rounded"
+           :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+        <AppIcon name="security" :size="24" class="mb-3 dd-text-muted" />
+        <p class="text-sm font-medium mb-1 dd-text-secondary">
+          {{ securityVulnerabilities.length === 0 ? 'No vulnerability data yet' : 'No images match your filters' }}
+        </p>
+        <p v-if="securityVulnerabilities.length === 0" class="text-xs dd-text-muted mb-3">
+          Run a scan to check your containers for known vulnerabilities
+        </p>
+        <div class="flex items-center gap-2 mt-2">
+          <button v-if="activeSecFilterCount > 0"
+                  class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20"
+                  @click="clearSecFilters">
+            Clear all filters
+          </button>
+          <button v-if="securityVulnerabilities.length === 0"
+                  class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
+                  :class="scanning ? 'dd-text-muted cursor-wait dd-bg-elevated' : 'text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20'"
+                  :disabled="scanning"
+                  @click="scanAllContainers">
+            <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
+            {{ scanning ? `Scanning ${scanProgress.done}/${scanProgress.total}...` : 'Scan Now' }}
+          </button>
+        </div>
+      </div>
+
+    <!-- Detail panel — full vulnerability report for selected image -->
+    <template #panel>
+      <DetailPanel
+        :open="detailOpen"
+        :is-mobile="isMobile"
+        :show-size-controls="true"
+        :show-full-page="false"
+        @update:open="detailOpen = $event; if (!$event) selectedImage = null"
+      >
+        <template #header>
+          <div class="flex items-center gap-2.5 min-w-0">
+            <AppIcon name="security" :size="14" class="shrink-0 dd-text-secondary" />
+            <span class="text-sm font-bold truncate dd-text">{{ selectedImage?.image }}</span>
+          </div>
+        </template>
+
+        <template #subtitle>
+          <div class="flex items-center gap-2 flex-wrap">
+            <span v-if="selectedImage?.critical" class="badge text-[9px] font-bold"
+                  :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+              {{ selectedImage.critical }} Critical
+            </span>
+            <span v-if="selectedImage?.high" class="badge text-[9px] font-bold"
+                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+              {{ selectedImage.high }} High
+            </span>
+            <span v-if="selectedImage?.medium" class="badge text-[9px] font-bold"
+                  :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution)' }">
+              {{ selectedImage.medium }} Medium
+            </span>
+            <span v-if="selectedImage?.low" class="badge text-[9px] font-bold"
+                  :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
+              {{ selectedImage.low }} Low
+            </span>
+            <span class="text-[10px] dd-text-muted ml-auto">{{ selectedImage?.total }} total</span>
+          </div>
+        </template>
+
+        <template v-if="selectedImage" #default>
+          <!-- Vulnerability list -->
+          <div class="divide-y" :style="{ borderColor: 'var(--dd-border)' }">
+            <div v-for="vuln in selectedImageVulns" :key="vuln.id + vuln.package"
+                 class="px-4 py-3 hover:dd-bg-hover transition-colors">
+              <div class="flex items-center gap-2 mb-1.5">
+                <AppIcon :name="severityIcon(vuln.severity)" :size="12"
+                         :style="{ color: severityColor(vuln.severity).text }" />
+                <span class="badge text-[8px] uppercase font-bold"
+                      :style="{ backgroundColor: severityColor(vuln.severity).bg, color: severityColor(vuln.severity).text }">
+                  {{ vuln.severity }}
+                </span>
+                <span class="font-mono text-[11px] font-semibold dd-text truncate">{{ vuln.id }}</span>
+              </div>
+              <div class="flex items-center gap-2 text-[11px] ml-5">
+                <span class="font-medium dd-text">{{ vuln.package }}</span>
+                <span class="dd-text-muted">{{ vuln.version }}</span>
+                <span v-if="vuln.fixedIn" class="ml-auto badge text-[8px] font-bold px-1.5 py-0"
+                      style="background: var(--dd-success-muted); color: var(--dd-success);">
+                  <AppIcon name="check" :size="9" class="mr-0.5" />
+                  {{ vuln.fixedIn }}
+                </span>
+                <span v-else class="ml-auto text-[10px] dd-text-muted">No fix</span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </DetailPanel>
+    </template>
   </DataViewLayout>
 </template>
