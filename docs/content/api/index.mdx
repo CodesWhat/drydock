@@ -12,6 +12,7 @@ By default, the API is enabled and exposed on port `3000`. You can override this
 ## Authentication
 
 When [authentication](/docs/configuration/authentications) is enabled, all API endpoints require a valid session (cookie-based via Basic or OIDC login).
+For cross-domain OIDC providers, keep `DD_SERVER_COOKIE_SAMESITE=lax` (default) unless you have a specific same-site policy requirement.
 
 The [webhook endpoints](/docs/configuration/webhooks) use a separate Bearer token authentication.
 

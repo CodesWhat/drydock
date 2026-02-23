@@ -10,7 +10,7 @@ const LokiStore = ConnectLoki(session);
 import getmac from 'getmac';
 import passport from 'passport';
 import { v5 as uuidV5 } from 'uuid';
-import { getVersion } from '../configuration/index.js';
+import { getServerConfiguration, getVersion } from '../configuration/index.js';
 import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as store from '../store/index.js';
@@ -186,6 +186,12 @@ function logout(req, res) {
  * @returns {*}
  */
 export function init(app) {
+  const sessionCookieSameSite = getServerConfiguration().cookie?.samesite || 'lax';
+  const sessionCookieSecure = sessionCookieSameSite === 'none' ? true : 'auto';
+  if (sessionCookieSameSite === 'none') {
+    log.warn('DD_SERVER_COOKIE_SAMESITE=none requires HTTPS; forcing secure session cookie');
+  }
+
   // Init express session
   app.use(
     session({
@@ -199,8 +205,8 @@ export function init(app) {
       saveUninitialized: false,
       cookie: {
         httpOnly: true,
-        sameSite: 'strict',
-        secure: 'auto',
+        sameSite: sessionCookieSameSite,
+        secure: sessionCookieSecure,
         maxAge: getCookieMaxAge(DEFAULT_SESSION_DAYS),
       },
     }),

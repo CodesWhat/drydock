@@ -27,8 +27,15 @@ You can adjust the server configuration with the following environment variables
 | `DD_SERVER_WEBHOOK_TOKEN` | ⚪ | Bearer token for webhook authentication (required when webhooks enabled) | Any string | |
 | `DD_SERVER_METRICS_AUTH` | ⚪ | Require authentication on `/metrics` endpoint | `true`, `false` | `true` |
 | `DD_SESSION_SECRET` | ⚪ | Override the auto-generated session secret for cookie signing | Any string | auto-generated |
+| `DD_SERVER_COOKIE_SAMESITE` | ⚪ | Session cookie SameSite policy for auth flows (`none` requires HTTPS) | `strict`, `lax`, `none` | `lax` |
 | `DD_RUN_AS_ROOT` | ⚪ | Request break-glass root mode (requires `DD_ALLOW_INSECURE_ROOT=true`) | `true`, `false` | `false` |
 | `DD_ALLOW_INSECURE_ROOT` | ⚪ | Explicit acknowledgment for break-glass root mode | `true`, `false` | `false` |
+
+## Session Cookie SameSite Guidance
+
+- Use `lax` (default) for typical web + OIDC setups.
+- Use `strict` only when drydock and IdP are same-site and you want the strictest cookie policy.
+- Use `none` only when you explicitly need cross-site cookies (for example embedded UI), and only over HTTPS.
 
 ## Examples
 

@@ -199,6 +199,7 @@ test('getServerConfiguration should return configured api (new vars)', async () 
   configuration.ddEnvVars.DD_SERVER_PORT = '4000';
   delete configuration.ddEnvVars.DD_SERVER_METRICS_AUTH;
   expect(configuration.getServerConfiguration()).toStrictEqual({
+    cookie: {},
     compression: {},
     cors: {},
     enabled: true,
@@ -218,6 +219,7 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
   delete configuration.ddEnvVars.DD_SERVER_PORT;
   configuration.ddEnvVars.DD_SERVER_METRICS_AUTH = 'false';
   expect(configuration.getServerConfiguration()).toStrictEqual({
+    cookie: {},
     compression: {},
     cors: {},
     enabled: true,
@@ -259,6 +261,24 @@ test('getServerConfiguration should accept trustproxy as boolean string', async 
   const config = configuration.getServerConfiguration();
   expect(config.trustproxy).toBe(true);
   delete configuration.ddEnvVars.DD_SERVER_TRUSTPROXY;
+});
+
+test('getServerConfiguration should allow overriding session cookie sameSite', async () => {
+  configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE = 'none';
+  const config = configuration.getServerConfiguration();
+  expect(config.cookie).toStrictEqual({
+    samesite: 'none',
+  });
+  delete configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE;
+});
+
+test('getServerConfiguration should normalize session cookie sameSite casing', async () => {
+  configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE = 'STRICT';
+  const config = configuration.getServerConfiguration();
+  expect(config.cookie).toStrictEqual({
+    samesite: 'strict',
+  });
+  delete configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE;
 });
 
 test('getPrometheusConfiguration should result in enabled by default', async () => {
@@ -521,6 +541,12 @@ describe('getServerConfiguration errors', () => {
     configuration.ddEnvVars.DD_SERVER_PORT = 'not-a-number';
     expect(() => configuration.getServerConfiguration()).toThrow();
     delete configuration.ddEnvVars.DD_SERVER_PORT;
+  });
+
+  test('should throw when session cookie sameSite is invalid', () => {
+    configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE = 'invalid';
+    expect(() => configuration.getServerConfiguration()).toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE;
   });
 
   test('should fallback to defaults when nested server config is null', () => {

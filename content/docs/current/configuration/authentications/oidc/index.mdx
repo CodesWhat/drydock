@@ -25,6 +25,8 @@ The `oidc` authentication lets you protect drydock access using the [Openid Conn
 <Callout type="warn">drydock tries its best to determine the public address to forge redirections on its own.
 If it fails (irregular reverse proxy configuration...), you can enforce the value using the env var `DD_PUBLIC_URL`</Callout>
 
+<Callout type="info">If your IdP is on a different domain and callback fails with `OIDC session is missing or expired`, check `DD_SERVER_COOKIE_SAMESITE` (server config). Default is `lax` for OIDC compatibility; `strict` can break cross-site callbacks. Use `none` only for explicit cross-site/embed cases over HTTPS.</Callout>
+
 ## How to integrate with&nbsp;[Authelia](https://www.authelia.com)
 
 ![logo](/docs/assets/configuration/authentications/oidc/authelia.png)

@@ -8,6 +8,7 @@ import { resolveConfiguredPath } from '../runtime/paths.js';
 const VAR_FILE_SUFFIX = '__FILE';
 export const SECURITY_SEVERITY_VALUES = ['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 export const SECURITY_SBOM_FORMAT_VALUES = ['spdx-json', 'cyclonedx-json'] as const;
+const SERVER_COOKIE_SAMESITE_VALUES = ['strict', 'lax', 'none'] as const;
 const DEFAULT_SECURITY_BLOCK_SEVERITY = 'CRITICAL,HIGH';
 const DEFAULT_SECURITY_SBOM_FORMATS = 'spdx-json';
 
@@ -244,6 +245,16 @@ export function getServerConfiguration() {
         containeractions: true,
         webhook: true,
       }),
+    cookie: joi
+      .object({
+        samesite: joi
+          .string()
+          .trim()
+          .lowercase()
+          .valid(...SERVER_COOKIE_SAMESITE_VALUES)
+          .default('lax'),
+      })
+      .default({}),
     trustproxy: joi
       .alternatives()
       .try(joi.boolean(), joi.number().integer().min(0), joi.string())

@@ -10,6 +10,7 @@ drydock allows `Anonymous` access by default.
 You can enable 1 or multiple authentication strategies using `DD_AUTH_*` env vars.
 
 <Callout type="warn">Please pay attention that all API routes & all UI views will be authenticated.</Callout>
+<Callout type="info">For OIDC setups, session-cookie policy is controlled by `DD_SERVER_COOKIE_SAMESITE` in [server configuration](/docs/configuration/server). Default `lax` works for most IdP callback flows.</Callout>
 
 Currently, the following strategies are supported:
 

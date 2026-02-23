@@ -3,6 +3,7 @@ const { mockRouter, mockLokiStore } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
   mockLokiStore: vi.fn(),
 }));
+const mockGetServerConfiguration = vi.hoisted(() => vi.fn(() => ({ cookie: {} })));
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -52,6 +53,7 @@ vi.mock('../log', () => ({ default: { warn: vi.fn(), info: vi.fn() } }));
 
 vi.mock('../configuration', () => ({
   getVersion: vi.fn(() => '1.0.0'),
+  getServerConfiguration: mockGetServerConfiguration,
 }));
 
 import session from 'express-session';
@@ -100,6 +102,7 @@ describe('Auth Router', () => {
     vi.clearAllMocks();
     // Reset the strategy IDs array between tests
     auth.getAllIds().length = 0;
+    mockGetServerConfiguration.mockReturnValue({ cookie: {} });
   });
 
   describe('getAllIds', () => {
@@ -147,7 +150,7 @@ describe('Auth Router', () => {
       expect(passport.deserializeUser).toHaveBeenCalled();
     });
 
-    test('should configure session cookie with sameSite strict', () => {
+    test('should default session cookie sameSite to lax for OIDC compatibility', () => {
       const app = createApp();
       auth.init(app);
 
@@ -155,9 +158,40 @@ describe('Auth Router', () => {
       expect(sessionConfig.cookie).toEqual(
         expect.objectContaining({
           httpOnly: true,
+          sameSite: 'lax',
+          secure: 'auto',
+        }),
+      );
+    });
+
+    test('should allow overriding session cookie sameSite to strict', () => {
+      mockGetServerConfiguration.mockReturnValue({ cookie: { samesite: 'strict' } });
+      const app = createApp();
+      auth.init(app);
+
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie).toEqual(
+        expect.objectContaining({
           sameSite: 'strict',
           secure: 'auto',
         }),
+      );
+    });
+
+    test('should force secure cookies when sameSite is none', () => {
+      mockGetServerConfiguration.mockReturnValue({ cookie: { samesite: 'none' } });
+      const app = createApp();
+      auth.init(app);
+
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie).toEqual(
+        expect.objectContaining({
+          sameSite: 'none',
+          secure: true,
+        }),
+      );
+      expect(log.warn).toHaveBeenCalledWith(
+        'DD_SERVER_COOKIE_SAMESITE=none requires HTTPS; forcing secure session cookie',
       );
     });
 
