@@ -824,6 +824,7 @@ watch(showSearch, async (val) => {
 // Server connectivity monitor
 const connectionLost = ref(false);
 const selfUpdateInProgress = ref(false);
+const selfUpdateOperationId = ref<string | undefined>(undefined);
 let connectivityTimer: ReturnType<typeof setInterval> | undefined;
 const sidebarDataLoading = ref(false);
 
@@ -847,7 +848,9 @@ const connectionOverlayTitle = computed(() =>
 );
 const connectionOverlayMessage = computed(() =>
   selfUpdateInProgress.value
-    ? 'Drydock is restarting after a self-update. Reconnecting when the service is back...'
+    ? `Drydock is restarting after a self-update${
+        selfUpdateOperationId.value ? ` (${selfUpdateOperationId.value.slice(0, 8)})` : ''
+      }. Reconnecting when the service is back...`
     : 'The server is unreachable. Waiting for it to come back online...',
 );
 const connectionOverlayStatus = computed(() =>
@@ -895,16 +898,19 @@ function emitUiSseEvent(name: string) {
   globalThis.dispatchEvent(new CustomEvent(name));
 }
 
-function handleSseEvent(event: string) {
+function handleSseEvent(event: string, payload?: any) {
   if (event === 'sse:connected') {
     connectionLost.value = false;
     selfUpdateInProgress.value = false;
+    selfUpdateOperationId.value = undefined;
     emitUiSseEvent('dd:sse-connected');
     return;
   }
   if (event === 'self-update') {
     selfUpdateInProgress.value = true;
     connectionLost.value = true;
+    selfUpdateOperationId.value =
+      payload && typeof payload === 'object' ? String(payload.opId || '') || undefined : undefined;
     emitUiSseEvent('dd:sse-self-update');
     return;
   }
@@ -925,7 +931,7 @@ function handleSseEvent(event: string) {
 onMounted(async () => {
   globalThis.addEventListener('keydown', handleKeydown);
   sseService.connect({
-    emit: (event) => handleSseEvent(event),
+    emit: (event, payload) => handleSseEvent(event, payload),
   });
   // Start connectivity polling (every 10s)
   connectivityTimer = setInterval(checkConnectivity, 10_000);
