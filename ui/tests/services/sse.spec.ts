@@ -6,6 +6,7 @@ describe('SseService', () => {
   let eventListeners: Record<string, EventListener>;
   let mockEventBus: any;
   let MockEventSourceCtor: any;
+  let mockFetch: any;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -22,6 +23,8 @@ describe('SseService', () => {
       return mockEventSource;
     });
     vi.stubGlobal('EventSource', MockEventSourceCtor);
+    mockFetch = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', mockFetch);
     mockEventBus = {
       emit: vi.fn(),
       on: vi.fn(),
@@ -70,10 +73,27 @@ describe('SseService', () => {
     expect(mockEventBus.emit).toHaveBeenCalledWith('sse:connected');
   });
 
-  it('emits self-update on dd:self-update event', () => {
+  it('emits self-update payload on dd:self-update event and acknowledges operation', () => {
     sseService.connect(mockEventBus);
-    eventListeners['dd:self-update']();
-    expect(mockEventBus.emit).toHaveBeenCalledWith('self-update');
+    eventListeners['dd:self-update']({
+      data: '{"opId":"op-123","requiresAck":true,"ackTimeoutMs":2000}',
+      lastEventId: 'evt-1',
+    });
+    expect(mockEventBus.emit).toHaveBeenCalledWith(
+      'self-update',
+      expect.objectContaining({
+        opId: 'op-123',
+        requiresAck: true,
+        ackTimeoutMs: 2000,
+      }),
+    );
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/events/ui/self-update/op-123/ack',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+      }),
+    );
   });
 
   it('handles heartbeat events without emitting additional bus events', () => {
@@ -99,7 +119,7 @@ describe('SseService', () => {
 
   it('emits connection-lost on error when in self-update mode', () => {
     sseService.connect(mockEventBus);
-    eventListeners['dd:self-update']();
+    eventListeners['dd:self-update']({ data: '{"opId":"op-123"}' });
     mockEventBus.emit.mockClear();
 
     mockEventSource.onerror();
@@ -163,7 +183,7 @@ describe('SseService', () => {
 
   it('resets self-update mode on disconnect', () => {
     sseService.connect(mockEventBus);
-    eventListeners['dd:self-update']();
+    eventListeners['dd:self-update']({ data: '{"opId":"op-123"}' });
     sseService.disconnect();
 
     sseService.connect(mockEventBus);

@@ -5,8 +5,15 @@ type SseBusEvent =
   | 'scan-started'
   | 'scan-completed';
 
+type SelfUpdateSsePayload = {
+  opId?: string;
+  requiresAck?: boolean;
+  ackTimeoutMs?: number;
+  startedAt?: string;
+};
+
 interface SseEventBus {
-  emit: (event: SseBusEvent) => void;
+  emit: (event: SseBusEvent, payload?: unknown) => void;
 }
 
 class SseService {
@@ -15,6 +22,10 @@ class SseService {
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private selfUpdateMode = false;
   private consecutiveErrors = 0;
+  private readonly clientId =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `ui-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   connect(eventBus: SseEventBus): void {
     this.eventBus = eventBus;
@@ -33,9 +44,13 @@ class SseService {
       this.eventBus?.emit('sse:connected');
     });
 
-    this.eventSource.addEventListener('dd:self-update', () => {
+    this.eventSource.addEventListener('dd:self-update', (event: MessageEvent) => {
+      const payload = this.parseSelfUpdatePayload(event?.data);
       this.selfUpdateMode = true;
-      this.eventBus?.emit('self-update');
+      if (payload.opId) {
+        void this.acknowledgeSelfUpdate(payload.opId, event?.lastEventId || undefined);
+      }
+      this.eventBus?.emit('self-update', payload);
     });
 
     this.eventSource.addEventListener('dd:scan-started', () => {
@@ -67,6 +82,42 @@ class SseService {
   private scheduleReconnect(delayMs = 5000): void {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = setTimeout(() => this.doConnect(), delayMs);
+  }
+
+  private parseSelfUpdatePayload(rawData: unknown): SelfUpdateSsePayload {
+    if (!rawData || typeof rawData !== 'string') {
+      return {};
+    }
+    try {
+      const parsed = JSON.parse(rawData);
+      if (!parsed || typeof parsed !== 'object') {
+        return {};
+      }
+      return parsed as SelfUpdateSsePayload;
+    } catch {
+      return {};
+    }
+  }
+
+  private async acknowledgeSelfUpdate(opId: string, lastEventId?: string): Promise<void> {
+    try {
+      const payload: Record<string, string> = {
+        clientId: this.clientId,
+      };
+      if (lastEventId) {
+        payload.lastEventId = lastEventId;
+      }
+      await fetch(`/api/events/ui/self-update/${encodeURIComponent(opId)}/ack`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // Best effort ack; no-op when connection is unstable.
+    }
   }
 
   disconnect(): void {

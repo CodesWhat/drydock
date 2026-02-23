@@ -29,12 +29,20 @@ interface OrderedEventHandler {
   sequence: number;
 }
 
+export interface SelfUpdateStartingEventPayload {
+  opId: string;
+  requiresAck?: boolean;
+  ackTimeoutMs?: number;
+  startedAt?: string;
+}
+
 const containerReportHandlers: OrderedEventHandler[] = [];
 const containerReportsHandlers: OrderedEventHandler[] = [];
 const containerUpdateAppliedHandlers: OrderedEventHandler[] = [];
 const containerUpdateFailedHandlers: OrderedEventHandler[] = [];
 const securityAlertHandlers: OrderedEventHandler[] = [];
 const agentDisconnectedHandlers: OrderedEventHandler[] = [];
+const selfUpdateStartingHandlers: OrderedEventHandler[] = [];
 let handlerRegistrationSequence = 0;
 const securityAlertAuditSeenAt = new Map<string, number>();
 const agentDisconnectedAuditSeenAt = new Map<string, number>();
@@ -304,15 +312,15 @@ export function registerWatcherStop(handler) {
   eventEmitter.on(DD_WATCHER_STOP, handler);
 }
 
-// Self-update event
-const DD_SELF_UPDATE_STARTING = 'dd:self-update-starting';
-
-export function emitSelfUpdateStarting() {
-  eventEmitter.emit(DD_SELF_UPDATE_STARTING);
+export async function emitSelfUpdateStarting(payload: SelfUpdateStartingEventPayload) {
+  await emitOrderedHandlers(selfUpdateStartingHandlers, payload);
 }
 
-export function registerSelfUpdateStarting(handler) {
-  eventEmitter.on(DD_SELF_UPDATE_STARTING, handler);
+export function registerSelfUpdateStarting(
+  handler: (payload: SelfUpdateStartingEventPayload) => any,
+  options: EventHandlerRegistrationOptions = {},
+) {
+  return registerOrderedEventHandler(selfUpdateStartingHandlers, handler, options);
 }
 
 import { getAuditCounter } from '../prometheus/audit.js';

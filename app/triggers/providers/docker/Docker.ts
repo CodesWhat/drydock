@@ -10,6 +10,7 @@ import {
 } from '../../../event/index.js';
 import { fullName } from '../../../model/container.js';
 import { getAuditCounter } from '../../../prometheus/audit.js';
+import { recordLegacyInput } from '../../../prometheus/compatibility.js';
 import { getState } from '../../../registry/index.js';
 import {
   generateImageSbom,
@@ -25,6 +26,33 @@ import Trigger from '../Trigger.js';
 import { startHealthMonitor } from './HealthMonitor.js';
 
 const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
+const SELF_UPDATE_START_TIMEOUT_MS = 30_000;
+const SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
+const SELF_UPDATE_POLL_INTERVAL_MS = 1_000;
+const SELF_UPDATE_ACK_TIMEOUT_MS = 3_000;
+const warnedLegacyTriggerLabelFallbacks = new Set<string>();
+
+function getPreferredLabelValue(labels, ddKey, wudKey, logger) {
+  const ddValue = labels?.[ddKey];
+  if (ddValue !== undefined) {
+    return ddValue;
+  }
+
+  const wudValue = labels?.[wudKey];
+  if (wudValue === undefined) {
+    return undefined;
+  }
+
+  recordLegacyInput('label', wudKey);
+  if (!warnedLegacyTriggerLabelFallbacks.has(wudKey)) {
+    warnedLegacyTriggerLabelFallbacks.add(wudKey);
+    logger?.warn?.(
+      `Legacy Docker label "${wudKey}" is deprecated. Please migrate to "${ddKey}" before fallback support is removed.`,
+    );
+  }
+
+  return wudValue;
+}
 
 function hasRepoTags(image) {
   return Array.isArray(image.RepoTags) && image.RepoTags.length > 0;
@@ -596,17 +624,22 @@ class Docker extends Trigger {
   }
 
   buildHookConfig(container) {
+    const logger = this.log?.child?.({});
     return {
-      hookPre: container.labels?.['dd.hook.pre'] ?? container.labels?.['wud.hook.pre'],
-      hookPost: container.labels?.['dd.hook.post'] ?? container.labels?.['wud.hook.post'],
+      hookPre: getPreferredLabelValue(container.labels, 'dd.hook.pre', 'wud.hook.pre', logger),
+      hookPost: getPreferredLabelValue(container.labels, 'dd.hook.post', 'wud.hook.post', logger),
       hookPreAbort:
         (
-          container.labels?.['dd.hook.pre.abort'] ??
-          container.labels?.['wud.hook.pre.abort'] ??
-          'true'
+          getPreferredLabelValue(
+            container.labels,
+            'dd.hook.pre.abort',
+            'wud.hook.pre.abort',
+            logger,
+          ) ?? 'true'
         ).toLowerCase() === 'true',
       hookTimeout: Number.parseInt(
-        container.labels?.['dd.hook.timeout'] ?? container.labels?.['wud.hook.timeout'] ?? '60000',
+        getPreferredLabelValue(container.labels, 'dd.hook.timeout', 'wud.hook.timeout', logger) ??
+          '60000',
         10,
       ),
       hookEnv: {
@@ -724,7 +757,7 @@ class Docker extends Trigger {
     return undefined;
   }
 
-  async executeSelfUpdate(context, container, logContainer) {
+  async executeSelfUpdate(context, container, logContainer, operationId?: string) {
     const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
 
     if (this.configuration.dryrun) {
@@ -789,24 +822,27 @@ class Docker extends Trigger {
     }
     const oldContainerId = currentContainerSpec.Id;
     const socketMount = `${socketPath}:/var/run/docker.sock`;
-    const apiBase = 'http://localhost';
-
-    const curlSocket = `curl -sf --unix-socket /var/run/docker.sock`;
-    const stopOld = `${curlSocket} -X POST ${apiBase}/containers/${oldContainerId}/stop`;
-    const startNew = `${curlSocket} -X POST ${apiBase}/containers/${newContainerId}/start`;
-    const startOld = `${curlSocket} -X POST ${apiBase}/containers/${oldContainerId}/start`;
-    const removeOld = `${curlSocket} -X DELETE ${apiBase}/containers/${oldContainerId}`;
-
-    // Stop old, then start new — if new fails, restart old as fallback
-    // Only remove old after a successful startNew (not after fallback to startOld)
-    const script = `${stopOld} && (${startNew} && ${removeOld} || ${startOld})`;
+    const selfUpdateOperationId = operationId || crypto.randomUUID();
 
     logContainer.info('Spawning helper container for self-update transition');
     try {
       await dockerApi
         .createContainer({
-          Image: currentContainerSpec.Config.Image,
-          Cmd: ['sh', '-c', script],
+          Image: newImage,
+          Cmd: ['node', 'dist/triggers/providers/docker/self-update-controller.js'],
+          Env: [
+            `DD_SELF_UPDATE_OP_ID=${selfUpdateOperationId}`,
+            `DD_SELF_UPDATE_OLD_CONTAINER_ID=${oldContainerId}`,
+            `DD_SELF_UPDATE_NEW_CONTAINER_ID=${newContainerId}`,
+            `DD_SELF_UPDATE_OLD_CONTAINER_NAME=${oldName}`,
+            `DD_SELF_UPDATE_START_TIMEOUT_MS=${SELF_UPDATE_START_TIMEOUT_MS}`,
+            `DD_SELF_UPDATE_HEALTH_TIMEOUT_MS=${SELF_UPDATE_HEALTH_TIMEOUT_MS}`,
+            `DD_SELF_UPDATE_POLL_INTERVAL_MS=${SELF_UPDATE_POLL_INTERVAL_MS}`,
+          ],
+          Labels: {
+            'dd.self-update.helper': 'true',
+            'dd.self-update.operation-id': selfUpdateOperationId,
+          },
           HostConfig: {
             AutoRemove: true,
             Binds: [socketMount],
@@ -830,15 +866,18 @@ class Docker extends Trigger {
     return true;
   }
 
-  async maybeNotifySelfUpdate(container, logContainer) {
+  async maybeNotifySelfUpdate(container, logContainer, operationId?: string) {
     if (!this.isSelfUpdate(container)) {
       return;
     }
 
     logContainer.info('Self-update detected — notifying UI before proceeding');
-    emitSelfUpdateStarting();
-    // Brief delay to allow SSE to deliver the event to connected clients
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await emitSelfUpdateStarting({
+      opId: operationId || crypto.randomUUID(),
+      requiresAck: true,
+      ackTimeoutMs: SELF_UPDATE_ACK_TIMEOUT_MS,
+      startedAt: new Date().toISOString(),
+    });
   }
 
   async persistSecurityState(container, securityPatch, logContainer) {
@@ -1062,17 +1101,24 @@ class Docker extends Trigger {
   getRollbackConfig(container) {
     const DEFAULT_ROLLBACK_WINDOW = 300000;
     const DEFAULT_ROLLBACK_INTERVAL = 10000;
+    const logger = this.log?.child?.({});
 
     const parsedWindow = Number.parseInt(
-      container.labels?.['dd.rollback.window'] ??
-        container.labels?.['wud.rollback.window'] ??
-        String(DEFAULT_ROLLBACK_WINDOW),
+      getPreferredLabelValue(
+        container.labels,
+        'dd.rollback.window',
+        'wud.rollback.window',
+        logger,
+      ) ?? String(DEFAULT_ROLLBACK_WINDOW),
       10,
     );
     const parsedInterval = Number.parseInt(
-      container.labels?.['dd.rollback.interval'] ??
-        container.labels?.['wud.rollback.interval'] ??
-        String(DEFAULT_ROLLBACK_INTERVAL),
+      getPreferredLabelValue(
+        container.labels,
+        'dd.rollback.interval',
+        'wud.rollback.interval',
+        logger,
+      ) ?? String(DEFAULT_ROLLBACK_INTERVAL),
       10,
     );
 
@@ -1101,9 +1147,12 @@ class Docker extends Trigger {
     return {
       autoRollback:
         (
-          container.labels?.['dd.rollback.auto'] ??
-          container.labels?.['wud.rollback.auto'] ??
-          'false'
+          getPreferredLabelValue(
+            container.labels,
+            'dd.rollback.auto',
+            'wud.rollback.auto',
+            logger,
+          ) ?? 'false'
         ).toLowerCase() === 'true',
       rollbackWindow,
       rollbackInterval,
@@ -1171,8 +1220,14 @@ class Docker extends Trigger {
       await this.runPreUpdateHook(container, hookConfig, logContainer);
 
       if (this.isSelfUpdate(container)) {
-        await this.maybeNotifySelfUpdate(container, logContainer);
-        const updated = await this.executeSelfUpdate(context, container, logContainer);
+        const selfUpdateOperationId = crypto.randomUUID();
+        await this.maybeNotifySelfUpdate(container, logContainer, selfUpdateOperationId);
+        const updated = await this.executeSelfUpdate(
+          context,
+          container,
+          logContainer,
+          selfUpdateOperationId,
+        );
         if (!updated) {
           return;
         }

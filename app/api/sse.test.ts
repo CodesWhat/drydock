@@ -1,5 +1,5 @@
 var { mockRouter, mockRegisterSelfUpdateStarting } = vi.hoisted(() => ({
-  mockRouter: { get: vi.fn() },
+  mockRouter: { get: vi.fn(), post: vi.fn() },
   mockRegisterSelfUpdateStarting: vi.fn(),
 }));
 
@@ -23,6 +23,12 @@ function getHandler() {
   return call[1];
 }
 
+function getAckHandler() {
+  sseRouter.init();
+  const call = mockRouter.post.mock.calls.find((c) => c[0] === '/self-update/:operationId/ack');
+  return call[1];
+}
+
 function createSSEResponse() {
   return {
     writeHead: vi.fn(),
@@ -41,6 +47,13 @@ function createSSERequest(ip = '127.0.0.1') {
   };
 }
 
+function createJsonResponse() {
+  return {
+    status: vi.fn().mockReturnThis(),
+    json: vi.fn(),
+  };
+}
+
 describe('SSE Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -48,6 +61,7 @@ describe('SSE Router', () => {
     // Clear clients and connection tracking between tests
     sseRouter._clients.clear();
     sseRouter._connectionsPerIp.clear();
+    sseRouter._clearPendingSelfUpdateAcks();
   });
 
   afterEach(() => {
@@ -58,6 +72,14 @@ describe('SSE Router', () => {
     test('should register GET route on /', () => {
       sseRouter.init();
       expect(mockRouter.get).toHaveBeenCalledWith('/', expect.any(Function));
+    });
+
+    test('should register POST route for self-update acknowledgments', () => {
+      sseRouter.init();
+      expect(mockRouter.post).toHaveBeenCalledWith(
+        '/self-update/:operationId/ack',
+        expect.any(Function),
+      );
     });
 
     test('should register self-update event handler', () => {
@@ -261,18 +283,24 @@ describe('SSE Router', () => {
       sseRouter._clients.add(res1);
       sseRouter._clients.add(res2);
 
-      sseRouter._broadcastSelfUpdate();
+      sseRouter._broadcastSelfUpdate({
+        opId: 'op-1',
+      });
 
-      expect(res1.write).toHaveBeenCalledWith('event: dd:self-update\ndata: {}\n\n');
-      expect(res2.write).toHaveBeenCalledWith('event: dd:self-update\ndata: {}\n\n');
+      expect(res1.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: dd:self-update\ndata: {"opId":"op-1"'),
+      );
+      expect(res2.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: dd:self-update\ndata: {"opId":"op-1"'),
+      );
     });
 
     test('should handle empty client set', () => {
       // No clients connected — should not throw
-      expect(() => sseRouter._broadcastSelfUpdate()).not.toThrow();
+      expect(() => sseRouter._broadcastSelfUpdate({ opId: 'op-2' })).not.toThrow();
     });
 
-    test('should be triggered when self-update event fires', () => {
+    test('should be triggered when self-update event fires', async () => {
       sseRouter.init();
       // The registerSelfUpdateStarting callback should call broadcastSelfUpdate
       const registeredCallback = mockRegisterSelfUpdateStarting.mock.calls[0][0];
@@ -280,9 +308,95 @@ describe('SSE Router', () => {
       const res = createSSEResponse();
       sseRouter._clients.add(res);
 
-      registeredCallback();
+      await registeredCallback({ opId: 'op-3' });
 
-      expect(res.write).toHaveBeenCalledWith('event: dd:self-update\ndata: {}\n\n');
+      expect(res.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: dd:self-update\ndata: {"opId":"op-3"'),
+      );
+    });
+
+    test('should wait for ack when requiresAck is true', async () => {
+      const res = createSSEResponse();
+      sseRouter._clients.add(res);
+
+      const broadcastPromise = sseRouter._broadcastSelfUpdate({
+        opId: 'op-ack-1',
+        requiresAck: true,
+        ackTimeoutMs: 1000,
+      });
+
+      expect(sseRouter._pendingSelfUpdateAcks.has('op-ack-1')).toBe(true);
+
+      const ackHandler = getAckHandler();
+      const req = {
+        params: { operationId: 'op-ack-1' },
+        body: { clientId: 'client-1' },
+      };
+      const jsonRes = createJsonResponse();
+      ackHandler(req, jsonRes);
+
+      await broadcastPromise;
+
+      expect(jsonRes.status).toHaveBeenCalledWith(202);
+      expect(jsonRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'accepted',
+          operationId: 'op-ack-1',
+        }),
+      );
+      expect(sseRouter._pendingSelfUpdateAcks.has('op-ack-1')).toBe(false);
+    });
+
+    test('should unblock on ack timeout', async () => {
+      const res = createSSEResponse();
+      sseRouter._clients.add(res);
+
+      const broadcastPromise = sseRouter._broadcastSelfUpdate({
+        opId: 'op-ack-timeout',
+        requiresAck: true,
+        ackTimeoutMs: 500,
+      });
+      expect(sseRouter._pendingSelfUpdateAcks.has('op-ack-timeout')).toBe(true);
+
+      vi.advanceTimersByTime(500);
+      await broadcastPromise;
+
+      expect(sseRouter._pendingSelfUpdateAcks.has('op-ack-timeout')).toBe(false);
+    });
+  });
+
+  describe('acknowledgeSelfUpdate', () => {
+    test('should return ignored for unknown operation', () => {
+      const ackHandler = getAckHandler();
+      const req = {
+        params: { operationId: 'unknown-op' },
+        body: { clientId: 'client-1' },
+      };
+      const jsonRes = createJsonResponse();
+
+      ackHandler(req, jsonRes);
+
+      expect(jsonRes.status).toHaveBeenCalledWith(202);
+      expect(jsonRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'ignored',
+          operationId: 'unknown-op',
+        }),
+      );
+    });
+
+    test('should validate missing clientId', () => {
+      const ackHandler = getAckHandler();
+      const req = {
+        params: { operationId: 'op-1' },
+        body: {},
+      };
+      const jsonRes = createJsonResponse();
+
+      ackHandler(req, jsonRes);
+
+      expect(jsonRes.status).toHaveBeenCalledWith(400);
+      expect(jsonRes.json).toHaveBeenCalledWith({ error: 'clientId is required' });
     });
   });
 

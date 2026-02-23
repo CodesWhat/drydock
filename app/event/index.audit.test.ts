@@ -30,9 +30,18 @@ describe('event default audit listeners', () => {
     const handler = vi.fn();
     event.registerSelfUpdateStarting(handler);
 
-    event.emitSelfUpdateStarting();
+    await event.emitSelfUpdateStarting({
+      opId: 'op-123',
+      requiresAck: true,
+      ackTimeoutMs: 2000,
+    });
 
     expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith({
+      opId: 'op-123',
+      requiresAck: true,
+      ackTimeoutMs: 2000,
+    });
   });
 
   test('should record update-available audits when container report has update', async () => {

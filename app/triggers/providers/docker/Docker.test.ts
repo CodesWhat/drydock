@@ -1821,26 +1821,21 @@ describe('additional docker trigger coverage', () => {
     expect(preview.networks).toEqual([]);
   });
 
-  test('maybeNotifySelfUpdate should wait before proceeding for drydock image', async () => {
-    vi.useFakeTimers();
-    try {
-      const logContainer = createMockLog('info');
-      const notifyPromise = docker.maybeNotifySelfUpdate(
-        {
-          image: {
-            name: 'drydock',
-          },
+  test('maybeNotifySelfUpdate should notify immediately for drydock image', async () => {
+    const logContainer = createMockLog('info');
+
+    await docker.maybeNotifySelfUpdate(
+      {
+        image: {
+          name: 'drydock',
         },
-        logContainer,
-      );
-      await vi.advanceTimersByTimeAsync(500);
-      await notifyPromise;
-      expect(logContainer.info).toHaveBeenCalledWith(
-        'Self-update detected — notifying UI before proceeding',
-      );
-    } finally {
-      vi.useRealTimers();
-    }
+      },
+      logContainer,
+    );
+
+    expect(logContainer.info).toHaveBeenCalledWith(
+      'Self-update detected — notifying UI before proceeding',
+    );
   });
 
   test('maybeNotifySelfUpdate should no-op for non-drydock images', async () => {
@@ -2113,7 +2108,7 @@ describe('executeSelfUpdate', () => {
     };
   }
 
-  test('should rename old container, create new, and spawn helper', async () => {
+  test('should rename old container, create new, and spawn controller helper', async () => {
     const context = createSelfUpdateContext();
     const logContainer = createMockLog('info', 'warn', 'debug');
     const container = createTriggerContainer({
@@ -2133,16 +2128,24 @@ describe('executeSelfUpdate', () => {
     });
     expect(docker.createContainer).toHaveBeenCalled();
     const helperCall = context.dockerApi.createContainer.mock.calls.find(
-      (call) => call[0]?.Cmd?.[0] === 'sh',
+      (call) => call[0]?.Cmd?.[0] === 'node',
     );
     expect(helperCall).toBeDefined();
-    const script = helperCall[0].Cmd[2];
-    expect(script).toContain('stop');
-    expect(script).toContain('start');
-    // Verify fallback: if new start fails, old is restarted
-    expect(script).toMatch(/\(.*start.*\|\|.*start.*\)/);
-    // Verify removeOld only runs after successful startNew, not after fallback
-    expect(script).toMatch(/start.*&&.*DELETE.*\|\|.*start/);
+    expect(helperCall[0].Cmd).toEqual([
+      'node',
+      'dist/triggers/providers/docker/self-update-controller.js',
+    ]);
+    expect(helperCall[0].Env).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^DD_SELF_UPDATE_OP_ID=/),
+        'DD_SELF_UPDATE_OLD_CONTAINER_ID=old-container-id',
+        'DD_SELF_UPDATE_NEW_CONTAINER_ID=new-container-id',
+        'DD_SELF_UPDATE_OLD_CONTAINER_NAME=drydock',
+      ]),
+    );
+    expect(helperCall[0].Labels).toMatchObject({
+      'dd.self-update.helper': 'true',
+    });
     expect(helperCall[0].HostConfig.AutoRemove).toBe(true);
     expect(context._mockHelperContainer.start).toHaveBeenCalled();
   });
