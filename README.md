@@ -503,7 +503,7 @@ drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the ima
 | **DHI registry** | `dhi.io` registry provider |
 | **Custom URL icons** | URL-based icons via `dd.display.icon` label |
 | **Version skip UI** | Skip specific versions from the web interface |
-| **In-app log viewer** | View container stdout/stderr logs and application runtime logs with level filtering, agent source selection, auto-fetch polling, scroll lock, and auto-scroll |
+| **In-app log viewer** | View container stdout/stderr logs and application runtime logs with level filtering, auto-fetch polling, scroll lock, and auto-scroll. Agent runtime logs are available in the Agents detail panel Logs tab. |
 | **Semver tag recovery** | Recover mismatched semver tags from include filters |
 | **Per-image config presets** | `imgset` defaults for per-image configuration |
 | **Audit log** | Event-based audit trail with LokiJS storage, REST API, and Prometheus counter |
