@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { reactive, ref } from 'vue';
+
 export interface DataTableColumn {
   key: string;
   label: string;
@@ -9,7 +11,7 @@ export interface DataTableColumn {
   icon?: boolean;
 }
 
-defineProps<{
+const props = defineProps<{
   columns: DataTableColumn[];
   rows: any[];
   rowKey: string | ((row: any) => string);
@@ -43,26 +45,85 @@ function toggleSort(
     emit('update:sortAsc', true);
   }
 }
+
+// -- Column resizing --
+const tableRef = ref<HTMLTableElement | null>(null);
+const colWidths = reactive<Record<string, number>>({});
+const resizing = ref(false);
+
+function initWidths() {
+  if (!tableRef.value) return;
+  const ths = tableRef.value.querySelectorAll('thead th[data-col-key]');
+  for (const th of ths) {
+    const key = (th as HTMLElement).dataset.colKey;
+    if (key && !(key in colWidths)) {
+      colWidths[key] = (th as HTMLElement).getBoundingClientRect().width;
+    }
+  }
+}
+
+function onResizeStart(colKey: string, event: MouseEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+  resizing.value = true;
+
+  // Initialize widths from DOM if not yet done
+  initWidths();
+
+  const startX = event.clientX;
+  const startWidth = colWidths[colKey] ?? 100;
+
+  function onMove(e: MouseEvent) {
+    const delta = e.clientX - startX;
+    colWidths[colKey] = Math.max(40, startWidth + delta);
+  }
+
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    // Delay clearing resizing flag to prevent click-through to sort
+    setTimeout(() => { resizing.value = false; }, 50);
+  }
+
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function colStyle(col: DataTableColumn): Record<string, string> {
+  if (col.key in colWidths) {
+    return { width: `${colWidths[col.key]}px`, minWidth: `${Math.min(colWidths[col.key], 40)}px` };
+  }
+  return col.width ? { width: col.width } : {};
+}
 </script>
 
 <template>
   <div class="dd-rounded overflow-hidden"
        :style="{ border: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-card)' }">
     <div class="overflow-hidden">
-      <table class="w-full text-xs">
+      <table ref="tableRef" class="w-full text-xs" :style="Object.keys(colWidths).length > 0 ? { tableLayout: 'fixed' } : {}">
         <thead>
           <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
             <th v-for="col in columns" :key="col.key"
+                :data-col-key="col.key"
                 :class="[
-                  col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-left', 'px-5'],
-                  'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-[10px] select-none transition-colors',
+                  col.icon ? 'text-center pl-5 pr-0' : ['text-center', 'px-5'],
+                  'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-[10px] select-none transition-colors relative',
                   (col.sortable !== false && !col.icon) ? 'cursor-pointer' : '',
                   sortKey === col.key ? 'dd-text-secondary' : 'dd-text-muted hover:dd-text-secondary',
                 ]"
-                :style="col.width ? { width: col.width } : {}"
-                @click="(col.sortable !== false && !col.icon) && toggleSort(col.key, sortKey, sortAsc, $emit)">
+                :style="colStyle(col)"
+                @click="!resizing && (col.sortable !== false && !col.icon) && toggleSort(col.key, sortKey, sortAsc, $emit)">
               {{ col.label }}
               <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-[8px]">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
+              <!-- Resize handle -->
+              <div v-if="!col.icon"
+                   class="absolute top-0 right-0 w-1.5 h-full cursor-col-resize z-10 group hover:bg-drydock-secondary/30 transition-colors"
+                   @mousedown="onResizeStart(col.key, $event)" />
             </th>
             <th v-if="showActions" class="text-right px-4 py-2.5 font-semibold uppercase tracking-wider text-[10px] whitespace-nowrap dd-text-muted">Actions</th>
           </tr>
@@ -79,7 +140,7 @@ function toggleSort(
               }"
               @click="$emit('row-click', row)">
             <td v-for="col in columns" :key="col.key"
-                class="py-3 align-middle"
+                class="py-3 align-middle overflow-hidden text-ellipsis"
                 :class="col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-left', 'px-5']">
               <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
                 {{ row[col.key] }}
