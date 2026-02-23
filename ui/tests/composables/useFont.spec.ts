@@ -5,6 +5,7 @@ describe('useFont', () => {
     // Clean up any font link tags from previous tests
     document.querySelectorAll('link[data-font]').forEach((el) => el.remove());
     document.documentElement.style.removeProperty('--drydock-font');
+    document.documentElement.style.removeProperty('--font-mono');
   });
 
   async function loadUseFont() {
@@ -65,10 +66,21 @@ describe('useFont', () => {
   });
 
   describe('applyFont', () => {
-    it('should set --drydock-font CSS variable on init', async () => {
+    it('should set both global font CSS variables on init', async () => {
       await loadUseFont();
-      const fontVar = document.documentElement.style.getPropertyValue('--drydock-font');
-      expect(fontVar).toBe('"IBM Plex Mono", monospace');
+      const drydockFont = document.documentElement.style.getPropertyValue('--drydock-font');
+      const monoFont = document.documentElement.style.getPropertyValue('--font-mono');
+      expect(drydockFont).toBe('"IBM Plex Mono", monospace');
+      expect(monoFont).toBe('"IBM Plex Mono", monospace');
+    });
+
+    it('should apply saved font to both CSS variables on init', async () => {
+      localStorage.setItem('drydock-font-family', 'jetbrains-mono');
+      await loadUseFont();
+      const drydockFont = document.documentElement.style.getPropertyValue('--drydock-font');
+      const monoFont = document.documentElement.style.getPropertyValue('--font-mono');
+      expect(drydockFont).toBe('"JetBrains Mono", monospace');
+      expect(monoFont).toBe('"JetBrains Mono", monospace');
     });
   });
 });

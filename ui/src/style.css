@@ -18,6 +18,7 @@ body {
   --dd-radius: 3px; /* Global border-radius — cards, buttons */
   --dd-radius-sm: 2px; /* Small elements (badges, chips) */
   --dd-radius-lg: 4px; /* Large panels (modals, detail panels) */
+  --drydock-font: "IBM Plex Mono", monospace;
   background-color: var(--dd-bg);
   color: var(--dd-text);
 }
@@ -26,7 +27,7 @@ body {
   --color-drydock-primary: #00355e;
   --color-drydock-secondary: var(--dd-primary);
   --color-drydock-accent: var(--dd-success);
-  --font-family-mono: "IBM Plex Mono", monospace;
+  --font-mono: var(--drydock-font, "IBM Plex Mono", monospace);
 }
 
 /* Utility: apply global radius token via Tailwind-style class */

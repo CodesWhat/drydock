@@ -97,6 +97,8 @@ function applyFont(id: FontId) {
   const opt = fontOptions.find((f) => f.id === id);
   if (opt) {
     document.documentElement.style.setProperty('--drydock-font', opt.family);
+    // Tailwind's `font-mono` utility resolves from this token.
+    document.documentElement.style.setProperty('--font-mono', opt.family);
   }
 }
 
