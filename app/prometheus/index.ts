@@ -10,6 +10,7 @@ import * as audit from './audit.js';
 import * as compatibility from './compatibility.js';
 import * as container from './container.js';
 import * as containerActions from './container-actions.js';
+import * as rollback from './rollback.js';
 import * as registry from './registry.js';
 import * as trigger from './trigger.js';
 import * as watcher from './watcher.js';
@@ -34,6 +35,7 @@ export function init() {
   audit.init();
   containerActions.init();
   webhook.init();
+  rollback.init();
 }
 
 /**

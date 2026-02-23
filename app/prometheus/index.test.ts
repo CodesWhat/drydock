@@ -48,6 +48,10 @@ vi.mock('./webhook', () => ({
   init: vi.fn(),
 }));
 
+vi.mock('./rollback', () => ({
+  init: vi.fn(),
+}));
+
 vi.mock('../log', () => ({ default: { child: vi.fn(() => ({ info: vi.fn() })) } }));
 
 describe('Prometheus Module', () => {
@@ -67,6 +71,7 @@ describe('Prometheus Module', () => {
     const audit = await import('./audit.js');
     const containerActions = await import('./container-actions.js');
     const webhook = await import('./webhook.js');
+    const rollback = await import('./rollback.js');
 
     prometheus.init();
 
@@ -79,6 +84,7 @@ describe('Prometheus Module', () => {
     expect(audit.init).toHaveBeenCalled();
     expect(containerActions.init).toHaveBeenCalled();
     expect(webhook.init).toHaveBeenCalled();
+    expect(rollback.init).toHaveBeenCalled();
   });
 
   test('should NOT initialize metrics when disabled', async () => {
@@ -94,6 +100,7 @@ describe('Prometheus Module', () => {
     const audit = await import('./audit.js');
     const containerActions = await import('./container-actions.js');
     const webhook = await import('./webhook.js');
+    const rollback = await import('./rollback.js');
 
     prometheus.init();
 
@@ -106,6 +113,7 @@ describe('Prometheus Module', () => {
     expect(audit.init).not.toHaveBeenCalled();
     expect(containerActions.init).not.toHaveBeenCalled();
     expect(webhook.init).not.toHaveBeenCalled();
+    expect(rollback.init).not.toHaveBeenCalled();
   });
 
   test('should return metrics output', async () => {
