@@ -93,6 +93,21 @@ test('authenticate should perform authenticate request', async () => {
   ).resolves.toEqual({ headers: { Authorization: 'Bearer token' } });
 });
 
+test('authenticate should throw when token response is missing token', async () => {
+  axios.mockImplementation(() => ({
+    data: {},
+  }));
+
+  await expect(
+    gitlab.authenticate(
+      {},
+      {
+        headers: {},
+      },
+    ),
+  ).rejects.toThrow('GitLab token endpoint response does not contain token');
+});
+
 test('normalizeImage should return the proper registry v2 endpoint', async () => {
   expect(
     gitlab.normalizeImage({

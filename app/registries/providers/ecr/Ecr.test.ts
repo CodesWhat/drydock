@@ -159,6 +159,32 @@ test('authenticate should fetch public ECR gallery token for public images', asy
   });
 });
 
+test('authenticate should throw when public ECR token is missing', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValueOnce({ data: {} });
+
+  const ecrPublic = new Ecr();
+  ecrPublic.configuration = {};
+
+  await expect(
+    ecrPublic.authenticate({ registry: { url: 'https://public.ecr.aws/v2' } }, { headers: {} }),
+  ).rejects.toThrow('public ECR token endpoint response does not contain token');
+});
+
+test('authenticate should throw when private ECR authorization token is missing', async () => {
+  const ecrPrivate = new Ecr();
+  ecrPrivate.configuration = {
+    accesskeyid: 'accesskeyid',
+    secretaccesskey: 'secretaccesskey',
+    region: 'region',
+  };
+  ecrPrivate.fetchPrivateEcrAuthToken = vi.fn().mockResolvedValue(undefined);
+
+  await expect(ecrPrivate.authenticate(undefined, { headers: {} })).rejects.toThrow(
+    'ECR authorization token is missing',
+  );
+});
+
 test('authenticate should return unchanged options when neither private nor public ECR', async () => {
   const ecrAnon = new Ecr();
   ecrAnon.configuration = {};

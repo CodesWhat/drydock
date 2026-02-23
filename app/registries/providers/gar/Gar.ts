@@ -1,6 +1,7 @@
 // @ts-nocheck
 import axios from 'axios';
 import type { ContainerImage } from '../../../model/container.js';
+import { withAuthorizationHeader } from '../../../security/auth.js';
 import BaseRegistry from '../../BaseRegistry.js';
 
 /**
@@ -66,17 +67,12 @@ class Gar extends BaseRegistry {
     };
 
     const response = await axios(request);
-    const token = response.data.token || response.data.access_token;
-    const requestOptionsWithAuth = {
-      ...requestOptions,
-      headers: {
-        ...(requestOptions.headers || {}),
-      },
-    };
-    if (token) {
-      requestOptionsWithAuth.headers.Authorization = `Bearer ${token}`;
-    }
-    return requestOptionsWithAuth;
+    return withAuthorizationHeader(
+      requestOptions,
+      'Bearer',
+      response.data.token || response.data.access_token,
+      `Unable to authenticate registry ${this.getId()}: GAR token endpoint response does not contain token`,
+    );
   }
 
   async getAuthPull() {

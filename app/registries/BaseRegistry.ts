@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import https from 'node:https';
 import axios from 'axios';
 import { resolveConfiguredPath } from '../runtime/paths.js';
+import { failClosedAuth, withAuthorizationHeader } from '../security/auth.js';
 import Registry from './Registry.js';
 
 /**
@@ -106,8 +107,6 @@ class BaseRegistry extends Registry {
     const requestOptionsWithAuth = this.withTlsRequestOptions({
       ...requestOptions,
     });
-    requestOptionsWithAuth.headers = requestOptionsWithAuth.headers || {};
-    let token;
 
     const request = this.withTlsRequestOptions({
       method: 'GET',
@@ -121,17 +120,21 @@ class BaseRegistry extends Registry {
       request.headers.Authorization = `Basic ${credentials}`;
     }
 
+    let response;
     try {
-      const response = await axios(request);
-      token = tokenExtractor(response);
+      response = await axios(request);
     } catch (e) {
-      this.log.warn(`Error when trying to get an access token (${e.message})`);
+      failClosedAuth(
+        `Unable to authenticate registry ${this.getId()}: token request failed (${e.message})`,
+      );
     }
 
-    if (token) {
-      requestOptionsWithAuth.headers.Authorization = `Bearer ${token}`;
-    }
-    return requestOptionsWithAuth;
+    return withAuthorizationHeader(
+      requestOptionsWithAuth,
+      'Bearer',
+      tokenExtractor(response),
+      `Unable to authenticate registry ${this.getId()}: token endpoint response does not contain token`,
+    );
   }
 
   /**

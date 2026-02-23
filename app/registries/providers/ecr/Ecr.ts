@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { ECRClient, GetAuthorizationTokenCommand } from '@aws-sdk/client-ecr';
 import axios from 'axios';
+import { requireAuthString, withAuthorizationHeader } from '../../../security/auth.js';
 import Registry from '../../Registry.js';
 
 const ECR_PUBLIC_GALLERY_HOSTNAME = 'public.ecr.aws';
@@ -74,12 +75,21 @@ class Ecr extends Registry {
   }
 
   async authenticate(image, requestOptions) {
-    const requestOptionsWithAuth = requestOptions;
+    const requestOptionsWithAuth = {
+      ...requestOptions,
+      headers: {
+        ...(requestOptions?.headers || {}),
+      },
+    };
     // Private registry
     if (this.configuration.accesskeyid) {
       const tokenValue = await this.fetchPrivateEcrAuthToken();
-
-      requestOptionsWithAuth.headers.Authorization = `Basic ${tokenValue}`;
+      return withAuthorizationHeader(
+        requestOptionsWithAuth,
+        'Basic',
+        tokenValue,
+        `Unable to authenticate registry ${this.getId()}: ECR authorization token is missing`,
+      );
 
       // Public ECR gallery
     } else if (image.registry.url.includes(ECR_PUBLIC_GALLERY_HOSTNAME)) {
@@ -90,14 +100,22 @@ class Ecr extends Registry {
           Accept: 'application/json',
         },
       });
-      requestOptionsWithAuth.headers.Authorization = `Bearer ${response.data.token}`;
+      return withAuthorizationHeader(
+        requestOptionsWithAuth,
+        'Bearer',
+        response.data.token,
+        `Unable to authenticate registry ${this.getId()}: public ECR token endpoint response does not contain token`,
+      );
     }
     return requestOptionsWithAuth;
   }
 
   async getAuthPull() {
     if (this.configuration.accesskeyid) {
-      const tokenValue = await this.fetchPrivateEcrAuthToken();
+      const tokenValue = requireAuthString(
+        await this.fetchPrivateEcrAuthToken(),
+        `Unable to authenticate registry ${this.getId()}: ECR authorization token is missing`,
+      );
       const auth = Buffer.from(tokenValue, 'base64').toString().split(':');
       return {
         username: auth[0],

@@ -114,6 +114,17 @@ test('authenticate should return unchanged options when no clientemail configure
   expect(result).toEqual({ headers: {} });
 });
 
+test('authenticate should throw when gcr token is missing', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockImplementationOnce(() => ({
+    data: {},
+  }));
+
+  await expect(gcr.authenticate({}, { headers: {} })).rejects.toThrow(
+    'GCR token endpoint response does not contain token',
+  );
+});
+
 test('getAuthPull should return credentials', async () => {
   const result = await gcr.getAuthPull();
   expect(result).toEqual({

@@ -1,11 +1,26 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
+require_insecure_root_ack() {
+	if [ "${DD_ALLOW_INSECURE_ROOT}" != "true" ]; then
+		cat >&2 <<'EOF'
+Refusing to run Drydock in root mode without explicit break-glass acknowledgment.
+
+Recommended fix (secure): use a Docker socket proxy and run Drydock as non-root.
+Break-glass override (less secure): set BOTH:
+  - DD_RUN_AS_ROOT=true
+  - DD_ALLOW_INSECURE_ROOT=true
+EOF
+		exit 1
+	fi
+}
+
 # ── Privilege-drop logic (runs only on first invocation as root) ──
 if [ "$(id -u)" = "0" ]; then
 	# Allow opting out of privilege drop for :ro socket compatibility
 	if [ "${DD_RUN_AS_ROOT}" = "true" ]; then
-		echo "DD_RUN_AS_ROOT is set — skipping privilege drop (running as root)"
+		require_insecure_root_ack
+		echo "WARNING: insecure root mode enabled (DD_RUN_AS_ROOT + DD_ALLOW_INSECURE_ROOT)"
 	elif [ -S /var/run/docker.sock ]; then
 		DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
 		if [ "$DOCKER_GID" != "0" ]; then
@@ -20,7 +35,15 @@ if [ "$(id -u)" = "0" ]; then
 			fi
 			exec su-exec node "$0" "$@"
 		fi
-		# GID is 0 (Docker Desktop / OrbStack): stay as root — matches Portainer/Watchtower/Dozzle
+		cat >&2 <<'EOF'
+Refusing implicit root mode: /var/run/docker.sock is owned by GID 0.
+
+Recommended fix (secure): use a Docker socket proxy and keep privilege drop enabled.
+Break-glass override (less secure): set BOTH:
+  - DD_RUN_AS_ROOT=true
+  - DD_ALLOW_INSECURE_ROOT=true
+EOF
+		exit 1
 	else
 		# No socket mounted: drop to node
 		exec su-exec node "$0" "$@"

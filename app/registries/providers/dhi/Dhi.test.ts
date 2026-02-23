@@ -43,6 +43,7 @@ describe('DHI Registry', () => {
   test('should initialize with token as password', async () => {
     const dhiWithToken = new Dhi();
     await dhiWithToken.register('registry', 'dhi', 'test', {
+      login: 'mydockerid',
       token: TEST_TOKEN,
     });
     expect(dhiWithToken.configuration.password).toBe(TEST_TOKEN);
@@ -89,6 +90,27 @@ describe('DHI Registry', () => {
       },
     });
     expect(result.headers.Authorization).toBe('Bearer public-token');
+  });
+
+  test('should reject ambiguous auth configuration', async () => {
+    expect(() =>
+      dhi.validateConfiguration({
+        login: 'user',
+        password: TEST_PASSWORD,
+        auth: 'dGVzdDp0ZXN0',
+      }),
+    ).toThrow();
+  });
+
+  test('should throw when dhi token response is missing token', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    const image = { name: 'python' };
+    const requestOptions = { headers: {} };
+
+    await expect(dhi.authenticate(image, requestOptions)).rejects.toThrow(
+      'DHI token endpoint response does not contain token',
+    );
   });
 
   test('should mask all configuration fields', async () => {

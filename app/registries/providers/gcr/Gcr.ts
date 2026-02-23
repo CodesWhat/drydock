@@ -1,5 +1,6 @@
 // @ts-nocheck
 import axios from 'axios';
+import { withAuthorizationHeader } from '../../../security/auth.js';
 import BaseRegistry from '../../BaseRegistry.js';
 
 /**
@@ -48,9 +49,12 @@ class Gcr extends BaseRegistry {
     };
 
     const response = await axios(request);
-    const requestOptionsWithAuth = requestOptions;
-    requestOptionsWithAuth.headers.Authorization = `Bearer ${response.data.token}`;
-    return requestOptionsWithAuth;
+    return withAuthorizationHeader(
+      requestOptions,
+      'Bearer',
+      response.data.token,
+      `Unable to authenticate registry ${this.getId()}: GCR token endpoint response does not contain token`,
+    );
   }
 
   async getAuthPull() {

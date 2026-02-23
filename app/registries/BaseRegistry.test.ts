@@ -199,18 +199,31 @@ test('authenticateBearerFromAuthUrl should set bearer token when request headers
   expect(result.headers.Authorization).toBe('Bearer abc123');
 });
 
-test('authenticateBearerFromAuthUrl should not set header when token is missing', async () => {
+test('authenticateBearerFromAuthUrl should throw when token is missing', async () => {
   const { default: axios } = await import('axios');
   axios.mockResolvedValue({ data: {} });
 
-  const result = await baseRegistry.authenticateBearerFromAuthUrl(
-    { headers: {} },
-    'https://auth.example.com/token',
-    undefined,
-    (response) => response.data.accessToken,
-  );
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {} },
+      'https://auth.example.com/token',
+      undefined,
+      (response) => response.data.accessToken,
+    ),
+  ).rejects.toThrow('token endpoint response does not contain token');
+});
 
-  expect(result.headers.Authorization).toBeUndefined();
+test('authenticateBearerFromAuthUrl should throw when token request fails', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockRejectedValue(new Error('Network error'));
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {} },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed (Network error)');
 });
 
 test('authenticateBearerFromAuthUrl should apply tls options to token request', async () => {

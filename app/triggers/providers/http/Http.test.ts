@@ -126,7 +126,7 @@ describe('HTTP Trigger', () => {
     });
   });
 
-  test('should handle unknown auth type without setting auth or headers', async () => {
+  test('should fail closed on unknown auth type', async () => {
     const { default: axios } = await import('axios');
     axios.mockResolvedValue({ data: {} });
     http.configuration = {
@@ -136,13 +136,34 @@ describe('HTTP Trigger', () => {
     };
     const container = { name: 'test' };
 
-    await http.trigger(container);
-    expect(axios).toHaveBeenCalledWith({
-      method: 'POST',
+    await expect(http.trigger(container)).rejects.toThrow('auth type "UNKNOWN" is unsupported');
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('should fail closed when BASIC auth credentials are incomplete', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    http.configuration = {
       url: 'https://example.com/webhook',
-      timeout: 30000,
-      data: container,
-    });
+      method: 'POST',
+      auth: { type: 'BASIC', user: 'user' },
+    };
+
+    await expect(http.trigger({ name: 'test' })).rejects.toThrow('basic auth password is missing');
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('should fail closed when BEARER token is missing', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    http.configuration = {
+      url: 'https://example.com/webhook',
+      method: 'POST',
+      auth: { type: 'BEARER' },
+    };
+
+    await expect(http.trigger({ name: 'test' })).rejects.toThrow('bearer token is missing');
+    expect(axios).not.toHaveBeenCalled();
   });
 
   test('should handle request with no auth and no proxy', async () => {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import axios from 'axios';
+import { withAuthorizationHeader } from '../../../security/auth.js';
 import Custom from '../custom/Custom.js';
 import { getTokenAuthConfigurationSchema } from '../shared/tokenAuthConfigurationSchema.js';
 
@@ -67,9 +68,12 @@ class Dhi extends Custom {
     }
 
     const response = await axios(axiosConfig);
-    const requestOptionsWithAuth = requestOptions;
-    requestOptionsWithAuth.headers.Authorization = `Bearer ${response.data.token}`;
-    return requestOptionsWithAuth;
+    return withAuthorizationHeader(
+      requestOptions,
+      'Bearer',
+      response.data.token,
+      `Unable to authenticate registry ${this.getId()}: DHI token endpoint response does not contain token`,
+    );
   }
 }
 
