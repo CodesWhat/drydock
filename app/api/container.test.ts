@@ -9,6 +9,7 @@ const mockScanImageForVulnerabilities = vi.hoisted(() => vi.fn());
 const mockVerifyImageSignature = vi.hoisted(() => vi.fn());
 const mockBroadcastScanStarted = vi.hoisted(() => vi.fn());
 const mockBroadcastScanCompleted = vi.hoisted(() => vi.fn());
+const mockEmitSecurityAlert = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -67,6 +68,10 @@ vi.mock('../log', () => ({ default: { child: vi.fn(() => ({ info: vi.fn(), warn:
 
 vi.mock('../agent/manager', () => ({
   getAgent: vi.fn(),
+}));
+
+vi.mock('../event/index.js', () => ({
+  emitSecurityAlert: (...args: unknown[]) => mockEmitSecurityAlert(...args),
 }));
 
 vi.mock('./sse', () => ({
@@ -614,7 +619,12 @@ describe('Container Router', () => {
     });
 
     test('should scan update candidate image when updateKind is present', async () => {
-      const scanResult = { status: 'scanned', vulnerabilities: [] };
+      const scanResult = {
+        status: 'scanned',
+        vulnerabilities: [],
+        blockingCount: 0,
+        summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+      };
       mockScanImageForVulnerabilities.mockResolvedValue(scanResult);
       registry.getState.mockReturnValue({
         watcher: {},
@@ -658,6 +668,56 @@ describe('Container Router', () => {
         }),
       );
       expect(mockBroadcastScanCompleted).toHaveBeenCalledWith('c1', 'scanned');
+      expect(mockEmitSecurityAlert).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should emit security-alert event when scan finds high/critical vulnerabilities', async () => {
+      const scanResult = {
+        status: 'blocked',
+        vulnerabilities: [],
+        blockingCount: 2,
+        summary: { unknown: 0, low: 0, medium: 3, high: 1, critical: 1 },
+      };
+      mockScanImageForVulnerabilities.mockResolvedValue(scanResult);
+      registry.getState.mockReturnValue({
+        watcher: {},
+        trigger: {},
+        registry: {
+          hub: {
+            getImageFullName: vi.fn((image, tag) => `my-registry/${image.name}:${tag}`),
+            getAuthPull: vi.fn(async () => ({ username: 'user', password: 'token' })),
+          },
+        },
+      });
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        watcher: 'local',
+        name: 'nginx',
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/app',
+          tag: { value: '1.2.3' },
+        },
+        updateKind: { kind: 'tag', remoteValue: '2.0.0' },
+        security: {},
+      });
+      getSecurityConfiguration.mockReturnValue({
+        enabled: true,
+        scanner: 'trivy',
+        signature: { verify: false },
+        sbom: { enabled: false, formats: [] },
+      });
+
+      const res = await callScanContainer();
+
+      expect(mockEmitSecurityAlert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          containerName: 'local_nginx',
+          status: 'blocked',
+          blockingCount: 2,
+        }),
+      );
       expect(res.status).toHaveBeenCalledWith(200);
     });
 

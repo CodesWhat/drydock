@@ -5,6 +5,7 @@ import { getSecurityConfiguration } from '../../../configuration/index.js';
 import {
   emitContainerUpdateApplied,
   emitContainerUpdateFailed,
+  emitSecurityAlert,
   emitSelfUpdateStarting,
 } from '../../../event/index.js';
 import { fullName } from '../../../model/container.js';
@@ -935,6 +936,17 @@ class Docker extends Trigger {
 
     const summary = scanResult.summary;
     const details = `critical=${summary.critical}, high=${summary.high}, medium=${summary.medium}, low=${summary.low}, unknown=${summary.unknown}`;
+
+    if (summary.critical > 0 || summary.high > 0) {
+      await emitSecurityAlert({
+        containerName: fullName(container),
+        details,
+        status: scanResult.status,
+        summary,
+        blockingCount: scanResult.blockingCount,
+        container,
+      });
+    }
 
     if (scanResult.status === 'blocked') {
       const blockedDetails = `Security scan blocked update (${scanResult.blockingCount} vulnerabilities matched block severities: ${scanResult.blockSeverities.join(', ')}). Summary: ${details}`;

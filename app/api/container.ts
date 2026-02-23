@@ -4,8 +4,10 @@ import nocache from 'nocache';
 import rateLimit from 'express-rate-limit';
 import { getAgent } from '../agent/manager.js';
 import { getSecurityConfiguration, getServerConfiguration } from '../configuration/index.js';
+import { emitSecurityAlert } from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
+import { fullName } from '../model/container.js';
 import * as registry from '../registry/index.js';
 import {
   generateImageSbom,
@@ -692,6 +694,19 @@ async function scanContainer(req, res) {
     // Run vulnerability scan
     const scanResult = await scanImageForVulnerabilities({ image, auth });
     securityPatch.scan = scanResult;
+
+    const summary = scanResult.summary;
+    if (summary && (summary.critical > 0 || summary.high > 0)) {
+      const details = `critical=${summary.critical}, high=${summary.high}, medium=${summary.medium}, low=${summary.low}, unknown=${summary.unknown}`;
+      await emitSecurityAlert({
+        containerName: fullName(container),
+        details,
+        status: scanResult.status,
+        summary,
+        blockingCount: scanResult.blockingCount,
+        container,
+      });
+    }
 
     // Run signature verification if configured
     if (securityConfiguration.signature.verify) {
