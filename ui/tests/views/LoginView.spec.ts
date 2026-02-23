@@ -50,15 +50,16 @@ describe('LoginView', () => {
   });
 
   describe('loading state', () => {
-    it('shows loading spinner before strategies resolve', () => {
+    it('does not show login card before strategies resolve', () => {
       mockGetStrategies.mockReturnValue(new Promise(() => {}));
       const wrapper = mountWithPlugins(LoginView);
-      expect(wrapper.text()).toContain('Loading...');
+      expect(wrapper.find('form').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain('Sign in to Drydock');
     });
 
-    it('hides loading after strategies resolve', async () => {
-      const wrapper = await mountLogin([]);
-      expect(wrapper.text()).not.toContain('Loading...');
+    it('shows login card after strategies resolve', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      expect(wrapper.text()).toContain('Sign in to Drydock');
     });
   });
 

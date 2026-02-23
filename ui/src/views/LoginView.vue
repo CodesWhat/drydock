@@ -134,18 +134,13 @@ onUnmounted(() => {
 
 <template>
   <div class="min-h-screen flex items-center justify-center px-4 py-8 dd-bg">
-    <!-- Loading state -->
-    <div v-if="loading" class="dd-text-secondary">
-      <AppIcon name="spinner" :size="14" class="dd-spin mr-2" />
-      Loading...
-    </div>
-
-    <!-- Login card -->
-    <div
-      v-else
-      class="w-full dd-rounded-lg overflow-hidden"
-      style="max-width: 420px; background-color: var(--dd-bg-card); border: 1px solid var(--dd-border-strong); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);"
-    >
+    <!-- Login card — starts invisible, fades in once strategies are loaded -->
+    <Transition name="login-card">
+      <div
+        v-if="!loading"
+        class="w-full dd-rounded-lg overflow-hidden"
+        style="max-width: 420px; background-color: var(--dd-bg-card); border: 1px solid var(--dd-border-strong); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);"
+      >
       <div class="p-8">
         <!-- Logo -->
         <div class="flex justify-center mb-5">
@@ -249,7 +244,8 @@ onUnmounted(() => {
           No authentication methods configured.
         </div>
       </div>
-    </div>
+      </div>
+    </Transition>
 
     <!-- Connection Lost Overlay -->
     <Transition name="fade">
@@ -284,6 +280,13 @@ onUnmounted(() => {
 @keyframes bounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-8px); }
+}
+.login-card-enter-active {
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.login-card-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
 }
 .fade-enter-active, .fade-leave-active {
   transition: opacity 0.3s ease;
