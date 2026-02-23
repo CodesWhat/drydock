@@ -59,6 +59,9 @@ export function init() {
   // Mount server router
   router.use('/server', serverRouter.init());
 
+  // Mount container groups router BEFORE container router (/:id would shadow /groups)
+  router.use('/containers', groupRouter.init());
+
   // Mount container router
   router.use('/containers', containerRouter.init());
 
@@ -70,9 +73,6 @@ export function init() {
 
   // Mount container actions router (start/stop/restart)
   router.use('/containers', containerActionsRouter.init());
-
-  // Mount container groups router (grouping / stack views)
-  router.use('/containers', groupRouter.init());
 
   // Mount trigger router
   router.use('/triggers', triggerRouter.init());
