@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-static-assets.mjs",
     "start": "nodemon --exec \"ts-node --esm\" index.ts",
     "doc": ".docsify serve ./docs",
     "format": "qlty fmt --filter biome --no-progress .",

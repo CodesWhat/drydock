@@ -6,7 +6,11 @@ import express from 'express';
 import joi from 'joi';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
-import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../runtime/paths.js';
+import {
+  resolveConfiguredPath,
+  resolveConfiguredPathWithinBase,
+  resolveFromRuntimeRoot,
+} from '../runtime/paths.js';
 import * as store from '../store/index.js';
 import * as settingsStore from '../store/settings.js';
 
@@ -16,6 +20,7 @@ const log = logger.child({ component: 'icons' });
 const CACHE_CONTROL_HEADER = 'public, max-age=31536000, immutable';
 const FALLBACK_ICON = 'fab fa-docker';
 const inFlightIconFetches = new Map<string, Promise<void>>();
+const BUNDLED_ICON_PROVIDERS = new Set(['selfhst']);
 
 const providers = {
   homarr: {
@@ -73,6 +78,30 @@ function getIconCachePath(provider: string, slug: string, extension: string) {
   return resolveConfiguredPathWithinBase(providerDirectory, `${slug}.${extension}`, {
     label: 'Icon slug path',
   });
+}
+
+function getBundledIconCandidates(provider: string, slug: string, extension: string) {
+  const fileName = `${slug}.${extension}`;
+  return Array.from(
+    new Set([
+      resolveFromRuntimeRoot('assets', 'icons', provider, fileName),
+      // Source-tree fallback for local dev/test when runtime root resolves to dist.
+      resolveFromRuntimeRoot('..', 'assets', 'icons', provider, fileName),
+    ]),
+  );
+}
+
+async function findBundledIconPath(provider: string, slug: string, extension: string) {
+  if (!BUNDLED_ICON_PROVIDERS.has(provider)) {
+    return null;
+  }
+  const candidates = getBundledIconCandidates(provider, slug, extension);
+  for (const candidate of candidates) {
+    if (await iconExists(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 function sendCachedIcon(res, iconPath: string, contentType: string) {
@@ -150,7 +179,7 @@ function fetchAndCacheIconOnce({
 }
 
 /**
- * Get icon from cache or jsDelivr.
+ * Get icon from cache, bundled assets, or jsDelivr.
  * @param req
  * @param res
  */
@@ -170,6 +199,12 @@ async function getIcon(req, res) {
 
   if (await iconExists(cachePath)) {
     sendCachedIcon(res, cachePath, providerConfig.contentType);
+    return;
+  }
+
+  const bundledIconPath = await findBundledIconPath(provider, slug, providerConfig.extension);
+  if (bundledIconPath) {
+    sendCachedIcon(res, bundledIconPath, providerConfig.contentType);
     return;
   }
 

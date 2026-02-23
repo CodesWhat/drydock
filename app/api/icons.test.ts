@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 const {
   mockRouter,
   mockRandomUUID,
@@ -11,6 +13,7 @@ const {
   mockAxiosIsAxiosError,
   mockIsInternetlessModeEnabled,
   mockGetStoreConfiguration,
+  mockResolveFromRuntimeRoot,
 } = vi.hoisted(() => ({
   mockRouter: { get: vi.fn(), delete: vi.fn() },
   mockRandomUUID: vi.fn(() => 'uuid-test'),
@@ -24,6 +27,7 @@ const {
   mockAxiosIsAxiosError: vi.fn(() => false),
   mockIsInternetlessModeEnabled: vi.fn(() => false),
   mockGetStoreConfiguration: vi.fn(() => ({ path: '/store', file: 'dd.json' })),
+  mockResolveFromRuntimeRoot: vi.fn(),
 }));
 
 vi.mock('express', () => ({
@@ -62,6 +66,14 @@ vi.mock('../store', () => ({
   getConfiguration: mockGetStoreConfiguration,
 }));
 
+vi.mock('../runtime/paths', async () => {
+  const actual = await vi.importActual<typeof import('../runtime/paths')>('../runtime/paths');
+  return {
+    ...actual,
+    resolveFromRuntimeRoot: mockResolveFromRuntimeRoot,
+  };
+});
+
 vi.mock('../log', () => ({
   default: { child: vi.fn(() => ({ warn: vi.fn(), info: vi.fn() })) },
 }));
@@ -94,6 +106,9 @@ describe('Icons Router', () => {
     vi.clearAllMocks();
     mockIsInternetlessModeEnabled.mockReturnValue(false);
     mockGetStoreConfiguration.mockReturnValue({ path: '/store', file: 'dd.json' });
+    mockResolveFromRuntimeRoot.mockImplementation((...segments: string[]) =>
+      path.posix.resolve('/runtime', ...segments),
+    );
     mockAxiosIsAxiosError.mockReturnValue(false);
     mockAccess.mockResolvedValue(undefined);
     mockMkdir.mockResolvedValue(undefined);
@@ -127,6 +142,55 @@ describe('Icons Router', () => {
     expect(res.set).toHaveBeenCalledWith('Cache-Control', 'public, max-age=31536000, immutable');
     expect(res.type).toHaveBeenCalledWith('image/png');
     expect(res.sendFile).toHaveBeenCalledWith('/store/icons/homarr/docker.png');
+  });
+
+  test('should serve bundled selfhst icon when cache is missing', async () => {
+    mockAccess.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/runtime/assets/icons/selfhst/docker.png') {
+        return;
+      }
+      throw new Error('not found');
+    });
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'selfhst',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(mockAxiosGet).not.toHaveBeenCalled();
+    expect(res.sendFile).toHaveBeenCalledWith('/runtime/assets/icons/selfhst/docker.png');
+  });
+
+  test('should serve bundled selfhst icon when internetless mode is enabled', async () => {
+    mockIsInternetlessModeEnabled.mockReturnValue(true);
+    mockAccess.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/runtime/assets/icons/selfhst/docker.png') {
+        return;
+      }
+      throw new Error('not found');
+    });
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'selfhst',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(mockAxiosGet).not.toHaveBeenCalled();
+    expect(res.sendFile).toHaveBeenCalledWith('/runtime/assets/icons/selfhst/docker.png');
   });
 
   test('should return 404 on cache miss when internetless mode is enabled', async () => {
