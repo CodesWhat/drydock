@@ -384,6 +384,40 @@ describe('ConfigView', () => {
       expect(text).toContain('admin@test.com');
     });
 
+    it('shows profile error state when user fetch fails', async () => {
+      mockGetUser.mockRejectedValueOnce(new Error('profile boom'));
+      const w = await mountProfileTab();
+      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalled());
+      await nextTick();
+
+      expect(w.text()).toContain('profile boom');
+    });
+
+    it('retries profile fetch from refresh button', async () => {
+      mockGetUser
+        .mockRejectedValueOnce(new Error('first failure'))
+        .mockResolvedValueOnce({
+          username: 'admin',
+          displayName: 'Admin User',
+          email: 'admin@test.com',
+          role: 'admin',
+          provider: 'basic',
+          sessions: 2,
+        });
+
+      const w = await mountProfileTab();
+      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalledTimes(1));
+      expect(w.text()).toContain('first failure');
+
+      const refreshButton = w.find('[data-testid="profile-refresh"]');
+      expect(refreshButton.exists()).toBe(true);
+      await refreshButton.trigger('click');
+
+      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalledTimes(2));
+      expect(w.text()).toContain('Admin User');
+      expect(w.text()).toContain('basic');
+    });
+
     it('selects profile tab from query param', async () => {
       mockRouteQuery.value = { tab: 'profile' };
       mockGetServer.mockResolvedValue({ configuration: {} });

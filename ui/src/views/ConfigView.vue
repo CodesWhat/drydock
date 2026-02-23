@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
@@ -47,20 +47,62 @@ const settingsTabs = [
 
 const loading = ref(true);
 const serverFields = ref<Array<{ label: string; value: string }>>([]);
+const serverError = ref('');
 
 // Settings state
 const internetlessMode = ref(false);
 const settingsLoading = ref(false);
+const settingsError = ref('');
 
 // Profile state
-const profileData = ref({
-  username: '',
-  email: '',
-  role: '',
-  lastLogin: '',
-  sessions: 0,
-});
+interface ProfileData {
+  username: string;
+  displayName: string;
+  email: string;
+  role: string;
+  provider: string;
+  lastLogin: string;
+  sessions: number;
+}
+
+function emptyProfileData(): ProfileData {
+  return {
+    username: '',
+    displayName: '',
+    email: '',
+    role: '',
+    provider: '',
+    lastLogin: '',
+    sessions: 0,
+  };
+}
+
+const profileData = ref<ProfileData>(emptyProfileData());
 const profileLoading = ref(true);
+const profileError = ref('');
+const profileDisplayName = computed(
+  () => profileData.value.displayName || profileData.value.username || 'Unknown User',
+);
+const profileInitials = computed(() => profileDisplayName.value.slice(0, 2).toUpperCase());
+
+function formatProfileLastLogin(rawValue: unknown): string {
+  if (rawValue === undefined || rawValue === null || rawValue === '') {
+    return '';
+  }
+  const date = new Date(rawValue as string | number | Date);
+  if (Number.isNaN(date.getTime())) {
+    return String(rawValue);
+  }
+  return date.toLocaleString();
+}
+
+function normalizeSessionCount(rawValue: unknown): number {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+  return Math.floor(parsed);
+}
 
 // App logs state
 interface AppLogEntry {
@@ -160,7 +202,10 @@ watch(
   },
 );
 
-onMounted(async () => {
+async function loadGeneralSettingsData() {
+  loading.value = true;
+  serverError.value = '';
+  settingsError.value = '';
   try {
     const [serverData, appData, settings] = await Promise.all([
       getServer().catch(() => null),
@@ -183,29 +228,40 @@ onMounted(async () => {
     if (settings) {
       internetlessMode.value = settings.internetlessMode;
     }
-  } catch {
+  } catch (e: any) {
+    serverError.value = e?.message || 'Failed to load server info';
     serverFields.value = [{ label: 'Error', value: 'Failed to load server info' }];
   } finally {
     loading.value = false;
   }
+}
 
-  // Fetch profile data
+async function loadProfileData() {
+  profileLoading.value = true;
+  profileError.value = '';
+  profileData.value = emptyProfileData();
   try {
     const user = await getUser();
     if (user) {
       profileData.value = {
-        username: user.username ?? 'unknown',
+        username: user.username ?? '',
+        displayName: user.displayName ?? '',
         email: user.email ?? '',
         role: user.role ?? '',
-        lastLogin: user.lastLogin ?? '',
-        sessions: user.sessions ?? 0,
+        provider: user.provider ?? user.authentication ?? '',
+        lastLogin: formatProfileLastLogin(user.lastLogin),
+        sessions: normalizeSessionCount(user.sessions),
       };
     }
-  } catch {
-    // Profile will show empty fields
+  } catch (e: any) {
+    profileError.value = e?.message || 'Failed to load profile data';
   } finally {
     profileLoading.value = false;
   }
+}
+
+onMounted(async () => {
+  await Promise.all([loadGeneralSettingsData(), loadProfileData()]);
 
   if (activeSettingsTab.value === 'logs') {
     void refreshAppLogs();
@@ -213,10 +269,13 @@ onMounted(async () => {
 });
 
 async function toggleInternetlessMode() {
+  settingsError.value = '';
   settingsLoading.value = true;
   try {
     const updated = await updateSettings({ internetlessMode: !internetlessMode.value });
     internetlessMode.value = updated.internetlessMode;
+  } catch (e: any) {
+    settingsError.value = e?.message || 'Failed to update network settings';
   } finally {
     settingsLoading.value = false;
   }
@@ -226,11 +285,14 @@ const cacheClearing = ref(false);
 const cacheCleared = ref<number | null>(null);
 
 async function handleClearIconCache() {
+  settingsError.value = '';
   cacheClearing.value = true;
   cacheCleared.value = null;
   try {
     const result = await clearIconCache();
     cacheCleared.value = result.cleared;
+  } catch (e: any) {
+    settingsError.value = e?.message || 'Failed to clear icon cache';
   } finally {
     cacheClearing.value = false;
   }
@@ -257,6 +319,18 @@ async function handleClearIconCache() {
 
       <!-- GENERAL TAB -->
       <div v-if="activeSettingsTab === 'general'" class="space-y-6">
+        <div v-if="serverError"
+             class="px-3 py-2 text-[11px] dd-rounded"
+             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+          {{ serverError }}
+        </div>
+
+        <div v-if="settingsError"
+             class="px-3 py-2 text-[11px] dd-rounded"
+             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+          {{ settingsError }}
+        </div>
+
         <!-- Application Info -->
         <div class="dd-rounded overflow-hidden"
              :style="{
@@ -665,27 +739,42 @@ async function handleClearIconCache() {
                backgroundColor: 'var(--dd-bg-card)',
                border: '1px solid var(--dd-border-strong)',
              }">
-          <div class="px-5 py-5 flex items-center gap-4"
+          <div class="px-5 py-5 flex items-center justify-between gap-4"
                :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <div class="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold text-white shrink-0"
-                 style="background: linear-gradient(135deg, var(--dd-primary), var(--dd-success));">
-              {{ profileData.username.substring(0, 2).toUpperCase() }}
+            <div class="flex items-center gap-4 min-w-0">
+              <div class="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold text-white shrink-0"
+                   style="background: linear-gradient(135deg, var(--dd-primary), var(--dd-success));">
+                {{ profileInitials }}
+              </div>
+              <div class="min-w-0">
+                <div class="text-sm font-bold dd-text truncate">{{ profileDisplayName }}</div>
+                <div class="text-[11px] dd-text-muted truncate">{{ profileData.email || profileData.username || '—' }}</div>
+                <span v-if="profileData.role" class="badge text-[9px] font-semibold mt-1 inline-flex"
+                      :style="{ backgroundColor: 'var(--dd-primary-muted)', color: 'var(--dd-primary)' }">
+                  {{ profileData.role }}
+                </span>
+              </div>
             </div>
-            <div>
-              <div class="text-sm font-bold dd-text">{{ profileData.username }}</div>
-              <span v-if="profileData.role" class="badge text-[9px] font-semibold mt-1 inline-flex"
-                    :style="{ backgroundColor: 'var(--dd-primary-muted)', color: 'var(--dd-primary)' }">
-                {{ profileData.role }}
-              </span>
-            </div>
+            <button
+              data-testid="profile-refresh"
+              class="px-2.5 py-1 dd-rounded text-[10px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90 disabled:opacity-50"
+              :disabled="profileLoading"
+              @click="loadProfileData">
+              Refresh
+            </button>
           </div>
           <div class="p-5 space-y-4">
             <div v-if="profileLoading" class="text-[12px] dd-text-muted text-center py-4">Loading...</div>
+            <div v-else-if="profileError"
+                 class="text-[11px] px-3 py-2 dd-rounded"
+                 :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+              {{ profileError }}
+            </div>
             <template v-else>
               <div class="flex items-center justify-between py-2"
                    :style="{ borderBottom: '1px solid var(--dd-border)' }">
                 <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Username</span>
-                <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.username }}</span>
+                <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.username || '—' }}</span>
               </div>
               <div class="flex items-center justify-between py-2"
                    :style="{ borderBottom: '1px solid var(--dd-border)' }">
@@ -696,6 +785,11 @@ async function handleClearIconCache() {
                    :style="{ borderBottom: '1px solid var(--dd-border)' }">
                 <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Role</span>
                 <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.role || '—' }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2"
+                   :style="{ borderBottom: '1px solid var(--dd-border)' }">
+                <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Provider</span>
+                <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.provider || '—' }}</span>
               </div>
               <div class="flex items-center justify-between py-2"
                    :style="{ borderBottom: '1px solid var(--dd-border)' }">
