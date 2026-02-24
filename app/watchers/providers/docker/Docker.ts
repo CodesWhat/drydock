@@ -854,6 +854,34 @@ function getRegistry(registryName: string) {
   return registryToReturn;
 }
 
+const UNKNOWN_CONTAINER_PROCESSING_ERROR = 'Unexpected container processing error';
+
+function getErrorMessage(error: any, fallback = UNKNOWN_CONTAINER_PROCESSING_ERROR) {
+  if (typeof error?.message === 'string' && error.message.trim() !== '') {
+    return error.message;
+  }
+  if (typeof error === 'string' && error.trim() !== '') {
+    return error;
+  }
+  return fallback;
+}
+
+function buildFallbackContainerReport(container: Container, message: string) {
+  const containerWithError = container;
+  delete containerWithError.result;
+  containerWithError.error = {
+    message,
+  };
+  containerWithError.updateAvailable = false;
+  if (!containerWithError.updateKind) {
+    containerWithError.updateKind = { kind: 'unknown' };
+  }
+  return {
+    container: containerWithError,
+    changed: false,
+  };
+}
+
 /**
  * Get old containers to prune.
  * @param newContainers
@@ -1292,6 +1320,7 @@ class Docker extends Watcher {
   public remoteOidcRefreshToken?: string;
   public remoteOidcAccessTokenExpiresAt?: number;
   public remoteOidcDeviceCodeCompleted?: boolean;
+  public remoteAuthBlockedReason?: string;
 
   ensureLogger() {
     if (!this.log) {
@@ -1403,6 +1432,8 @@ class Docker extends Watcher {
       maintenancewindowopen: hasMaintenanceWindow ? this.isMaintenanceWindowOpen() : undefined,
       maintenancewindowqueued: hasMaintenanceWindow ? this.maintenanceWindowWatchQueued : false,
       maintenancenextwindow: nextMaintenanceWindow,
+      authblocked: this.remoteAuthBlockedReason !== undefined,
+      authblockedreason: this.remoteAuthBlockedReason,
       auth: this.configuration.auth
           ? {
             type: this.configuration.auth.type,
@@ -1542,6 +1573,7 @@ class Docker extends Watcher {
 
   initWatcher() {
     const options: Dockerode.DockerOptions = {};
+    this.remoteAuthBlockedReason = undefined;
     if (this.configuration.host) {
       options.host = this.configuration.host;
       options.port = this.configuration.port;
@@ -1569,7 +1601,18 @@ class Docker extends Watcher {
           }),
         );
       }
-      this.applyRemoteAuthHeaders(options);
+      try {
+        this.applyRemoteAuthHeaders(options);
+      } catch (e: any) {
+        const authFailureMessage = getErrorMessage(
+          e,
+          `Unable to authenticate remote watcher ${this.name}`,
+        );
+        this.remoteAuthBlockedReason = authFailureMessage;
+        this.log.warn(
+          `Remote watcher ${this.name} auth is blocked (${authFailureMessage}); watcher remains registered but remote sync is disabled until auth is fixed or auth.insecure=true is set`,
+        );
+      }
     } else {
       options.socketPath = this.configuration.socket;
     }
@@ -2029,6 +2072,10 @@ class Docker extends Watcher {
   }
 
   async ensureRemoteAuthHeaders() {
+    if (this.remoteAuthBlockedReason) {
+      throw new Error(this.remoteAuthBlockedReason);
+    }
+
     if (!this.configuration.host || !this.configuration.auth) {
       return;
     }
@@ -2514,14 +2561,21 @@ class Docker extends Watcher {
       this.log.warn(`Error when trying to get the list of the containers to watch (${e.message})`);
     }
     try {
-      const containerReports = await Promise.all(
+      const containerReportsSettled = await Promise.allSettled(
         containers.map((container) => this.watchContainer(container)),
       );
+      const containerReports = containerReportsSettled.map((containerReport, index) => {
+        if (containerReport.status === 'fulfilled') {
+          return containerReport.value;
+        }
+        const message = getErrorMessage(containerReport.reason);
+        this.log.warn(`Error when processing some containers (${message})`);
+        const fallbackContainerReport = buildFallbackContainerReport(containers[index], message);
+        event.emitContainerReport(fallbackContainerReport);
+        return fallbackContainerReport;
+      });
       event.emitContainerReports(containerReports);
       return containerReports;
-    } catch (e: any) {
-      this.log.warn(`Error when processing some containers (${e.message})`);
-      return [];
     } finally {
       // Dispatch event to notify stop watching
       event.emitWatcherStop(this);
@@ -2547,10 +2601,11 @@ class Docker extends Watcher {
     try {
       containerWithResult.result = await this.findNewVersion(container, logContainer);
     } catch (e: any) {
-      logContainer.warn(`Error when processing (${e.message})`);
+      const errorMessage = getErrorMessage(e);
+      logContainer.warn(`Error when processing (${errorMessage})`);
       logContainer.debug(e);
       containerWithResult.error = {
-        message: e.message,
+        message: errorMessage,
       };
     }
 

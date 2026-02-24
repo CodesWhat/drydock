@@ -532,18 +532,22 @@ describe('Docker Watcher', () => {
       });
     });
 
-    test('should fail closed when remote watcher auth is configured without HTTPS', async () => {
-      await expect(
-        docker.register('watcher', 'docker', 'test', {
-          host: 'localhost',
-          port: 2375,
-          protocol: 'http',
-          auth: {
-            type: 'bearer',
-            bearer: 'my-secret-token',
-          },
-        }),
-      ).rejects.toThrow('HTTPS is required for remote auth');
+    test('should keep watcher registered but block remote sync when auth is configured without HTTPS', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        host: 'localhost',
+        port: 2375,
+        protocol: 'http',
+        auth: {
+          type: 'bearer',
+          bearer: 'my-secret-token',
+        },
+      });
+      expect(docker.remoteAuthBlockedReason).toContain('HTTPS is required for remote auth');
+      expect(mockDockerode).toHaveBeenCalledWith({
+        host: 'localhost',
+        port: 2375,
+        protocol: 'http',
+      });
     });
 
     test('should allow insecure auth fallback when auth.insecure=true', async () => {
@@ -1665,8 +1669,49 @@ describe('Docker Watcher', () => {
 
       const result = await docker.watch();
 
-      expect(result).toEqual([]);
+      expect(result).toEqual([
+        {
+          container: {
+            id: 'test',
+            error: { message: 'Processing failed' },
+            updateAvailable: false,
+            updateKind: { kind: 'unknown' },
+          },
+          changed: false,
+        },
+      ]);
       expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('Processing failed'));
+    });
+
+    test('should continue processing when one container fails during watch', async () => {
+      const mockLog = createMockLog(['warn']);
+      docker.log = mockLog;
+      docker.getContainers = vi.fn().mockResolvedValue([{ id: 'failed' }, { id: 'ok' }]);
+      docker.watchContainer = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('failed to process'))
+        .mockResolvedValueOnce({
+          container: { id: 'ok', updateAvailable: false },
+          changed: false,
+        });
+
+      const result = await docker.watch();
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual({
+        container: {
+          id: 'failed',
+          error: { message: 'failed to process' },
+          updateAvailable: false,
+          updateKind: { kind: 'unknown' },
+        },
+        changed: false,
+      });
+      expect(result[1]).toEqual({
+        container: { id: 'ok', updateAvailable: false },
+        changed: false,
+      });
+      expect(event.emitContainerReports).toHaveBeenCalledWith(result);
     });
   });
 
@@ -1695,6 +1740,21 @@ describe('Docker Watcher', () => {
 
       expect(mockLog._child.warn).toHaveBeenCalledWith(expect.stringContaining('Registry error'));
       expect(container.error).toEqual({ message: 'Registry error' });
+    });
+
+    test('should fallback to a non-empty message when container processing error is empty', async () => {
+      const container = { id: 'test123', name: 'test' };
+      const mockLog = createMockLogWithChild(['warn', 'debug']);
+      docker.log = mockLog;
+      docker.findNewVersion = vi.fn().mockRejectedValue(new Error(''));
+      docker.mapContainerToContainerReport = vi.fn().mockReturnValue({ container, changed: false });
+
+      await docker.watchContainer(container);
+
+      expect(mockLog._child.warn).toHaveBeenCalledWith(
+        'Error when processing (Unexpected container processing error)',
+      );
+      expect(container.error).toEqual({ message: 'Unexpected container processing error' });
     });
   });
 
@@ -3529,7 +3589,7 @@ describe('Docker Watcher', () => {
   });
 
   describe('Additional Coverage - applyRemoteAuthHeaders', () => {
-    test('should fail closed when credentials are incomplete', async () => {
+    test('should keep remote watcher registered in blocked mode when credentials are incomplete', async () => {
       // Bypass validation by setting configuration directly after register
       await docker.register('watcher', 'docker', 'test', {
         host: 'localhost',
@@ -3537,10 +3597,13 @@ describe('Docker Watcher', () => {
         protocol: 'https',
       });
       docker.configuration.auth = { type: '' };
-      expect(() => docker.initWatcher()).toThrow('credentials are incomplete');
+      docker.initWatcher();
+      expect(docker.remoteAuthBlockedReason).toBe(
+        'Unable to authenticate remote watcher test: credentials are incomplete',
+      );
     });
 
-    test('should fail closed when basic auth is declared but credentials are missing', async () => {
+    test('should keep remote watcher registered in blocked mode when basic auth credentials are missing', async () => {
       await docker.register('watcher', 'docker', 'test', {
         host: 'localhost',
         port: 443,
@@ -3548,10 +3611,13 @@ describe('Docker Watcher', () => {
       });
       // Need hasOidcConfig to bypass first guard, but authType=basic to reach the basic-incomplete path
       docker.configuration.auth = { type: 'basic', oidc: { tokenurl: 'https://idp/token' } };
-      expect(() => docker.initWatcher()).toThrow('basic credentials are incomplete');
+      docker.initWatcher();
+      expect(docker.remoteAuthBlockedReason).toBe(
+        'Unable to authenticate remote watcher test: basic credentials are incomplete',
+      );
     });
 
-    test('should fail closed when bearer auth is declared but token is missing', async () => {
+    test('should keep remote watcher registered in blocked mode when bearer token is missing', async () => {
       await docker.register('watcher', 'docker', 'test', {
         host: 'localhost',
         port: 443,
@@ -3559,17 +3625,23 @@ describe('Docker Watcher', () => {
       });
       // Need hasOidcConfig to bypass first guard, but authType=bearer to reach the bearer-missing path
       docker.configuration.auth = { type: 'bearer', oidc: { tokenurl: 'https://idp/token' } };
-      expect(() => docker.initWatcher()).toThrow('bearer token is missing');
+      docker.initWatcher();
+      expect(docker.remoteAuthBlockedReason).toBe(
+        'Unable to authenticate remote watcher test: bearer token is missing',
+      );
     });
 
-    test('should fail closed when auth type is unsupported', async () => {
+    test('should keep remote watcher registered in blocked mode when auth type is unsupported', async () => {
       await docker.register('watcher', 'docker', 'test', {
         host: 'localhost',
         port: 443,
         protocol: 'https',
       });
       docker.configuration.auth = { type: 'custom', user: 'x', password: 'y' };
-      expect(() => docker.initWatcher()).toThrow('is unsupported');
+      docker.initWatcher();
+      expect(docker.remoteAuthBlockedReason).toBe(
+        'Unable to authenticate remote watcher test: auth type "custom" is unsupported',
+      );
     });
 
     test('should warn and continue when auth.insecure=true and credentials are incomplete', async () => {
@@ -3582,9 +3654,24 @@ describe('Docker Watcher', () => {
       const logMock = createMockLog(['warn', 'info', 'debug']);
       docker.log = logMock;
       docker.initWatcher();
+      expect(docker.remoteAuthBlockedReason).toBeUndefined();
       expect(logMock.warn).toHaveBeenCalledWith(
         expect.stringContaining('continuing because auth.insecure=true'),
       );
+    });
+
+    test('should block getContainers when watcher auth is blocked', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        host: 'localhost',
+        port: 443,
+        protocol: 'https',
+      });
+      docker.configuration.auth = { type: '' };
+      docker.initWatcher();
+      mockDockerApi.listContainers.mockResolvedValue([]);
+
+      await expect(docker.getContainers()).rejects.toThrow('credentials are incomplete');
+      expect(mockDockerApi.listContainers).not.toHaveBeenCalled();
     });
   });
 
@@ -4011,6 +4098,22 @@ describe('Docker Watcher', () => {
       const masked = docker.maskConfiguration();
       expect(masked.auth.oidc.tokenurl).toBe('https://idp/token');
       expect(masked.auth.oidc.clientsecret).not.toBe('super-secret');
+      expect(masked.authblocked).toBe(false);
+      expect(masked.authblockedreason).toBeUndefined();
+    });
+
+    test('should expose blocked remote auth reason in masked configuration', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        host: 'localhost',
+        port: 443,
+        protocol: 'https',
+      });
+      docker.configuration.auth = { type: '' };
+      docker.initWatcher();
+
+      const masked = docker.maskConfiguration();
+      expect(masked.authblocked).toBe(true);
+      expect(masked.authblockedreason).toContain('credentials are incomplete');
     });
 
     test('should create fallback logger', async () => {
