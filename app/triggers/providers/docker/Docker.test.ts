@@ -1,6 +1,7 @@
 // @ts-nocheck
 import joi from 'joi';
 import log from '../../../log/index.js';
+import * as registryStore from '../../../registry';
 import * as backupStore from '../../../store/backup';
 import Docker from './Docker.js';
 
@@ -166,6 +167,13 @@ vi.mock('../../../registry', () => ({
       registry: {
         hub: {
           getAuthPull: async () => undefined,
+          normalizeImage: (image) => ({
+            ...image,
+            registry: {
+              ...(image.registry || {}),
+              name: 'hub',
+            },
+          }),
           getImageFullName: (image, tagOrDigest) =>
             `${image.registry.url}/${image.name}:${tagOrDigest}`,
         },
@@ -732,6 +740,70 @@ test('cloneContainer should handle missing NetworkSettings by using empty endpoi
   expect(clone.NetworkingConfig).toEqual({ EndpointsConfig: {} });
 });
 
+test('cloneContainer should drop stale Entrypoint and Cmd inherited from source image defaults', () => {
+  const logContainer = createMockLog('info');
+  const clone = docker.cloneContainer(
+    {
+      Name: '/hub_nginx_120',
+      Id: 'abc123',
+      HostConfig: {},
+      Config: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      NetworkSettings: { Networks: {} },
+    },
+    'nginx:1.10-alpine',
+    {
+      sourceImageConfig: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      targetImageConfig: {
+        Entrypoint: null,
+        Cmd: ['nginx'],
+      },
+      logContainer,
+    },
+  );
+
+  expect(clone.Entrypoint).toBeUndefined();
+  expect(clone.Cmd).toBeUndefined();
+  expect(logContainer.info).toHaveBeenCalledWith(
+    expect.stringContaining('Dropping stale Entrypoint'),
+  );
+  expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Cmd'));
+});
+
+test('cloneContainer should preserve explicit Entrypoint/Cmd overrides', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/hub_nginx_custom',
+      Id: 'abc123',
+      HostConfig: {},
+      Config: {
+        Entrypoint: ['/custom-entrypoint.sh'],
+        Cmd: ['echo', 'healthy'],
+      },
+      NetworkSettings: { Networks: {} },
+    },
+    'nginx:1.10-alpine',
+    {
+      sourceImageConfig: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      targetImageConfig: {
+        Entrypoint: null,
+        Cmd: ['nginx'],
+      },
+    },
+  );
+
+  expect(clone.Entrypoint).toEqual(['/custom-entrypoint.sh']);
+  expect(clone.Cmd).toEqual(['echo', 'healthy']);
+});
+
 // --- trigger ---
 
 test('trigger should not throw when all is ok', async () => {
@@ -826,6 +898,66 @@ test('trigger should not throw when container does not exist', async () => {
   await expect(
     docker.trigger(createTriggerContainer({ name: 'test-container' })),
   ).resolves.toBeUndefined();
+});
+
+test('trigger should throw an explicit error when registry manager is unknown', async () => {
+  await expect(
+    docker.trigger(
+      createTriggerContainer({
+        image: {
+          name: 'test/test',
+          registry: { name: 'custom.local', url: '' },
+          tag: { value: '1.0.0' },
+        },
+      }),
+    ),
+  ).rejects.toThrowError('Unsupported registry manager "custom.local"');
+});
+
+test('trigger should throw an explicit error when registry manager is misconfigured', async () => {
+  const baseState = registryStore.getState();
+  vi.spyOn(registryStore, 'getState').mockReturnValue({
+    ...baseState,
+    registry: {
+      ...baseState.registry,
+      hub: {
+        getImageFullName: vi.fn(
+          (image, tagOrDigest) => `${image.registry.url}/${image.name}:${tagOrDigest}`,
+        ),
+      },
+    },
+  } as any);
+
+  await expect(docker.trigger(createTriggerContainer())).rejects.toThrowError(
+    /Registry manager "hub" is misconfigured.*getAuthPull/,
+  );
+});
+
+test('trigger should use anonymous registry mode when registry URL is provided', async () => {
+  stubTriggerFlow({ running: true });
+  const executeSelfUpdateSpy = vi.spyOn(docker, 'executeSelfUpdate').mockResolvedValue(false);
+  const maybeNotifySelfUpdateSpy = vi
+    .spyOn(docker, 'maybeNotifySelfUpdate')
+    .mockResolvedValue(undefined);
+
+  await expect(
+    docker.trigger(
+      createTriggerContainer({
+        image: {
+          name: 'drydock',
+          registry: { name: 'custom.local', url: 'http://localhost:5000/v2' },
+          tag: { value: 'good' },
+        },
+        updateKind: { kind: 'tag', remoteValue: 'bad' },
+      }),
+    ),
+  ).resolves.toBeUndefined();
+
+  expect(maybeNotifySelfUpdateSpy).toHaveBeenCalled();
+  expect(executeSelfUpdateSpy).toHaveBeenCalled();
+  const [contextArg] = executeSelfUpdateSpy.mock.calls[0];
+  expect(contextArg.newImage).toBe('localhost:5000/drydock:bad');
+  expect(contextArg.auth).toBeUndefined();
 });
 
 test('trigger should block update when security scan is blocked', async () => {
@@ -2144,6 +2276,39 @@ describe('executeContainerUpdate', () => {
     );
   });
 
+  test('should return actionable rollback error for incompatible runtime command', async () => {
+    const context = createContainerUpdateContext({
+      newImage: 'nginx:1.10-alpine',
+      currentContainerSpec: {
+        Id: 'old-container-id',
+        Name: '/container-name',
+        Config: {
+          Image: 'nginx:1.20-alpine',
+          Entrypoint: ['/docker-entrypoint.sh'],
+          Cmd: ['nginx', '-g', 'daemon off;'],
+        },
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+        NetworkSettings: { Networks: {} },
+      },
+    });
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    vi.mocked(docker.createContainer).mockRejectedValueOnce(
+      new Error(
+        '(HTTP code 400) unexpected - failed to create task for container: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: exec: "/docker-entrypoint.sh": stat /docker-entrypoint.sh: no such file or directory',
+      ),
+    );
+
+    await expect(
+      docker.executeContainerUpdate(context, createTriggerContainer(), logContainer),
+    ).rejects.toThrow(
+      'runtime command is incompatible with target image nginx:1.10-alpine',
+    );
+
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(2);
+    expect(context.currentContainer.rename).toHaveBeenLastCalledWith({ name: 'container-name' });
+  });
+
   test('should rollback to old container when starting new container fails', async () => {
     const context = createContainerUpdateContext();
     const logContainer = createMockLog('info', 'warn', 'debug');
@@ -2196,6 +2361,66 @@ describe('executeContainerUpdate', () => {
       logContainer,
     );
     expect(docker.removeContainer).not.toHaveBeenCalled();
+  });
+
+  test('should treat old AutoRemove cleanup 404 as success', async () => {
+    const context = createContainerUpdateContext({
+      currentContainerSpec: {
+        Id: 'old-container-id',
+        Name: '/container-name',
+        Config: { Image: 'my-registry/test/test:1.0.0' },
+        State: { Running: true },
+        HostConfig: { AutoRemove: true },
+        NetworkSettings: { Networks: {} },
+      },
+    });
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const alreadyRemovedError = Object.assign(new Error('No such container: old-container-id'), {
+      statusCode: 404,
+    });
+    vi.mocked(docker.waitContainerRemoved).mockRejectedValueOnce(alreadyRemovedError);
+
+    const result = await docker.executeContainerUpdate(
+      context,
+      createTriggerContainer(),
+      logContainer,
+    );
+
+    expect(result).toBe(true);
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(1);
+    expect(mockRollbackCounterInc).not.toHaveBeenCalled();
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        status: 'succeeded',
+        phase: 'succeeded',
+      }),
+    );
+  });
+
+  test('should not rollback-delete healthy new container when AutoRemove cleanup reports no such container', async () => {
+    const context = createContainerUpdateContext({
+      currentContainerSpec: {
+        Id: 'old-container-id',
+        Name: '/container-name',
+        Config: { Image: 'my-registry/test/test:1.0.0' },
+        State: { Running: true },
+        HostConfig: { AutoRemove: true },
+        NetworkSettings: { Networks: {} },
+      },
+    });
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    vi.mocked(docker.waitContainerRemoved).mockRejectedValueOnce(
+      new Error('No such container: old-container-id'),
+    );
+
+    await expect(
+      docker.executeContainerUpdate(context, createTriggerContainer(), logContainer),
+    ).resolves.toBe(true);
+
+    expect(context._mockNewContainer.stop).not.toHaveBeenCalled();
+    expect(context._mockNewContainer.remove).not.toHaveBeenCalled();
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(1);
   });
 
   test('should remove old container when AutoRemove is enabled but source was already stopped', async () => {

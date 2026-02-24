@@ -139,6 +139,173 @@ class Docker extends Trigger {
     return networkNames[0];
   }
 
+  normalizeContainerProcessArgs(processArgs) {
+    if (processArgs === undefined || processArgs === null) {
+      return undefined;
+    }
+    if (Array.isArray(processArgs)) {
+      return processArgs.map((arg) => String(arg));
+    }
+    return [String(processArgs)];
+  }
+
+  areContainerProcessArgsEqual(left, right) {
+    const leftNormalized = this.normalizeContainerProcessArgs(left);
+    const rightNormalized = this.normalizeContainerProcessArgs(right);
+
+    if (leftNormalized === undefined && rightNormalized === undefined) {
+      return true;
+    }
+    if (leftNormalized === undefined || rightNormalized === undefined) {
+      return false;
+    }
+    if (leftNormalized.length !== rightNormalized.length) {
+      return false;
+    }
+    return leftNormalized.every((value, index) => value === rightNormalized[index]);
+  }
+
+  buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer) {
+    if (!runtimeOptionsOrLogContainer) {
+      return {};
+    }
+
+    const hasRuntimeConfigOptions =
+      Object.hasOwn(runtimeOptionsOrLogContainer, 'sourceImageConfig') ||
+      Object.hasOwn(runtimeOptionsOrLogContainer, 'targetImageConfig') ||
+      Object.hasOwn(runtimeOptionsOrLogContainer, 'logContainer');
+
+    if (hasRuntimeConfigOptions) {
+      return runtimeOptionsOrLogContainer;
+    }
+
+    // Backward compatibility for existing callsites that passed logContainer
+    return { logContainer: runtimeOptionsOrLogContainer };
+  }
+
+  sanitizeClonedRuntimeConfig(
+    containerConfig,
+    sourceImageConfig,
+    targetImageConfig,
+    logContainer,
+  ) {
+    const sanitizedConfig = { ...(containerConfig || {}) };
+
+    for (const runtimeField of ['Entrypoint', 'Cmd']) {
+      const clonedValue = containerConfig?.[runtimeField];
+      if (clonedValue === undefined) {
+        continue;
+      }
+
+      const inheritedFromSource = this.areContainerProcessArgsEqual(
+        clonedValue,
+        sourceImageConfig?.[runtimeField],
+      );
+      if (!inheritedFromSource) {
+        continue;
+      }
+
+      const matchesTargetDefault = this.areContainerProcessArgsEqual(
+        clonedValue,
+        targetImageConfig?.[runtimeField],
+      );
+      if (matchesTargetDefault) {
+        continue;
+      }
+
+      delete sanitizedConfig[runtimeField];
+      logContainer?.info?.(
+        `Dropping stale ${runtimeField} from cloned container spec so target image defaults can be used`,
+      );
+    }
+
+    return sanitizedConfig;
+  }
+
+  async inspectImageConfig(dockerApi, imageRef, logContainer) {
+    if (!dockerApi?.getImage || !imageRef) {
+      return undefined;
+    }
+
+    try {
+      const image = await dockerApi.getImage(imageRef);
+      if (!image?.inspect) {
+        return undefined;
+      }
+      const imageSpec = await image.inspect();
+      return imageSpec?.Config;
+    } catch (e) {
+      logContainer?.debug?.(
+        `Unable to inspect image ${imageRef} for runtime defaults (${e.message})`,
+      );
+      return undefined;
+    }
+  }
+
+  async getCloneRuntimeConfigOptions(dockerApi, currentContainerSpec, newImage, logContainer) {
+    const sourceImageRef = currentContainerSpec?.Config?.Image ?? currentContainerSpec?.Image;
+    const [sourceImageConfig, targetImageConfig] = await Promise.all([
+      this.inspectImageConfig(dockerApi, sourceImageRef, logContainer),
+      this.inspectImageConfig(dockerApi, newImage, logContainer),
+    ]);
+
+    return {
+      sourceImageConfig,
+      targetImageConfig,
+      logContainer,
+    };
+  }
+
+  isRuntimeConfigCompatibilityError(errorMessage) {
+    if (typeof errorMessage !== 'string') {
+      return false;
+    }
+
+    const normalizedMessage = errorMessage.toLowerCase();
+    return (
+      normalizedMessage.includes('exec:') &&
+      (normalizedMessage.includes('no such file or directory') ||
+        normalizedMessage.includes('executable file not found') ||
+        normalizedMessage.includes('permission denied'))
+    );
+  }
+
+  buildRuntimeConfigCompatibilityError(
+    error,
+    containerName,
+    currentContainerSpec,
+    targetImage,
+    rollbackSucceeded,
+  ) {
+    const originalMessage = error?.message ?? String(error);
+    if (!this.isRuntimeConfigCompatibilityError(originalMessage)) {
+      return undefined;
+    }
+
+    const sourceImage = currentContainerSpec?.Config?.Image ?? currentContainerSpec?.Image ?? 'unknown';
+    const rollbackStatus = rollbackSucceeded
+      ? 'Rollback completed.'
+      : 'Rollback attempted but did not fully complete.';
+
+    return new Error(
+      `Container ${containerName} runtime command is incompatible with target image ${targetImage} (source image: ${sourceImage}). ${rollbackStatus} Review Entrypoint/Cmd overrides and retry. Original error: ${originalMessage}`,
+    );
+  }
+
+  isContainerNotFoundError(error) {
+    if (!error) {
+      return false;
+    }
+
+    const statusCode = error?.statusCode ?? error?.status;
+    if (statusCode === 404) {
+      return true;
+    }
+
+    const errorMessage = `${error?.message ?? ''} ${error?.reason ?? ''} ${error?.json?.message ?? ''}`;
+    return errorMessage.toLowerCase().includes('no such container');
+  }
+
   /**
    * Get the Trigger configuration schema.
    * @returns {*}
@@ -160,6 +327,211 @@ class Docker extends Trigger {
 
   getWatcher(container) {
     return getState().watcher[`docker.${container.watcher}`];
+  }
+
+  normalizeRegistryHost(registryUrlOrName) {
+    if (typeof registryUrlOrName !== 'string') {
+      return undefined;
+    }
+    const registryHostCandidate = registryUrlOrName.trim();
+    if (registryHostCandidate === '') {
+      return undefined;
+    }
+
+    try {
+      if (/^https?:\/\//i.test(registryHostCandidate)) {
+        return new URL(registryHostCandidate).host;
+      }
+    } catch {
+      return undefined;
+    }
+
+    return registryHostCandidate
+      .replace(/^https?:\/\//i, '')
+      .replace(/\/v2\/?$/i, '')
+      .replace(/\/+$/, '');
+  }
+
+  buildRegistryLookupCandidates(image) {
+    if (!image) {
+      return [];
+    }
+    const candidates = [image];
+    const registryUrl = image.registry?.url;
+
+    if (typeof registryUrl !== 'string' || registryUrl.trim() === '') {
+      return candidates;
+    }
+
+    const trimmedRegistryUrl = registryUrl.trim();
+    const normalizedRegistryHost = this.normalizeRegistryHost(trimmedRegistryUrl);
+    if (normalizedRegistryHost) {
+      candidates.push({
+        ...image,
+        registry: {
+          ...image.registry,
+          url: normalizedRegistryHost,
+        },
+      });
+      candidates.push({
+        ...image,
+        registry: {
+          ...image.registry,
+          url: `http://${normalizedRegistryHost}`,
+        },
+      });
+      candidates.push({
+        ...image,
+        registry: {
+          ...image.registry,
+          url: `https://${normalizedRegistryHost}`,
+        },
+      });
+    }
+
+    const registryUrlWithoutV2 = trimmedRegistryUrl.replace(/\/v2\/?$/i, '');
+    if (registryUrlWithoutV2 !== trimmedRegistryUrl) {
+      candidates.push({
+        ...image,
+        registry: {
+          ...image.registry,
+          url: registryUrlWithoutV2,
+        },
+      });
+    }
+
+    return candidates;
+  }
+
+  isRegistryManagerCompatible(registry, options = {}) {
+    const { requireNormalizeImage = false } = options;
+    if (!registry || typeof registry !== 'object') {
+      return false;
+    }
+    if (typeof registry.getAuthPull !== 'function') {
+      return false;
+    }
+    if (typeof registry.getImageFullName !== 'function') {
+      return false;
+    }
+    if (requireNormalizeImage && typeof registry.normalizeImage !== 'function') {
+      return false;
+    }
+    return true;
+  }
+
+  createAnonymousRegistryManager(container, logContainer) {
+    const registryName = container?.image?.registry?.name;
+    const registryUrl = container?.image?.registry?.url;
+    const registryHost = this.normalizeRegistryHost(registryUrl);
+
+    if (!registryHost) {
+      return undefined;
+    }
+
+    const imageName = container?.image?.name;
+    if (typeof imageName !== 'string' || imageName.trim() === '') {
+      return undefined;
+    }
+
+    logContainer.info?.(
+      `Registry manager "${registryName}" is not configured; using anonymous pull mode for "${registryHost}"`,
+    );
+
+    return {
+      getAuthPull: async () => undefined,
+      getImageFullName: (image, tagOrDigest) => {
+        const imageNameResolved = String(image?.name ?? '').replace(/^\/+/, '');
+        if (imageNameResolved === '') {
+          throw new Error('Container image name is missing');
+        }
+
+        const tagOrDigestResolved = String(tagOrDigest ?? '').trim();
+        if (tagOrDigestResolved === '') {
+          throw new Error('Container image tag/digest is missing');
+        }
+
+        const separator = tagOrDigestResolved.includes(':') ? '@' : ':';
+        return `${registryHost}/${imageNameResolved}${separator}${tagOrDigestResolved}`;
+      },
+      normalizeImage: (image) => {
+        const normalizedImage = structuredClone(image);
+        normalizedImage.registry = normalizedImage.registry || {};
+        normalizedImage.registry.url = registryHost;
+        normalizedImage.registry.name = registryName || normalizedImage.registry.name || 'anonymous';
+        return normalizedImage;
+      },
+    };
+  }
+
+  resolveRegistryManager(container, logContainer, options = {}) {
+    const { allowAnonymousFallback = false } = options;
+    const registryName = container?.image?.registry?.name;
+    const registryState = getState().registry || {};
+    const requireNormalizeImage = this.configuration.prune === true && !this.isSelfUpdate(container);
+    const requiredMethods = ['getAuthPull', 'getImageFullName'];
+    if (requireNormalizeImage) {
+      requiredMethods.push('normalizeImage');
+    }
+
+    const ensureCompatible = (registryManager, source) => {
+      if (!registryManager) {
+        return undefined;
+      }
+      if (
+        !this.isRegistryManagerCompatible(registryManager, {
+          requireNormalizeImage,
+        })
+      ) {
+        throw new Error(
+          `Registry manager "${registryName}" is misconfigured (${source}); expected methods: ${requiredMethods.join(', ')}`,
+        );
+      }
+      return registryManager;
+    };
+
+    const byName = ensureCompatible(registryState[registryName], 'lookup by name');
+    if (byName) {
+      return byName;
+    }
+
+    const lookupCandidates = this.buildRegistryLookupCandidates(container?.image);
+    for (const imageCandidate of lookupCandidates) {
+      const byMatch = Object.values(registryState).find((registryManager) => {
+        if (typeof registryManager?.match !== 'function') {
+          return false;
+        }
+        try {
+          return registryManager.match(imageCandidate);
+        } catch {
+          return false;
+        }
+      });
+      if (byMatch) {
+        const byMatchCompatible = ensureCompatible(byMatch, 'lookup by image match');
+        if (byMatchCompatible) {
+          const matchedRegistryId =
+            typeof byMatchCompatible.getId === 'function' ? byMatchCompatible.getId() : 'unknown';
+          logContainer.debug?.(
+            `Resolved registry manager "${registryName}" using matcher "${matchedRegistryId}"`,
+          );
+          return byMatchCompatible;
+        }
+      }
+    }
+
+    if (allowAnonymousFallback) {
+      const anonymousRegistryManager = this.createAnonymousRegistryManager(container, logContainer);
+      if (anonymousRegistryManager) {
+        return anonymousRegistryManager;
+      }
+    }
+
+    const knownRegistries = Object.keys(registryState);
+    const knownRegistriesAsString = knownRegistries.length > 0 ? knownRegistries.join(', ') : 'none';
+    throw new Error(
+      `Unsupported registry manager "${registryName}". Known registries: ${knownRegistriesAsString}. Configure a matching registry or provide a valid registry URL.`,
+    );
   }
 
   /**
@@ -487,7 +859,9 @@ class Docker extends Trigger {
    * @param newImage
    * @returns {*}
    */
-  cloneContainer(currentContainer, newImage) {
+  cloneContainer(currentContainer, newImage, runtimeOptionsOrLogContainer = {}) {
+    const { sourceImageConfig, targetImageConfig, logContainer } =
+      this.buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer);
     const containerName = currentContainer.Name.replace('/', '');
     const currentContainerNetworks = currentContainer.NetworkSettings?.Networks || {};
     const endpointsConfig = Object.entries(currentContainerNetworks).reduce(
@@ -497,9 +871,15 @@ class Docker extends Trigger {
       },
       {},
     );
+    const sanitizedContainerConfig = this.sanitizeClonedRuntimeConfig(
+      currentContainer.Config,
+      sourceImageConfig,
+      targetImageConfig,
+      logContainer,
+    );
 
     const containerClone = {
-      ...currentContainer.Config,
+      ...sanitizedContainerConfig,
       name: containerName,
       Image: newImage,
       HostConfig: currentContainer.HostConfig,
@@ -608,7 +988,9 @@ class Docker extends Trigger {
     const logContainer = this.log.child({ container: fullName(container) });
     const watcher = this.getWatcher(container);
     const { dockerApi } = watcher;
-    const registry = getState().registry[container.image.registry.name];
+    const registry = this.resolveRegistryManager(container, logContainer, {
+      allowAnonymousFallback: true,
+    });
     const newImage = this.getNewImageFullName(registry, container);
 
     const currentContainer = await this.getCurrentContainer(dockerApi, container);
@@ -995,6 +1377,12 @@ class Docker extends Trigger {
 
     // Pull the new image while we're still alive
     await this.pullImage(dockerApi, auth, newImage, logContainer);
+    const cloneRuntimeConfigOptions = await this.getCloneRuntimeConfigOptions(
+      dockerApi,
+      currentContainerSpec,
+      newImage,
+      logContainer,
+    );
 
     const oldName = currentContainerSpec.Name.replace(/^\//, '');
     const tempName = `drydock-old-${Date.now()}`;
@@ -1009,7 +1397,7 @@ class Docker extends Trigger {
       const containerToCreateInspect = this.cloneContainer(
         currentContainerSpec,
         newImage,
-        logContainer,
+        cloneRuntimeConfigOptions,
       );
       newContainer = await this.createContainer(
         dockerApi,
@@ -1224,7 +1612,9 @@ class Docker extends Trigger {
     const { dockerApi } = watcher;
 
     logContainer.debug(`Get ${container.image.registry.name} registry manager`);
-    const registry = getState().registry[container.image.registry.name];
+    const registry = this.resolveRegistryManager(container, logContainer, {
+      allowAnonymousFallback: true,
+    });
 
     logContainer.debug(`Get ${container.image.registry.name} registry credentials`);
     const auth = await registry.getAuthPull();
@@ -1290,6 +1680,12 @@ class Docker extends Trigger {
       logContainer.info('Do not replace the existing container because dry-run mode is enabled');
       return false;
     }
+    const cloneRuntimeConfigOptions = await this.getCloneRuntimeConfigOptions(
+      dockerApi,
+      currentContainerSpec,
+      newImage,
+      logContainer,
+    );
 
     const oldName = currentContainerSpec.Name.replace(/^\//, '');
     const tempName = `${oldName}-old-${Date.now()}`;
@@ -1324,7 +1720,7 @@ class Docker extends Trigger {
       const containerToCreateInspect = this.cloneContainer(
         currentContainerSpec,
         newImage,
-        logContainer,
+        cloneRuntimeConfigOptions,
       );
       newContainer = await this.createContainer(
         dockerApi,
@@ -1365,15 +1761,29 @@ class Docker extends Trigger {
       }
 
       failureReason = 'cleanup_old_failed';
-      if (currentContainerSpec.HostConfig?.AutoRemove === true && wasRunning) {
-        await this.waitContainerRemoved(
-          currentContainer,
-          tempName,
-          currentContainerSpec.Id,
-          logContainer,
+      try {
+        if (currentContainerSpec.HostConfig?.AutoRemove === true && wasRunning) {
+          await this.waitContainerRemoved(
+            currentContainer,
+            tempName,
+            currentContainerSpec.Id,
+            logContainer,
+          );
+        } else {
+          await this.removeContainer(
+            currentContainer,
+            tempName,
+            currentContainerSpec.Id,
+            logContainer,
+          );
+        }
+      } catch (cleanupError) {
+        if (!this.isContainerNotFoundError(cleanupError)) {
+          throw cleanupError;
+        }
+        logContainer.info(
+          `Container ${tempName} with id ${currentContainerSpec.Id} was already removed during cleanup`,
         );
-      } else {
-        await this.removeContainer(currentContainer, tempName, currentContainerSpec.Id, logContainer);
       }
 
       updateOperationStore.updateOperation(operation.id, {
@@ -1442,6 +1852,17 @@ class Docker extends Trigger {
         container.updateKind.remoteValue ?? container.image.tag.value,
         container.updateKind.localValue ?? container.image.tag.value,
       );
+
+      const compatibilityError = this.buildRuntimeConfigCompatibilityError(
+        e,
+        oldName,
+        currentContainerSpec,
+        newImage,
+        rollbackSucceeded,
+      );
+      if (compatibilityError) {
+        throw compatibilityError;
+      }
 
       throw e;
     }
