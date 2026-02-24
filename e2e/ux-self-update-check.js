@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { loadSelfUpdatePayload } = require('./self-update-payload');
 
 (async () => {
   const out = {
@@ -11,9 +12,7 @@ const { chromium } = require('playwright');
     triggerError: null,
   };
 
-  const payload = JSON.parse(
-    fs.readFileSync(path.resolve(__dirname, '../artifacts/self-update-drill/payload-healthy.json'), 'utf8'),
-  );
+  const payload = loadSelfUpdatePayload();
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
