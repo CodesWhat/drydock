@@ -29,6 +29,11 @@ describe('Docker Hub Registry', () => {
     expect(hub.match({ registry: { url: 'other.registry.com' } })).toBe(false);
   });
 
+  test('should match missing registry object as Docker Hub default', async () => {
+    expect(() => hub.match({})).not.toThrow();
+    expect(hub.match({})).toBe(true);
+  });
+
   test('should reject hostnames that bypass unescaped dot in regex', async () => {
     expect(hub.match({ registry: { url: 'dockerXio' } })).toBe(false);
     expect(hub.match({ registry: { url: 'evil-docker.io.attacker.com' } })).toBe(false);

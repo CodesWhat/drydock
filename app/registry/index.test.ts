@@ -158,14 +158,18 @@ test('registerRegistries should register all registries', async () => {
     'dhi.public',
     'docr.public',
     'ecr.private',
+    'ecr.public',
     'gar.public',
     'gcr.public',
     'ghcr.public',
     'hub.private',
+    'hub.public',
     'ibmcr.public',
     'lscr.public',
+    'mau.public',
     'ocir.public',
     'quay.public',
+    'trueforge.public',
   ]);
 });
 
@@ -183,8 +187,10 @@ test('registerRegistries should register all anonymous registries by default', a
     'hub.public',
     'ibmcr.public',
     'lscr.public',
+    'mau.public',
     'ocir.public',
     'quay.public',
+    'trueforge.public',
   ]);
 });
 
@@ -201,6 +207,8 @@ test('registerRegistries should warn when registration errors occur', async () =
   expect(spyLog).toHaveBeenCalledWith(
     'Some registries failed to register (Error when registering component hub ("value" does not match any of the allowed types))',
   );
+  expect(Object.keys(registry.getState().registry)).toContain('hub.public');
+  expect(Object.keys(registry.getState().registry)).not.toContain('hub.private');
 });
 
 test('registerTriggers should register all triggers', async () => {
@@ -312,6 +320,27 @@ test('registerWatchers should register all watchers', async () => {
   expect(Object.keys(registry.getState().watcher)).toEqual(['docker.watcher1', 'docker.watcher2']);
 });
 
+test('registerWatchers should keep remote watcher registered when auth configuration is incomplete', async () => {
+  watchers = {
+    local: {
+      watchbydefault: false,
+    },
+    remote: {
+      host: 'example.invalid',
+      port: 2375,
+      protocol: 'http',
+      auth: {
+        type: 'bearer',
+      },
+    },
+  };
+  await registry.testable_registerWatchers();
+  expect(Object.keys(registry.getState().watcher).sort()).toEqual(['docker.local', 'docker.remote']);
+  const remoteWatcherMaskedConfiguration = registry.getState().watcher['docker.remote'].maskConfiguration();
+  expect(remoteWatcherMaskedConfiguration.authblocked).toBe(true);
+  expect(remoteWatcherMaskedConfiguration.authblockedreason).toContain('credentials are incomplete');
+});
+
 test('registerWatchers should register local docker watcher by default', async () => {
   await registry.testable_registerWatchers();
   expect(Object.keys(registry.getState().watcher)).toEqual(['docker.local']);
@@ -416,14 +445,18 @@ test('init should register all components', async () => {
     'dhi.public',
     'docr.public',
     'ecr.private',
+    'ecr.public',
     'gar.public',
     'gcr.public',
     'ghcr.public',
     'hub.private',
+    'hub.public',
     'ibmcr.public',
     'lscr.public',
+    'mau.public',
     'ocir.public',
     'quay.public',
+    'trueforge.public',
   ]);
   expect(Object.keys(registry.getState().trigger)).toEqual(['mock.mock1', 'mock.mock2']);
   expect(Object.keys(registry.getState().watcher)).toEqual(['docker.watcher1', 'docker.watcher2']);

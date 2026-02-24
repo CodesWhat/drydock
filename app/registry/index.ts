@@ -157,9 +157,42 @@ async function registerComponents(
         }),
       );
     });
-    return Promise.all(providerPromises);
+    const registrationResults = await Promise.allSettled(providerPromises);
+    const failures = registrationResults.filter(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+    if (failures.length > 0) {
+      const failureMessages = failures.map((failure) =>
+        failure.reason instanceof Error ? failure.reason.message : String(failure.reason),
+      );
+      throw new Error(failureMessages.join('; '));
+    }
+    return registrationResults
+      .filter((result): result is PromiseFulfilledResult<Component> => result.status === 'fulfilled')
+      .map((result) => result.value);
   }
   return [];
+}
+
+function toNamedConfigurationMap(configuration: unknown): Record<string, any> {
+  if (configuration && typeof configuration === 'object' && !Array.isArray(configuration)) {
+    return configuration as Record<string, any>;
+  }
+  return {};
+}
+
+function mergeProviderConfigurations(
+  defaultConfiguration: Record<string, any>,
+  configuredConfiguration: Record<string, any>,
+) {
+  // Preserve user-defined component ordering first (for precedence), then fallback defaults.
+  const mergedConfiguration = { ...configuredConfiguration };
+  for (const [configurationName, configuration] of Object.entries(defaultConfiguration)) {
+    if (!(configurationName in mergedConfiguration)) {
+      mergedConfiguration[configurationName] = configuration;
+    }
+  }
+  return mergedConfiguration;
 }
 
 function applySharedTriggerConfigurationByName(configurations: Record<string, any>) {
@@ -287,12 +320,33 @@ async function registerRegistries() {
     hub: { public: '' },
     ibmcr: { public: '' },
     lscr: { public: '' },
+    mau: { public: '' },
     ocir: { public: '' },
     quay: { public: '' },
+    trueforge: { public: '' },
   };
+  const configuredRegistries = getRegistryConfigurations();
+  const providers = new Set([
+    ...Object.keys(defaultRegistries),
+    ...Object.keys(configuredRegistries || {}),
+  ]);
   const registriesToRegister = {
-    ...defaultRegistries,
-    ...getRegistryConfigurations(),
+    ...Array.from(providers).reduce(
+      (mergedRegistries, provider) => {
+        const defaultProviderConfiguration = toNamedConfigurationMap(
+          (defaultRegistries as Record<string, unknown>)[provider],
+        );
+        const configuredProviderConfiguration = toNamedConfigurationMap(
+          (configuredRegistries as Record<string, unknown>)?.[provider],
+        );
+        mergedRegistries[provider] = mergeProviderConfigurations(
+          defaultProviderConfiguration,
+          configuredProviderConfiguration,
+        );
+        return mergedRegistries;
+      },
+      {} as Record<string, any>,
+    ),
   };
 
   try {

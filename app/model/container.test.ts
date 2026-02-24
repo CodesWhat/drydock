@@ -1,6 +1,34 @@
 // @ts-nocheck
 import * as container from './container.js';
 
+function createContainerWithError(errorMessage) {
+  return {
+    id: 'container-error-123456789',
+    name: 'test-error',
+    watcher: 'test',
+    image: {
+      id: 'image-error-123456789',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+    error: {
+      message: errorMessage,
+    },
+  };
+}
+
 test('model should be validated when compliant', async () => {
   const containerValidated = container.validate({
     id: 'container-123456789',
@@ -82,6 +110,17 @@ test('model should not be validated when invalid', async () => {
   expect(() => {
     container.validate({});
   }).toThrow();
+});
+
+test('model should validate a non-empty error message', async () => {
+  const containerValidated = container.validate(createContainerWithError('Registry request failed'));
+  expect(containerValidated.error).toEqual({ message: 'Registry request failed' });
+});
+
+test('model should reject empty error message', async () => {
+  expect(() => {
+    container.validate(createContainerWithError(''));
+  }).toThrow('ValidationError: "error.message" is not allowed to be empty');
 });
 
 test('model should flag updateAvailable when tag is different', async () => {

@@ -38,10 +38,11 @@ class Hub extends Custom {
    */
 
   match(image) {
+    const registryUrl = image?.registry?.url;
     return (
-      !image.registry.url ||
-      image.registry.url === 'docker.io' ||
-      (image.registry.url.endsWith('.docker.io') && /^[a-zA-Z0-9.-]+$/.test(image.registry.url))
+      !registryUrl ||
+      registryUrl === 'docker.io' ||
+      (registryUrl.endsWith('.docker.io') && /^[a-zA-Z0-9.-]+$/.test(registryUrl))
     );
   }
 

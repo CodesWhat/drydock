@@ -67,6 +67,13 @@ test('match should return false when registry url is not from trueforge', async 
   ).toBeFalsy();
 });
 
+test('match should return false and never throw when registry url is missing', async () => {
+  expect(() => trueforge.match({ registry: { url: undefined } })).not.toThrow();
+  expect(() => trueforge.match({})).not.toThrow();
+  expect(trueforge.match({ registry: { url: undefined } })).toBe(false);
+  expect(trueforge.match({})).toBe(false);
+});
+
 test('match should reject hostnames that bypass unescaped dot in regex', async () => {
   expect(trueforge.match({ registry: { url: 'ociXtrueforgeXorg' } })).toBe(false);
   expect(trueforge.match({ registry: { url: 'evil-oci.trueforge.org.attacker.com' } })).toBe(false);

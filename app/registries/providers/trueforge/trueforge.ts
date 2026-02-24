@@ -12,7 +12,10 @@ class Trueforge extends Quay {
    */
 
   match(image) {
-    const url = image.registry.url;
+    const url = image?.registry?.url;
+    if (typeof url !== 'string') {
+      return false;
+    }
     return (
       url === 'oci.trueforge.org' ||
       (url.endsWith('.oci.trueforge.org') && /^[a-zA-Z0-9.-]+$/.test(url))
