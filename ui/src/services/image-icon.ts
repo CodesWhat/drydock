@@ -135,6 +135,7 @@ const IMAGE_TO_ICON: Record<string, string> = {
   gitlab: 'gitlab',
   'gitlab-ce': 'gitlab',
   'gitlab-ee': 'gitlab',
+  'gitlab-runner': 'gitlab',
   jenkins: 'jenkins',
   drone: 'drone',
   woodpecker: 'woodpecker-ci',
@@ -218,16 +219,17 @@ const STRIP_NAMESPACES = [
 function extractBaseName(imageName: string): string {
   let name = imageName.toLowerCase().trim();
 
-  // Remove tag if present
-  const colonIdx = name.indexOf(':');
-  if (colonIdx !== -1) {
-    name = name.substring(0, colonIdx);
-  }
-
   // Remove digest if present
   const atIdx = name.indexOf('@');
   if (atIdx !== -1) {
     name = name.substring(0, atIdx);
+  }
+
+  // Remove tag if present. Keep registry ports (for example, registry:5000/image:tag).
+  const lastSlash = name.lastIndexOf('/');
+  const tagIdx = name.lastIndexOf(':');
+  if (tagIdx > lastSlash) {
+    name = name.substring(0, tagIdx);
   }
 
   // Strip known namespace prefixes
@@ -239,9 +241,9 @@ function extractBaseName(imageName: string): string {
   }
 
   // Take only the last path segment (handles "org/repo" -> "repo")
-  const lastSlash = name.lastIndexOf('/');
-  if (lastSlash !== -1) {
-    name = name.substring(lastSlash + 1);
+  const lastSlashIdx = name.lastIndexOf('/');
+  if (lastSlashIdx !== -1) {
+    name = name.substring(lastSlashIdx + 1);
   }
 
   return name;

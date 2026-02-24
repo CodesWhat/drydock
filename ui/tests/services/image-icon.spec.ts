@@ -24,6 +24,18 @@ describe('image-icon service', () => {
     expect(getEffectiveDisplayIcon('', 'my-org/custom-service:1.2.3')).toBe('sh-custom-service');
   });
 
+  it('handles registry hosts with ports while stripping image tags', () => {
+    expect(getEffectiveDisplayIcon('', 'registry.example.com:5000/library/nginx:latest')).toBe(
+      'sh-nginx',
+    );
+  });
+
+  it('maps gitlab-runner images to the gitlab icon slug', () => {
+    expect(getEffectiveDisplayIcon('', 'registry.gitlab.com/gitlab-org/gitlab-runner:alpine')).toBe(
+      'sh-gitlab',
+    );
+  });
+
   it('falls back to docker icon when inferred base name is too short', () => {
     expect(getEffectiveDisplayIcon('mdi:docker', 'a')).toBe('sh-docker');
   });

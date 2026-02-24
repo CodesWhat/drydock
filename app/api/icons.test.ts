@@ -328,6 +328,69 @@ describe('Icons Router', () => {
     });
   });
 
+  test('should treat upstream 403 as missing and return 404 metadata', async () => {
+    const upstreamError = Object.assign(new Error('forbidden'), {
+      response: { status: 403 },
+    });
+    mockAccess.mockRejectedValue(new Error('not found'));
+    mockAxiosGet.mockRejectedValue(upstreamError);
+    mockAxiosIsAxiosError.mockReturnValue(true);
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'selfhst',
+          slug: 'missing',
+        },
+      },
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Icon selfhst/missing was not found',
+      fallbackIcon: 'fab fa-docker',
+    });
+  });
+
+  test('should serve bundled fallback image when upstream 403 occurs for browser image request', async () => {
+    const upstreamError = Object.assign(new Error('forbidden'), {
+      response: { status: 403 },
+    });
+    mockAccess.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/runtime/assets/icons/selfhst/docker.png') {
+        return;
+      }
+      throw new Error('not found');
+    });
+    mockAxiosGet.mockRejectedValue(upstreamError);
+    mockAxiosIsAxiosError.mockReturnValue(true);
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'selfhst',
+          slug: 'missing',
+        },
+        headers: {
+          'sec-fetch-dest': 'image',
+          accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+        },
+      },
+      res,
+    );
+
+    expect(res.status).not.toHaveBeenCalledWith(404);
+    expect(res.json).not.toHaveBeenCalled();
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'public, max-age=31536000, immutable');
+    expect(res.type).toHaveBeenCalledWith('image/png');
+    expect(res.sendFile).toHaveBeenCalledWith('/runtime/assets/icons/selfhst/docker.png');
+  });
+
   test('should cleanup temp file and return 502 when atomic rename fails', async () => {
     mockAccess.mockRejectedValue(new Error('not found'));
     mockAxiosGet.mockResolvedValue({

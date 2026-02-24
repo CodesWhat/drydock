@@ -19,6 +19,9 @@ const log = logger.child({ component: 'icons' });
 
 const CACHE_CONTROL_HEADER = 'public, max-age=31536000, immutable';
 const FALLBACK_ICON = 'fab fa-docker';
+const FALLBACK_IMAGE_PROVIDER = 'selfhst';
+const FALLBACK_IMAGE_SLUG = 'docker';
+const MISSING_UPSTREAM_STATUS_CODES = new Set([403, 404]);
 const inFlightIconFetches = new Map<string, Promise<void>>();
 const BUNDLED_ICON_PROVIDERS = new Set(['selfhst']);
 
@@ -108,6 +111,54 @@ function sendCachedIcon(res, iconPath: string, contentType: string) {
   res.set('Cache-Control', CACHE_CONTROL_HEADER);
   res.type(contentType);
   res.sendFile(iconPath);
+}
+
+function shouldServeImageFallback(req): boolean {
+  const fetchDestination = req?.headers?.['sec-fetch-dest'];
+  const fetchDestinationValue = Array.isArray(fetchDestination)
+    ? fetchDestination.join(',')
+    : fetchDestination;
+  if (
+    typeof fetchDestinationValue === 'string' &&
+    fetchDestinationValue.toLowerCase() === 'image'
+  ) {
+    return true;
+  }
+
+  const acceptHeader = req?.headers?.accept;
+  const acceptHeaderValue = Array.isArray(acceptHeader) ? acceptHeader.join(',') : acceptHeader;
+  return typeof acceptHeaderValue === 'string' && acceptHeaderValue.toLowerCase().includes('image/');
+}
+
+async function sendMissingIconResponse({
+  req,
+  res,
+  provider,
+  slug,
+  errorMessage,
+}: {
+  req;
+  res;
+  provider: string;
+  slug: string;
+  errorMessage: string;
+}) {
+  if (shouldServeImageFallback(req)) {
+    const fallbackPath = await findBundledIconPath(
+      FALLBACK_IMAGE_PROVIDER,
+      FALLBACK_IMAGE_SLUG,
+      providers[FALLBACK_IMAGE_PROVIDER].extension,
+    );
+    if (fallbackPath) {
+      sendCachedIcon(res, fallbackPath, providers[FALLBACK_IMAGE_PROVIDER].contentType);
+      return;
+    }
+  }
+
+  res.status(404).json({
+    error: errorMessage,
+    fallbackIcon: FALLBACK_ICON,
+  });
 }
 
 async function iconExists(iconPath: string) {
@@ -209,9 +260,12 @@ async function getIcon(req, res) {
   }
 
   if (settingsStore.isInternetlessModeEnabled()) {
-    res.status(404).json({
-      error: `Icon ${provider}/${slug} is not cached`,
-      fallbackIcon: FALLBACK_ICON,
+    await sendMissingIconResponse({
+      req,
+      res,
+      provider,
+      slug,
+      errorMessage: `Icon ${provider}/${slug} is not cached`,
     });
     return;
   }
@@ -225,10 +279,13 @@ async function getIcon(req, res) {
     sendCachedIcon(res, cachePath, providerConfig.contentType);
   } catch (e) {
     const statusCode = axios.isAxiosError(e) ? e.response?.status : undefined;
-    if (statusCode === 404) {
-      res.status(404).json({
-        error: `Icon ${provider}/${slug} was not found`,
-        fallbackIcon: FALLBACK_ICON,
+    if (statusCode && MISSING_UPSTREAM_STATUS_CODES.has(statusCode)) {
+      await sendMissingIconResponse({
+        req,
+        res,
+        provider,
+        slug,
+        errorMessage: `Icon ${provider}/${slug} was not found`,
       });
       return;
     }
