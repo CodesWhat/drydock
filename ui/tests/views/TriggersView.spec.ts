@@ -115,4 +115,42 @@ describe('TriggersView', () => {
 
     expect(wrapper.text()).toContain('Failed to load triggers');
   });
+
+  it('shows parsed trigger failure reason in the detail panel', async () => {
+    mockRunTrigger.mockRejectedValueOnce(
+      new Error(
+        'Error when running trigger http.local (Unable to authenticate HTTP trigger http.local: bearer token is missing)',
+      ),
+    );
+
+    const wrapper = await mountTriggersView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    const testButton = findButtonByText(wrapper, 'Test Trigger');
+    expect(testButton).toBeDefined();
+
+    await testButton?.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain(
+      'Unable to authenticate HTTP trigger http.local: bearer token is missing',
+    );
+  });
+
+  it('shows fallback trigger failure message when error has no text', async () => {
+    mockRunTrigger.mockRejectedValueOnce({});
+
+    const wrapper = await mountTriggersView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    const testButton = findButtonByText(wrapper, 'Test Trigger');
+    expect(testButton).toBeDefined();
+
+    await testButton?.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Trigger test failed');
+  });
 });

@@ -20,11 +20,33 @@ const loading = ref(true);
 const error = ref('');
 const testingTrigger = ref<string | null>(null);
 const testResult = ref<{ id: string; success: boolean } | null>(null);
+const testError = ref<{ id: string; message: string } | null>(null);
+
+function parseTriggerTestErrorMessage(errorValue: unknown): string {
+  const defaultMessage = 'Trigger test failed';
+  const message =
+    typeof errorValue === 'string'
+      ? errorValue
+      : typeof errorValue === 'object' &&
+          errorValue !== null &&
+          'message' in errorValue &&
+          typeof errorValue.message === 'string'
+        ? errorValue.message
+        : '';
+
+  if (!message.trim()) {
+    return defaultMessage;
+  }
+
+  const nestedMessage = message.match(/^Error when running trigger [^()]+ \((.*)\)$/);
+  return nestedMessage?.[1]?.trim() || message.trim();
+}
 
 async function testTrigger(trigger: any) {
   if (testingTrigger.value) return;
   testingTrigger.value = trigger.id;
   testResult.value = null;
+  testError.value = null;
   try {
     await runTrigger({
       triggerType: trigger.type,
@@ -40,11 +62,13 @@ async function testTrigger(trigger: any) {
     testResult.value = { id: trigger.id, success: true };
   } catch (e: any) {
     testResult.value = { id: trigger.id, success: false };
+    testError.value = { id: trigger.id, message: parseTriggerTestErrorMessage(e) };
   } finally {
     testingTrigger.value = null;
     setTimeout(() => {
       testResult.value = null;
-    }, 3000);
+      testError.value = null;
+    }, 5000);
   }
 }
 
@@ -204,26 +228,31 @@ onMounted(async () => {
             </div>
           </div>
         </div>
-        <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
+        <div class="px-4 py-2.5 mt-auto"
              :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
-          <AppIcon :name="item.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
-                   :style="{ color: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-          <span class="badge text-[9px] font-bold max-md:!hidden"
-                :style="{
-                  backgroundColor: item.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                  color: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)',
-                }">
-            {{ item.status }}
-          </span>
-          <button class="inline-flex items-center gap-1 px-2 py-1 dd-rounded text-[10px] font-bold transition-all text-white"
-                  :style="{ background: testResult?.id === item.id
-                    ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
-                    : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))' }"
-                  :disabled="testingTrigger !== null"
-                  @click.stop="testTrigger(item)">
-            <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11" />
-            {{ testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test' }}
-          </button>
+          <div class="flex items-center justify-between">
+            <AppIcon :name="item.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
+                     :style="{ color: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
+            <span class="badge text-[9px] font-bold max-md:!hidden"
+                  :style="{
+                    backgroundColor: item.status === 'active' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
+                    color: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)',
+                  }">
+              {{ item.status }}
+            </span>
+            <button class="inline-flex items-center gap-1 px-2 py-1 dd-rounded text-[10px] font-bold transition-all text-white"
+                    :style="{ background: testResult?.id === item.id
+                      ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
+                      : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))' }"
+                    :disabled="testingTrigger !== null"
+                    @click.stop="testTrigger(item)">
+              <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11" />
+              {{ testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test' }}
+            </button>
+          </div>
+          <p v-if="testError?.id === item.id" class="mt-2 text-[10px] break-words" style="color: var(--dd-danger);">
+            {{ testError.message }}
+          </p>
         </div>
       </template>
     </DataCardGrid>
@@ -270,6 +299,9 @@ onMounted(async () => {
             <AppIcon :name="testingTrigger === item.id ? 'pending' : testResult?.id === item.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="10" />
             {{ testingTrigger === item.id ? 'Testing...' : testResult?.id === item.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test' }}
           </button>
+          <p v-if="testError?.id === item.id" class="mt-2 text-[10px] break-words" style="color: var(--dd-danger);">
+            {{ testError.message }}
+          </p>
         </div>
       </template>
     </DataListAccordion>
@@ -333,6 +365,11 @@ onMounted(async () => {
                 <AppIcon :name="testingTrigger === selectedTrigger.id ? 'pending' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'check' : 'xmark') : 'play'" :size="11" />
                 {{ testingTrigger === selectedTrigger.id ? 'Testing...' : testResult?.id === selectedTrigger.id ? (testResult.success ? 'Sent!' : 'Failed') : 'Test Trigger' }}
               </button>
+              <p v-if="testError?.id === selectedTrigger.id"
+                 class="mt-2 text-[10px] break-words"
+                 style="color: var(--dd-danger);">
+                {{ testError.message }}
+              </p>
             </div>
           </div>
         </template>
