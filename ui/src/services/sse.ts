@@ -12,6 +12,11 @@ type SelfUpdateSsePayload = {
   startedAt?: string;
 };
 
+type ConnectedSsePayload = {
+  clientId?: string;
+  clientToken?: string;
+};
+
 interface SseEventBus {
   emit: (event: SseBusEvent, payload?: unknown) => void;
 }
@@ -22,10 +27,8 @@ class SseService {
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private selfUpdateMode = false;
   private consecutiveErrors = 0;
-  private readonly clientId =
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : `ui-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  private serverClientId: string | undefined;
+  private serverClientToken: string | undefined;
 
   connect(eventBus: SseEventBus): void {
     this.eventBus = eventBus;
@@ -39,7 +42,10 @@ class SseService {
 
     this.eventSource = new EventSource('/api/events/ui');
 
-    this.eventSource.addEventListener('dd:connected', () => {
+    this.eventSource.addEventListener('dd:connected', (event: MessageEvent) => {
+      const connectedPayload = this.parseConnectedPayload(event?.data);
+      this.serverClientId = connectedPayload.clientId;
+      this.serverClientToken = connectedPayload.clientToken;
       this.consecutiveErrors = 0;
       this.eventBus?.emit('sse:connected');
     });
@@ -99,10 +105,31 @@ class SseService {
     }
   }
 
+  private parseConnectedPayload(rawData: unknown): ConnectedSsePayload {
+    if (!rawData || typeof rawData !== 'string') {
+      return {};
+    }
+    try {
+      const parsed = JSON.parse(rawData);
+      if (!parsed || typeof parsed !== 'object') {
+        return {};
+      }
+      const clientId = typeof parsed.clientId === 'string' ? parsed.clientId : undefined;
+      const clientToken = typeof parsed.clientToken === 'string' ? parsed.clientToken : undefined;
+      return { clientId, clientToken };
+    } catch {
+      return {};
+    }
+  }
+
   private async acknowledgeSelfUpdate(opId: string, lastEventId?: string): Promise<void> {
+    if (!this.serverClientId || !this.serverClientToken) {
+      return;
+    }
     try {
       const payload: Record<string, string> = {
-        clientId: this.clientId,
+        clientId: this.serverClientId,
+        clientToken: this.serverClientToken,
       };
       if (lastEventId) {
         payload.lastEventId = lastEventId;
@@ -132,6 +159,8 @@ class SseService {
     this.eventBus = undefined;
     this.selfUpdateMode = false;
     this.consecutiveErrors = 0;
+    this.serverClientId = undefined;
+    this.serverClientToken = undefined;
     return;
   }
 }

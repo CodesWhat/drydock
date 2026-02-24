@@ -7,6 +7,10 @@ describe('SseService', () => {
   let mockEventBus: any;
   let MockEventSourceCtor: any;
   let mockFetch: any;
+  const connectedPayload = {
+    clientId: 'server-client-1',
+    clientToken: 'server-token-1',
+  };
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -75,6 +79,7 @@ describe('SseService', () => {
 
   it('emits self-update payload on dd:self-update event and acknowledges operation', () => {
     sseService.connect(mockEventBus);
+    eventListeners['dd:connected']({ data: JSON.stringify(connectedPayload) });
     eventListeners['dd:self-update']({
       data: '{"opId":"op-123","requiresAck":true,"ackTimeoutMs":2000}',
       lastEventId: 'evt-1',
@@ -92,6 +97,11 @@ describe('SseService', () => {
       expect.objectContaining({
         method: 'POST',
         credentials: 'include',
+        body: JSON.stringify({
+          clientId: connectedPayload.clientId,
+          clientToken: connectedPayload.clientToken,
+          lastEventId: 'evt-1',
+        }),
       }),
     );
   });
@@ -205,19 +215,10 @@ describe('SseService', () => {
     expect(mockEventBus.emit).toHaveBeenCalledWith('self-update', {});
   });
 
-  it('generates a fallback clientId when crypto.randomUUID is unavailable', async () => {
-    const originalCrypto = globalThis.crypto;
-    vi.stubGlobal('crypto', { getRandomValues: originalCrypto.getRandomValues });
-    vi.resetModules();
-
-    const { default: freshSse } = await import('@/services/sse');
-
-    // Connect and trigger a self-update to exercise the ack path which sends clientId
-    const bus = { emit: vi.fn() };
-    freshSse.connect(bus);
-    freshSse.disconnect();
-
-    vi.stubGlobal('crypto', originalCrypto);
+  it('skips ACK when server connection credentials are missing', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:self-update']({ data: '{"opId":"op-123"}' });
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('resets self-update mode on disconnect', () => {

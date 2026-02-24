@@ -56,12 +56,41 @@ function createJsonResponse() {
   };
 }
 
+function parseSseEventPayload(res, eventName) {
+  const call = res.write.mock.calls.find(
+    ([payload]) => typeof payload === 'string' && payload.startsWith(`event: ${eventName}\n`),
+  );
+  if (!call) {
+    throw new Error(`Missing SSE event ${eventName}`);
+  }
+  const dataSection = call[0].split('\ndata: ')[1];
+  if (!dataSection) {
+    return {};
+  }
+  return JSON.parse(dataSection.trim());
+}
+
+function connectSseClient(handler, ip = '127.0.0.1') {
+  const req = createSSERequest(ip);
+  const res = createSSEResponse();
+  handler(req, res);
+  const connectedPayload = parseSseEventPayload(res, 'dd:connected');
+  return {
+    req,
+    res,
+    clientId: connectedPayload.clientId,
+    clientToken: connectedPayload.clientToken,
+  };
+}
+
 describe('SSE Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     // Clear clients and connection tracking between tests
     sseRouter._clients.clear();
+    sseRouter._activeSseClientsByToken.clear();
+    sseRouter._activeSseClientsByResponse.clear();
     sseRouter._connectionsPerIp.clear();
     sseRouter._clearPendingSelfUpdateAcks();
   });
@@ -113,7 +142,16 @@ describe('SSE Router', () => {
 
       handler(req, res);
 
-      expect(res.write).toHaveBeenCalledWith('event: dd:connected\ndata: {}\n\n');
+      expect(res.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: dd:connected\ndata: {"clientId":"'),
+      );
+      const connectedPayload = parseSseEventPayload(res, 'dd:connected');
+      expect(connectedPayload).toEqual(
+        expect.objectContaining({
+          clientId: expect.any(String),
+          clientToken: expect.any(String),
+        }),
+      );
       expect(res.flushHeaders).toHaveBeenCalledTimes(1);
       expect(res.flush).toHaveBeenCalledTimes(1);
     });
@@ -283,10 +321,9 @@ describe('SSE Router', () => {
 
   describe('broadcastSelfUpdate', () => {
     test('should send dd:self-update to all connected clients', () => {
-      const res1 = createSSEResponse();
-      const res2 = createSSEResponse();
-      sseRouter._clients.add(res1);
-      sseRouter._clients.add(res2);
+      const handler = getHandler();
+      const { res: res1 } = connectSseClient(handler, '10.0.0.1');
+      const { res: res2 } = connectSseClient(handler, '10.0.0.2');
 
       sseRouter._broadcastSelfUpdate({
         opId: 'op-1',
@@ -306,12 +343,11 @@ describe('SSE Router', () => {
     });
 
     test('should be triggered when self-update event fires', async () => {
-      sseRouter.init();
+      const handler = getHandler();
       // The registerSelfUpdateStarting callback should call broadcastSelfUpdate
-      const registeredCallback = mockRegisterSelfUpdateStarting.mock.calls[0][0];
+      const registeredCallback = mockRegisterSelfUpdateStarting.mock.calls.at(-1)[0];
 
-      const res = createSSEResponse();
-      sseRouter._clients.add(res);
+      const { res } = connectSseClient(handler);
 
       await registeredCallback({ opId: 'op-3' });
 
@@ -321,8 +357,8 @@ describe('SSE Router', () => {
     });
 
     test('should wait for ack when requiresAck is true', async () => {
-      const res = createSSEResponse();
-      sseRouter._clients.add(res);
+      const handler = getHandler();
+      const { clientId, clientToken } = connectSseClient(handler);
 
       const broadcastPromise = sseRouter._broadcastSelfUpdate({
         opId: 'op-ack-1',
@@ -335,7 +371,7 @@ describe('SSE Router', () => {
       const ackHandler = getAckHandler();
       const req = {
         params: { operationId: 'op-ack-1' },
-        body: { clientId: 'client-1' },
+        body: { clientId, clientToken },
       };
       const jsonRes = createJsonResponse();
       ackHandler(req, jsonRes);
@@ -353,8 +389,8 @@ describe('SSE Router', () => {
     });
 
     test('should unblock on ack timeout', async () => {
-      const res = createSSEResponse();
-      sseRouter._clients.add(res);
+      const handler = getHandler();
+      connectSseClient(handler);
 
       const broadcastPromise = sseRouter._broadcastSelfUpdate({
         opId: 'op-ack-timeout',
@@ -368,6 +404,39 @@ describe('SSE Router', () => {
 
       expect(sseRouter._pendingSelfUpdateAcks.has('op-ack-timeout')).toBe(false);
     });
+
+    test('should reject fabricated ACK client credentials and keep pending ACK active', async () => {
+      const handler = getHandler();
+      connectSseClient(handler);
+
+      const broadcastPromise = sseRouter._broadcastSelfUpdate({
+        opId: 'op-ack-invalid',
+        requiresAck: true,
+        ackTimeoutMs: 1000,
+      });
+      expect(sseRouter._pendingSelfUpdateAcks.has('op-ack-invalid')).toBe(true);
+
+      const ackHandler = getAckHandler();
+      const req = {
+        params: { operationId: 'op-ack-invalid' },
+        body: { clientId: 'fabricated-client', clientToken: 'fabricated-token' },
+      };
+      const jsonRes = createJsonResponse();
+      ackHandler(req, jsonRes);
+
+      expect(jsonRes.status).toHaveBeenCalledWith(403);
+      expect(jsonRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'rejected',
+          operationId: 'op-ack-invalid',
+        }),
+      );
+      expect(sseRouter._pendingSelfUpdateAcks.has('op-ack-invalid')).toBe(true);
+
+      vi.advanceTimersByTime(1000);
+      await broadcastPromise;
+      expect(sseRouter._pendingSelfUpdateAcks.has('op-ack-invalid')).toBe(false);
+    });
   });
 
   describe('acknowledgeSelfUpdate', () => {
@@ -375,7 +444,7 @@ describe('SSE Router', () => {
       const ackHandler = getAckHandler();
       const req = {
         params: { operationId: 'unknown-op' },
-        body: { clientId: 'client-1' },
+        body: { clientId: 'client-1', clientToken: 'token-1' },
       };
       const jsonRes = createJsonResponse();
 
@@ -402,6 +471,51 @@ describe('SSE Router', () => {
 
       expect(jsonRes.status).toHaveBeenCalledWith(400);
       expect(jsonRes.json).toHaveBeenCalledWith({ error: 'clientId is required' });
+    });
+
+    test('should validate missing clientToken', () => {
+      const ackHandler = getAckHandler();
+      const req = {
+        params: { operationId: 'op-1' },
+        body: { clientId: 'client-1' },
+      };
+      const jsonRes = createJsonResponse();
+
+      ackHandler(req, jsonRes);
+
+      expect(jsonRes.status).toHaveBeenCalledWith(400);
+      expect(jsonRes.json).toHaveBeenCalledWith({ error: 'clientToken is required' });
+    });
+
+    test('should reject ACK from unknown client token', () => {
+      const handler = getHandler();
+      const { clientId } = connectSseClient(handler);
+      sseRouter._pendingSelfUpdateAcks.set('op-unknown-client', {
+        operationId: 'op-unknown-client',
+        requiresAck: true,
+        ackTimeoutMs: 1000,
+        clientsAtEmit: 1,
+        eligibleClientTokens: new Set<string>(['known-token']),
+        ackedClientIds: new Set<string>(),
+        resolved: false,
+      });
+      const ackHandler = getAckHandler();
+      const req = {
+        params: { operationId: 'op-unknown-client' },
+        body: { clientId, clientToken: 'unknown-token' },
+      };
+      const jsonRes = createJsonResponse();
+
+      ackHandler(req, jsonRes);
+
+      expect(jsonRes.status).toHaveBeenCalledWith(403);
+      expect(jsonRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'rejected',
+          reason: 'invalid-or-expired-client-token',
+        }),
+      );
+      expect(sseRouter._pendingSelfUpdateAcks.has('op-unknown-client')).toBe(true);
     });
   });
 

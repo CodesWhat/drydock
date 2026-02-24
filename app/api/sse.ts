@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import express from 'express';
 import type { SelfUpdateStartingEventPayload } from '../event/index.js';
@@ -6,8 +7,28 @@ import log from '../log/index.js';
 
 const router = express.Router();
 
+interface ActiveSseClient {
+  clientId: string;
+  clientToken: string;
+  response: Response;
+}
+
+interface PendingSelfUpdateAck {
+  operationId: string;
+  requiresAck: boolean;
+  ackTimeoutMs: number;
+  clientsAtEmit: number;
+  eligibleClientTokens: Set<string>;
+  ackedClientIds: Set<string>;
+  resolved: boolean;
+  resolveWaiter?: () => void;
+  timeoutHandle?: ReturnType<typeof setTimeout>;
+}
+
 const clients = new Set<Response>();
-const pendingSelfUpdateAcks = new Map<string, any>();
+const activeSseClientsByToken = new Map<string, ActiveSseClient>();
+const activeSseClientsByResponse = new Map<Response, ActiveSseClient>();
+const pendingSelfUpdateAcks = new Map<string, PendingSelfUpdateAck>();
 
 // Per-IP connection tracking to prevent connection exhaustion
 const MAX_CONNECTIONS_PER_IP = 10;
@@ -16,6 +37,10 @@ const DEFAULT_SELF_UPDATE_ACK_TIMEOUT_MS = 3000;
 
 function getClientIp(req: Request): string {
   return req.ip ?? 'unknown';
+}
+
+function issueServerClientId(prefix: string): string {
+  return `${prefix}-${randomUUID()}`;
 }
 
 function eventsHandler(req: Request, res: Response): void {
@@ -39,8 +64,21 @@ function eventsHandler(req: Request, res: Response): void {
   });
   res.flushHeaders?.();
 
+  const activeClient: ActiveSseClient = {
+    clientId: issueServerClientId('sse-client'),
+    clientToken: issueServerClientId('sse-token'),
+    response: res,
+  };
+  activeSseClientsByResponse.set(res, activeClient);
+  activeSseClientsByToken.set(activeClient.clientToken, activeClient);
+
   // Send initial connection event
-  res.write('event: dd:connected\ndata: {}\n\n');
+  res.write(
+    `event: dd:connected\ndata: ${JSON.stringify({
+      clientId: activeClient.clientId,
+      clientToken: activeClient.clientToken,
+    })}\n\n`,
+  );
   (res as any).flush?.();
 
   clients.add(res);
@@ -54,6 +92,11 @@ function eventsHandler(req: Request, res: Response): void {
   req.on('close', () => {
     globalThis.clearInterval(heartbeatInterval);
     clients.delete(res);
+    const disconnectedClient = activeSseClientsByResponse.get(res);
+    if (disconnectedClient) {
+      activeSseClientsByToken.delete(disconnectedClient.clientToken);
+      activeSseClientsByResponse.delete(res);
+    }
     const count = connectionsPerIp.get(ip) ?? 1;
     if (count <= 1) {
       connectionsPerIp.delete(ip);
@@ -104,22 +147,24 @@ async function broadcastSelfUpdate(payload: SelfUpdateStartingEventPayload): Pro
     startedAt,
   };
   const serializedPayload = JSON.stringify(eventPayload);
+  const eligibleClientTokens = new Set(activeSseClientsByToken.keys());
 
   for (const client of clients) {
     client.write(`event: dd:self-update\ndata: ${serializedPayload}\n\n`);
     (client as any).flush?.();
   }
 
-  if (!requiresAck || clients.size === 0) {
+  if (!requiresAck || eligibleClientTokens.size === 0) {
     return;
   }
 
   await new Promise<void>((resolve) => {
-    const pending = {
+    const pending: PendingSelfUpdateAck = {
       operationId,
       requiresAck,
       ackTimeoutMs,
-      clientsAtEmit: clients.size,
+      clientsAtEmit: eligibleClientTokens.size,
+      eligibleClientTokens,
       ackedClientIds: new Set<string>(),
       resolved: false,
       resolveWaiter: resolve,
@@ -134,12 +179,17 @@ async function broadcastSelfUpdate(payload: SelfUpdateStartingEventPayload): Pro
 function acknowledgeSelfUpdate(req: Request, res: Response): void {
   const operationId = String(req.params.operationId || '').trim();
   const clientId = String(req.body?.clientId || '').trim();
+  const clientToken = String(req.body?.clientToken || '').trim();
   if (!operationId) {
     res.status(400).json({ error: 'operationId is required' });
     return;
   }
   if (!clientId) {
     res.status(400).json({ error: 'clientId is required' });
+    return;
+  }
+  if (!clientToken) {
+    res.status(400).json({ error: 'clientToken is required' });
     return;
   }
 
@@ -153,7 +203,33 @@ function acknowledgeSelfUpdate(req: Request, res: Response): void {
     return;
   }
 
-  pending.ackedClientIds.add(clientId);
+  const activeClient = activeSseClientsByToken.get(clientToken);
+  if (!activeClient) {
+    res.status(403).json({
+      status: 'rejected',
+      operationId,
+      reason: 'invalid-or-expired-client-token',
+    });
+    return;
+  }
+  if (activeClient.clientId !== clientId) {
+    res.status(403).json({
+      status: 'rejected',
+      operationId,
+      reason: 'client-token-mismatch',
+    });
+    return;
+  }
+  if (!pending.eligibleClientTokens.has(clientToken)) {
+    res.status(403).json({
+      status: 'rejected',
+      operationId,
+      reason: 'client-not-bound-to-operation',
+    });
+    return;
+  }
+
+  pending.ackedClientIds.add(activeClient.clientId);
   finalizePendingAck(operationId);
 
   res.status(202).json({
@@ -200,6 +276,8 @@ export function init(): express.Router {
 // For testing
 export {
   clients as _clients,
+  activeSseClientsByToken as _activeSseClientsByToken,
+  activeSseClientsByResponse as _activeSseClientsByResponse,
   connectionsPerIp as _connectionsPerIp,
   MAX_CONNECTIONS_PER_IP as _MAX_CONNECTIONS_PER_IP,
   pendingSelfUpdateAcks as _pendingSelfUpdateAcks,
