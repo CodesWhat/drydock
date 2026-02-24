@@ -117,17 +117,6 @@ describe('Store Module', () => {
     expect(updateOperation.createCollections).toHaveBeenCalled();
   });
 
-  test('should persist database on save', async () => {
-    fs.existsSync.mockReturnValue(true);
-    await store.init();
-
-    const Loki = await import('lokijs');
-    const dbInstance = Loki.default.mock.results.at(-1).value;
-
-    await store.save();
-    expect(dbInstance.saveDatabase).toHaveBeenCalled();
-  });
-
   test('should create directory if it does not exist', async () => {
     fs.existsSync.mockReturnValue(false);
 
@@ -177,20 +166,56 @@ describe('Store Module', () => {
     expect(updateOperation.createCollections).toHaveBeenCalled();
   });
 
-  test('should skip save in memory mode', async () => {
+  test('should save database when persistence is enabled', async () => {
     vi.resetModules();
     registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+      },
+    });
+
+    const storePersistent = await import('./index.js');
+    await storePersistent.init();
+    await storePersistent.save();
+
+    const Loki = (await import('lokijs')).default;
+    const dbInstance = Loki.mock.results[0].value;
+    expect(dbInstance.saveDatabase).toHaveBeenCalledTimes(1);
+  });
+
+  test('should no-op save when store runs in memory mode', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      lokiSave: vi.fn((callback) => callback(null)),
       fs: { renameSync: vi.fn() },
     });
 
     const storeMemory = await import('./index.js');
     await storeMemory.init({ memory: true });
-
-    const Loki = await import('lokijs');
-    const dbInstance = Loki.default.mock.results.at(-1).value;
-
     await storeMemory.save();
+
+    const Loki = (await import('lokijs')).default;
+    const dbInstance = Loki.mock.results[0].value;
     expect(dbInstance.saveDatabase).not.toHaveBeenCalled();
+  });
+
+  test('should throw when database save fails', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      lokiSave: vi.fn((callback) => callback(new Error('Database save failed'))),
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+      },
+    });
+
+    const storeWithSaveError = await import('./index.js');
+    await storeWithSaveError.init();
+
+    await expect(storeWithSaveError.save()).rejects.toThrow('Database save failed');
   });
 
   test('should throw when store configuration is invalid', async () => {
@@ -258,17 +283,5 @@ describe('Store Module', () => {
     await storeMigrate.init();
 
     expect(mockFs.renameSync).toHaveBeenCalledWith('/test/store/wud.json', '/test/store/test.json');
-  });
-
-  test('should propagate save errors', async () => {
-    vi.resetModules();
-    registerCommonMocks({
-      lokiSave: (callback) => callback(new Error('Save failed')),
-      fs: { renameSync: vi.fn() },
-    });
-
-    const storeWithSaveError = await import('./index.js');
-    await storeWithSaveError.init();
-    await expect(storeWithSaveError.save()).rejects.toThrow('Save failed');
   });
 });

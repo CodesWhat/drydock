@@ -17,7 +17,7 @@ vi.mock('../configuration', () => ({
 }));
 
 vi.mock('../store/index.js', () => ({
-  save: vi.fn().mockResolvedValue(undefined),
+  save: vi.fn(),
 }));
 
 let registries = {};
@@ -483,7 +483,7 @@ test('shutdown should deregister all and exit 0', async () => {
   registry.getState().watcher = {};
   registry.getState().authentication = {};
   await registry.testable_shutdown();
-  expect(store.save).toHaveBeenCalled();
+  expect(store.save).toHaveBeenCalledTimes(1);
   expect(exitSpy).toHaveBeenCalledWith(0);
   exitSpy.mockRestore();
 });
@@ -496,21 +496,20 @@ test('shutdown should exit 1 when deregisterAll throws', async () => {
   };
   registry.getState().trigger = { trigger1: component };
   await registry.testable_shutdown();
+  expect(store.save).not.toHaveBeenCalled();
   expect(exitSpy).toHaveBeenCalledWith(1);
   exitSpy.mockRestore();
 });
 
-test('shutdown should exit 1 when store save fails', async () => {
+test('shutdown should exit 1 when store save throws', async () => {
   const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
-  const saveSpy = vi.mocked(store.save).mockRejectedValueOnce(new Error('save failed'));
-  const errorSpy = vi.spyOn(registry.testable_log, 'error');
+  store.save.mockRejectedValueOnce(new Error('Save failed'));
   registry.getState().trigger = {};
   registry.getState().registry = {};
   registry.getState().watcher = {};
   registry.getState().authentication = {};
   await registry.testable_shutdown();
-  expect(saveSpy).toHaveBeenCalled();
-  expect(errorSpy).toHaveBeenCalledWith('save failed');
+  expect(store.save).toHaveBeenCalledTimes(1);
   expect(exitSpy).toHaveBeenCalledWith(1);
   exitSpy.mockRestore();
 });

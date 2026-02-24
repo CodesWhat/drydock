@@ -34,7 +34,7 @@ const configuration = configurationToValidate.value;
 
 // Loki DB
 let db;
-let isMemoryStore = false;
+let isMemoryMode = false;
 
 function createCollections() {
   app.createCollections(db);
@@ -69,8 +69,7 @@ async function loadDb(err, resolve, reject) {
  * @returns {Promise<unknown>}
  */
 export async function init(options = {}) {
-  const isMemory = options.memory || false;
-  isMemoryStore = isMemory;
+  isMemoryMode = options.memory || false;
   const storeDirectory = resolveConfiguredPath(configuration.path, {
     label: 'DD_STORE_PATH',
   });
@@ -82,10 +81,10 @@ export async function init(options = {}) {
   }
 
   db = new Loki(storePath, {
-    autosave: !isMemory,
+    autosave: !isMemoryMode,
   });
 
-  if (isMemory) {
+  if (isMemoryMode) {
     log.info('Init store in memory mode');
     createCollections();
     return;
@@ -109,11 +108,12 @@ export async function init(options = {}) {
 }
 
 /**
- * Persist current DB state to disk.
- * In memory mode this is a no-op.
+ * Explicitly flush DB to disk.
+ * No-op in memory mode.
+ * @returns {Promise<void>}
  */
 export async function save() {
-  if (isMemoryStore || !db) {
+  if (!db || isMemoryMode) {
     return;
   }
   return new Promise((resolve, reject) => {
@@ -121,7 +121,7 @@ export async function save() {
       if (err) {
         reject(err);
       } else {
-        resolve(undefined);
+        resolve();
       }
     });
   });
