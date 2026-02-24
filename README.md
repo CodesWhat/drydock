@@ -454,6 +454,7 @@ As of 2026 hardening updates, auth-related remote flows now fail closed by defau
 - **Remote Docker watcher auth** fails when credentials are incomplete, auth type is unsupported, or HTTPS/TLS is missing.
   - Break-glass override is explicit: `DD_WATCHER_{watcher_name}_AUTH_INSECURE=true`
 - **Registry bearer token exchange** fails when token endpoints error or return no token (no silent anonymous fallback).
+- **Hub/DHI public legacy token-auth migration path** keeps startup non-breaking for partial/mixed `DD_REGISTRY_{HUB|DHI}_PUBLIC_*` credentials by falling back to anonymous `hub.public` / `dhi.public` with startup warnings. This compatibility fallback is deprecated and will be removed in a future major release.
 - **HTTP trigger auth** fails when `AUTH_TYPE` is unsupported or required `BASIC`/`BEARER` values are missing.
 
 See:

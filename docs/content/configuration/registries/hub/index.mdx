@@ -30,6 +30,8 @@ Don't forget to configure authentication if you're using [Docker Hub Private Rep
 
 <Callout type="warn">Registry auth now fails closed for invalid combinations. `LOGIN` must be paired with `PASSWORD` (or `TOKEN` alias), and `AUTH` cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`.</Callout>
 
+<Callout type="info">Migration behavior: `hub.public` keeps backward-compatible startup for legacy partial/mixed token-auth inputs (`LOGIN` only, `TOKEN` only, `PASSWORD` only, or `LOGIN` + `PASSWORD` + `TOKEN`) by falling back to anonymous access with a warning. This compatibility fallback is deprecated and will be removed in a future major release.</Callout>
+
 ## Examples
 
 ### Configure Authentication using Login/Token

@@ -2435,6 +2435,70 @@ describe('Docker Watcher', () => {
       expect(result).toEqual({ tag: '1.2.4-ls133' });
     });
 
+    test('should keep current tag and warn when strict mode filters only cross-family higher tags', async () => {
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: '1.2.3-ls132', semver: true },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.3-ls132']),
+      };
+      registry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+
+      const rank = {
+        '1.2.3-ls132': 1230,
+        '1.2.4': 1241,
+      };
+      mockTag.isGreater.mockImplementation(
+        (version1, version2) => (rank[version1] || 0) > (rank[version2] || 0),
+      );
+
+      const mockLogChild = { error: vi.fn(), warn: vi.fn() };
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result).toEqual({ tag: '1.2.3-ls132' });
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Strict tag-family policy filtered out 1 higher semver tag(s) outside the inferred family of "1.2.3-ls132"',
+        ),
+      );
+    });
+
+    test('should allow cross-family updates in loose mode when no higher same-family tag exists', async () => {
+      const container = {
+        tagFamily: 'loose',
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: '1.2.3-ls132', semver: true },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.3-ls132']),
+      };
+      registry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+
+      const rank = {
+        '1.2.3-ls132': 1230,
+        '1.2.4': 1241,
+      };
+      mockTag.isGreater.mockImplementation(
+        (version1, version2) => (rank[version1] || 0) > (rank[version2] || 0),
+      );
+
+      const mockLogChild = { error: vi.fn(), warn: vi.fn() };
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result).toEqual({ tag: '1.2.4' });
+    });
+
     test('should allow cross-family semver updates when tagFamily is loose', async () => {
       const container = {
         tagFamily: 'loose',
@@ -3281,6 +3345,49 @@ describe('Docker Watcher', () => {
       expect(result).toBeDefined();
       // Verify parse was called
       expect(mockParse).toHaveBeenCalledWith('prom/prometheus:v3.8.0');
+    });
+
+    test('should fail implicit docker hub image normalization when hub registry provider is missing', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'nginx:1.25.5',
+          Names: ['/hub-proof'],
+        },
+        parsedImage: { domain: undefined, path: 'library/nginx', tag: '1.25.5' },
+        registryState: {},
+        validateImpl: (containerCandidate) => {
+          if (!containerCandidate.image.registry.url) {
+            throw new Error('"image.registry.url" is required');
+          }
+          return containerCandidate;
+        },
+      });
+
+      await expect(docker.addImageDetailsToContainer(container)).rejects.toThrow(
+        '"image.registry.url" is required',
+      );
+    });
+
+    test('should keep implicit docker hub image tracking when hub registry provider is available', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'nginx:1.25.5',
+          Names: ['/hub-proof'],
+        },
+        parsedImage: { domain: undefined, path: 'library/nginx', tag: '1.25.5' },
+        registryState: createHarborHubRegistryState(),
+        validateImpl: (containerCandidate) => {
+          if (!containerCandidate.image.registry.url) {
+            throw new Error('"image.registry.url" is required');
+          }
+          return containerCandidate;
+        },
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result.image.registry.name).toBe('hub');
+      expect(result.image.registry.url).toBe('https://registry-1.docker.io/v2');
     });
 
     test('should handle container with SHA256 image', async () => {
