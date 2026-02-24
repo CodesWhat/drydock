@@ -492,6 +492,7 @@ interface SemverCandidateFilterStats {
   afterFamily: number;
   afterGreater: number;
   output: number;
+  crossFamilyGreaterDropped: number;
   prefixSkipped: boolean;
   greaterSkipped: boolean;
 }
@@ -583,6 +584,7 @@ function filterSemverCandidatesOnePass(
     afterFamily: 0,
     afterGreater: 0,
     output: 0,
+    crossFamilyGreaterDropped: 0,
     prefixSkipped: !applyPrefixFilter,
     greaterSkipped: allowIncludeFilterRecovery,
   };
@@ -614,15 +616,19 @@ function filterSemverCandidatesOnePass(
       }
     }
 
+    const greaterThanCurrent =
+      allowIncludeFilterRecovery || isGreaterSemver(transformedTag, currentTransformedTag);
+
     if (!familyMatch) {
+      if (!allowIncludeFilterRecovery && greaterThanCurrent) {
+        stats.crossFamilyGreaterDropped += 1;
+      }
       continue;
     }
     stats.afterFamily += 1;
 
-    if (!allowIncludeFilterRecovery) {
-      if (!isGreaterSemver(transformedTag, currentTransformedTag)) {
-        continue;
-      }
+    if (!greaterThanCurrent) {
+      continue;
     }
     stats.afterGreater += 1;
 
@@ -755,10 +761,16 @@ function getTagCandidates(container: Container, tags: string[], logContainer: an
     logContainer.warn(getPrefixFilterWarning(currentPrefix));
   }
 
-  if (tagFamilyPolicy === 'strict' && stats.afterSemver > 0 && stats.afterFamily === 0) {
-    logContainer.warn(
-      `No tags found in the same inferred family as "${container.image.tag.value}". Set dd.tag.family=loose to allow cross-family semver updates.`,
-    );
+  if (tagFamilyPolicy === 'strict') {
+    if (stats.afterSemver > 0 && stats.afterFamily === 0) {
+      logContainer.warn(
+        `No tags found in the same inferred family as "${container.image.tag.value}". Set dd.tag.family=loose to allow cross-family semver updates.`,
+      );
+    } else if (stats.crossFamilyGreaterDropped > 0 && stats.output === 0) {
+      logContainer.warn(
+        `Strict tag-family policy filtered out ${stats.crossFamilyGreaterDropped} higher semver tag(s) outside the inferred family of "${container.image.tag.value}". Set dd.tag.family=loose to restore cross-family update behavior.`,
+      );
+    }
   }
 
   logSemverCandidateFilterStats(logContainer, tagFamilyPolicy, stats);
