@@ -16,6 +16,12 @@ The `ghcr` registry lets you configure [GHCR](https://docs.github.com/en/package
 | `DD_REGISTRY_GHCR_{REGISTRY_NAME}_USERNAME` | ⚪ | Github username | | |
 | `DD_REGISTRY_GHCR_{REGISTRY_NAME}_TOKEN` | ⚪ | Github token | Github password or Github Personal Token | |
 
+## Auth behavior
+
+- Public images work without credentials.
+- If credentials are configured but GHCR rejects them (`401`/`403`), drydock retries the token exchange anonymously for public image checks and logs a warning.
+- Private images still require valid credentials and continue to fail closed when anonymous access is not allowed.
+
 ## Examples
 
 ### Configure to access private images
