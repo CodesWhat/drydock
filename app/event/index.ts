@@ -471,6 +471,7 @@ export function clearAllListenersForTests() {
   containerUpdateFailedHandlers.length = 0;
   securityAlertHandlers.length = 0;
   agentDisconnectedHandlers.length = 0;
+  selfUpdateStartingHandlers.length = 0;
   securityAlertAuditSeenAt.clear();
   agentDisconnectedAuditSeenAt.clear();
   handlerRegistrationSequence = 0;

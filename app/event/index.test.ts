@@ -191,6 +191,20 @@ test('deregistration of agent disconnected handler should work', async () => {
   expect(handler).not.toHaveBeenCalled();
 });
 
+test('clearAllListenersForTests should clear self-update-starting handlers', async () => {
+  const handler = vi.fn();
+  event.registerSelfUpdateStarting(handler, { order: 10 });
+
+  event.clearAllListenersForTests();
+
+  await event.emitSelfUpdateStarting({
+    opId: 'op-self-update',
+    requiresAck: true,
+    ackTimeoutMs: 1500,
+  });
+  expect(handler).not.toHaveBeenCalled();
+});
+
 test('handler with non-finite order should default to 100', async () => {
   const calls: string[] = [];
   event.registerContainerReport(
