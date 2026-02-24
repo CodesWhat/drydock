@@ -763,15 +763,137 @@ test('cloneContainer should drop stale Entrypoint and Cmd inherited from source 
         Entrypoint: null,
         Cmd: ['nginx'],
       },
+      runtimeFieldOrigins: {
+        Entrypoint: 'inherited',
+        Cmd: 'inherited',
+      },
       logContainer,
     },
   );
 
   expect(clone.Entrypoint).toBeUndefined();
   expect(clone.Cmd).toBeUndefined();
+  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
+  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('inherited');
   expect(logContainer.info).toHaveBeenCalledWith(
     expect.stringContaining('Dropping stale Entrypoint'),
   );
+  expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Cmd'));
+});
+
+test('cloneContainer should preserve Cmd/Entrypoint pins when runtime origin is unknown', () => {
+  const logContainer = createMockLog('debug');
+  const clone = docker.cloneContainer(
+    {
+      Name: '/hub_nginx_pinned',
+      Id: 'abc123',
+      HostConfig: {},
+      Config: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      NetworkSettings: { Networks: {} },
+    },
+    'nginx:1.10-alpine',
+    {
+      sourceImageConfig: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      targetImageConfig: {
+        Entrypoint: null,
+        Cmd: ['nginx'],
+      },
+      runtimeFieldOrigins: {
+        Entrypoint: 'unknown',
+        Cmd: 'unknown',
+      },
+      logContainer,
+    },
+  );
+
+  expect(clone.Entrypoint).toEqual(['/docker-entrypoint.sh']);
+  expect(clone.Cmd).toEqual(['nginx', '-g', 'daemon off;']);
+  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
+  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+  expect(logContainer.debug).toHaveBeenCalledWith(
+    expect.stringContaining('runtime origin is unknown'),
+  );
+});
+
+test('cloneContainer should preserve explicit Cmd pin while dropping inherited Entrypoint', () => {
+  const logContainer = createMockLog('info');
+  const clone = docker.cloneContainer(
+    {
+      Name: '/hub_nginx_cmd_pin',
+      Id: 'abc123',
+      HostConfig: {},
+      Config: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      NetworkSettings: { Networks: {} },
+    },
+    'nginx:1.10-alpine',
+    {
+      sourceImageConfig: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      targetImageConfig: {
+        Entrypoint: null,
+        Cmd: ['nginx'],
+      },
+      runtimeFieldOrigins: {
+        Entrypoint: 'inherited',
+        Cmd: 'unknown',
+      },
+      logContainer,
+    },
+  );
+
+  expect(clone.Entrypoint).toBeUndefined();
+  expect(clone.Cmd).toEqual(['nginx', '-g', 'daemon off;']);
+  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
+  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+  expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Entrypoint'));
+});
+
+test('cloneContainer should preserve explicit Entrypoint pin while dropping inherited Cmd', () => {
+  const logContainer = createMockLog('info');
+  const clone = docker.cloneContainer(
+    {
+      Name: '/hub_nginx_entrypoint_pin',
+      Id: 'abc123',
+      HostConfig: {},
+      Config: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      NetworkSettings: { Networks: {} },
+    },
+    'nginx:1.10-alpine',
+    {
+      sourceImageConfig: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      targetImageConfig: {
+        Entrypoint: null,
+        Cmd: ['nginx'],
+      },
+      runtimeFieldOrigins: {
+        Entrypoint: 'unknown',
+        Cmd: 'inherited',
+      },
+      logContainer,
+    },
+  );
+
+  expect(clone.Entrypoint).toEqual(['/docker-entrypoint.sh']);
+  expect(clone.Cmd).toBeUndefined();
+  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
+  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('inherited');
   expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Cmd'));
 });
 
@@ -2255,6 +2377,159 @@ describe('executeContainerUpdate', () => {
       'old-container-id',
       logContainer,
     );
+  });
+
+  test('should preserve explicit runtime pins matching source defaults during update', async () => {
+    const currentContainer = {
+      rename: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      wait: vi.fn().mockResolvedValue(undefined),
+      start: vi.fn().mockResolvedValue(undefined),
+    };
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: {
+        Image: 'nginx:1.20-alpine',
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+        Labels: {},
+      },
+      State: { Running: false },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+    const dockerApi = {
+      getImage: vi.fn((imageRef) => ({
+        inspect: vi.fn().mockResolvedValue(
+          imageRef === 'nginx:1.20-alpine'
+            ? {
+                Config: {
+                  Entrypoint: ['/docker-entrypoint.sh'],
+                  Cmd: ['nginx', '-g', 'daemon off;'],
+                },
+              }
+            : {
+                Config: {
+                  Entrypoint: null,
+                  Cmd: ['nginx'],
+                },
+              },
+        ),
+      })),
+    };
+    const newContainer = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'new-container-id',
+        State: { Health: { Status: 'healthy' } },
+      }),
+    };
+    const createContainerSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue(newContainer);
+    vi.spyOn(docker, 'pullImage').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'removeContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'stopContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'startContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'waitContainerRemoved').mockResolvedValue(undefined);
+
+    const result = await docker.executeContainerUpdate(
+      {
+        dockerApi,
+        auth: undefined,
+        newImage: 'nginx:1.10-alpine',
+        currentContainer,
+        currentContainerSpec,
+      },
+      createTriggerContainer(),
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    expect(result).toBe(true);
+    const createPayload = createContainerSpy.mock.calls[0][1];
+    expect(createPayload.Entrypoint).toEqual(['/docker-entrypoint.sh']);
+    expect(createPayload.Cmd).toEqual(['nginx', '-g', 'daemon off;']);
+    expect(createPayload.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
+    expect(createPayload.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+  });
+
+  test('should drop stale inherited runtime defaults when origin labels mark inherited', async () => {
+    const currentContainer = {
+      rename: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      wait: vi.fn().mockResolvedValue(undefined),
+      start: vi.fn().mockResolvedValue(undefined),
+    };
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: {
+        Image: 'nginx:1.20-alpine',
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+        Labels: {
+          'dd.runtime.entrypoint.origin': 'inherited',
+          'dd.runtime.cmd.origin': 'inherited',
+        },
+      },
+      State: { Running: false },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+    const dockerApi = {
+      getImage: vi.fn((imageRef) => ({
+        inspect: vi.fn().mockResolvedValue(
+          imageRef === 'nginx:1.20-alpine'
+            ? {
+                Config: {
+                  Entrypoint: ['/docker-entrypoint.sh'],
+                  Cmd: ['nginx', '-g', 'daemon off;'],
+                },
+              }
+            : {
+                Config: {
+                  Entrypoint: null,
+                  Cmd: ['nginx'],
+                },
+              },
+        ),
+      })),
+    };
+    const newContainer = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'new-container-id',
+        State: { Health: { Status: 'healthy' } },
+      }),
+    };
+    const createContainerSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue(newContainer);
+    vi.spyOn(docker, 'pullImage').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'removeContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'stopContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'startContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'waitContainerRemoved').mockResolvedValue(undefined);
+
+    const result = await docker.executeContainerUpdate(
+      {
+        dockerApi,
+        auth: undefined,
+        newImage: 'nginx:1.10-alpine',
+        currentContainer,
+        currentContainerSpec,
+      },
+      createTriggerContainer(),
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    expect(result).toBe(true);
+    const createPayload = createContainerSpy.mock.calls[0][1];
+    expect(createPayload.Entrypoint).toBeUndefined();
+    expect(createPayload.Cmd).toBeUndefined();
+    expect(createPayload.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
+    expect(createPayload.Labels['dd.runtime.cmd.origin']).toBe('inherited');
   });
 
   test('should rollback rename when creating new container fails', async () => {

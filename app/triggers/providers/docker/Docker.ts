@@ -35,6 +35,20 @@ const SELF_UPDATE_ACK_TIMEOUT_MS = 3_000;
 const NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
 const NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS = 1_000;
 const warnedLegacyTriggerLabelFallbacks = new Set<string>();
+const RUNTIME_PROCESS_FIELDS = ['Entrypoint', 'Cmd'];
+const RUNTIME_ORIGIN_EXPLICIT = 'explicit';
+const RUNTIME_ORIGIN_INHERITED = 'inherited';
+const RUNTIME_ORIGIN_UNKNOWN = 'unknown';
+const RUNTIME_FIELD_ORIGIN_LABELS = {
+  Entrypoint: {
+    dd: 'dd.runtime.entrypoint.origin',
+    wud: 'wud.runtime.entrypoint.origin',
+  },
+  Cmd: {
+    dd: 'dd.runtime.cmd.origin',
+    wud: 'wud.runtime.cmd.origin',
+  },
+};
 
 function getPreferredLabelValue(labels, ddKey, wudKey, logger) {
   const ddValue = labels?.[ddKey];
@@ -165,6 +179,75 @@ class Docker extends Trigger {
     return leftNormalized.every((value, index) => value === rightNormalized[index]);
   }
 
+  normalizeRuntimeFieldOrigin(origin) {
+    const normalizedOrigin = String(origin || '').toLowerCase();
+    if (
+      normalizedOrigin === RUNTIME_ORIGIN_EXPLICIT ||
+      normalizedOrigin === RUNTIME_ORIGIN_INHERITED
+    ) {
+      return normalizedOrigin;
+    }
+    return RUNTIME_ORIGIN_UNKNOWN;
+  }
+
+  getRuntimeFieldOrigin(containerConfig, runtimeField) {
+    const runtimeOriginLabels = RUNTIME_FIELD_ORIGIN_LABELS[runtimeField];
+    const originFromLabel = getPreferredLabelValue(
+      containerConfig?.Labels,
+      runtimeOriginLabels.dd,
+      runtimeOriginLabels.wud,
+      this.log,
+    );
+    const normalizedOrigin = this.normalizeRuntimeFieldOrigin(originFromLabel);
+    if (normalizedOrigin !== RUNTIME_ORIGIN_UNKNOWN) {
+      return normalizedOrigin;
+    }
+
+    if (containerConfig?.[runtimeField] === undefined) {
+      return RUNTIME_ORIGIN_INHERITED;
+    }
+    return RUNTIME_ORIGIN_UNKNOWN;
+  }
+
+  getRuntimeFieldOrigins(containerConfig) {
+    return RUNTIME_PROCESS_FIELDS.reduce((runtimeFieldOrigins, runtimeField) => {
+      runtimeFieldOrigins[runtimeField] = this.getRuntimeFieldOrigin(containerConfig, runtimeField);
+      return runtimeFieldOrigins;
+    }, {});
+  }
+
+  annotateClonedRuntimeFieldOrigins(containerConfig, runtimeFieldOrigins, targetImageConfig) {
+    const labels = { ...(containerConfig?.Labels || {}) };
+
+    for (const runtimeField of RUNTIME_PROCESS_FIELDS) {
+      const runtimeValue = containerConfig?.[runtimeField];
+      let nextRuntimeOrigin = RUNTIME_ORIGIN_INHERITED;
+
+      if (runtimeValue !== undefined) {
+        const currentRuntimeOrigin = this.normalizeRuntimeFieldOrigin(
+          runtimeFieldOrigins?.[runtimeField],
+        );
+        if (currentRuntimeOrigin === RUNTIME_ORIGIN_INHERITED) {
+          nextRuntimeOrigin = this.areContainerProcessArgsEqual(
+            runtimeValue,
+            targetImageConfig?.[runtimeField],
+          )
+            ? RUNTIME_ORIGIN_INHERITED
+            : RUNTIME_ORIGIN_EXPLICIT;
+        } else {
+          nextRuntimeOrigin = RUNTIME_ORIGIN_EXPLICIT;
+        }
+      }
+
+      labels[RUNTIME_FIELD_ORIGIN_LABELS[runtimeField].dd] = nextRuntimeOrigin;
+    }
+
+    return {
+      ...(containerConfig || {}),
+      Labels: labels,
+    };
+  }
+
   buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer) {
     if (!runtimeOptionsOrLogContainer) {
       return {};
@@ -173,6 +256,7 @@ class Docker extends Trigger {
     const hasRuntimeConfigOptions =
       Object.hasOwn(runtimeOptionsOrLogContainer, 'sourceImageConfig') ||
       Object.hasOwn(runtimeOptionsOrLogContainer, 'targetImageConfig') ||
+      Object.hasOwn(runtimeOptionsOrLogContainer, 'runtimeFieldOrigins') ||
       Object.hasOwn(runtimeOptionsOrLogContainer, 'logContainer');
 
     if (hasRuntimeConfigOptions) {
@@ -187,20 +271,31 @@ class Docker extends Trigger {
     containerConfig,
     sourceImageConfig,
     targetImageConfig,
+    runtimeFieldOrigins,
     logContainer,
   ) {
     const sanitizedConfig = { ...(containerConfig || {}) };
 
-    for (const runtimeField of ['Entrypoint', 'Cmd']) {
+    for (const runtimeField of RUNTIME_PROCESS_FIELDS) {
       const clonedValue = containerConfig?.[runtimeField];
       if (clonedValue === undefined) {
         continue;
       }
 
+      const runtimeOrigin = this.normalizeRuntimeFieldOrigin(runtimeFieldOrigins?.[runtimeField]);
       const inheritedFromSource = this.areContainerProcessArgsEqual(
         clonedValue,
         sourceImageConfig?.[runtimeField],
       );
+      if (runtimeOrigin !== RUNTIME_ORIGIN_INHERITED) {
+        if (runtimeOrigin === RUNTIME_ORIGIN_UNKNOWN && inheritedFromSource) {
+          logContainer?.debug?.(
+            `Preserving ${runtimeField} because runtime origin is unknown; avoiding stale-default cleanup to prevent dropping explicit pins`,
+          );
+        }
+        continue;
+      }
+
       if (!inheritedFromSource) {
         continue;
       }
@@ -252,6 +347,7 @@ class Docker extends Trigger {
     return {
       sourceImageConfig,
       targetImageConfig,
+      runtimeFieldOrigins: this.getRuntimeFieldOrigins(currentContainerSpec?.Config),
       logContainer,
     };
   }
@@ -860,7 +956,7 @@ class Docker extends Trigger {
    * @returns {*}
    */
   cloneContainer(currentContainer, newImage, runtimeOptionsOrLogContainer = {}) {
-    const { sourceImageConfig, targetImageConfig, logContainer } =
+    const { sourceImageConfig, targetImageConfig, runtimeFieldOrigins, logContainer } =
       this.buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer);
     const containerName = currentContainer.Name.replace('/', '');
     const currentContainerNetworks = currentContainer.NetworkSettings?.Networks || {};
@@ -875,11 +971,23 @@ class Docker extends Trigger {
       currentContainer.Config,
       sourceImageConfig,
       targetImageConfig,
+      runtimeFieldOrigins,
       logContainer,
     );
+    const shouldAnnotateRuntimeFieldOrigins =
+      sourceImageConfig !== undefined ||
+      targetImageConfig !== undefined ||
+      runtimeFieldOrigins !== undefined;
+    const clonedContainerConfig = shouldAnnotateRuntimeFieldOrigins
+      ? this.annotateClonedRuntimeFieldOrigins(
+          sanitizedContainerConfig,
+          runtimeFieldOrigins,
+          targetImageConfig,
+        )
+      : sanitizedContainerConfig;
 
     const containerClone = {
-      ...sanitizedContainerConfig,
+      ...clonedContainerConfig,
       name: containerName,
       Image: newImage,
       HostConfig: currentContainer.HostConfig,
