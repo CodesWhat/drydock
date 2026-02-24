@@ -33,12 +33,15 @@ function eventsHandler(req: Request, res: Response): void {
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
+    'Cache-Control': 'no-cache, no-transform',
     Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
   });
+  res.flushHeaders?.();
 
   // Send initial connection event
   res.write('event: dd:connected\ndata: {}\n\n');
+  (res as any).flush?.();
 
   clients.add(res);
   logger.debug(`SSE client connected (${clients.size} total)`);
@@ -104,6 +107,7 @@ async function broadcastSelfUpdate(payload: SelfUpdateStartingEventPayload): Pro
 
   for (const client of clients) {
     client.write(`event: dd:self-update\ndata: ${serializedPayload}\n\n`);
+    (client as any).flush?.();
   }
 
   if (!requiresAck || clients.size === 0) {
@@ -170,6 +174,7 @@ export function broadcastScanStarted(containerId: string): void {
   const data = JSON.stringify({ containerId });
   for (const client of clients) {
     client.write(`event: dd:scan-started\ndata: ${data}\n\n`);
+    (client as any).flush?.();
   }
 }
 
@@ -177,6 +182,7 @@ export function broadcastScanCompleted(containerId: string, status: string): voi
   const data = JSON.stringify({ containerId, status });
   for (const client of clients) {
     client.write(`event: dd:scan-completed\ndata: ${data}\n\n`);
+    (client as any).flush?.();
   }
 }
 

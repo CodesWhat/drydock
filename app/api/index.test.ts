@@ -192,9 +192,19 @@ describe('API Index', () => {
     await indexRouter.init();
 
     const compressionOptions = compressionModule.default.mock.calls[0][0];
-    expect(compressionOptions.filter({ path: '/api/events/stream' }, {})).toBe(false);
-    expect(compressionOptions.filter({ path: '/api/containers' }, {})).toBe(true);
-    expect(compressionModule.default.filter).toHaveBeenCalledWith({ path: '/api/containers' }, {});
+    expect(compressionOptions.filter({ path: '/api/events/stream', headers: {} }, {})).toBe(false);
+    expect(compressionOptions.filter({ path: '/events/ui', headers: {} }, {})).toBe(false);
+    expect(
+      compressionOptions.filter(
+        { path: '/api/containers', headers: { accept: 'text/event-stream' } },
+        {},
+      ),
+    ).toBe(false);
+    expect(compressionOptions.filter({ path: '/api/containers', headers: {} }, {})).toBe(true);
+    expect(compressionModule.default.filter).toHaveBeenCalledWith(
+      { path: '/api/containers', headers: {} },
+      {},
+    );
   });
 
   test('should disable compression when configured', async () => {

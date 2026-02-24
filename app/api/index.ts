@@ -45,7 +45,14 @@ export async function init() {
           threshold: configuration.compression?.threshold ?? 1024,
           // Avoid compressing SSE streams to prevent buffering and delayed events.
           filter: (req, res) => {
-            if (req.path.startsWith('/api/events/')) {
+            const acceptsEventStream =
+              typeof req.headers?.accept === 'string' &&
+              req.headers.accept.includes('text/event-stream');
+            if (
+              acceptsEventStream ||
+              req.path.startsWith('/api/events/') ||
+              req.path.startsWith('/events/')
+            ) {
               return false;
             }
             return compression.filter(req, res);

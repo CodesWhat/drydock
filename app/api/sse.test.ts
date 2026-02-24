@@ -33,6 +33,8 @@ function createSSEResponse() {
   return {
     writeHead: vi.fn(),
     write: vi.fn(),
+    flush: vi.fn(),
+    flushHeaders: vi.fn(),
   };
 }
 
@@ -98,8 +100,9 @@ describe('SSE Router', () => {
 
       expect(res.writeHead).toHaveBeenCalledWith(200, {
         'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
       });
     });
 
@@ -111,6 +114,8 @@ describe('SSE Router', () => {
       handler(req, res);
 
       expect(res.write).toHaveBeenCalledWith('event: dd:connected\ndata: {}\n\n');
+      expect(res.flushHeaders).toHaveBeenCalledTimes(1);
+      expect(res.flush).toHaveBeenCalledTimes(1);
     });
 
     test('should add client to clients set', () => {
