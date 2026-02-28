@@ -100,9 +100,10 @@ export class AgentClient {
       query.watcher = watcher;
     }
     const containersInStore = storeContainer.getContainers(query);
+    const newContainerIds = new Set(newContainers.map((container) => container.id));
 
     const containersToRemove = containersInStore.filter(
-      (containerInStore) => !newContainers.some((c) => c.id === containerInStore.id),
+      (containerInStore) => !newContainerIds.has(containerInStore.id),
     );
 
     containersToRemove.forEach((c) => {

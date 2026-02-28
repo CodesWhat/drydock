@@ -1,4 +1,5 @@
 export const SHARED_TRIGGER_CONFIGURATION_KEYS = ['threshold', 'once', 'mode', 'order'];
+const SHARED_TRIGGER_CONFIGURATION_KEY_SET = new Set(SHARED_TRIGGER_CONFIGURATION_KEYS);
 
 function isRecord(value: unknown): value is Record<string, any> {
   return (
@@ -19,7 +20,7 @@ function applyProviderSharedTriggerConfiguration(configurations: Record<string, 
     const sharedConfiguration: Record<string, any> = {};
     Object.keys(providerConfigurations).forEach((key) => {
       const value = providerConfigurations[key];
-      if (SHARED_TRIGGER_CONFIGURATION_KEYS.includes(key.toLowerCase()) && !isRecord(value)) {
+      if (SHARED_TRIGGER_CONFIGURATION_KEY_SET.has(key.toLowerCase()) && !isRecord(value)) {
         sharedConfiguration[key.toLowerCase()] = value;
       }
     });
@@ -32,7 +33,7 @@ function applyProviderSharedTriggerConfiguration(configurations: Record<string, 
           ...sharedConfiguration,
           ...triggerConfiguration,
         };
-      } else if (!SHARED_TRIGGER_CONFIGURATION_KEYS.includes(triggerName.toLowerCase())) {
+      } else if (!SHARED_TRIGGER_CONFIGURATION_KEY_SET.has(triggerName.toLowerCase())) {
         normalizedConfigurations[provider][triggerName] = triggerConfiguration;
       }
     });
@@ -157,7 +158,7 @@ function isValidTriggerGroup(entry: Record<string, any>): boolean {
   return (
     keys.length > 0 &&
     keys.every(
-      (k) => SHARED_TRIGGER_CONFIGURATION_KEYS.includes(k.toLowerCase()) && !isRecord(entry[k]),
+      (k) => SHARED_TRIGGER_CONFIGURATION_KEY_SET.has(k.toLowerCase()) && !isRecord(entry[k]),
     )
   );
 }

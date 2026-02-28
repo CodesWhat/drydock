@@ -91,13 +91,14 @@ function getUniqueStrategies() {
   const strategies = Object.values(registry.getState().authentication).map((authentication) =>
     authentication.getStrategyDescription(),
   );
-  const uniqueStrategies = [];
-  strategies.forEach((strategy) => {
-    if (
-      !uniqueStrategies.some((item) => item.type === strategy.type && item.name === strategy.name)
-    ) {
-      uniqueStrategies.push(strategy);
+  const seenStrategies = new Set<string>();
+  const uniqueStrategies = strategies.filter((strategy) => {
+    const key = JSON.stringify([strategy.type, strategy.name]);
+    if (seenStrategies.has(key)) {
+      return false;
     }
+    seenStrategies.add(key);
+    return true;
   });
   return uniqueStrategies.sort((s1, s2) => s1.name.localeCompare(s2.name));
 }

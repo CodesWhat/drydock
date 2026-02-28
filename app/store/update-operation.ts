@@ -41,6 +41,7 @@ export function updateOperation(id, patch = {}) {
     return undefined;
   }
 
+  // LokiJS nested lookups are linear without a collection index; small collections keep this acceptable until SQLite migration.
   const existingDoc = updateOperationCollection.find().find((item) => item.data.id === id);
   if (!existingDoc) {
     return undefined;

@@ -910,9 +910,10 @@ function getOldContainers(newContainers: Container[], containersFromTheStore: Co
   if (!containersFromTheStore || !newContainers) {
     return [];
   }
-  return containersFromTheStore.filter((containerFromStore) => {
-    return !newContainers.some((newContainer) => newContainer.id === containerFromStore.id);
-  });
+  const newContainerIds = new Set(newContainers.map((container) => container.id));
+  return containersFromTheStore.filter(
+    (containerFromStore) => !newContainerIds.has(containerFromStore.id),
+  );
 }
 
 /**
@@ -1251,9 +1252,10 @@ function getImgsetSpecificity(imagePattern: string, parsedImage: any) {
   if (imageCandidates.length === 0) {
     return -1;
   }
+  const imageCandidateSet = new Set(imageCandidates);
 
   const hasMatch = patternCandidates.some((patternCandidate) =>
-    imageCandidates.includes(patternCandidate),
+    imageCandidateSet.has(patternCandidate),
   );
   if (!hasMatch) {
     return -1;

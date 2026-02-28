@@ -358,6 +358,48 @@ describe('Auth Router', () => {
       ]);
     });
 
+    test('getStrategies should deduplicate with near-linear type lookups', () => {
+      let typeReads = 0;
+      const authentication = Object.fromEntries(
+        Array.from({ length: 40 }, (_, index) => {
+          const id = `oauth.${index}`;
+          return [
+            id,
+            {
+              getId: vi.fn(() => id),
+              getStrategy: vi.fn(() => ({})),
+              getStrategyDescription: vi.fn(() => {
+                const strategy = {};
+                Object.defineProperty(strategy, 'type', {
+                  enumerable: true,
+                  get: () => {
+                    typeReads += 1;
+                    return 'oauth';
+                  },
+                });
+                Object.defineProperty(strategy, 'name', {
+                  enumerable: true,
+                  value: `provider-${String(index).padStart(2, '0')}`,
+                });
+                return strategy;
+              }),
+            },
+          ];
+        }),
+      );
+      registry.getState.mockReturnValue({ authentication });
+
+      const app = createApp();
+      auth.init(app);
+      const strategiesCall = mockRouter.get.mock.calls.find((c) => c[0] === '/strategies');
+      const handler = strategiesCall[1];
+      const res = createResponse();
+      handler({}, res);
+
+      expect(res.json).toHaveBeenCalled();
+      expect(typeReads).toBeLessThanOrEqual(80);
+    });
+
     test('getUser should return req.user when present', () => {
       const handler = getRouteHandler('get', '/user');
       const res = createResponse();

@@ -4913,6 +4913,21 @@ describe('Docker Watcher', () => {
         testable_getImgsetSpecificity('   ', { path: 'library/nginx', domain: 'docker.io' }),
       ).toBe(-1);
     });
+
+    test('helper should avoid array includes for candidate membership checks', () => {
+      mockParse.mockReturnValue({ path: 'library/nginx', domain: 'docker.io' });
+      const includesSpy = vi.spyOn(Array.prototype, 'includes');
+      const beforeCallCount = includesSpy.mock.calls.length;
+      const specificity = testable_getImgsetSpecificity('library/nginx', {
+        path: 'library/nginx',
+        domain: 'docker.io',
+      });
+      const callDelta = includesSpy.mock.calls.length - beforeCallCount;
+      includesSpy.mockRestore();
+
+      expect(specificity).toBeGreaterThan(0);
+      expect(callDelta).toBe(0);
+    });
   });
 
   describe('Additional Coverage - Docker helper functions', () => {
@@ -5066,6 +5081,39 @@ describe('Docker Watcher', () => {
       );
 
       expect(result).toEqual([{ id: 'stale-1' }]);
+    });
+
+    test('getOldContainers should perform near-linear id lookups', () => {
+      let newIdReads = 0;
+      let storeIdReads = 0;
+      const newContainers = Array.from({ length: 30 }, (_, index) => {
+        const container = {};
+        Object.defineProperty(container, 'id', {
+          enumerable: true,
+          get: () => {
+            newIdReads += 1;
+            return `id-${index}`;
+          },
+        });
+        return container;
+      });
+      const containersFromStore = Array.from({ length: 30 }, (_, index) => {
+        const container = {};
+        Object.defineProperty(container, 'id', {
+          enumerable: true,
+          get: () => {
+            storeIdReads += 1;
+            return `id-${index + 15}`;
+          },
+        });
+        return container;
+      });
+
+      const result = testable_getOldContainers(newContainers, containersFromStore);
+
+      expect(result).toHaveLength(15);
+      expect(newIdReads).toBeLessThanOrEqual(60);
+      expect(storeIdReads).toBeLessThanOrEqual(60);
     });
 
     test('pruneOldContainers should update status when stale container still exists in docker', async () => {

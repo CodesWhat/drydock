@@ -66,6 +66,7 @@ export function getBackup(id: string): ImageBackup | undefined {
   if (!backupCollection) {
     return undefined;
   }
+  // LokiJS nested lookups are linear without a collection index; small collections keep this acceptable until SQLite migration.
   const doc = backupCollection.find().find((item) => item.data.id === id);
   return doc ? (doc.data as ImageBackup) : undefined;
 }
@@ -78,6 +79,7 @@ export function deleteBackup(id: string): boolean {
   if (!backupCollection) {
     return false;
   }
+  // LokiJS nested lookups are linear without a collection index; small collections keep this acceptable until SQLite migration.
   const doc = backupCollection.find().find((item) => item.data.id === id);
   if (doc) {
     backupCollection.remove(doc);

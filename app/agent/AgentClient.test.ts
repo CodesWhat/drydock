@@ -349,6 +349,40 @@ describe('AgentClient', () => {
       await client.watch('docker', 'local');
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
     });
+
+    test('should use near-linear id lookups when pruning old containers', () => {
+      let newIdReads = 0;
+      let storeIdReads = 0;
+      const newContainers = Array.from({ length: 30 }, (_, index) => {
+        const container = {};
+        Object.defineProperty(container, 'id', {
+          enumerable: true,
+          get: () => {
+            newIdReads += 1;
+            return `id-${index}`;
+          },
+        });
+        return container;
+      });
+      const containersInStore = Array.from({ length: 30 }, (_, index) => {
+        const container = { name: `container-${index}` };
+        Object.defineProperty(container, 'id', {
+          enumerable: true,
+          get: () => {
+            storeIdReads += 1;
+            return `id-${index + 15}`;
+          },
+        });
+        return container;
+      });
+      storeContainer.getContainers.mockReturnValue(containersInStore);
+
+      client.pruneOldContainers(newContainers);
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledTimes(15);
+      expect(newIdReads).toBeLessThanOrEqual(80);
+      expect(storeIdReads).toBeLessThanOrEqual(80);
+    });
   });
 
   describe('scheduleReconnect', () => {
