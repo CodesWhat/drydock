@@ -15,31 +15,50 @@ function isUnsafePropertyName(name) {
   return FORBIDDEN_PROPERTY_NAMES.has(name);
 }
 
-function resolveJsonPath(obj, path) {
-  const p = path.startsWith('$') ? path.slice(1) : path;
-  if (p === '') return obj;
+function stripJsonPathRoot(path) {
+  return path.startsWith('$') ? path.slice(1) : path;
+}
 
+function tokenizeJsonPath(path) {
   const tokens = [];
   const re = /\.([^.[]+)|\[(\d+)]/g;
   let m;
-  while ((m = re.exec(p)) !== null) {
-    if (m[1] !== undefined) tokens.push(m[1]);
-    else if (m[2] !== undefined) tokens.push(Number(m[2]));
+  while ((m = re.exec(path)) !== null) {
+    if (m[1] !== undefined) {
+      tokens.push(m[1]);
+      continue;
+    }
+    if (m[2] !== undefined) {
+      tokens.push(Number(m[2]));
+    }
   }
+  return tokens;
+}
+
+function resolvePathToken(current, token) {
+  if (current == null) return { found: false, value: undefined };
+  if (typeof token === 'number') {
+    if (!Array.isArray(current)) return { found: false, value: undefined };
+    return { found: true, value: current[token] };
+  }
+  if (isUnsafePropertyName(token)) return { found: false, value: undefined };
+  if (typeof current !== 'object') return { found: false, value: undefined };
+  if (!hasOwn(current, token)) return { found: false, value: undefined };
+  return { found: true, value: current[token] };
+}
+
+function resolveJsonPath(obj, path) {
+  const p = stripJsonPathRoot(path);
+  if (p === '') return obj;
+  const tokens = tokenizeJsonPath(p);
 
   let current = obj;
   for (const token of tokens) {
-    if (current == null) return undefined;
-    if (typeof token === 'number') {
-      if (!Array.isArray(current)) return undefined;
-      current = current[token];
-      continue;
-    }
-    if (isUnsafePropertyName(token)) return undefined;
-    if (typeof current !== 'object') return undefined;
-    if (!hasOwn(current, token)) return undefined;
-    current = current[token];
+    const resolved = resolvePathToken(current, token);
+    if (!resolved.found) return undefined;
+    current = resolved.value;
   }
+
   return current;
 }
 
@@ -82,56 +101,67 @@ function parsePattern(pattern) {
   return tokens;
 }
 
-function matchesPatternTokens(tokens, value) {
-  const memo = new Map();
+function patternMemoKey(tokenIndex, valueIndex) {
+  return `${tokenIndex}:${valueIndex}`;
+}
 
-  function matchFrom(tokenIndex, valueIndex) {
-    const memoKey = `${tokenIndex}:${valueIndex}`;
-    if (memo.has(memoKey)) {
-      return memo.get(memoKey);
+function setMatchMemo(memo, key, matched) {
+  memo.set(key, matched);
+  return matched;
+}
+
+function matchAnyManyToken(tokens, value, tokenIndex, valueIndex, memo) {
+  for (let i = valueIndex; i <= value.length; i += 1) {
+    if (matchPatternFrom(tokens, value, tokenIndex + 1, i, memo)) {
+      return true;
     }
+  }
+  return false;
+}
 
-    if (tokenIndex === tokens.length) {
-      const matched = valueIndex === value.length;
-      memo.set(memoKey, matched);
-      return matched;
-    }
+function matchSingleToken(tokens, value, tokenIndex, valueIndex, memo) {
+  const token = tokens[tokenIndex];
+  if (token.type === 'any-one') {
+    return matchPatternFrom(tokens, value, tokenIndex + 1, valueIndex + 1, memo);
+  }
+  if (token.type === 'literal' && value[valueIndex] === token.value) {
+    return matchPatternFrom(tokens, value, tokenIndex + 1, valueIndex + 1, memo);
+  }
+  return false;
+}
 
-    const token = tokens[tokenIndex];
-
-    if (token.type === 'any-many') {
-      for (let i = valueIndex; i <= value.length; i += 1) {
-        if (matchFrom(tokenIndex + 1, i)) {
-          memo.set(memoKey, true);
-          return true;
-        }
-      }
-      memo.set(memoKey, false);
-      return false;
-    }
-
-    if (valueIndex >= value.length) {
-      memo.set(memoKey, false);
-      return false;
-    }
-
-    if (token.type === 'any-one') {
-      const matched = matchFrom(tokenIndex + 1, valueIndex + 1);
-      memo.set(memoKey, matched);
-      return matched;
-    }
-
-    if (value[valueIndex] === token.value) {
-      const matched = matchFrom(tokenIndex + 1, valueIndex + 1);
-      memo.set(memoKey, matched);
-      return matched;
-    }
-
-    memo.set(memoKey, false);
-    return false;
+function matchPatternFrom(tokens, value, tokenIndex, valueIndex, memo) {
+  const memoKey = patternMemoKey(tokenIndex, valueIndex);
+  if (memo.has(memoKey)) {
+    return memo.get(memoKey);
   }
 
-  return matchFrom(0, 0);
+  if (tokenIndex === tokens.length) {
+    return setMatchMemo(memo, memoKey, valueIndex === value.length);
+  }
+
+  const token = tokens[tokenIndex];
+  if (token.type === 'any-many') {
+    return setMatchMemo(
+      memo,
+      memoKey,
+      matchAnyManyToken(tokens, value, tokenIndex, valueIndex, memo),
+    );
+  }
+
+  if (valueIndex >= value.length) {
+    return setMatchMemo(memo, memoKey, false);
+  }
+
+  return setMatchMemo(
+    memo,
+    memoKey,
+    matchSingleToken(tokens, value, tokenIndex, valueIndex, memo),
+  );
+}
+
+function matchesPatternTokens(tokens, value) {
+  return matchPatternFrom(tokens, value, 0, 0, new Map());
 }
 
 function matchesDynamicPattern(actual, pattern) {
@@ -146,10 +176,10 @@ function matchesDynamicPattern(actual, pattern) {
   return matchesPatternTokens(tokens, actual);
 }
 
-async function doGet(path) {
+async function doRequest(path, method) {
   const url = `${baseUrl}${path}`;
   const res = await fetch(url, {
-    method: 'GET',
+    method,
     headers: { Authorization: authHeader },
   });
   this.responseStatus = res.status;
@@ -160,37 +190,29 @@ async function doGet(path) {
   } catch {
     this.responseJson = undefined;
   }
-  this.lastRequest = { method: 'GET', path };
+  this.lastRequest = { method, path };
+}
+
+async function doGet(path) {
+  await doRequest.call(this, path, 'GET');
 }
 
 async function doPost(path) {
-  const url = `${baseUrl}${path}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { Authorization: authHeader },
-  });
-  this.responseStatus = res.status;
-  this.responseHeaders = res.headers;
-  this.responseBody = await res.text();
-  try {
-    this.responseJson = JSON.parse(this.responseBody);
-  } catch {
-    this.responseJson = undefined;
-  }
-  this.lastRequest = { method: 'POST', path };
+  await doRequest.call(this, path, 'POST');
 }
 
 function assertResponsePathValue(context, path, expected) {
   const resolvedPath = resolveTemplate(path, context.scenarioScope);
   const actual = resolveJsonPath(context.responseJson, resolvedPath);
   const actualStr = String(actual);
-  if (isDynamicPattern(expected)) {
+  const resolvedExpected = resolveTemplate(expected, context.scenarioScope);
+  if (isDynamicPattern(resolvedExpected)) {
     assert.ok(
-      matchesDynamicPattern(actualStr, expected),
-      `Expected "${actualStr}" to match pattern ${expected}`,
+      matchesDynamicPattern(actualStr, resolvedExpected),
+      `Expected "${actualStr}" to match pattern ${resolvedExpected}`,
     );
   } else {
-    assert.strictEqual(actualStr, expected);
+    assert.strictEqual(actualStr, resolvedExpected);
   }
 }
 
