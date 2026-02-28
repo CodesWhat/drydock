@@ -907,7 +907,7 @@ describe('ContainersView', () => {
 
   describe('grouping', () => {
     beforeEach(() => {
-      localStorage.removeItem('dd-group-by-stack');
+      localStorage.removeItem('dd-group-by-stack-v1');
     });
 
     it('groupByStack defaults to false', async () => {
@@ -972,11 +972,11 @@ describe('ContainersView', () => {
 
       vm.groupByStack = true;
       await flushPromises();
-      expect(localStorage.getItem('dd-group-by-stack')).toBe('true');
+      expect(localStorage.getItem('dd-group-by-stack-v1')).toBe('true');
 
       vm.groupByStack = false;
       await flushPromises();
-      expect(localStorage.getItem('dd-group-by-stack')).toBe('false');
+      expect(localStorage.getItem('dd-group-by-stack-v1')).toBe('false');
     });
 
     it('toggles collapse state for groups', async () => {

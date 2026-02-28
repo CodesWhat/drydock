@@ -53,7 +53,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
          role="dialog"
          :aria-modal="isMobile ? 'true' : undefined"
          aria-label="Detail panel"
-         class="detail-panel-inline flex flex-col min-w-0 dd-rounded overflow-clip transition-all duration-300 ease-in-out"
+         class="detail-panel-inline flex flex-col min-w-0 dd-rounded overflow-clip transition-[color,background-color,border-color,opacity,transform,box-shadow] duration-300 ease-in-out"
          :class="isMobile ? 'fixed top-0 right-0 h-full z-50' : 'sticky top-0'"
          :style="{
            flex: isMobile ? undefined : panelFlex,

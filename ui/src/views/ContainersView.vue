@@ -939,11 +939,11 @@ watch(
 // View mode
 const containerViewMode = ref<'table' | 'cards' | 'list'>('table');
 const tableActionStyle = ref<'icons' | 'buttons'>(
-  (localStorage.getItem('dd-table-actions') as 'icons' | 'buttons') || 'icons',
+  (localStorage.getItem('dd-table-actions-v1') as 'icons' | 'buttons') || 'icons',
 );
 watch(
   () => tableActionStyle.value,
-  (v) => localStorage.setItem('dd-table-actions', v),
+  (v) => localStorage.setItem('dd-table-actions-v1', v),
 );
 
 // Filters
@@ -1056,7 +1056,7 @@ const displayContainers = computed(() => {
 });
 
 // Grouping / stacks
-const groupByStack = ref(localStorage.getItem('dd-group-by-stack') === 'true');
+const groupByStack = ref(localStorage.getItem('dd-group-by-stack-v1') === 'true');
 const groupMembershipMap = ref<Record<string, string>>({});
 const collapsedGroups = ref(new Set<string>());
 const groupUpdateInProgress = ref(new Set<string>());
@@ -1064,7 +1064,7 @@ const groupUpdateInProgress = ref(new Set<string>());
 watch(
   () => groupByStack.value,
   (v) => {
-    localStorage.setItem('dd-group-by-stack', String(v));
+    localStorage.setItem('dd-group-by-stack-v1', String(v));
     if (v && Object.keys(groupMembershipMap.value).length === 0) {
       loadGroups();
     }
@@ -1243,13 +1243,14 @@ async function handleSseScanCompleted() {
     await loadDetailSecurityData();
   }
 }
+const sseScanCompletedListener = handleSseScanCompleted as EventListener;
 onMounted(() => {
   document.addEventListener('click', handleGlobalClick);
-  globalThis.addEventListener('dd:sse-scan-completed', handleSseScanCompleted as EventListener);
+  globalThis.addEventListener('dd:sse-scan-completed', sseScanCompletedListener);
 });
 onUnmounted(() => {
   document.removeEventListener('click', handleGlobalClick);
-  globalThis.removeEventListener('dd:sse-scan-completed', handleSseScanCompleted as EventListener);
+  globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
 });
 
 // Container action handlers
@@ -1693,25 +1694,25 @@ function confirmDelete(name: string) {
                     <AppIcon name="lock" :size="11" />
                   </button>
                   <button v-else-if="c.newTag"
-                          class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
+                          class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
                           v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
                     <AppIcon name="cloud-download" :size="14" />
                   </button>
                   <button v-else-if="c.status === 'running'"
-                          class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95"
+                          class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95"
                           v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
                     <AppIcon name="stop" :size="12" />
                   </button>
                   <button v-else
-                          class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
+                          class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
                           v-tooltip.top="tt('Start')" @click.stop="startContainer(c.name)">
                     <AppIcon name="play" :size="12" />
                   </button>
-                  <button class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-secondary hover:dd-bg-hover hover:scale-110 active:scale-95"
+                  <button class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-secondary hover:dd-bg-hover hover:scale-110 active:scale-95"
                           v-tooltip.top="tt('Scan')" @click.stop="scanContainer(c.name)">
                     <AppIcon name="security" :size="12" />
                   </button>
-                  <button class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95"
+                  <button class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95"
                           :class="openActionsMenu === c.name ? 'dd-bg-elevated dd-text' : ''"
                           v-tooltip.top="tt('More')" @click.stop="toggleActionsMenu(c.name, $event)">
                     <AppIcon name="more" :size="11" />
@@ -1883,30 +1884,30 @@ function confirmDelete(name: string) {
           <template v-if="tableActionStyle === 'icons'">
             <div class="flex items-center justify-end gap-0.5">
               <button v-if="c.newTag && c.bouncer === 'blocked'"
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-all cursor-not-allowed dd-text-muted opacity-50"
+                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] cursor-not-allowed dd-text-muted opacity-50"
                       v-tooltip.top="tt('Blocked by Bouncer')" @click.stop>
                 <AppIcon name="lock" :size="13" />
               </button>
               <button v-else-if="c.newTag"
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
+                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
                       v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
                 <AppIcon name="cloud-download" :size="16" />
               </button>
               <button v-else-if="c.status === 'running'"
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95"
+                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95"
                       v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
                 <AppIcon name="stop" :size="14" />
               </button>
               <button v-else
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
+                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
                       v-tooltip.top="tt('Start')" @click.stop="startContainer(c.name)">
                 <AppIcon name="play" :size="14" />
               </button>
-              <button class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-secondary hover:dd-bg-hover hover:scale-110 active:scale-95"
+              <button class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-secondary hover:dd-bg-hover hover:scale-110 active:scale-95"
                       v-tooltip.top="tt('Scan')" @click.stop="scanContainer(c.name)">
                 <AppIcon name="security" :size="14" />
               </button>
-              <button class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95"
+              <button class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95"
                       :class="openActionsMenu === c.name ? 'dd-bg-elevated dd-text' : ''"
                       v-tooltip.top="tt('More')" @click.stop="toggleActionsMenu(c.name, $event)">
                 <AppIcon name="more" :size="13" />

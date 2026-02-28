@@ -1,8 +1,8 @@
 import { computed, ref, watch } from 'vue';
 import type { ThemeFamily, ThemeVariant } from './palettes';
 
-const FAMILY_KEY = 'drydock-theme-family';
-const VARIANT_KEY = 'drydock-theme-variant';
+const FAMILY_KEY = 'drydock-theme-family-v1';
+const VARIANT_KEY = 'drydock-theme-variant-v1';
 
 function loadFamily(): ThemeFamily {
   try {

@@ -236,20 +236,20 @@ function handleAgentStatusChanged() {
   void fetchAgents();
 }
 
+const agentStatusChangedListener = handleAgentStatusChanged as EventListener;
+
 onMounted(() => {
-  const listener = handleAgentStatusChanged as EventListener;
   if (activeAgentStatusListener) {
     globalThis.removeEventListener('dd:sse-agent-status-changed', activeAgentStatusListener);
   }
-  activeAgentStatusListener = listener;
-  globalThis.addEventListener('dd:sse-agent-status-changed', listener);
+  activeAgentStatusListener = agentStatusChangedListener;
+  globalThis.addEventListener('dd:sse-agent-status-changed', agentStatusChangedListener);
   void fetchAgents();
 });
 
 onUnmounted(() => {
-  const listener = handleAgentStatusChanged as EventListener;
-  globalThis.removeEventListener('dd:sse-agent-status-changed', listener);
-  if (activeAgentStatusListener === listener) {
+  globalThis.removeEventListener('dd:sse-agent-status-changed', agentStatusChangedListener);
+  if (activeAgentStatusListener === agentStatusChangedListener) {
     activeAgentStatusListener = null;
   }
 });

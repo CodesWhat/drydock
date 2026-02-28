@@ -3,7 +3,7 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import PlaygroundView from './PlaygroundView.vue';
 
 function resetPlaygroundState() {
-  localStorage.removeItem('drydock-radius');
+  localStorage.removeItem('drydock-radius-v1');
   document.documentElement.style.removeProperty('--dd-radius');
   document.documentElement.style.removeProperty('--dd-radius-sm');
   document.documentElement.style.removeProperty('--dd-radius-lg');

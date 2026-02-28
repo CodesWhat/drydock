@@ -58,7 +58,7 @@ const radiusPresets = [
 
 function loadRadius() {
   try {
-    return localStorage.getItem('drydock-radius') || 'sharp';
+    return localStorage.getItem('drydock-radius-v1') || 'sharp';
   } catch {
     return 'sharp';
   }
@@ -72,7 +72,7 @@ function setRadius(id: string) {
   el.style.setProperty('--dd-radius-sm', `${p.sm}px`);
   el.style.setProperty('--dd-radius-lg', `${p.lg}px`);
   try {
-    localStorage.setItem('drydock-radius', id);
+    localStorage.setItem('drydock-radius-v1', id);
   } catch {
     /* ignored */
   }
@@ -227,7 +227,7 @@ const colorTokens = [
         <div class="p-4">
           <div class="grid grid-cols-2 gap-3">
             <button v-for="fam in themeFamilies" :key="fam.id"
-                    class="dd-rounded p-3 text-left transition-all border"
+                    class="dd-rounded p-3 text-left transition-[color,background-color,border-color,opacity,transform,box-shadow] border"
                     :class="themeFamily === fam.id ? 'ring-2 ring-drydock-secondary' : ''"
                     :style="{
                       backgroundColor: themeFamily === fam.id ? 'var(--dd-primary-muted)' : 'var(--dd-bg-inset)',
@@ -385,7 +385,7 @@ const colorTokens = [
                       border: activeRadius === p.id ? '1.5px solid var(--dd-primary)' : '1px solid var(--dd-border-strong)',
                     }"
                     @click="setRadius(p.id)">
-              <div class="w-10 h-7 border-2 transition-all"
+              <div class="w-10 h-7 border-2 transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                    :class="activeRadius === p.id ? 'border-drydock-secondary/60' : 'dd-border-strong'"
                    :style="{ borderRadius: p.md + 'px', backgroundColor: activeRadius === p.id ? 'var(--dd-primary-muted)' : 'transparent' }" />
               <div class="text-[11px] font-semibold"
@@ -826,11 +826,11 @@ const colorTokens = [
         </div>
         <div class="p-5 space-y-3">
           <div class="flex dd-rounded-lg overflow-hidden h-8">
-            <div class="flex items-center justify-center text-[10px] font-bold text-white transition-all"
+            <div class="flex items-center justify-center text-[10px] font-bold text-white transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                  style="width: 80%; background: var(--dd-success);">38</div>
-            <div class="flex items-center justify-center text-[10px] font-bold text-white transition-all"
+            <div class="flex items-center justify-center text-[10px] font-bold text-white transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                  style="width: 13%; background: var(--dd-warning);">6</div>
-            <div class="flex items-center justify-center text-[10px] font-bold text-white transition-all"
+            <div class="flex items-center justify-center text-[10px] font-bold text-white transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                  style="width: 7%; background: var(--dd-danger);">3</div>
           </div>
           <div class="flex items-center gap-5 text-[10px]">

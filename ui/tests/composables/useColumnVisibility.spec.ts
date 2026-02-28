@@ -95,12 +95,12 @@ describe('useColumnVisibility', () => {
     const { toggleColumn } = useColumnVisibility(ref(false));
     toggleColumn('bouncer');
     await nextTick();
-    const stored = JSON.parse(localStorage.getItem('dd-table-cols') || '[]');
+    const stored = JSON.parse(localStorage.getItem('dd-table-cols-v1') || '[]');
     expect(stored).not.toContain('bouncer');
   });
 
   it('should restore visible columns from localStorage', async () => {
-    localStorage.setItem('dd-table-cols', JSON.stringify(['icon', 'name', 'status']));
+    localStorage.setItem('dd-table-cols-v1', JSON.stringify(['icon', 'name', 'status']));
     const { useColumnVisibility } = await loadColumnVisibility();
     const { visibleColumns } = useColumnVisibility(ref(false));
     expect(visibleColumns.value.size).toBe(3);

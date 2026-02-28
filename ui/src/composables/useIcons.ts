@@ -1,8 +1,8 @@
 import { ref, watch } from 'vue';
 import { type IconLibrary, iconMap } from '../icons';
 
-const STORAGE_KEY = 'drydock-icon-library';
-const SCALE_KEY = 'drydock-icon-scale';
+const STORAGE_KEY = 'drydock-icon-library-v1';
+const SCALE_KEY = 'drydock-icon-scale-v1';
 
 function loadLibrary(): IconLibrary {
   try {

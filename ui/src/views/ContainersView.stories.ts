@@ -146,7 +146,7 @@ function installContainersMock(data: ContainerApiItem[]) {
 }
 
 function resetContainerViewState() {
-  localStorage.setItem('dd-table-actions', 'icons');
+  localStorage.setItem('dd-table-actions-v1', 'icons');
   sessionStorage.removeItem('dd-panel');
 }
 

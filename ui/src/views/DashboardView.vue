@@ -249,11 +249,13 @@ function handleRealtimeRefresh() {
   void fetchDashboardData();
 }
 
+const realtimeRefreshListener = handleRealtimeRefresh as EventListener;
+
 onMounted(async () => {
   loadWidgetOrder();
-  globalThis.addEventListener('dd:sse-container-changed', handleRealtimeRefresh as EventListener);
-  globalThis.addEventListener('dd:sse-scan-completed', handleRealtimeRefresh as EventListener);
-  globalThis.addEventListener('dd:sse-connected', handleRealtimeRefresh as EventListener);
+  globalThis.addEventListener('dd:sse-container-changed', realtimeRefreshListener);
+  globalThis.addEventListener('dd:sse-scan-completed', realtimeRefreshListener);
+  globalThis.addEventListener('dd:sse-connected', realtimeRefreshListener);
   maintenanceCountdownTimer = window.setInterval(() => {
     maintenanceCountdownNow.value = Date.now();
   }, 30_000);
@@ -261,9 +263,9 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  globalThis.removeEventListener('dd:sse-container-changed', handleRealtimeRefresh as EventListener);
-  globalThis.removeEventListener('dd:sse-scan-completed', handleRealtimeRefresh as EventListener);
-  globalThis.removeEventListener('dd:sse-connected', handleRealtimeRefresh as EventListener);
+  globalThis.removeEventListener('dd:sse-container-changed', realtimeRefreshListener);
+  globalThis.removeEventListener('dd:sse-scan-completed', realtimeRefreshListener);
+  globalThis.removeEventListener('dd:sse-connected', realtimeRefreshListener);
   if (maintenanceCountdownTimer !== undefined) {
     clearInterval(maintenanceCountdownTimer);
     maintenanceCountdownTimer = undefined;
@@ -487,15 +489,26 @@ const securityByImage = computed<ImageSecurityAggregate[]>(() => {
   return [...map.values()];
 });
 
-const securityCleanCount = computed(() =>
-  securityByImage.value.filter((aggregate) => aggregate.scanned && !aggregate.hasIssue).length,
-);
-const securityIssueCount = computed(() =>
-  securityByImage.value.filter((aggregate) => aggregate.hasIssue).length,
-);
-const securityNotScannedCount = computed(() =>
-  securityByImage.value.filter((aggregate) => !aggregate.scanned).length,
-);
+const securityCounts = computed(() => {
+  let clean = 0;
+  let issues = 0;
+  let notScanned = 0;
+
+  for (const aggregate of securityByImage.value) {
+    if (!aggregate.scanned) {
+      notScanned += 1;
+    } else if (aggregate.hasIssue) {
+      issues += 1;
+    } else {
+      clean += 1;
+    }
+  }
+
+  return { clean, issues, notScanned };
+});
+const securityCleanCount = computed(() => securityCounts.value.clean);
+const securityIssueCount = computed(() => securityCounts.value.issues);
+const securityNotScannedCount = computed(() => securityCounts.value.notScanned);
 const securitySeverityTotals = computed(() =>
   securityByImage.value.reduce(
     (totals, aggregate) => {
@@ -517,15 +530,26 @@ const securityTotalCount = computed(() => securityByImage.value.length);
 // Computed: stat cards
 const stats = computed(() => {
   const total = containers.value.length;
-  const running = containers.value.filter((c) => c.status === 'running').length;
+  let running = 0;
+  let updatesAvailable = 0;
+  const securityImages = new Set<string>();
+  const allImages = new Set<string>();
+  for (const container of containers.value) {
+    if (container.status === 'running') {
+      running += 1;
+    }
+    if (container.updateKind) {
+      updatesAvailable += 1;
+    }
+    if (container.bouncer === 'blocked' || container.bouncer === 'unsafe') {
+      securityImages.add(container.image);
+    }
+    allImages.add(container.image);
+  }
+
   const stopped = Math.max(total - running, 0);
-  const updatesAvailable = containers.value.filter((c) => c.updateKind).length;
-  const securityIssues = new Set(
-    containers.value
-      .filter((c) => c.bouncer === 'blocked' || c.bouncer === 'unsafe')
-      .map((c) => c.image),
-  ).size;
-  const images = new Set(containers.value.map((c) => c.image)).size;
+  const securityIssues = securityImages.size;
+  const images = allImages.size;
   const triggerCount = triggers.value.length;
   const watcherCount = watchers.value.length;
   const registryCount = registries.value.length;
@@ -1307,7 +1331,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                 <div class="text-[10px] font-medium uppercase tracking-wider mt-0.5 dd-text-muted">{{ kind.label }}</div>
                 <!-- Mini bar -->
                 <div class="mt-2 h-1.5 dd-rounded-sm overflow-hidden" style="background: var(--dd-bg-elevated);">
-                  <div class="h-full dd-rounded-sm transition-all"
+                  <div class="h-full dd-rounded-sm transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                        :style="{ width: Math.max(kind.count / Math.max(totalUpdates, 1) * 100, 4) + '%', backgroundColor: kind.color }" />
                 </div>
               </div>

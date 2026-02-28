@@ -286,7 +286,7 @@ onMounted(async () => {
                   }">
               {{ item.status }}
             </span>
-            <button class="inline-flex items-center gap-1 px-2 py-1 dd-rounded text-[10px] font-bold transition-all text-white"
+            <button class="inline-flex items-center gap-1 px-2 py-1 dd-rounded text-[10px] font-bold transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
                     :style="{ background: testResult?.id === item.id
                       ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
                       : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))' }"
@@ -335,7 +335,7 @@ onMounted(async () => {
           </div>
         </div>
         <div class="mt-4 pt-3" :style="{ borderTop: '1px solid var(--dd-border-strong)' }">
-          <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold tracking-wide transition-all text-white"
+          <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold tracking-wide transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
                   :style="{ background: testResult?.id === item.id
                     ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
                     : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))',
@@ -408,7 +408,7 @@ onMounted(async () => {
 
             <!-- Test trigger button -->
             <div class="pt-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
-              <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold tracking-wide transition-all text-white"
+              <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold tracking-wide transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
                       :style="{ background: testResult?.id === selectedTrigger.id
                         ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
                         : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))',

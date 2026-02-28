@@ -38,7 +38,7 @@ function iconColor(id: string) {
 
 <template>
   <div
-    class="theme-toggle relative inline-flex items-center overflow-hidden transition-all duration-200 ease-out"
+    class="theme-toggle relative inline-flex items-center overflow-hidden transition-[color,background-color,border-color,opacity,transform,box-shadow] duration-200 ease-out"
     :style="{ width: expanded ? `${variants.length * cellSize}px` : `${cellSize}px` }"
     @mouseenter="expanded = true"
     @mouseleave="expanded = false"

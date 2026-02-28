@@ -1,6 +1,6 @@
 import { ref, watch } from 'vue';
 
-const STORAGE_KEY = 'drydock-font-family';
+const STORAGE_KEY = 'drydock-font-family-v1';
 
 export type FontId =
   | 'ibm-plex-mono'

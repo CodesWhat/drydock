@@ -20,13 +20,13 @@ describe('useFont', () => {
     });
 
     it('should load saved font from localStorage', async () => {
-      localStorage.setItem('drydock-font-family', 'jetbrains-mono');
+      localStorage.setItem('drydock-font-family-v1', 'jetbrains-mono');
       const { activeFont } = await loadUseFont();
       expect(activeFont.value).toBe('jetbrains-mono');
     });
 
     it('should ignore invalid localStorage values', async () => {
-      localStorage.setItem('drydock-font-family', 'comic-sans-ms');
+      localStorage.setItem('drydock-font-family-v1', 'comic-sans-ms');
       const { activeFont } = await loadUseFont();
       expect(activeFont.value).toBe('ibm-plex-mono');
     });
@@ -75,7 +75,7 @@ describe('useFont', () => {
     });
 
     it('should apply saved font to both CSS variables on init', async () => {
-      localStorage.setItem('drydock-font-family', 'jetbrains-mono');
+      localStorage.setItem('drydock-font-family-v1', 'jetbrains-mono');
       await loadUseFont();
       const drydockFont = document.documentElement.style.getPropertyValue('--drydock-font');
       const monoFont = document.documentElement.style.getPropertyValue('--font-mono');

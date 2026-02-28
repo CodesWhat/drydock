@@ -18,13 +18,13 @@ describe('useIcons', () => {
     });
 
     it('should load saved library from localStorage', async () => {
-      localStorage.setItem('drydock-icon-library', 'lucide');
+      localStorage.setItem('drydock-icon-library-v1', 'lucide');
       const { iconLibrary } = await loadUseIcons();
       expect(iconLibrary.value).toBe('lucide');
     });
 
     it('should ignore invalid localStorage values', async () => {
-      localStorage.setItem('drydock-icon-library', 'invalid-lib');
+      localStorage.setItem('drydock-icon-library-v1', 'invalid-lib');
       const { iconLibrary } = await loadUseIcons();
       expect(iconLibrary.value).toBe('ph-duotone');
     });
@@ -36,7 +36,7 @@ describe('useIcons', () => {
       setIconLibrary('tabler');
       await nextTick();
       expect(iconLibrary.value).toBe('tabler');
-      expect(localStorage.getItem('drydock-icon-library')).toBe('tabler');
+      expect(localStorage.getItem('drydock-icon-library-v1')).toBe('tabler');
     });
   });
 
@@ -47,19 +47,19 @@ describe('useIcons', () => {
     });
 
     it('should load saved scale from localStorage', async () => {
-      localStorage.setItem('drydock-icon-scale', '1.2');
+      localStorage.setItem('drydock-icon-scale-v1', '1.2');
       const { iconScale } = await loadUseIcons();
       expect(iconScale.value).toBe(1.2);
     });
 
     it('should reject out-of-range scale values', async () => {
-      localStorage.setItem('drydock-icon-scale', '5.0');
+      localStorage.setItem('drydock-icon-scale-v1', '5.0');
       const { iconScale } = await loadUseIcons();
       expect(iconScale.value).toBe(1);
     });
 
     it('should reject scale below minimum', async () => {
-      localStorage.setItem('drydock-icon-scale', '0.5');
+      localStorage.setItem('drydock-icon-scale-v1', '0.5');
       const { iconScale } = await loadUseIcons();
       expect(iconScale.value).toBe(1);
     });
@@ -71,7 +71,7 @@ describe('useIcons', () => {
       setIconScale(1.3);
       await nextTick();
       expect(iconScale.value).toBe(1.3);
-      expect(localStorage.getItem('drydock-icon-scale')).toBe('1.3');
+      expect(localStorage.getItem('drydock-icon-scale-v1')).toBe('1.3');
     });
   });
 

@@ -564,18 +564,16 @@ function toggleSecColumnPicker(event: MouseEvent) {
 function handleGlobalClick() {
   showSecColumnPicker.value = false;
 }
+const sseScanCompletedListener = handleSseScanCompleted as EventListener;
 onMounted(() => {
   fetchSecurityRuntimeStatus();
   fetchVulnerabilities();
   document.addEventListener('click', handleGlobalClick);
-  globalThis.addEventListener('dd:sse-scan-completed', handleSseScanCompleted as EventListener);
+  globalThis.addEventListener('dd:sse-scan-completed', sseScanCompletedListener);
 });
 onUnmounted(() => {
   document.removeEventListener('click', handleGlobalClick);
-  globalThis.removeEventListener(
-    'dd:sse-scan-completed',
-    handleSseScanCompleted as EventListener,
-  );
+  globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
 });
 </script>
 

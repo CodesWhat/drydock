@@ -131,7 +131,7 @@ const {
       return;
     }
     mockActiveFont.value = selected.id;
-    localStorage.setItem('drydock-font-family', selected.id);
+    localStorage.setItem('drydock-font-family-v1', selected.id);
     document.documentElement.style.setProperty('--drydock-font', selected.family);
     document.documentElement.style.setProperty('--font-mono', selected.family);
   });
@@ -142,7 +142,7 @@ const {
     mockFontLoading.value = false;
     mockSetFont.mockClear();
     mockIsFontLoaded.mockClear();
-    localStorage.removeItem('drydock-font-family');
+    localStorage.removeItem('drydock-font-family-v1');
     document.documentElement.style.setProperty('--drydock-font', '"IBM Plex Mono", monospace');
     document.documentElement.style.setProperty('--font-mono', '"IBM Plex Mono", monospace');
   };
@@ -569,7 +569,7 @@ describe('ConfigView', () => {
           const rootStyles = getComputedStyle(document.documentElement);
           expect(rootStyles.getPropertyValue('--drydock-font').trim()).toBe(font.family);
           expect(rootStyles.getPropertyValue('--font-mono').trim()).toBe(font.family);
-          expect(localStorage.getItem('drydock-font-family')).toBe(font.id);
+          expect(localStorage.getItem('drydock-font-family-v1')).toBe(font.id);
           // App shell text uses Tailwind's `font-mono`, which resolves from --font-mono.
           expect(appShellProbe.style.fontFamily).toBe('var(--font-mono)');
         }

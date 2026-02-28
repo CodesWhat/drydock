@@ -671,7 +671,7 @@ async function handleClearIconCache() {
           <div class="p-4">
             <div class="grid grid-cols-2 gap-3">
               <button v-for="fam in themeFamilies" :key="fam.id"
-                      class="dd-rounded p-3 text-left transition-all border"
+                      class="dd-rounded p-3 text-left transition-[color,background-color,border-color,opacity,transform,box-shadow] border"
                       :class="themeFamily === fam.id ? 'ring-2 ring-drydock-secondary' : ''"
                       :style="{
                         backgroundColor: themeFamily === fam.id
