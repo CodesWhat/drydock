@@ -127,12 +127,8 @@ async function fetchAgents() {
       getAllWatchers().catch(() => []),
       getAllTriggers().catch(() => []),
     ]);
-    const watchersByAgent = mapComponentNamesByAgent(
-      Array.isArray(rawWatchers) ? rawWatchers : [],
-    );
-    const triggersByAgent = mapComponentNamesByAgent(
-      Array.isArray(rawTriggers) ? rawTriggers : [],
-    );
+    const watchersByAgent = mapComponentNamesByAgent(Array.isArray(rawWatchers) ? rawWatchers : []);
+    const triggersByAgent = mapComponentNamesByAgent(Array.isArray(rawTriggers) ? rawTriggers : []);
 
     agentsData.value = rawAgents.map((a: ApiAgent) => ({
       id: a.name,

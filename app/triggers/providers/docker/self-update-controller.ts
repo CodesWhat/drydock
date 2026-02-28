@@ -240,7 +240,10 @@ class SelfUpdateController {
     try {
       await this.restoreOldContainerName(oldContainer);
     } catch (restoreNameError: any) {
-      this.logState('ROLLBACK_RESTORE_NAME_FAILED', String(restoreNameError?.message || restoreNameError));
+      this.logState(
+        'ROLLBACK_RESTORE_NAME_FAILED',
+        String(restoreNameError?.message || restoreNameError),
+      );
     }
 
     this.logState('ROLLBACK_START_OLD', reason);
@@ -248,10 +251,7 @@ class SelfUpdateController {
       await oldContainer.start();
     } catch (rollbackError: any) {
       if (!isContainerAlreadyStartedError(rollbackError)) {
-        this.logState(
-          'ROLLBACK_START_OLD_FAILED',
-          String(rollbackError?.message || rollbackError),
-        );
+        this.logState('ROLLBACK_START_OLD_FAILED', String(rollbackError?.message || rollbackError));
       }
     }
 

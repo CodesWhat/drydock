@@ -1,6 +1,10 @@
 // @ts-nocheck
 import axios from 'axios';
-import { failClosedAuth, requireAuthString, withAuthorizationHeader } from '../../../security/auth.js';
+import {
+  failClosedAuth,
+  requireAuthString,
+  withAuthorizationHeader,
+} from '../../../security/auth.js';
 
 import Trigger from '../Trigger.js';
 

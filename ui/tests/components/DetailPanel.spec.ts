@@ -108,7 +108,8 @@ describe('DetailPanel', () => {
 
     it('adds aria-label to the close button', () => {
       const w = factory();
-      const closeBtn = w.findAll('button')
+      const closeBtn = w
+        .findAll('button')
         .find((b) => b.classes().includes('w-7') && b.classes().includes('h-7'));
       expect(closeBtn?.attributes('aria-label')).toBe('Close details panel');
     });

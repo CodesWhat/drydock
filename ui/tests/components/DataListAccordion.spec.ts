@@ -61,10 +61,7 @@ describe('DataListAccordion', () => {
     });
 
     it('does not show details slot content', () => {
-      const w = factory(
-        {},
-        { details: ({ item }: any) => `Details: ${item.name}` },
-      );
+      const w = factory({}, { details: ({ item }: any) => `Details: ${item.name}` });
       expect(w.text()).not.toContain('Details:');
     });
   });
@@ -180,10 +177,7 @@ describe('DataListAccordion', () => {
 
   describe('header slot', () => {
     it('passes item to header slot', () => {
-      const w = factory(
-        {},
-        { header: ({ item }: any) => `${item.name}` },
-      );
+      const w = factory({}, { header: ({ item }: any) => `${item.name}` });
       const firstItem = w.findAll('.space-y-2 > div')[0];
       expect(firstItem.text()).toContain('Alpha');
     });

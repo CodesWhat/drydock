@@ -70,7 +70,12 @@ describe('Authentication Service', () => {
   });
 
   it('fetches an agent-scoped authentication provider when agent is provided', async () => {
-    const mockAuthentication = { id: 'edge.basic.local', type: 'basic', name: 'local', agent: 'edge' };
+    const mockAuthentication = {
+      id: 'edge.basic.local',
+      type: 'basic',
+      name: 'local',
+      agent: 'edge',
+    };
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => mockAuthentication,

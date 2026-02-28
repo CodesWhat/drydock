@@ -147,18 +147,86 @@ const playgroundLogs = [
 ];
 
 const playgroundContainers = [
-  { name: 'nginx-proxy', image: 'nginx', tag: '1.25.3', newTag: '1.25.4', status: 'running', registry: 'dockerhub' },
-  { name: 'postgres-db', image: 'postgres', tag: '16.1', newTag: '16.2', status: 'running', registry: 'dockerhub' },
-  { name: 'redis-cache', image: 'redis', tag: '7.2.3', newTag: null, status: 'running', registry: 'dockerhub' },
-  { name: 'drydock', image: 'ghcr.io/drydock/drydock', tag: 'v1.3.0', newTag: 'v1.4.0', status: 'stopped', registry: 'ghcr' },
+  {
+    name: 'nginx-proxy',
+    image: 'nginx',
+    tag: '1.25.3',
+    newTag: '1.25.4',
+    status: 'running',
+    registry: 'dockerhub',
+  },
+  {
+    name: 'postgres-db',
+    image: 'postgres',
+    tag: '16.1',
+    newTag: '16.2',
+    status: 'running',
+    registry: 'dockerhub',
+  },
+  {
+    name: 'redis-cache',
+    image: 'redis',
+    tag: '7.2.3',
+    newTag: null,
+    status: 'running',
+    registry: 'dockerhub',
+  },
+  {
+    name: 'drydock',
+    image: 'ghcr.io/drydock/drydock',
+    tag: 'v1.3.0',
+    newTag: 'v1.4.0',
+    status: 'stopped',
+    registry: 'ghcr',
+  },
 ];
 
 const playgroundTableRows = [
-  { name: 'traefik', image: 'traefik', oldVer: '2.10.7', newVer: '3.0.1', status: 'updated', time: '12m ago', running: true },
-  { name: 'postgres-db', image: 'postgres', oldVer: '15.4', newVer: '16.1', status: 'pending', time: '34m ago', running: true },
-  { name: 'redis-cache', image: 'redis', oldVer: '7.0.12', newVer: '7.2.4', status: 'updated', time: '1h ago', running: true },
-  { name: 'nginx-proxy', image: 'nginx', oldVer: '1.24.0', newVer: '1.25.3', status: 'failed', time: '2h ago', running: false },
-  { name: 'grafana', image: 'grafana/grafana', oldVer: '10.1.5', newVer: '10.2.3', status: 'updated', time: '3h ago', running: true },
+  {
+    name: 'traefik',
+    image: 'traefik',
+    oldVer: '2.10.7',
+    newVer: '3.0.1',
+    status: 'updated',
+    time: '12m ago',
+    running: true,
+  },
+  {
+    name: 'postgres-db',
+    image: 'postgres',
+    oldVer: '15.4',
+    newVer: '16.1',
+    status: 'pending',
+    time: '34m ago',
+    running: true,
+  },
+  {
+    name: 'redis-cache',
+    image: 'redis',
+    oldVer: '7.0.12',
+    newVer: '7.2.4',
+    status: 'updated',
+    time: '1h ago',
+    running: true,
+  },
+  {
+    name: 'nginx-proxy',
+    image: 'nginx',
+    oldVer: '1.24.0',
+    newVer: '1.25.3',
+    status: 'failed',
+    time: '2h ago',
+    running: false,
+  },
+  {
+    name: 'grafana',
+    image: 'grafana/grafana',
+    oldVer: '10.1.5',
+    newVer: '10.2.3',
+    status: 'updated',
+    time: '3h ago',
+    running: true,
+  },
 ];
 
 const tableSortKey = ref('name');

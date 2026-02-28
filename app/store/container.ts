@@ -32,7 +32,10 @@ function getUpdateDetectedAt(containerCurrent, containerNext) {
     return undefined;
   }
 
-  if (typeof containerNext.updateDetectedAt === 'string' && containerNext.updateDetectedAt.length > 0) {
+  if (
+    typeof containerNext.updateDetectedAt === 'string' &&
+    containerNext.updateDetectedAt.length > 0
+  ) {
     return containerNext.updateDetectedAt;
   }
 
@@ -41,13 +44,17 @@ function getUpdateDetectedAt(containerCurrent, containerNext) {
   }
 
   const updateChanged =
-    typeof containerCurrent.resultChanged === 'function' && containerCurrent.resultChanged(containerNext);
+    typeof containerCurrent.resultChanged === 'function' &&
+    containerCurrent.resultChanged(containerNext);
 
   if (!containerCurrent.updateAvailable || updateChanged) {
     return new Date().toISOString();
   }
 
-  if (typeof containerCurrent.updateDetectedAt === 'string' && containerCurrent.updateDetectedAt.length > 0) {
+  if (
+    typeof containerCurrent.updateDetectedAt === 'string' &&
+    containerCurrent.updateDetectedAt.length > 0
+  ) {
     return containerCurrent.updateDetectedAt;
   }
 

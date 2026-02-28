@@ -252,37 +252,40 @@ test.each([
     publicConfiguration: { login: 'user', password: 'pass', token: 'token' },
     configuredKeys: 'login, password, token',
   },
-])(
-  'registerRegistries should fallback $provider.public legacy token-auth config to anonymous',
-  async ({ provider, publicConfiguration, configuredKeys }) => {
-    const spyLog = vi.spyOn(registry.testable_log, 'warn');
-    registries = {
-      [provider]: {
-        public: publicConfiguration,
-      },
-    };
+])('registerRegistries should fallback $provider.public legacy token-auth config to anonymous', async ({
+  provider,
+  publicConfiguration,
+  configuredKeys,
+}) => {
+  const spyLog = vi.spyOn(registry.testable_log, 'warn');
+  registries = {
+    [provider]: {
+      public: publicConfiguration,
+    },
+  };
 
-    await registry.testable_registerRegistries();
+  await registry.testable_registerRegistries();
 
-    expect(Object.keys(registry.getState().registry)).toContain(`${provider}.public`);
-    expect(spyLog).toHaveBeenCalledWith(
-      expect.stringContaining(
-        `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials for ${provider}.public.`,
-      ),
-    );
-    expect(spyLog).toHaveBeenCalledWith(expect.stringContaining(`Configured keys: ${configuredKeys}.`));
-    expect(spyLog).toHaveBeenCalledWith(
-      expect.stringContaining(
-        `Falling back to anonymous ${provider}.public registry for backward compatibility.`,
-      ),
-    );
-    expect(
-      spyLog.mock.calls.some(([message]) =>
-        `${message}`.includes('Some registries failed to register'),
-      ),
-    ).toBe(false);
-  },
-);
+  expect(Object.keys(registry.getState().registry)).toContain(`${provider}.public`);
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining(
+      `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials for ${provider}.public.`,
+    ),
+  );
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining(`Configured keys: ${configuredKeys}.`),
+  );
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining(
+      `Falling back to anonymous ${provider}.public registry for backward compatibility.`,
+    ),
+  );
+  expect(
+    spyLog.mock.calls.some(([message]) =>
+      `${message}`.includes('Some registries failed to register'),
+    ),
+  ).toBe(false);
+});
 
 test('registerRegistries should keep fail-closed behavior for incomplete hub.private auth', async () => {
   const spyLog = vi.spyOn(registry.testable_log, 'warn');
@@ -301,36 +304,36 @@ test('registerRegistries should keep fail-closed behavior for incomplete hub.pri
   );
 });
 
-test.each(['hub', 'dhi'])(
-  'registerRegistries should not fallback %s.public when login/token auth is valid',
-  async (provider) => {
-    const spyLog = vi.spyOn(registry.testable_log, 'warn');
-    registries = {
-      [provider]: {
-        public: {
-          login: 'valid-user',
-          token: 'valid-token',
-        },
+test.each([
+  'hub',
+  'dhi',
+])('registerRegistries should not fallback %s.public when login/token auth is valid', async (provider) => {
+  const spyLog = vi.spyOn(registry.testable_log, 'warn');
+  registries = {
+    [provider]: {
+      public: {
+        login: 'valid-user',
+        token: 'valid-token',
       },
-    };
+    },
+  };
 
-    await registry.testable_registerRegistries();
+  await registry.testable_registerRegistries();
 
-    expect(Object.keys(registry.getState().registry)).toContain(`${provider}.public`);
-    expect(
-      spyLog.mock.calls.some(([message]) =>
-        `${message}`.includes(
-          `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials`,
-        ),
+  expect(Object.keys(registry.getState().registry)).toContain(`${provider}.public`);
+  expect(
+    spyLog.mock.calls.some(([message]) =>
+      `${message}`.includes(
+        `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials`,
       ),
-    ).toBe(false);
-    expect(
-      spyLog.mock.calls.some(([message]) =>
-        `${message}`.includes('Some registries failed to register'),
-      ),
-    ).toBe(false);
-  },
-);
+    ),
+  ).toBe(false);
+  expect(
+    spyLog.mock.calls.some(([message]) =>
+      `${message}`.includes('Some registries failed to register'),
+    ),
+  ).toBe(false);
+});
 
 test('registerTriggers should register all triggers', async () => {
   triggers = {
@@ -456,10 +459,17 @@ test('registerWatchers should keep remote watcher registered when auth configura
     },
   };
   await registry.testable_registerWatchers();
-  expect(Object.keys(registry.getState().watcher).sort()).toEqual(['docker.local', 'docker.remote']);
-  const remoteWatcherMaskedConfiguration = registry.getState().watcher['docker.remote'].maskConfiguration();
+  expect(Object.keys(registry.getState().watcher).sort()).toEqual([
+    'docker.local',
+    'docker.remote',
+  ]);
+  const remoteWatcherMaskedConfiguration = registry
+    .getState()
+    .watcher['docker.remote'].maskConfiguration();
   expect(remoteWatcherMaskedConfiguration.authblocked).toBe(true);
-  expect(remoteWatcherMaskedConfiguration.authblockedreason).toContain('credentials are incomplete');
+  expect(remoteWatcherMaskedConfiguration.authblockedreason).toContain(
+    'credentials are incomplete',
+  );
 });
 
 test('registerWatchers should register local docker watcher by default', async () => {

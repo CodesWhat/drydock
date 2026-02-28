@@ -60,10 +60,7 @@ const notificationFixtures: NotificationRuleApiItem[] = [
   },
 ];
 
-function installNotificationsMock(
-  rules: NotificationRuleApiItem[],
-  triggers: TriggerApiItem[],
-) {
+function installNotificationsMock(rules: NotificationRuleApiItem[], triggers: TriggerApiItem[]) {
   const inMemoryRules = rules.map((rule) => ({ ...rule, triggers: [...rule.triggers] }));
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {

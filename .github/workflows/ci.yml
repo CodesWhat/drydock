@@ -9,6 +9,8 @@ on:
     secrets:
       CODECOV_TOKEN:
         required: false
+      ARTILLERY_CLOUD_API_KEY:
+        required: false
 
 permissions:
   contents: read

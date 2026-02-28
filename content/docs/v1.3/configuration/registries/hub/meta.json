@@ -1,6 +1,4 @@
 {
   "title": "Docker Hub",
-  "pages": [
-    "index"
-  ]
+  "pages": ["index"]
 }

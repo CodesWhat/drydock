@@ -1,21 +1,8 @@
-import {
-  ComparisonPage,
-  type ComparisonRow,
-  type Highlight,
-} from "@/components/comparison-page";
-import {
-  Bell,
-  Check,
-  Layers,
-  Monitor,
-  Radio,
-  RotateCcw,
-  Shield,
-} from "lucide-react";
+import { Bell, Check, Layers, Monitor, Radio, RotateCcw, Shield } from "lucide-react";
 import type { Metadata } from "next";
+import { ComparisonPage, type ComparisonRow, type Highlight } from "@/components/comparison-page";
 
-const baseUrl =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
 
 export const metadata: Metadata = {
   title: "Diun vs Drydock — Container Update Monitoring Comparison",
@@ -232,8 +219,8 @@ export default function DiunComparison() {
       heroTitle="Diun vs Drydock"
       heroDescription={
         <p>
-          Diun (Docker Image Update Notifier) is a lightweight notification
-          tool. Drydock builds on the same monitoring concept but adds a{" "}
+          Diun (Docker Image Update Notifier) is a lightweight notification tool. Drydock builds on
+          the same monitoring concept but adds a{" "}
           <strong className="text-neutral-900 dark:text-neutral-200">
             full web UI, auto-updates, security scanning
           </strong>
@@ -260,8 +247,7 @@ export default function DiunComparison() {
         "@context": "https://schema.org",
         "@type": "WebPage",
         name: "Diun vs Drydock — Container Update Monitoring Comparison",
-        description:
-          "Compare Diun and Drydock for container update monitoring.",
+        description: "Compare Diun and Drydock for container update monitoring.",
         url: `${baseUrl}/compare/diun`,
         mainEntity: {
           "@type": "SoftwareApplication",

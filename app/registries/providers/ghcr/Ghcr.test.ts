@@ -111,9 +111,7 @@ describe('GitHub Container Registry', () => {
       },
     });
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'GHCR credentials were rejected for registry ghcr.test (status 403)',
-      ),
+      expect.stringContaining('GHCR credentials were rejected for registry ghcr.test (status 403)'),
     );
     expect(result.headers.Authorization).toBe('Bearer anon-token');
   });

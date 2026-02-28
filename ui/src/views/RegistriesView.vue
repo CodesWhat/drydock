@@ -94,7 +94,11 @@ async function openDetail(reg: Record<string, unknown>) {
   const requestId = ++detailRequestId;
 
   try {
-    const detail = await getRegistry({ type: String(reg.type), name: String(reg.name), agent: reg.agent as string | undefined });
+    const detail = await getRegistry({
+      type: String(reg.type),
+      name: String(reg.name),
+      agent: reg.agent as string | undefined,
+    });
     if (requestId !== detailRequestId || !detailOpen.value) return;
     selectedRegistry.value = mapRegistry(detail, String(reg.status));
   } catch {
@@ -126,8 +130,7 @@ const filteredRegistries = computed(() => {
   if (!searchQuery.value) return registriesData.value;
   const q = searchQuery.value.toLowerCase();
   return registriesData.value.filter(
-    (item) =>
-      item.name.toLowerCase().includes(q) || item.type.toLowerCase().includes(q),
+    (item) => item.name.toLowerCase().includes(q) || item.type.toLowerCase().includes(q),
   );
 });
 

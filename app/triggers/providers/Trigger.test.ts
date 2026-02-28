@@ -837,7 +837,9 @@ test('handleContainerUpdateApplied should warn on dismiss error and still clean 
 });
 
 test('handleContainerReport should skip when update-available rule suppresses this trigger', async () => {
-  notificationStore.isTriggerEnabledForRule.mockImplementation((ruleId) => ruleId !== 'update-available');
+  notificationStore.isTriggerEnabledForRule.mockImplementation(
+    (ruleId) => ruleId !== 'update-available',
+  );
   const spy = vi.spyOn(trigger, 'trigger');
 
   await trigger.handleContainerReport({
@@ -875,7 +877,9 @@ test('handleContainerUpdateAppliedEvent should skip when rule disables trigger d
     updateAvailable: true,
     updateKind: { kind: 'tag', semverDiff: 'major' },
   };
-  notificationStore.isTriggerEnabledForRule.mockImplementation((ruleId) => ruleId !== 'update-applied');
+  notificationStore.isTriggerEnabledForRule.mockImplementation(
+    (ruleId) => ruleId !== 'update-applied',
+  );
   storeContainer.getContainers.mockReturnValue([container]);
   const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
 
@@ -1066,7 +1070,9 @@ test('dispatchContainerForEvent should fallback to all threshold when threshold 
 });
 
 test('handleContainerReports should skip when update-available rule disables trigger dispatch', async () => {
-  notificationStore.isTriggerEnabledForRule.mockImplementation((ruleId) => ruleId !== 'update-available');
+  notificationStore.isTriggerEnabledForRule.mockImplementation(
+    (ruleId) => ruleId !== 'update-available',
+  );
   const spy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
 
   await trigger.handleContainerReports([
@@ -1112,7 +1118,9 @@ test('init should wire auto dispatch callbacks for update/security/agent events'
   const updateFailedSpy = vi
     .spyOn(trigger, 'handleContainerUpdateFailedEvent')
     .mockResolvedValue(undefined);
-  const securityAlertSpy = vi.spyOn(trigger, 'handleSecurityAlertEvent').mockResolvedValue(undefined);
+  const securityAlertSpy = vi
+    .spyOn(trigger, 'handleSecurityAlertEvent')
+    .mockResolvedValue(undefined);
   const agentDisconnectedSpy = vi
     .spyOn(trigger, 'handleAgentDisconnectedEvent')
     .mockResolvedValue(undefined);

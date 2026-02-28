@@ -127,7 +127,9 @@ function shouldServeImageFallback(req): boolean {
 
   const acceptHeader = req?.headers?.accept;
   const acceptHeaderValue = Array.isArray(acceptHeader) ? acceptHeader.join(',') : acceptHeader;
-  return typeof acceptHeaderValue === 'string' && acceptHeaderValue.toLowerCase().includes('image/');
+  return (
+    typeof acceptHeaderValue === 'string' && acceptHeaderValue.toLowerCase().includes('image/')
+  );
 }
 
 async function sendMissingIconResponse({

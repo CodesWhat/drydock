@@ -61,7 +61,10 @@ function updateNotificationRule(req, res) {
     const allowedTriggerIds = getAllowedNotificationTriggerIds();
     const triggersRequested = notificationRuleToUpdate.value.triggers;
     if (Array.isArray(triggersRequested)) {
-      const triggersNormalized = normalizeNotificationTriggerIds(triggersRequested, allowedTriggerIds);
+      const triggersNormalized = normalizeNotificationTriggerIds(
+        triggersRequested,
+        allowedTriggerIds,
+      );
       if (triggersNormalized.length !== triggersRequested.length) {
         const invalidTriggers = triggersRequested.filter(
           (triggerId) => !allowedTriggerIds.has(triggerId),

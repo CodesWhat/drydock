@@ -1,13 +1,8 @@
-import {
-  ComparisonPage,
-  type ComparisonRow,
-  type Highlight,
-} from "@/components/comparison-page";
 import { Bell, Check, Eye, Lock, Radio, RotateCcw, Shield } from "lucide-react";
 import type { Metadata } from "next";
+import { ComparisonPage, type ComparisonRow, type Highlight } from "@/components/comparison-page";
 
-const baseUrl =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
 
 export const metadata: Metadata = {
   title: "Komodo vs Drydock — Container Update Monitoring Comparison",
@@ -34,8 +29,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Komodo vs Drydock — Container Update Monitoring Comparison",
-    description:
-      "Compare Komodo and Drydock for container management and update monitoring.",
+    description: "Compare Komodo and Drydock for container management and update monitoring.",
     creator: "@codeswhat",
   },
   alternates: {
@@ -230,13 +224,13 @@ export default function KomodoComparison() {
       heroTitle="Komodo vs Drydock"
       heroDescription={
         <p>
-          Komodo is a broad DevOps platform with CI/CD, GitOps, and container
-          management. Drydock focuses specifically on{" "}
+          Komodo is a broad DevOps platform with CI/CD, GitOps, and container management. Drydock
+          focuses specifically on{" "}
           <strong className="text-neutral-900 dark:text-neutral-200">
             safe container update monitoring
           </strong>{" "}
-          with rollback, maintenance windows, security scanning, and the widest
-          registry and notification coverage.
+          with rollback, maintenance windows, security scanning, and the widest registry and
+          notification coverage.
         </p>
       }
       competitorBadge={{
@@ -259,8 +253,7 @@ export default function KomodoComparison() {
         "@context": "https://schema.org",
         "@type": "WebPage",
         name: "Komodo vs Drydock — Container Update Monitoring Comparison",
-        description:
-          "Compare Komodo and Drydock for container management and update monitoring.",
+        description: "Compare Komodo and Drydock for container management and update monitoring.",
         url: `${baseUrl}/compare/komodo`,
         mainEntity: {
           "@type": "SoftwareApplication",

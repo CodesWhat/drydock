@@ -63,12 +63,7 @@ class Ghcr extends BaseRegistry {
         `GHCR credentials were rejected for registry ${this.getId()} (status ${rejectedStatus}); retrying token request without credentials for public image checks`,
       );
 
-      return this.authenticateBearerFromAuthUrl(
-        requestOptions,
-        authUrl,
-        undefined,
-        tokenExtractor,
-      );
+      return this.authenticateBearerFromAuthUrl(requestOptions, authUrl, undefined, tokenExtractor);
     }
   }
 }

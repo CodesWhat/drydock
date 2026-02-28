@@ -11,9 +11,7 @@ export const size = {
 export const contentType = "image/png";
 
 export default async function Image() {
-  const logoData = await readFile(
-    join(process.cwd(), "public", "whale-logo.png"),
-  );
+  const logoData = await readFile(join(process.cwd(), "public", "whale-logo.png"));
   const logoSrc = `data:image/png;base64,${logoData.toString("base64")}`;
 
   return new ImageResponse(

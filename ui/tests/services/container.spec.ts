@@ -569,12 +569,9 @@ describe('Container Service', () => {
 
       const result = await getContainerSbom('container1', 'cyclonedx-json');
 
-      expect(fetch).toHaveBeenCalledWith(
-        '/api/containers/container1/sbom?format=cyclonedx-json',
-        {
-          credentials: 'include',
-        },
-      );
+      expect(fetch).toHaveBeenCalledWith('/api/containers/container1/sbom?format=cyclonedx-json', {
+        credentials: 'include',
+      });
       expect(result).toEqual(mockResult);
     });
 

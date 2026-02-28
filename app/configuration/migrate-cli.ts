@@ -36,9 +36,7 @@ const LEGACY_LABEL_MAPPINGS = [
   ['wud.compose.file', 'dd.compose.file'],
 ] as const;
 
-const WATCHTOWER_LABEL_MAPPINGS = [
-  ['com.centurylinklabs.watchtower.enable', 'dd.watch'],
-] as const;
+const WATCHTOWER_LABEL_MAPPINGS = [['com.centurylinklabs.watchtower.enable', 'dd.watch']] as const;
 
 const SUPPORTED_MIGRATION_SOURCES = ['auto', 'wud', 'watchtower'] as const;
 type MigrationSource = (typeof SUPPORTED_MIGRATION_SOURCES)[number];
@@ -165,11 +163,7 @@ function migrateWatchtowerConfigContent(content: string): MigrationResult {
 
 function parseMigrationSource(value: string): MigrationSource | null {
   const normalized = value.toLowerCase();
-  if (
-    normalized === 'auto' ||
-    normalized === 'wud' ||
-    normalized === 'watchtower'
-  ) {
+  if (normalized === 'auto' || normalized === 'wud' || normalized === 'watchtower') {
     return normalized;
   }
   return null;

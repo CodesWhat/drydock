@@ -40,9 +40,12 @@ watch(isMobile, (val) => {
 });
 
 // Close mobile menu on any route change (safety net for non-sidebar navigation)
-watch(() => route.path, () => {
-  if (isMobile.value) isMobileMenuOpen.value = false;
-});
+watch(
+  () => route.path,
+  () => {
+    if (isMobile.value) isMobileMenuOpen.value = false;
+  },
+);
 
 interface NavItem {
   label: string;
@@ -371,7 +374,8 @@ const containerSearchResults = computed<SearchResultItem[]>(() =>
     route: '/containers',
     query: { q: container.displayName },
     kind: 'container',
-    searchable: `${container.displayName} ${container.name} ${container.image} ${container.status} ${container.host}`.toLowerCase(),
+    searchable:
+      `${container.displayName} ${container.name} ${container.image} ${container.status} ${container.host}`.toLowerCase(),
   })),
 );
 
@@ -408,16 +412,14 @@ function searchScopeChipStyles(scope: SearchScope, active: boolean) {
   };
 }
 
-function buildSearchIndexResults(
-  resources: {
-    agents?: unknown;
-    triggers?: unknown;
-    watchers?: unknown;
-    registries?: unknown;
-    authentications?: unknown;
-    notificationRules?: unknown;
-  },
-): SearchResultItem[] {
+function buildSearchIndexResults(resources: {
+  agents?: unknown;
+  triggers?: unknown;
+  watchers?: unknown;
+  registries?: unknown;
+  authentications?: unknown;
+  notificationRules?: unknown;
+}): SearchResultItem[] {
   const results: SearchResultItem[] = [];
 
   const agents = Array.isArray(resources.agents) ? resources.agents : [];
@@ -619,7 +621,10 @@ const rankedSearchResults = computed<SearchResultItem[]>(() => {
   return allSearchResults.value
     .map((result) => ({ result, score: scoreSearchResult(result, queryNormalized) }))
     .filter(({ score }) => score >= 0)
-    .sort((left, right) => right.score - left.score || left.result.title.localeCompare(right.result.title))
+    .sort(
+      (left, right) =>
+        right.score - left.score || left.result.title.localeCompare(right.result.title),
+    )
     .map(({ result }) => result);
 });
 
@@ -643,7 +648,9 @@ const searchScopeCounts = computed<Record<SearchScope, number>>(() => {
 });
 
 const scopedSearchResults = computed<SearchResultItem[]>(() =>
-  rankedSearchResults.value.filter((result) => isSearchResultInScope(result, effectiveSearchScope.value)),
+  rankedSearchResults.value.filter((result) =>
+    isSearchResultInScope(result, effectiveSearchScope.value),
+  ),
 );
 
 const groupedSearchResults = computed<SearchResultGroup[]>(() => {
@@ -867,7 +874,9 @@ async function refreshSidebarData() {
     }
     containerCount.value = String(containers.length);
     searchContainers.value = containers.map((container: Record<string, unknown>) => {
-      const displayName = String(container.displayName || container.name || container.id || 'container');
+      const displayName = String(
+        container.displayName || container.name || container.id || 'container',
+      );
       const displayIcon = String(container.displayIcon || '');
       const imageName = String(container.image?.name || '');
       const imageTag = String(container.image?.tag?.value || '');
@@ -910,7 +919,9 @@ function handleSseEvent(event: string, payload?: unknown) {
     selfUpdateInProgress.value = true;
     connectionLost.value = true;
     selfUpdateOperationId.value =
-      payload && typeof payload === 'object' ? String((payload as Record<string, unknown>).opId || '') || undefined : undefined;
+      payload && typeof payload === 'object'
+        ? String((payload as Record<string, unknown>).opId || '') || undefined
+        : undefined;
     emitUiSseEvent('dd:sse-self-update');
     return;
   }

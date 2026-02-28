@@ -1,6 +1,4 @@
 {
   "title": "Forgejo",
-  "pages": [
-    "index"
-  ]
+  "pages": ["index"]
 }

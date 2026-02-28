@@ -117,9 +117,9 @@ async function mountAuditView() {
 }
 
 function findButtonByIcon(wrapper: any, icon: string) {
-  return wrapper.findAll('button').find((button: any) =>
-    button.find(`.app-icon-stub[data-icon="${icon}"]`).exists(),
-  );
+  return wrapper
+    .findAll('button')
+    .find((button: any) => button.find(`.app-icon-stub[data-icon="${icon}"]`).exists());
 }
 
 describe('AuditView', () => {
@@ -256,9 +256,9 @@ describe('AuditView', () => {
         limit: 50,
         container: 'redis-main',
       });
-      expect(
-        (wrapper.find('input[name="container-name"]').element as HTMLInputElement).value,
-      ).toBe('redis-main');
+      expect((wrapper.find('input[name="container-name"]').element as HTMLInputElement).value).toBe(
+        'redis-main',
+      );
     });
   });
 
@@ -367,9 +367,9 @@ describe('AuditView', () => {
       await flushPromises();
 
       expect((wrapper.find('input').element as HTMLInputElement).value).toBe('');
-      expect(
-        (wrapper.find('input[name="container-name"]').element as HTMLInputElement).value,
-      ).toBe('');
+      expect((wrapper.find('input[name="container-name"]').element as HTMLInputElement).value).toBe(
+        '',
+      );
       expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('');
       expect(mockGetAuditLog).toHaveBeenLastCalledWith({
         page: 1,

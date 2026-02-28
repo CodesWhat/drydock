@@ -11,7 +11,9 @@ function getAgentContainerStats(agentName: string) {
   ).length;
   const total = containers.length;
   const images = new Set(
-    containers.map((container: any) => container.image?.id ?? container.image?.name ?? container.id),
+    containers.map(
+      (container: any) => container.image?.id ?? container.image?.name ?? container.id,
+    ),
   ).size;
   return {
     containers: {

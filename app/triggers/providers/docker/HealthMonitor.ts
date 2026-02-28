@@ -114,7 +114,12 @@ async function performRollback(context: RollbackContext): Promise<void> {
     }
 
     const currentContainerSpec = await triggerInstance.inspectContainer(currentContainer, log);
-    await triggerInstance.stopAndRemoveContainer(currentContainer, currentContainerSpec, containerRef, log);
+    await triggerInstance.stopAndRemoveContainer(
+      currentContainer,
+      currentContainerSpec,
+      containerRef,
+      log,
+    );
     await triggerInstance.recreateContainer(
       dockerApi,
       currentContainerSpec,
@@ -180,7 +185,9 @@ function handleWindowExpiry(
   log: any,
 ): void {
   if (signal.aborted) return;
-  log.info(`Health monitoring window expired for container ${containerName} — container is healthy`);
+  log.info(
+    `Health monitoring window expired for container ${containerName} — container is healthy`,
+  );
   cleanup();
 }
 

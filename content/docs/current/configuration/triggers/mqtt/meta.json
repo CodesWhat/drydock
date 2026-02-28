@@ -1,6 +1,4 @@
 {
   "title": "MQTT",
-  "pages": [
-    "index"
-  ]
+  "pages": ["index"]
 }

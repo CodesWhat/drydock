@@ -1,6 +1,4 @@
 {
   "title": "Gotify",
-  "pages": [
-    "index"
-  ]
+  "pages": ["index"]
 }

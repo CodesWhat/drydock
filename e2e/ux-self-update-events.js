@@ -47,23 +47,35 @@ const { loadSelfUpdatePayload } = require('./self-update-payload');
       out.triggerError = String(err && err.message ? err.message : err);
     }
 
-    await page.waitForFunction(() => {
-      return Array.isArray(window.__ddEvents) && window.__ddEvents.some((e) => e.name === 'self-update');
-    }, { timeout: 30000 });
+    await page.waitForFunction(
+      () => {
+        return (
+          Array.isArray(window.__ddEvents) &&
+          window.__ddEvents.some((e) => e.name === 'self-update')
+        );
+      },
+      { timeout: 30000 },
+    );
 
-    await page.waitForFunction(() => {
-      const events = Array.isArray(window.__ddEvents) ? window.__ddEvents : [];
-      const selfIdx = events.findIndex((e) => e.name === 'self-update');
-      if (selfIdx < 0) return false;
-      return events.slice(selfIdx + 1).some((e) => e.name === 'connected');
-    }, { timeout: 120000 });
+    await page.waitForFunction(
+      () => {
+        const events = Array.isArray(window.__ddEvents) ? window.__ddEvents : [];
+        const selfIdx = events.findIndex((e) => e.name === 'self-update');
+        if (selfIdx < 0) return false;
+        return events.slice(selfIdx + 1).some((e) => e.name === 'connected');
+      },
+      { timeout: 120000 },
+    );
 
     out.events = await page.evaluate(() => window.__ddEvents || []);
     out.sawSelfUpdateEvent = out.events.some((e) => e.name === 'self-update');
     const selfIdx = out.events.findIndex((e) => e.name === 'self-update');
-    out.sawConnectedAfterSelfUpdate = selfIdx >= 0 && out.events.slice(selfIdx + 1).some((e) => e.name === 'connected');
+    out.sawConnectedAfterSelfUpdate =
+      selfIdx >= 0 && out.events.slice(selfIdx + 1).some((e) => e.name === 'connected');
 
-    await page.screenshot({ path: path.resolve(__dirname, '../artifacts/self-update-drill/ux-events-final.png') });
+    await page.screenshot({
+      path: path.resolve(__dirname, '../artifacts/self-update-drill/ux-events-final.png'),
+    });
   } finally {
     out.finishedAt = new Date().toISOString();
     fs.writeFileSync(

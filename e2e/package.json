@@ -22,13 +22,14 @@
   "repository": "CodesWhat/drydock",
   "license": "MIT",
   "dependencies": {
-    "@cucumber/cucumber": "^12.6.0"
+    "@cucumber/cucumber": "^12.7.0"
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "1.52.0",
     "artillery": "2.0.30"
   },
   "overrides": {
+    "fast-xml-parser": "5.3.8",
     "minimatch": "^10.2.1"
   }
 }

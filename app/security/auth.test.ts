@@ -63,7 +63,5 @@ test('failClosedAuth should warn and continue when insecure mode is enabled', ()
     }),
   ).not.toThrow();
 
-  expect(logger.warn).toHaveBeenCalledWith(
-    'auth failed; continuing because auth.insecure=true',
-  );
+  expect(logger.warn).toHaveBeenCalledWith('auth failed; continuing because auth.insecure=true');
 });

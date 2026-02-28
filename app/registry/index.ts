@@ -168,7 +168,9 @@ async function registerComponents(
       throw new Error(failureMessages.join('; '));
     }
     return registrationResults
-      .filter((result): result is PromiseFulfilledResult<Component> => result.status === 'fulfilled')
+      .filter(
+        (result): result is PromiseFulfilledResult<Component> => result.status === 'fulfilled',
+      )
       .map((result) => result.value);
   }
   return [];
@@ -216,7 +218,9 @@ function shouldFallbackLegacyPublicTokenAuthConfiguration(configuration: unknown
     return false;
   }
 
-  const hasAnyCredentialKey = TOKEN_AUTH_CREDENTIAL_KEYS.some((key) => hasOwnKey(configuration, key));
+  const hasAnyCredentialKey = TOKEN_AUTH_CREDENTIAL_KEYS.some((key) =>
+    hasOwnKey(configuration, key),
+  );
   if (!hasAnyCredentialKey) {
     return false;
   }

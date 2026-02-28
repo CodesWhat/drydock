@@ -1,6 +1,4 @@
 {
   "title": "Rocket.Chat",
-  "pages": [
-    "index"
-  ]
+  "pages": ["index"]
 }

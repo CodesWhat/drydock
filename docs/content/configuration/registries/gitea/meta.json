@@ -1,6 +1,4 @@
 {
   "title": "Gitea",
-  "pages": [
-    "index"
-  ]
+  "pages": ["index"]
 }

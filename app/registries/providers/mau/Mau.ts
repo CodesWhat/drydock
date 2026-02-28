@@ -53,8 +53,7 @@ class Mau extends Gitlab {
       return false;
     }
     return (
-      url === 'dock.mau.dev' ||
-      (url.endsWith('.dock.mau.dev') && /^[a-zA-Z0-9.-]+$/.test(url))
+      url === 'dock.mau.dev' || (url.endsWith('.dock.mau.dev') && /^[a-zA-Z0-9.-]+$/.test(url))
     );
   }
 

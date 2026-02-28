@@ -153,11 +153,7 @@ function matchPatternFrom(tokens, value, tokenIndex, valueIndex, memo) {
     return setMatchMemo(memo, memoKey, false);
   }
 
-  return setMatchMemo(
-    memo,
-    memoKey,
-    matchSingleToken(tokens, value, tokenIndex, valueIndex, memo),
-  );
+  return setMatchMemo(memo, memoKey, matchSingleToken(tokens, value, tokenIndex, valueIndex, memo));
 }
 
 function matchesPatternTokens(tokens, value) {

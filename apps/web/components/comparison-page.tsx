@@ -1,19 +1,10 @@
+import type { LucideIcon } from "lucide-react";
+import { AlertTriangle, BookOpen, Check, Clock, Github, Minus, Terminal, X } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  AlertTriangle,
-  BookOpen,
-  Check,
-  Clock,
-  Github,
-  Minus,
-  Terminal,
-  X,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
 
 export type ComparisonRow = {
   feature: string;
@@ -160,8 +151,7 @@ export function ComparisonPage({
                         </td>
                         <td className="px-4 py-3 text-neutral-500 sm:px-6 dark:text-neutral-400">
                           <span className="flex items-center gap-2">
-                            {row.competitor === "No" ||
-                            row.competitor === "None" ? (
+                            {row.competitor === "No" || row.competitor === "None" ? (
                               <X className="h-4 w-4 shrink-0 text-neutral-300 dark:text-neutral-600" />
                             ) : row.verdict === "drydock" ? (
                               <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
@@ -258,11 +248,9 @@ export function ComparisonPage({
                           <pre className="overflow-x-auto text-sm">
                             <code className="text-neutral-300">
                               <span className="text-neutral-500">$</span>{" "}
-                              <span className="text-[#C4FF00]">docker run</span>{" "}
-                              -d \{"\n"}
+                              <span className="text-[#C4FF00]">docker run</span> -d \{"\n"}
                               {"  "}--name drydock \{"\n"}
-                              {"  "}-v /var/run/docker.sock:/var/run/docker.sock
-                              \{"\n"}
+                              {"  "}-v /var/run/docker.sock:/var/run/docker.sock \{"\n"}
                               {"  "}-p 3000:3000 \{"\n"}
                               {"  "}codeswhat/drydock
                             </code>
@@ -321,9 +309,7 @@ export function ComparisonPage({
                   height={20}
                   className="dark:invert"
                 />
-                <span>
-                  &copy; {new Date().getFullYear()} CodesWhat. MIT License.
-                </span>
+                <span>&copy; {new Date().getFullYear()} CodesWhat. MIT License.</span>
               </div>
               <div className="flex items-center gap-4">
                 <a

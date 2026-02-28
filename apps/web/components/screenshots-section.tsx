@@ -1,8 +1,8 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
-import { useTheme } from "next-themes";
 import Image from "next/image";
+import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
 type Screenshot = {
@@ -12,11 +12,7 @@ type Screenshot = {
   label: string;
 };
 
-export function ScreenshotsSection({
-  screenshots,
-}: {
-  screenshots: Screenshot[];
-}) {
+export function ScreenshotsSection({ screenshots }: { screenshots: Screenshot[] }) {
   const { resolvedTheme } = useTheme();
   const [mode, setMode] = useState<"light" | "dark" | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -25,9 +21,7 @@ export function ScreenshotsSection({
     setMounted(true);
   }, []);
 
-  const effectiveMode = mounted
-    ? (mode ?? (resolvedTheme === "dark" ? "dark" : "light"))
-    : "light";
+  const effectiveMode = mounted ? (mode ?? (resolvedTheme === "dark" ? "dark" : "light")) : "light";
 
   return (
     <section className="px-4 py-24">
@@ -38,8 +32,7 @@ export function ScreenshotsSection({
             See it in action
           </h2>
           <p className="relative mx-auto max-w-2xl text-neutral-600 dark:text-neutral-400">
-            A modern, responsive dashboard with dark mode support and rich
-            container management.
+            A modern, responsive dashboard with dark mode support and rich container management.
           </p>
         </div>
 
@@ -49,9 +42,7 @@ export function ScreenshotsSection({
             <div className="inline-flex items-center rounded-lg border border-neutral-200 bg-white/50 p-1 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50">
               <button
                 type="button"
-                onClick={() =>
-                  setMode(effectiveMode === "light" ? null : "light")
-                }
+                onClick={() => setMode(effectiveMode === "light" ? null : "light")}
                 className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   effectiveMode === "light"
                     ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
@@ -63,9 +54,7 @@ export function ScreenshotsSection({
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  setMode(effectiveMode === "dark" ? null : "dark")
-                }
+                onClick={() => setMode(effectiveMode === "dark" ? null : "dark")}
                 className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   effectiveMode === "dark"
                     ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
@@ -87,11 +76,7 @@ export function ScreenshotsSection({
                   {mounted && (
                     <Image
                       key={`${screenshot.label}-${effectiveMode}`}
-                      src={
-                        effectiveMode === "dark"
-                          ? screenshot.srcDark
-                          : screenshot.srcLight
-                      }
+                      src={effectiveMode === "dark" ? screenshot.srcDark : screenshot.srcLight}
                       alt={screenshot.alt}
                       fill
                       className="object-cover object-left-top transition-transform duration-500 group-hover:scale-105"

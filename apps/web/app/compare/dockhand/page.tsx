@@ -1,21 +1,8 @@
-import {
-  ComparisonPage,
-  type ComparisonRow,
-  type Highlight,
-} from "@/components/comparison-page";
-import {
-  Bell,
-  Check,
-  History,
-  Lock,
-  Network,
-  Radio,
-  RotateCcw,
-} from "lucide-react";
+import { Bell, Check, History, Lock, Network, Radio, RotateCcw } from "lucide-react";
 import type { Metadata } from "next";
+import { ComparisonPage, type ComparisonRow, type Highlight } from "@/components/comparison-page";
 
-const baseUrl =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
 
 export const metadata: Metadata = {
   title: "Dockhand vs Drydock — Container Update Monitoring Comparison",
@@ -41,8 +28,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Dockhand vs Drydock — Container Update Monitoring Comparison",
-    description:
-      "Compare Dockhand and Drydock for container update monitoring.",
+    description: "Compare Dockhand and Drydock for container update monitoring.",
     creator: "@codeswhat",
   },
   alternates: {
@@ -237,13 +223,12 @@ export default function DockhandComparison() {
       heroTitle="Dockhand vs Drydock"
       heroDescription={
         <p>
-          Dockhand and Drydock are both container update tools with web UIs and
-          security scanning. Drydock adds{" "}
+          Dockhand and Drydock are both container update tools with web UIs and security scanning.
+          Drydock adds{" "}
           <strong className="text-neutral-900 dark:text-neutral-200">
             automatic rollback, maintenance windows, lifecycle hooks
           </strong>
-          , and broader registry and notification coverage — all free and open
-          source.
+          , and broader registry and notification coverage — all free and open source.
         </p>
       }
       competitorBadge={{
@@ -266,8 +251,7 @@ export default function DockhandComparison() {
         "@context": "https://schema.org",
         "@type": "WebPage",
         name: "Dockhand vs Drydock — Container Update Monitoring Comparison",
-        description:
-          "Compare Dockhand and Drydock for container update monitoring.",
+        description: "Compare Dockhand and Drydock for container update monitoring.",
         url: `${baseUrl}/compare/dockhand`,
         mainEntity: {
           "@type": "SoftwareApplication",

@@ -135,9 +135,21 @@ const mockContainerScrollBlocked = ref(false);
 const mockContainerAutoFetchInterval = ref(0);
 
 vi.mock('@/composables/useLogViewerBehavior', () => ({
-  useLogViewport: () => ({ logContainer: ref(null), scrollBlocked: mockContainerScrollBlocked, scrollToBottom: vi.fn(), handleLogScroll: vi.fn(), resumeAutoScroll: vi.fn() }),
+  useLogViewport: () => ({
+    logContainer: ref(null),
+    scrollBlocked: mockContainerScrollBlocked,
+    scrollToBottom: vi.fn(),
+    handleLogScroll: vi.fn(),
+    resumeAutoScroll: vi.fn(),
+  }),
   useAutoFetchLogs: () => ({ autoFetchInterval: mockContainerAutoFetchInterval }),
-  LOG_AUTO_FETCH_INTERVALS: [{ label: 'Off', value: 0 }, { label: '2s', value: 2000 }, { label: '5s', value: 5000 }, { label: '10s', value: 10000 }, { label: '30s', value: 30000 }],
+  LOG_AUTO_FETCH_INTERVALS: [
+    { label: 'Off', value: 0 },
+    { label: '2s', value: 2000 },
+    { label: '5s', value: 5000 },
+    { label: '10s', value: 10000 },
+    { label: '30s', value: 30000 },
+  ],
 }));
 
 const mockSelectedContainer = ref<Container | null>(null);
@@ -257,8 +269,9 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
 
 async function mountContainersView(containers: Container[] = [], apiContainersInput?: any[]) {
   // The API returns raw objects; mapApiContainers transforms them
-  const apiContainers = apiContainersInput
-    ?? containers.map((c) => ({
+  const apiContainers =
+    apiContainersInput ??
+    containers.map((c) => ({
       ...c,
       displayName: c.name,
     }));
@@ -406,7 +419,9 @@ describe('ContainersView', () => {
       (wrapper.vm as any).containerViewMode = 'list';
       await flushPromises();
 
-      expect(wrapper.find('.data-list-accordion [aria-label="Registry error"]').exists()).toBe(true);
+      expect(wrapper.find('.data-list-accordion [aria-label="Registry error"]').exists()).toBe(
+        true,
+      );
     });
 
     it('shows no-update reason in table version cell', async () => {
@@ -418,7 +433,9 @@ describe('ContainersView', () => {
     });
 
     it('derives active list policy state from updatePolicy metadata', async () => {
-      const containers = [makeContainer({ id: 'c1', name: 'nginx', newTag: null, updateKind: null })];
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx', newTag: null, updateKind: null }),
+      ];
       const wrapper = await mountContainersView(containers, [
         {
           id: 'c1',
@@ -467,7 +484,9 @@ describe('ContainersView', () => {
 
   describe('advanced policy controls', () => {
     it('removes one skipped tag via remove-skip policy action', async () => {
-      const containers = [makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' })];
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' }),
+      ];
       const wrapper = await mountContainersView(containers, [
         {
           id: 'c1',
@@ -492,7 +511,9 @@ describe('ContainersView', () => {
     });
 
     it('removes one skipped digest via remove-skip policy action', async () => {
-      const containers = [makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' })];
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' }),
+      ];
       const wrapper = await mountContainersView(containers, [
         {
           id: 'c1',
@@ -517,7 +538,9 @@ describe('ContainersView', () => {
     });
 
     it('snoozes to a specific date via snooze policy action', async () => {
-      const containers = [makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' })];
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' }),
+      ];
       const wrapper = await mountContainersView(containers);
       const vm = wrapper.vm as any;
       mockSelectedContainer.value = containers[0];
@@ -742,22 +765,25 @@ describe('ContainersView', () => {
 
     it('shows image metadata in overview for selected container', async () => {
       const c = makeContainer({ id: 'container-1', name: 'nginx' });
-      const wrapper = await mountContainersView([c], [
-        {
-          id: 'container-1',
-          name: 'nginx',
-          displayName: 'nginx',
-          image: {
+      const wrapper = await mountContainersView(
+        [c],
+        [
+          {
+            id: 'container-1',
             name: 'nginx',
-            architecture: 'amd64',
-            os: 'linux',
-            created: '2026-01-02T03:04:05.000Z',
-            digest: {
-              value: 'sha256:metadata-digest',
+            displayName: 'nginx',
+            image: {
+              name: 'nginx',
+              architecture: 'amd64',
+              os: 'linux',
+              created: '2026-01-02T03:04:05.000Z',
+              digest: {
+                value: 'sha256:metadata-digest',
+              },
             },
           },
-        },
-      ]);
+        ],
+      );
 
       mockSelectedContainer.value = c;
       mockDetailPanelOpen.value = true;
@@ -773,18 +799,21 @@ describe('ContainersView', () => {
 
     it('shows runtime Entrypoint/Cmd origins from container labels', async () => {
       const c = makeContainer({ id: 'container-1', name: 'nginx' });
-      const wrapper = await mountContainersView([c], [
-        {
-          id: 'container-1',
-          name: 'nginx',
-          displayName: 'nginx',
-          watcher: 'local',
-          labels: {
-            'dd.runtime.entrypoint.origin': 'explicit',
-            'dd.runtime.cmd.origin': 'inherited',
+      const wrapper = await mountContainersView(
+        [c],
+        [
+          {
+            id: 'container-1',
+            name: 'nginx',
+            displayName: 'nginx',
+            watcher: 'local',
+            labels: {
+              'dd.runtime.entrypoint.origin': 'explicit',
+              'dd.runtime.cmd.origin': 'inherited',
+            },
           },
-        },
-      ]);
+        ],
+      );
 
       mockSelectedContainer.value = c;
       mockDetailPanelOpen.value = true;
@@ -800,19 +829,22 @@ describe('ContainersView', () => {
 
     it('shows lifecycle hooks from container labels in overview', async () => {
       const c = makeContainer({ id: 'container-1', name: 'nginx' });
-      const wrapper = await mountContainersView([c], [
-        {
-          id: 'container-1',
-          name: 'nginx',
-          displayName: 'nginx',
-          watcher: 'local',
-          labels: {
-            'dd.hook.pre': 'echo before',
-            'dd.hook.post': 'echo after',
-            'dd.hook.timeout': '30000',
+      const wrapper = await mountContainersView(
+        [c],
+        [
+          {
+            id: 'container-1',
+            name: 'nginx',
+            displayName: 'nginx',
+            watcher: 'local',
+            labels: {
+              'dd.hook.pre': 'echo before',
+              'dd.hook.post': 'echo after',
+              'dd.hook.timeout': '30000',
+            },
           },
-        },
-      ]);
+        ],
+      );
 
       mockSelectedContainer.value = c;
       mockDetailPanelOpen.value = true;
@@ -830,19 +862,22 @@ describe('ContainersView', () => {
 
     it('shows auto-rollback config from container labels in overview', async () => {
       const c = makeContainer({ id: 'container-1', name: 'nginx' });
-      const wrapper = await mountContainersView([c], [
-        {
-          id: 'container-1',
-          name: 'nginx',
-          displayName: 'nginx',
-          watcher: 'local',
-          labels: {
-            'dd.rollback.auto': 'true',
-            'dd.rollback.window': '120000',
-            'dd.rollback.interval': '5000',
+      const wrapper = await mountContainersView(
+        [c],
+        [
+          {
+            id: 'container-1',
+            name: 'nginx',
+            displayName: 'nginx',
+            watcher: 'local',
+            labels: {
+              'dd.rollback.auto': 'true',
+              'dd.rollback.window': '120000',
+              'dd.rollback.interval': '5000',
+            },
           },
-        },
-      ]);
+        ],
+      );
 
       mockSelectedContainer.value = c;
       mockDetailPanelOpen.value = true;
@@ -856,15 +891,18 @@ describe('ContainersView', () => {
 
     it('shows runtime drift warning when origin metadata is unknown', async () => {
       const c = makeContainer({ id: 'container-1', name: 'nginx' });
-      const wrapper = await mountContainersView([c], [
-        {
-          id: 'container-1',
-          name: 'nginx',
-          displayName: 'nginx',
-          watcher: 'local',
-          labels: {},
-        },
-      ]);
+      const wrapper = await mountContainersView(
+        [c],
+        [
+          {
+            id: 'container-1',
+            name: 'nginx',
+            displayName: 'nginx',
+            watcher: 'local',
+            labels: {},
+          },
+        ],
+      );
 
       mockSelectedContainer.value = c;
       mockDetailPanelOpen.value = true;
@@ -1008,7 +1046,10 @@ describe('ContainersView', () => {
     });
 
     it('shows grouped stack headers when grouping is enabled', async () => {
-      const containers = [makeContainer({ name: 'nginx' }), makeContainer({ id: 'c2', name: 'redis' })];
+      const containers = [
+        makeContainer({ name: 'nginx' }),
+        makeContainer({ id: 'c2', name: 'redis' }),
+      ];
       const wrapper = await mountContainersView(containers);
       const vm = wrapper.vm as any;
 
@@ -1049,7 +1090,9 @@ describe('ContainersView', () => {
     });
 
     it('tracks group update-all loading state during execution', async () => {
-      const containers = [makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' })];
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' }),
+      ];
       const wrapper = await mountContainersView(containers);
       const vm = wrapper.vm as any;
       let resolveUpdate: ((value: unknown) => void) | undefined;

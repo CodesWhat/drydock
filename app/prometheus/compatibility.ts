@@ -28,7 +28,9 @@ function incrementLegacyInputCount(source: 'env' | 'label', key: string) {
 }
 
 function buildSourceSummary(source: 'env' | 'label'): LegacyInputSourceSummary {
-  const entries = Array.from(legacyInputCounts[source].entries()).sort(([a], [b]) => a.localeCompare(b));
+  const entries = Array.from(legacyInputCounts[source].entries()).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
   return {
     total: entries.reduce((count, [, value]) => count + value, 0),
     keys: entries.map(([key]) => key),

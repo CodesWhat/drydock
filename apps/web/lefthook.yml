@@ -2,5 +2,5 @@ pre-commit:
   commands:
     biome:
       glob: "*.{js,ts,jsx,tsx,json}"
-      run: npx @biomejs/biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      run: qlty check --fix --filter biome --no-progress {staged_files}
       stage_fixed: true

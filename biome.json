@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!ui/public/index.html", "!website"]
+    "includes": ["**", "!ui/public/index.html", "!website", "!apps/web/app/globals.css"]
   },
   "formatter": {
     "enabled": true,
@@ -64,5 +64,32 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["apps/web/**"],
+      "javascript": {
+        "formatter": {
+          "quoteStyle": "double",
+          "semicolons": "always"
+        }
+      },
+      "linter": {
+        "rules": {
+          "security": {
+            "noDangerouslySetInnerHtml": "off"
+          },
+          "performance": {
+            "noImgElement": "off"
+          },
+          "style": {
+            "useTemplate": "off"
+          },
+          "correctness": {
+            "noUnusedImports": "warn"
+          }
+        }
+      }
+    }
+  ]
 }

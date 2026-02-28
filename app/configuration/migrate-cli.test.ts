@@ -117,11 +117,7 @@ labels:
 `;
     const originalRegExp = globalThis.RegExp;
     let constructorCalls = 0;
-    const countingRegExp = function (
-      this: RegExp,
-      pattern?: string | RegExp,
-      flags?: string,
-    ) {
+    const countingRegExp = function (this: RegExp, pattern?: string | RegExp, flags?: string) {
       constructorCalls += 1;
       return new originalRegExp(pattern, flags);
     } as unknown as RegExpConstructor;
@@ -349,13 +345,10 @@ describe('runConfigMigrateCommandIfRequested', () => {
       fs.symlinkSync(sourcePath, symlinkPath);
 
       const collector = createIoCollector();
-      const result = runConfigMigrateCommandIfRequested(
-        ['config', 'migrate', '--file', '.env'],
-        {
-          cwd: tempDir,
-          io: collector.io,
-        },
-      );
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
 
       expect(result).toBe(0);
       expect(fs.readFileSync(sourcePath, 'utf-8')).toBe(original);

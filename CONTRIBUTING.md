@@ -70,25 +70,25 @@ qlty check --all --no-progress
 
 We use **Gitmoji + Conventional Commits**:
 
-```
+```text
 <emoji> <type>(<scope>): <description>
 ```
 
-| Emoji | Type | Use |
-|-------|------|-----|
-| ✨ | `feat` | New feature |
-| 🐛 | `fix` | Bug fix |
-| 📝 | `docs` | Documentation |
-| 💄 | `style` | UI/cosmetic changes |
-| ♻️ | `refactor` | Code refactor (no feature/fix) |
-| ⚡ | `perf` | Performance improvement |
-| ✅ | `test` | Adding/updating tests |
-| 🔧 | `chore` | Build, config, tooling |
-| 🔒 | `security` | Security fix |
+|Emoji|Type|Use|
+|---|---|---|
+|✨|`feat`|New feature|
+|🐛|`fix`|Bug fix|
+|📝|`docs`|Documentation|
+|💄|`style`|UI/cosmetic changes|
+|♻️|`refactor`|Code refactor (no feature/fix)|
+|⚡|`perf`|Performance improvement|
+|✅|`test`|Adding/updating tests|
+|🔧|`chore`|Build, config, tooling|
+|🔒|`security`|Security fix|
 
 Scope is optional. Subject line should be imperative, lowercase, no trailing period.
 
-```
+```text
 ✨ feat(docker): add health check endpoint
 🐛 fix: resolve socket EACCES (#38)
 ♻️ refactor(store): simplify collection init
@@ -113,17 +113,17 @@ Scope is optional. Subject line should be imperative, lowercase, no trailing per
 
 [Lefthook](https://github.com/evilmartians/lefthook) runs a piped (sequential, fail-fast) pipeline on every `git push`:
 
-| Step | What it does |
-|------|-------------|
-| `qlty` | Lint all files (`qlty check --all`) |
-| `build-app` | Compile backend TypeScript |
-| `build-ui` | Vite production build |
-| `test-app` | Backend test suite with coverage |
-| `test-ui` | Frontend test suite with coverage |
-| `e2e` | Cucumber E2E tests |
-| `zizmor` | GitHub Actions workflow linting (advisory, skipped if not installed) |
-| `snyk-deps` | Dependency vulnerability scan (skipped if Snyk not installed) |
-| `snyk-code` | Static analysis security scan (skipped if Snyk not installed) |
+|Step|What it does|
+|---|---|
+|`qlty`|Lint all files (`qlty check --all`)|
+|`build-app`|Compile backend TypeScript|
+|`build-ui`|Vite production build|
+|`test-app`|Backend test suite with coverage|
+|`test-ui`|Frontend test suite with coverage|
+|`e2e`|Cucumber E2E tests|
+|`zizmor`|GitHub Actions workflow linting (advisory, skipped if not installed)|
+|`snyk-deps`|Dependency vulnerability scan (skipped if Snyk not installed)|
+|`snyk-code`|Static analysis security scan (skipped if Snyk not installed)|
 
 If lefthook passes locally, CI will pass. Fix any issues **before** pushing.
 

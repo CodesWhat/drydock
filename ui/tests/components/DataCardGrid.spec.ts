@@ -87,11 +87,7 @@ describe('DataCardGrid', () => {
     it('sets a per-item aria-label on each card', () => {
       const w = factory();
       const labels = w.findAll('.container-card').map((card) => card.attributes('aria-label'));
-      expect(labels).toEqual([
-        'Select Alpha',
-        'Select Beta',
-        'Select Gamma',
-      ]);
+      expect(labels).toEqual(['Select Alpha', 'Select Beta', 'Select Gamma']);
     });
   });
 

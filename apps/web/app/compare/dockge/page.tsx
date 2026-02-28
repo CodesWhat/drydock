@@ -1,21 +1,8 @@
-import {
-  ComparisonPage,
-  type ComparisonRow,
-  type Highlight,
-} from "@/components/comparison-page";
-import {
-  Bell,
-  Check,
-  Eye,
-  Network,
-  Radio,
-  RotateCcw,
-  Shield,
-} from "lucide-react";
+import { Bell, Check, Eye, Network, Radio, RotateCcw, Shield } from "lucide-react";
 import type { Metadata } from "next";
+import { ComparisonPage, type ComparisonRow, type Highlight } from "@/components/comparison-page";
 
-const baseUrl =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
 
 export const metadata: Metadata = {
   title: "Dockge vs Drydock — Docker Compose & Container Update Comparison",
@@ -230,9 +217,8 @@ export default function DockgeComparison() {
           <strong className="text-neutral-900 dark:text-neutral-200">
             container update monitoring and safe auto-updates
           </strong>
-          . They solve different problems and can work well side-by-side —
-          Dockge for managing compose files, Drydock for tracking and applying
-          image updates.
+          . They solve different problems and can work well side-by-side — Dockge for managing
+          compose files, Drydock for tracking and applying image updates.
         </p>
       }
       competitorBadge={{
@@ -255,8 +241,7 @@ export default function DockgeComparison() {
         "@context": "https://schema.org",
         "@type": "WebPage",
         name: "Dockge vs Drydock — Docker Compose & Container Update Comparison",
-        description:
-          "Compare Dockge and Drydock for Docker container management.",
+        description: "Compare Dockge and Drydock for Docker container management.",
         url: `${baseUrl}/compare/dockge`,
         mainEntity: {
           "@type": "SoftwareApplication",

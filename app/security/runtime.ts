@@ -1,8 +1,5 @@
 import { execFile } from 'node:child_process';
-import {
-  getSecurityConfiguration,
-  type SecuritySbomFormat,
-} from '../configuration/index.js';
+import { getSecurityConfiguration, type SecuritySbomFormat } from '../configuration/index.js';
 
 export type SecurityRuntimeToolStatus = {
   enabled: boolean;

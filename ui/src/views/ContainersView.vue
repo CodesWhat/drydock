@@ -3,7 +3,11 @@ import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
-import { LOG_AUTO_FETCH_INTERVALS, useAutoFetchLogs, useLogViewport } from '../composables/useLogViewerBehavior';
+import {
+  LOG_AUTO_FETCH_INTERVALS,
+  useAutoFetchLogs,
+  useLogViewport,
+} from '../composables/useLogViewerBehavior';
 import { useColumnVisibility } from '../composables/useColumnVisibility';
 import { useContainerFilters } from '../composables/useContainerFilters';
 import { useDetailPanel } from '../composables/useDetailPanel';
@@ -130,7 +134,13 @@ function getContainerLogs(containerName: string): string[] {
 }
 
 // Container log viewer behavior
-const { logContainer: containerLogRef, scrollBlocked: containerScrollBlocked, scrollToBottom: containerScrollToBottom, handleLogScroll: containerHandleLogScroll, resumeAutoScroll: containerResumeAutoScroll } = useLogViewport();
+const {
+  logContainer: containerLogRef,
+  scrollBlocked: containerScrollBlocked,
+  scrollToBottom: containerScrollToBottom,
+  handleLogScroll: containerHandleLogScroll,
+  resumeAutoScroll: containerResumeAutoScroll,
+} = useLogViewport();
 
 async function refreshCurrentContainerLogs() {
   if (selectedContainer.value) {
@@ -138,7 +148,11 @@ async function refreshCurrentContainerLogs() {
   }
 }
 
-const { autoFetchInterval: containerAutoFetchInterval } = useAutoFetchLogs({ fetchFn: refreshCurrentContainerLogs, scrollToBottom: containerScrollToBottom, scrollBlocked: containerScrollBlocked });
+const { autoFetchInterval: containerAutoFetchInterval } = useAutoFetchLogs({
+  fetchFn: refreshCurrentContainerLogs,
+  scrollToBottom: containerScrollToBottom,
+  scrollBlocked: containerScrollBlocked,
+});
 
 // Breakpoints
 const { isMobile, windowNarrow } = useBreakpoints();
@@ -169,7 +183,9 @@ function syncSelectedContainerReference() {
   if (!selectedContainer.value) {
     return;
   }
-  const refreshed = containers.value.find((container) => container.name === selectedContainer.value?.name);
+  const refreshed = containers.value.find(
+    (container) => container.name === selectedContainer.value?.name,
+  );
   if (refreshed) {
     selectedContainer.value = refreshed;
     return;
@@ -193,8 +209,7 @@ const selectedContainerMeta = computed(() =>
 type RuntimeOrigin = 'explicit' | 'inherited' | 'unknown';
 
 function normalizeRuntimeOrigin(originValue: unknown): RuntimeOrigin {
-  const normalizedOrigin =
-    typeof originValue === 'string' ? originValue.trim().toLowerCase() : '';
+  const normalizedOrigin = typeof originValue === 'string' ? originValue.trim().toLowerCase() : '';
   if (normalizedOrigin === 'explicit' || normalizedOrigin === 'inherited') {
     return normalizedOrigin;
   }
@@ -213,7 +228,11 @@ function getRuntimeOriginValue(labels: unknown, ddKey: string, wudKey: string): 
   return normalizeRuntimeOrigin(labelRecord[wudKey]);
 }
 
-function getPreferredLabelString(labels: unknown, ddKey: string, wudKey: string): string | undefined {
+function getPreferredLabelString(
+  labels: unknown,
+  ddKey: string,
+  wudKey: string,
+): string | undefined {
   if (!labels || typeof labels !== 'object') {
     return undefined;
   }
@@ -381,9 +400,13 @@ const selectedSkipTags = computed<string[]>(() =>
   Array.isArray(selectedUpdatePolicy.value.skipTags) ? selectedUpdatePolicy.value.skipTags : [],
 );
 const selectedSkipDigests = computed<string[]>(() =>
-  Array.isArray(selectedUpdatePolicy.value.skipDigests) ? selectedUpdatePolicy.value.skipDigests : [],
+  Array.isArray(selectedUpdatePolicy.value.skipDigests)
+    ? selectedUpdatePolicy.value.skipDigests
+    : [],
 );
-const selectedSnoozeUntil = computed<string | undefined>(() => selectedUpdatePolicy.value.snoozeUntil);
+const selectedSnoozeUntil = computed<string | undefined>(
+  () => selectedUpdatePolicy.value.snoozeUntil,
+);
 const snoozeDateInput = ref('');
 
 const detailPreview = ref<Record<string, unknown> | null>(null);
@@ -428,12 +451,13 @@ const vulnerabilitySummary = computed(() => {
   };
 });
 
-const vulnerabilityTotal = computed(() =>
-  vulnerabilitySummary.value.critical
-  + vulnerabilitySummary.value.high
-  + vulnerabilitySummary.value.medium
-  + vulnerabilitySummary.value.low
-  + vulnerabilitySummary.value.unknown,
+const vulnerabilityTotal = computed(
+  () =>
+    vulnerabilitySummary.value.critical +
+    vulnerabilitySummary.value.high +
+    vulnerabilitySummary.value.medium +
+    vulnerabilitySummary.value.low +
+    vulnerabilitySummary.value.unknown,
 );
 
 const vulnerabilityPreview = computed(() => {
@@ -465,10 +489,10 @@ function normalizeSeverity(value: unknown): string {
   }
   const normalized = value.toUpperCase();
   if (
-    normalized === 'CRITICAL'
-    || normalized === 'HIGH'
-    || normalized === 'MEDIUM'
-    || normalized === 'LOW'
+    normalized === 'CRITICAL' ||
+    normalized === 'HIGH' ||
+    normalized === 'MEDIUM' ||
+    normalized === 'LOW'
   ) {
     return normalized;
   }
@@ -549,11 +573,7 @@ function formatOperationValue(value: unknown): string {
   if (typeof value !== 'string') {
     return 'unknown';
   }
-  return value
-    .trim()
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .toLowerCase();
+  return value.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').toLowerCase();
 }
 
 function formatOperationPhase(phase: unknown): string {
@@ -752,7 +772,12 @@ async function rollbackToBackup(backupId?: string) {
   }
 }
 
-async function applyPolicy(name: string, action: string, payload: Record<string, unknown> = {}, message?: string) {
+async function applyPolicy(
+  name: string,
+  action: string,
+  payload: Record<string, unknown> = {},
+  message?: string,
+) {
   const containerId = containerIdMap.value[name];
   if (!containerId || policyInProgress.value) {
     return false;
@@ -1040,11 +1065,11 @@ const displayContainers = computed(() => {
   const live = sortedContainers.value.map((c) =>
     skippedUpdates.value.has(c.name)
       ? {
-        ...c,
-        newTag: undefined,
-        releaseLink: undefined,
-        updateKind: undefined,
-      }
+          ...c,
+          newTag: undefined,
+          releaseLink: undefined,
+          updateKind: undefined,
+        }
       : c,
   );
   // Merge pending (ghost) containers that disappeared during action
@@ -1433,7 +1458,8 @@ function getContainerListPolicyState(containerName: string): ContainerListPolicy
 
   const policy = updatePolicy as Record<string, unknown>;
   const skipCount =
-    normalizePolicyEntries(policy.skipTags).length + normalizePolicyEntries(policy.skipDigests).length;
+    normalizePolicyEntries(policy.skipTags).length +
+    normalizePolicyEntries(policy.skipDigests).length;
 
   const rawSnoozeUntil = typeof policy.snoozeUntil === 'string' ? policy.snoozeUntil : undefined;
   const snoozeUntilMs = rawSnoozeUntil ? new Date(rawSnoozeUntil).getTime() : Number.NaN;
@@ -1454,7 +1480,9 @@ function getContainerListPolicyState(containerName: string): ContainerListPolicy
 function containerPolicyTooltip(containerName: string, kind: 'snoozed' | 'skipped'): string {
   const state = getContainerListPolicyState(containerName);
   if (kind === 'snoozed') {
-    return state.snoozeUntil ? `Updates snoozed until ${formatTimestamp(state.snoozeUntil)}` : 'Updates snoozed';
+    return state.snoozeUntil
+      ? `Updates snoozed until ${formatTimestamp(state.snoozeUntil)}`
+      : 'Updates snoozed';
   }
   if (state.skipCount <= 0) {
     return 'Skipped updates policy active';

@@ -1,22 +1,8 @@
-import {
-  ComparisonPage,
-  type ComparisonRow,
-  type Highlight,
-} from "@/components/comparison-page";
-import {
-  Archive,
-  Bell,
-  Check,
-  Eye,
-  Monitor,
-  Radio,
-  RotateCcw,
-  Shield,
-} from "lucide-react";
+import { Archive, Bell, Check, Eye, Monitor, Radio, RotateCcw, Shield } from "lucide-react";
 import type { Metadata } from "next";
+import { ComparisonPage, type ComparisonRow, type Highlight } from "@/components/comparison-page";
 
-const baseUrl =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
 
 export const metadata: Metadata = {
   title: "Ouroboros vs Drydock — Container Update Monitoring Comparison",
@@ -234,13 +220,12 @@ export default function OuroborosComparison() {
       heroTitle="Ouroboros vs Drydock"
       heroDescription={
         <p>
-          Ouroboros was a popular Python-based container updater, but it has
-          been{" "}
+          Ouroboros was a popular Python-based container updater, but it has been{" "}
           <strong className="text-neutral-900 dark:text-neutral-200">
             unmaintained since around 2020
           </strong>
-          . Drydock offers a modern, actively maintained alternative with a full
-          web UI, security scanning, and comprehensive container management.
+          . Drydock offers a modern, actively maintained alternative with a full web UI, security
+          scanning, and comprehensive container management.
         </p>
       }
       competitorBadge={{

@@ -6,213 +6,213 @@ const https = require('node:https');
 const DEFAULT_BASIC_AUTH = 'Basic YWRtaW46cGFzc3dvcmQ=';
 
 function getLoadTestTarget() {
-	const target = process.env.DD_LOAD_TEST_TARGET;
-	if (!target) {
-		throw new Error('DD_LOAD_TEST_TARGET is not set');
-	}
-	return target;
+  const target = process.env.DD_LOAD_TEST_TARGET;
+  if (!target) {
+    throw new Error('DD_LOAD_TEST_TARGET is not set');
+  }
+  return target;
 }
 
 function getAuthHeader() {
-	return process.env.DD_LOAD_TEST_AUTH_HEADER || DEFAULT_BASIC_AUTH;
+  return process.env.DD_LOAD_TEST_AUTH_HEADER || DEFAULT_BASIC_AUTH;
 }
 
 function buildApiUrl(pathname) {
-	return new URL(pathname, getLoadTestTarget()).toString();
+  return new URL(pathname, getLoadTestTarget()).toString();
 }
 
 async function requestJson(pathname, options = {}) {
-	const headers = {
-		Accept: 'application/json',
-		Authorization: getAuthHeader(),
-		...(options.headers || {}),
-	};
+  const headers = {
+    Accept: 'application/json',
+    Authorization: getAuthHeader(),
+    ...(options.headers || {}),
+  };
 
-	let body;
-	if (options.body !== undefined) {
-		body = JSON.stringify(options.body);
-		if (!headers['Content-Type'] && !headers['content-type']) {
-			headers['Content-Type'] = 'application/json';
-		}
-	}
+  let body;
+  if (options.body !== undefined) {
+    body = JSON.stringify(options.body);
+    if (!headers['Content-Type'] && !headers['content-type']) {
+      headers['Content-Type'] = 'application/json';
+    }
+  }
 
-	const response = await fetch(buildApiUrl(pathname), {
-		method: options.method || 'GET',
-		headers,
-		body,
-	});
+  const response = await fetch(buildApiUrl(pathname), {
+    method: options.method || 'GET',
+    headers,
+    body,
+  });
 
-	const text = await response.text();
-	let responseBody = null;
-	if (text.length > 0) {
-		try {
-			responseBody = JSON.parse(text);
-		} catch {
-			responseBody = text;
-		}
-	}
+  const text = await response.text();
+  let responseBody = null;
+  if (text.length > 0) {
+    try {
+      responseBody = JSON.parse(text);
+    } catch {
+      responseBody = text;
+    }
+  }
 
-	return {
-		status: response.status,
-		body: responseBody,
-	};
+  return {
+    status: response.status,
+    body: responseBody,
+  };
 }
 
 function openSseConnection(timeoutMs = 5000) {
-	return new Promise((resolve, reject) => {
-		const targetUrl = new URL('/api/events/ui', getLoadTestTarget());
-		const transport = targetUrl.protocol === 'https:' ? https : http;
-		let settled = false;
+  return new Promise((resolve, reject) => {
+    const targetUrl = new URL('/api/events/ui', getLoadTestTarget());
+    const transport = targetUrl.protocol === 'https:' ? https : http;
+    let settled = false;
 
-		const settle = (error) => {
-			if (settled) {
-				return;
-			}
-			settled = true;
-			if (error) {
-				reject(error);
-			} else {
-				resolve();
-			}
-		};
+    const settle = (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    };
 
-		const req = transport.request(
-			targetUrl,
-			{
-				method: 'GET',
-				headers: {
-					Accept: 'text/event-stream',
-					Authorization: getAuthHeader(),
-					'Cache-Control': 'no-cache',
-				},
-			},
-			(res) => {
-				if (res.statusCode !== 200) {
-					res.resume();
-					settle(new Error(`Unexpected SSE status code: ${res.statusCode}`));
-					return;
-				}
+    const req = transport.request(
+      targetUrl,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'text/event-stream',
+          Authorization: getAuthHeader(),
+          'Cache-Control': 'no-cache',
+        },
+      },
+      (res) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          settle(new Error(`Unexpected SSE status code: ${res.statusCode}`));
+          return;
+        }
 
-				let buffer = '';
-				const timeout = setTimeout(() => {
-					req.destroy();
-					settle(new Error('Timed out waiting for SSE dd:connected event'));
-				}, timeoutMs);
+        let buffer = '';
+        const timeout = setTimeout(() => {
+          req.destroy();
+          settle(new Error('Timed out waiting for SSE dd:connected event'));
+        }, timeoutMs);
 
-				const complete = () => {
-					clearTimeout(timeout);
-					req.destroy();
-					settle();
-				};
+        const complete = () => {
+          clearTimeout(timeout);
+          req.destroy();
+          settle();
+        };
 
-				res.on('data', (chunk) => {
-					buffer += chunk.toString('utf8');
-					if (buffer.includes('event: dd:connected')) {
-						complete();
-					}
-				});
+        res.on('data', (chunk) => {
+          buffer += chunk.toString('utf8');
+          if (buffer.includes('event: dd:connected')) {
+            complete();
+          }
+        });
 
-				res.on('end', () => {
-					clearTimeout(timeout);
-					if (!settled) {
-						settle(new Error('SSE stream ended before dd:connected event'));
-					}
-				});
+        res.on('end', () => {
+          clearTimeout(timeout);
+          if (!settled) {
+            settle(new Error('SSE stream ended before dd:connected event'));
+          }
+        });
 
-				res.on('error', (error) => {
-					clearTimeout(timeout);
-					if (!settled) {
-						settle(error);
-					}
-				});
-			},
-		);
+        res.on('error', (error) => {
+          clearTimeout(timeout);
+          if (!settled) {
+            settle(error);
+          }
+        });
+      },
+    );
 
-		req.on('error', (error) => {
-			if (!settled) {
-				settle(error);
-			}
-		});
+    req.on('error', (error) => {
+      if (!settled) {
+        settle(error);
+      }
+    });
 
-		req.end();
-	});
+    req.end();
+  });
 }
 
 async function probeSseReconnect() {
-	await openSseConnection();
-	await openSseConnection();
+  await openSseConnection();
+  await openSseConnection();
 }
 
 async function probeConnectedAgentLogs() {
-	const agentsResponse = await requestJson('/api/agents');
-	if (agentsResponse.status !== 200) {
-		throw new Error(`Failed to list agents (status ${agentsResponse.status})`);
-	}
+  const agentsResponse = await requestJson('/api/agents');
+  if (agentsResponse.status !== 200) {
+    throw new Error(`Failed to list agents (status ${agentsResponse.status})`);
+  }
 
-	const agents = Array.isArray(agentsResponse.body) ? agentsResponse.body : [];
-	const connectedAgent = agents.find(
-		(agent) => agent && agent.connected === true && typeof agent.name === 'string',
-	);
+  const agents = Array.isArray(agentsResponse.body) ? agentsResponse.body : [];
+  const connectedAgent = agents.find(
+    (agent) => agent && agent.connected === true && typeof agent.name === 'string',
+  );
 
-	// Agent log happy-path is optional in this environment.
-	if (!connectedAgent) {
-		return;
-	}
+  // Agent log happy-path is optional in this environment.
+  if (!connectedAgent) {
+    return;
+  }
 
-	const logsResponse = await requestJson(
-		`/api/agents/${encodeURIComponent(connectedAgent.name)}/log/entries?tail=100`,
-	);
-	if (logsResponse.status !== 200) {
-		throw new Error(`Expected 200 from connected agent log endpoint, got ${logsResponse.status}`);
-	}
+  const logsResponse = await requestJson(
+    `/api/agents/${encodeURIComponent(connectedAgent.name)}/log/entries?tail=100`,
+  );
+  if (logsResponse.status !== 200) {
+    throw new Error(`Expected 200 from connected agent log endpoint, got ${logsResponse.status}`);
+  }
 }
 
 function extractContainerId(payload) {
-	if (!Array.isArray(payload) || payload.length === 0) {
-		return null;
-	}
-	const firstContainer = payload.find((entry) => entry && typeof entry.id === 'string');
-	return firstContainer?.id || null;
+  if (!Array.isArray(payload) || payload.length === 0) {
+    return null;
+  }
+  const firstContainer = payload.find((entry) => entry && typeof entry.id === 'string');
+  return firstContainer?.id || null;
 }
 
 async function ensureContainerId(context) {
-	if (context?.vars?.containerId) {
-		return;
-	}
+  if (context?.vars?.containerId) {
+    return;
+  }
 
-	const containersResponse = await requestJson('/api/containers');
-	if (containersResponse.status === 200) {
-		const containerId = extractContainerId(containersResponse.body);
-		if (containerId) {
-			context.vars.containerId = containerId;
-			return;
-		}
-	}
+  const containersResponse = await requestJson('/api/containers');
+  if (containersResponse.status === 200) {
+    const containerId = extractContainerId(containersResponse.body);
+    if (containerId) {
+      context.vars.containerId = containerId;
+      return;
+    }
+  }
 
-	const watchResponse = await requestJson('/api/containers/watch', { method: 'POST' });
-	if (watchResponse.status !== 200) {
-		throw new Error(
-			`Failed to prepare container for rate-limit scan test (watch status ${watchResponse.status})`,
-		);
-	}
+  const watchResponse = await requestJson('/api/containers/watch', { method: 'POST' });
+  if (watchResponse.status !== 200) {
+    throw new Error(
+      `Failed to prepare container for rate-limit scan test (watch status ${watchResponse.status})`,
+    );
+  }
 
-	const watchedContainerId = extractContainerId(watchResponse.body);
-	if (!watchedContainerId) {
-		throw new Error('Failed to prepare container for rate-limit scan test (no container found)');
-	}
-	context.vars.containerId = watchedContainerId;
+  const watchedContainerId = extractContainerId(watchResponse.body);
+  if (!watchedContainerId) {
+    throw new Error('Failed to prepare container for rate-limit scan test (no container found)');
+  }
+  context.vars.containerId = watchedContainerId;
 }
 
 function dropAuthorization(requestParams, _context, _events, next) {
-	requestParams.headers = requestParams.headers || {};
-	delete requestParams.headers.Authorization;
-	delete requestParams.headers.authorization;
-	next();
+  requestParams.headers = requestParams.headers || {};
+  delete requestParams.headers.Authorization;
+  delete requestParams.headers.authorization;
+  next();
 }
 
 module.exports = {
-	dropAuthorization,
-	ensureContainerId,
-	probeConnectedAgentLogs,
-	probeSseReconnect,
+  dropAuthorization,
+  ensureContainerId,
+  probeConnectedAgentLogs,
+  probeSseReconnect,
 };

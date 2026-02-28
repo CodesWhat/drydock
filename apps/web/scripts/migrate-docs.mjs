@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'fs';
-import { join, dirname, basename, relative, extname } from 'path';
-import { fileURLToPath } from 'url';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
+import { basename, dirname, join, relative } from "path";
+import { fileURLToPath } from "url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const repoRoot = join(scriptDir, '..', '..', '..');
+const repoRoot = join(scriptDir, "..", "..", "..");
 
-const SRC = join(repoRoot, 'docs');
-const DEST = join(repoRoot, 'content', 'docs', 'current');
+const SRC = join(repoRoot, "docs");
+const DEST = join(repoRoot, "content", "docs", "current");
 
 // Directories/files to exclude
-const EXCLUDES = ['planning', 'node_modules', '_coverpage.md', 'sidebar.md', 'security'];
+const EXCLUDES = ["planning", "node_modules", "_coverpage.md", "sidebar.md", "security"];
 
 // Collect all .md files recursively
 function collectFiles(dir, base = dir) {
@@ -22,13 +22,13 @@ function collectFiles(dir, base = dir) {
     const stat = statSync(full);
 
     // Skip excluded dirs/files
-    const topLevel = rel.split('/')[0];
+    const topLevel = rel.split("/")[0];
     if (EXCLUDES.includes(topLevel)) continue;
     if (EXCLUDES.includes(entry)) continue;
 
     if (stat.isDirectory()) {
       results = results.concat(collectFiles(full, base));
-    } else if (entry.endsWith('.md')) {
+    } else if (entry.endsWith(".md")) {
       results.push({ full, rel: relative(base, full) });
     }
   }
@@ -38,14 +38,14 @@ function collectFiles(dir, base = dir) {
 // Extract title from first # heading
 function extractTitle(content) {
   const match = content.match(/^#\s+(.+)$/m);
-  return match ? match[1].trim() : 'Untitled';
+  return match ? match[1].trim() : "Untitled";
 }
 
 // Extract description from first paragraph after heading
 function extractDescription(content) {
-  const lines = content.split('\n');
+  const lines = content.split("\n");
   let pastHeading = false;
-  let desc = '';
+  let desc = "";
   for (const line of lines) {
     if (!pastHeading) {
       if (/^#\s+/.test(line)) {
@@ -54,11 +54,11 @@ function extractDescription(content) {
       continue;
     }
     const trimmed = line.trim();
-    if (trimmed === '') continue;
+    if (trimmed === "") continue;
     // Skip badges, images, other headings
-    if (trimmed.startsWith('#') || trimmed.startsWith('![') || trimmed.startsWith('|')) continue;
+    if (trimmed.startsWith("#") || trimmed.startsWith("![") || trimmed.startsWith("|")) continue;
     // Skip callout markers as description
-    if (trimmed.startsWith('?>') || trimmed.startsWith('!>')) continue;
+    if (trimmed.startsWith("?>") || trimmed.startsWith("!>")) continue;
     desc = trimmed;
     break;
   }
@@ -70,12 +70,12 @@ function extractDescription(content) {
     }
     return desc.substring(0, 160);
   }
-  return '';
+  return "";
 }
 
 // Convert Docsify callouts (?> and !>) to Fumadocs Callout components
 function convertCallouts(content) {
-  const lines = content.split('\n');
+  const lines = content.split("\n");
   const result = [];
   let i = 0;
 
@@ -84,23 +84,27 @@ function convertCallouts(content) {
     const warnMatch = lines[i].match(/^!>\s*(.*)/);
 
     if (infoMatch || warnMatch) {
-      const type = infoMatch ? 'info' : 'warn';
+      const type = infoMatch ? "info" : "warn";
       let text = (infoMatch || warnMatch)[1];
 
       // Handle multi-line callouts:
       // 1. Lines ending with \ are explicit continuations
       // 2. Non-blank lines following that don't start with ?> or !> are continuation text
       while (i + 1 < lines.length) {
-        if (text.endsWith('\\')) {
+        if (text.endsWith("\\")) {
           // Explicit continuation with backslash
           text = text.slice(0, -1).trimEnd();
           i++;
-          text += '\n' + lines[i].trim();
-        } else if (text.endsWith('  ') && lines[i + 1].trim() !== '' && !lines[i + 1].match(/^[?!]>\s/)) {
+          text += "\n" + lines[i].trim();
+        } else if (
+          text.endsWith("  ") &&
+          lines[i + 1].trim() !== "" &&
+          !lines[i + 1].match(/^[?!]>\s/)
+        ) {
           // Trailing double-space line break followed by non-empty, non-callout line
           text = text.trimEnd();
           i++;
-          text += '\n' + lines[i].trim();
+          text += "\n" + lines[i].trim();
         } else {
           break;
         }
@@ -113,7 +117,7 @@ function convertCallouts(content) {
     i++;
   }
 
-  return result.join('\n');
+  return result.join("\n");
 }
 
 // Convert Docsify tabs to Fumadocs Tabs components
@@ -141,12 +145,12 @@ function convertTabs(content) {
 
     if (tabs.length === 0) return match;
 
-    const tabNames = tabs.map(t => `"${t.name}"`).join(', ');
+    const tabNames = tabs.map((t) => `"${t.name}"`).join(", ");
     let output = `<Tabs items={[${tabNames}]}>`;
     for (const tab of tabs) {
       output += `\n<Tab value="${tab.name}">\n${tab.content}\n</Tab>`;
     }
-    output += '\n</Tabs>';
+    output += "\n</Tabs>";
     return output;
   });
 }
@@ -156,46 +160,46 @@ function convertTabs(content) {
 function convertLinks(content, fileRelDir) {
   return content.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (match, text, href) => {
     // Skip external links
-    if (href.startsWith('http://') || href.startsWith('https://')) return match;
+    if (href.startsWith("http://") || href.startsWith("https://")) return match;
     // Skip anchor-only links
-    if (href.startsWith('#')) return match;
+    if (href.startsWith("#")) return match;
     // Skip mail links
-    if (href.startsWith('mailto:')) return match;
+    if (href.startsWith("mailto:")) return match;
     // Skip image references (handled separately)
-    if (/\.(png|jpg|gif|svg|ico)$/i.test(href.split('#')[0].split('?')[0])) return match;
+    if (/\.(png|jpg|gif|svg|ico)$/i.test(href.split("#")[0].split("?")[0])) return match;
 
     // In Docsify, both relative and absolute links resolve from docs root
     let resolved = href;
 
     // Normalize: convert ?id= to #
-    resolved = resolved.replace(/\?id=/, '#');
+    resolved = resolved.replace(/\?id=/, "#");
 
     // Ensure leading slash
-    if (!resolved.startsWith('/')) {
-      resolved = '/' + resolved;
+    if (!resolved.startsWith("/")) {
+      resolved = "/" + resolved;
     }
 
     // Remove trailing slashes (but not from root /)
-    resolved = resolved.replace(/\/+$/, '') || '/';
+    resolved = resolved.replace(/\/+$/, "") || "/";
 
     // Prepend /docs if not already
-    if (!resolved.startsWith('/docs')) {
-      resolved = '/docs' + resolved;
+    if (!resolved.startsWith("/docs")) {
+      resolved = "/docs" + resolved;
     }
 
     // Clean up double slashes (preserve # anchors)
-    const hashIdx = resolved.indexOf('#');
+    const hashIdx = resolved.indexOf("#");
     if (hashIdx !== -1) {
-      const path = resolved.substring(0, hashIdx).replace(/\/+/g, '/');
+      const path = resolved.substring(0, hashIdx).replace(/\/+/g, "/");
       const hash = resolved.substring(hashIdx);
       resolved = path + hash;
     } else {
-      resolved = resolved.replace(/\/+/g, '/');
+      resolved = resolved.replace(/\/+/g, "/");
     }
 
     // Remove trailing slash (but keep root)
     if (hashIdx === -1 && resolved.length > 1) {
-      resolved = resolved.replace(/\/$/, '');
+      resolved = resolved.replace(/\/$/, "");
     }
 
     return `[${text}](${resolved})`;
@@ -206,20 +210,20 @@ function convertLinks(content, fileRelDir) {
 function convertImages(content, fileRelDir) {
   return content.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, src) => {
     // Skip external images (URLs)
-    if (src.startsWith('http://') || src.startsWith('https://')) return match;
+    if (src.startsWith("http://") || src.startsWith("https://")) return match;
     // Skip already-absolute /docs/assets paths
-    if (src.startsWith('/docs/assets/')) return match;
+    if (src.startsWith("/docs/assets/")) return match;
 
     // Handle relative image path starting with ./
-    let cleanSrc = src.startsWith('./') ? src.substring(2) : src;
+    const cleanSrc = src.startsWith("./") ? src.substring(2) : src;
 
     // For absolute paths starting with / (Docsify root-relative), treat as root-relative
-    if (cleanSrc.startsWith('/')) {
+    if (cleanSrc.startsWith("/")) {
       return `![${alt}](/docs/assets${cleanSrc})`;
     }
 
     let imgPath;
-    if (fileRelDir && fileRelDir !== '.') {
+    if (fileRelDir && fileRelDir !== ".") {
       imgPath = `/docs/assets/${fileRelDir}/${cleanSrc}`;
     } else {
       imgPath = `/docs/assets/${cleanSrc}`;
@@ -231,17 +235,17 @@ function convertImages(content, fileRelDir) {
 
 // Remove the first heading line (it's in frontmatter now)
 function removeFirstHeading(content) {
-  return content.replace(/^#\s+.+\n/, '');
+  return content.replace(/^#\s+.+\n/, "");
 }
 
 // Process a single markdown file
 function processFile(srcPath, relPath) {
-  let content = readFileSync(srcPath, 'utf-8');
+  let content = readFileSync(srcPath, "utf-8");
   const title = extractTitle(content);
   const description = extractDescription(content);
 
   // Get the relative directory of this file within the docs root
-  const fileRelDir = dirname(relPath) === '.' ? '' : dirname(relPath);
+  const fileRelDir = dirname(relPath) === "." ? "" : dirname(relPath);
 
   // Remove first heading (now in frontmatter)
   content = removeFirstHeading(content);
@@ -254,10 +258,10 @@ function processFile(srcPath, relPath) {
 
   // Determine required imports
   const imports = [];
-  if (content.includes('<Callout')) {
+  if (content.includes("<Callout")) {
     imports.push("import { Callout } from 'fumadocs-ui/components/callout';");
   }
-  if (content.includes('<Tabs') || content.includes('<Tab ')) {
+  if (content.includes("<Tabs") || content.includes("<Tab ")) {
     imports.push("import { Tab, Tabs } from 'fumadocs-ui/components/tabs';");
   }
 
@@ -268,22 +272,22 @@ function processFile(srcPath, relPath) {
   let frontmatter = `---\ntitle: "${safeTitle}"\ndescription: "${safeDesc}"\n---\n`;
 
   if (imports.length > 0) {
-    frontmatter += '\n' + imports.join('\n') + '\n';
+    frontmatter += "\n" + imports.join("\n") + "\n";
   }
 
-  const output = frontmatter + '\n' + content.trimStart();
+  const output = frontmatter + "\n" + content.trimStart();
 
   // Determine output path
   const dir = dirname(relPath);
   const file = basename(relPath);
   let outName;
-  if (file === 'README.md') {
-    outName = 'index.mdx';
+  if (file === "README.md") {
+    outName = "index.mdx";
   } else {
-    outName = file.replace(/\.md$/, '.mdx');
+    outName = file.replace(/\.md$/, ".mdx");
   }
 
-  const outDir = dir === '.' ? DEST : join(DEST, dir);
+  const outDir = dir === "." ? DEST : join(DEST, dir);
   mkdirSync(outDir, { recursive: true });
 
   const outPath = join(outDir, outName);
@@ -293,83 +297,138 @@ function processFile(srcPath, relPath) {
 
 // Meta.json definitions
 const META_FILES = {
-  '': {
-    title: 'Documentation',
-    pages: ['index', 'quickstart', 'configuration', 'updates', 'api', 'monitoring', 'faq', 'changelog'],
+  "": {
+    title: "Documentation",
+    pages: [
+      "index",
+      "quickstart",
+      "configuration",
+      "updates",
+      "api",
+      "monitoring",
+      "faq",
+      "changelog",
+    ],
   },
-  'configuration': {
-    title: 'Configuration',
-    pages: ['index', 'agents', 'authentications', 'logs', 'registries', 'security', 'server', 'storage', 'timezone', 'triggers', 'watchers'],
+  configuration: {
+    title: "Configuration",
+    pages: [
+      "index",
+      "agents",
+      "authentications",
+      "logs",
+      "registries",
+      "security",
+      "server",
+      "storage",
+      "timezone",
+      "triggers",
+      "watchers",
+    ],
   },
-  'configuration/registries': {
-    title: 'Registries',
-    pages: ['index', 'acr', 'custom', 'docr', 'dhi', 'ecr', 'forgejo', 'gcr', 'ghcr', 'gitea', 'gitlab', 'hub', 'lscr', 'trueforge', 'quay'],
+  "configuration/registries": {
+    title: "Registries",
+    pages: [
+      "index",
+      "acr",
+      "custom",
+      "docr",
+      "dhi",
+      "ecr",
+      "forgejo",
+      "gcr",
+      "ghcr",
+      "gitea",
+      "gitlab",
+      "hub",
+      "lscr",
+      "trueforge",
+      "quay",
+    ],
   },
-  'configuration/triggers': {
-    title: 'Triggers',
-    pages: ['index', 'apprise', 'command', 'discord', 'docker', 'docker-compose', 'gotify', 'http', 'ifttt', 'kafka', 'mqtt', 'ntfy', 'pushover', 'rocketchat', 'slack', 'smtp', 'telegram'],
+  "configuration/triggers": {
+    title: "Triggers",
+    pages: [
+      "index",
+      "apprise",
+      "command",
+      "discord",
+      "docker",
+      "docker-compose",
+      "gotify",
+      "http",
+      "ifttt",
+      "kafka",
+      "mqtt",
+      "ntfy",
+      "pushover",
+      "rocketchat",
+      "slack",
+      "smtp",
+      "telegram",
+    ],
   },
-  'configuration/authentications': {
-    title: 'Authentication',
-    pages: ['index', 'basic', 'oidc'],
+  "configuration/authentications": {
+    title: "Authentication",
+    pages: ["index", "basic", "oidc"],
   },
-  'api': {
-    title: 'API',
-    pages: ['index', 'agent', 'app', 'container', 'log', 'registry', 'store', 'trigger', 'watcher'],
+  api: {
+    title: "API",
+    pages: ["index", "agent", "app", "container", "log", "registry", "store", "trigger", "watcher"],
   },
-  'configuration/watchers': {
-    title: 'Watchers',
-    pages: ['index', 'popular-imgsets'],
+  "configuration/watchers": {
+    title: "Watchers",
+    pages: ["index", "popular-imgsets"],
   },
 };
 
 // Directories that only have index.mdx
 const INDEX_ONLY_DIRS = [
-  { path: 'quickstart', title: 'Quick Start' },
-  { path: 'faq', title: 'FAQ' },
-  { path: 'monitoring', title: 'Monitoring' },
-  { path: 'updates', title: 'Updates' },
-  { path: 'changelog', title: 'Changelog' },
-  { path: 'configuration/agents', title: 'Agents' },
-  { path: 'configuration/logs', title: 'Logs' },
-  { path: 'configuration/security', title: 'Update Guard' },
-  { path: 'configuration/server', title: 'Server' },
-  { path: 'configuration/storage', title: 'Storage' },
-  { path: 'configuration/timezone', title: 'Timezone' },
-  { path: 'configuration/authentications/basic', title: 'Basic' },
-  { path: 'configuration/authentications/oidc', title: 'OIDC' },
+  { path: "quickstart", title: "Quick Start" },
+  { path: "faq", title: "FAQ" },
+  { path: "monitoring", title: "Monitoring" },
+  { path: "updates", title: "Updates" },
+  { path: "changelog", title: "Changelog" },
+  { path: "configuration/agents", title: "Agents" },
+  { path: "configuration/logs", title: "Logs" },
+  { path: "configuration/security", title: "Update Guard" },
+  { path: "configuration/server", title: "Server" },
+  { path: "configuration/storage", title: "Storage" },
+  { path: "configuration/timezone", title: "Timezone" },
+  { path: "configuration/authentications/basic", title: "Basic" },
+  { path: "configuration/authentications/oidc", title: "OIDC" },
   // Registry subdirs
-  { path: 'configuration/registries/acr', title: 'ACR' },
-  { path: 'configuration/registries/custom', title: 'Custom' },
-  { path: 'configuration/registries/docr', title: 'DOCR' },
-  { path: 'configuration/registries/dhi', title: 'DHI' },
-  { path: 'configuration/registries/ecr', title: 'ECR' },
-  { path: 'configuration/registries/forgejo', title: 'Forgejo' },
-  { path: 'configuration/registries/gcr', title: 'GCR' },
-  { path: 'configuration/registries/ghcr', title: 'GHCR' },
-  { path: 'configuration/registries/gitea', title: 'Gitea' },
-  { path: 'configuration/registries/gitlab', title: 'GitLab' },
-  { path: 'configuration/registries/hub', title: 'Docker Hub' },
-  { path: 'configuration/registries/lscr', title: 'LSCR' },
-  { path: 'configuration/registries/trueforge', title: 'TrueForge' },
-  { path: 'configuration/registries/quay', title: 'Quay' },
+  { path: "configuration/registries/acr", title: "ACR" },
+  { path: "configuration/registries/custom", title: "Custom" },
+  { path: "configuration/registries/docr", title: "DOCR" },
+  { path: "configuration/registries/dhi", title: "DHI" },
+  { path: "configuration/registries/ecr", title: "ECR" },
+  { path: "configuration/registries/forgejo", title: "Forgejo" },
+  { path: "configuration/registries/gcr", title: "GCR" },
+  { path: "configuration/registries/ghcr", title: "GHCR" },
+  { path: "configuration/registries/gitea", title: "Gitea" },
+  { path: "configuration/registries/gitlab", title: "GitLab" },
+  { path: "configuration/registries/hub", title: "Docker Hub" },
+  { path: "configuration/registries/lscr", title: "LSCR" },
+  { path: "configuration/registries/trueforge", title: "TrueForge" },
+  { path: "configuration/registries/quay", title: "Quay" },
   // Trigger subdirs
-  { path: 'configuration/triggers/apprise', title: 'Apprise' },
-  { path: 'configuration/triggers/command', title: 'Command' },
-  { path: 'configuration/triggers/discord', title: 'Discord' },
-  { path: 'configuration/triggers/docker', title: 'Docker' },
-  { path: 'configuration/triggers/docker-compose', title: 'Docker Compose' },
-  { path: 'configuration/triggers/gotify', title: 'Gotify' },
-  { path: 'configuration/triggers/http', title: 'HTTP' },
-  { path: 'configuration/triggers/ifttt', title: 'IFTTT' },
-  { path: 'configuration/triggers/kafka', title: 'Kafka' },
-  { path: 'configuration/triggers/mqtt', title: 'MQTT' },
-  { path: 'configuration/triggers/ntfy', title: 'Ntfy' },
-  { path: 'configuration/triggers/pushover', title: 'Pushover' },
-  { path: 'configuration/triggers/rocketchat', title: 'Rocket.Chat' },
-  { path: 'configuration/triggers/slack', title: 'Slack' },
-  { path: 'configuration/triggers/smtp', title: 'SMTP' },
-  { path: 'configuration/triggers/telegram', title: 'Telegram' },
+  { path: "configuration/triggers/apprise", title: "Apprise" },
+  { path: "configuration/triggers/command", title: "Command" },
+  { path: "configuration/triggers/discord", title: "Discord" },
+  { path: "configuration/triggers/docker", title: "Docker" },
+  { path: "configuration/triggers/docker-compose", title: "Docker Compose" },
+  { path: "configuration/triggers/gotify", title: "Gotify" },
+  { path: "configuration/triggers/http", title: "HTTP" },
+  { path: "configuration/triggers/ifttt", title: "IFTTT" },
+  { path: "configuration/triggers/kafka", title: "Kafka" },
+  { path: "configuration/triggers/mqtt", title: "MQTT" },
+  { path: "configuration/triggers/ntfy", title: "Ntfy" },
+  { path: "configuration/triggers/pushover", title: "Pushover" },
+  { path: "configuration/triggers/rocketchat", title: "Rocket.Chat" },
+  { path: "configuration/triggers/slack", title: "Slack" },
+  { path: "configuration/triggers/smtp", title: "SMTP" },
+  { path: "configuration/triggers/telegram", title: "Telegram" },
 ];
 
 function writeMeta() {
@@ -377,41 +436,41 @@ function writeMeta() {
   for (const [dir, meta] of Object.entries(META_FILES)) {
     const outDir = dir ? join(DEST, dir) : DEST;
     mkdirSync(outDir, { recursive: true });
-    const metaPath = join(outDir, 'meta.json');
-    writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n');
-    console.log(`  meta.json -> ${dir || '(root)'}/meta.json`);
+    const metaPath = join(outDir, "meta.json");
+    writeFileSync(metaPath, JSON.stringify(meta, null, 2) + "\n");
+    console.log(`  meta.json -> ${dir || "(root)"}/meta.json`);
   }
 
   // Write index-only directory meta.json files
   for (const { path: dir, title } of INDEX_ONLY_DIRS) {
     const outDir = join(DEST, dir);
     mkdirSync(outDir, { recursive: true });
-    const metaPath = join(outDir, 'meta.json');
+    const metaPath = join(outDir, "meta.json");
     // Only write if not already written by META_FILES
     if (!existsSync(metaPath)) {
-      writeFileSync(metaPath, JSON.stringify({ title, pages: ['index'] }, null, 2) + '\n');
+      writeFileSync(metaPath, JSON.stringify({ title, pages: ["index"] }, null, 2) + "\n");
       console.log(`  meta.json -> ${dir}/meta.json`);
     }
   }
 }
 
 // Non-README .md files to skip (excluded globally)
-const SKIP_EXTENSIONS = ['.html', '.css', '.json'];
+const SKIP_EXTENSIONS = [".html", ".css", ".json"];
 
-console.log('Migrating Docsify docs to Fumadocs MDX...\n');
+console.log("Migrating Docsify docs to Fumadocs MDX...\n");
 
 // Collect files
 const files = collectFiles(SRC);
 console.log(`Found ${files.length} markdown files to process.\n`);
 
 // Process each file
-console.log('Converting files:');
+console.log("Converting files:");
 for (const { full, rel } of files) {
   processFile(full, rel);
 }
 
 // Write meta.json files
-console.log('\nWriting meta.json files:');
+console.log("\nWriting meta.json files:");
 writeMeta();
 
-console.log('\nMigration complete!');
+console.log("\nMigration complete!");

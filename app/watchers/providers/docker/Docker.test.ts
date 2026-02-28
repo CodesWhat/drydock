@@ -1195,7 +1195,9 @@ describe('Docker Watcher', () => {
         expect(docker.dockerEventsReconnectDelayMs).toBe(1000);
 
         eventHandlers.error(new Error('Stream dropped'));
-        expect(docker.log.warn).toHaveBeenCalledWith(expect.stringContaining('reconnect attempt #1'));
+        expect(docker.log.warn).toHaveBeenCalledWith(
+          expect.stringContaining('reconnect attempt #1'),
+        );
         expect(docker.dockerEventsReconnectTimeout).toBeDefined();
         expect(docker.dockerEventsReconnectDelayMs).toBe(2000);
 
@@ -2199,28 +2201,21 @@ describe('Docker Watcher', () => {
         ['dd.rollback.interval', 'wud.rollback.interval'],
       ];
 
-      test.each(labelPairs)(
-        'should prefer %s over %s when both are present',
-        (ddKey, wudKey) => {
-          const labels = { [ddKey]: 'dd-value', [wudKey]: 'wud-value' };
-          expect(testable_getLabel(labels, ddKey, wudKey)).toBe('dd-value');
-        },
-      );
+      test.each(labelPairs)('should prefer %s over %s when both are present', (ddKey, wudKey) => {
+        const labels = { [ddKey]: 'dd-value', [wudKey]: 'wud-value' };
+        expect(testable_getLabel(labels, ddKey, wudKey)).toBe('dd-value');
+      });
 
-      test.each(labelPairs)(
-        'should fall back to %s when %s is absent',
-        (ddKey, wudKey) => {
-          const labels = { [wudKey]: 'legacy-value' };
-          expect(testable_getLabel(labels, ddKey, wudKey)).toBe('legacy-value');
-        },
-      );
+      test.each(labelPairs)('should fall back to %s when %s is absent', (ddKey, wudKey) => {
+        const labels = { [wudKey]: 'legacy-value' };
+        expect(testable_getLabel(labels, ddKey, wudKey)).toBe('legacy-value');
+      });
 
-      test.each(labelPairs)(
-        'should return undefined when neither %s nor %s is set',
-        (ddKey, wudKey) => {
-          expect(testable_getLabel({}, ddKey, wudKey)).toBeUndefined();
-        },
-      );
+      test.each(
+        labelPairs,
+      )('should return undefined when neither %s nor %s is set', (ddKey, wudKey) => {
+        expect(testable_getLabel({}, ddKey, wudKey)).toBeUndefined();
+      });
     });
   });
 
@@ -2690,9 +2685,7 @@ describe('Docker Watcher', () => {
       expect(mockLogChild.warn).toHaveBeenCalledWith(
         expect.stringContaining('does not match includeTags regex'),
       );
-      expect(mockLogChild.debug).toHaveBeenCalledWith(
-        expect.stringContaining('greater=skipped'),
-      );
+      expect(mockLogChild.debug).toHaveBeenCalledWith(expect.stringContaining('greater=skipped'));
     });
 
     test('should advise best semver tag when current tag is non-semver and includeTags filter is set', async () => {
@@ -3979,7 +3972,9 @@ describe('Docker Watcher', () => {
         protocol: 'http',
       });
       docker.configuration.auth = { type: 'oidc', oidc: { tokenurl: 'https://idp/token' } };
-      await expect(docker.ensureRemoteAuthHeaders()).rejects.toThrow('HTTPS is required for OIDC auth');
+      await expect(docker.ensureRemoteAuthHeaders()).rejects.toThrow(
+        'HTTPS is required for OIDC auth',
+      );
       expect(mockAxios.post).not.toHaveBeenCalled();
     });
 
@@ -5422,7 +5417,9 @@ describe('Docker Watcher', () => {
         expect(firstPayload.msg).toContain('Failed to initialize watcher logger');
         expect(firstPayload.fallback).toBe('stderr-json');
 
-        const childPayload = JSON.parse(`${stderrSpy.mock.calls[stderrSpy.mock.calls.length - 1][0]}`);
+        const childPayload = JSON.parse(
+          `${stderrSpy.mock.calls[stderrSpy.mock.calls.length - 1][0]}`,
+        );
         expect(childPayload.scope).toBe('child');
       } finally {
         originalModule.default.child = origChild;

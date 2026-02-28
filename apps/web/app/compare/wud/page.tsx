@@ -1,21 +1,8 @@
-import {
-  ComparisonPage,
-  type ComparisonRow,
-  type Highlight,
-} from "@/components/comparison-page";
-import {
-  Bell,
-  Check,
-  GitBranch,
-  Network,
-  Radio,
-  RotateCcw,
-  Shield,
-} from "lucide-react";
+import { Bell, Check, GitBranch, Network, Radio, RotateCcw, Shield } from "lucide-react";
 import type { Metadata } from "next";
+import { ComparisonPage, type ComparisonRow, type Highlight } from "@/components/comparison-page";
 
-const baseUrl =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
 
 export const metadata: Metadata = {
   title: "WUD vs Drydock — Container Update Monitoring Comparison",
@@ -243,9 +230,8 @@ export default function WudComparison() {
           <strong className="text-neutral-900 dark:text-neutral-200">
             fork of What&apos;s Up Docker (WUD)
           </strong>{" "}
-          that has evolved significantly — migrating to TypeScript, adding
-          security scanning, distributed agents, audit logging, rollback, and 14
-          additional registry providers.
+          that has evolved significantly — migrating to TypeScript, adding security scanning,
+          distributed agents, audit logging, rollback, and 14 additional registry providers.
         </p>
       }
       competitorBadge={{
@@ -268,8 +254,7 @@ export default function WudComparison() {
         "@context": "https://schema.org",
         "@type": "WebPage",
         name: "WUD vs Drydock — Container Update Monitoring Comparison",
-        description:
-          "Compare What's Up Docker (WUD) and Drydock for container update monitoring.",
+        description: "Compare What's Up Docker (WUD) and Drydock for container update monitoring.",
         url: `${baseUrl}/compare/wud`,
         mainEntity: {
           "@type": "SoftwareApplication",

@@ -67,7 +67,9 @@ describe('Main Application', () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     // Verify initialization order and calls
-    expect(migrateCli.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith(process.argv.slice(2));
+    expect(migrateCli.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith(
+      process.argv.slice(2),
+    );
     expect(getVersion).toHaveBeenCalled();
     expect(log.info).toHaveBeenCalledWith(
       'drydock is starting in Controller mode (version = 1.0.0)',
@@ -96,7 +98,9 @@ describe('Main Application', () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(log.info).toHaveBeenCalledWith('drydock is starting in Agent mode (version = 1.0.0)');
-    expect(migrateCli.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith(process.argv.slice(2));
+    expect(migrateCli.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith(
+      process.argv.slice(2),
+    );
     expect(store.init).toHaveBeenCalledWith({ memory: true });
     expect(registry.init).toHaveBeenCalledWith({ agent: true });
     expect(prometheus.init).not.toHaveBeenCalled();
@@ -123,7 +127,10 @@ describe('Main Application', () => {
     await import('./index.js');
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(migrateCli.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith(['config', 'migrate']);
+    expect(migrateCli.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith([
+      'config',
+      'migrate',
+    ]);
     expect(log.info).not.toHaveBeenCalled();
     expect(getVersion).not.toHaveBeenCalled();
     expect(store.init).not.toHaveBeenCalled();

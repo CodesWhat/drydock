@@ -3,8 +3,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 
-const baseUrl =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
 
 export const metadata: Metadata = {
   title: "Drydock vs Alternatives — Container Update Tool Comparisons",
@@ -46,8 +45,7 @@ const tools = [
     description:
       "Full container management platform with free CE and paid Business Edition. Compare Drydock's free update monitoring and security scanning to Portainer's paid features.",
     status: "Active",
-    statusColor:
-      "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
+    statusColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
   },
   {
     name: "Komodo",
@@ -55,8 +53,7 @@ const tools = [
     description:
       "Broad DevOps platform with CI/CD, git deployment, and container management. See how Drydock's focused update monitoring compares.",
     status: "Active",
-    statusColor:
-      "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
+    statusColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
   },
   {
     name: "Diun",
@@ -64,8 +61,7 @@ const tools = [
     description:
       "Lightweight notification-only tool that alerts on image updates but doesn't apply them. See how Drydock adds a UI, auto-updates, and security scanning.",
     status: "Active",
-    statusColor:
-      "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
+    statusColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
   },
   {
     name: "Dockge",
@@ -73,8 +69,7 @@ const tools = [
     description:
       "Popular compose stack manager focused on editing and deploying compose files. Drydock focuses on update monitoring — they complement each other well.",
     status: "Active",
-    statusColor:
-      "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
+    statusColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
   },
   {
     name: "Dockhand",
@@ -82,8 +77,7 @@ const tools = [
     description:
       "Container update tool with Update Guard scanning and git-based deployment. Compare rollback, hooks, and registry support.",
     status: "Active",
-    statusColor:
-      "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
+    statusColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
   },
   {
     name: "Dozzle",
@@ -91,8 +85,7 @@ const tools = [
     description:
       "Best-in-class real-time log viewer with SQL querying. Different focus from Drydock — they work great side-by-side.",
     status: "Active",
-    statusColor:
-      "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
+    statusColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
   },
   {
     name: "WUD",
@@ -100,8 +93,7 @@ const tools = [
     description:
       "Drydock's upstream fork (What's Up Docker). See what Drydock adds: 13 more registries, security scanning, agents, audit log, and a TypeScript rewrite.",
     status: "Active",
-    statusColor:
-      "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
+    statusColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
   },
   {
     name: "Watchtower",
@@ -117,8 +109,7 @@ const tools = [
     description:
       "Python-based auto-updater, unmaintained since ~2020. See how Drydock provides a modern, actively maintained alternative.",
     status: "Unmaintained",
-    statusColor:
-      "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400",
+    statusColor: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400",
   },
 ];
 
@@ -169,9 +160,8 @@ export default function ComparePage() {
                   Drydock vs Alternatives
                 </h1>
                 <p className="relative mx-auto max-w-2xl text-lg text-neutral-600 dark:text-neutral-400">
-                  Feature-by-feature comparisons with every major container
-                  update and management tool. Find out which tool fits your
-                  workflow.
+                  Feature-by-feature comparisons with every major container update and management
+                  tool. Find out which tool fits your workflow.
                 </p>
               </div>
             </div>
@@ -222,9 +212,7 @@ export default function ComparePage() {
                   height={20}
                   className="dark:invert"
                 />
-                <span>
-                  &copy; {new Date().getFullYear()} CodesWhat. AGPL-3.0 License.
-                </span>
+                <span>&copy; {new Date().getFullYear()} CodesWhat. AGPL-3.0 License.</span>
               </div>
             </div>
           </footer>

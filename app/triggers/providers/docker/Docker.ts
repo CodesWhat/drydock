@@ -378,7 +378,8 @@ class Docker extends Trigger {
       return undefined;
     }
 
-    const sourceImage = currentContainerSpec?.Config?.Image ?? currentContainerSpec?.Image ?? 'unknown';
+    const sourceImage =
+      currentContainerSpec?.Config?.Image ?? currentContainerSpec?.Image ?? 'unknown';
     const rollbackStatus = rollbackSucceeded
       ? 'Rollback completed.'
       : 'Rollback attempted but did not fully complete.';
@@ -554,7 +555,8 @@ class Docker extends Trigger {
         const normalizedImage = structuredClone(image);
         normalizedImage.registry = normalizedImage.registry || {};
         normalizedImage.registry.url = registryHost;
-        normalizedImage.registry.name = registryName || normalizedImage.registry.name || 'anonymous';
+        normalizedImage.registry.name =
+          registryName || normalizedImage.registry.name || 'anonymous';
         return normalizedImage;
       },
     };
@@ -564,7 +566,8 @@ class Docker extends Trigger {
     const { allowAnonymousFallback = false } = options;
     const registryName = container?.image?.registry?.name;
     const registryState = getState().registry || {};
-    const requireNormalizeImage = this.configuration.prune === true && !this.isSelfUpdate(container);
+    const requireNormalizeImage =
+      this.configuration.prune === true && !this.isSelfUpdate(container);
     const requiredMethods = ['getAuthPull', 'getImageFullName'];
     if (requireNormalizeImage) {
       requiredMethods.push('normalizeImage');
@@ -624,7 +627,8 @@ class Docker extends Trigger {
     }
 
     const knownRegistries = Object.keys(registryState);
-    const knownRegistriesAsString = knownRegistries.length > 0 ? knownRegistries.join(', ') : 'none';
+    const knownRegistriesAsString =
+      knownRegistries.length > 0 ? knownRegistries.join(', ') : 'none';
     throw new Error(
       `Unsupported registry manager "${registryName}". Known registries: ${knownRegistriesAsString}. Configure a matching registry or provide a valid registry URL.`,
     );
@@ -1262,13 +1266,17 @@ class Docker extends Trigger {
         await inspected.container.stop();
       }
     } catch (e) {
-      logContainer.warn(`Failed to stop stale container ${identifier} during recovery (${e.message})`);
+      logContainer.warn(
+        `Failed to stop stale container ${identifier} during recovery (${e.message})`,
+      );
     }
     try {
       await inspected.container.remove({ force: true });
       return true;
     } catch (e) {
-      logContainer.warn(`Failed to remove stale container ${identifier} during recovery (${e.message})`);
+      logContainer.warn(
+        `Failed to remove stale container ${identifier} during recovery (${e.message})`,
+      );
       return false;
     }
   }
@@ -1283,7 +1291,10 @@ class Docker extends Trigger {
       `Found in-progress update operation ${pending.id} for ${container.name}; attempting recovery`,
     );
 
-    const activeByOriginalName = await this.inspectContainerByIdentifier(dockerApi, pending.oldName);
+    const activeByOriginalName = await this.inspectContainerByIdentifier(
+      dockerApi,
+      pending.oldName,
+    );
     const tempByRenamedName = await this.inspectContainerByIdentifier(dockerApi, pending.tempName);
 
     if (activeByOriginalName && tempByRenamedName) {
@@ -1900,7 +1911,9 @@ class Docker extends Trigger {
       });
       return true;
     } catch (e) {
-      logContainer.warn(`Container update failed for ${oldName}, attempting rollback (${e.message})`);
+      logContainer.warn(
+        `Container update failed for ${oldName}, attempting rollback (${e.message})`,
+      );
       updateOperationStore.updateOperation(operation.id, {
         phase: 'rollback-started',
         lastError: e.message,

@@ -1,4 +1,5 @@
 // @ts-nocheck
+import fs from 'node:fs/promises';
 import * as container from './container.js';
 
 function createContainerWithError(errorMessage) {
@@ -510,6 +511,14 @@ test('flatten should be flatten the nested properties with underscores when call
     update_kind_semver_diff: 'major',
     watcher: 'test',
   });
+});
+
+test('casing dependency should use non-deprecated change-case package', async () => {
+  const packageJsonRaw = await fs.readFile(new URL('../package.json', import.meta.url), 'utf8');
+  const packageJson = JSON.parse(packageJsonRaw);
+
+  expect(packageJson.dependencies?.['change-case']).toBeDefined();
+  expect(packageJson.dependencies?.['snake-case']).toBeUndefined();
 });
 
 test('fullName should build an id with watcher name & container name when called', async () => {

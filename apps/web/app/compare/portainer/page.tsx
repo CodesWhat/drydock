@@ -1,13 +1,8 @@
-import {
-  ComparisonPage,
-  type ComparisonRow,
-  type Highlight,
-} from "@/components/comparison-page";
 import { Bell, Check, Eye, Lock, Radio, RotateCcw, Shield } from "lucide-react";
 import type { Metadata } from "next";
+import { ComparisonPage, type ComparisonRow, type Highlight } from "@/components/comparison-page";
 
-const baseUrl =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
 
 export const metadata: Metadata = {
   title: "Portainer vs Drydock — Container Update Monitoring Comparison",
@@ -34,8 +29,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Portainer vs Drydock — Container Update Monitoring Comparison",
-    description:
-      "Compare Portainer and Drydock for container update monitoring.",
+    description: "Compare Portainer and Drydock for container update monitoring.",
     creator: "@codeswhat",
   },
   alternates: {
@@ -230,13 +224,12 @@ export default function PortainerComparison() {
       heroTitle="Portainer vs Drydock"
       heroDescription={
         <p>
-          Portainer is a full container management platform with a broad feature
-          set. Drydock is a{" "}
+          Portainer is a full container management platform with a broad feature set. Drydock is a{" "}
           <strong className="text-neutral-900 dark:text-neutral-200">
             focused, lightweight update monitor
           </strong>{" "}
-          with safety controls that Portainer lacks — automatic rollback,
-          maintenance windows, lifecycle hooks, and free security scanning.
+          with safety controls that Portainer lacks — automatic rollback, maintenance windows,
+          lifecycle hooks, and free security scanning.
         </p>
       }
       competitorBadge={{
@@ -259,8 +252,7 @@ export default function PortainerComparison() {
         "@context": "https://schema.org",
         "@type": "WebPage",
         name: "Portainer vs Drydock — Container Update Monitoring Comparison",
-        description:
-          "Compare Portainer and Drydock for container update monitoring.",
+        description: "Compare Portainer and Drydock for container update monitoring.",
         url: `${baseUrl}/compare/portainer`,
         mainEntity: {
           "@type": "SoftwareApplication",

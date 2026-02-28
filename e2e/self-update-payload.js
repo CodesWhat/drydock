@@ -14,8 +14,7 @@ function writePayload(payload) {
 
 function loadSelfUpdatePayload() {
   const payload = readPayload();
-  const containerName =
-    typeof payload?.name === 'string' ? payload.name.trim() : '';
+  const containerName = typeof payload?.name === 'string' ? payload.name.trim() : '';
 
   if (containerName !== '') {
     try {

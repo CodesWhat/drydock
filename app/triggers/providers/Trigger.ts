@@ -227,7 +227,9 @@ class Trigger extends Component {
   }
 
   private findContainerByBusinessId(containerName: string): Container | undefined {
-    return storeContainer.getContainers().find((container) => fullName(container) === containerName);
+    return storeContainer
+      .getContainers()
+      .find((container) => fullName(container) === containerName);
   }
 
   private async dispatchContainerForEvent(

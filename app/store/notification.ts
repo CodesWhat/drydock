@@ -229,10 +229,7 @@ export function isTriggerEnabledForRule(
     return false;
   }
 
-  const {
-    allowAllWhenNoTriggers = false,
-    defaultWhenRuleMissing = false,
-  } = options;
+  const { allowAllWhenNoTriggers = false, defaultWhenRuleMissing = false } = options;
   const rule = getNotificationRule(ruleIdNormalized);
   if (!rule) {
     return defaultWhenRuleMissing;

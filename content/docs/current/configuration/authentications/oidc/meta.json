@@ -1,6 +1,4 @@
 {
   "title": "OIDC",
-  "pages": [
-    "index"
-  ]
+  "pages": ["index"]
 }

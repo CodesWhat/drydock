@@ -111,6 +111,7 @@ environment:
 If `DD_RUN_AS_ROOT=true` is set without `DD_ALLOW_INSECURE_ROOT=true`, startup now fails closed by design.
 
 See the docs for full guidance:
+
 - [Docker Socket Security](https://drydock.codeswhat.com/docs/configuration/watchers/#docker-socket-security)
 - [Docker Compose Trigger Permissions](https://drydock.codeswhat.com/docs/configuration/triggers/docker-compose/#permissions-and-compose-cli-access)
 
@@ -458,6 +459,7 @@ As of 2026 hardening updates, auth-related remote flows now fail closed by defau
 - **HTTP trigger auth** fails when `AUTH_TYPE` is unsupported or required `BASIC`/`BEARER` values are missing.
 
 See:
+
 - [Watcher auth configuration](https://drydock.codeswhat.com/docs/configuration/watchers)
 - [HTTP trigger configuration](https://drydock.codeswhat.com/docs/configuration/triggers/http)
 - [Registry configuration](https://drydock.codeswhat.com/docs/configuration/registries)

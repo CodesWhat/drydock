@@ -69,7 +69,7 @@ pick_random_port() {
 }
 
 if [ -z "${DD_LOAD_TEST_PORT}" ]; then
-	if ! [[ "${DD_LOAD_TEST_RANDOM_PORT_MIN}" =~ ^[0-9]+$ ]] || ! [[ "${DD_LOAD_TEST_RANDOM_PORT_MAX}" =~ ^[0-9]+$ ]]; then
+	if ! [[ ${DD_LOAD_TEST_RANDOM_PORT_MIN} =~ ^[0-9]+$ ]] || ! [[ ${DD_LOAD_TEST_RANDOM_PORT_MAX} =~ ^[0-9]+$ ]]; then
 		echo "DD_LOAD_TEST_RANDOM_PORT_MIN/MAX must be numeric"
 		exit 1
 	fi
@@ -84,7 +84,7 @@ if [ -z "${DD_LOAD_TEST_PORT}" ]; then
 		exit 1
 	fi
 	echo "Selected random load test port: ${DD_LOAD_TEST_PORT}"
-elif ! [[ "${DD_LOAD_TEST_PORT}" =~ ^[0-9]+$ ]]; then
+elif ! [[ ${DD_LOAD_TEST_PORT} =~ ^[0-9]+$ ]]; then
 	echo "DD_LOAD_TEST_PORT must be numeric"
 	exit 1
 fi

@@ -120,10 +120,7 @@ describe('AgentsView', () => {
 
   it('route query q filters rows', async () => {
     mockRoute.query = { q: 'edge-2' };
-    mockGetAgents.mockResolvedValue([
-      makeAgent({ name: 'edge-1' }),
-      makeAgent({ name: 'edge-2' }),
-    ]);
+    mockGetAgents.mockResolvedValue([makeAgent({ name: 'edge-1' }), makeAgent({ name: 'edge-2' })]);
 
     const wrapper = await mountAgentsView();
 

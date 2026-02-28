@@ -1,17 +1,11 @@
-import {
-  ComparisonPage,
-  type ComparisonRow,
-  type Highlight,
-} from "@/components/comparison-page";
 import { Bell, Check, Eye, Radio, RotateCcw, Shield } from "lucide-react";
 import type { Metadata } from "next";
+import { ComparisonPage, type ComparisonRow, type Highlight } from "@/components/comparison-page";
 
-const baseUrl =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
 
 export const metadata: Metadata = {
-  title:
-    "Dozzle vs Drydock — Container Log Viewer & Update Monitoring Comparison",
+  title: "Dozzle vs Drydock — Container Log Viewer & Update Monitoring Comparison",
   description:
     "Compare Dozzle and Drydock for Docker container management. Dozzle is a real-time log viewer, Drydock monitors container updates — see how they complement each other or which fits your needs.",
   keywords: [
@@ -24,8 +18,7 @@ export const metadata: Metadata = {
     "dozzle container updates",
   ],
   openGraph: {
-    title:
-      "Dozzle vs Drydock — Container Log Viewer & Update Monitoring Comparison",
+    title: "Dozzle vs Drydock — Container Log Viewer & Update Monitoring Comparison",
     description:
       "Compare Dozzle and Drydock for Docker container management. See how log viewing and update monitoring compare.",
     url: `${baseUrl}/compare/dozzle`,
@@ -35,8 +28,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title:
-      "Dozzle vs Drydock — Container Log Viewer & Update Monitoring Comparison",
+    title: "Dozzle vs Drydock — Container Log Viewer & Update Monitoring Comparison",
     description: "Compare Dozzle and Drydock for Docker container management.",
     creator: "@codeswhat",
   },
@@ -236,8 +228,8 @@ export default function DozzleComparison() {
           <strong className="text-neutral-900 dark:text-neutral-200">
             container update monitoring and safe auto-updates
           </strong>
-          . They solve different problems and work well together — Dozzle for
-          log analysis, Drydock for keeping containers up-to-date.
+          . They solve different problems and work well together — Dozzle for log analysis, Drydock
+          for keeping containers up-to-date.
         </p>
       }
       competitorBadge={{
@@ -260,8 +252,7 @@ export default function DozzleComparison() {
         "@context": "https://schema.org",
         "@type": "WebPage",
         name: "Dozzle vs Drydock — Container Log Viewer & Update Monitoring Comparison",
-        description:
-          "Compare Dozzle and Drydock for Docker container management.",
+        description: "Compare Dozzle and Drydock for Docker container management.",
         url: `${baseUrl}/compare/dozzle`,
         mainEntity: {
           "@type": "SoftwareApplication",

@@ -1,7 +1,4 @@
 {
   "title": "Watchers",
-  "pages": [
-    "index",
-    "popular-imgsets"
-  ]
+  "pages": ["index", "popular-imgsets"]
 }

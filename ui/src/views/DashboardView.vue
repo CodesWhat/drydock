@@ -37,9 +37,7 @@ const DASHBOARD_WIDGET_IDS = [
 type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
 
 function isDashboardWidgetId(value: unknown): value is DashboardWidgetId {
-  return (
-    typeof value === 'string' && (DASHBOARD_WIDGET_IDS as readonly string[]).includes(value)
-  );
+  return typeof value === 'string' && (DASHBOARD_WIDGET_IDS as readonly string[]).includes(value);
 }
 
 function sanitizeWidgetOrder(rawOrder: unknown): DashboardWidgetId[] {
@@ -113,8 +111,7 @@ function buildRecentStatusByContainer(entries: unknown): Record<string, RecentAu
   for (const entry of entries) {
     if (!entry || typeof entry !== 'object') continue;
     const containerNameRaw = (entry as { containerName?: unknown }).containerName;
-    const containerName =
-      typeof containerNameRaw === 'string' ? containerNameRaw.trim() : '';
+    const containerName = typeof containerNameRaw === 'string' ? containerNameRaw.trim() : '';
     if (!containerName || statusByContainer[containerName]) continue;
     const mappedStatus = mapAuditActionToRecentStatus((entry as { action?: unknown }).action);
     if (!mappedStatus) continue;
@@ -216,16 +213,23 @@ async function fetchDashboardData() {
   loading.value = true;
   error.value = null;
   try {
-    const [containersRes, serverRes, agentsRes, triggersRes, watchersRes, registriesRes, auditLogRes] =
-      await Promise.all([
-        getAllContainers(),
-        getServer().catch(() => null),
-        getAgents().catch(() => []),
-        getAllTriggers().catch(() => []),
-        getAllWatchers().catch(() => []),
-        getAllRegistries().catch(() => []),
-        getAuditLog({ limit: 100 }).catch(() => ({ entries: [] })),
-      ]);
+    const [
+      containersRes,
+      serverRes,
+      agentsRes,
+      triggersRes,
+      watchersRes,
+      registriesRes,
+      auditLogRes,
+    ] = await Promise.all([
+      getAllContainers(),
+      getServer().catch(() => null),
+      getAgents().catch(() => []),
+      getAllTriggers().catch(() => []),
+      getAllWatchers().catch(() => []),
+      getAllRegistries().catch(() => []),
+      getAuditLog({ limit: 100 }).catch(() => ({ entries: [] })),
+    ]);
     containers.value = mapApiContainers(containersRes);
     serverInfo.value = serverRes;
     agents.value = agentsRes;
@@ -452,18 +456,12 @@ const securityByImage = computed<ImageSecurityAggregate[]>(() => {
         aggregate.summary.unknown,
         container.securitySummary.unknown,
       );
-      aggregate.summary.low = Math.max(
-        aggregate.summary.low,
-        container.securitySummary.low,
-      );
+      aggregate.summary.low = Math.max(aggregate.summary.low, container.securitySummary.low);
       aggregate.summary.medium = Math.max(
         aggregate.summary.medium,
         container.securitySummary.medium,
       );
-      aggregate.summary.high = Math.max(
-        aggregate.summary.high,
-        container.securitySummary.high,
-      );
+      aggregate.summary.high = Math.max(aggregate.summary.high, container.securitySummary.high);
       aggregate.summary.critical = Math.max(
         aggregate.summary.critical,
         container.securitySummary.critical,
@@ -747,7 +745,8 @@ const recentUpdates = computed<RecentUpdateRow[]>(() => {
     .filter((c) => !!c.newTag || !!c.updatePolicyState)
     .slice()
     .sort((a, b) => {
-      const byDetectedAt = parseDetectedAt(b.updateDetectedAt) - parseDetectedAt(a.updateDetectedAt);
+      const byDetectedAt =
+        parseDetectedAt(b.updateDetectedAt) - parseDetectedAt(a.updateDetectedAt);
       if (byDetectedAt !== 0) return byDetectedAt;
       return a.name.localeCompare(b.name);
     })
@@ -821,7 +820,8 @@ const servers = computed(() => {
 
   // Add agents as remote hosts
   for (const agent of agents.value) {
-    const agentName = typeof agent.name === 'string' && agent.name.length > 0 ? agent.name : 'unknown-agent';
+    const agentName =
+      typeof agent.name === 'string' && agent.name.length > 0 ? agent.name : 'unknown-agent';
     const agentContainers = containers.value.filter((c) => c.server === agentName);
     list.push({
       name: agentName,

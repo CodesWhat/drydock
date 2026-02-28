@@ -604,7 +604,10 @@ describe('Dockercompose Trigger', () => {
       '      - MIRROR_IMAGE=nginx:1.0.0',
       '',
     ].join('\n');
-    const { writeComposeFileSpy } = spyOnProcessComposeHelpers(trigger, composeWithOtherImageStrings);
+    const { writeComposeFileSpy } = spyOnProcessComposeHelpers(
+      trigger,
+      composeWithOtherImageStrings,
+    );
 
     await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
 

@@ -243,11 +243,16 @@ describe('DashboardView', () => {
     });
 
     it('computes trigger, watcher, and registry counts from dashboard inputs', async () => {
-      const wrapper = await mountDashboard([], [], {}, {
-        triggers: [{ id: 't1' }, { id: 't2' }],
-        watchers: [{ id: 'w1' }, { id: 'w2' }, { id: 'w3' }],
-        registries: [{ id: 'r1' }],
-      });
+      const wrapper = await mountDashboard(
+        [],
+        [],
+        {},
+        {
+          triggers: [{ id: 't1' }, { id: 't2' }],
+          watchers: [{ id: 'w1' }, { id: 'w2' }, { id: 'w3' }],
+          registries: [{ id: 'r1' }],
+        },
+      );
 
       const statCards = wrapper.findAll('.stat-card');
       const triggersCard = statCards.find((c) => c.text().includes('Triggers'));
@@ -260,17 +265,22 @@ describe('DashboardView', () => {
     });
 
     it('shows maintenance countdown status on the watchers card', async () => {
-      const wrapper = await mountDashboard([], [], {}, {
-        watchers: [
-          {
-            id: 'watcher-1',
-            configuration: {
-              maintenancewindow: '0 2 * * *',
-              maintenancewindowopen: true,
+      const wrapper = await mountDashboard(
+        [],
+        [],
+        {},
+        {
+          watchers: [
+            {
+              id: 'watcher-1',
+              configuration: {
+                maintenancewindow: '0 2 * * *',
+                maintenancewindowopen: true,
+              },
             },
-          },
-        ],
-      });
+          ],
+        },
+      );
 
       const statCards = wrapper.findAll('.stat-card');
       const watchersCard = statCards.find((c) => c.text().includes('Watchers'));
@@ -280,17 +290,22 @@ describe('DashboardView', () => {
 
   describe('recent activity', () => {
     it('shows recent activity entries from audit log', async () => {
-      const wrapper = await mountDashboard([], [], {}, {
-        auditEntries: [
-          {
-            id: 'a1',
-            timestamp: '2026-02-28T10:00:00.000Z',
-            action: 'update-applied',
-            containerName: 'api',
-            status: 'success',
-          },
-        ],
-      });
+      const wrapper = await mountDashboard(
+        [],
+        [],
+        {},
+        {
+          auditEntries: [
+            {
+              id: 'a1',
+              timestamp: '2026-02-28T10:00:00.000Z',
+              action: 'update-applied',
+              containerName: 'api',
+              status: 'success',
+            },
+          ],
+        },
+      );
 
       expect(wrapper.text()).toContain('Recent Activity');
       expect(wrapper.text()).toContain('api');
@@ -400,18 +415,25 @@ describe('DashboardView', () => {
     });
 
     it('uses the latest audit outcome to render each row status', async () => {
-      const containers = [makeContainer({ id: 'c1', name: 'redis', currentTag: '6.0.0', newTag: '7.0.0' })];
-      const wrapper = await mountDashboard(containers, [], {}, {
-        auditEntries: [
-          {
-            id: 'a1',
-            timestamp: '2026-02-28T10:00:00.000Z',
-            action: 'update-failed',
-            containerName: 'redis',
-            status: 'error',
-          },
-        ],
-      });
+      const containers = [
+        makeContainer({ id: 'c1', name: 'redis', currentTag: '6.0.0', newTag: '7.0.0' }),
+      ];
+      const wrapper = await mountDashboard(
+        containers,
+        [],
+        {},
+        {
+          auditEntries: [
+            {
+              id: 'a1',
+              timestamp: '2026-02-28T10:00:00.000Z',
+              action: 'update-failed',
+              containerName: 'redis',
+              status: 'error',
+            },
+          ],
+        },
+      );
 
       const row = wrapper.find('[data-widget-id="recent-updates"] tbody tr');
       expect(row.text()).toContain('redis');
@@ -435,7 +457,9 @@ describe('DashboardView', () => {
         }),
       ];
       const wrapper = await mountDashboard(containers);
-      const errorRow = wrapper.find('[data-widget-id="recent-updates"] tr[data-update-status="error"]');
+      const errorRow = wrapper.find(
+        '[data-widget-id="recent-updates"] tr[data-update-status="error"]',
+      );
 
       expect(errorRow.exists()).toBe(true);
       expect(errorRow.text()).toContain('registry-fail');
@@ -512,15 +536,17 @@ describe('DashboardView', () => {
           securityScanState: 'scanned',
           securitySummary: { critical: 0, high: 0, medium: 3, low: 0, unknown: 0 },
         },
-      ] as Array<Container & {
-        securitySummary?: {
-          critical: number;
-          high: number;
-          medium: number;
-          low: number;
-          unknown: number;
-        };
-      }>;
+      ] as Array<
+        Container & {
+          securitySummary?: {
+            critical: number;
+            high: number;
+            medium: number;
+            low: number;
+            unknown: number;
+          };
+        }
+      >;
 
       const wrapper = await mountDashboard(containers as Container[]);
       const severityBreakdown = wrapper.find('[data-test="security-severity-breakdown"]');
@@ -717,17 +743,25 @@ describe('DashboardView', () => {
       localStorage.setItem(
         DASHBOARD_WIDGET_ORDER_STORAGE_KEY,
         JSON.stringify([
-          'stat-containers', 'stat-updates', 'stat-security', 'stat-images',
-          'host-status', 'recent-updates', 'security-overview', 'update-breakdown',
+          'stat-containers',
+          'stat-updates',
+          'stat-security',
+          'stat-images',
+          'host-status',
+          'recent-updates',
+          'security-overview',
+          'update-breakdown',
         ]),
       );
 
       const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
 
-      expect(wrapper.find('[data-widget-id="host-status"]').attributes('data-widget-order')).toBe('4');
-      expect(wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order')).toBe(
-        '5',
+      expect(wrapper.find('[data-widget-id="host-status"]').attributes('data-widget-order')).toBe(
+        '4',
       );
+      expect(
+        wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order'),
+      ).toBe('5');
       expect(
         wrapper.find('[data-widget-id="security-overview"]').attributes('data-widget-order'),
       ).toBe('6');
@@ -750,12 +784,12 @@ describe('DashboardView', () => {
       await targetWidget.trigger('drop', { dataTransfer });
       await draggedWidget.trigger('dragend');
 
-      expect(wrapper.find('[data-widget-id="update-breakdown"]').attributes('data-widget-order')).toBe(
-        '4',
-      );
-      expect(wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order')).toBe(
-        '5',
-      );
+      expect(
+        wrapper.find('[data-widget-id="update-breakdown"]').attributes('data-widget-order'),
+      ).toBe('4');
+      expect(
+        wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order'),
+      ).toBe('5');
       expect(JSON.parse(localStorage.getItem(DASHBOARD_WIDGET_ORDER_STORAGE_KEY) || '[]')).toEqual([
         'stat-containers',
         'stat-updates',
@@ -789,8 +823,12 @@ describe('DashboardView', () => {
       await targetStat.trigger('drop', { dataTransfer });
       await draggedStat.trigger('dragend');
 
-      expect(wrapper.find('[data-widget-id="stat-images"]').attributes('data-widget-order')).toBe('0');
-      expect(wrapper.find('[data-widget-id="stat-containers"]').attributes('data-widget-order')).toBe('1');
+      expect(wrapper.find('[data-widget-id="stat-images"]').attributes('data-widget-order')).toBe(
+        '0',
+      );
+      expect(
+        wrapper.find('[data-widget-id="stat-containers"]').attributes('data-widget-order'),
+      ).toBe('1');
     });
   });
 
@@ -828,7 +866,9 @@ describe('DashboardView', () => {
         makeContainer({ updateKind: 'minor', newTag: '1.2.0' }),
       ]);
       const recentUpdatesViewAll = wrapper.find('[data-widget-id="recent-updates"]').find('button');
-      const updateBreakdownViewAll = wrapper.find('[data-widget-id="update-breakdown"]').find('button');
+      const updateBreakdownViewAll = wrapper
+        .find('[data-widget-id="update-breakdown"]')
+        .find('button');
 
       await recentUpdatesViewAll.trigger('click');
       expect(mockRouterPush).toHaveBeenCalledWith({
@@ -850,9 +890,8 @@ describe('DashboardView', () => {
     });
 
     it('fetches container groups', async () => {
-      const { getContainerGroups } = await vi.importActual<typeof import('@/services/container')>(
-        '@/services/container',
-      );
+      const { getContainerGroups } =
+        await vi.importActual<typeof import('@/services/container')>('@/services/container');
       const groups = [{ name: 'core' }];
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
@@ -864,9 +903,8 @@ describe('DashboardView', () => {
     });
 
     it('throws when fetching container groups fails', async () => {
-      const { getContainerGroups } = await vi.importActual<typeof import('@/services/container')>(
-        '@/services/container',
-      );
+      const { getContainerGroups } =
+        await vi.importActual<typeof import('@/services/container')>('@/services/container');
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         statusText: 'Bad Gateway',

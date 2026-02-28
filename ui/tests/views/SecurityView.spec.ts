@@ -50,7 +50,14 @@ const stubs: Record<string, any> = {
     template: '<div class="dvl"><slot /><slot name="panel" /></div>',
   }),
   DataFilterBar: defineComponent({
-    props: ['modelValue', 'showFilters', 'filteredCount', 'totalCount', 'activeFilterCount', 'countLabel'],
+    props: [
+      'modelValue',
+      'showFilters',
+      'filteredCount',
+      'totalCount',
+      'activeFilterCount',
+      'countLabel',
+    ],
     emits: ['update:modelValue', 'update:showFilters'],
     template: '<div class="dfb"><slot name="filters" /><slot name="left" /></div>',
   }),
@@ -72,7 +79,8 @@ const stubs: Record<string, any> = {
   DetailPanel: defineComponent({
     props: ['open', 'isMobile', 'showSizeControls', 'showFullPage'],
     emits: ['update:open'],
-    template: '<div class="detail-panel"><slot name="header" /><slot name="subtitle" /><slot /></div>',
+    template:
+      '<div class="detail-panel"><slot name="header" /><slot name="subtitle" /><slot /></div>',
   }),
   EmptyState: defineComponent({
     props: ['icon', 'message', 'showClear'],
@@ -270,9 +278,7 @@ describe('SecurityView', () => {
 
       expect(w.text()).toContain('OpenSSL buffer overflow');
       expect(w.text()).toContain('usr/lib/libcrypto.so');
-      expect(
-        w.find('a[href="https://avd.aquasec.com/nvd/cve-2026-9999"]').exists(),
-      ).toBe(true);
+      expect(w.find('a[href="https://avd.aquasec.com/nvd/cve-2026-9999"]').exists()).toBe(true);
     });
 
     it('groups multiple containers into separate image summaries', async () => {
@@ -295,7 +301,9 @@ describe('SecurityView', () => {
     });
 
     it('loads sbom and shows view/download controls for the selected image', async () => {
-      mockGetAllContainers.mockResolvedValue([makeContainer({ id: 'container-1', displayName: 'nginx' })]);
+      mockGetAllContainers.mockResolvedValue([
+        makeContainer({ id: 'container-1', displayName: 'nginx' }),
+      ]);
       mockGetContainerSbom.mockResolvedValue({
         format: 'spdx-json',
         generatedAt: '2026-02-28T09:00:00.000Z',
@@ -387,9 +395,7 @@ describe('SecurityView', () => {
           displayName: 'nginx',
           security: {
             scan: {
-              vulnerabilities: [
-                { id: 'CVE-1', severity: 'LOW', packageName: 'a' },
-              ],
+              vulnerabilities: [{ id: 'CVE-1', severity: 'LOW', packageName: 'a' }],
             },
           },
         }),
@@ -423,9 +429,7 @@ describe('SecurityView', () => {
           displayName: 'nginx',
           security: {
             scan: {
-              vulnerabilities: [
-                { id: 'CVE-1', severity: 'LOW', packageName: 'a' },
-              ],
+              vulnerabilities: [{ id: 'CVE-1', severity: 'LOW', packageName: 'a' }],
             },
           },
         }),
@@ -434,9 +438,7 @@ describe('SecurityView', () => {
           displayName: 'redis',
           security: {
             scan: {
-              vulnerabilities: [
-                { id: 'CVE-2', severity: 'CRITICAL', packageName: 'b' },
-              ],
+              vulnerabilities: [{ id: 'CVE-2', severity: 'CRITICAL', packageName: 'b' }],
             },
           },
         }),

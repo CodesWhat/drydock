@@ -1,14 +1,11 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
-import { source } from "@/lib/source";
 import type { MetadataRoute } from "next";
+import { source } from "@/lib/source";
 
 const contentDir = join(process.cwd(), "content", "docs");
 
-function getFileModifiedDate(page: {
-  absolutePath?: string;
-  path: string;
-}): Date {
+function getFileModifiedDate(page: { absolutePath?: string; path: string }): Date {
   const filePath = page.absolutePath ?? join(contentDir, page.path);
   try {
     return statSync(filePath).mtime;
@@ -18,8 +15,7 @@ function getFileModifiedDate(page: {
 }
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
 
   const docPages = source.getPages().map((page) => ({
     url: `${baseUrl}${page.url}`,

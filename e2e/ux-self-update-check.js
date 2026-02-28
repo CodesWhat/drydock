@@ -41,14 +41,18 @@ const { loadSelfUpdatePayload } = require('./self-update-payload');
     const applying = page.getByText('Applying Update', { exact: false });
     await applying.waitFor({ state: 'visible', timeout: 30000 });
     out.overlaySeen = true;
-    await page.screenshot({ path: path.resolve(__dirname, '../artifacts/self-update-drill/ux-overlay-visible.png') });
+    await page.screenshot({
+      path: path.resolve(__dirname, '../artifacts/self-update-drill/ux-overlay-visible.png'),
+    });
 
     await applying.waitFor({ state: 'hidden', timeout: 120000 });
 
     const dashboard = page.getByText('Dashboard', { exact: false });
     await dashboard.first().waitFor({ state: 'visible', timeout: 30000 });
     out.recovered = true;
-    await page.screenshot({ path: path.resolve(__dirname, '../artifacts/self-update-drill/ux-recovered.png') });
+    await page.screenshot({
+      path: path.resolve(__dirname, '../artifacts/self-update-drill/ux-recovered.png'),
+    });
   } finally {
     out.finishedAt = new Date().toISOString();
     fs.writeFileSync(

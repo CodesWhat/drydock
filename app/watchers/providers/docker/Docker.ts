@@ -516,7 +516,10 @@ function getNumericTagShapeFromTransformedTag(transformedTag: string): NumericTa
   };
 }
 
-function getNumericTagShape(tag: string, transformTags: string | undefined): NumericTagShape | null {
+function getNumericTagShape(
+  tag: string,
+  transformTags: string | undefined,
+): NumericTagShape | null {
   const transformedTag = transformTag(transformTags, tag);
   return getNumericTagShapeFromTransformedTag(transformedTag);
 }
@@ -549,13 +552,14 @@ function getTagFamilyPolicy(container: Container, logContainer: any): TagFamilyP
   if (normalizedPolicy === 'strict' || normalizedPolicy === 'loose') {
     return normalizedPolicy;
   }
-  logContainer.warn(
-    `Invalid tag family policy "${container.tagFamily}", falling back to "strict"`,
-  );
+  logContainer.warn(`Invalid tag family policy "${container.tagFamily}", falling back to "strict"`);
   return 'strict';
 }
 
-function isStrictFamilyMatch(referenceShape: NumericTagShape, candidateShape: NumericTagShape): boolean {
+function isStrictFamilyMatch(
+  referenceShape: NumericTagShape,
+  candidateShape: NumericTagShape,
+): boolean {
   if (candidateShape.prefix !== referenceShape.prefix) {
     return false;
   }
@@ -599,7 +603,9 @@ function filterSemverCandidatesOnePass(
 
   for (const tag of tags) {
     if (applyPrefixFilter) {
-      const hasExpectedPrefix = currentPrefix ? tag.startsWith(currentPrefix) : startsWithDigit(tag);
+      const hasExpectedPrefix = currentPrefix
+        ? tag.startsWith(currentPrefix)
+        : startsWithDigit(tag);
       if (!hasExpectedPrefix) {
         continue;
       }
@@ -725,7 +731,11 @@ function filterSemverOnly(tags: string[], transformTags: string | undefined): st
  * @param tags
  * @returns {*}
  */
-function getTagCandidates(container: Container, tags: string[], logContainer: any): TagCandidatesResult {
+function getTagCandidates(
+  container: Container,
+  tags: string[],
+  logContainer: any,
+): TagCandidatesResult {
   const { filteredTags: baseTags, allowIncludeFilterRecovery } = applyIncludeExcludeFilters(
     container,
     tags,
@@ -754,7 +764,11 @@ function getTagCandidates(container: Container, tags: string[], logContainer: an
   }
 
   const tagFamilyPolicy = getTagFamilyPolicy(container, logContainer);
-  const { filteredTags: semverTagCandidates, currentPrefix, stats } = filterSemverCandidatesOnePass(
+  const {
+    filteredTags: semverTagCandidates,
+    currentPrefix,
+    stats,
+  } = filterSemverCandidatesOnePass(
     filteredTags,
     container,
     tagFamilyPolicy,
@@ -1004,7 +1018,10 @@ function areRuntimeDetailsEqual(
   detailsA: ContainerRuntimeDetails | undefined,
   detailsB: ContainerRuntimeDetails | undefined,
 ) {
-  return JSON.stringify(normalizeRuntimeDetails(detailsA)) === JSON.stringify(normalizeRuntimeDetails(detailsB));
+  return (
+    JSON.stringify(normalizeRuntimeDetails(detailsA)) ===
+    JSON.stringify(normalizeRuntimeDetails(detailsB))
+  );
 }
 
 function formatContainerPortsFromInspect(networkPorts: unknown): string[] {
@@ -1083,7 +1100,8 @@ function formatContainerVolumes(mounts: unknown): string[] {
     if (source === '' && destination === '') {
       continue;
     }
-    let volume = source !== '' && destination !== '' ? `${source}:${destination}` : source || destination;
+    let volume =
+      source !== '' && destination !== '' ? `${source}:${destination}` : source || destination;
     if ((mount as any).RW === false) {
       volume = `${volume}:ro`;
     }
@@ -1651,7 +1669,7 @@ class Docker extends Watcher {
       authblocked: this.remoteAuthBlockedReason !== undefined,
       authblockedreason: this.remoteAuthBlockedReason,
       auth: this.configuration.auth
-          ? {
+        ? {
             type: this.configuration.auth.type,
             user: Docker.mask(this.configuration.auth.user),
             password: Docker.mask(this.configuration.auth.password),
@@ -3089,7 +3107,11 @@ class Docker extends Watcher {
     const tags = await registryProvider.getTags(container.image);
 
     // Get candidate tags (based on tag name)
-    const { tags: tagsCandidates, noUpdateReason } = getTagCandidates(container, tags, logContainer);
+    const { tags: tagsCandidates, noUpdateReason } = getTagCandidates(
+      container,
+      tags,
+      logContainer,
+    );
     if (noUpdateReason) {
       result.noUpdateReason = noUpdateReason;
     }

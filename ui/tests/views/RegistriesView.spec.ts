@@ -108,7 +108,11 @@ describe('RegistriesView', () => {
     await wrapper.find('.row-click-first').trigger('click');
     await flushPromises();
 
-    expect(mockGetRegistry).toHaveBeenCalledWith({ type: 'hub', name: 'private', agent: undefined });
+    expect(mockGetRegistry).toHaveBeenCalledWith({
+      type: 'hub',
+      name: 'private',
+      agent: undefined,
+    });
     expect(wrapper.text()).toContain('https://detail.example');
     expect(wrapper.text()).toContain('team-a');
   });

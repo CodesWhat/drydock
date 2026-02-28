@@ -309,10 +309,7 @@ const secFilterSeverity = ref('all');
 const secFilterFix = ref('all');
 
 const activeSecFilterCount = computed(
-  () =>
-    [secFilterSeverity, secFilterFix].filter(
-      (f) => f.value !== 'all',
-    ).length,
+  () => [secFilterSeverity, secFilterFix].filter((f) => f.value !== 'all').length,
 );
 
 function clearSecFilters() {
@@ -333,7 +330,16 @@ const imageSummaries = computed<ImageSummary[]>(() => {
   for (const v of securityVulnerabilities.value) {
     let summary = map.get(v.image);
     if (!summary) {
-      summary = { image: v.image, critical: 0, high: 0, medium: 0, low: 0, total: 0, fixable: 0, vulns: [] };
+      summary = {
+        image: v.image,
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        total: 0,
+        fixable: 0,
+        vulns: [],
+      };
       map.set(v.image, summary);
     }
     if (v.severity === 'CRITICAL') summary.critical++;
@@ -367,9 +373,7 @@ const filteredSummaries = computed(() => {
     });
   }
   if (secFilterFix.value !== 'all') {
-    list = list.filter((s) =>
-      secFilterFix.value === 'yes' ? s.fixable > 0 : s.fixable < s.total,
-    );
+    list = list.filter((s) => (secFilterFix.value === 'yes' ? s.fixable > 0 : s.fixable < s.total));
   }
 
   const field = securitySortField.value;
@@ -379,8 +383,8 @@ const filteredSummaries = computed(() => {
     if (field === 'image') {
       cmp = a.image.localeCompare(b.image);
     } else {
-      const av = (a as Record<string, unknown>)[field] as number ?? 0;
-      const bv = (b as Record<string, unknown>)[field] as number ?? 0;
+      const av = ((a as Record<string, unknown>)[field] as number) ?? 0;
+      const bv = ((b as Record<string, unknown>)[field] as number) ?? 0;
       cmp = av - bv;
     }
     return asc ? cmp : -cmp;

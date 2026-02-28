@@ -347,7 +347,9 @@ describe('container-mapper', () => {
           },
         }),
       );
-      expect((c as any).noUpdateReason).toContain('Strict tag-family policy filtered out 1 higher semver');
+      expect((c as any).noUpdateReason).toContain(
+        'Strict tag-family policy filtered out 1 higher semver',
+      );
     });
 
     it('marks suppressed snoozed updates for dashboard rendering', () => {

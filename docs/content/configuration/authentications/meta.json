@@ -1,8 +1,4 @@
 {
   "title": "Authentication",
-  "pages": [
-    "index",
-    "basic",
-    "oidc"
-  ]
+  "pages": ["index", "basic", "oidc"]
 }

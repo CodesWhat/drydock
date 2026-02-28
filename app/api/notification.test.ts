@@ -1,36 +1,32 @@
 import { createMockResponse } from '../test/helpers.js';
 
-const {
-  mockRouter,
-  mockGetNotificationRules,
-  mockUpdateNotificationRule,
-  mockGetRegistryState,
-} = vi.hoisted(() => ({
-  mockRouter: { use: vi.fn(), get: vi.fn(), patch: vi.fn(), put: vi.fn() },
-  mockGetNotificationRules: vi.fn(() => [
-    {
-      id: 'update-available',
+const { mockRouter, mockGetNotificationRules, mockUpdateNotificationRule, mockGetRegistryState } =
+  vi.hoisted(() => ({
+    mockRouter: { use: vi.fn(), get: vi.fn(), patch: vi.fn(), put: vi.fn() },
+    mockGetNotificationRules: vi.fn(() => [
+      {
+        id: 'update-available',
+        name: 'Update Available',
+        enabled: true,
+        triggers: ['slack.ops', 'docker.update'],
+        description: 'When a container has a new version',
+      },
+    ]),
+    mockUpdateNotificationRule: vi.fn((id, update) => ({
+      id,
       name: 'Update Available',
-      enabled: true,
-      triggers: ['slack.ops', 'docker.update'],
+      enabled: update.enabled ?? true,
+      triggers: update.triggers ?? [],
       description: 'When a container has a new version',
-    },
-  ]),
-  mockUpdateNotificationRule: vi.fn((id, update) => ({
-    id,
-    name: 'Update Available',
-    enabled: update.enabled ?? true,
-    triggers: update.triggers ?? [],
-    description: 'When a container has a new version',
-  })),
-  mockGetRegistryState: vi.fn(() => ({
-    trigger: {
-      'slack.ops': { type: 'slack', name: 'ops' },
-      'smtp.ops': { type: 'smtp', name: 'ops' },
-      'docker.update': { type: 'docker', name: 'update' },
-    },
-  })),
-}));
+    })),
+    mockGetRegistryState: vi.fn(() => ({
+      trigger: {
+        'slack.ops': { type: 'slack', name: 'ops' },
+        'smtp.ops': { type: 'smtp', name: 'ops' },
+        'docker.update': { type: 'docker', name: 'update' },
+      },
+    })),
+  }));
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },

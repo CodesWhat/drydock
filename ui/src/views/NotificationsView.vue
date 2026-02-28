@@ -265,7 +265,9 @@ onMounted(async () => {
 
     notificationsData.value = notificationRules.map((rule: NotificationRule) => ({
       ...rule,
-      triggers: normalizeTriggerIds(rule.triggers.filter((triggerId) => allowedTriggerIds.has(triggerId))),
+      triggers: normalizeTriggerIds(
+        rule.triggers.filter((triggerId) => allowedTriggerIds.has(triggerId)),
+      ),
     }));
     triggersData.value = notificationTriggers;
   } catch (e: unknown) {

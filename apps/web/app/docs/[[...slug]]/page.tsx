@@ -1,48 +1,32 @@
-import { source } from "@/lib/source";
-import type { TOCItemType } from "fumadocs-core/toc";
-import {
-  DocsBody,
-  DocsDescription,
-  DocsPage,
-  DocsTitle,
-} from "fumadocs-ui/layouts/docs/page";
+import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layouts/docs/page";
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import type { StaticImageData } from "next/image";
 import NextImage from "next/image";
 import { notFound } from "next/navigation";
 import type React from "react";
+import { source } from "@/lib/source";
 
-function MdxImage(
-  props: React.ComponentProps<"img"> & { src?: string | StaticImageData },
-) {
+function MdxImage(props: React.ComponentProps<"img"> & { src?: string | StaticImageData }) {
   const { src, alt, style, width, height, ...rest } = props;
   // Fumadocs MDX may transform image src into a static import object
   if (typeof src === "object" && src !== null && "src" in src) {
     return (
-      <NextImage
-        src={src}
-        alt={alt ?? ""}
-        style={{ maxWidth: "100%", height: "auto", ...style }}
-      />
+      <NextImage src={src} alt={alt ?? ""} style={{ maxWidth: "100%", height: "auto", ...style }} />
     );
   }
   // External URLs or local string paths — use native img
   return <img {...rest} src={src} style={style} alt={alt ?? ""} />;
 }
 
-export default async function Page(props: {
-  params: Promise<{ slug?: string[] }>;
-}) {
+export default async function Page(props: { params: Promise<{ slug?: string[] }> }) {
   const params = await props.params;
   const page = source.getPage(params.slug);
   if (!page) notFound();
 
-  // biome-ignore lint/suspicious/noExplicitAny: Fumadocs MDX collection types require runtime casting
   const data = page.data as any;
   const MDX = data.body;
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
   const segments = params.slug ?? [];
   const breadcrumbItems = [
     { name: "Home", url: baseUrl },
@@ -110,15 +94,12 @@ export async function generateStaticParams() {
   return source.generateParams();
 }
 
-export async function generateMetadata(props: {
-  params: Promise<{ slug?: string[] }>;
-}) {
+export async function generateMetadata(props: { params: Promise<{ slug?: string[] }> }) {
   const params = await props.params;
   const page = source.getPage(params.slug);
   if (!page) notFound();
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
   const url = `${baseUrl}${page.url}`;
 
   return {

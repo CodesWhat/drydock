@@ -1,6 +1,4 @@
 {
   "title": "Docker Compose",
-  "pages": [
-    "index"
-  ]
+  "pages": ["index"]
 }

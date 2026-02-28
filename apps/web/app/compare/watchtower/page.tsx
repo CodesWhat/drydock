@@ -1,22 +1,8 @@
-import {
-  ComparisonPage,
-  type ComparisonRow,
-  type Highlight,
-} from "@/components/comparison-page";
-import {
-  Archive,
-  Check,
-  Eye,
-  Monitor,
-  Network,
-  Radio,
-  RotateCcw,
-  Shield,
-} from "lucide-react";
+import { Archive, Check, Eye, Monitor, Network, Radio, RotateCcw, Shield } from "lucide-react";
 import type { Metadata } from "next";
+import { ComparisonPage, type ComparisonRow, type Highlight } from "@/components/comparison-page";
 
-const baseUrl =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
 
 export const metadata: Metadata = {
   title: "Watchtower vs Drydock — Container Update Monitoring Comparison",
@@ -238,8 +224,8 @@ export default function WatchtowerComparison() {
           <strong className="text-neutral-900 dark:text-neutral-200">
             archival in December 2025
           </strong>
-          , Drydock offers an actively maintained alternative with a modern UI,
-          security scanning, and monitor-first design.
+          , Drydock offers an actively maintained alternative with a modern UI, security scanning,
+          and monitor-first design.
         </p>
       }
       competitorBadge={{

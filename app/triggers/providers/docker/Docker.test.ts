@@ -856,7 +856,9 @@ test('cloneContainer should preserve explicit Cmd pin while dropping inherited E
   expect(clone.Cmd).toEqual(['nginx', '-g', 'daemon off;']);
   expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
   expect(clone.Labels['dd.runtime.cmd.origin']).toBe('explicit');
-  expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Entrypoint'));
+  expect(logContainer.info).toHaveBeenCalledWith(
+    expect.stringContaining('Dropping stale Entrypoint'),
+  );
 });
 
 test('cloneContainer should preserve explicit Entrypoint pin while dropping inherited Cmd', () => {
@@ -2576,9 +2578,7 @@ describe('executeContainerUpdate', () => {
 
     await expect(
       docker.executeContainerUpdate(context, createTriggerContainer(), logContainer),
-    ).rejects.toThrow(
-      'runtime command is incompatible with target image nginx:1.10-alpine',
-    );
+    ).rejects.toThrow('runtime command is incompatible with target image nginx:1.10-alpine');
 
     expect(context.currentContainer.rename).toHaveBeenCalledTimes(2);
     expect(context.currentContainer.rename).toHaveBeenLastCalledWith({ name: 'container-name' });

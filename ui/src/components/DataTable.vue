@@ -28,7 +28,10 @@ const emit = defineEmits<{
   'row-click': [row: Record<string, unknown>];
 }>();
 
-function getRowKey(row: Record<string, unknown>, rowKeyProp: string | ((row: Record<string, unknown>) => string)): string {
+function getRowKey(
+  row: Record<string, unknown>,
+  rowKeyProp: string | ((row: Record<string, unknown>) => string),
+): string {
   return typeof rowKeyProp === 'function' ? rowKeyProp(row) : row[rowKeyProp];
 }
 
@@ -83,7 +86,9 @@ function onResizeStart(colKey: string, event: MouseEvent) {
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
     // Delay clearing resizing flag to prevent click-through to sort
-    setTimeout(() => { resizing.value = false; }, 50);
+    setTimeout(() => {
+      resizing.value = false;
+    }, 50);
   }
 
   document.body.style.cursor = 'col-resize';

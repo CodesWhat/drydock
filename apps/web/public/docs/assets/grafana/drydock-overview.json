@@ -90,10 +90,7 @@
           },
           "thresholds": {
             "mode": "absolute",
-            "steps": [
-              { "color": "text", "value": null },
-              { "color": "blue", "value": 1 }
-            ]
+            "steps": [{ "color": "text", "value": null }, { "color": "blue", "value": 1 }]
           },
           "mappings": []
         },
@@ -194,10 +191,7 @@
           },
           "thresholds": {
             "mode": "absolute",
-            "steps": [
-              { "color": "text", "value": null },
-              { "color": "purple", "value": 1 }
-            ]
+            "steps": [{ "color": "text", "value": null }, { "color": "purple", "value": 1 }]
           },
           "mappings": []
         },
@@ -870,10 +864,7 @@
               },
               "thresholds": {
                 "mode": "absolute",
-                "steps": [
-                  { "color": "text", "value": null },
-                  { "color": "blue", "value": 1 }
-                ]
+                "steps": [{ "color": "text", "value": null }, { "color": "blue", "value": 1 }]
               },
               "mappings": [],
               "noValue": "N/A"

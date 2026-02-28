@@ -3,7 +3,11 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
-import { LOG_AUTO_FETCH_INTERVALS, useAutoFetchLogs, useLogViewport } from '../composables/useLogViewerBehavior';
+import {
+  LOG_AUTO_FETCH_INTERVALS,
+  useAutoFetchLogs,
+  useLogViewport,
+} from '../composables/useLogViewerBehavior';
 import { type IconLibrary, iconMap, libraryLabels } from '../icons';
 import { getAppInfos } from '../services/app';
 import { getUser } from '../services/auth';
@@ -21,8 +25,13 @@ const { themeFamily, themeVariant, isDark, setThemeFamily, transitionTheme } = u
 const { iconLibrary, setIconLibrary, iconScale, setIconScale } = useIcons();
 const { activeFont, setFont, fontLoading, isFontLoaded } = useFont();
 
-const { logContainer, scrollBlocked, scrollToBottom, handleLogScroll, resumeAutoScroll } = useLogViewport();
-const { autoFetchInterval } = useAutoFetchLogs({ fetchFn: refreshAppLogs, scrollToBottom, scrollBlocked });
+const { logContainer, scrollBlocked, scrollToBottom, handleLogScroll, resumeAutoScroll } =
+  useLogViewport();
+const { autoFetchInterval } = useAutoFetchLogs({
+  fetchFn: refreshAppLogs,
+  scrollToBottom,
+  scrollBlocked,
+});
 
 type SettingsTab = 'general' | 'appearance' | 'logs' | 'profile';
 
@@ -31,14 +40,19 @@ const VALID_TABS = new Set<SettingsTab>(['general', 'appearance', 'logs', 'profi
 function tabFromQuery(): SettingsTab {
   const raw = route.query.tab;
   const val = Array.isArray(raw) ? raw[0] : raw;
-  return typeof val === 'string' && VALID_TABS.has(val as SettingsTab) ? (val as SettingsTab) : 'general';
+  return typeof val === 'string' && VALID_TABS.has(val as SettingsTab)
+    ? (val as SettingsTab)
+    : 'general';
 }
 
 const activeSettingsTab = ref<SettingsTab>(tabFromQuery());
 
-watch(() => route.query.tab, () => {
-  activeSettingsTab.value = tabFromQuery();
-});
+watch(
+  () => route.query.tab,
+  () => {
+    activeSettingsTab.value = tabFromQuery();
+  },
+);
 
 const settingsTabs = [
   { id: 'general' as const, label: 'General', icon: 'settings' },
@@ -106,12 +120,15 @@ const legacyLabelKeysPreview = computed(() =>
 function normalizeLegacyInputSourceSummary(rawValue: unknown): LegacyInputSourceSummary {
   const parsedTotal = Number((rawValue as { total?: unknown })?.total);
   const parsedKeys = Array.isArray((rawValue as { keys?: unknown })?.keys)
-    ? (rawValue as { keys: unknown[] }).keys.filter((value): value is string => typeof value === 'string')
+    ? (rawValue as { keys: unknown[] }).keys.filter(
+        (value): value is string => typeof value === 'string',
+      )
     : [];
   const uniqueKeys = Array.from(new Set(parsedKeys)).sort((a, b) => a.localeCompare(b));
-  const total = Number.isFinite(parsedTotal) && parsedTotal >= 0
-    ? Math.max(Math.floor(parsedTotal), uniqueKeys.length)
-    : uniqueKeys.length;
+  const total =
+    Number.isFinite(parsedTotal) && parsedTotal >= 0
+      ? Math.max(Math.floor(parsedTotal), uniqueKeys.length)
+      : uniqueKeys.length;
   return { total, keys: uniqueKeys };
 }
 
@@ -123,9 +140,10 @@ function normalizeLegacyInputSummary(rawValue: unknown): LegacyInputSummary | nu
   const label = normalizeLegacyInputSourceSummary((rawValue as { label?: unknown }).label);
   const parsedTotal = Number((rawValue as { total?: unknown }).total);
   const totalFromKeys = env.total + label.total;
-  const total = Number.isFinite(parsedTotal) && parsedTotal >= 0
-    ? Math.max(Math.floor(parsedTotal), totalFromKeys)
-    : totalFromKeys;
+  const total =
+    Number.isFinite(parsedTotal) && parsedTotal >= 0
+      ? Math.max(Math.floor(parsedTotal), totalFromKeys)
+      : totalFromKeys;
 
   if (total <= 0) {
     return null;
@@ -140,7 +158,9 @@ function summarizeLegacyKeys(keys: string[]): string {
   }
   const previewKeys = keys.slice(0, LEGACY_KEY_PREVIEW_LIMIT);
   const hiddenCount = keys.length - previewKeys.length;
-  return hiddenCount > 0 ? `${previewKeys.join(', ')} (+${hiddenCount} more)` : previewKeys.join(', ');
+  return hiddenCount > 0
+    ? `${previewKeys.join(', ')} (+${hiddenCount} more)`
+    : previewKeys.join(', ');
 }
 
 // Profile state

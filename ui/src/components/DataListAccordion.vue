@@ -14,7 +14,10 @@ const emit = defineEmits<{
 
 const expandedItems = ref<Set<string>>(new Set());
 
-function getKey(item: Record<string, unknown>, itemKeyProp: string | ((item: Record<string, unknown>) => string)): string {
+function getKey(
+  item: Record<string, unknown>,
+  itemKeyProp: string | ((item: Record<string, unknown>) => string),
+): string {
   return typeof itemKeyProp === 'function' ? itemKeyProp(item) : item[itemKeyProp];
 }
 

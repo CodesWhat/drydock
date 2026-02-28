@@ -1,8 +1,3 @@
-import { RoadmapTimeline } from "@/components/roadmap-timeline";
-import { ScreenshotsSection } from "@/components/screenshots-section";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   ArrowRight,
   BarChart3,
@@ -24,6 +19,11 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { RoadmapTimeline } from "@/components/roadmap-timeline";
+import { ScreenshotsSection } from "@/components/screenshots-section";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 const features = [
   {
@@ -242,11 +242,7 @@ const roadmap = [
     status: "planned" as const,
     dotColor:
       "border-sky-400 bg-sky-50 text-sky-500 dark:border-sky-500 dark:bg-sky-950 dark:text-sky-400",
-    items: [
-      "Real-time log viewer",
-      "Container resource monitoring",
-      "Registry webhook receiver",
-    ],
+    items: ["Real-time log viewer", "Container resource monitoring", "Registry webhook receiver"],
   },
   {
     version: "v1.6.0",
@@ -310,10 +306,7 @@ const roadmap = [
     status: "planned" as const,
     dotColor:
       "border-indigo-400 bg-indigo-50 text-indigo-500 dark:border-indigo-500 dark:bg-indigo-950 dark:text-indigo-400",
-    items: [
-      "Health check gate with auto-rollback",
-      "Canary deployments (Kubernetes)",
-    ],
+    items: ["Health check gate with auto-rollback", "Canary deployments (Kubernetes)"],
   },
   {
     version: "v2.2.0",
@@ -350,11 +343,7 @@ const roadmap = [
     status: "planned" as const,
     dotColor:
       "border-lime-400 bg-lime-50 text-lime-500 dark:border-lime-500 dark:bg-lime-950 dark:text-lime-400",
-    items: [
-      "Scheduled automated backups",
-      "Compose templates library",
-      "Secret management",
-    ],
+    items: ["Scheduled automated backups", "Compose templates library", "Secret management"],
   },
   {
     version: "v3.0.0",
@@ -387,16 +376,14 @@ const roadmap = [
 ];
 
 export default function Home() {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.com";
 
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     name: "Drydock",
     url: baseUrl,
-    description:
-      "Open source container update monitoring built in TypeScript with modern tooling.",
+    description: "Open source container update monitoring built in TypeScript with modern tooling.",
     applicationCategory: "DeveloperApplication",
     operatingSystem: "Docker",
     license: "https://opensource.org/licenses/AGPL-3.0",
@@ -436,10 +423,7 @@ export default function Home() {
               </div>
 
               {/* Version Badge */}
-              <Badge
-                variant="secondary"
-                className="mb-6 px-4 py-1.5 text-sm font-medium"
-              >
+              <Badge variant="secondary" className="mb-6 px-4 py-1.5 text-sm font-medium">
                 v1.3.7 &middot; Open Source
               </Badge>
 
@@ -448,16 +432,13 @@ export default function Home() {
                 <h1 className="mb-4 text-5xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 sm:text-6xl lg:text-7xl">
                   Container Update
                   <br />
-                  <span className="text-neutral-600 dark:text-neutral-400">
-                    Monitoring
-                  </span>
+                  <span className="text-neutral-600 dark:text-neutral-400">Monitoring</span>
                 </h1>
 
                 <p className="mx-auto mb-10 max-w-2xl text-lg text-neutral-600 sm:text-xl dark:text-neutral-400">
-                  Keep your containers up-to-date. Auto-discover running
-                  containers, detect image updates across 22 registries, scan
-                  for vulnerabilities, and trigger notifications via 20+
-                  services.
+                  Keep your containers up-to-date. Auto-discover running containers, detect image
+                  updates across 22 registries, scan for vulnerabilities, and trigger notifications
+                  via 20+ services.
                 </p>
 
                 {/* CTA Buttons */}
@@ -649,20 +630,13 @@ export default function Home() {
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    <img
-                      src="https://snyk.io/test/github/CodesWhat/drydock/badge.svg"
-                      alt="Snyk"
-                    />
+                    <img src="https://snyk.io/test/github/CodesWhat/drydock/badge.svg" alt="Snyk" />
                   </a>
                   <img
                     src="https://visitor-badge.laobi.icu/badge?page_id=drydock.codeswhat.com&left_text=site%20views"
                     alt="Site views"
                   />
-                  <a
-                    href="https://ko-fi.com/codeswhat"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                  <a href="https://ko-fi.com/codeswhat" target="_blank" rel="noopener noreferrer">
                     <img
                       src="https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=kofi&logoColor=white"
                       alt="Ko-fi"
@@ -707,8 +681,8 @@ export default function Home() {
                   Everything you need
                 </h2>
                 <p className="relative mx-auto max-w-2xl text-neutral-600 dark:text-neutral-400">
-                  A complete solution for monitoring and managing container
-                  updates across your infrastructure.
+                  A complete solution for monitoring and managing container updates across your
+                  infrastructure.
                 </p>
               </div>
 
@@ -723,9 +697,7 @@ export default function Home() {
                         <div
                           className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${feature.bg}`}
                         >
-                          <feature.icon
-                            className={`h-5 w-5 ${feature.color}`}
-                          />
+                          <feature.icon className={`h-5 w-5 ${feature.color}`} />
                         </div>
                         <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">
                           {feature.title}
@@ -759,15 +731,12 @@ export default function Home() {
                 <CardContent className="pt-6">
                   <div className="mb-3 flex items-center gap-2 text-neutral-500">
                     <Terminal className="h-4 w-4" />
-                    <span className="text-xs font-medium uppercase tracking-wider">
-                      Terminal
-                    </span>
+                    <span className="text-xs font-medium uppercase tracking-wider">Terminal</span>
                   </div>
                   <pre className="overflow-x-auto text-sm">
                     <code className="text-neutral-300">
                       <span className="text-neutral-500">$</span>{" "}
-                      <span className="text-[#C4FF00]">docker run</span> -d \
-                      {"\n"}
+                      <span className="text-[#C4FF00]">docker run</span> -d \{"\n"}
                       {"  "}--name drydock \{"\n"}
                       {"  "}-v /var/run/docker.sock:/var/run/docker.sock \{"\n"}
                       {"  "}-p 3000:3000 \{"\n"}
@@ -828,8 +797,7 @@ export default function Home() {
                   Compare with alternatives
                 </h2>
                 <p className="relative mx-auto max-w-2xl text-neutral-600 dark:text-neutral-400">
-                  See how Drydock stacks up against Watchtower, Portainer, Diun,
-                  and more.
+                  See how Drydock stacks up against Watchtower, Portainer, Diun, and more.
                 </p>
               </div>
               <Link
@@ -853,9 +821,7 @@ export default function Home() {
                   height={20}
                   className="dark:invert"
                 />
-                <span>
-                  &copy; {new Date().getFullYear()} CodesWhat. AGPL-3.0 License.
-                </span>
+                <span>&copy; {new Date().getFullYear()} CodesWhat. AGPL-3.0 License.</span>
               </div>
               <div className="flex items-center gap-4">
                 <a

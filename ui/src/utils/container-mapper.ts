@@ -172,7 +172,9 @@ function normalizeSeverityCount(value: unknown): number {
   return Math.floor(value);
 }
 
-function deriveSecuritySummary(apiContainer: ApiContainerInput): ContainerSecuritySummary | undefined {
+function deriveSecuritySummary(
+  apiContainer: ApiContainerInput,
+): ContainerSecuritySummary | undefined {
   const summary = apiContainer.security?.scan?.summary;
   if (!summary || typeof summary !== 'object') {
     return undefined;
@@ -187,7 +189,9 @@ function deriveSecuritySummary(apiContainer: ApiContainerInput): ContainerSecuri
 }
 
 /** Derive the simplified updateKind string from the API updateKind object. */
-function deriveUpdateKind(apiContainer: ApiContainerInput): 'major' | 'minor' | 'patch' | 'digest' | null {
+function deriveUpdateKind(
+  apiContainer: ApiContainerInput,
+): 'major' | 'minor' | 'patch' | 'digest' | null {
   if (!apiContainer.updateAvailable) return null;
   const uk = apiContainer.updateKind;
   if (!uk) return null;
@@ -246,8 +250,7 @@ function deriveUpdatePolicyState(apiContainer: ApiContainerInput): Container['up
     }
   }
 
-  const remoteValue =
-    asNonEmptyString(updateKind.remoteValue);
+  const remoteValue = asNonEmptyString(updateKind.remoteValue);
 
   if (
     updateKind.kind === 'tag' &&
@@ -339,7 +342,9 @@ function normalizeStringArray(values: unknown): string[] {
 function normalizeEnv(values: unknown): { key: string; value: string }[] {
   if (!Array.isArray(values)) return [];
   return values
-    .filter((value): value is { key: unknown; value: unknown } => !!value && typeof value === 'object')
+    .filter(
+      (value): value is { key: unknown; value: unknown } => !!value && typeof value === 'object',
+    )
     .map((value) => {
       const key = typeof value.key === 'string' ? value.key.trim() : '';
       const envValue = typeof value.value === 'string' ? value.value : `${value.value ?? ''}`;
@@ -348,7 +353,9 @@ function normalizeEnv(values: unknown): { key: string; value: string }[] {
     .filter((value) => value.key.length > 0);
 }
 
-function deriveRuntimeDetails(apiContainer: ApiContainerInput): Omit<Container['details'], 'labels'> {
+function deriveRuntimeDetails(
+  apiContainer: ApiContainerInput,
+): Omit<Container['details'], 'labels'> {
   const detailsSource =
     apiContainer.details && typeof apiContainer.details === 'object'
       ? apiContainer.details

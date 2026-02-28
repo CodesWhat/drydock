@@ -1,9 +1,9 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import { Check, ChevronRight, Clock, Ellipsis } from "lucide-react";
 import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 
 type Milestone = {
   version: string;
@@ -66,10 +66,8 @@ export function RoadmapTimeline({ roadmap }: { roadmap: Milestone[] }) {
             {roadmap.map((milestone, index) => {
               const isLeft = index % 2 === 0;
               const isCollapsed = collapsed.has(milestone.version);
-              const isCollapsible =
-                milestone.status === "released" && index !== latestReleasedIdx;
-              const prevCollapsed =
-                index > 0 && collapsed.has(roadmap[index - 1].version);
+              const isCollapsible = milestone.status === "released" && index !== latestReleasedIdx;
+              const prevCollapsed = index > 0 && collapsed.has(roadmap[index - 1].version);
 
               // Older released milestones fade towards greyscale
               // Distance 0 = latest released (full color), higher = more faded
@@ -84,9 +82,7 @@ export function RoadmapTimeline({ roadmap }: { roadmap: Milestone[] }) {
                     : releasedDistance === 2
                       ? "saturate(30%)"
                       : "saturate(10%)";
-              const dotStyle = dotSaturation
-                ? { filter: dotSaturation }
-                : undefined;
+              const dotStyle = dotSaturation ? { filter: dotSaturation } : undefined;
 
               if (isCollapsed) {
                 return (
@@ -151,11 +147,7 @@ export function RoadmapTimeline({ roadmap }: { roadmap: Milestone[] }) {
                           releasedDistance >= 2 ? "h-8 w-8" : "h-10 w-10"
                         } ${milestone.dotColor}`}
                       >
-                        <Check
-                          className={
-                            releasedDistance >= 2 ? "h-3.5 w-3.5" : "h-4 w-4"
-                          }
-                        />
+                        <Check className={releasedDistance >= 2 ? "h-3.5 w-3.5" : "h-4 w-4"} />
                       </button>
                     ) : (
                       <div
@@ -198,11 +190,7 @@ export function RoadmapTimeline({ roadmap }: { roadmap: Milestone[] }) {
                       <CardContent>
                         <div className="mb-3 flex items-center gap-3">
                           <Badge
-                            variant={
-                              milestone.status === "released"
-                                ? "default"
-                                : "secondary"
-                            }
+                            variant={milestone.status === "released" ? "default" : "secondary"}
                             className="text-xs"
                           >
                             {milestone.version}

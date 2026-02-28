@@ -1,14 +1,4 @@
 {
   "title": "API",
-  "pages": [
-    "index",
-    "agent",
-    "app",
-    "container",
-    "log",
-    "registry",
-    "store",
-    "trigger",
-    "watcher"
-  ]
+  "pages": ["index", "agent", "app", "container", "log", "registry", "store", "trigger", "watcher"]
 }
