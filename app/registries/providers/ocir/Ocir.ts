@@ -1,27 +1,13 @@
 // @ts-nocheck
 import BaseRegistry from '../../BaseRegistry.js';
+import { getBasicAuthConfigurationSchema } from '../shared/basicAuthConfigurationSchema.js';
 
 /**
  * Oracle Cloud Infrastructure Registry integration.
  */
 class Ocir extends BaseRegistry {
   getConfigurationSchema() {
-    const authSchema = this.joi
-      .alternatives()
-      .try(this.joi.string().base64(), this.joi.string().valid(''));
-
-    const credentialsSchema = this.joi
-      .object()
-      .keys({
-        login: this.joi.string(),
-        password: this.joi.string(),
-        auth: authSchema,
-      })
-      .and('login', 'password')
-      .without('login', 'auth')
-      .without('password', 'auth');
-
-    return this.joi.alternatives().try(this.joi.string().allow(''), credentialsSchema);
+    return getBasicAuthConfigurationSchema(this.joi);
   }
 
   maskConfiguration() {
