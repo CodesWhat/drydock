@@ -836,12 +836,18 @@ let connectivityTimer: ReturnType<typeof setInterval> | undefined;
 const sidebarDataLoading = ref(false);
 
 async function checkConnectivity() {
+  if (!connectionLost.value) {
+    return;
+  }
+
   try {
     const res = await fetch('/auth/user', { credentials: 'include', redirect: 'manual' });
-    if (connectionLost.value && (res.ok || res.status === 401)) {
+    if (res.ok || res.status === 401) {
       // Server is back — redirect to login (session likely expired)
       connectionLost.value = false;
-      clearInterval(connectivityTimer);
+      if (connectivityTimer) {
+        clearInterval(connectivityTimer);
+      }
       router.push('/login');
     }
   } catch {
