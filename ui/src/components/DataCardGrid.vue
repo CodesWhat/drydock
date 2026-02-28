@@ -1,17 +1,31 @@
 <script setup lang="ts">
-defineProps<{
-  items: any[];
-  itemKey: string | ((item: any) => string);
+const props = defineProps<{
+  items: Record<string, unknown>[];
+  itemKey: string | ((item: Record<string, unknown>) => string);
   selectedKey?: string | null;
   minWidth?: string;
+  /** Return a human-readable label for a card (used in aria-label). Falls back to item.name. */
+  itemLabel?: (item: Record<string, unknown>) => string;
 }>();
 
-defineEmits<{
-  'item-click': [item: any];
+function cardLabel(item: Record<string, unknown>): string {
+  if (props.itemLabel) return props.itemLabel(item);
+  return item.name ?? '';
+}
+
+const emit = defineEmits<{
+  'item-click': [item: Record<string, unknown>];
 }>();
 
-function getKey(item: any, itemKeyProp: string | ((item: any) => string)): string {
+function getKey(item: Record<string, unknown>, itemKeyProp: string | ((item: Record<string, unknown>) => string)): string {
   return typeof itemKeyProp === 'function' ? itemKeyProp(item) : item[itemKeyProp];
+}
+
+function onCardKeydown(event: KeyboardEvent, item: Record<string, unknown>) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    emit('item-click', item);
+  }
 }
 </script>
 
@@ -33,7 +47,11 @@ function getKey(item: any, itemKeyProp: string | ((item: any) => string)): strin
            borderRadius: 'var(--dd-radius)',
            overflow: 'hidden',
          }"
-         @click="$emit('item-click', item)">
+         role="button"
+         tabindex="0"
+         :aria-label="`Select ${cardLabel(item)}`"
+         @keydown="onCardKeydown($event, item)"
+         @click="emit('item-click', item)">
       <slot name="card" :item="item" :selected="selectedKey != null && getKey(item, itemKey) === selectedKey" />
     </div>
   </div>

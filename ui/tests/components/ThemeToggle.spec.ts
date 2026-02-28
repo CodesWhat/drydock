@@ -143,4 +143,16 @@ describe('ThemeToggle', () => {
     expect(btn.attributes('style')).toContain('width: 32px');
     expect(btn.attributes('style')).toContain('height: 32px');
   });
+
+  it('exposes aria labels and pressed state on variant buttons', () => {
+    mockThemeVariant.value = 'system';
+    const wrapper = factory();
+    const buttons = wrapper.findAll('button');
+    expect(buttons[0].attributes('aria-label')).toBe('Switch to light theme');
+    expect(buttons[1].attributes('aria-label')).toBe('Switch to system theme');
+    expect(buttons[2].attributes('aria-label')).toBe('Switch to dark theme');
+    expect(buttons[0].attributes('aria-pressed')).toBe('false');
+    expect(buttons[1].attributes('aria-pressed')).toBe('true');
+    expect(buttons[2].attributes('aria-pressed')).toBe('false');
+  });
 });

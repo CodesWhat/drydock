@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import whaleLogo from '../assets/whale-logo.png';
 import { getOidcRedirection, getStrategies, loginBasic, setRememberMe } from '../services/auth';
@@ -25,6 +25,19 @@ const rememberMe = ref(false);
 
 const hasBasic = ref(false);
 const oidcStrategies = ref<Strategy[]>([]);
+const oidcLayoutClass = computed(() => {
+  const count = oidcStrategies.value.length;
+  if (count <= 1) {
+    return 'grid grid-cols-1 gap-3';
+  }
+  if (count === 2) {
+    return 'grid grid-cols-2 gap-3';
+  }
+  if (count === 3) {
+    return 'grid grid-cols-3 gap-3';
+  }
+  return 'flex flex-col gap-3';
+});
 
 onMounted(async () => {
   try {
@@ -214,7 +227,7 @@ onUnmounted(() => {
         </div>
 
         <!-- OIDC provider buttons -->
-        <div v-if="oidcStrategies.length > 0" :class="oidcStrategies.length <= 3 ? `grid grid-cols-${oidcStrategies.length} gap-3` : 'flex flex-col gap-3'">
+        <div v-if="oidcStrategies.length > 0" :class="oidcLayoutClass">
           <button
             v-for="strategy in oidcStrategies"
             :key="strategy.name"

@@ -100,6 +100,22 @@ async function getAllTriggers() {
   return response.json();
 }
 
+function buildTriggerDetailPath({ type, name, agent }) {
+  const segments = ['/api/triggers'];
+  if (agent) {
+    segments.push(encodeURIComponent(agent));
+  }
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
+  return segments.join('/');
+}
+
+async function getTrigger({ type, name, agent }) {
+  const response = await fetch(buildTriggerDetailPath({ type, name, agent }), {
+    credentials: 'include',
+  });
+  return response.json();
+}
+
 async function runTrigger({ triggerType, triggerName, container }) {
   const response = await fetch(`/api/triggers/${triggerType}/${triggerName}`, {
     method: 'POST',
@@ -119,5 +135,6 @@ export {
   getTriggerProviderIcon,
   getTriggerProviderColor,
   getAllTriggers,
+  getTrigger,
   runTrigger,
 };

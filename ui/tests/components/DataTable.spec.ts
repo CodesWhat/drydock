@@ -137,6 +137,23 @@ describe('DataTable', () => {
     });
   });
 
+  describe('accessibility', () => {
+    it('sets aria-sort on sortable headers', () => {
+      const w = factory({ sortKey: 'name', sortAsc: true });
+      const ths = w.findAll('thead th');
+      expect(ths[0].attributes('aria-sort')).toBe('ascending');
+      expect(ths[1].attributes('aria-sort')).toBe('none');
+      expect(ths[2].attributes('aria-sort')).toBeUndefined();
+    });
+
+    it('sets aria-sort to descending when the active sort is descending', () => {
+      const w = factory({ sortKey: 'status', sortAsc: false });
+      const ths = w.findAll('thead th');
+      expect(ths[0].attributes('aria-sort')).toBe('none');
+      expect(ths[1].attributes('aria-sort')).toBe('descending');
+    });
+  });
+
   describe('selection', () => {
     it('applies ring class to the selected row', () => {
       const w = factory({ selectedKey: '2' });
@@ -162,6 +179,32 @@ describe('DataTable', () => {
       const w = factory();
       await w.findAll('tbody tr')[1].trigger('click');
       expect(w.emitted('row-click')?.[0]).toEqual([rows[1]]);
+    });
+  });
+
+  describe('row keyboard navigation', () => {
+    it('sets tabindex on rows', () => {
+      const w = factory();
+      const row = w.findAll('tbody tr')[0];
+      expect(row.attributes('tabindex')).toBe('0');
+    });
+
+    it('emits row-click on Enter keydown', async () => {
+      const w = factory();
+      await w.findAll('tbody tr')[0].trigger('keydown', { key: 'Enter' });
+      expect(w.emitted('row-click')?.[0]).toEqual([rows[0]]);
+    });
+
+    it('emits row-click on Space keydown', async () => {
+      const w = factory();
+      await w.findAll('tbody tr')[2].trigger('keydown', { key: ' ' });
+      expect(w.emitted('row-click')?.[0]).toEqual([rows[2]]);
+    });
+
+    it('does not emit row-click on other keys', async () => {
+      const w = factory();
+      await w.findAll('tbody tr')[0].trigger('keydown', { key: 'Tab' });
+      expect(w.emitted('row-click')).toBeUndefined();
     });
   });
 

@@ -116,7 +116,7 @@ export const DesktopSmall: Story = {
   render: renderPanel,
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    const listeners = args as Record<string, any>;
+    const listeners = args as Record<string, unknown>;
 
     await userEvent.click(canvas.getByRole('button', { name: 'M' }));
     await expect(listeners['onUpdate:size']).toHaveBeenCalledWith('md');

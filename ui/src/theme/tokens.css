@@ -28,6 +28,13 @@
   --dd-primary-muted: color-mix(in srgb, var(--dd-primary) 15%, transparent);
   --dd-alt-muted: color-mix(in srgb, var(--dd-alt) 15%, transparent);
   --dd-neutral-muted: color-mix(in srgb, var(--dd-neutral) 15%, transparent);
+  --dd-shadow-sm: 0 2px 8px color-mix(in srgb, #020617 30%, transparent);
+  --dd-shadow-lg: 0 8px 24px color-mix(in srgb, #020617 24%, transparent);
+  --dd-shadow-inset: inset 0 8px 16px -8px color-mix(in srgb, #020617 40%, transparent);
+  --dd-hover-overlay: color-mix(in srgb, var(--dd-text) 8%, transparent);
+  --dd-log-line: color-mix(in srgb, var(--dd-border) 55%, transparent);
+  --dd-log-divider: color-mix(in srgb, var(--dd-border-strong) 70%, transparent);
+  --dd-log-footer-bg: color-mix(in srgb, var(--dd-bg-code) 80%, var(--dd-bg-elevated) 20%);
 }
 
 /* Drydock Light */

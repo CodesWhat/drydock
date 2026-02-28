@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { flushPromises } from '@vue/test-utils';
 import { ref } from 'vue';
 import LoginView from '@/views/LoginView.vue';
@@ -214,6 +216,17 @@ describe('LoginView', () => {
       await flushPromises();
 
       expect(wrapper.text()).toContain('Failed to connect to GitHub');
+    });
+
+    it('uses static Tailwind classes for OIDC button layout', () => {
+      const source = fs.readFileSync(
+        path.resolve(__dirname, '../../src/views/LoginView.vue'),
+        'utf8',
+      );
+      expect(source).not.toContain('grid-cols-${');
+      expect(source).toContain('grid grid-cols-1 gap-3');
+      expect(source).toContain('grid grid-cols-2 gap-3');
+      expect(source).toContain('grid grid-cols-3 gap-3');
     });
   });
 

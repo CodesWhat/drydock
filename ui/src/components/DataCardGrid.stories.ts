@@ -85,7 +85,7 @@ export const Default: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByText('Background Worker'));
-    await expect((args as Record<string, any>).onItemClick).toHaveBeenCalledWith(services[1]);
+    await expect((args as Record<string, unknown>).onItemClick).toHaveBeenCalledWith(services[1]);
   },
 };
 

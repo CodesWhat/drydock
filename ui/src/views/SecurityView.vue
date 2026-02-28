@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
-import { getAllContainers, scanContainer } from '../services/container';
+import { getAllContainers, getContainerSbom, scanContainer } from '../services/container';
 import { getSecurityRuntime } from '../services/server';
+import { errorMessage } from '../utils/error';
 
 interface Vulnerability {
   id: string;
@@ -10,6 +11,9 @@ interface Vulnerability {
   package: string;
   version: string;
   fixedIn: string | null;
+  title?: string;
+  target?: string;
+  primaryUrl?: string;
   image: string;
   publishedDate: string;
 }
@@ -24,6 +28,8 @@ interface ImageSummary {
   fixable: number;
   vulns: Vulnerability[];
 }
+
+type SbomFormat = 'spdx-json' | 'cyclonedx-json';
 
 interface SecurityRuntimeToolStatus {
   enabled: boolean;
@@ -67,6 +73,8 @@ const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 const loading = ref(true);
 const error = ref<string | null>(null);
 const securityVulnerabilities = ref<Vulnerability[]>([]);
+const containerIdsByImage = ref<Record<string, string[]>>({});
+const latestSecurityScanAt = ref<string | null>(null);
 const runtimeLoading = ref(true);
 const runtimeError = ref<string | null>(null);
 const runtimeStatus = ref<SecurityRuntimeStatus | null>(null);
@@ -165,13 +173,47 @@ function statusBadgeTone(status: SecurityRuntimeToolStatus['status']) {
   return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)' };
 }
 
+function chooseLatestTimestamp(current: string | null, candidate: unknown): string | null {
+  if (typeof candidate !== 'string' || candidate.length === 0) {
+    return current;
+  }
+
+  if (!current) {
+    return candidate;
+  }
+
+  const currentDate = new Date(current);
+  const candidateDate = new Date(candidate);
+  if (Number.isNaN(candidateDate.getTime())) {
+    return current;
+  }
+  if (Number.isNaN(currentDate.getTime())) {
+    return candidate;
+  }
+  return candidateDate.getTime() > currentDate.getTime() ? candidate : current;
+}
+
+function formatTimestamp(value: string | null | undefined): string {
+  if (!value) {
+    return 'unknown';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toISOString();
+}
+
+const runtimeCheckedAtLabel = computed(() => formatTimestamp(runtimeStatus.value?.checkedAt));
+const latestScanLabel = computed(() => formatTimestamp(latestSecurityScanAt.value));
+
 async function fetchSecurityRuntimeStatus() {
   runtimeLoading.value = true;
   runtimeError.value = null;
   try {
     runtimeStatus.value = await getSecurityRuntime();
-  } catch (e: any) {
-    runtimeError.value = e?.message ?? 'Failed to load security runtime status';
+  } catch (e: unknown) {
+    runtimeError.value = errorMessage(e, 'Failed to load security runtime status');
     runtimeStatus.value = null;
   } finally {
     runtimeLoading.value = false;
@@ -184,12 +226,22 @@ async function fetchVulnerabilities() {
   try {
     const containers = await getAllContainers();
     const vulns: Vulnerability[] = [];
+    const imageContainerMap: Record<string, string[]> = {};
+    let latestScanAt: string | null = null;
 
     for (const container of containers) {
       const scan = container.security?.scan;
       if (!scan || !Array.isArray(scan.vulnerabilities)) continue;
+      latestScanAt = chooseLatestTimestamp(latestScanAt, scan.scannedAt);
 
       const imageName = container.displayName || container.name || 'unknown';
+      if (typeof container.id === 'string' && container.id.length > 0) {
+        const mappedContainerIds = imageContainerMap[imageName] || [];
+        if (!mappedContainerIds.includes(container.id)) {
+          mappedContainerIds.push(container.id);
+          imageContainerMap[imageName] = mappedContainerIds;
+        }
+      }
       for (const v of scan.vulnerabilities) {
         vulns.push({
           id: v.id ?? 'unknown',
@@ -197,6 +249,9 @@ async function fetchVulnerabilities() {
           package: v.packageName ?? v.package ?? 'unknown',
           version: v.installedVersion ?? v.version ?? '',
           fixedIn: v.fixedVersion ?? v.fixedIn ?? null,
+          title: v.title ?? v.Title ?? '',
+          target: v.target ?? v.Target ?? '',
+          primaryUrl: v.primaryUrl ?? v.PrimaryURL ?? '',
           image: imageName,
           publishedDate: v.publishedDate ?? '',
         });
@@ -204,8 +259,12 @@ async function fetchVulnerabilities() {
     }
 
     securityVulnerabilities.value = vulns;
-  } catch (e: any) {
-    error.value = e?.message ?? 'Failed to load vulnerability data';
+    containerIdsByImage.value = imageContainerMap;
+    latestSecurityScanAt.value = latestScanAt;
+  } catch (e: unknown) {
+    error.value = errorMessage(e, 'Failed to load vulnerability data');
+    containerIdsByImage.value = {};
+    latestSecurityScanAt.value = null;
   } finally {
     loading.value = false;
   }
@@ -333,10 +392,105 @@ const filteredSummaries = computed(() => {
 // -- Detail panel --
 const selectedImage = ref<ImageSummary | null>(null);
 const detailOpen = ref(false);
+const selectedSbomFormat = ref<SbomFormat>('spdx-json');
+const detailSbomResult = ref<Record<string, unknown> | null>(null);
+const detailSbomLoading = ref(false);
+const detailSbomError = ref<string | null>(null);
+const showSbomDocument = ref(false);
+
+const selectedImageContainerId = computed(() => {
+  if (!selectedImage.value) {
+    return undefined;
+  }
+  const containerIds = containerIdsByImage.value[selectedImage.value.image];
+  if (!Array.isArray(containerIds) || containerIds.length === 0) {
+    return undefined;
+  }
+  return containerIds[0];
+});
+
+const detailSbomDocument = computed(() => detailSbomResult.value?.document);
+const detailSbomGeneratedAt = computed(() => detailSbomResult.value?.generatedAt);
+const detailSbomComponentCount = computed(() => {
+  const document = detailSbomDocument.value;
+  if (Array.isArray(document?.packages)) {
+    return document.packages.length;
+  }
+  if (Array.isArray(document?.components)) {
+    return document.components.length;
+  }
+  return undefined;
+});
+const detailSbomDocumentJson = computed(() => {
+  if (!detailSbomDocument.value) {
+    return '';
+  }
+  try {
+    return JSON.stringify(detailSbomDocument.value, null, 2);
+  } catch {
+    return '';
+  }
+});
+
+function toSafeFileName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, '-');
+}
+
+async function loadDetailSbom() {
+  const containerId = selectedImageContainerId.value;
+  if (!containerId) {
+    detailSbomResult.value = null;
+    detailSbomError.value = 'No container identifier is available for this image.';
+    return;
+  }
+  detailSbomLoading.value = true;
+  detailSbomError.value = null;
+  try {
+    detailSbomResult.value = await getContainerSbom(containerId, selectedSbomFormat.value);
+  } catch (e: unknown) {
+    detailSbomResult.value = null;
+    detailSbomError.value = errorMessage(e, 'Failed to load SBOM');
+  } finally {
+    detailSbomLoading.value = false;
+  }
+}
+
+function downloadDetailSbom() {
+  if (!detailSbomDocument.value || !selectedImage.value) {
+    return;
+  }
+  const payload = detailSbomDocumentJson.value;
+  if (!payload) {
+    return;
+  }
+  const blob = new Blob([payload], { type: 'application/json' });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = `${toSafeFileName(selectedImage.value.image)}.${selectedSbomFormat.value}.sbom.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(objectUrl);
+}
 
 function openDetail(summary: ImageSummary) {
   selectedImage.value = summary;
   detailOpen.value = true;
+  showSbomDocument.value = false;
+  detailSbomResult.value = null;
+  detailSbomError.value = null;
+  void loadDetailSbom();
+}
+
+function handleDetailOpenChange(open: boolean) {
+  detailOpen.value = open;
+  if (!open) {
+    selectedImage.value = null;
+    showSbomDocument.value = false;
+    detailSbomResult.value = null;
+    detailSbomError.value = null;
+  }
 }
 
 // Detail panel vuln sort
@@ -441,6 +595,10 @@ onUnmounted(() => {
             <div class="text-[10px] font-semibold uppercase tracking-wide opacity-80">Security runtime</div>
             <div class="text-[12px] font-semibold mt-0.5">{{ runtimeHeadline }}</div>
             <div class="text-[10px] mt-1 opacity-90">{{ runtimeDescription }}</div>
+            <div class="text-[10px] mt-1 opacity-90 flex items-center gap-3 flex-wrap">
+              <span v-if="runtimeStatus">Runtime checked: {{ runtimeCheckedAtLabel }}</span>
+              <span v-if="latestSecurityScanAt">Latest scan: {{ latestScanLabel }}</span>
+            </div>
           </div>
           <button class="w-7 h-7 dd-rounded flex items-center justify-center border transition-colors"
                   :style="{ borderColor: 'var(--dd-border-strong)' }"
@@ -779,7 +937,7 @@ onUnmounted(() => {
         :is-mobile="isMobile"
         :show-size-controls="true"
         :show-full-page="false"
-        @update:open="detailOpen = $event; if (!$event) selectedImage = null"
+        @update:open="handleDetailOpenChange"
       >
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
@@ -834,7 +992,95 @@ onUnmounted(() => {
                 </span>
                 <span v-else class="ml-auto text-[10px] dd-text-muted">No fix</span>
               </div>
+              <div
+                v-if="vuln.title || vuln.target || vuln.primaryUrl"
+                class="ml-5 mt-1.5 space-y-1"
+              >
+                <div v-if="vuln.title" class="text-[10px] dd-text">
+                  {{ vuln.title }}
+                </div>
+                <div v-if="vuln.target" class="text-[10px] dd-text-muted">
+                  Target:
+                  <span class="font-mono dd-text">{{ vuln.target }}</span>
+                </div>
+                <a
+                  v-if="vuln.primaryUrl"
+                  :href="vuln.primaryUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex text-[10px] underline hover:no-underline break-all"
+                  style="color: var(--dd-info);"
+                >
+                  {{ vuln.primaryUrl }}
+                </a>
+              </div>
             </div>
+          </div>
+
+          <div class="px-4 py-3 space-y-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-[10px] font-semibold uppercase tracking-wide dd-text-muted">SBOM</span>
+              <select v-model="selectedSbomFormat"
+                      class="px-2 py-1 dd-rounded text-[10px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong"
+                      @change="loadDetailSbom">
+                <option value="spdx-json">spdx-json</option>
+                <option value="cyclonedx-json">cyclonedx-json</option>
+              </select>
+              <button class="px-2 py-1 dd-rounded text-[10px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                      :style="{ border: '1px solid var(--dd-border-strong)' }"
+                      :disabled="detailSbomLoading"
+                      @click="loadDetailSbom">
+                {{ detailSbomLoading ? 'Loading SBOM...' : 'Refresh SBOM' }}
+              </button>
+              <button class="px-2 py-1 dd-rounded text-[10px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                      :style="{ border: '1px solid var(--dd-border-strong)' }"
+                      :disabled="!detailSbomDocument"
+                      @click="showSbomDocument = !showSbomDocument">
+                {{ showSbomDocument ? 'Hide SBOM' : 'View SBOM' }}
+              </button>
+              <button class="px-2 py-1 dd-rounded text-[10px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                      :style="{ border: '1px solid var(--dd-border-strong)' }"
+                      :disabled="!detailSbomDocument"
+                      @click="downloadDetailSbom">
+                Download SBOM
+              </button>
+            </div>
+
+            <div v-if="detailSbomError"
+                 class="px-2.5 py-1.5 dd-rounded text-[11px]"
+                 :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+              {{ detailSbomError }}
+            </div>
+            <div v-else-if="detailSbomLoading"
+                 class="px-2.5 py-1.5 dd-rounded text-[11px] dd-text-muted"
+                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+              Loading SBOM document...
+            </div>
+            <div v-else-if="detailSbomDocument"
+                 class="px-2.5 py-1.5 dd-rounded text-[10px] space-y-0.5"
+                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+              <div class="dd-text-muted">
+                format:
+                <span class="dd-text font-mono">{{ selectedSbomFormat }}</span>
+              </div>
+              <div v-if="typeof detailSbomComponentCount === 'number'" class="dd-text-muted">
+                components:
+                <span class="dd-text">{{ detailSbomComponentCount }}</span>
+              </div>
+              <div v-if="detailSbomGeneratedAt" class="dd-text-muted">
+                generated:
+                <span class="dd-text">{{ formatTimestamp(detailSbomGeneratedAt) }}</span>
+              </div>
+            </div>
+            <div v-else
+                 class="px-2.5 py-1.5 dd-rounded text-[11px] dd-text-muted italic"
+                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+              SBOM document is not available yet.
+            </div>
+
+            <pre v-if="showSbomDocument && detailSbomDocumentJson"
+                 class="p-2 dd-rounded text-[10px] overflow-auto max-h-64 font-mono"
+                 :style="{ backgroundColor: 'var(--dd-bg-code)' }">{{ detailSbomDocumentJson }}</pre>
           </div>
         </template>
       </DetailPanel>

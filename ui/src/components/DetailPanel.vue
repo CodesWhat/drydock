@@ -50,6 +50,9 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
 
   <!-- Panel -->
   <aside v-if="open"
+         role="dialog"
+         :aria-modal="isMobile ? 'true' : undefined"
+         aria-label="Detail panel"
          class="detail-panel-inline flex flex-col min-w-0 dd-rounded overflow-clip transition-all duration-300 ease-in-out"
          :class="isMobile ? 'fixed top-0 right-0 h-full z-50' : 'sticky top-0'"
          :style="{
@@ -85,7 +88,8 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
         </button>
         <slot name="toolbar" />
       </div>
-      <button class="flex items-center justify-center w-7 h-7 dd-rounded text-xs font-medium transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+      <button aria-label="Close details panel"
+              class="flex items-center justify-center w-7 h-7 dd-rounded text-xs font-medium transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
               @click="closePanel">
         <AppIcon name="xmark" :size="14" />
       </button>

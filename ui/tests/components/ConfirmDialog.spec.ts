@@ -74,4 +74,23 @@ describe('ConfirmDialog', () => {
     input.remove();
     wrapper.unmount();
   });
+
+  it('renders dialog semantics when visible', async () => {
+    const wrapper = mount(ConfirmDialog);
+    showDialog();
+    await nextTick();
+
+    const dialog = document.body.querySelector('[role="dialog"]') as HTMLElement | null;
+    expect(dialog).toBeTruthy();
+    expect(dialog?.getAttribute('aria-modal')).toBe('true');
+
+    const labelledBy = dialog?.getAttribute('aria-labelledby');
+    const describedBy = dialog?.getAttribute('aria-describedby');
+    expect(labelledBy).toBeTruthy();
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(labelledBy as string)).toBeTruthy();
+    expect(document.getElementById(describedBy as string)).toBeTruthy();
+
+    wrapper.unmount();
+  });
 });

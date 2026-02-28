@@ -194,6 +194,72 @@ describe('AuditView', () => {
       });
       expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('security-alert');
     });
+
+    it('accepts container-update as a valid action filter from route query', async () => {
+      mockRoute.query = {
+        action: 'container-update',
+      };
+      mockGetAuditLog.mockResolvedValue({
+        entries: [makeEntry({ action: 'container-update' })],
+        total: 1,
+      });
+
+      const wrapper = await mountAuditView();
+
+      expect(mockGetAuditLog).toHaveBeenCalledWith({
+        page: 1,
+        limit: 50,
+        action: 'container-update',
+      });
+      expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('container-update');
+    });
+
+    it('loads using route query date range filters', async () => {
+      mockRoute.query = {
+        from: '2026-01-01',
+        to: '2026-01-31',
+      };
+      mockGetAuditLog.mockResolvedValue({
+        entries: [makeEntry()],
+        total: 1,
+      });
+
+      const wrapper = await mountAuditView();
+
+      expect(mockGetAuditLog).toHaveBeenCalledWith({
+        page: 1,
+        limit: 50,
+        from: '2026-01-01',
+        to: '2026-01-31',
+      });
+      expect((wrapper.find('input[name="from-date"]').element as HTMLInputElement).value).toBe(
+        '2026-01-01',
+      );
+      expect((wrapper.find('input[name="to-date"]').element as HTMLInputElement).value).toBe(
+        '2026-01-31',
+      );
+    });
+
+    it('loads using route query container filter', async () => {
+      mockRoute.query = {
+        container: 'redis-main',
+      };
+      mockGetAuditLog.mockResolvedValue({
+        entries: [makeEntry({ containerName: 'redis-main' })],
+        total: 1,
+      });
+
+      const wrapper = await mountAuditView();
+
+      expect(mockGetAuditLog).toHaveBeenCalledWith({
+        page: 1,
+        limit: 50,
+        container: 'redis-main',
+      });
+      expect(
+        (wrapper.find('input[name="container-name"]').element as HTMLInputElement).value,
+      ).toBe('redis-main');
+    });
   });
 
   describe('filtering', () => {
@@ -242,8 +308,53 @@ describe('AuditView', () => {
       });
     });
 
+    it('refetches data when date range filters change', async () => {
+      mockGetAuditLog.mockResolvedValue({
+        entries: [makeEntry()],
+        total: 1,
+      });
+      const wrapper = await mountAuditView();
+
+      const fromInput = wrapper.find('input[name="from-date"]');
+      const toInput = wrapper.find('input[name="to-date"]');
+      expect(fromInput.exists()).toBe(true);
+      expect(toInput.exists()).toBe(true);
+
+      await fromInput.setValue('2026-01-01');
+      await flushPromises();
+      await toInput.setValue('2026-01-31');
+      await flushPromises();
+
+      expect(mockGetAuditLog).toHaveBeenLastCalledWith({
+        page: 1,
+        limit: 50,
+        from: '2026-01-01',
+        to: '2026-01-31',
+      });
+    });
+
+    it('refetches data when container filter changes', async () => {
+      mockGetAuditLog.mockResolvedValue({
+        entries: [makeEntry()],
+        total: 1,
+      });
+      const wrapper = await mountAuditView();
+
+      const containerInput = wrapper.find('input[name="container-name"]');
+      expect(containerInput.exists()).toBe(true);
+
+      await containerInput.setValue('redis');
+      await flushPromises();
+
+      expect(mockGetAuditLog).toHaveBeenLastCalledWith({
+        page: 1,
+        limit: 50,
+        container: 'redis',
+      });
+    });
+
     it('clears filters and resets pagination to page 1', async () => {
-      mockRoute.query = { page: '2', action: 'update-failed', q: 'nginx' };
+      mockRoute.query = { page: '2', action: 'update-failed', q: 'nginx', container: 'redis' };
       mockGetAuditLog.mockResolvedValue({
         entries: [makeEntry({ action: 'update-failed' })],
         total: 120,
@@ -256,6 +367,9 @@ describe('AuditView', () => {
       await flushPromises();
 
       expect((wrapper.find('input').element as HTMLInputElement).value).toBe('');
+      expect(
+        (wrapper.find('input[name="container-name"]').element as HTMLInputElement).value,
+      ).toBe('');
       expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('');
       expect(mockGetAuditLog).toHaveBeenLastCalledWith({
         page: 1,

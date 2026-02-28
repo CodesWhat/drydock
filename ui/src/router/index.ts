@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router';
+import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router';
 import { getUser } from '@/services/auth';
 import AppLayout from '@/layouts/AppLayout.vue';
 
@@ -58,7 +58,7 @@ const router = createRouter({
  * Validate and return the `next` query parameter as a safe redirect path.
  * Returns the path string if valid, or `true` to proceed to the current route.
  */
-export function validateAndGetNextRoute(to: any): string | boolean {
+export function validateAndGetNextRoute(to: RouteLocationNormalized): string | boolean {
   if (to.query.next) {
     const next = String(to.query.next);
     if (next.startsWith('/') && !next.startsWith('//')) {
@@ -72,7 +72,7 @@ export function validateAndGetNextRoute(to: any): string | boolean {
  * Create a redirect object that sends the user to the login page,
  * preserving the original destination as the `next` query parameter.
  */
-export function createLoginRedirect(to: any) {
+export function createLoginRedirect(to: RouteLocationNormalized) {
   return {
     name: 'login',
     query: {
@@ -84,7 +84,7 @@ export function createLoginRedirect(to: any) {
 /**
  * Apply authentication navigation guard.
  */
-export async function applyAuthNavigationGuard(to: any) {
+export async function applyAuthNavigationGuard(to: RouteLocationNormalized) {
   if (to.name === 'login') {
     return true;
   }

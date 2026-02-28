@@ -143,6 +143,25 @@ describe('DataListAccordion', () => {
     });
   });
 
+  describe('accessibility', () => {
+    it('marks expandable rows as buttons and updates aria-expanded', async () => {
+      const w = factory({ expandable: true });
+      const firstItem = w.findAll('.space-y-2 > div')[0];
+      expect(firstItem.attributes('role')).toBe('button');
+      expect(firstItem.attributes('aria-expanded')).toBe('false');
+      expect(firstItem.attributes('tabindex')).toBe('0');
+
+      await firstItem.trigger('click');
+      expect(w.findAll('.space-y-2 > div')[0].attributes('aria-expanded')).toBe('true');
+    });
+
+    it('adds an aria-label for click-through rows', () => {
+      const w = factory({ expandable: false });
+      const firstItem = w.findAll('.space-y-2 > div')[0];
+      expect(firstItem.attributes('aria-label')).toContain('Alpha');
+    });
+  });
+
   describe('selection', () => {
     it('applies thicker border to selected item', () => {
       const w = factory({ selectedKey: '2' });

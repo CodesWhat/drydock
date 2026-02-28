@@ -13,8 +13,35 @@ export function serverBadgeColor(server: string) {
   return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)' };
 }
 
-export function registryLabel(reg: string) {
-  return reg === 'dockerhub' ? 'Dockerhub' : reg === 'ghcr' ? 'GHCR' : 'Custom';
+function parseRegistryHost(registryUrl?: string): string | undefined {
+  if (typeof registryUrl !== 'string') {
+    return undefined;
+  }
+  const trimmed = registryUrl.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  try {
+    return new URL(trimmed).host;
+  } catch {
+    const normalized = trimmed.replace(/^[a-z]+:\/\//i, '');
+    const host = normalized.split('/')[0];
+    return host.length > 0 ? host : undefined;
+  }
+}
+
+export function registryLabel(reg: string, registryUrl?: string, registryName?: string) {
+  if (reg === 'dockerhub') return 'Dockerhub';
+  if (reg === 'ghcr') return 'GHCR';
+  const host = parseRegistryHost(registryUrl);
+  if (host) return host;
+  if (typeof registryName === 'string') {
+    const trimmed = registryName.trim();
+    if (trimmed.length > 0 && trimmed.toLowerCase() !== 'custom') {
+      return trimmed;
+    }
+  }
+  return 'Custom';
 }
 
 export function registryColorBg(reg: string) {

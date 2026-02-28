@@ -5,6 +5,8 @@ import { useBreakpoints } from '../composables/useBreakpoints';
 import type { NotificationRule, NotificationRuleUpdate } from '../services/notification';
 import { getAllNotificationRules, updateNotificationRule } from '../services/notification';
 import { getAllTriggers } from '../services/trigger';
+import type { ApiComponent } from '../types/api';
+import { errorMessage } from '../utils/error';
 
 interface TriggerSummary {
   id: string;
@@ -187,8 +189,8 @@ async function persistRule(ruleId: string, update: NotificationRuleUpdate) {
       syncDetailDraftFromRule();
     }
     return updatedRule;
-  } catch (e: any) {
-    saveError.value = e?.message || 'Failed to update notification rule';
+  } catch (e: unknown) {
+    saveError.value = errorMessage(e, 'Failed to update notification rule');
     throw e;
   } finally {
     savingRuleId.value = null;
@@ -253,8 +255,8 @@ onMounted(async () => {
     ]);
 
     const notificationTriggers: TriggerSummary[] = triggers
-      .filter((trigger: any) => isNotificationTriggerType(trigger.type))
-      .map((trigger: any) => ({
+      .filter((trigger: ApiComponent) => isNotificationTriggerType(trigger.type))
+      .map((trigger: ApiComponent) => ({
         id: trigger.id,
         name: trigger.name,
         type: trigger.type,
@@ -266,8 +268,8 @@ onMounted(async () => {
       triggers: normalizeTriggerIds(rule.triggers.filter((triggerId) => allowedTriggerIds.has(triggerId))),
     }));
     triggersData.value = notificationTriggers;
-  } catch (e: any) {
-    error.value = e?.message || 'Failed to load notification rules';
+  } catch (e: unknown) {
+    error.value = errorMessage(e, 'Failed to load notification rules');
   } finally {
     loading.value = false;
   }

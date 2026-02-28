@@ -3,6 +3,8 @@ import { onMounted, onUnmounted } from 'vue';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 
 const { visible, current, accept, reject, dismiss } = useConfirmDialog();
+const dialogTitleId = 'confirm-dialog-title';
+const dialogDescriptionId = 'confirm-dialog-description';
 
 function isTextEntryTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
@@ -51,6 +53,10 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
            class="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-start justify-center pt-[20vh]"
            @pointerdown.self="dismiss">
         <div class="relative w-full max-w-[420px] min-w-[340px] mx-4 dd-rounded-lg overflow-hidden"
+             role="dialog"
+             aria-modal="true"
+             :aria-labelledby="dialogTitleId"
+             :aria-describedby="dialogDescriptionId"
              :style="{
                backgroundColor: 'var(--dd-bg-card)',
                border: '1px solid var(--dd-border-strong)',
@@ -59,11 +65,11 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
           <!-- Header -->
           <div class="px-5 pt-4 pb-3"
                :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <span class="text-[13px] font-semibold dd-text">{{ current.header }}</span>
+            <span :id="dialogTitleId" class="text-[13px] font-semibold dd-text">{{ current.header }}</span>
           </div>
 
           <!-- Body -->
-          <div class="px-5 py-4.5 text-[12px] leading-relaxed dd-text-secondary">
+          <div :id="dialogDescriptionId" class="px-5 py-4.5 text-[12px] leading-relaxed dd-text-secondary">
             {{ current.message }}
           </div>
 
@@ -71,6 +77,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
           <div class="px-5 pt-3 pb-4.5 flex items-center justify-end gap-2.5">
             <button
               class="px-4 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
+              :aria-label="current.rejectLabel || 'Cancel'"
               :style="{
                 backgroundColor: 'var(--dd-bg-inset)',
                 border: '1px solid var(--dd-border-strong)',
@@ -81,6 +88,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
             </button>
             <button
               class="px-4 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
+              :aria-label="current.acceptLabel || 'Confirm'"
               :style="current.severity === 'danger'
                 ? {
                     backgroundColor: 'var(--dd-danger-muted)',

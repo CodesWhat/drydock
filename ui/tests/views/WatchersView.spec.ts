@@ -1,6 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import { getAllContainers } from '@/services/container';
-import { getAllWatchers } from '@/services/watcher';
+import { getAllWatchers, getWatcher } from '@/services/watcher';
 import WatchersView from '@/views/WatchersView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
 import { mountWithPlugins } from '../helpers/mount';
@@ -21,6 +21,7 @@ vi.mock('@/composables/useBreakpoints', () => ({
 
 vi.mock('@/services/watcher', () => ({
   getAllWatchers: vi.fn(),
+  getWatcher: vi.fn(),
 }));
 
 vi.mock('@/services/container', () => ({
@@ -28,6 +29,7 @@ vi.mock('@/services/container', () => ({
 }));
 
 const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
+const mockGetWatcher = getWatcher as ReturnType<typeof vi.fn>;
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
 
 async function mountWatchersView() {
@@ -42,6 +44,12 @@ describe('WatchersView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRoute.query = {};
+    mockGetWatcher.mockResolvedValue({
+      id: 'watcher-alpha',
+      name: 'Alpha Watcher',
+      type: 'docker',
+      configuration: { cron: '*/1 * * * *', grace: '30s' },
+    });
   });
 
   it('successful load combines watcher + container counts into rendered rows', async () => {
@@ -119,5 +127,35 @@ describe('WatchersView', () => {
     const wrapper = await mountWatchersView();
 
     expect(wrapper.text()).toContain('Failed to load watchers');
+  });
+
+  it('clicking a row fetches watcher details from per-component endpoint', async () => {
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+      },
+    ]);
+    mockGetAllContainers.mockResolvedValue([{ id: 'c-1', watcher: 'watcher-alpha' }]);
+    mockGetWatcher.mockResolvedValue({
+      id: 'watcher-alpha',
+      name: 'Alpha Watcher',
+      type: 'docker',
+      configuration: { cron: '*/1 * * * *', grace: '30s' },
+    });
+
+    const wrapper = await mountWatchersView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    expect(mockGetWatcher).toHaveBeenCalledWith({
+      type: 'docker',
+      name: 'Alpha Watcher',
+      agent: undefined,
+    });
+    expect(wrapper.text()).toContain('*/1 * * * *');
+    expect(wrapper.text()).toContain('30s');
   });
 });

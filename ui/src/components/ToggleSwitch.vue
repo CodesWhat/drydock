@@ -2,6 +2,7 @@
 defineProps<{
   modelValue: boolean;
   disabled?: boolean;
+  ariaLabel?: string;
 }>();
 
 defineEmits<{
@@ -12,6 +13,9 @@ defineEmits<{
 <template>
   <button
     type="button"
+    role="switch"
+    :aria-checked="String(modelValue)"
+    :aria-label="ariaLabel"
     class="relative w-10 h-5 dd-rounded-lg transition-colors"
     :class="disabled ? 'opacity-50 pointer-events-none' : ''"
     :style="{ backgroundColor: modelValue ? 'var(--dd-primary)' : 'var(--dd-border-strong)' }"

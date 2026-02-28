@@ -24,13 +24,22 @@ describe('audit service', () => {
       json: () => Promise.resolve({ entries: [], total: 0 }),
     });
 
-    await getAuditLog({ page: 2, limit: 10, action: 'update-applied', container: 'nginx' });
+    await getAuditLog({
+      page: 2,
+      limit: 10,
+      action: 'update-applied',
+      container: 'nginx',
+      from: '2026-01-01',
+      to: '2026-01-31',
+    });
 
     const calledUrl = (global.fetch as any).mock.calls[0][0];
     expect(calledUrl).toContain('page=2');
     expect(calledUrl).toContain('limit=10');
     expect(calledUrl).toContain('action=update-applied');
     expect(calledUrl).toContain('container=nginx');
+    expect(calledUrl).toContain('from=2026-01-01');
+    expect(calledUrl).toContain('to=2026-01-31');
   });
 
   it('throws when response is not ok', async () => {

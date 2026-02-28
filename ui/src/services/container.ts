@@ -1,3 +1,5 @@
+import { errorMessage } from '../utils/error';
+
 function getContainerIcon() {
   return 'sh-docker';
 }
@@ -95,6 +97,43 @@ async function getContainerLogs(containerId, tail = 100) {
   return response.json();
 }
 
+async function getContainerUpdateOperations(containerId) {
+  const response = await fetch(`/api/containers/${containerId}/update-operations`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to get update operations for container ${containerId}: ${response.statusText}`,
+    );
+  }
+  return response.json();
+}
+
+async function getContainerVulnerabilities(containerId) {
+  const response = await fetch(`/api/containers/${containerId}/vulnerabilities`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to get vulnerabilities for container ${containerId}: ${response.statusText}`,
+    );
+  }
+  return response.json();
+}
+
+async function getContainerSbom(containerId, format = 'spdx-json') {
+  const response = await fetch(
+    `/api/containers/${containerId}/sbom?format=${encodeURIComponent(format)}`,
+    {
+      credentials: 'include',
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to get SBOM for container ${containerId}: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 async function updateContainerPolicy(containerId, action, payload = {}) {
   const response = await fetch(`/api/containers/${containerId}/update-policy`, {
     method: 'PATCH',
@@ -110,8 +149,8 @@ async function updateContainerPolicy(containerId, action, payload = {}) {
     try {
       const body = await response.json();
       details = body?.error ? ` (${body.error})` : '';
-    } catch (e: any) {
-      console.debug(`Unable to parse policy update response payload: ${e?.message || e}`);
+    } catch (e: unknown) {
+      console.debug(`Unable to parse policy update response payload: ${errorMessage(e)}`);
       // Ignore parsing error and fallback to status text.
     }
     throw new Error(
@@ -139,8 +178,8 @@ async function scanContainer(containerId) {
     try {
       const body = await response.json();
       details = body?.error ? ` (${body.error})` : '';
-    } catch (e: any) {
-      console.debug(`Unable to parse scan response payload: ${e?.message || e}`);
+    } catch (e: unknown) {
+      console.debug(`Unable to parse scan response payload: ${errorMessage(e)}`);
     }
     throw new Error(`Failed to scan container: ${response.statusText}${details}`);
   }
@@ -156,6 +195,9 @@ export {
   deleteContainer,
   getContainerTriggers,
   getContainerLogs,
+  getContainerUpdateOperations,
+  getContainerVulnerabilities,
+  getContainerSbom,
   runTrigger,
   scanContainer,
   updateContainerPolicy,

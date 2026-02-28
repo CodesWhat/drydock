@@ -1,5 +1,5 @@
 import { flushPromises } from '@vue/test-utils';
-import { computed, ref } from 'vue';
+import { computed, defineComponent, ref } from 'vue';
 import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
 import { mountWithPlugins } from '../helpers/mount';
@@ -18,8 +18,16 @@ vi.mock('@/services/container', () => ({
   getAllContainers: vi.fn(),
   getContainerGroups: vi.fn().mockResolvedValue([]),
   getContainerLogs: vi.fn(),
+  getContainerUpdateOperations: vi.fn().mockResolvedValue([]),
+  getContainerSbom: vi.fn().mockResolvedValue({ format: 'spdx-json', document: {} }),
   getContainerTriggers: vi.fn().mockResolvedValue([]),
+  getContainerVulnerabilities: vi.fn().mockResolvedValue({
+    status: 'not-scanned',
+    summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+    vulnerabilities: [],
+  }),
   refreshAllContainers: vi.fn().mockResolvedValue([]),
+  scanContainer: vi.fn().mockResolvedValue({}),
   runTrigger: vi.fn().mockResolvedValue({}),
   updateContainerPolicy: vi.fn().mockResolvedValue({}),
 }));
@@ -168,18 +176,36 @@ const childStubs = {
       '<div class="data-filter-bar"><slot name="filters" /><slot name="extra-buttons" /><slot name="left" /></div>',
     props: ['modelValue', 'showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
   },
-  DataTable: {
-    template: '<div class="data-table" />',
+  DataTable: defineComponent({
     props: ['columns', 'rows', 'rowKey', 'sortKey', 'sortAsc', 'selectedKey', 'showActions'],
-  },
-  DataCardGrid: {
-    template: '<div class="data-card-grid" />',
+    template: `
+      <div class="data-table">
+        <div v-if="rows?.[0]" class="data-table-first-row">
+          <slot name="cell-name" :row="rows[0]" />
+          <slot name="cell-version" :row="rows[0]" />
+          <slot name="cell-status" :row="rows[0]" />
+          <slot name="cell-registry" :row="rows[0]" />
+          <slot name="actions" :row="rows[0]" />
+        </div>
+      </div>
+    `,
+  }),
+  DataCardGrid: defineComponent({
     props: ['items', 'itemKey', 'selectedKey'],
-  },
-  DataListAccordion: {
-    template: '<div class="data-list-accordion" />',
+    template: `
+      <div class="data-card-grid">
+        <slot v-if="items?.[0]" name="card" :item="items[0]" />
+      </div>
+    `,
+  }),
+  DataListAccordion: defineComponent({
     props: ['items', 'itemKey', 'selectedKey'],
-  },
+    template: `
+      <div class="data-list-accordion">
+        <slot v-if="items?.[0]" name="header" :item="items[0]" />
+      </div>
+    `,
+  }),
   DetailPanel: {
     template: '<div class="detail-panel"><slot name="header" /><slot /></div>',
     props: ['open', 'isMobile', 'size', 'showSizeControls', 'showFullPage'],
@@ -190,12 +216,26 @@ const childStubs = {
   },
 };
 
-import { getAllContainers, getContainerGroups } from '@/services/container';
+import {
+  getAllContainers,
+  getContainerGroups,
+  getContainerUpdateOperations,
+  scanContainer,
+  getContainerSbom,
+  updateContainerPolicy,
+  getContainerVulnerabilities,
+} from '@/services/container';
 import { updateContainer as apiUpdateContainer } from '@/services/container-actions';
 
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
 const mockGetContainerGroups = getContainerGroups as ReturnType<typeof vi.fn>;
+const mockGetContainerUpdateOperations = getContainerUpdateOperations as ReturnType<typeof vi.fn>;
+const mockGetContainerVulnerabilities = getContainerVulnerabilities as ReturnType<typeof vi.fn>;
+const mockGetContainerSbom = getContainerSbom as ReturnType<typeof vi.fn>;
+const mockScanContainer = scanContainer as ReturnType<typeof vi.fn>;
+const mockUpdateContainerPolicy = updateContainerPolicy as ReturnType<typeof vi.fn>;
 const mockApiUpdate = apiUpdateContainer as ReturnType<typeof vi.fn>;
+const mountedWrappers: Array<{ unmount: () => void }> = [];
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
   return {
@@ -215,12 +255,13 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
   };
 }
 
-async function mountContainersView(containers: Container[] = []) {
+async function mountContainersView(containers: Container[] = [], apiContainersInput?: any[]) {
   // The API returns raw objects; mapApiContainers transforms them
-  const apiContainers = containers.map((c) => ({
-    ...c,
-    displayName: c.name,
-  }));
+  const apiContainers = apiContainersInput
+    ?? containers.map((c) => ({
+      ...c,
+      displayName: c.name,
+    }));
   mockGetAllContainers.mockResolvedValue(apiContainers);
 
   const { mapApiContainers } = await import('@/utils/container-mapper');
@@ -243,6 +284,7 @@ async function mountContainersView(containers: Container[] = []) {
   const wrapper = mountWithPlugins(ContainersView, {
     global: { stubs: childStubs },
   });
+  mountedWrappers.push(wrapper);
   await flushPromises();
   return wrapper;
 }
@@ -250,6 +292,16 @@ async function mountContainersView(containers: Container[] = []) {
 describe('ContainersView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetContainerGroups.mockResolvedValue([]);
+    mockGetContainerUpdateOperations.mockResolvedValue([]);
+    mockGetContainerVulnerabilities.mockResolvedValue({
+      status: 'not-scanned',
+      summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+      vulnerabilities: [],
+    });
+    mockGetContainerSbom.mockResolvedValue({ format: 'spdx-json', document: {} });
+    mockScanContainer.mockResolvedValue({});
+    mockUpdateContainerPolicy.mockResolvedValue({});
     mockFilteredContainers.value = [];
     mockActiveFilterCount.value = 0;
     mockFilterSearch.value = '';
@@ -261,6 +313,15 @@ describe('ContainersView', () => {
     mockContainerScrollBlocked.value = false;
     mockContainerAutoFetchInterval.value = 0;
     mockRoute.query = {};
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    while (mountedWrappers.length > 0) {
+      const wrapper = mountedWrappers.pop();
+      wrapper?.unmount();
+    }
   });
 
   describe('loading containers', () => {
@@ -317,6 +378,68 @@ describe('ContainersView', () => {
       const wrapper = await mountContainersView([makeContainer()]);
       expect(wrapper.find('.data-filter-bar').exists()).toBe(true);
     });
+
+    it('shows registry error indicator in table rows', async () => {
+      const c = makeContainer() as Container & { registryError?: string };
+      c.registryError = 'Registry request failed: unauthorized';
+      const wrapper = await mountContainersView([c]);
+
+      expect(wrapper.find('.data-table [aria-label="Registry error"]').exists()).toBe(true);
+    });
+
+    it('shows registry error indicator in card rows', async () => {
+      const c = makeContainer() as Container & { registryError?: string };
+      c.registryError = 'Registry request failed: unauthorized';
+      const wrapper = await mountContainersView([c]);
+
+      (wrapper.vm as any).containerViewMode = 'cards';
+      await flushPromises();
+
+      expect(wrapper.find('.data-card-grid [aria-label="Registry error"]').exists()).toBe(true);
+    });
+
+    it('shows registry error indicator in list rows', async () => {
+      const c = makeContainer() as Container & { registryError?: string };
+      c.registryError = 'Registry request failed: unauthorized';
+      const wrapper = await mountContainersView([c]);
+
+      (wrapper.vm as any).containerViewMode = 'list';
+      await flushPromises();
+
+      expect(wrapper.find('.data-list-accordion [aria-label="Registry error"]').exists()).toBe(true);
+    });
+
+    it('shows no-update reason in table version cell', async () => {
+      const c = makeContainer({ newTag: null }) as Container & { noUpdateReason?: string };
+      c.noUpdateReason = 'All tags excluded by policy';
+      const wrapper = await mountContainersView([c]);
+
+      expect(wrapper.find('.data-table').text()).toContain('All tags excluded by policy');
+    });
+
+    it('derives active list policy state from updatePolicy metadata', async () => {
+      const containers = [makeContainer({ id: 'c1', name: 'nginx', newTag: null, updateKind: null })];
+      const wrapper = await mountContainersView(containers, [
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          updatePolicy: {
+            snoozeUntil: '2099-01-01T00:00:00.000Z',
+            skipTags: ['2.0.0'],
+          },
+        },
+      ]);
+      const vm = wrapper.vm as any;
+      expect(vm.getContainerListPolicyState('nginx')).toEqual({
+        snoozed: true,
+        skipped: true,
+        skipCount: 1,
+        snoozeUntil: '2099-01-01T00:00:00.000Z',
+      });
+      expect(wrapper.find('.data-table [aria-label="Snoozed updates"]').exists()).toBe(true);
+      expect(wrapper.find('.data-table [aria-label="Skipped updates"]').exists()).toBe(true);
+    });
   });
 
   describe('skipUpdate', () => {
@@ -339,6 +462,80 @@ describe('ContainersView', () => {
       const after = vm.displayContainers;
       expect(after[0].newTag).toBeUndefined();
       expect(after[0].updateKind).toBeUndefined();
+    });
+  });
+
+  describe('advanced policy controls', () => {
+    it('removes one skipped tag via remove-skip policy action', async () => {
+      const containers = [makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' })];
+      const wrapper = await mountContainersView(containers, [
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          updatePolicy: { skipTags: ['2.0.0', '3.0.0'] },
+        },
+      ]);
+      const vm = wrapper.vm as any;
+      mockSelectedContainer.value = containers[0];
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'actions';
+      mockUpdateContainerPolicy.mockResolvedValue({ updated: true });
+
+      await vm.removeSkipTagSelected('2.0.0');
+      await flushPromises();
+
+      expect(mockUpdateContainerPolicy).toHaveBeenCalledWith('c1', 'remove-skip', {
+        kind: 'tag',
+        value: '2.0.0',
+      });
+    });
+
+    it('removes one skipped digest via remove-skip policy action', async () => {
+      const containers = [makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' })];
+      const wrapper = await mountContainersView(containers, [
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          updatePolicy: { skipDigests: ['sha256:abc', 'sha256:def'] },
+        },
+      ]);
+      const vm = wrapper.vm as any;
+      mockSelectedContainer.value = containers[0];
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'actions';
+      mockUpdateContainerPolicy.mockResolvedValue({ updated: true });
+
+      await vm.removeSkipDigestSelected('sha256:abc');
+      await flushPromises();
+
+      expect(mockUpdateContainerPolicy).toHaveBeenCalledWith('c1', 'remove-skip', {
+        kind: 'digest',
+        value: 'sha256:abc',
+      });
+    });
+
+    it('snoozes to a specific date via snooze policy action', async () => {
+      const containers = [makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' })];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+      mockSelectedContainer.value = containers[0];
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'actions';
+      mockUpdateContainerPolicy.mockResolvedValue({ updated: true });
+      vm.snoozeDateInput = '2030-01-10';
+
+      await vm.snoozeSelectedUntilDate();
+      await flushPromises();
+
+      expect(mockUpdateContainerPolicy).toHaveBeenCalledWith(
+        'c1',
+        'snooze',
+        expect.objectContaining({
+          snoozeUntil: expect.any(String),
+        }),
+      );
     });
   });
 
@@ -404,6 +601,25 @@ describe('ContainersView', () => {
 
       expect(mockApiUpdate).toHaveBeenCalledWith('nginx-id-1');
     });
+
+    it('calls scanContainer with the correct container id', async () => {
+      const containers = [makeContainer({ name: 'nginx', newTag: '2.0.0' })];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      vm.containerIdMap = { nginx: 'nginx-id-1' };
+      mockScanContainer.mockResolvedValue({});
+
+      const apiContainers = containers.map((c) => ({ ...c, displayName: c.name }));
+      mockGetAllContainers.mockResolvedValue(apiContainers);
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue(containers);
+
+      await vm.scanContainer('nginx');
+      await flushPromises();
+
+      expect(mockScanContainer).toHaveBeenCalledWith('nginx-id-1');
+    });
   });
 
   describe('detail panel', () => {
@@ -421,6 +637,241 @@ describe('ContainersView', () => {
       mockDetailPanelOpen.value = true;
       await flushPromises();
       expect(wrapper.find('.detail-panel').exists()).toBe(true);
+    });
+
+    it('loads vulnerabilities and sbom for selected container details', async () => {
+      const c = makeContainer({ id: 'container-1', name: 'nginx' });
+      const wrapper = await mountContainersView([c]);
+      mockGetContainerVulnerabilities.mockResolvedValue({
+        status: 'scanned',
+        summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+        vulnerabilities: [{ id: 'CVE-2026-1', severity: 'CRITICAL' }],
+      });
+      mockGetContainerSbom.mockResolvedValue({
+        format: 'spdx-json',
+        document: { spdxVersion: 'SPDX-2.3' },
+      });
+
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      await flushPromises();
+
+      expect(mockGetContainerVulnerabilities).toHaveBeenCalledWith('container-1');
+      expect(mockGetContainerSbom).toHaveBeenCalledWith('container-1', 'spdx-json');
+
+      wrapper.unmount();
+    });
+
+    it('loads and renders update operation history when opening actions tab', async () => {
+      const c = makeContainer({ id: 'container-1', name: 'nginx' });
+      const wrapper = await mountContainersView([c]);
+
+      mockGetContainerUpdateOperations.mockResolvedValue([
+        {
+          id: 'op-1',
+          status: 'rolled-back',
+          phase: 'rollback-failed',
+          rollbackReason: 'health_gate_failed',
+          updatedAt: '2026-02-28T10:00:00.000Z',
+        },
+      ]);
+
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'actions';
+      await flushPromises();
+
+      expect(mockGetContainerUpdateOperations).toHaveBeenCalledWith('container-1');
+      expect(wrapper.text()).toContain('Update Operation History');
+      expect(wrapper.text()).toContain('op-1');
+      expect(wrapper.text()).toContain('rolled back');
+      expect(wrapper.text()).toContain('rollback failed');
+      expect(wrapper.text()).toContain('health gate failed');
+    });
+
+    it('shows registry error message when selected container has one', async () => {
+      const c = makeContainer() as Container & { registryError?: string };
+      c.registryError = 'Registry request failed: unauthorized';
+      const wrapper = await mountContainersView([c]);
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+      expect(wrapper.text()).toContain('Registry request failed: unauthorized');
+    });
+
+    it('shows no-update reason when selected container has noUpdateReason', async () => {
+      const c = makeContainer({ newTag: null }) as Container & { noUpdateReason?: string };
+      c.noUpdateReason =
+        'Strict tag-family policy filtered out 1 higher semver tag(s) outside the inferred family.';
+      const wrapper = await mountContainersView([c]);
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+      expect(wrapper.text()).toContain('Strict tag-family policy filtered out 1 higher semver');
+    });
+
+    it('shows release notes link when selected container has releaseLink', async () => {
+      const c = makeContainer({ newTag: '2.0.0' }) as Container & { releaseLink?: string };
+      c.releaseLink = 'https://example.com/changelog';
+      const wrapper = await mountContainersView([c]);
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+      const releaseLink = wrapper.find('a[href="https://example.com/changelog"]');
+      expect(releaseLink.exists()).toBe(true);
+    });
+
+    it('shows trigger include/exclude filters in overview', async () => {
+      const c = makeContainer({
+        newTag: '2.0.0',
+      } as any) as Container & { triggerInclude?: string; triggerExclude?: string };
+      c.triggerInclude = 'slack.default:major';
+      c.triggerExclude = 'discord.default';
+      const wrapper = await mountContainersView([c]);
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('slack.default:major');
+      expect(wrapper.text()).toContain('discord.default');
+    });
+
+    it('shows image metadata in overview for selected container', async () => {
+      const c = makeContainer({ id: 'container-1', name: 'nginx' });
+      const wrapper = await mountContainersView([c], [
+        {
+          id: 'container-1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: {
+            name: 'nginx',
+            architecture: 'amd64',
+            os: 'linux',
+            created: '2026-01-02T03:04:05.000Z',
+            digest: {
+              value: 'sha256:metadata-digest',
+            },
+          },
+        },
+      ]);
+
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Image Metadata');
+      expect(wrapper.text()).toContain('amd64');
+      expect(wrapper.text()).toContain('linux');
+      expect(wrapper.text()).toContain('sha256:metadata-digest');
+      expect(wrapper.text()).toContain('2026');
+    });
+
+    it('shows runtime Entrypoint/Cmd origins from container labels', async () => {
+      const c = makeContainer({ id: 'container-1', name: 'nginx' });
+      const wrapper = await mountContainersView([c], [
+        {
+          id: 'container-1',
+          name: 'nginx',
+          displayName: 'nginx',
+          watcher: 'local',
+          labels: {
+            'dd.runtime.entrypoint.origin': 'explicit',
+            'dd.runtime.cmd.origin': 'inherited',
+          },
+        },
+      ]);
+
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Runtime Process');
+      expect(wrapper.text()).toContain('Entrypoint');
+      expect(wrapper.text()).toContain('Explicit');
+      expect(wrapper.text()).toContain('Cmd');
+      expect(wrapper.text()).toContain('Inherited');
+    });
+
+    it('shows lifecycle hooks from container labels in overview', async () => {
+      const c = makeContainer({ id: 'container-1', name: 'nginx' });
+      const wrapper = await mountContainersView([c], [
+        {
+          id: 'container-1',
+          name: 'nginx',
+          displayName: 'nginx',
+          watcher: 'local',
+          labels: {
+            'dd.hook.pre': 'echo before',
+            'dd.hook.post': 'echo after',
+            'dd.hook.timeout': '30000',
+          },
+        },
+      ]);
+
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Lifecycle Hooks');
+      expect(wrapper.text()).toContain('echo before');
+      expect(wrapper.text()).toContain('echo after');
+      expect(wrapper.text()).toContain('30000ms');
+      expect(wrapper.text()).toContain('Template Variables');
+      expect(wrapper.text()).toContain('DD_CONTAINER_NAME');
+      expect(wrapper.text()).toContain('DD_UPDATE_TO');
+    });
+
+    it('shows auto-rollback config from container labels in overview', async () => {
+      const c = makeContainer({ id: 'container-1', name: 'nginx' });
+      const wrapper = await mountContainersView([c], [
+        {
+          id: 'container-1',
+          name: 'nginx',
+          displayName: 'nginx',
+          watcher: 'local',
+          labels: {
+            'dd.rollback.auto': 'true',
+            'dd.rollback.window': '120000',
+            'dd.rollback.interval': '5000',
+          },
+        },
+      ]);
+
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Enabled');
+      expect(wrapper.text()).toContain('120000ms');
+      expect(wrapper.text()).toContain('5000ms');
+    });
+
+    it('shows runtime drift warning when origin metadata is unknown', async () => {
+      const c = makeContainer({ id: 'container-1', name: 'nginx' });
+      const wrapper = await mountContainersView([c], [
+        {
+          id: 'container-1',
+          name: 'nginx',
+          displayName: 'nginx',
+          watcher: 'local',
+          labels: {},
+        },
+      ]);
+
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Runtime origin metadata is missing');
     });
   });
 

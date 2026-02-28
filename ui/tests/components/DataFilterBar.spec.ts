@@ -112,6 +112,28 @@ describe('DataFilterBar', () => {
     });
   });
 
+  describe('accessibility', () => {
+    it('sets aria-expanded on the filter toggle button', () => {
+      const w = factory({ showFilters: false });
+      const filterBtn = w.find('button[title="Filters"]');
+      expect(filterBtn.attributes('aria-expanded')).toBe('false');
+    });
+
+    it('sets aria-expanded=true when filters are visible', () => {
+      const w = factory({ showFilters: true });
+      const filterBtn = w.find('button[title="Filters"]');
+      expect(filterBtn.attributes('aria-expanded')).toBe('true');
+    });
+
+    it('sets aria-label on each view mode button', () => {
+      const w = factory();
+      const viewBtns = w.findAll('button').filter((b) => b.attributes('title')?.endsWith('view'));
+      expect(viewBtns[0].attributes('aria-label')).toBe('Table view');
+      expect(viewBtns[1].attributes('aria-label')).toBe('Cards view');
+      expect(viewBtns[2].attributes('aria-label')).toBe('List view');
+    });
+  });
+
   describe('filter panel', () => {
     it('shows filter slot content when showFilters is true', () => {
       const w = factory(

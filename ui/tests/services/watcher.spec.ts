@@ -1,5 +1,6 @@
 import {
   getAllWatchers,
+  getWatcher,
   getWatcherIcon,
   getWatcherProviderColor,
   getWatcherProviderIcon,
@@ -40,5 +41,35 @@ describe('Watcher Service', () => {
 
     expect(global.fetch).toHaveBeenCalledWith('/api/watchers', { credentials: 'include' });
     expect(result).toEqual(mockResponse);
+  });
+
+  it('fetches a specific watcher by type and name', async () => {
+    const mockWatcher = { id: 'docker.local', type: 'docker', name: 'local' };
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue(mockWatcher),
+    });
+
+    const result = await getWatcher({ type: 'docker', name: 'local' });
+
+    expect(global.fetch).toHaveBeenCalledWith('/api/watchers/docker/local', {
+      credentials: 'include',
+    });
+    expect(result).toEqual(mockWatcher);
+  });
+
+  it('fetches an agent-scoped watcher when agent is provided', async () => {
+    const mockWatcher = { id: 'edge.docker.local', type: 'docker', name: 'local', agent: 'edge' };
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue(mockWatcher),
+    });
+
+    const result = await getWatcher({ agent: 'edge', type: 'docker', name: 'local' });
+
+    expect(global.fetch).toHaveBeenCalledWith('/api/watchers/edge/docker/local', {
+      credentials: 'include',
+    });
+    expect(result).toEqual(mockWatcher);
   });
 });

@@ -1,5 +1,6 @@
 import {
   getAllTriggers,
+  getTrigger,
   getTriggerIcon,
   getTriggerProviderColor,
   getTriggerProviderIcon,
@@ -146,6 +147,38 @@ describe('Trigger Service', () => {
           container: { id: 'c1' },
         }),
       ).rejects.toThrow('Unknown error');
+    });
+  });
+
+  describe('getTrigger', () => {
+    it('fetches a specific trigger by type and name', async () => {
+      const mockTrigger = { id: 'slack.alerts', type: 'slack', name: 'alerts' };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockTrigger,
+      } as any);
+
+      const result = await getTrigger({ type: 'slack', name: 'alerts' });
+
+      expect(fetch).toHaveBeenCalledWith('/api/triggers/slack/alerts', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockTrigger);
+    });
+
+    it('fetches an agent-scoped trigger when agent is provided', async () => {
+      const mockTrigger = { id: 'edge.slack.alerts', type: 'slack', name: 'alerts', agent: 'edge' };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockTrigger,
+      } as any);
+
+      const result = await getTrigger({ agent: 'edge', type: 'slack', name: 'alerts' });
+
+      expect(fetch).toHaveBeenCalledWith('/api/triggers/edge/slack/alerts', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockTrigger);
     });
   });
 });

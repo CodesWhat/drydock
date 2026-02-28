@@ -2,11 +2,13 @@ import { defineComponent, nextTick } from 'vue';
 
 const mockGetAllContainers = vi.fn();
 const mockScanContainer = vi.fn();
+const mockGetContainerSbom = vi.fn();
 const mockGetSecurityRuntime = vi.fn();
 
 vi.mock('@/services/container', () => ({
   getAllContainers: (...args: any[]) => mockGetAllContainers(...args),
   scanContainer: (...args: any[]) => mockScanContainer(...args),
+  getContainerSbom: (...args: any[]) => mockGetContainerSbom(...args),
 }));
 
 vi.mock('@/services/server', () => ({
@@ -70,7 +72,7 @@ const stubs: Record<string, any> = {
   DetailPanel: defineComponent({
     props: ['open', 'isMobile', 'showSizeControls', 'showFullPage'],
     emits: ['update:open'],
-    template: '<div class="detail-panel" />',
+    template: '<div class="detail-panel"><slot name="header" /><slot name="subtitle" /><slot /></div>',
   }),
   EmptyState: defineComponent({
     props: ['icon', 'message', 'showClear'],
@@ -136,6 +138,44 @@ describe('SecurityView', () => {
       expect(w.text()).toContain('Vulnerability scanner is ready');
     });
 
+    it('shows runtime checkedAt and latest scannedAt timestamps', async () => {
+      mockGetAllContainers.mockResolvedValue([
+        makeContainer({
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              scannedAt: '2026-02-24T10:00:00.000Z',
+              vulnerabilities: [
+                { id: 'CVE-1', severity: 'HIGH', packageName: 'openssl', fixedVersion: '3.0.1' },
+              ],
+            },
+          },
+        }),
+        makeContainer({
+          name: 'redis',
+          displayName: 'redis',
+          security: {
+            scan: {
+              scannedAt: '2026-02-25T11:30:00.000Z',
+              vulnerabilities: [
+                { id: 'CVE-2', severity: 'LOW', packageName: 'zlib', fixedVersion: null },
+              ],
+            },
+          },
+        }),
+      ]);
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSecurityRuntime).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalledOnce());
+      await nextTick();
+
+      expect(w.text()).toContain('Runtime checked');
+      expect(w.text()).toContain('2026-02-23');
+      expect(w.text()).toContain('Latest scan');
+      expect(w.text()).toContain('2026-02-25');
+    });
+
     it('fetches containers on mount and groups vulnerabilities by image', async () => {
       mockGetAllContainers.mockResolvedValue([makeContainer()]);
       const w = factory();
@@ -196,6 +236,45 @@ describe('SecurityView', () => {
       expect(vm.filteredSummaries[0].vulns[0].package).toBe('curl');
     });
 
+    it('renders vulnerability title, target, and reference URL in detail view', async () => {
+      mockGetAllContainers.mockResolvedValue([
+        makeContainer({
+          id: 'container-1',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [
+                {
+                  id: 'CVE-2026-9999',
+                  severity: 'CRITICAL',
+                  packageName: 'openssl',
+                  installedVersion: '3.0.0',
+                  fixedVersion: '3.0.10',
+                  title: 'OpenSSL buffer overflow',
+                  target: 'usr/lib/libcrypto.so',
+                  primaryUrl: 'https://avd.aquasec.com/nvd/cve-2026-9999',
+                },
+              ],
+            },
+          },
+        }),
+      ]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalledOnce());
+      await nextTick();
+
+      const vm = w.vm as any;
+      vm.openDetail(vm.filteredSummaries[0]);
+      await nextTick();
+
+      expect(w.text()).toContain('OpenSSL buffer overflow');
+      expect(w.text()).toContain('usr/lib/libcrypto.so');
+      expect(
+        w.find('a[href="https://avd.aquasec.com/nvd/cve-2026-9999"]').exists(),
+      ).toBe(true);
+    });
+
     it('groups multiple containers into separate image summaries', async () => {
       mockGetAllContainers.mockResolvedValue([
         makeContainer({ name: 'nginx', displayName: 'nginx' }),
@@ -213,6 +292,29 @@ describe('SecurityView', () => {
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
       await nextTick();
       expect(w.find('.dt').attributes('data-rows')).toBe('2');
+    });
+
+    it('loads sbom and shows view/download controls for the selected image', async () => {
+      mockGetAllContainers.mockResolvedValue([makeContainer({ id: 'container-1', displayName: 'nginx' })]);
+      mockGetContainerSbom.mockResolvedValue({
+        format: 'spdx-json',
+        generatedAt: '2026-02-28T09:00:00.000Z',
+        document: { spdxVersion: 'SPDX-2.3' },
+      });
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalledOnce());
+      await nextTick();
+
+      const vm = w.vm as any;
+      vm.openDetail(vm.filteredSummaries[0]);
+
+      await vi.waitFor(() => {
+        expect(mockGetContainerSbom).toHaveBeenCalledWith('container-1', 'spdx-json');
+      });
+
+      expect(w.text()).toContain('View SBOM');
+      expect(w.text()).toContain('Download SBOM');
     });
   });
 

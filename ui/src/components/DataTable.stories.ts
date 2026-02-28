@@ -58,7 +58,7 @@ export const Default: Story = {
   },
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    const listeners = args as Record<string, any>;
+    const listeners = args as Record<string, unknown>;
 
     await userEvent.click(canvas.getByText('Container'));
     await expect(listeners['onUpdate:sortAsc']).toHaveBeenCalledWith(false);

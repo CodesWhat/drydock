@@ -98,7 +98,7 @@ export const Default: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByText('Edge Cluster 1'));
-    await expect((args as Record<string, any>).onToggle).toHaveBeenCalledWith('edge-1');
+    await expect((args as Record<string, unknown>).onToggle).toHaveBeenCalledWith('edge-1');
     await expect(canvas.getByText('Endpoint')).toBeInTheDocument();
   },
 };

@@ -107,4 +107,18 @@ describe('ServersView', () => {
 
     expect(wrapper.text()).toContain('Failed to load server data');
   });
+
+  it('shows webhook status indicator from server configuration', async () => {
+    mockGetServer.mockResolvedValue({
+      configuration: {
+        webhook: {
+          enabled: true,
+        },
+      },
+    });
+
+    const wrapper = await mountServersView();
+    expect(wrapper.text()).toContain('Webhook API');
+    expect(wrapper.text()).toContain('Enabled');
+  });
 });

@@ -2,6 +2,8 @@ type SseBusEvent =
   | 'sse:connected'
   | 'self-update'
   | 'connection-lost'
+  | 'container-changed'
+  | 'agent-status-changed'
   | 'scan-started'
   | 'scan-completed';
 
@@ -65,6 +67,26 @@ class SseService {
 
     this.eventSource.addEventListener('dd:scan-completed', () => {
       this.eventBus?.emit('scan-completed');
+    });
+
+    this.eventSource.addEventListener('dd:container-added', () => {
+      this.eventBus?.emit('container-changed');
+    });
+
+    this.eventSource.addEventListener('dd:container-updated', () => {
+      this.eventBus?.emit('container-changed');
+    });
+
+    this.eventSource.addEventListener('dd:container-removed', () => {
+      this.eventBus?.emit('container-changed');
+    });
+
+    this.eventSource.addEventListener('dd:agent-connected', () => {
+      this.eventBus?.emit('agent-status-changed');
+    });
+
+    this.eventSource.addEventListener('dd:agent-disconnected', () => {
+      this.eventBus?.emit('agent-status-changed');
     });
 
     this.eventSource.addEventListener('dd:heartbeat', () => {

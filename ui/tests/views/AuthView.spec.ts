@@ -1,6 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import AuthView from '@/views/AuthView.vue';
-import { getAllAuthentications } from '@/services/authentication';
+import { getAllAuthentications, getAuthentication } from '@/services/authentication';
 import { mountWithPlugins } from '../helpers/mount';
 import { dataViewStubs } from '../helpers/data-view-stubs';
 
@@ -20,9 +20,11 @@ vi.mock('@/composables/useBreakpoints', () => ({
 
 vi.mock('@/services/authentication', () => ({
   getAllAuthentications: vi.fn(),
+  getAuthentication: vi.fn(),
 }));
 
 const mockGetAllAuthentications = getAllAuthentications as ReturnType<typeof vi.fn>;
+const mockGetAuthentication = getAuthentication as ReturnType<typeof vi.fn>;
 
 function makeAuthentication(overrides: Record<string, any> = {}) {
   return {
@@ -49,6 +51,7 @@ describe('AuthView', () => {
     vi.clearAllMocks();
     mockRoute.query = {};
     mockGetAllAuthentications.mockResolvedValue([makeAuthentication()]);
+    mockGetAuthentication.mockResolvedValue(makeAuthentication());
   });
 
   it('loads providers, maps fields, and renders table rows', async () => {
@@ -68,6 +71,14 @@ describe('AuthView', () => {
         },
       }),
     ]);
+    mockGetAuthentication.mockResolvedValueOnce(
+      makeAuthentication({
+        id: 'auth-local',
+        name: 'Local Basic',
+        type: 'basic',
+        configuration: undefined,
+      }),
+    );
 
     const wrapper = await mountAuthView();
 
@@ -110,5 +121,36 @@ describe('AuthView', () => {
 
     expect(wrapper.text()).toContain('Failed to load authentication providers');
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('0');
+  });
+
+  it('clicking a row fetches authentication details from per-component endpoint', async () => {
+    mockGetAllAuthentications.mockResolvedValue([
+      makeAuthentication({
+        id: 'auth-basic',
+        name: 'local',
+        type: 'basic',
+        configuration: undefined,
+      }),
+    ]);
+    mockGetAuthentication.mockResolvedValue(
+      makeAuthentication({
+        id: 'auth-basic',
+        name: 'local',
+        type: 'basic',
+        configuration: { issuer: 'https://issuer.example' },
+      }),
+    );
+
+    const wrapper = await mountAuthView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    expect(mockGetAuthentication).toHaveBeenCalledWith({
+      type: 'basic',
+      name: 'local',
+      agent: undefined,
+    });
+    expect(wrapper.text()).toContain('issuer');
+    expect(wrapper.text()).toContain('https://issuer.example');
   });
 });

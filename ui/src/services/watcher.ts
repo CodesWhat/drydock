@@ -21,4 +21,26 @@ async function getAllWatchers() {
   return response.json();
 }
 
-export { getWatcherIcon, getWatcherProviderIcon, getWatcherProviderColor, getAllWatchers };
+function buildWatcherDetailPath({ type, name, agent }) {
+  const segments = ['/api/watchers'];
+  if (agent) {
+    segments.push(encodeURIComponent(agent));
+  }
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
+  return segments.join('/');
+}
+
+async function getWatcher({ type, name, agent }) {
+  const response = await fetch(buildWatcherDetailPath({ type, name, agent }), {
+    credentials: 'include',
+  });
+  return response.json();
+}
+
+export {
+  getWatcherIcon,
+  getWatcherProviderIcon,
+  getWatcherProviderColor,
+  getAllWatchers,
+  getWatcher,
+};

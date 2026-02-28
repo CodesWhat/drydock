@@ -1,6 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import TriggersView from '@/views/TriggersView.vue';
-import { getAllTriggers, runTrigger } from '@/services/trigger';
+import { getAllTriggers, getTrigger, runTrigger } from '@/services/trigger';
 import { mountWithPlugins } from '../helpers/mount';
 import { dataViewStubs } from '../helpers/data-view-stubs';
 
@@ -20,10 +20,12 @@ vi.mock('@/composables/useBreakpoints', () => ({
 
 vi.mock('@/services/trigger', () => ({
   getAllTriggers: vi.fn(),
+  getTrigger: vi.fn(),
   runTrigger: vi.fn(),
 }));
 
 const mockGetAllTriggers = getAllTriggers as ReturnType<typeof vi.fn>;
+const mockGetTrigger = getTrigger as ReturnType<typeof vi.fn>;
 const mockRunTrigger = runTrigger as ReturnType<typeof vi.fn>;
 
 function makeTrigger(overrides: Record<string, any> = {}) {
@@ -64,6 +66,7 @@ describe('TriggersView', () => {
     ]);
 
     mockRunTrigger.mockResolvedValue({ ok: true });
+    mockGetTrigger.mockResolvedValue(makeTrigger());
   });
 
   it('successful load renders trigger rows', async () => {
@@ -152,5 +155,36 @@ describe('TriggersView', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('Trigger test failed');
+  });
+
+  it('clicking a row fetches trigger details from per-component endpoint', async () => {
+    mockGetAllTriggers.mockResolvedValue([
+      makeTrigger({
+        id: 'trigger:slack-alerts',
+        name: 'Slack Alerts',
+        type: 'slack',
+        configuration: { channel: '#alerts' },
+      }),
+    ]);
+    mockGetTrigger.mockResolvedValue(
+      makeTrigger({
+        id: 'trigger:slack-alerts',
+        name: 'Slack Alerts',
+        type: 'slack',
+        configuration: { channel: '#detail-alerts', retries: '3' },
+      }),
+    );
+
+    const wrapper = await mountTriggersView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    expect(mockGetTrigger).toHaveBeenCalledWith({
+      type: 'slack',
+      name: 'Slack Alerts',
+      agent: undefined,
+    });
+    expect(wrapper.text()).toContain('#detail-alerts');
+    expect(wrapper.text()).toContain('3');
   });
 });

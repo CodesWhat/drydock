@@ -1,6 +1,7 @@
 import { defineComponent, nextTick } from 'vue';
 
 const mockGetServer = vi.fn();
+const mockGetStore = vi.fn();
 const mockGetAppInfos = vi.fn();
 const mockGetSettings = vi.fn();
 const mockUpdateSettings = vi.fn();
@@ -8,6 +9,7 @@ const mockClearIconCache = vi.fn();
 const mockGetUser = vi.fn();
 const mockGetLog = vi.fn();
 const mockGetLogEntries = vi.fn();
+const mockGetAgents = vi.fn();
 
 vi.mock('@/services/app', () => ({
   getAppInfos: (...args: any[]) => mockGetAppInfos(...args),
@@ -15,6 +17,10 @@ vi.mock('@/services/app', () => ({
 
 vi.mock('@/services/server', () => ({
   getServer: (...args: any[]) => mockGetServer(...args),
+}));
+
+vi.mock('@/services/store', () => ({
+  getStore: (...args: any[]) => mockGetStore(...args),
 }));
 
 vi.mock('@/services/settings', () => ({
@@ -30,6 +36,10 @@ vi.mock('@/services/auth', () => ({
 vi.mock('@/services/log', () => ({
   getLog: (...args: any[]) => mockGetLog(...args),
   getLogEntries: (...args: any[]) => mockGetLogEntries(...args),
+}));
+
+vi.mock('@/services/agent', () => ({
+  getAgents: (...args: any[]) => mockGetAgents(...args),
 }));
 
 const { mockScrollBlocked, mockAutoFetchInterval } = vi.hoisted(() => {
@@ -251,12 +261,14 @@ describe('ConfigView', () => {
       sessions: 2,
     });
     mockGetAppInfos.mockResolvedValue({ version: '1.4.0' });
+    mockGetStore.mockResolvedValue({ configuration: { path: '/store', file: 'dd.json' } });
     mockGetLog.mockResolvedValue({ level: 'info' });
     mockGetLogEntries.mockResolvedValue([]);
+    mockGetAgents.mockResolvedValue([]);
   });
 
   describe('on mount', () => {
-    it('fetches server info and settings', async () => {
+    it('fetches server info, store info, and settings', async () => {
       mockGetServer.mockResolvedValue({
         configuration: {
           port: 3000,
@@ -270,6 +282,7 @@ describe('ConfigView', () => {
       factory();
       await vi.waitFor(() => {
         expect(mockGetServer).toHaveBeenCalledOnce();
+        expect(mockGetStore).toHaveBeenCalledOnce();
         expect(mockGetAppInfos).toHaveBeenCalledOnce();
         expect(mockGetSettings).toHaveBeenCalledOnce();
       });
@@ -282,6 +295,7 @@ describe('ConfigView', () => {
           feature: { containeractions: false, delete: true },
           webhook: { enabled: false },
           trustproxy: true,
+          metrics: { auth: false },
         },
       });
       mockGetSettings.mockResolvedValue({ internetlessMode: false });
@@ -295,6 +309,82 @@ describe('ConfigView', () => {
       expect(text).toContain('1.4.0');
       expect(text).toContain('8080');
       expect(text).toContain('Enabled'); // trustproxy
+      expect(text).toContain('Metrics Auth');
+    });
+
+    it('shows webhook API details when webhook is enabled', async () => {
+      mockGetServer.mockResolvedValue({
+        configuration: {
+          port: 3000,
+          feature: { containeractions: true, delete: false },
+          webhook: { enabled: true },
+          trustproxy: false,
+        },
+      });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+
+      const w = factory();
+      await vi.waitFor(() => {
+        expect(w.text()).not.toContain('Loading');
+      });
+
+      const text = w.text();
+      expect(text).toContain('Webhook API');
+      expect(text).toContain('POST /api/webhook/watch');
+      expect(text).toContain('POST /api/webhook/watch/:name');
+      expect(text).toContain('POST /api/webhook/update/:name');
+      expect(text).toContain('curl -X POST');
+      expect(text).toContain('/api/webhook/watch');
+      expect(text).toContain('Authorization: Bearer YOUR_TOKEN');
+    });
+
+    it('keeps webhook API endpoints and curl example visible when webhook is disabled', async () => {
+      mockGetServer.mockResolvedValue({
+        configuration: {
+          port: 3000,
+          feature: { containeractions: true, delete: false },
+          webhook: { enabled: false },
+          trustproxy: false,
+        },
+      });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+
+      const w = factory();
+      await vi.waitFor(() => {
+        expect(w.text()).not.toContain('Loading');
+      });
+
+      const text = w.text();
+      expect(text).toContain('Webhook API is disabled');
+      expect(text).toContain('POST /api/webhook/watch');
+      expect(text).toContain('POST /api/webhook/watch/:name');
+      expect(text).toContain('POST /api/webhook/update/:name');
+      expect(text).toContain('curl -X POST');
+      expect(text).toContain('/api/webhook/watch');
+      expect(text).toContain('Authorization: Bearer YOUR_TOKEN');
+    });
+
+    it('displays store fields after loading', async () => {
+      mockGetServer.mockResolvedValue({
+        configuration: {
+          port: 3000,
+          feature: { containeractions: true, delete: false },
+          webhook: { enabled: true },
+          trustproxy: false,
+        },
+      });
+      mockGetStore.mockResolvedValue({ configuration: { path: '/var/drydock', file: 'prod.json' } });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+
+      const w = factory();
+      await vi.waitFor(() => {
+        expect(w.text()).not.toContain('Loading');
+      });
+
+      const text = w.text();
+      expect(text).toContain('Store');
+      expect(text).toContain('/var/drydock');
+      expect(text).toContain('prod.json');
     });
 
     it('shows default values when server fetch fails', async () => {
@@ -311,6 +401,39 @@ describe('ConfigView', () => {
       // Falls back to defaults when all fetches fail (each is .catch(() => null))
       expect(text).toContain('unknown');
       expect(text).toContain('3000');
+    });
+
+    it('shows legacy compatibility warning banner with migration guidance', async () => {
+      mockGetServer.mockResolvedValue({
+        configuration: {
+          port: 3000,
+          feature: { containeractions: true, delete: false },
+          webhook: { enabled: true },
+          trustproxy: false,
+        },
+        compatibility: {
+          legacyInputs: {
+            total: 4,
+            env: { total: 1, keys: ['WUD_SERVER_PORT'] },
+            label: { total: 3, keys: ['wud.watch', 'wud.tag.include'] },
+          },
+        },
+      });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+
+      const w = factory();
+      await vi.waitFor(() => {
+        expect(w.text()).not.toContain('Loading');
+      });
+
+      const text = w.text();
+      expect(text).toContain('Legacy compatibility inputs detected');
+      expect(text).toContain('WUD_SERVER_PORT');
+      expect(text).toContain('wud.watch');
+      expect(text).toContain('node dist/index.js config migrate --dry-run');
+      expect(
+        w.find('a[href="https://drydock.codeswhat.com/docs/quickstart"]').exists(),
+      ).toBe(true);
     });
   });
 
@@ -568,6 +691,7 @@ describe('ConfigView', () => {
       const logsTab = tabs.find((t) => t.text().includes('Logs'));
       await logsTab?.trigger('click');
       await vi.waitFor(() => expect(mockGetLogEntries).toHaveBeenCalled());
+      await vi.waitFor(() => expect(w.text()).not.toContain('Loading logs...'));
       await nextTick();
       return w;
     }
@@ -652,6 +776,22 @@ describe('ConfigView', () => {
       mockAutoFetchInterval.value = 0;
       const w = await mountLogsTab();
       expect(w.text()).not.toContain('Auto-scroll paused');
+    });
+
+    it('keeps config log fetch server-only and hides source selector', async () => {
+      mockGetAgents.mockResolvedValue([
+        { name: 'edge-1', connected: true },
+        { name: 'edge-2', connected: false },
+      ]);
+      const w = await mountLogsTab();
+
+      expect(w.find('select[data-testid="log-source-select"]').exists()).toBe(false);
+      expect(mockGetAgents).not.toHaveBeenCalled();
+      expect(mockGetLogEntries).toHaveBeenLastCalledWith({
+        level: 'all',
+        component: undefined,
+        tail: 100,
+      });
     });
   });
 });

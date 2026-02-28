@@ -33,4 +33,26 @@ async function getAllAuthentications() {
   return response.json();
 }
 
-export { getAuthenticationIcon, getAuthProviderIcon, getAuthProviderColor, getAllAuthentications };
+function buildAuthenticationDetailPath({ type, name, agent }) {
+  const segments = ['/api/authentications'];
+  if (agent) {
+    segments.push(encodeURIComponent(agent));
+  }
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
+  return segments.join('/');
+}
+
+async function getAuthentication({ type, name, agent }) {
+  const response = await fetch(buildAuthenticationDetailPath({ type, name, agent }), {
+    credentials: 'include',
+  });
+  return response.json();
+}
+
+export {
+  getAuthenticationIcon,
+  getAuthProviderIcon,
+  getAuthProviderColor,
+  getAllAuthentications,
+  getAuthentication,
+};

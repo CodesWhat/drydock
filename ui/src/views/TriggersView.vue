@@ -2,20 +2,20 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
-import { getAllTriggers, runTrigger } from '../services/trigger';
+import { getAllTriggers, getTrigger, runTrigger } from '../services/trigger';
+import type { ApiComponent } from '../types/api';
+import { errorMessage } from '../utils/error';
 
 const triggersViewMode = ref<'table' | 'cards' | 'list'>('table');
 const { isMobile } = useBreakpoints();
 const route = useRoute();
-const selectedTrigger = ref<any | null>(null);
+const selectedTrigger = ref<Record<string, unknown> | null>(null);
 const detailOpen = ref(false);
+const detailLoading = ref(false);
+const detailError = ref('');
+let detailRequestId = 0;
 
-function openDetail(t: any) {
-  selectedTrigger.value = t;
-  detailOpen.value = true;
-}
-
-const triggersData = ref<any[]>([]);
+const triggersData = ref<Record<string, unknown>[]>([]);
 const loading = ref(true);
 const error = ref('');
 const testingTrigger = ref<string | null>(null);
@@ -42,15 +42,15 @@ function parseTriggerTestErrorMessage(errorValue: unknown): string {
   return nestedMessage?.[1]?.trim() || message.trim();
 }
 
-async function testTrigger(trigger: any) {
+async function testTrigger(trigger: Record<string, unknown>) {
   if (testingTrigger.value) return;
-  testingTrigger.value = trigger.id;
+  testingTrigger.value = trigger.id as string;
   testResult.value = null;
   testError.value = null;
   try {
     await runTrigger({
-      triggerType: trigger.type,
-      triggerName: trigger.name,
+      triggerType: trigger.type as string,
+      triggerName: trigger.name as string,
       container: {
         id: 'test',
         name: 'Test Container',
@@ -60,7 +60,7 @@ async function testTrigger(trigger: any) {
       },
     });
     testResult.value = { id: trigger.id, success: true };
-  } catch (e: any) {
+  } catch (e: unknown) {
     testResult.value = { id: trigger.id, success: false };
     testError.value = { id: trigger.id, message: parseTriggerTestErrorMessage(e) };
   } finally {
@@ -119,16 +119,62 @@ function clearFilters() {
   searchQuery.value = '';
 }
 
+function mapTrigger(trigger: ApiComponent, status = 'active') {
+  return {
+    id: trigger.id,
+    name: trigger.name,
+    type: trigger.type,
+    status,
+    config: trigger.configuration ?? {},
+    agent: trigger.agent,
+  };
+}
+
+function resetDetailState() {
+  detailOpen.value = false;
+  detailLoading.value = false;
+  detailError.value = '';
+  selectedTrigger.value = null;
+  detailRequestId += 1;
+}
+
+function handleDetailOpenChange(value: boolean) {
+  if (!value) {
+    resetDetailState();
+  } else {
+    detailOpen.value = true;
+  }
+}
+
+async function openDetail(trigger: Record<string, unknown>) {
+  selectedTrigger.value = trigger;
+  detailOpen.value = true;
+  detailLoading.value = true;
+  detailError.value = '';
+  const requestId = ++detailRequestId;
+
+  try {
+    const detail = await getTrigger({
+      type: String(trigger.type),
+      name: String(trigger.name),
+      agent: trigger.agent as string | undefined,
+    });
+    if (requestId !== detailRequestId || !detailOpen.value) return;
+    selectedTrigger.value = mapTrigger(detail, String(trigger.status));
+  } catch {
+    if (requestId !== detailRequestId) return;
+    detailError.value = 'Unable to load latest trigger details';
+  } finally {
+    if (requestId === detailRequestId) {
+      detailLoading.value = false;
+    }
+  }
+}
+
 onMounted(async () => {
   try {
     const data = await getAllTriggers();
-    triggersData.value = data.map((t: any) => ({
-      id: t.id,
-      name: t.name,
-      type: t.type,
-      status: 'active',
-      config: t.configuration ?? {},
-    }));
+    triggersData.value = data.map((trigger: ApiComponent) => mapTrigger(trigger));
   } catch {
     error.value = 'Failed to load triggers';
   } finally {
@@ -321,7 +367,7 @@ onMounted(async () => {
         :is-mobile="isMobile"
         :show-size-controls="false"
         :show-full-page="false"
-        @update:open="detailOpen = $event; if (!$event) selectedTrigger = null"
+        @update:open="handleDetailOpenChange"
       >
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
@@ -345,6 +391,13 @@ onMounted(async () => {
 
         <template v-if="selectedTrigger" #default>
           <div class="p-4 space-y-5">
+            <div v-if="detailLoading" class="text-[11px] dd-text-muted">Refreshing trigger details...</div>
+            <div v-if="detailError"
+                 class="px-3 py-2 text-[11px] dd-rounded"
+                 :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+              {{ detailError }}
+            </div>
+
             <div v-for="(val, key) in selectedTrigger.config" :key="key">
               <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ key }}</div>
               <div class="text-[12px] font-mono dd-text break-all">{{ val }}</div>

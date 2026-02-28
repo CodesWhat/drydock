@@ -2,12 +2,14 @@
  * Authentication service.
  */
 
+import { errorMessage } from '../utils/error';
+
 // Current logged user
 let user = undefined;
 
 /**
  * Get auth strategies.
- * @returns {Promise<any>}
+ * @returns {Promise<unknown>}
  */
 async function getStrategies() {
   const response = await fetch('/auth/strategies', { credentials: 'include' });
@@ -31,8 +33,8 @@ async function getUser() {
       user = undefined;
       return undefined;
     }
-  } catch (e: any) {
-    console.debug(`Unable to fetch current user: ${e?.message || e}`);
+  } catch (e: unknown) {
+    console.debug(`Unable to fetch current user: ${errorMessage(e)}`);
     user = undefined;
     return undefined;
   }
@@ -86,7 +88,7 @@ async function getOidcRedirection(name) {
 
 /**
  * Logout current user.
- * @returns {Promise<any>}
+ * @returns {Promise<unknown>}
  */
 async function logout() {
   const response = await fetch(`/auth/logout`, {

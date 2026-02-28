@@ -1,5 +1,6 @@
 import {
   getAllRegistries,
+  getRegistry,
   getRegistryIcon,
   getRegistryProviderColor,
   getRegistryProviderIcon,
@@ -106,6 +107,38 @@ describe('Registry Service', () => {
         credentials: 'include',
       });
       expect(registries).toEqual(mockRegistries);
+    });
+  });
+
+  describe('getRegistry', () => {
+    it('fetches a specific registry by type and name', async () => {
+      const mockRegistry = { id: 'hub.private', type: 'hub', name: 'private' };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockRegistry,
+      } as any);
+
+      const result = await getRegistry({ type: 'hub', name: 'private' });
+
+      expect(fetch).toHaveBeenCalledWith('/api/registries/hub/private', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockRegistry);
+    });
+
+    it('fetches an agent-scoped registry when agent is provided', async () => {
+      const mockRegistry = { id: 'edge.hub.private', type: 'hub', name: 'private', agent: 'edge' };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockRegistry,
+      } as any);
+
+      const result = await getRegistry({ agent: 'edge', type: 'hub', name: 'private' });
+
+      expect(fetch).toHaveBeenCalledWith('/api/registries/edge/hub/private', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockRegistry);
     });
   });
 });

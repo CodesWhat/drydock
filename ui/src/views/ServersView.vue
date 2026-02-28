@@ -4,6 +4,7 @@ import { useBreakpoints } from '../composables/useBreakpoints';
 import { getAgents } from '../services/agent';
 import { getAllContainers } from '../services/container';
 import { getServer } from '../services/server';
+import { errorMessage } from '../utils/error';
 
 interface ServerEntry {
   id: string;
@@ -19,6 +20,7 @@ const serversViewMode = ref<'table' | 'cards' | 'list'>('table');
 const loading = ref(true);
 const error = ref<string | null>(null);
 const servers = ref<ServerEntry[]>([]);
+const webhookEnabled = ref<boolean | null>(null);
 
 const searchQuery = ref('');
 const showFilters = ref(false);
@@ -62,7 +64,7 @@ const tableColumns = [
 ];
 
 function countContainersByWatcher(
-  containers: any[],
+  containers: Record<string, unknown>[],
 ): Record<string, { total: number; running: number; stopped: number }> {
   const counts: Record<string, { total: number; running: number; stopped: number }> = {};
   for (const c of containers) {
@@ -80,7 +82,7 @@ function countContainersByWatcher(
   return counts;
 }
 
-function countImagesByWatcher(containers: any[]): Record<string, number> {
+function countImagesByWatcher(containers: Record<string, unknown>[]): Record<string, number> {
   const imagesByWatcher: Record<string, Set<string>> = {};
   for (const c of containers) {
     const watcher = c.watcher ?? 'local';
@@ -98,11 +100,15 @@ async function fetchServers() {
   loading.value = true;
   error.value = null;
   try {
-    const [_serverData, agentsData, containersData] = await Promise.all([
+    const [serverData, agentsData, containersData] = await Promise.all([
       getServer(),
       getAgents(),
       getAllContainers(),
     ]);
+    webhookEnabled.value =
+      typeof serverData?.configuration?.webhook?.enabled === 'boolean'
+        ? serverData.configuration.webhook.enabled
+        : false;
 
     const safeContainers = containersData ?? [];
     const containerCounts = countContainersByWatcher(safeContainers);
@@ -140,8 +146,9 @@ async function fetchServers() {
     }
 
     servers.value = entries;
-  } catch (e: any) {
-    error.value = e?.message ?? 'Failed to load server data';
+  } catch (e: unknown) {
+    error.value = errorMessage(e, 'Failed to load server data');
+    webhookEnabled.value = null;
   } finally {
     loading.value = false;
   }
@@ -159,6 +166,18 @@ onMounted(fetchServers);
     </div>
 
     <div v-if="loading" class="text-[11px] dd-text-muted py-3 px-1">Loading server data...</div>
+
+    <div v-if="!loading && webhookEnabled !== null"
+         class="mb-3 flex items-center justify-end gap-2">
+      <span class="text-[10px] font-semibold uppercase tracking-wider dd-text-muted">Webhook API</span>
+      <span class="badge text-[9px] uppercase font-bold"
+            :style="{
+              backgroundColor: webhookEnabled ? 'var(--dd-success-muted)' : 'var(--dd-neutral-muted)',
+              color: webhookEnabled ? 'var(--dd-success)' : 'var(--dd-neutral)',
+            }">
+        {{ webhookEnabled ? 'Enabled' : 'Disabled' }}
+      </span>
+    </div>
 
     <!-- Filter bar -->
     <DataFilterBar

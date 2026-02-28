@@ -122,8 +122,14 @@ function toggleVariant() {
   else themeVariant.value = 'dark';
 }
 
+interface ViewTransitionDocument extends Document {
+  startViewTransition?: (callback: () => void) => { finished: Promise<void> };
+}
+
 async function transitionTheme(change: () => void, e?: MouseEvent) {
-  if (!(document as any).startViewTransition) {
+  const vtDoc = document as ViewTransitionDocument;
+  const startViewTransition = vtDoc.startViewTransition;
+  if (!startViewTransition) {
     change();
     return;
   }
@@ -135,7 +141,7 @@ async function transitionTheme(change: () => void, e?: MouseEvent) {
   document.documentElement.classList.add('dd-transitioning');
 
   isTransitioning = true;
-  const transition = (document as any).startViewTransition(() => {
+  const transition = startViewTransition(() => {
     change();
     applyClasses();
   });

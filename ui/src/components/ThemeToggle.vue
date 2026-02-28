@@ -56,6 +56,8 @@ function iconColor(id: string) {
         :class="[iconColor(v.id), 'hover:dd-bg-elevated']"
         :style="{ width: `${cellSize}px`, height: `${cellSize}px` }"
         :title="v.id.charAt(0).toUpperCase() + v.id.slice(1)"
+        :aria-label="'Switch to ' + v.id + ' theme'"
+        :aria-pressed="String(v.id === themeVariant)"
         @click="v.id === themeVariant ? (expanded = !expanded) : select(v.id, $event)"
       >
         <AppIcon :name="v.icon" :size="iconSize" />

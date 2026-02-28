@@ -1,6 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import RegistriesView from '@/views/RegistriesView.vue';
-import { getAllRegistries } from '@/services/registry';
+import { getAllRegistries, getRegistry } from '@/services/registry';
 import { mountWithPlugins } from '../helpers/mount';
 import { dataViewStubs } from '../helpers/data-view-stubs';
 
@@ -20,9 +20,11 @@ vi.mock('@/composables/useBreakpoints', () => ({
 
 vi.mock('@/services/registry', () => ({
   getAllRegistries: vi.fn(),
+  getRegistry: vi.fn(),
 }));
 
 const mockGetAllRegistries = getAllRegistries as ReturnType<typeof vi.fn>;
+const mockGetRegistry = getRegistry as ReturnType<typeof vi.fn>;
 
 function makeRegistry(overrides: Record<string, any> = {}) {
   return {
@@ -47,6 +49,7 @@ describe('RegistriesView', () => {
     vi.clearAllMocks();
     mockRoute.query = {};
     mockGetAllRegistries.mockResolvedValue([makeRegistry()]);
+    mockGetRegistry.mockResolvedValue(makeRegistry());
   });
 
   it('successful load renders registry rows', async () => {
@@ -81,5 +84,32 @@ describe('RegistriesView', () => {
 
     expect(wrapper.text()).toContain('Failed to load registries');
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('0');
+  });
+
+  it('clicking a row fetches registry details from per-component endpoint', async () => {
+    mockGetAllRegistries.mockResolvedValue([
+      makeRegistry({
+        id: 'registry-1',
+        name: 'private',
+        type: 'hub',
+        configuration: { url: 'https://list.example' },
+      }),
+    ]);
+    mockGetRegistry.mockResolvedValue(
+      makeRegistry({
+        id: 'registry-1',
+        name: 'private',
+        type: 'hub',
+        configuration: { url: 'https://detail.example', namespace: 'team-a' },
+      }),
+    );
+
+    const wrapper = await mountRegistriesView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    expect(mockGetRegistry).toHaveBeenCalledWith({ type: 'hub', name: 'private', agent: undefined });
+    expect(wrapper.text()).toContain('https://detail.example');
+    expect(wrapper.text()).toContain('team-a');
   });
 });

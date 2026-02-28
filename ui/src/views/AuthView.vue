@@ -2,23 +2,22 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
-import { getAllAuthentications } from '../services/authentication';
+import { getAllAuthentications, getAuthentication } from '../services/authentication';
+import type { ApiComponent } from '../types/api';
 
 const authViewMode = ref<'table' | 'cards' | 'list'>('table');
 
-const authData = ref<any[]>([]);
+const authData = ref<Record<string, unknown>[]>([]);
 const loading = ref(true);
 const error = ref('');
 const route = useRoute();
 
 const { isMobile } = useBreakpoints();
-const selectedAuth = ref<any | null>(null);
+const selectedAuth = ref<Record<string, unknown> | null>(null);
 const detailOpen = ref(false);
-
-function openDetail(a: any) {
-  selectedAuth.value = a;
-  detailOpen.value = true;
-}
+const detailLoading = ref(false);
+const detailError = ref('');
+let detailRequestId = 0;
 
 function authTypeBadge(type: string) {
   if (type === 'basic')
@@ -55,16 +54,62 @@ const tableColumns = [
   { key: 'status', label: 'Status', align: 'text-center' },
 ];
 
+function mapAuthentication(authentication: ApiComponent, status = 'active') {
+  return {
+    id: authentication.id,
+    name: authentication.name,
+    type: authentication.type,
+    status,
+    config: authentication.configuration ?? {},
+    agent: authentication.agent,
+  };
+}
+
+function resetDetailState() {
+  detailOpen.value = false;
+  detailLoading.value = false;
+  detailError.value = '';
+  selectedAuth.value = null;
+  detailRequestId += 1;
+}
+
+function handleDetailOpenChange(value: boolean) {
+  if (!value) {
+    resetDetailState();
+  } else {
+    detailOpen.value = true;
+  }
+}
+
+async function openDetail(authentication: Record<string, unknown>) {
+  selectedAuth.value = authentication;
+  detailOpen.value = true;
+  detailLoading.value = true;
+  detailError.value = '';
+  const requestId = ++detailRequestId;
+
+  try {
+    const detail = await getAuthentication({
+      type: String(authentication.type),
+      name: String(authentication.name),
+      agent: authentication.agent as string | undefined,
+    });
+    if (requestId !== detailRequestId || !detailOpen.value) return;
+    selectedAuth.value = mapAuthentication(detail, String(authentication.status));
+  } catch {
+    if (requestId !== detailRequestId) return;
+    detailError.value = 'Unable to load latest authentication details';
+  } finally {
+    if (requestId === detailRequestId) {
+      detailLoading.value = false;
+    }
+  }
+}
+
 onMounted(async () => {
   try {
     const data = await getAllAuthentications();
-    authData.value = data.map((a: any) => ({
-      id: a.id,
-      name: a.name,
-      type: a.type,
-      status: 'active',
-      config: a.configuration ?? {},
-    }));
+    authData.value = data.map((authentication: ApiComponent) => mapAuthentication(authentication));
   } catch {
     error.value = 'Failed to load authentication providers';
   } finally {
@@ -225,7 +270,7 @@ onMounted(async () => {
         :is-mobile="isMobile"
         :show-size-controls="false"
         :show-full-page="false"
-        @update:open="detailOpen = $event; if (!$event) selectedAuth = null"
+        @update:open="handleDetailOpenChange"
       >
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
@@ -249,6 +294,15 @@ onMounted(async () => {
 
         <template v-if="selectedAuth" #default>
           <div class="p-4 space-y-5">
+            <div v-if="detailLoading" class="text-[11px] dd-text-muted">
+              Refreshing authentication details...
+            </div>
+            <div v-if="detailError"
+                 class="px-3 py-2 text-[11px] dd-rounded"
+                 :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+              {{ detailError }}
+            </div>
+
             <div v-for="(val, key) in selectedAuth.config" :key="key">
               <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">{{ key }}</div>
               <div class="text-[12px] font-mono dd-text break-all">{{ val }}</div>

@@ -111,7 +111,7 @@ export const InteractionSmoke: Story = {
   render: renderWithFilters,
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
-    const listeners = args as Record<string, any>;
+    const listeners = args as Record<string, unknown>;
 
     await userEvent.click(canvas.getByTitle('Cards view'));
     await expect(listeners['onUpdate:modelValue']).toHaveBeenCalledWith('cards');

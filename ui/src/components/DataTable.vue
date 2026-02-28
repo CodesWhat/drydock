@@ -13,8 +13,8 @@ export interface DataTableColumn {
 
 const props = defineProps<{
   columns: DataTableColumn[];
-  rows: any[];
-  rowKey: string | ((row: any) => string);
+  rows: Record<string, unknown>[];
+  rowKey: string | ((row: Record<string, unknown>) => string);
   sortKey?: string;
   sortAsc?: boolean;
   selectedKey?: string | null;
@@ -22,13 +22,13 @@ const props = defineProps<{
   compact?: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   'update:sortKey': [key: string];
   'update:sortAsc': [asc: boolean];
-  'row-click': [row: any];
+  'row-click': [row: Record<string, unknown>];
 }>();
 
-function getRowKey(row: any, rowKeyProp: string | ((row: any) => string)): string {
+function getRowKey(row: Record<string, unknown>, rowKeyProp: string | ((row: Record<string, unknown>) => string)): string {
   return typeof rowKeyProp === 'function' ? rowKeyProp(row) : row[rowKeyProp];
 }
 
@@ -36,7 +36,6 @@ function toggleSort(
   key: string,
   currentSortKey: string | undefined,
   currentSortAsc: boolean | undefined,
-  emit: any,
 ) {
   if (currentSortKey === key) {
     emit('update:sortAsc', !currentSortAsc);
@@ -99,6 +98,37 @@ function colStyle(col: DataTableColumn): Record<string, string> {
   }
   return col.width ? { width: col.width } : {};
 }
+
+function isSortableColumn(col: DataTableColumn): boolean {
+  return col.sortable !== false && !col.icon;
+}
+
+function ariaSort(col: DataTableColumn): 'ascending' | 'descending' | 'none' | undefined {
+  if (!isSortableColumn(col)) {
+    return undefined;
+  }
+  if (props.sortKey !== col.key) {
+    return 'none';
+  }
+  return props.sortAsc === false ? 'descending' : 'ascending';
+}
+
+function handleRowKeydown(event: KeyboardEvent, row: Record<string, unknown>) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    emit('row-click', row);
+  }
+}
+
+function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
+  if (resizing.value || !isSortableColumn(col)) {
+    return;
+  }
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    toggleSort(col.key, props.sortKey, props.sortAsc);
+  }
+}
 </script>
 
 <template>
@@ -113,15 +143,20 @@ function colStyle(col: DataTableColumn): Record<string, string> {
                 :class="[
                   col.icon ? 'text-center pl-5 pr-0' : ['text-center', 'px-5'],
                   'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-[10px] select-none transition-colors relative',
-                  (col.sortable !== false && !col.icon) ? 'cursor-pointer' : '',
+                  isSortableColumn(col) ? 'cursor-pointer' : '',
                   sortKey === col.key ? 'dd-text-secondary' : 'dd-text-muted hover:dd-text-secondary',
                 ]"
                 :style="colStyle(col)"
-                @click="!resizing && (col.sortable !== false && !col.icon) && toggleSort(col.key, sortKey, sortAsc, $emit)">
+                :tabindex="isSortableColumn(col) ? 0 : undefined"
+                :aria-sort="ariaSort(col)"
+                @keydown="handleHeaderKeydown($event, col)"
+                @click="!resizing && isSortableColumn(col) && toggleSort(col.key, sortKey, sortAsc)">
               {{ col.label }}
               <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-[8px]">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
               <!-- Resize handle -->
               <div v-if="!col.icon && colIdx < columns.length - 1"
+                   role="separator"
+                   aria-label="Resize column"
                    class="absolute top-0 right-0 w-2 h-full cursor-col-resize z-10 flex items-center justify-center transition-colors hover:bg-drydock-secondary/20"
                    @mousedown="onResizeStart(col.key, $event)">
                 <div class="w-px h-3/5 rounded-full opacity-25 hover:opacity-60 transition-opacity"
@@ -141,7 +176,9 @@ function colStyle(col: DataTableColumn): Record<string, string> {
                   : (i % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)'),
                 borderBottom: i < rows.length - 1 ? '1px solid var(--dd-border-strong)' : 'none',
               }"
-              @click="$emit('row-click', row)">
+              tabindex="0"
+              @keydown="handleRowKeydown($event, row)"
+              @click="emit('row-click', row)">
             <td v-for="col in columns" :key="col.key"
                 class="py-3 align-middle overflow-hidden text-ellipsis"
                 :class="col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-left', 'px-5']">

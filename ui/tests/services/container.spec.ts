@@ -3,7 +3,10 @@ import {
   getAllContainers,
   getContainerIcon,
   getContainerLogs,
+  getContainerUpdateOperations,
+  getContainerSbom,
   getContainerTriggers,
+  getContainerVulnerabilities,
   refreshAllContainers,
   refreshContainer,
   runTrigger,
@@ -464,6 +467,125 @@ describe('Container Service', () => {
 
       await expect(getContainerLogs('c1')).rejects.toThrow(
         'Failed to get logs for container c1: Internal Server Error',
+      );
+    });
+  });
+
+  describe('getContainerUpdateOperations', () => {
+    it('fetches update operations successfully', async () => {
+      const operations = [
+        {
+          id: 'op-1',
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          rollbackReason: 'health_gate_failed',
+        },
+      ];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => operations,
+      } as any);
+
+      const result = await getContainerUpdateOperations('container1');
+
+      expect(fetch).toHaveBeenCalledWith('/api/containers/container1/update-operations', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(operations);
+    });
+
+    it('throws when fetching update operations fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Bad Gateway',
+      } as any);
+
+      await expect(getContainerUpdateOperations('c1')).rejects.toThrow(
+        'Failed to get update operations for container c1: Bad Gateway',
+      );
+    });
+  });
+
+  describe('getContainerVulnerabilities', () => {
+    it('fetches container vulnerabilities successfully', async () => {
+      const mockResult = {
+        status: 'scanned',
+        summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+        vulnerabilities: [{ id: 'CVE-2026-1', severity: 'CRITICAL' }],
+      };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResult,
+      } as any);
+
+      const result = await getContainerVulnerabilities('container1');
+
+      expect(fetch).toHaveBeenCalledWith('/api/containers/container1/vulnerabilities', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockResult);
+    });
+
+    it('throws when fetching vulnerabilities fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Internal Server Error',
+      } as any);
+
+      await expect(getContainerVulnerabilities('c1')).rejects.toThrow(
+        'Failed to get vulnerabilities for container c1: Internal Server Error',
+      );
+    });
+  });
+
+  describe('getContainerSbom', () => {
+    it('fetches container SBOM successfully', async () => {
+      const mockResult = {
+        format: 'spdx-json',
+        document: { spdxVersion: 'SPDX-2.3' },
+      };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResult,
+      } as any);
+
+      const result = await getContainerSbom('container1');
+
+      expect(fetch).toHaveBeenCalledWith('/api/containers/container1/sbom?format=spdx-json', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockResult);
+    });
+
+    it('fetches container SBOM with a custom format', async () => {
+      const mockResult = {
+        format: 'cyclonedx-json',
+        document: { bomFormat: 'CycloneDX' },
+      };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResult,
+      } as any);
+
+      const result = await getContainerSbom('container1', 'cyclonedx-json');
+
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/containers/container1/sbom?format=cyclonedx-json',
+        {
+          credentials: 'include',
+        },
+      );
+      expect(result).toEqual(mockResult);
+    });
+
+    it('throws when fetching SBOM fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Bad Request',
+      } as any);
+
+      await expect(getContainerSbom('c1')).rejects.toThrow(
+        'Failed to get SBOM for container c1: Bad Request',
       );
     });
   });

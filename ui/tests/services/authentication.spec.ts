@@ -1,5 +1,6 @@
 import {
   getAllAuthentications,
+  getAuthentication,
   getAuthenticationIcon,
   getAuthProviderColor,
   getAuthProviderIcon,
@@ -51,5 +52,35 @@ describe('Authentication Service', () => {
       credentials: 'include',
     });
     expect(result).toEqual(mockAuthentications);
+  });
+
+  it('fetches a specific authentication provider by type and name', async () => {
+    const mockAuthentication = { id: 'basic.local', type: 'basic', name: 'local' };
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockAuthentication,
+    } as any);
+
+    const result = await getAuthentication({ type: 'basic', name: 'local' });
+
+    expect(fetch).toHaveBeenCalledWith('/api/authentications/basic/local', {
+      credentials: 'include',
+    });
+    expect(result).toEqual(mockAuthentication);
+  });
+
+  it('fetches an agent-scoped authentication provider when agent is provided', async () => {
+    const mockAuthentication = { id: 'edge.basic.local', type: 'basic', name: 'local', agent: 'edge' };
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockAuthentication,
+    } as any);
+
+    const result = await getAuthentication({ agent: 'edge', type: 'basic', name: 'local' });
+
+    expect(fetch).toHaveBeenCalledWith('/api/authentications/edge/basic/local', {
+      credentials: 'include',
+    });
+    expect(result).toEqual(mockAuthentication);
   });
 });

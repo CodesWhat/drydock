@@ -11,10 +11,14 @@ import { useSorting } from '../composables/useSorting';
 import {
   deleteContainer as apiDeleteContainer,
   getContainerLogs as fetchContainerLogs,
+  getContainerUpdateOperations as fetchContainerUpdateOperations,
+  getContainerSbom as fetchContainerSbom,
+  getContainerVulnerabilities as fetchContainerVulnerabilities,
   getAllContainers,
   getContainerGroups,
   getContainerTriggers,
   refreshAllContainers,
+  scanContainer as apiScanContainer,
   runTrigger as runContainerTrigger,
   updateContainerPolicy,
 } from '../services/container';
@@ -37,6 +41,8 @@ import {
   serverBadgeColor,
   updateKindColor,
 } from '../utils/display';
+import { errorMessage } from '../utils/error';
+import type { ApiSbomDocument, ApiVulnerability, ApiContainerTrigger } from '../types/api';
 
 const confirm = useConfirmDialog();
 
@@ -49,7 +55,7 @@ const containers = ref<Container[]>([]);
 
 // Map from container name -> API id (needed to call actions/logs by id)
 const containerIdMap = ref<Record<string, string>>({});
-const containerMetaMap = ref<Record<string, any>>({});
+const containerMetaMap = ref<Record<string, unknown>>({});
 
 // Fetch containers from API
 async function loadContainers() {
@@ -58,7 +64,7 @@ async function loadContainers() {
     containers.value = mapApiContainers(apiContainers);
     // Build id lookup map
     const idMap: Record<string, string> = {};
-    const metaMap: Record<string, any> = {};
+    const metaMap: Record<string, unknown> = {};
     for (const ac of apiContainers) {
       const uiName = ac.displayName || ac.name;
       idMap[uiName] = ac.id;
@@ -69,8 +75,8 @@ async function loadContainers() {
     if (groupByStack.value) {
       await loadGroups();
     }
-  } catch (e: any) {
-    error.value = e.message || 'Failed to load containers';
+  } catch (e: unknown) {
+    error.value = errorMessage(e, 'Failed to load containers');
   } finally {
     loading.value = false;
   }
@@ -184,7 +190,191 @@ const selectedContainerId = computed(() =>
 const selectedContainerMeta = computed(() =>
   selectedContainer.value ? containerMetaMap.value[selectedContainer.value.name] : undefined,
 );
-const selectedUpdatePolicy = computed<Record<string, any>>(
+type RuntimeOrigin = 'explicit' | 'inherited' | 'unknown';
+
+function normalizeRuntimeOrigin(originValue: unknown): RuntimeOrigin {
+  const normalizedOrigin =
+    typeof originValue === 'string' ? originValue.trim().toLowerCase() : '';
+  if (normalizedOrigin === 'explicit' || normalizedOrigin === 'inherited') {
+    return normalizedOrigin;
+  }
+  return 'unknown';
+}
+
+function getRuntimeOriginValue(labels: unknown, ddKey: string, wudKey: string): RuntimeOrigin {
+  if (!labels || typeof labels !== 'object') {
+    return 'unknown';
+  }
+  const labelRecord = labels as Record<string, unknown>;
+  const ddValue = labelRecord[ddKey];
+  if (ddValue !== undefined) {
+    return normalizeRuntimeOrigin(ddValue);
+  }
+  return normalizeRuntimeOrigin(labelRecord[wudKey]);
+}
+
+function getPreferredLabelString(labels: unknown, ddKey: string, wudKey: string): string | undefined {
+  if (!labels || typeof labels !== 'object') {
+    return undefined;
+  }
+  const labelRecord = labels as Record<string, unknown>;
+  const ddValue = labelRecord[ddKey];
+  if (ddValue !== undefined && ddValue !== null) {
+    const value = `${ddValue}`.trim();
+    if (value.length > 0) {
+      return value;
+    }
+  }
+  const wudValue = labelRecord[wudKey];
+  if (wudValue !== undefined && wudValue !== null) {
+    const value = `${wudValue}`.trim();
+    if (value.length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function parseBooleanLabelValue(value: string | undefined): boolean | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['false', '0', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+  return undefined;
+}
+
+const selectedRuntimeOrigins = computed(() => ({
+  entrypoint: getRuntimeOriginValue(
+    selectedContainerMeta.value?.labels,
+    'dd.runtime.entrypoint.origin',
+    'wud.runtime.entrypoint.origin',
+  ),
+  cmd: getRuntimeOriginValue(
+    selectedContainerMeta.value?.labels,
+    'dd.runtime.cmd.origin',
+    'wud.runtime.cmd.origin',
+  ),
+}));
+
+const selectedLifecycleHooks = computed(() => {
+  const labels = selectedContainerMeta.value?.labels;
+  const preUpdate = getPreferredLabelString(labels, 'dd.hook.pre', 'wud.hook.pre');
+  const postUpdate = getPreferredLabelString(labels, 'dd.hook.post', 'wud.hook.post');
+  const timeoutRaw = getPreferredLabelString(labels, 'dd.hook.timeout', 'wud.hook.timeout');
+  const timeoutParsed = timeoutRaw ? Number.parseInt(timeoutRaw, 10) : Number.NaN;
+  const preAbortRaw = getPreferredLabelString(labels, 'dd.hook.pre.abort', 'wud.hook.pre.abort');
+  const preAbort = parseBooleanLabelValue(preAbortRaw);
+
+  return {
+    preUpdate,
+    postUpdate,
+    timeoutLabel:
+      Number.isFinite(timeoutParsed) && timeoutParsed > 0
+        ? `${timeoutParsed}ms`
+        : '60000ms (default)',
+    preAbortBehavior:
+      preAbort === undefined
+        ? undefined
+        : preAbort
+          ? 'Abort update on pre-hook failure'
+          : 'Continue update on pre-hook failure',
+  };
+});
+
+const lifecycleHookTemplateVariables = [
+  { name: 'DD_CONTAINER_NAME', description: 'Container name' },
+  { name: 'DD_CONTAINER_ID', description: 'Container ID' },
+  { name: 'DD_IMAGE_NAME', description: 'Image name (without registry)' },
+  { name: 'DD_IMAGE_TAG', description: 'Current image tag' },
+  { name: 'DD_UPDATE_KIND', description: 'Update type (tag or digest)' },
+  { name: 'DD_UPDATE_FROM', description: 'Current tag or digest' },
+  { name: 'DD_UPDATE_TO', description: 'New tag or digest' },
+];
+
+const selectedAutoRollbackConfig = computed(() => {
+  const labels = selectedContainerMeta.value?.labels;
+  const enabledRaw = getPreferredLabelString(labels, 'dd.rollback.auto', 'wud.rollback.auto');
+  const enabled = parseBooleanLabelValue(enabledRaw);
+  const windowRaw = getPreferredLabelString(labels, 'dd.rollback.window', 'wud.rollback.window');
+  const intervalRaw = getPreferredLabelString(
+    labels,
+    'dd.rollback.interval',
+    'wud.rollback.interval',
+  );
+
+  const windowParsed = windowRaw ? Number.parseInt(windowRaw, 10) : Number.NaN;
+  const intervalParsed = intervalRaw ? Number.parseInt(intervalRaw, 10) : Number.NaN;
+  const windowMs = Number.isFinite(windowParsed) && windowParsed > 0 ? windowParsed : 300000;
+  const intervalMs = Number.isFinite(intervalParsed) && intervalParsed > 0 ? intervalParsed : 10000;
+
+  return {
+    enabledLabel:
+      enabled === true ? 'Enabled' : enabled === false ? 'Disabled' : 'Disabled (default)',
+    windowLabel: `${windowMs}ms`,
+    intervalLabel: `${intervalMs}ms`,
+  };
+});
+
+const selectedRuntimeDriftWarnings = computed<string[]>(() => {
+  if (!selectedContainerMeta.value) {
+    return [];
+  }
+
+  const missingOrigins: string[] = [];
+  if (selectedRuntimeOrigins.value.entrypoint === 'unknown') {
+    missingOrigins.push('Entrypoint');
+  }
+  if (selectedRuntimeOrigins.value.cmd === 'unknown') {
+    missingOrigins.push('Cmd');
+  }
+  if (missingOrigins.length === 0) {
+    return [];
+  }
+
+  return [
+    `Runtime origin metadata is missing for ${missingOrigins.join(
+      ' and ',
+    )}. Updates will preserve current values to avoid dropping explicit overrides, which can cause runtime drift.`,
+  ];
+});
+
+function runtimeOriginLabel(origin: RuntimeOrigin): string {
+  if (origin === 'explicit') {
+    return 'Explicit';
+  }
+  if (origin === 'inherited') {
+    return 'Inherited';
+  }
+  return 'Unknown';
+}
+
+function runtimeOriginStyle(origin: RuntimeOrigin) {
+  if (origin === 'explicit') {
+    return { backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' };
+  }
+  if (origin === 'inherited') {
+    return { backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' };
+  }
+  return { backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' };
+}
+
+const selectedImageMetadata = computed(() => {
+  const image = selectedContainerMeta.value?.image;
+  const digestValue = image?.digest?.value || image?.digest?.repo;
+  return {
+    architecture: typeof image?.architecture === 'string' ? image.architecture : undefined,
+    os: typeof image?.os === 'string' ? image.os : undefined,
+    digest: typeof digestValue === 'string' ? digestValue : undefined,
+    created: typeof image?.created === 'string' ? image.created : undefined,
+  };
+});
+const selectedUpdatePolicy = computed<Record<string, unknown>>(
   () => selectedContainerMeta.value?.updatePolicy || {},
 );
 const selectedSkipTags = computed<string[]>(() =>
@@ -194,26 +384,155 @@ const selectedSkipDigests = computed<string[]>(() =>
   Array.isArray(selectedUpdatePolicy.value.skipDigests) ? selectedUpdatePolicy.value.skipDigests : [],
 );
 const selectedSnoozeUntil = computed<string | undefined>(() => selectedUpdatePolicy.value.snoozeUntil);
+const snoozeDateInput = ref('');
 
-const detailPreview = ref<Record<string, any> | null>(null);
+const detailPreview = ref<Record<string, unknown> | null>(null);
 const previewLoading = ref(false);
 const previewError = ref<string | null>(null);
 
-const detailTriggers = ref<any[]>([]);
+const detailTriggers = ref<Record<string, unknown>[]>([]);
 const triggersLoading = ref(false);
 const triggerRunInProgress = ref<string | null>(null);
 const triggerMessage = ref<string | null>(null);
 const triggerError = ref<string | null>(null);
 
-const detailBackups = ref<any[]>([]);
+const detailBackups = ref<Record<string, unknown>[]>([]);
 const backupsLoading = ref(false);
 const rollbackInProgress = ref<string | null>(null);
 const rollbackMessage = ref<string | null>(null);
 const rollbackError = ref<string | null>(null);
+const detailUpdateOperations = ref<Record<string, unknown>[]>([]);
+const updateOperationsLoading = ref(false);
+const updateOperationsError = ref<string | null>(null);
 
 const policyInProgress = ref<string | null>(null);
 const policyMessage = ref<string | null>(null);
 const policyError = ref<string | null>(null);
+
+const selectedSbomFormat = ref<'spdx-json' | 'cyclonedx-json'>('spdx-json');
+const detailVulnerabilityResult = ref<Record<string, unknown> | null>(null);
+const detailVulnerabilityLoading = ref(false);
+const detailVulnerabilityError = ref<string | null>(null);
+const detailSbomResult = ref<Record<string, unknown> | null>(null);
+const detailSbomLoading = ref(false);
+const detailSbomError = ref<string | null>(null);
+
+const vulnerabilitySummary = computed(() => {
+  const summary = detailVulnerabilityResult.value?.summary;
+  return {
+    critical: summary?.critical ?? 0,
+    high: summary?.high ?? 0,
+    medium: summary?.medium ?? 0,
+    low: summary?.low ?? 0,
+    unknown: summary?.unknown ?? 0,
+  };
+});
+
+const vulnerabilityTotal = computed(() =>
+  vulnerabilitySummary.value.critical
+  + vulnerabilitySummary.value.high
+  + vulnerabilitySummary.value.medium
+  + vulnerabilitySummary.value.low
+  + vulnerabilitySummary.value.unknown,
+);
+
+const vulnerabilityPreview = computed(() => {
+  const vulnerabilities = detailVulnerabilityResult.value?.vulnerabilities;
+  if (!Array.isArray(vulnerabilities)) {
+    return [];
+  }
+  return vulnerabilities.slice(0, 5);
+});
+
+const sbomDocument = computed(() => detailSbomResult.value?.document);
+const sbomGeneratedAt = computed(() => detailSbomResult.value?.generatedAt);
+
+function detectSbomComponentCount(document: ApiSbomDocument): number | undefined {
+  if (Array.isArray(document?.packages)) {
+    return document.packages.length;
+  }
+  if (Array.isArray(document?.components)) {
+    return document.components.length;
+  }
+  return undefined;
+}
+
+const sbomComponentCount = computed(() => detectSbomComponentCount(sbomDocument.value));
+
+function normalizeSeverity(value: unknown): string {
+  if (typeof value !== 'string') {
+    return 'UNKNOWN';
+  }
+  const normalized = value.toUpperCase();
+  if (
+    normalized === 'CRITICAL'
+    || normalized === 'HIGH'
+    || normalized === 'MEDIUM'
+    || normalized === 'LOW'
+  ) {
+    return normalized;
+  }
+  return 'UNKNOWN';
+}
+
+function severityStyle(severity: string) {
+  if (severity === 'CRITICAL') {
+    return { bg: 'var(--dd-danger-muted)', text: 'var(--dd-danger)' };
+  }
+  if (severity === 'HIGH') {
+    return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' };
+  }
+  if (severity === 'MEDIUM') {
+    return { bg: 'var(--dd-caution-muted)', text: 'var(--dd-caution)' };
+  }
+  return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)' };
+}
+
+function getVulnerabilityPackage(vulnerability: ApiVulnerability): string {
+  return vulnerability?.packageName || vulnerability?.package || 'unknown';
+}
+
+async function loadDetailVulnerabilities() {
+  const containerId = selectedContainerId.value;
+  if (!containerId) {
+    detailVulnerabilityResult.value = null;
+    detailVulnerabilityError.value = null;
+    return;
+  }
+  detailVulnerabilityLoading.value = true;
+  detailVulnerabilityError.value = null;
+  try {
+    detailVulnerabilityResult.value = await fetchContainerVulnerabilities(containerId);
+  } catch (e: unknown) {
+    detailVulnerabilityResult.value = null;
+    detailVulnerabilityError.value = errorMessage(e, 'Failed to load vulnerabilities');
+  } finally {
+    detailVulnerabilityLoading.value = false;
+  }
+}
+
+async function loadDetailSbom() {
+  const containerId = selectedContainerId.value;
+  if (!containerId) {
+    detailSbomResult.value = null;
+    detailSbomError.value = null;
+    return;
+  }
+  detailSbomLoading.value = true;
+  detailSbomError.value = null;
+  try {
+    detailSbomResult.value = await fetchContainerSbom(containerId, selectedSbomFormat.value);
+  } catch (e: unknown) {
+    detailSbomResult.value = null;
+    detailSbomError.value = errorMessage(e, 'Failed to load SBOM');
+  } finally {
+    detailSbomLoading.value = false;
+  }
+}
+
+async function loadDetailSecurityData() {
+  await Promise.all([loadDetailVulnerabilities(), loadDetailSbom()]);
+}
 
 function formatTimestamp(timestamp: string | undefined): string {
   if (!timestamp) {
@@ -226,6 +545,69 @@ function formatTimestamp(timestamp: string | undefined): string {
   return parsed.toLocaleString();
 }
 
+function formatOperationValue(value: unknown): string {
+  if (typeof value !== 'string') {
+    return 'unknown';
+  }
+  return value
+    .trim()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
+function formatOperationPhase(phase: unknown): string {
+  return formatOperationValue(phase);
+}
+
+function formatRollbackReason(reason: unknown): string {
+  return formatOperationValue(reason);
+}
+
+function formatOperationStatus(status: unknown): string {
+  return formatOperationValue(status);
+}
+
+function getOperationStatusStyle(status: unknown) {
+  const normalized = String(status || '').toLowerCase();
+  if (normalized === 'succeeded') {
+    return {
+      backgroundColor: 'var(--dd-success-muted)',
+      color: 'var(--dd-success)',
+    };
+  }
+  if (normalized === 'rolled-back') {
+    return {
+      backgroundColor: 'var(--dd-warning-muted)',
+      color: 'var(--dd-warning)',
+    };
+  }
+  if (normalized === 'failed') {
+    return {
+      backgroundColor: 'var(--dd-danger-muted)',
+      color: 'var(--dd-danger)',
+    };
+  }
+  return {
+    backgroundColor: 'var(--dd-info-muted)',
+    color: 'var(--dd-info)',
+  };
+}
+
+function toDateInputValue(timestamp: string | undefined): string {
+  if (!timestamp) {
+    return '';
+  }
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) {
+    return '';
+  }
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function resetDetailMessages() {
   triggerMessage.value = null;
   triggerError.value = null;
@@ -233,9 +615,10 @@ function resetDetailMessages() {
   rollbackError.value = null;
   policyMessage.value = null;
   policyError.value = null;
+  updateOperationsError.value = null;
 }
 
-function getTriggerKey(trigger: any): string {
+function getTriggerKey(trigger: ApiContainerTrigger): string {
   if (trigger.id) {
     return trigger.id;
   }
@@ -253,9 +636,9 @@ async function loadDetailTriggers() {
   triggerError.value = null;
   try {
     detailTriggers.value = await getContainerTriggers(containerId);
-  } catch (e: any) {
+  } catch (e: unknown) {
     detailTriggers.value = [];
-    triggerError.value = e?.message || 'Failed to load associated triggers';
+    triggerError.value = errorMessage(e, 'Failed to load associated triggers');
   } finally {
     triggersLoading.value = false;
   }
@@ -271,16 +654,36 @@ async function loadDetailBackups() {
   rollbackError.value = null;
   try {
     detailBackups.value = await getBackups(containerId);
-  } catch (e: any) {
+  } catch (e: unknown) {
     detailBackups.value = [];
-    rollbackError.value = e?.message || 'Failed to load backups';
+    rollbackError.value = errorMessage(e, 'Failed to load backups');
   } finally {
     backupsLoading.value = false;
   }
 }
 
+async function loadDetailUpdateOperations() {
+  const containerId = selectedContainerId.value;
+  if (!containerId) {
+    detailUpdateOperations.value = [];
+    updateOperationsError.value = null;
+    return;
+  }
+
+  updateOperationsLoading.value = true;
+  updateOperationsError.value = null;
+  try {
+    detailUpdateOperations.value = await fetchContainerUpdateOperations(containerId);
+  } catch (e: unknown) {
+    detailUpdateOperations.value = [];
+    updateOperationsError.value = errorMessage(e, 'Failed to load update operation history');
+  } finally {
+    updateOperationsLoading.value = false;
+  }
+}
+
 async function refreshActionTabData() {
-  await Promise.all([loadDetailTriggers(), loadDetailBackups()]);
+  await Promise.all([loadDetailTriggers(), loadDetailBackups(), loadDetailUpdateOperations()]);
 }
 
 async function runContainerPreview() {
@@ -292,15 +695,15 @@ async function runContainerPreview() {
   previewError.value = null;
   try {
     detailPreview.value = await previewContainer(containerId);
-  } catch (e: any) {
+  } catch (e: unknown) {
     detailPreview.value = null;
-    previewError.value = e?.message || 'Failed to generate update preview';
+    previewError.value = errorMessage(e, 'Failed to generate update preview');
   } finally {
     previewLoading.value = false;
   }
 }
 
-async function runAssociatedTrigger(trigger: any) {
+async function runAssociatedTrigger(trigger: ApiContainerTrigger) {
   const containerId = selectedContainerId.value;
   if (!containerId || triggerRunInProgress.value) {
     return;
@@ -318,8 +721,9 @@ async function runAssociatedTrigger(trigger: any) {
     });
     triggerMessage.value = `Trigger ${triggerKey} ran successfully`;
     await loadContainers();
-  } catch (e: any) {
-    triggerError.value = e?.message || `Failed to run ${triggerKey}`;
+    await refreshActionTabData();
+  } catch (e: unknown) {
+    triggerError.value = errorMessage(e, `Failed to run ${triggerKey}`);
   } finally {
     triggerRunInProgress.value = null;
   }
@@ -340,15 +744,15 @@ async function rollbackToBackup(backupId?: string) {
       : 'Rollback completed from latest backup';
     skippedUpdates.value.delete(selectedContainer.value?.name || '');
     await loadContainers();
-    await loadDetailBackups();
-  } catch (e: any) {
-    rollbackError.value = e?.message || 'Rollback failed';
+    await Promise.all([loadDetailBackups(), loadDetailUpdateOperations()]);
+  } catch (e: unknown) {
+    rollbackError.value = errorMessage(e, 'Rollback failed');
   } finally {
     rollbackInProgress.value = null;
   }
 }
 
-async function applyPolicy(name: string, action: string, payload: Record<string, any> = {}, message?: string) {
+async function applyPolicy(name: string, action: string, payload: Record<string, unknown> = {}, message?: string) {
   const containerId = containerIdMap.value[name];
   if (!containerId || policyInProgress.value) {
     return false;
@@ -362,8 +766,8 @@ async function applyPolicy(name: string, action: string, payload: Record<string,
     }
     await loadContainers();
     return true;
-  } catch (e: any) {
-    policyError.value = e?.message || 'Failed to update policy';
+  } catch (e: unknown) {
+    policyError.value = errorMessage(e, 'Failed to update policy');
     return false;
   } finally {
     policyInProgress.value = null;
@@ -400,6 +804,36 @@ async function snoozeSelected(days: number) {
   );
 }
 
+function resolveSnoozeUntilFromInput(dateInput: string): string | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+    return undefined;
+  }
+  // Apply snooze through the end of the selected local date.
+  const parsed = new Date(`${dateInput}T23:59:59`);
+  if (Number.isNaN(parsed.getTime())) {
+    return undefined;
+  }
+  return parsed.toISOString();
+}
+
+async function snoozeSelectedUntilDate() {
+  const containerName = selectedContainer.value?.name;
+  if (!containerName) {
+    return;
+  }
+  const snoozeUntil = resolveSnoozeUntilFromInput(snoozeDateInput.value);
+  if (!snoozeUntil) {
+    policyError.value = 'Select a valid snooze date';
+    return;
+  }
+  await applyPolicy(
+    containerName,
+    'snooze',
+    { snoozeUntil },
+    `Snoozed until ${snoozeDateInput.value}`,
+  );
+}
+
 async function unsnoozeSelected() {
   const containerName = selectedContainer.value?.name;
   if (!containerName) {
@@ -426,6 +860,28 @@ async function clearPolicySelected() {
   await applyPolicy(containerName, 'clear', {}, 'Update policy cleared');
 }
 
+async function removeSkipSelected(kind: 'tag' | 'digest', value: string) {
+  const containerName = selectedContainer.value?.name;
+  if (!containerName || !value) {
+    return;
+  }
+  skippedUpdates.value.delete(containerName);
+  await applyPolicy(
+    containerName,
+    'remove-skip',
+    { kind, value },
+    `Removed skipped ${kind} ${value}`,
+  );
+}
+
+async function removeSkipTagSelected(value: string) {
+  await removeSkipSelected('tag', value);
+}
+
+async function removeSkipDigestSelected(value: string) {
+  await removeSkipSelected('digest', value);
+}
+
 watch(
   () => [selectedContainer.value?.name, activeDetailTab.value],
   ([containerName, tabName]) => {
@@ -434,6 +890,8 @@ watch(
     if (!containerName) {
       detailTriggers.value = [];
       detailBackups.value = [];
+      detailUpdateOperations.value = [];
+      updateOperationsError.value = null;
       resetDetailMessages();
       return;
     }
@@ -443,6 +901,39 @@ watch(
     }
   },
   { immediate: true },
+);
+
+watch(
+  () => selectedSnoozeUntil.value,
+  (snoozeUntil) => {
+    snoozeDateInput.value = toDateInputValue(snoozeUntil);
+  },
+  { immediate: true },
+);
+
+watch(
+  () => selectedContainerId.value,
+  (containerId) => {
+    if (!containerId) {
+      detailVulnerabilityResult.value = null;
+      detailVulnerabilityError.value = null;
+      detailSbomResult.value = null;
+      detailSbomError.value = null;
+      return;
+    }
+    void loadDetailSecurityData();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => selectedSbomFormat.value,
+  () => {
+    if (!selectedContainerId.value) {
+      return;
+    }
+    void loadDetailSbom();
+  },
 );
 
 // View mode
@@ -547,7 +1038,14 @@ const sortedContainers = computed(() => {
 // Apply skip-update masking and merge ghost containers
 const displayContainers = computed(() => {
   const live = sortedContainers.value.map((c) =>
-    skippedUpdates.value.has(c.name) ? { ...c, newTag: undefined, updateKind: undefined } : c,
+    skippedUpdates.value.has(c.name)
+      ? {
+        ...c,
+        newTag: undefined,
+        releaseLink: undefined,
+        updateKind: undefined,
+      }
+      : c,
   );
   // Merge pending (ghost) containers that disappeared during action
   const liveNames = new Set(live.map((c) => c.name));
@@ -739,8 +1237,11 @@ function handleGlobalClick() {
   openActionsMenu.value = null;
   showColumnPicker.value = false;
 }
-function handleSseScanCompleted() {
-  loadContainers();
+async function handleSseScanCompleted() {
+  await loadContainers();
+  if (selectedContainerId.value) {
+    await loadDetailSecurityData();
+  }
 }
 onMounted(() => {
   document.addEventListener('click', handleGlobalClick);
@@ -779,7 +1280,7 @@ onUnmounted(() => {
   for (const timer of pollTimers.value.values()) clearInterval(timer);
 });
 
-async function executeAction(name: string, action: (id: string) => Promise<any>) {
+async function executeAction(name: string, action: (id: string) => Promise<unknown>) {
   const containerId = containerIdMap.value[name];
   if (!containerId || actionInProgress.value) return false;
   actionInProgress.value = name;
@@ -794,9 +1295,12 @@ async function executeAction(name: string, action: (id: string) => Promise<any>)
       actionPending.value.set(name, snapshot);
       startPolling(name);
     }
+    if (selectedContainer.value?.name === name && activeDetailTab.value === 'actions') {
+      await refreshActionTabData();
+    }
     return true;
-  } catch (e: any) {
-    console.error(`Action failed for ${name}:`, e.message);
+  } catch (e: unknown) {
+    console.error(`Action failed for ${name}:`, errorMessage(e));
     return false;
   } finally {
     actionInProgress.value = null;
@@ -841,6 +1345,10 @@ async function updateContainer(name: string) {
   await executeAction(name, apiUpdateContainer);
 }
 
+async function scanContainer(name: string) {
+  await executeAction(name, apiScanContainer);
+}
+
 async function skipUpdate(name: string) {
   const applied = await applyPolicy(name, 'skip-current', {}, `Skipped current update for ${name}`);
   if (applied) {
@@ -871,8 +1379,8 @@ async function deleteContainer(name: string) {
     }
     await loadContainers();
     return true;
-  } catch (e: any) {
-    error.value = e?.message || `Failed to delete ${name}`;
+  } catch (e: unknown) {
+    error.value = errorMessage(e, `Failed to delete ${name}`);
     return false;
   } finally {
     actionInProgress.value = null;
@@ -881,6 +1389,77 @@ async function deleteContainer(name: string) {
 
 // Tooltip shorthand — shows on 400ms delay
 const tt = (label: string) => ({ value: label, showDelay: 400 });
+
+function hasRegistryError(container: Container): boolean {
+  return typeof container.registryError === 'string' && container.registryError.trim().length > 0;
+}
+
+function registryErrorTooltip(container: Container): string {
+  if (!hasRegistryError(container)) {
+    return 'Registry error';
+  }
+  return `Registry error: ${container.registryError}`;
+}
+
+interface ContainerListPolicyState {
+  snoozed: boolean;
+  skipped: boolean;
+  skipCount: number;
+  snoozeUntil?: string;
+}
+
+const EMPTY_CONTAINER_POLICY_STATE: ContainerListPolicyState = {
+  snoozed: false,
+  skipped: false,
+  skipCount: 0,
+};
+
+function normalizePolicyEntries(values: unknown): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+  return values
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+}
+
+function getContainerListPolicyState(containerName: string): ContainerListPolicyState {
+  const updatePolicy = containerMetaMap.value[containerName]?.updatePolicy;
+  if (!updatePolicy || typeof updatePolicy !== 'object') {
+    return EMPTY_CONTAINER_POLICY_STATE;
+  }
+
+  const policy = updatePolicy as Record<string, unknown>;
+  const skipCount =
+    normalizePolicyEntries(policy.skipTags).length + normalizePolicyEntries(policy.skipDigests).length;
+
+  const rawSnoozeUntil = typeof policy.snoozeUntil === 'string' ? policy.snoozeUntil : undefined;
+  const snoozeUntilMs = rawSnoozeUntil ? new Date(rawSnoozeUntil).getTime() : Number.NaN;
+  const snoozed = Number.isFinite(snoozeUntilMs) && snoozeUntilMs > Date.now();
+
+  if (!snoozed && skipCount === 0) {
+    return EMPTY_CONTAINER_POLICY_STATE;
+  }
+
+  return {
+    snoozed,
+    skipped: skipCount > 0,
+    skipCount,
+    snoozeUntil: snoozed ? rawSnoozeUntil : undefined,
+  };
+}
+
+function containerPolicyTooltip(containerName: string, kind: 'snoozed' | 'skipped'): string {
+  const state = getContainerListPolicyState(containerName);
+  if (kind === 'snoozed') {
+    return state.snoozeUntil ? `Updates snoozed until ${formatTimestamp(state.snoozeUntil)}` : 'Updates snoozed';
+  }
+  if (state.skipCount <= 0) {
+    return 'Skipped updates policy active';
+  }
+  return `Skipped updates policy active (${state.skipCount} entr${state.skipCount === 1 ? 'y' : 'ies'})`;
+}
 
 // Confirm wrappers for destructive actions
 function confirmStop(name: string) {
@@ -1029,7 +1608,7 @@ function confirmDelete(name: string) {
              ...columnPickerStyle,
              backgroundColor: 'var(--dd-bg-card)',
              border: '1px solid var(--dd-border-strong)',
-             boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+             boxShadow: 'var(--dd-shadow-lg)',
            }">
         <div class="px-3 py-1 text-[9px] font-bold uppercase tracking-wider dd-text-muted">Columns</div>
         <button v-for="col in allColumns.filter(c => c.label)" :key="col.key"
@@ -1050,6 +1629,9 @@ function confirmDelete(name: string) {
              class="flex items-center gap-2 px-3 py-2.5 mb-3 cursor-pointer select-none dd-rounded transition-colors hover:dd-bg-elevated"
              :style="{ backgroundColor: 'var(--dd-bg-elevated)', border: '1px solid var(--dd-border-strong)' }"
              :class="group.key === renderGroups[0]?.key ? '' : 'mt-6'"
+             role="button"
+             tabindex="0"
+             @keydown.enter.space.prevent="toggleGroupCollapse(group.key)"
              @click="toggleGroupCollapse(group.key)">
           <AppIcon :name="collapsedGroups.has(group.key) ? 'chevron-right' : 'chevron-down'" :size="10" class="dd-text-muted shrink-0" />
           <AppIcon name="stack" :size="12" class="dd-text-muted shrink-0" />
@@ -1125,6 +1707,10 @@ function confirmDelete(name: string) {
                           v-tooltip.top="tt('Start')" @click.stop="startContainer(c.name)">
                     <AppIcon name="play" :size="12" />
                   </button>
+                  <button class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-secondary hover:dd-bg-hover hover:scale-110 active:scale-95"
+                          v-tooltip.top="tt('Scan')" @click.stop="scanContainer(c.name)">
+                    <AppIcon name="security" :size="12" />
+                  </button>
                   <button class="w-7 h-7 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95"
                           :class="openActionsMenu === c.name ? 'dd-bg-elevated dd-text' : ''"
                           v-tooltip.top="tt('More')" @click.stop="toggleActionsMenu(c.name, $event)">
@@ -1139,6 +1725,15 @@ function confirmDelete(name: string) {
                   <span class="truncate max-w-[80px]">{{ c.currentTag }}</span>
                   <AppIcon name="arrow-right" :size="11" class="dd-text-muted mx-0.5 shrink-0" />
                   <span class="truncate max-w-[100px]" style="color: var(--dd-primary);" :title="c.newTag">{{ c.newTag }}</span>
+                </span>
+                <span
+                  v-else-if="c.noUpdateReason"
+                  class="inline-flex items-center gap-1 text-[9px] min-w-0"
+                  style="color: var(--dd-warning);"
+                  :title="c.noUpdateReason"
+                >
+                  <AppIcon name="warning" :size="10" class="shrink-0" />
+                  <span class="truncate max-w-[130px]">{{ c.noUpdateReason }}</span>
                 </span>
                 <div class="flex items-center gap-1.5 ml-auto shrink-0">
                 <span v-if="c.updateKind" class="badge px-1.5 py-0 text-[9px]"
@@ -1155,6 +1750,26 @@ function confirmDelete(name: string) {
                       style="background: var(--dd-warning-muted); color: var(--dd-warning);"
                       v-tooltip.top="tt(c.bouncer)">
                   <AppIcon name="warning" :size="12" />
+                </span>
+                <span v-if="hasRegistryError(c)" class="badge px-1.5 py-0 text-[9px]"
+                      style="background: var(--dd-danger-muted); color: var(--dd-danger);"
+                      aria-label="Registry error"
+                      v-tooltip.top="tt(registryErrorTooltip(c))">
+                  <AppIcon name="warning" :size="12" />
+                </span>
+                <span v-if="getContainerListPolicyState(c.name).snoozed"
+                      class="badge px-1.5 py-0 text-[9px]"
+                      style="background: var(--dd-info-muted); color: var(--dd-info);"
+                      aria-label="Snoozed updates"
+                      v-tooltip.top="tt(containerPolicyTooltip(c.name, 'snoozed'))">
+                  <AppIcon name="pause" :size="12" />
+                </span>
+                <span v-if="getContainerListPolicyState(c.name).skipped"
+                      class="badge px-1.5 py-0 text-[9px]"
+                      style="background: var(--dd-warning-muted); color: var(--dd-warning);"
+                      aria-label="Skipped updates"
+                      v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
+                  <AppIcon name="skip-forward" :size="12" />
                 </span>
                 <span class="badge px-1.5 py-0 text-[9px]"
                       :style="{
@@ -1181,6 +1796,32 @@ function confirmDelete(name: string) {
           </div>
           <div v-else class="text-center">
             <span class="text-[11px] dd-text-secondary truncate block max-w-[140px] mx-auto" :title="c.currentTag">{{ c.currentTag }}</span>
+            <div v-if="getContainerListPolicyState(c.name).snoozed || getContainerListPolicyState(c.name).skipped"
+                 class="mt-1 inline-flex items-center justify-center gap-1">
+              <span v-if="getContainerListPolicyState(c.name).snoozed"
+                    class="inline-flex items-center justify-center"
+                    style="color: var(--dd-info);"
+                    aria-label="Snoozed updates"
+                    v-tooltip.top="tt(containerPolicyTooltip(c.name, 'snoozed'))">
+                <AppIcon name="pause" :size="11" />
+              </span>
+              <span v-if="getContainerListPolicyState(c.name).skipped"
+                    class="inline-flex items-center justify-center"
+                    style="color: var(--dd-warning);"
+                    aria-label="Skipped updates"
+                    v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
+                <AppIcon name="skip-forward" :size="11" />
+              </span>
+            </div>
+            <div
+              v-if="c.noUpdateReason"
+              class="mt-1 inline-flex items-center gap-1 text-[10px] max-w-[220px] justify-center"
+              style="color: var(--dd-warning);"
+              :title="c.noUpdateReason"
+            >
+              <AppIcon name="warning" :size="10" class="shrink-0" />
+              <span class="truncate">{{ c.noUpdateReason }}</span>
+            </div>
           </div>
         </template>
         <!-- Kind badge -->
@@ -1222,10 +1863,19 @@ function confirmDelete(name: string) {
         </template>
         <!-- Registry badge -->
         <template #cell-registry="{ row: c }">
-          <span class="badge text-[9px] uppercase tracking-wide font-bold"
-                :style="{ backgroundColor: registryColorBg(c.registry), color: registryColorText(c.registry) }">
-            {{ registryLabel(c.registry) }}
-          </span>
+          <div class="inline-flex items-center justify-center gap-1.5">
+            <span class="badge text-[9px] uppercase tracking-wide font-bold"
+                  :style="{ backgroundColor: registryColorBg(c.registry), color: registryColorText(c.registry) }">
+              {{ registryLabel(c.registry, c.registryUrl, c.registryName) }}
+            </span>
+            <span v-if="hasRegistryError(c)"
+                  class="inline-flex items-center justify-center"
+                  style="color: var(--dd-danger);"
+                  aria-label="Registry error"
+                  v-tooltip.top="tt(registryErrorTooltip(c))">
+              <AppIcon name="warning" :size="12" />
+            </span>
+          </div>
         </template>
         <!-- Actions (hidden in compact -- inlined into name cell) -->
         <template #actions="{ row: c }">
@@ -1252,6 +1902,10 @@ function confirmDelete(name: string) {
                       v-tooltip.top="tt('Start')" @click.stop="startContainer(c.name)">
                 <AppIcon name="play" :size="14" />
               </button>
+              <button class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text-secondary hover:dd-bg-hover hover:scale-110 active:scale-95"
+                      v-tooltip.top="tt('Scan')" @click.stop="scanContainer(c.name)">
+                <AppIcon name="security" :size="14" />
+              </button>
               <button class="w-8 h-8 dd-rounded flex items-center justify-center transition-all dd-text-muted hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95"
                       :class="openActionsMenu === c.name ? 'dd-bg-elevated dd-text' : ''"
                       v-tooltip.top="tt('More')" @click.stop="toggleActionsMenu(c.name, $event)">
@@ -1261,7 +1915,7 @@ function confirmDelete(name: string) {
           </template>
           <!-- Button-style actions (full) -->
           <template v-else>
-            <div v-if="c.newTag" class="inline-flex">
+            <div v-if="c.newTag" class="inline-flex items-center gap-1">
               <!-- Blocked: muted split button -->
               <div v-if="c.bouncer === 'blocked'" class="inline-flex dd-rounded overflow-hidden" style="min-width: 110px;"
                    :style="{ border: '1px solid var(--dd-border-strong)' }">
@@ -1291,6 +1945,10 @@ function confirmDelete(name: string) {
                   <AppIcon name="chevron-down" :size="11" />
                 </button>
               </div>
+              <button class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-secondary hover:dd-bg-hover"
+                      v-tooltip.top="tt('Scan')" @click.stop="scanContainer(c.name)">
+                <AppIcon name="security" :size="11" />
+              </button>
             </div>
             <div v-else class="flex items-center justify-end gap-1">
               <button v-if="c.status === 'running'"
@@ -1307,6 +1965,10 @@ function confirmDelete(name: string) {
                       v-tooltip.top="tt('Restart')" @click.stop="confirmRestart(c.name)">
                 <AppIcon name="restart" :size="11" />
               </button>
+              <button class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-secondary hover:dd-bg-hover"
+                      v-tooltip.top="tt('Scan')" @click.stop="scanContainer(c.name)">
+                <AppIcon name="security" :size="11" />
+              </button>
             </div>
           </template>
         </template>
@@ -1321,7 +1983,7 @@ function confirmDelete(name: string) {
                  ...actionsMenuStyle,
                  backgroundColor: 'var(--dd-bg-card)',
                  border: '1px solid var(--dd-border-strong)',
-                 boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                 boxShadow: 'var(--dd-shadow-lg)',
                }"
                @click.stop>
             <button v-if="c.status === 'running'" class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
@@ -1338,6 +2000,11 @@ function confirmDelete(name: string) {
                     @click="closeActionsMenu(); confirmRestart(c.name)">
               <AppIcon name="restart" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
               Restart
+            </button>
+            <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
+                    @click="closeActionsMenu(); scanContainer(c.name)">
+              <AppIcon name="security" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-secondary)' }" />
+              Scan
             </button>
             <!-- Force update for blocked containers (even without newTag) -->
             <template v-if="c.bouncer === 'blocked' && !c.newTag">
@@ -1394,10 +2061,33 @@ function confirmDelete(name: string) {
                 </div>
               </div>
             </div>
-            <span class="badge text-[9px] uppercase tracking-wide font-bold shrink-0 ml-2"
-                  :style="{ backgroundColor: registryColorBg(c.registry), color: registryColorText(c.registry) }">
-              {{ registryLabel(c.registry) }}
-            </span>
+            <div class="flex items-center gap-1.5 shrink-0 ml-2">
+              <span class="badge text-[9px] uppercase tracking-wide font-bold"
+                    :style="{ backgroundColor: registryColorBg(c.registry), color: registryColorText(c.registry) }">
+                {{ registryLabel(c.registry, c.registryUrl, c.registryName) }}
+              </span>
+              <span v-if="hasRegistryError(c)"
+                    class="inline-flex items-center justify-center"
+                    style="color: var(--dd-danger);"
+                    aria-label="Registry error"
+                    v-tooltip.top="tt(registryErrorTooltip(c))">
+                <AppIcon name="warning" :size="12" />
+              </span>
+              <span v-if="getContainerListPolicyState(c.name).snoozed"
+                    class="inline-flex items-center justify-center"
+                    style="color: var(--dd-info);"
+                    aria-label="Snoozed updates"
+                    v-tooltip.top="tt(containerPolicyTooltip(c.name, 'snoozed'))">
+                <AppIcon name="pause" :size="12" />
+              </span>
+              <span v-if="getContainerListPolicyState(c.name).skipped"
+                    class="inline-flex items-center justify-center"
+                    style="color: var(--dd-warning);"
+                    aria-label="Skipped updates"
+                    v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
+                <AppIcon name="skip-forward" :size="12" />
+              </span>
+            </div>
           </div>
 
           <!-- Card body -- inline Current / Latest -->
@@ -1416,7 +2106,32 @@ function confirmDelete(name: string) {
                 </span>
               </template>
               <template v-else>
-                <AppIcon name="check" :size="14" class="ml-1" style="color: var(--dd-success);" />
+                <span
+                  v-if="c.noUpdateReason"
+                  class="inline-flex items-center gap-1 ml-1 px-1.5 py-0.5 dd-rounded-sm text-[10px] max-w-[220px]"
+                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+                  :title="c.noUpdateReason"
+                >
+                  <AppIcon name="warning" :size="11" class="shrink-0" />
+                  <span class="truncate">{{ c.noUpdateReason }}</span>
+                </span>
+                <template v-else-if="getContainerListPolicyState(c.name).snoozed || getContainerListPolicyState(c.name).skipped">
+                  <span v-if="getContainerListPolicyState(c.name).snoozed"
+                        class="inline-flex items-center justify-center ml-1"
+                        style="color: var(--dd-info);"
+                        aria-label="Snoozed updates"
+                        v-tooltip.top="tt(containerPolicyTooltip(c.name, 'snoozed'))">
+                    <AppIcon name="pause" :size="13" />
+                  </span>
+                  <span v-if="getContainerListPolicyState(c.name).skipped"
+                        class="inline-flex items-center justify-center"
+                        style="color: var(--dd-warning);"
+                        aria-label="Skipped updates"
+                        v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
+                    <AppIcon name="skip-forward" :size="13" />
+                  </span>
+                </template>
+                <AppIcon v-else name="check" :size="14" class="ml-1" style="color: var(--dd-success);" />
               </template>
             </div>
           </div>
@@ -1450,6 +2165,10 @@ function confirmDelete(name: string) {
                       v-tooltip.top="tt('Restart')" @click.stop="confirmRestart(c.name)">
                 <AppIcon name="restart" :size="14" />
               </button>
+              <button class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-secondary hover:dd-bg-elevated"
+                      v-tooltip.top="tt('Scan')" @click.stop="scanContainer(c.name)">
+                <AppIcon name="security" :size="14" />
+              </button>
               <button v-if="c.newTag"
                       class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-success hover:dd-bg-elevated"
                       v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
@@ -1472,6 +2191,14 @@ function confirmDelete(name: string) {
           <div class="min-w-0 flex-1" :class="{ 'opacity-50': c._pending }">
             <div class="text-sm font-semibold truncate dd-text">{{ c.name }}</div>
             <div class="text-[10px] mt-0.5 truncate dd-text-muted" :title="`${c.image}:${c.currentTag}`">{{ c.image }}:{{ c.currentTag }}</div>
+            <div
+              v-if="!c.newTag && c.noUpdateReason"
+              class="text-[10px] mt-0.5 truncate"
+              style="color: var(--dd-warning);"
+              :title="c.noUpdateReason"
+            >
+              {{ c.noUpdateReason }}
+            </div>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
             <!-- Update kind: icon on mobile, badge on desktop -->
@@ -1492,6 +2219,27 @@ function confirmDelete(name: string) {
                     color: c.status === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
                   }">
               {{ c.status }}
+            </span>
+            <span v-if="hasRegistryError(c)"
+                  class="inline-flex items-center justify-center"
+                  style="color: var(--dd-danger);"
+                  aria-label="Registry error"
+                  v-tooltip.top="tt(registryErrorTooltip(c))">
+              <AppIcon name="warning" :size="12" />
+            </span>
+            <span v-if="getContainerListPolicyState(c.name).snoozed"
+                  class="inline-flex items-center justify-center"
+                  style="color: var(--dd-info);"
+                  aria-label="Snoozed updates"
+                  v-tooltip.top="tt(containerPolicyTooltip(c.name, 'snoozed'))">
+              <AppIcon name="pause" :size="12" />
+            </span>
+            <span v-if="getContainerListPolicyState(c.name).skipped"
+                  class="inline-flex items-center justify-center"
+                  style="color: var(--dd-warning);"
+                  aria-label="Skipped updates"
+                  v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
+              <AppIcon name="skip-forward" :size="12" />
             </span>
             <!-- Bouncer: icon in badge -->
             <span v-if="c.bouncer === 'blocked'" class="badge px-1.5 py-0 text-[9px]"
@@ -1616,6 +2364,63 @@ function confirmDelete(name: string) {
                   <span class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</span>
                 </template>
               </div>
+              <div
+                v-if="!selectedContainer.newTag && selectedContainer.noUpdateReason"
+                class="mt-2 flex items-start gap-2 px-2.5 py-1.5 dd-rounded text-[11px]"
+                :style="{ backgroundColor: 'var(--dd-warning-muted)' }"
+              >
+                <AppIcon name="warning" :size="11" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
+                <span style="color: var(--dd-warning);">{{ selectedContainer.noUpdateReason }}</span>
+              </div>
+              <a
+                v-if="selectedContainer.releaseLink"
+                :href="selectedContainer.releaseLink"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="mt-2 inline-flex items-center text-[11px] underline hover:no-underline"
+                style="color: var(--dd-info);"
+              >
+                Release notes
+              </a>
+            </div>
+
+            <!-- Tag filter regex -->
+            <div>
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Tag Filters</div>
+              <div class="space-y-1">
+                <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary shrink-0">Include:</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.includeTags || 'Not set' }}</span>
+                </div>
+                <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary shrink-0">Exclude:</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.excludeTags || 'Not set' }}</span>
+                </div>
+                <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary shrink-0">Transform:</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.transformTags || 'Not set' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Trigger filter include/exclude -->
+            <div>
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Trigger Filters</div>
+              <div class="space-y-1">
+                <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary shrink-0">Include:</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.triggerInclude || 'Not set' }}</span>
+                </div>
+                <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary shrink-0">Exclude:</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.triggerExclude || 'Not set' }}</span>
+                </div>
+              </div>
             </div>
 
             <!-- Registry -->
@@ -1625,9 +2430,249 @@ function confirmDelete(name: string) {
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <span class="badge text-[9px] uppercase font-bold"
                       :style="{ backgroundColor: registryColorBg(selectedContainer.registry), color: registryColorText(selectedContainer.registry) }">
-                  {{ registryLabel(selectedContainer.registry) }}
+                  {{ registryLabel(selectedContainer.registry, selectedContainer.registryUrl, selectedContainer.registryName) }}
                 </span>
                 <span class="font-mono dd-text-secondary">{{ selectedContainer.image }}</span>
+              </div>
+              <div v-if="selectedContainer.registryError"
+                   class="mt-2 flex items-start gap-2 px-2.5 py-1.5 dd-rounded text-[11px]"
+                   :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
+                <AppIcon name="warning" :size="11" class="shrink-0 mt-0.5" style="color: var(--dd-danger);" />
+                <span style="color: var(--dd-danger);">{{ selectedContainer.registryError }}</span>
+              </div>
+            </div>
+
+            <!-- Runtime process -->
+            <div>
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Runtime Process</div>
+              <div class="space-y-1">
+                <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary">Entrypoint</span>
+                  <span class="badge text-[9px] font-bold uppercase"
+                        :style="runtimeOriginStyle(selectedRuntimeOrigins.entrypoint)">
+                    {{ runtimeOriginLabel(selectedRuntimeOrigins.entrypoint) }}
+                  </span>
+                </div>
+                <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary">Cmd</span>
+                  <span class="badge text-[9px] font-bold uppercase"
+                        :style="runtimeOriginStyle(selectedRuntimeOrigins.cmd)">
+                    {{ runtimeOriginLabel(selectedRuntimeOrigins.cmd) }}
+                  </span>
+                </div>
+              </div>
+              <div v-if="selectedRuntimeDriftWarnings.length > 0" class="mt-2 space-y-1">
+                <div v-for="warning in selectedRuntimeDriftWarnings" :key="warning"
+                     class="flex items-start gap-2 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-warning-muted)' }">
+                  <AppIcon name="warning" :size="11" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
+                  <span style="color: var(--dd-warning);">{{ warning }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Lifecycle hooks -->
+            <div>
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Lifecycle Hooks</div>
+              <div class="space-y-1">
+                <div class="flex items-start justify-between gap-3 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary shrink-0">Pre-update</span>
+                  <span class="font-mono dd-text text-right break-all">{{ selectedLifecycleHooks.preUpdate || 'Not configured' }}</span>
+                </div>
+                <div class="flex items-start justify-between gap-3 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary shrink-0">Post-update</span>
+                  <span class="font-mono dd-text text-right break-all">{{ selectedLifecycleHooks.postUpdate || 'Not configured' }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary">Timeout</span>
+                  <span class="font-mono dd-text">{{ selectedLifecycleHooks.timeoutLabel }}</span>
+                </div>
+              </div>
+              <div v-if="selectedLifecycleHooks.preAbortBehavior"
+                   class="mt-2 px-2.5 py-1.5 dd-rounded text-[11px]"
+                   :style="{ backgroundColor: 'var(--dd-info-muted)' }">
+                <span style="color: var(--dd-info);">{{ selectedLifecycleHooks.preAbortBehavior }}</span>
+              </div>
+              <div class="mt-2 px-2.5 py-1.5 dd-rounded text-[11px]"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                <div class="dd-text-secondary mb-1">Template Variables</div>
+                <div class="space-y-1">
+                  <div v-for="variable in lifecycleHookTemplateVariables" :key="variable.name"
+                       class="flex items-start justify-between gap-3">
+                    <span class="font-mono dd-text">{{ variable.name }}</span>
+                    <span class="dd-text-muted text-right">{{ variable.description }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Auto-rollback -->
+            <div>
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Auto-Rollback</div>
+              <div class="space-y-1">
+                <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary">Status</span>
+                  <span class="font-mono dd-text">{{ selectedAutoRollbackConfig.enabledLabel }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary">Window</span>
+                  <span class="font-mono dd-text">{{ selectedAutoRollbackConfig.windowLabel }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary">Interval</span>
+                  <span class="font-mono dd-text">{{ selectedAutoRollbackConfig.intervalLabel }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Image metadata -->
+            <div>
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Image Metadata</div>
+              <div class="space-y-1">
+                <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary">Architecture</span>
+                  <span class="font-mono dd-text">{{ selectedImageMetadata.architecture || 'Unknown' }}</span>
+                </div>
+                <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary">OS</span>
+                  <span class="font-mono dd-text">{{ selectedImageMetadata.os || 'Unknown' }}</span>
+                </div>
+                <div class="px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <div class="dd-text-secondary">Digest</div>
+                  <div class="font-mono dd-text break-all">
+                    {{ selectedImageMetadata.digest || 'Unknown' }}
+                  </div>
+                </div>
+                <div class="flex items-center justify-between gap-3 px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary">Created</span>
+                  <span class="font-mono dd-text">
+                    {{ selectedImageMetadata.created ? formatTimestamp(selectedImageMetadata.created) : 'Unknown' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Security -->
+            <div>
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="text-[10px] font-semibold uppercase tracking-wider dd-text-muted">Security</div>
+                <button class="px-2 py-1 dd-rounded text-[10px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                        :style="{ border: '1px solid var(--dd-border-strong)' }"
+                        :disabled="detailVulnerabilityLoading || detailSbomLoading"
+                        @click="loadDetailSecurityData">
+                  {{ detailVulnerabilityLoading || detailSbomLoading ? 'Refreshing...' : 'Refresh' }}
+                </button>
+              </div>
+
+              <div v-if="detailVulnerabilityLoading"
+                   class="px-2.5 py-1.5 dd-rounded text-[11px] dd-text-muted"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                Loading vulnerability data...
+              </div>
+              <div v-else-if="detailVulnerabilityError"
+                   class="px-2.5 py-1.5 dd-rounded text-[11px]"
+                   :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+                {{ detailVulnerabilityError }}
+              </div>
+              <div v-else class="space-y-1.5">
+                <div class="flex items-center gap-1.5 flex-wrap text-[10px]">
+                  <span class="badge text-[9px] font-bold"
+                        :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+                    critical {{ vulnerabilitySummary.critical }}
+                  </span>
+                  <span class="badge text-[9px] font-bold"
+                        :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+                    high {{ vulnerabilitySummary.high }}
+                  </span>
+                  <span class="badge text-[9px] font-bold"
+                        :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution)' }">
+                    medium {{ vulnerabilitySummary.medium }}
+                  </span>
+                  <span class="badge text-[9px] font-bold"
+                        :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
+                    low {{ vulnerabilitySummary.low }}
+                  </span>
+                  <span class="text-[10px] dd-text-muted ml-auto">{{ vulnerabilityTotal }} total</span>
+                </div>
+
+                <div v-if="vulnerabilityPreview.length > 0" class="space-y-1">
+                  <div v-for="vulnerability in vulnerabilityPreview" :key="vulnerability.id"
+                       class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-[10px]"
+                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                    <span class="badge text-[9px] font-bold uppercase"
+                          :style="{
+                            backgroundColor: severityStyle(normalizeSeverity(vulnerability.severity)).bg,
+                            color: severityStyle(normalizeSeverity(vulnerability.severity)).text,
+                          }">
+                      {{ normalizeSeverity(vulnerability.severity) }}
+                    </span>
+                    <span class="font-mono dd-text truncate">{{ vulnerability.id }}</span>
+                    <span class="dd-text-muted truncate ml-auto">{{ getVulnerabilityPackage(vulnerability) }}</span>
+                  </div>
+                </div>
+                <div v-else class="px-2.5 py-1.5 dd-rounded text-[11px] dd-text-muted italic"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  No vulnerabilities reported for this container.
+                </div>
+              </div>
+
+              <div class="mt-2 space-y-1.5">
+                <div class="flex items-center gap-2">
+                  <select v-model="selectedSbomFormat"
+                          class="px-2 py-1 dd-rounded text-[10px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                    <option value="spdx-json">spdx-json</option>
+                    <option value="cyclonedx-json">cyclonedx-json</option>
+                  </select>
+                  <button class="px-2 py-1 dd-rounded text-[10px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :disabled="detailSbomLoading"
+                          @click="loadDetailSbom">
+                    {{ detailSbomLoading ? 'Loading SBOM...' : 'Refresh SBOM' }}
+                  </button>
+                </div>
+                <div v-if="detailSbomError"
+                     class="px-2.5 py-1.5 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+                  {{ detailSbomError }}
+                </div>
+                <div v-else-if="detailSbomLoading"
+                     class="px-2.5 py-1.5 dd-rounded text-[11px] dd-text-muted"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  Loading SBOM document...
+                </div>
+                <div v-else-if="sbomDocument"
+                     class="px-2.5 py-1.5 dd-rounded text-[10px] space-y-0.5"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <div class="dd-text-muted">
+                    format:
+                    <span class="dd-text font-mono">{{ selectedSbomFormat }}</span>
+                  </div>
+                  <div v-if="typeof sbomComponentCount === 'number'" class="dd-text-muted">
+                    components:
+                    <span class="dd-text">{{ sbomComponentCount }}</span>
+                  </div>
+                  <div v-if="sbomGeneratedAt" class="dd-text-muted">
+                    generated:
+                    <span class="dd-text">{{ formatTimestamp(sbomGeneratedAt) }}</span>
+                  </div>
+                </div>
+                <div v-else
+                     class="px-2.5 py-1.5 dd-rounded text-[11px] dd-text-muted italic"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  SBOM document is not available yet.
+                </div>
               </div>
             </div>
           </div>
@@ -1637,8 +2682,8 @@ function confirmDelete(name: string) {
             <div class="dd-rounded overflow-hidden"
                  :style="{ backgroundColor: 'var(--dd-bg-code)' }">
               <div class="px-3 py-2 flex items-center justify-between gap-2"
-                   style="border-bottom: 1px solid rgba(255,255,255,0.08);">
-                <span class="text-[10px] font-semibold uppercase tracking-wider" style="color: #64748b;">
+                   style="border-bottom: 1px solid var(--dd-log-divider);">
+                <span class="text-[10px] font-semibold uppercase tracking-wider" style="color: var(--dd-text-muted);">
                   Container Logs
                 </span>
                 <div class="flex items-center gap-2">
@@ -1648,7 +2693,7 @@ function confirmDelete(name: string) {
                       {{ opt.label }}
                     </option>
                   </select>
-                  <span class="text-[9px] font-mono" style="color: #475569;">
+                  <span class="text-[9px] font-mono" style="color: var(--dd-text-muted);">
                     {{ getContainerLogs(selectedContainer.name).length }} lines
                   </span>
                 </div>
@@ -1657,14 +2702,14 @@ function confirmDelete(name: string) {
                    @scroll="containerHandleLogScroll">
                 <div v-for="(line, i) in getContainerLogs(selectedContainer.name)" :key="i"
                      class="px-3 py-0.5 font-mono text-[10px] leading-relaxed whitespace-pre"
-                     :style="{ borderBottom: i < getContainerLogs(selectedContainer.name).length - 1 ? '1px solid rgba(255,255,255,0.03)' : 'none' }">
-                  <span style="color: #64748b;">{{ line.substring(0, 24) }}</span>
-                  <span :style="{ color: line.includes('[error]') || line.includes('[crit]') || line.includes('[emerg]') ? '#ef4444' : line.includes('[warn]') ? '#f59e0b' : '#94a3b8' }">{{ line.substring(24) }}</span>
+                     :style="{ borderBottom: i < getContainerLogs(selectedContainer.name).length - 1 ? '1px solid var(--dd-log-line)' : 'none' }">
+                  <span style="color: var(--dd-text-muted);">{{ line.substring(0, 24) }}</span>
+                  <span :style="{ color: line.includes('[error]') || line.includes('[crit]') || line.includes('[emerg]') ? 'var(--dd-danger)' : line.includes('[warn]') ? 'var(--dd-warning)' : 'var(--dd-text-secondary)' }">{{ line.substring(24) }}</span>
                 </div>
               </div>
               <div v-if="containerScrollBlocked && containerAutoFetchInterval > 0"
                    class="flex items-center justify-between px-3 py-1.5 text-[9px]"
-                   style="border-top: 1px solid rgba(255,255,255,0.08);">
+                   style="border-top: 1px solid var(--dd-log-divider);">
                 <span class="font-semibold" style="color: var(--dd-warning);">Auto-scroll paused</span>
                 <button class="px-2 py-0.5 dd-rounded text-[9px] font-semibold"
                         :style="{ backgroundColor: 'var(--dd-warning)', color: 'var(--dd-bg)' }"
@@ -1739,9 +2784,15 @@ function confirmDelete(name: string) {
                 </button>
                 <button class="px-2.5 py-1.5 dd-rounded text-[10px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                         :style="{ border: '1px solid var(--dd-border-strong)' }"
+                        :disabled="actionInProgress === selectedContainer.name"
+                        @click="scanContainer(selectedContainer.name)">
+                  Scan Now
+                </button>
+                <button class="px-2.5 py-1.5 dd-rounded text-[10px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                        :style="{ border: '1px solid var(--dd-border-strong)' }"
                         :disabled="!selectedContainer.newTag || policyInProgress !== null"
                         @click="skipCurrentForSelected">
-                  Skip Current
+                  Skip This Update
                 </button>
                 <button class="px-2.5 py-1.5 dd-rounded text-[10px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                         :style="{ border: '1px solid var(--dd-border-strong)' }"
@@ -1754,6 +2805,17 @@ function confirmDelete(name: string) {
                         :disabled="policyInProgress !== null"
                         @click="snoozeSelected(7)">
                   Snooze 7d
+                </button>
+                <input
+                  v-model="snoozeDateInput"
+                  type="date"
+                  class="px-2 py-1.5 dd-rounded text-[10px] border outline-none dd-bg dd-text dd-border-strong"
+                  :disabled="policyInProgress !== null" />
+                <button class="px-2.5 py-1.5 dd-rounded text-[10px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                        :style="{ border: '1px solid var(--dd-border-strong)' }"
+                        :disabled="!snoozeDateInput || policyInProgress !== null"
+                        @click="snoozeSelectedUntilDate">
+                  Snooze Until
                 </button>
                 <button class="px-2.5 py-1.5 dd-rounded text-[10px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                         :style="{ border: '1px solid var(--dd-border-strong)' }"
@@ -1781,11 +2843,33 @@ function confirmDelete(name: string) {
                 </div>
                 <div v-if="selectedSkipTags.length > 0">
                   Skipped tags:
-                  <span class="dd-text font-mono">{{ selectedSkipTags.join(', ') }}</span>
+                  <div class="mt-1 flex flex-wrap gap-1">
+                    <span v-for="tag in selectedSkipTags" :key="`skip-tag-${tag}`"
+                          class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-[10px] font-mono"
+                          :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                      <span class="dd-text">{{ tag }}</span>
+                      <button class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                              :disabled="policyInProgress !== null"
+                              @click="removeSkipTagSelected(tag)">
+                        <AppIcon name="xmark" :size="9" />
+                      </button>
+                    </span>
+                  </div>
                 </div>
                 <div v-if="selectedSkipDigests.length > 0">
                   Skipped digests:
-                  <span class="dd-text font-mono">{{ selectedSkipDigests.join(', ') }}</span>
+                  <div class="mt-1 flex flex-wrap gap-1">
+                    <span v-for="digest in selectedSkipDigests" :key="`skip-digest-${digest}`"
+                          class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-[10px] font-mono"
+                          :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                      <span class="dd-text">{{ digest }}</span>
+                      <button class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                              :disabled="policyInProgress !== null"
+                              @click="removeSkipDigestSelected(digest)">
+                        <AppIcon name="xmark" :size="9" />
+                      </button>
+                    </span>
+                  </div>
                 </div>
                 <div v-if="!selectedSnoozeUntil && selectedSkipTags.length === 0 && selectedSkipDigests.length === 0"
                      class="italic">
@@ -1883,6 +2967,46 @@ function confirmDelete(name: string) {
               <p v-if="rollbackMessage" class="mt-2 text-[10px]" style="color: var(--dd-success);">{{ rollbackMessage }}</p>
               <p v-if="rollbackError" class="mt-2 text-[10px]" style="color: var(--dd-danger);">{{ rollbackError }}</p>
             </div>
+
+            <div>
+              <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Update Operation History</div>
+              <div v-if="updateOperationsLoading" class="text-[11px] dd-text-muted">Loading operation history...</div>
+              <div v-else-if="detailUpdateOperations.length > 0" class="space-y-1.5">
+                <div v-for="operation in detailUpdateOperations" :key="operation.id"
+                     class="space-y-1 px-2.5 py-2 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="font-mono text-[10px] dd-text-muted truncate">{{ operation.id }}</div>
+                    <span class="badge text-[9px] font-semibold uppercase"
+                          :style="getOperationStatusStyle(operation.status)">
+                      {{ formatOperationStatus(operation.status) }}
+                    </span>
+                  </div>
+                  <div class="dd-text-muted">Phase:
+                    <span class="dd-text font-mono">{{ formatOperationPhase(operation.phase) }}</span>
+                  </div>
+                  <div v-if="operation.fromVersion || operation.toVersion" class="dd-text-muted">
+                    Version:
+                    <span class="dd-text font-mono">{{ operation.fromVersion || '?' }}</span>
+                    <span class="dd-text-muted"> → </span>
+                    <span class="dd-text font-mono">{{ operation.toVersion || '?' }}</span>
+                  </div>
+                  <div v-if="operation.rollbackReason" class="dd-text-muted">
+                    Rollback reason:
+                    <span class="dd-text font-mono">{{ formatRollbackReason(operation.rollbackReason) }}</span>
+                  </div>
+                  <div v-if="operation.lastError" class="dd-text-muted">
+                    Last error:
+                    <span class="dd-text">{{ operation.lastError }}</span>
+                  </div>
+                  <div class="text-[10px] dd-text-muted">
+                    {{ formatTimestamp(operation.updatedAt || operation.createdAt) }}
+                  </div>
+                </div>
+              </div>
+              <p v-else class="text-[11px] dd-text-muted italic">No update operations recorded yet</p>
+              <p v-if="updateOperationsError" class="mt-2 text-[10px]" style="color: var(--dd-danger);">{{ updateOperationsError }}</p>
+            </div>
           </div>
 
         </div>
@@ -1928,7 +3052,7 @@ function confirmDelete(name: string) {
                   </span>
                   <span class="badge text-[9px] uppercase font-bold max-sm:hidden"
                         :style="{ backgroundColor: registryColorBg(selectedContainer.registry), color: registryColorText(selectedContainer.registry) }">
-                    {{ registryLabel(selectedContainer.registry) }}
+                    {{ registryLabel(selectedContainer.registry, selectedContainer.registryUrl, selectedContainer.registryName) }}
                   </span>
                   <span v-if="selectedContainer.newTag"
                         class="badge text-[9px] max-sm:hidden"
@@ -1959,6 +3083,12 @@ function confirmDelete(name: string) {
                     @click="confirmRestart(selectedContainer.name)">
               <AppIcon name="restart" :size="12" />
               Restart
+            </button>
+            <button class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text"
+                    :style="{ border: '1px solid var(--dd-border-strong)' }"
+                    @click="scanContainer(selectedContainer.name)">
+              <AppIcon name="security" :size="12" />
+              Scan
             </button>
             <button v-if="selectedContainer.newTag"
                     class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold transition-colors"
@@ -2070,6 +3200,55 @@ function confirmDelete(name: string) {
                 <AppIcon name="up-to-date" :size="11" style="color: var(--dd-success);" />
                 <span class="font-medium" style="color: var(--dd-success);">Up to date</span>
               </div>
+              <div
+                v-if="!selectedContainer.newTag && selectedContainer.noUpdateReason"
+                class="flex items-start gap-2 px-3 py-2 dd-rounded text-[12px]"
+                :style="{ backgroundColor: 'var(--dd-warning-muted)' }"
+              >
+                <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
+                <span style="color: var(--dd-warning);">{{ selectedContainer.noUpdateReason }}</span>
+              </div>
+              <a
+                v-if="selectedContainer.releaseLink"
+                :href="selectedContainer.releaseLink"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center text-[12px] underline hover:no-underline"
+                style="color: var(--dd-info);"
+              >
+                Release notes
+              </a>
+              <div class="pt-1 space-y-1.5">
+                <div class="text-[10px] font-semibold uppercase tracking-wider dd-text-muted">Tag Filters</div>
+                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary shrink-0">Include:</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.includeTags || 'Not set' }}</span>
+                </div>
+                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary shrink-0">Exclude:</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.excludeTags || 'Not set' }}</span>
+                </div>
+                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary shrink-0">Transform:</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.transformTags || 'Not set' }}</span>
+                </div>
+              </div>
+              <div class="pt-1 space-y-1.5">
+                <div class="text-[10px] font-semibold uppercase tracking-wider dd-text-muted">Trigger Filters</div>
+                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary shrink-0">Include:</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.triggerInclude || 'Not set' }}</span>
+                </div>
+                <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-[11px]"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <span class="dd-text-secondary shrink-0">Exclude:</span>
+                  <span class="font-mono dd-text break-all">{{ selectedContainer.triggerExclude || 'Not set' }}</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -2086,9 +3265,230 @@ function confirmDelete(name: string) {
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <span class="badge text-[9px] uppercase font-bold"
                       :style="{ backgroundColor: registryColorBg(selectedContainer.registry), color: registryColorText(selectedContainer.registry) }">
-                  {{ registryLabel(selectedContainer.registry) }}
+                  {{ registryLabel(selectedContainer.registry, selectedContainer.registryUrl, selectedContainer.registryName) }}
                 </span>
                 <span class="font-mono dd-text-secondary">{{ selectedContainer.image }}</span>
+              </div>
+              <div v-if="selectedContainer.registryError"
+                   class="mt-3 flex items-start gap-2 px-3 py-2 dd-rounded text-[12px]"
+                   :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
+                <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-danger);" />
+                <span style="color: var(--dd-danger);">{{ selectedContainer.registryError }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Runtime process card -->
+          <div class="dd-rounded overflow-hidden"
+               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+            <div class="px-4 py-3 flex items-center gap-2"
+                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+              <AppIcon name="terminal" :size="12" class="dd-text-muted" />
+              <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Runtime Process</span>
+            </div>
+            <div class="p-4 space-y-2">
+              <div class="flex items-center justify-between gap-3 px-3 py-2 dd-rounded text-[12px]"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                <span class="dd-text-secondary">Entrypoint</span>
+                <span class="badge text-[10px] font-bold uppercase"
+                      :style="runtimeOriginStyle(selectedRuntimeOrigins.entrypoint)">
+                  {{ runtimeOriginLabel(selectedRuntimeOrigins.entrypoint) }}
+                </span>
+              </div>
+              <div class="flex items-center justify-between gap-3 px-3 py-2 dd-rounded text-[12px]"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                <span class="dd-text-secondary">Cmd</span>
+                <span class="badge text-[10px] font-bold uppercase"
+                      :style="runtimeOriginStyle(selectedRuntimeOrigins.cmd)">
+                  {{ runtimeOriginLabel(selectedRuntimeOrigins.cmd) }}
+                </span>
+              </div>
+              <div v-if="selectedRuntimeDriftWarnings.length > 0" class="space-y-1.5">
+                <div v-for="warning in selectedRuntimeDriftWarnings" :key="warning"
+                     class="flex items-start gap-2 px-3 py-2 dd-rounded text-[12px]"
+                     :style="{ backgroundColor: 'var(--dd-warning-muted)' }">
+                  <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
+                  <span style="color: var(--dd-warning);">{{ warning }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Lifecycle hooks card -->
+          <div class="dd-rounded overflow-hidden"
+               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+            <div class="px-4 py-3 flex items-center gap-2"
+                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+              <AppIcon name="triggers" :size="12" class="dd-text-muted" />
+              <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Lifecycle Hooks</span>
+            </div>
+            <div class="p-4 space-y-2">
+              <div class="flex items-start justify-between gap-3 px-3 py-2 dd-rounded text-[12px]"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                <span class="dd-text-secondary shrink-0">Pre-update</span>
+                <span class="font-mono dd-text text-right break-all">{{ selectedLifecycleHooks.preUpdate || 'Not configured' }}</span>
+              </div>
+              <div class="flex items-start justify-between gap-3 px-3 py-2 dd-rounded text-[12px]"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                <span class="dd-text-secondary shrink-0">Post-update</span>
+                <span class="font-mono dd-text text-right break-all">{{ selectedLifecycleHooks.postUpdate || 'Not configured' }}</span>
+              </div>
+              <div class="flex items-center justify-between gap-3 px-3 py-2 dd-rounded text-[12px]"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                <span class="dd-text-secondary">Timeout</span>
+                <span class="font-mono dd-text">{{ selectedLifecycleHooks.timeoutLabel }}</span>
+              </div>
+              <div v-if="selectedLifecycleHooks.preAbortBehavior"
+                   class="px-3 py-2 dd-rounded text-[12px]"
+                   :style="{ backgroundColor: 'var(--dd-info-muted)' }">
+                <span style="color: var(--dd-info);">{{ selectedLifecycleHooks.preAbortBehavior }}</span>
+              </div>
+              <div class="px-3 py-2 dd-rounded text-[12px]"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                <div class="dd-text-secondary mb-1">Template Variables</div>
+                <div class="space-y-1">
+                  <div v-for="variable in lifecycleHookTemplateVariables" :key="variable.name"
+                       class="flex items-start justify-between gap-3">
+                    <span class="font-mono dd-text">{{ variable.name }}</span>
+                    <span class="dd-text-muted text-right">{{ variable.description }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Auto-rollback card -->
+          <div class="dd-rounded overflow-hidden"
+               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+            <div class="px-4 py-3 flex items-center gap-2"
+                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+              <AppIcon name="recent-updates" :size="12" class="dd-text-muted" />
+              <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Auto-Rollback</span>
+            </div>
+            <div class="p-4 space-y-2">
+              <div class="flex items-center justify-between gap-3 px-3 py-2 dd-rounded text-[12px]"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                <span class="dd-text-secondary">Status</span>
+                <span class="font-mono dd-text">{{ selectedAutoRollbackConfig.enabledLabel }}</span>
+              </div>
+              <div class="flex items-center justify-between gap-3 px-3 py-2 dd-rounded text-[12px]"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                <span class="dd-text-secondary">Window</span>
+                <span class="font-mono dd-text">{{ selectedAutoRollbackConfig.windowLabel }}</span>
+              </div>
+              <div class="flex items-center justify-between gap-3 px-3 py-2 dd-rounded text-[12px]"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                <span class="dd-text-secondary">Interval</span>
+                <span class="font-mono dd-text">{{ selectedAutoRollbackConfig.intervalLabel }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Security card -->
+          <div class="dd-rounded overflow-hidden"
+               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+            <div class="px-4 py-3 flex items-center gap-2"
+                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+              <AppIcon name="security" :size="12" class="dd-text-muted" />
+              <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Security</span>
+              <button class="ml-auto px-2 py-1 dd-rounded text-[10px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                      :style="{ border: '1px solid var(--dd-border-strong)' }"
+                      :disabled="detailVulnerabilityLoading || detailSbomLoading"
+                      @click="loadDetailSecurityData">
+                {{ detailVulnerabilityLoading || detailSbomLoading ? 'Refreshing...' : 'Refresh' }}
+              </button>
+            </div>
+            <div class="p-4 space-y-3">
+              <div v-if="detailVulnerabilityLoading"
+                   class="px-3 py-2 dd-rounded text-[12px] dd-text-muted"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                Loading vulnerability data...
+              </div>
+              <div v-else-if="detailVulnerabilityError"
+                   class="px-3 py-2 dd-rounded text-[12px]"
+                   :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+                {{ detailVulnerabilityError }}
+              </div>
+              <template v-else>
+                <div class="flex items-center gap-2 flex-wrap text-[11px]">
+                  <span class="badge text-[10px] font-bold"
+                        :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+                    critical {{ vulnerabilitySummary.critical }}
+                  </span>
+                  <span class="badge text-[10px] font-bold"
+                        :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+                    high {{ vulnerabilitySummary.high }}
+                  </span>
+                  <span class="badge text-[10px] font-bold"
+                        :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution)' }">
+                    medium {{ vulnerabilitySummary.medium }}
+                  </span>
+                  <span class="badge text-[10px] font-bold"
+                        :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
+                    low {{ vulnerabilitySummary.low }}
+                  </span>
+                  <span class="dd-text-muted ml-auto">{{ vulnerabilityTotal }} total</span>
+                </div>
+                <div v-if="vulnerabilityPreview.length > 0" class="space-y-1.5">
+                  <div v-for="vulnerability in vulnerabilityPreview" :key="vulnerability.id"
+                       class="flex items-center gap-2 px-3 py-2 dd-rounded text-[11px]"
+                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                    <span class="badge text-[9px] font-bold uppercase"
+                          :style="{
+                            backgroundColor: severityStyle(normalizeSeverity(vulnerability.severity)).bg,
+                            color: severityStyle(normalizeSeverity(vulnerability.severity)).text,
+                          }">
+                      {{ normalizeSeverity(vulnerability.severity) }}
+                    </span>
+                    <span class="font-mono dd-text truncate">{{ vulnerability.id }}</span>
+                    <span class="dd-text-muted truncate ml-auto">{{ getVulnerabilityPackage(vulnerability) }}</span>
+                  </div>
+                </div>
+                <p v-else class="text-[12px] dd-text-muted italic">No vulnerabilities reported for this container.</p>
+              </template>
+
+              <div class="pt-1 space-y-1.5"
+                   :style="{ borderTop: '1px solid var(--dd-border-strong)' }">
+                <div class="flex items-center gap-2">
+                  <select v-model="selectedSbomFormat"
+                          class="px-2 py-1 dd-rounded text-[10px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                    <option value="spdx-json">spdx-json</option>
+                    <option value="cyclonedx-json">cyclonedx-json</option>
+                  </select>
+                  <button class="px-2 py-1 dd-rounded text-[10px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :disabled="detailSbomLoading"
+                          @click="loadDetailSbom">
+                    {{ detailSbomLoading ? 'Loading SBOM...' : 'Refresh SBOM' }}
+                  </button>
+                </div>
+                <div v-if="detailSbomError"
+                     class="px-3 py-2 dd-rounded text-[12px]"
+                     :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+                  {{ detailSbomError }}
+                </div>
+                <div v-else-if="detailSbomLoading"
+                     class="px-3 py-2 dd-rounded text-[12px] dd-text-muted"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  Loading SBOM document...
+                </div>
+                <div v-else-if="sbomDocument"
+                     class="px-3 py-2 dd-rounded text-[11px] space-y-1"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <div class="dd-text-muted">
+                    format:
+                    <span class="dd-text font-mono">{{ selectedSbomFormat }}</span>
+                  </div>
+                  <div v-if="typeof sbomComponentCount === 'number'" class="dd-text-muted">
+                    components:
+                    <span class="dd-text">{{ sbomComponentCount }}</span>
+                  </div>
+                  <div v-if="sbomGeneratedAt" class="dd-text-muted">
+                    generated:
+                    <span class="dd-text">{{ formatTimestamp(sbomGeneratedAt) }}</span>
+                  </div>
+                </div>
+                <p v-else class="text-[12px] dd-text-muted italic">SBOM document is not available yet.</p>
               </div>
             </div>
           </div>
@@ -2099,13 +3499,13 @@ function confirmDelete(name: string) {
           <div class="dd-rounded overflow-hidden"
                :style="{ backgroundColor: 'var(--dd-bg-code)' }">
             <div class="px-4 py-3 flex items-center justify-between"
-                 style="border-bottom: 1px solid rgba(255,255,255,0.08);">
+                 style="border-bottom: 1px solid var(--dd-log-divider);">
               <div class="flex items-center gap-2">
-                <AppIcon name="terminal" :size="11" :style="{ color: '#64748b' }" />
-                <span class="text-[11px] font-semibold uppercase tracking-wider" style="color: #64748b;">
+                <AppIcon name="terminal" :size="11" :style="{ color: 'var(--dd-text-muted)' }" />
+                <span class="text-[11px] font-semibold uppercase tracking-wider" style="color: var(--dd-text-muted);">
                   Container Logs
                 </span>
-                <span class="text-[11px] font-mono" style="color: #0096C7;">{{ selectedContainer.name }}</span>
+                <span class="text-[11px] font-mono" style="color: var(--dd-primary);">{{ selectedContainer.name }}</span>
               </div>
               <div class="flex items-center gap-2">
                 <select v-model.number="containerAutoFetchInterval"
@@ -2114,7 +3514,7 @@ function confirmDelete(name: string) {
                     {{ opt.label }}
                   </option>
                 </select>
-                <span class="text-[10px] font-mono" style="color: #475569;">
+                <span class="text-[10px] font-mono" style="color: var(--dd-text-muted);">
                   {{ getContainerLogs(selectedContainer.name).length }} lines
                 </span>
               </div>
@@ -2123,14 +3523,14 @@ function confirmDelete(name: string) {
                  @scroll="containerHandleLogScroll">
               <div v-for="(line, i) in getContainerLogs(selectedContainer.name)" :key="i"
                    class="px-3 py-0.5 font-mono text-[11px] leading-relaxed whitespace-pre hover:bg-white/[0.02]"
-                   :style="{ borderBottom: i < getContainerLogs(selectedContainer.name).length - 1 ? '1px solid rgba(255,255,255,0.02)' : 'none' }">
-                <span style="color: #64748b;">{{ line.substring(0, 24) }}</span>
-                <span :style="{ color: line.includes('[error]') || line.includes('[crit]') || line.includes('[emerg]') ? '#ef4444' : line.includes('[warn]') || line.includes('[hint]') ? '#f59e0b' : '#94a3b8' }">{{ line.substring(24) }}</span>
+                   :style="{ borderBottom: i < getContainerLogs(selectedContainer.name).length - 1 ? '1px solid var(--dd-log-line)' : 'none' }">
+                <span style="color: var(--dd-text-muted);">{{ line.substring(0, 24) }}</span>
+                <span :style="{ color: line.includes('[error]') || line.includes('[crit]') || line.includes('[emerg]') ? 'var(--dd-danger)' : line.includes('[warn]') || line.includes('[hint]') ? 'var(--dd-warning)' : 'var(--dd-text-secondary)' }">{{ line.substring(24) }}</span>
               </div>
             </div>
             <div v-if="containerScrollBlocked && containerAutoFetchInterval > 0"
                  class="flex items-center justify-between px-3 py-1.5 text-[10px]"
-                 style="border-top: 1px solid rgba(255,255,255,0.08);">
+                 style="border-top: 1px solid var(--dd-log-divider);">
               <span class="font-semibold" style="color: var(--dd-warning);">Auto-scroll paused</span>
               <button class="px-2 py-0.5 dd-rounded text-[10px] font-semibold"
                       :style="{ backgroundColor: 'var(--dd-warning)', color: 'var(--dd-bg)' }"
@@ -2238,9 +3638,15 @@ function confirmDelete(name: string) {
                   </button>
                   <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                           :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :disabled="actionInProgress === selectedContainer.name"
+                          @click="scanContainer(selectedContainer.name)">
+                    Scan Now
+                  </button>
+                  <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                          :style="{ border: '1px solid var(--dd-border-strong)' }"
                           :disabled="!selectedContainer.newTag || policyInProgress !== null"
                           @click="skipCurrentForSelected">
-                    Skip Current
+                    Skip This Update
                   </button>
                   <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                           :style="{ border: '1px solid var(--dd-border-strong)' }"
@@ -2253,6 +3659,17 @@ function confirmDelete(name: string) {
                           :disabled="policyInProgress !== null"
                           @click="snoozeSelected(7)">
                     Snooze 7d
+                  </button>
+                  <input
+                    v-model="snoozeDateInput"
+                    type="date"
+                    class="px-2.5 py-1.5 dd-rounded text-[11px] border outline-none dd-bg dd-text dd-border-strong"
+                    :disabled="policyInProgress !== null" />
+                  <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :disabled="!snoozeDateInput || policyInProgress !== null"
+                          @click="snoozeSelectedUntilDate">
+                    Snooze Until
                   </button>
                   <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                           :style="{ border: '1px solid var(--dd-border-strong)' }"
@@ -2280,11 +3697,33 @@ function confirmDelete(name: string) {
                   </div>
                   <div v-if="selectedSkipTags.length > 0">
                     Skipped tags:
-                    <span class="dd-text font-mono">{{ selectedSkipTags.join(', ') }}</span>
+                    <div class="mt-1 flex flex-wrap gap-1.5">
+                      <span v-for="tag in selectedSkipTags" :key="`skip-tag-full-${tag}`"
+                            class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-[11px] font-mono"
+                            :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                        <span class="dd-text">{{ tag }}</span>
+                        <button class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                                :disabled="policyInProgress !== null"
+                                @click="removeSkipTagSelected(tag)">
+                          <AppIcon name="xmark" :size="9" />
+                        </button>
+                      </span>
+                    </div>
                   </div>
                   <div v-if="selectedSkipDigests.length > 0">
                     Skipped digests:
-                    <span class="dd-text font-mono">{{ selectedSkipDigests.join(', ') }}</span>
+                    <div class="mt-1 flex flex-wrap gap-1.5">
+                      <span v-for="digest in selectedSkipDigests" :key="`skip-digest-full-${digest}`"
+                            class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-[11px] font-mono"
+                            :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                        <span class="dd-text">{{ digest }}</span>
+                        <button class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                                :disabled="policyInProgress !== null"
+                                @click="removeSkipDigestSelected(digest)">
+                          <AppIcon name="xmark" :size="9" />
+                        </button>
+                      </span>
+                    </div>
                   </div>
                   <div v-if="!selectedSnoozeUntil && selectedSkipTags.length === 0 && selectedSkipDigests.length === 0"
                        class="italic">
@@ -2397,6 +3836,53 @@ function confirmDelete(name: string) {
                 <p v-else class="text-[12px] dd-text-muted italic">No backups available yet</p>
                 <p v-if="rollbackMessage" class="text-[11px]" style="color: var(--dd-success);">{{ rollbackMessage }}</p>
                 <p v-if="rollbackError" class="text-[11px]" style="color: var(--dd-danger);">{{ rollbackError }}</p>
+              </div>
+            </div>
+
+            <div class="dd-rounded overflow-hidden"
+                 :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+              <div class="px-4 py-3 flex items-center gap-2"
+                   :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+                <AppIcon name="audit" :size="12" class="dd-text-muted" />
+                <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Update Operation History</span>
+              </div>
+              <div class="p-4 space-y-2">
+                <div v-if="updateOperationsLoading" class="text-[12px] dd-text-muted">Loading operation history...</div>
+                <div v-else-if="detailUpdateOperations.length > 0" class="space-y-2">
+                  <div v-for="operation in detailUpdateOperations" :key="`full-${operation.id}`"
+                       class="space-y-1.5 px-3 py-2 dd-rounded"
+                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                    <div class="flex items-center justify-between gap-3">
+                      <div class="text-[11px] font-mono dd-text-muted truncate">{{ operation.id }}</div>
+                      <span class="badge text-[10px] font-semibold uppercase"
+                            :style="getOperationStatusStyle(operation.status)">
+                        {{ formatOperationStatus(operation.status) }}
+                      </span>
+                    </div>
+                    <div class="text-[12px] dd-text-muted">Phase:
+                      <span class="dd-text font-mono">{{ formatOperationPhase(operation.phase) }}</span>
+                    </div>
+                    <div v-if="operation.fromVersion || operation.toVersion" class="text-[12px] dd-text-muted">
+                      Version:
+                      <span class="dd-text font-mono">{{ operation.fromVersion || '?' }}</span>
+                      <span class="dd-text-muted"> → </span>
+                      <span class="dd-text font-mono">{{ operation.toVersion || '?' }}</span>
+                    </div>
+                    <div v-if="operation.rollbackReason" class="text-[12px] dd-text-muted">
+                      Rollback reason:
+                      <span class="dd-text font-mono">{{ formatRollbackReason(operation.rollbackReason) }}</span>
+                    </div>
+                    <div v-if="operation.lastError" class="text-[12px] dd-text-muted">
+                      Last error:
+                      <span class="dd-text">{{ operation.lastError }}</span>
+                    </div>
+                    <div class="text-[11px] dd-text-muted">
+                      {{ formatTimestamp(operation.updatedAt || operation.createdAt) }}
+                    </div>
+                  </div>
+                </div>
+                <p v-else class="text-[12px] dd-text-muted italic">No update operations recorded yet</p>
+                <p v-if="updateOperationsError" class="text-[11px]" style="color: var(--dd-danger);">{{ updateOperationsError }}</p>
               </div>
             </div>
           </div>

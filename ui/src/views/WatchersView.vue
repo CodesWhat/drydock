@@ -2,23 +2,24 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { getAllContainers } from '../services/container';
-import { getAllWatchers } from '../services/watcher';
+import { getAllWatchers, getWatcher } from '../services/watcher';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import type { ApiComponent } from '../types/api';
 
 const { isMobile } = useBreakpoints();
 const route = useRoute();
 const watchersViewMode = ref<'table' | 'cards' | 'list'>('table');
-const selectedWatcher = ref<any | null>(null);
+const selectedWatcher = ref<Record<string, unknown> | null>(null);
 const detailOpen = ref(false);
+const detailLoading = ref(false);
+const detailError = ref('');
+let detailRequestId = 0;
 
-function openDetail(w: any) {
-  selectedWatcher.value = w;
-  detailOpen.value = true;
-}
-
-const watchersData = ref<any[]>([]);
+const watchersData = ref<Record<string, unknown>[]>([]);
 const loading = ref(true);
 const error = ref('');
+const containerCounts = ref<Record<string, number>>({});
+const totalContainers = ref(0);
 
 function watcherStatusColor(status: string) {
   if (status === 'watching') return 'var(--dd-success)';
@@ -55,26 +56,74 @@ const tableColumns = [
   { key: 'lastRun', label: 'Last Run', width: '15%', align: 'text-right', sortable: false },
 ];
 
+function mapWatcher(watcher: ApiComponent, status = 'watching') {
+  return {
+    id: watcher.id,
+    name: watcher.name,
+    type: watcher.type,
+    status,
+    containers: containerCounts.value[watcher.id] ?? totalContainers.value,
+    cron: watcher.configuration?.cron ?? '',
+    lastRun: '\u2014',
+    config: watcher.configuration ?? {},
+    agent: watcher.agent,
+  };
+}
+
+function resetDetailState() {
+  detailOpen.value = false;
+  detailLoading.value = false;
+  detailError.value = '';
+  selectedWatcher.value = null;
+  detailRequestId += 1;
+}
+
+function handleDetailOpenChange(value: boolean) {
+  if (!value) {
+    resetDetailState();
+  } else {
+    detailOpen.value = true;
+  }
+}
+
+async function openDetail(watcher: Record<string, unknown>) {
+  selectedWatcher.value = watcher;
+  detailOpen.value = true;
+  detailLoading.value = true;
+  detailError.value = '';
+  const requestId = ++detailRequestId;
+
+  try {
+    const detail = await getWatcher({
+      type: String(watcher.type),
+      name: String(watcher.name),
+      agent: watcher.agent as string | undefined,
+    });
+    if (requestId !== detailRequestId || !detailOpen.value) return;
+    selectedWatcher.value = mapWatcher(detail, String(watcher.status));
+  } catch {
+    if (requestId !== detailRequestId) return;
+    detailError.value = 'Unable to load latest watcher details';
+  } finally {
+    if (requestId === detailRequestId) {
+      detailLoading.value = false;
+    }
+  }
+}
+
 onMounted(async () => {
   try {
     const [watcherData, containerData] = await Promise.all([getAllWatchers(), getAllContainers()]);
 
-    const containerCounts: Record<string, number> = {};
+    const counts: Record<string, number> = {};
     for (const c of containerData) {
       const key = c.watcher || 'unknown';
-      containerCounts[key] = (containerCounts[key] || 0) + 1;
+      counts[key] = (counts[key] || 0) + 1;
     }
+    containerCounts.value = counts;
+    totalContainers.value = containerData.length;
 
-    watchersData.value = watcherData.map((w: any) => ({
-      id: w.id,
-      name: w.name,
-      type: w.type,
-      status: 'watching',
-      containers: containerCounts[w.id] ?? containerData.length,
-      cron: w.configuration?.cron ?? '',
-      lastRun: '\u2014',
-      config: w.configuration ?? {},
-    }));
+    watchersData.value = watcherData.map((watcher: ApiComponent) => mapWatcher(watcher));
   } catch {
     error.value = 'Failed to load watchers';
   } finally {
@@ -264,7 +313,7 @@ onMounted(async () => {
         :is-mobile="isMobile"
         :show-size-controls="false"
         :show-full-page="false"
-        @update:open="detailOpen = $event; if (!$event) selectedWatcher = null"
+        @update:open="handleDetailOpenChange"
       >
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
@@ -285,6 +334,13 @@ onMounted(async () => {
 
         <template v-if="selectedWatcher" #default>
           <div class="p-4 space-y-5">
+            <div v-if="detailLoading" class="text-[11px] dd-text-muted">Refreshing watcher details...</div>
+            <div v-if="detailError"
+                 class="px-3 py-2 text-[11px] dd-rounded"
+                 :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+              {{ detailError }}
+            </div>
+
             <div>
               <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Containers</div>
               <div class="text-lg font-bold dd-text">{{ selectedWatcher.containers }}</div>

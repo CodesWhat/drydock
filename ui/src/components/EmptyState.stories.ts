@@ -33,6 +33,6 @@ export const WithClearButton: Story = {
   play: async ({ canvasElement, args }) => {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Clear all filters' }));
-    await expect((args as Record<string, any>).onClear).toHaveBeenCalled();
+    await expect((args as Record<string, unknown>).onClear).toHaveBeenCalled();
   },
 };

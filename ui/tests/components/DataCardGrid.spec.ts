@@ -76,6 +76,45 @@ describe('DataCardGrid', () => {
     });
   });
 
+  describe('accessibility', () => {
+    it('marks each card as a button with a keyboard tab stop', () => {
+      const w = factory();
+      const card = w.findAll('.container-card')[0];
+      expect(card.attributes('role')).toBe('button');
+      expect(card.attributes('tabindex')).toBe('0');
+    });
+
+    it('sets a per-item aria-label on each card', () => {
+      const w = factory();
+      const labels = w.findAll('.container-card').map((card) => card.attributes('aria-label'));
+      expect(labels).toEqual([
+        'Select Alpha',
+        'Select Beta',
+        'Select Gamma',
+      ]);
+    });
+  });
+
+  describe('keyboard navigation', () => {
+    it('emits item-click on Enter keydown', async () => {
+      const w = factory();
+      await w.findAll('.container-card')[0].trigger('keydown', { key: 'Enter' });
+      expect(w.emitted('item-click')?.[0]).toEqual([items[0]]);
+    });
+
+    it('emits item-click on Space keydown', async () => {
+      const w = factory();
+      await w.findAll('.container-card')[1].trigger('keydown', { key: ' ' });
+      expect(w.emitted('item-click')?.[0]).toEqual([items[1]]);
+    });
+
+    it('does not emit item-click on other keys', async () => {
+      const w = factory();
+      await w.findAll('.container-card')[0].trigger('keydown', { key: 'Tab' });
+      expect(w.emitted('item-click')).toBeUndefined();
+    });
+  });
+
   describe('card slot', () => {
     it('passes item to card slot', () => {
       const w = factory(

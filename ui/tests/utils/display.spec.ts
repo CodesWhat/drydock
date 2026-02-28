@@ -69,6 +69,12 @@ describe('display utilities', () => {
       expect(registryLabel('custom')).toBe('Custom');
       expect(registryLabel('whatever')).toBe('Custom');
     });
+
+    it('uses registry host label for custom registry URLs', () => {
+      expect(
+        (registryLabel as any)('custom', 'https://myacr.azurecr.io/v2/library/nginx', 'acr'),
+      ).toBe('myacr.azurecr.io');
+    });
   });
 
   describe('registryColorBg', () => {

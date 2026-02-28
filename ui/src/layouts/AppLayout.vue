@@ -421,7 +421,7 @@ function buildSearchIndexResults(
   const results: SearchResultItem[] = [];
 
   const agents = Array.isArray(resources.agents) ? resources.agents : [];
-  agents.forEach((agent: any) => {
+  agents.forEach((agent: Record<string, unknown>) => {
     const name = normalizeSearchValue(agent.name || agent.id || 'agent');
     const host = normalizeSearchValue(agent.host);
     const port = normalizeSearchValue(agent.port);
@@ -440,7 +440,7 @@ function buildSearchIndexResults(
   });
 
   const triggers = Array.isArray(resources.triggers) ? resources.triggers : [];
-  triggers.forEach((trigger: any) => {
+  triggers.forEach((trigger: Record<string, unknown>) => {
     const name = normalizeSearchValue(trigger.name || trigger.id || 'trigger');
     const type = normalizeSearchValue(trigger.type || 'unknown');
     const id = normalizeSearchValue(trigger.id || `${type}.${name}`);
@@ -457,7 +457,7 @@ function buildSearchIndexResults(
   });
 
   const watchers = Array.isArray(resources.watchers) ? resources.watchers : [];
-  watchers.forEach((watcher: any) => {
+  watchers.forEach((watcher: Record<string, unknown>) => {
     const name = normalizeSearchValue(watcher.name || watcher.id || 'watcher');
     const type = normalizeSearchValue(watcher.type || 'unknown');
     const id = normalizeSearchValue(watcher.id || `${type}.${name}`);
@@ -474,7 +474,7 @@ function buildSearchIndexResults(
   });
 
   const registries = Array.isArray(resources.registries) ? resources.registries : [];
-  registries.forEach((registry: any) => {
+  registries.forEach((registry: Record<string, unknown>) => {
     const name = normalizeSearchValue(registry.name || registry.id || 'registry');
     const type = normalizeSearchValue(registry.type || 'unknown');
     const id = normalizeSearchValue(registry.id || `${type}.${name}`);
@@ -491,7 +491,7 @@ function buildSearchIndexResults(
   });
 
   const authentications = Array.isArray(resources.authentications) ? resources.authentications : [];
-  authentications.forEach((authentication: any) => {
+  authentications.forEach((authentication: Record<string, unknown>) => {
     const name = normalizeSearchValue(authentication.name || authentication.id || 'authentication');
     const type = normalizeSearchValue(authentication.type || 'unknown');
     const id = normalizeSearchValue(authentication.id || `${type}.${name}`);
@@ -510,7 +510,7 @@ function buildSearchIndexResults(
   const notificationRules = Array.isArray(resources.notificationRules)
     ? resources.notificationRules
     : [];
-  notificationRules.forEach((rule: any) => {
+  notificationRules.forEach((rule: Record<string, unknown>) => {
     const name = normalizeSearchValue(rule.name || rule.id || 'notification');
     const id = normalizeSearchValue(rule.id || name);
     results.push({
@@ -866,7 +866,7 @@ async function refreshSidebarData() {
       return;
     }
     containerCount.value = String(containers.length);
-    searchContainers.value = containers.map((container: Record<string, any>) => {
+    searchContainers.value = containers.map((container: Record<string, unknown>) => {
       const displayName = String(container.displayName || container.name || container.id || 'container');
       const displayIcon = String(container.displayIcon || '');
       const imageName = String(container.image?.name || '');
@@ -882,7 +882,7 @@ async function refreshSidebarData() {
         host: String(container.agent || container.watcher || 'local'),
       };
     });
-    const issues = containers.filter((c: Record<string, any>) => {
+    const issues = containers.filter((c: Record<string, unknown>) => {
       const summary = c.security?.scan?.summary;
       return Number(summary?.critical || 0) > 0 || Number(summary?.high || 0) > 0;
     }).length;
@@ -898,7 +898,7 @@ function emitUiSseEvent(name: string) {
   globalThis.dispatchEvent(new CustomEvent(name));
 }
 
-function handleSseEvent(event: string, payload?: any) {
+function handleSseEvent(event: string, payload?: unknown) {
   if (event === 'sse:connected') {
     connectionLost.value = false;
     selfUpdateInProgress.value = false;
@@ -910,7 +910,7 @@ function handleSseEvent(event: string, payload?: any) {
     selfUpdateInProgress.value = true;
     connectionLost.value = true;
     selfUpdateOperationId.value =
-      payload && typeof payload === 'object' ? String(payload.opId || '') || undefined : undefined;
+      payload && typeof payload === 'object' ? String((payload as Record<string, unknown>).opId || '') || undefined : undefined;
     emitUiSseEvent('dd:sse-self-update');
     return;
   }
@@ -921,6 +921,15 @@ function handleSseEvent(event: string, payload?: any) {
   if (event === 'scan-completed') {
     emitUiSseEvent('dd:sse-scan-completed');
     refreshSidebarData();
+    return;
+  }
+  if (event === 'container-changed') {
+    emitUiSseEvent('dd:sse-container-changed');
+    void refreshSidebarData();
+    return;
+  }
+  if (event === 'agent-status-changed') {
+    emitUiSseEvent('dd:sse-agent-status-changed');
     return;
   }
   if (event === 'connection-lost') {
@@ -992,6 +1001,7 @@ onUnmounted(() => {
                 style="letter-spacing:0.15em;">DRYDOCK</span>
         </div>
         <button v-if="isMobile"
+                aria-label="Close menu"
                 class="p-1 dd-text-muted hover:dd-text transition-colors"
                 @click="isMobileMenuOpen = false">
           <AppIcon name="close" :size="14" />
@@ -1040,7 +1050,7 @@ onUnmounted(() => {
                  :style="{
                    backgroundColor: 'var(--dd-bg-card)',
                    color: 'var(--dd-text)',
-                   boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                   boxShadow: 'var(--dd-shadow-sm)',
                  }">
               {{ item.label }}
             </div>
@@ -1050,7 +1060,8 @@ onUnmounted(() => {
 
       <!-- Sidebar search -->
       <div class="shrink-0 px-3 pt-3 pb-3">
-        <button class="w-full flex items-center gap-2 dd-rounded px-3 py-2 text-xs transition-colors dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
+        <button aria-label="Search"
+                class="w-full flex items-center gap-2 dd-rounded px-3 py-2 text-xs transition-colors dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
                 :style="{ border: '1px solid var(--dd-border)' }"
                 @click="showSearch = true; isMobileMenuOpen = false">
           <AppIcon name="search" :size="12" />
@@ -1065,12 +1076,14 @@ onUnmounted(() => {
       <div class="shrink-0 px-3 py-2.5 flex items-center gap-1"
            :class="isCollapsed ? 'flex-col' : 'flex-row justify-between'"
            :style="{ borderTop: '1px solid var(--dd-border)' }">
-        <button class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+        <button aria-label="About Drydock"
+                class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                 title="About Drydock"
                 @click="showAbout = true">
           <AppIcon name="info" :size="14" />
         </button>
         <button v-if="!isMobile"
+                :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
                 class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                 :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
                 @click="sidebarCollapsed = !sidebarCollapsed">
@@ -1092,6 +1105,8 @@ onUnmounted(() => {
         <!-- Left: hamburger + breadcrumb -->
         <div class="flex items-center gap-3">
           <button v-if="isMobile"
+                  aria-label="Toggle menu"
+                  :aria-expanded="String(isMobileMenuOpen)"
                   class="flex flex-col items-center justify-center w-8 h-8 gap-1 rounded-md transition-colors hover:dd-bg-elevated"
                   @click="isMobileMenuOpen = !isMobileMenuOpen">
             <span class="hamburger-line block w-4 h-[2px] rounded-full" style="background: var(--dd-text-muted)" />
@@ -1115,14 +1130,17 @@ onUnmounted(() => {
         <div class="flex items-center gap-2 justify-end">
           <ThemeToggle />
 
-          <button class="relative flex items-center justify-center w-8 h-8 dd-rounded transition-colors dd-text-secondary hover:dd-bg-elevated hover:dd-text">
+          <button aria-label="Notifications"
+                  class="relative flex items-center justify-center w-8 h-8 dd-rounded transition-colors dd-text-secondary hover:dd-bg-elevated hover:dd-text">
             <AppIcon name="notifications" :size="18" />
             <span v-if="securityIssueCount" class="badge-pulse absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white"
                   style="background:var(--dd-danger);">{{ securityIssueCount }}</span>
           </button>
 
           <div class="relative user-menu-wrapper">
-            <button class="flex items-center gap-2 dd-rounded px-1.5 py-1 transition-colors hover:dd-bg-elevated"
+            <button aria-label="User menu"
+                    :aria-expanded="String(showUserMenu)"
+                    class="flex items-center gap-2 dd-rounded px-1.5 py-1 transition-colors hover:dd-bg-elevated"
                     @click="toggleUserMenu">
               <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white"
                    style="background: linear-gradient(135deg, var(--dd-primary), var(--dd-success));">
@@ -1133,7 +1151,7 @@ onUnmounted(() => {
             <Transition name="menu-fade">
               <div v-if="showUserMenu"
                    class="absolute right-0 top-full mt-1 min-w-[160px] py-1 dd-rounded-lg shadow-lg z-50"
-                   :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: '0 8px 24px rgba(0,0,0,0.25)' }">
+                   :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-lg)' }">
                 <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider dd-text-muted"
                      :style="{ borderBottom: '1px solid var(--dd-border)' }">
                   {{ currentUser?.username || 'User' }}
@@ -1170,11 +1188,14 @@ onUnmounted(() => {
            @pointerdown.self="showAbout = false">
         <div class="flex items-start justify-center pt-[20vh] min-h-full px-4"
              @pointerdown.self="showAbout = false">
-          <div class="relative w-full max-w-[340px] dd-rounded-lg overflow-hidden shadow-2xl"
+          <div role="dialog"
+               aria-modal="true"
+               aria-labelledby="about-dialog-title"
+               class="relative w-full max-w-[340px] dd-rounded-lg overflow-hidden shadow-2xl"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <div class="flex flex-col items-center pt-6 pb-4 px-6">
               <img :src="whaleLogo" alt="Drydock" class="h-12 w-auto mb-3" :style="{ filter: 'invert(1)' }" />
-              <h2 class="text-base font-bold dd-text">Drydock</h2>
+              <h2 id="about-dialog-title" class="text-base font-bold dd-text">Drydock</h2>
               <span class="text-[11px] dd-text-muted mt-0.5">Docker Container Update Manager</span>
               <span class="badge text-[10px] font-semibold mt-2 dd-bg-elevated dd-text-secondary">v1.4.0</span>
             </div>
@@ -1210,13 +1231,17 @@ onUnmounted(() => {
            @pointerdown.self="showSearch = false">
         <div class="flex items-start justify-center pt-[15vh] min-h-full px-4"
              @pointerdown.self="showSearch = false">
-          <div class="relative w-full max-w-[560px] dd-rounded-lg overflow-hidden shadow-2xl"
+          <div role="dialog"
+               aria-modal="true"
+               aria-label="Search"
+               class="relative w-full max-w-[560px] dd-rounded-lg overflow-hidden shadow-2xl"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <div class="flex items-center gap-3 px-4 py-3"
                  :style="{ borderBottom: '1px solid var(--dd-border)' }">
               <AppIcon name="search" :size="14" class="dd-text-muted" />
               <input ref="searchInput" v-model="searchQuery"
                      type="text"
+                     aria-label="Search"
                      placeholder="Jump to pages, containers, agents, triggers..."
                      class="flex-1 bg-transparent text-sm dd-text font-mono outline-none placeholder:dd-text-muted"
                      @keydown.escape="showSearch = false"
@@ -1233,6 +1258,7 @@ onUnmounted(() => {
                 v-for="scopeOption in SEARCH_SCOPE_OPTIONS"
                 :key="scopeOption.id"
                 class="inline-flex items-center gap-1 px-2 py-1 text-[10px] uppercase tracking-wide font-semibold border dd-rounded transition-colors"
+                :aria-pressed="String(scopeOption.id === effectiveSearchScope)"
                 :style="searchScopeChipStyles(scopeOption.id, scopeOption.id === effectiveSearchScope)"
                 @click="applySearchScope(scopeOption.id)">
                 {{ scopeOption.label }}

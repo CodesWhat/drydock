@@ -90,6 +90,30 @@ describe('DetailPanel', () => {
     });
   });
 
+  describe('accessibility', () => {
+    it('renders desktop panel with dialog role', () => {
+      const w = factory({ open: true, isMobile: false });
+      const panel = w.find('aside');
+      expect(panel.attributes('role')).toBe('dialog');
+      expect(panel.attributes('aria-modal')).toBeUndefined();
+      expect(panel.attributes('aria-label')).toBeTruthy();
+    });
+
+    it('renders mobile panel with aria-modal=true', () => {
+      const w = factory({ open: true, isMobile: true });
+      const panel = w.find('aside');
+      expect(panel.attributes('role')).toBe('dialog');
+      expect(panel.attributes('aria-modal')).toBe('true');
+    });
+
+    it('adds aria-label to the close button', () => {
+      const w = factory();
+      const closeBtn = w.findAll('button')
+        .find((b) => b.classes().includes('w-7') && b.classes().includes('h-7'));
+      expect(closeBtn?.attributes('aria-label')).toBe('Close details panel');
+    });
+  });
+
   describe('size controls', () => {
     it('renders S/M/L buttons when showSizeControls is true (default)', () => {
       const w = factory();

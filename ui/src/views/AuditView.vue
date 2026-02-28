@@ -21,6 +21,7 @@ const actionTypes = [
   'update-available',
   'update-applied',
   'update-failed',
+  'container-update',
   'security-alert',
   'agent-disconnect',
   'container-added',
@@ -65,6 +66,18 @@ function parseActionQuery(value: unknown): string {
   return raw && actionTypes.includes(raw) ? raw : '';
 }
 
+function parseContainerQuery(value: unknown): string {
+  const raw = firstQueryValue(value);
+  return raw?.trim() ?? '';
+}
+
+function parseDateQuery(value: unknown): string {
+  const raw = firstQueryValue(value);
+  if (!raw) return '';
+  const normalized = raw.includes('T') ? raw.slice(0, 10) : raw;
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : '';
+}
+
 const auditViewMode = ref<'table' | 'cards' | 'list'>(parseViewModeQuery(route.query.view));
 const selectedEntry = ref<AuditEntry | null>(null);
 const detailOpen = ref(false);
@@ -87,17 +100,26 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit.valu
 // Filters
 const searchQuery = ref(firstQueryValue(route.query.q) ?? '');
 const actionFilter = ref(parseActionQuery(route.query.action));
+const containerFilter = ref(parseContainerQuery(route.query.container));
+const fromDateFilter = ref(parseDateQuery(route.query.from));
+const toDateFilter = ref(parseDateQuery(route.query.to));
 const showFilters = ref(false);
 const activeFilterCount = computed(() => {
   let count = 0;
   if (searchQuery.value) count++;
   if (actionFilter.value) count++;
+  if (containerFilter.value) count++;
+  if (fromDateFilter.value) count++;
+  if (toDateFilter.value) count++;
   return count;
 });
 
 function clearFilters() {
   searchQuery.value = '';
   actionFilter.value = '';
+  containerFilter.value = '';
+  fromDateFilter.value = '';
+  toDateFilter.value = '';
   page.value = 1;
 }
 
@@ -183,8 +205,11 @@ async function fetchAudit() {
   loading.value = true;
   error.value = '';
   try {
-    const params: Record<string, any> = { page: page.value, limit: limit.value };
+    const params: Record<string, unknown> = { page: page.value, limit: limit.value };
     if (actionFilter.value) params.action = actionFilter.value;
+    if (containerFilter.value) params.container = containerFilter.value;
+    if (fromDateFilter.value) params.from = fromDateFilter.value;
+    if (toDateFilter.value) params.to = toDateFilter.value;
     const data = await getAuditLog(params);
     entries.value = data.entries ?? [];
     total.value = data.total ?? 0;
@@ -195,14 +220,25 @@ async function fetchAudit() {
   }
 }
 
-watch([page, actionFilter], () => fetchAudit());
+watch([page, actionFilter, containerFilter, fromDateFilter, toDateFilter], () => fetchAudit());
 watch(
-  () => [route.query.page, route.query.action, route.query.q, route.query.view],
-  ([nextPage, nextAction, nextSearch, nextView]) => {
+  () => [
+    route.query.page,
+    route.query.action,
+    route.query.q,
+    route.query.view,
+    route.query.container,
+    route.query.from,
+    route.query.to,
+  ],
+  ([nextPage, nextAction, nextSearch, nextView, nextContainer, nextFrom, nextTo]) => {
     page.value = parsePageQuery(nextPage);
     actionFilter.value = parseActionQuery(nextAction);
     searchQuery.value = firstQueryValue(nextSearch) ?? '';
     auditViewMode.value = parseViewModeQuery(nextView);
+    containerFilter.value = parseContainerQuery(nextContainer);
+    fromDateFilter.value = parseDateQuery(nextFrom);
+    toDateFilter.value = parseDateQuery(nextTo);
   },
 );
 
@@ -239,11 +275,26 @@ onMounted(fetchAudit);
                type="text"
                placeholder="Filter by target or event..."
                class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
+        <input v-model="containerFilter"
+               name="container-name"
+               type="text"
+               placeholder="Container name..."
+               class="min-w-[140px] max-w-[220px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
         <select v-model="actionFilter"
                 class="px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-border-strong">
           <option value="">All events</option>
           <option v-for="a in actionTypes" :key="a" :value="a">{{ actionLabel(a) }}</option>
         </select>
+        <input v-model="fromDateFilter"
+               name="from-date"
+               type="date"
+               aria-label="From date"
+               class="px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-border-strong" />
+        <input v-model="toDateFilter"
+               name="to-date"
+               type="date"
+               aria-label="To date"
+               class="px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-border-strong" />
         <button v-if="activeFilterCount > 0"
                 class="text-[10px] dd-text-muted hover:dd-text transition-colors"
                 @click="clearFilters">

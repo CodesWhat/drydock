@@ -1,27 +1,33 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { getAgents } from '../services/agent';
 import { getLogEntries } from '../services/log';
+import { getAllWatchers } from '../services/watcher';
+import { getAllTriggers } from '../services/trigger';
+import type { ApiComponent, ApiAgent, ApiAgentLogEntry } from '../types/api';
+import { errorMessage } from '../utils/error';
 
 interface Agent {
   id: string;
   name: string;
   host: string;
   status: 'connected' | 'disconnected';
-  dockerVersion: string;
-  os: string;
-  arch: string;
-  cpus: number;
-  memoryGb: number;
+  dockerVersion?: string;
+  os?: string;
+  arch?: string;
+  cpus?: number;
+  memoryGb?: number;
   containers: { total: number; running: number; stopped: number };
-  images: number;
-  lastSeen: string;
-  version: string;
-  uptime: string;
-  logLevel: string;
-  pollInterval: string;
+  images?: number;
+  lastSeen?: string;
+  version?: string;
+  uptime?: string;
+  logLevel?: string;
+  pollInterval?: string;
+  watchers: string[];
+  triggers: string[];
 }
 
 interface AgentLog {
@@ -33,11 +39,18 @@ interface AgentLog {
 
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 const route = useRoute();
+let activeAgentStatusListener: EventListener | null = null;
 
 const loading = ref(true);
 const error = ref<string | null>(null);
 const agentsData = ref<Agent[]>([]);
 const agentLogsCache = ref<Record<string, AgentLog[]>>({});
+const agentLogsLoading = ref(false);
+const agentLogsError = ref('');
+const agentLogLevelFilter = ref('all');
+const agentLogTail = ref(100);
+const agentLogComponent = ref('');
+const agentLogsLastFetched = ref('');
 
 function formatAgentLogTimestamp(iso: string) {
   const d = new Date(iso);
@@ -51,62 +64,195 @@ function formatTimestamp(ts: number | string): string {
   return ts;
 }
 
+function formatUptime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return '';
+  }
+  const total = Math.floor(seconds);
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${Math.max(minutes, 1)}m`;
+}
+
 function getAgentLogs(agentId: string): AgentLog[] {
   return agentLogsCache.value[agentId] ?? [];
+}
+
+function formatLastFetched(iso: string): string {
+  if (!iso) {
+    return 'never';
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return 'never';
+  }
+  return date.toLocaleTimeString();
+}
+
+function normalizeAgentKey(value: unknown): string {
+  return typeof value === 'string' ? value.toLowerCase() : '';
+}
+
+function mapComponentNamesByAgent(components: ApiComponent[]): Record<string, string[]> {
+  const mapped: Record<string, string[]> = {};
+  for (const component of components) {
+    const agentKey = normalizeAgentKey(component?.agent);
+    if (!agentKey) continue;
+    const label =
+      typeof component?.type === 'string' && typeof component?.name === 'string'
+        ? `${component.type}.${component.name}`
+        : component?.id;
+    if (typeof label !== 'string' || label.length === 0) continue;
+    if (!mapped[agentKey]) {
+      mapped[agentKey] = [];
+    }
+    mapped[agentKey].push(label);
+  }
+
+  for (const labels of Object.values(mapped)) {
+    labels.sort((left, right) => left.localeCompare(right));
+  }
+  return mapped;
 }
 
 async function fetchAgents() {
   loading.value = true;
   error.value = null;
   try {
-    const rawAgents = await getAgents();
-    agentsData.value = rawAgents.map((a: any) => ({
+    const [rawAgents, rawWatchers, rawTriggers] = await Promise.all([
+      getAgents(),
+      getAllWatchers().catch(() => []),
+      getAllTriggers().catch(() => []),
+    ]);
+    const watchersByAgent = mapComponentNamesByAgent(
+      Array.isArray(rawWatchers) ? rawWatchers : [],
+    );
+    const triggersByAgent = mapComponentNamesByAgent(
+      Array.isArray(rawTriggers) ? rawTriggers : [],
+    );
+
+    agentsData.value = rawAgents.map((a: ApiAgent) => ({
       id: a.name,
       name: a.name,
       host: `${a.host}${a.port ? `:${a.port}` : ''}`,
       status: a.connected ? 'connected' : 'disconnected',
-      dockerVersion: a.dockerVersion ?? '-',
-      os: a.os ?? '-',
-      arch: a.arch ?? '-',
-      cpus: a.cpus ?? 0,
-      memoryGb: a.memoryGb ?? 0,
-      containers: a.containers ?? { total: 0, running: 0, stopped: 0 },
-      images: a.images ?? 0,
-      lastSeen: a.lastSeen ?? (a.connected ? '-' : 'Never'),
-      version: a.version ?? '-',
-      uptime: a.uptime ?? '-',
-      logLevel: a.logLevel ?? '-',
-      pollInterval: a.pollInterval ?? '-',
+      dockerVersion: typeof a.dockerVersion === 'string' ? a.dockerVersion : undefined,
+      os: typeof a.os === 'string' ? a.os : undefined,
+      arch: typeof a.arch === 'string' ? a.arch : undefined,
+      cpus: Number.isFinite(a.cpus) ? Number(a.cpus) : undefined,
+      memoryGb: Number.isFinite(a.memoryGb) ? Number(a.memoryGb) : undefined,
+      containers:
+        a.containers &&
+        Number.isFinite(a.containers.total) &&
+        Number.isFinite(a.containers.running) &&
+        Number.isFinite(a.containers.stopped)
+          ? {
+              total: Number(a.containers.total),
+              running: Number(a.containers.running),
+              stopped: Number(a.containers.stopped),
+            }
+          : { total: 0, running: 0, stopped: 0 },
+      images: Number.isFinite(a.images) ? Number(a.images) : undefined,
+      lastSeen: typeof a.lastSeen === 'string' ? a.lastSeen : a.connected ? undefined : 'Never',
+      version: typeof a.version === 'string' ? a.version : undefined,
+      uptime:
+        typeof a.uptime === 'string'
+          ? a.uptime
+          : Number.isFinite(a.uptimeSeconds)
+            ? formatUptime(Number(a.uptimeSeconds))
+            : undefined,
+      logLevel: typeof a.logLevel === 'string' ? a.logLevel : undefined,
+      pollInterval: typeof a.pollInterval === 'string' ? a.pollInterval : undefined,
+      watchers: watchersByAgent[normalizeAgentKey(a.name)] ?? [],
+      triggers: triggersByAgent[normalizeAgentKey(a.name)] ?? [],
     }));
+
+    if (selectedAgent.value) {
+      const refreshedSelectedAgent = agentsData.value.find(
+        (agent) => agent.id === selectedAgent.value?.id,
+      );
+      if (refreshedSelectedAgent) {
+        selectedAgent.value = refreshedSelectedAgent;
+      } else {
+        closeAgentPanel();
+      }
+    }
 
     // Fetch logs for connected agents
     for (const agent of agentsData.value) {
       if (agent.status === 'connected') {
-        fetchAgentLogs(agent.name);
+        void fetchAgentLogs(agent.name, { tail: 50, silent: true });
       }
     }
-  } catch (e: any) {
-    error.value = e?.message ?? 'Failed to load agents';
+  } catch (e: unknown) {
+    error.value = errorMessage(e, 'Failed to load agents');
   } finally {
     loading.value = false;
   }
 }
 
-async function fetchAgentLogs(agentName: string) {
+async function fetchAgentLogs(
+  agentName: string,
+  options: { level?: string; component?: string; tail?: number; silent?: boolean } = {},
+) {
+  if (!options.silent) {
+    agentLogsLoading.value = true;
+    agentLogsError.value = '';
+  }
   try {
-    const entries = await getLogEntries({ agent: agentName, tail: 50 });
-    agentLogsCache.value[agentName] = (entries ?? []).map((e: any) => ({
+    const level = options.level ?? agentLogLevelFilter.value;
+    const component = options.component ?? (agentLogComponent.value.trim() || undefined);
+    const tail = options.tail ?? agentLogTail.value;
+    const entries = await getLogEntries({
+      agent: agentName,
+      level: level && level !== 'all' ? level : undefined,
+      component,
+      tail,
+    });
+    agentLogsCache.value[agentName] = (entries ?? []).map((e: ApiAgentLogEntry) => ({
       timestamp: formatTimestamp(e.timestamp),
       level: e.level ?? 'info',
       component: e.component ?? '',
       message: e.msg ?? e.message ?? '',
     }));
+    if (!options.silent) {
+      agentLogsLastFetched.value = new Date().toISOString();
+    }
   } catch {
-    agentLogsCache.value[agentName] = [];
+    if (!options.silent) {
+      agentLogsError.value = 'Failed to load agent logs';
+    }
+  } finally {
+    if (!options.silent) {
+      agentLogsLoading.value = false;
+    }
   }
 }
 
-onMounted(fetchAgents);
+function handleAgentStatusChanged() {
+  void fetchAgents();
+}
+
+onMounted(() => {
+  const listener = handleAgentStatusChanged as EventListener;
+  if (activeAgentStatusListener) {
+    globalThis.removeEventListener('dd:sse-agent-status-changed', activeAgentStatusListener);
+  }
+  activeAgentStatusListener = listener;
+  globalThis.addEventListener('dd:sse-agent-status-changed', listener);
+  void fetchAgents();
+});
+
+onUnmounted(() => {
+  const listener = handleAgentStatusChanged as EventListener;
+  globalThis.removeEventListener('dd:sse-agent-status-changed', listener);
+  if (activeAgentStatusListener === listener) {
+    activeAgentStatusListener = null;
+  }
+});
 
 // -- Search filter --
 const searchQuery = ref('');
@@ -198,6 +344,93 @@ function closeAgentPanel() {
   agentPanelOpen.value = false;
   selectedAgent.value = null;
 }
+
+function refreshSelectedAgentLogs() {
+  if (!selectedAgent.value) return;
+  void fetchAgentLogs(selectedAgent.value.name);
+}
+
+function resetAgentLogFilters() {
+  agentLogLevelFilter.value = 'all';
+  agentLogTail.value = 100;
+  agentLogComponent.value = '';
+  refreshSelectedAgentLogs();
+}
+
+watch(
+  () => [agentDetailTab.value, selectedAgent.value?.name] as const,
+  ([tab, agentName]) => {
+    if (tab !== 'logs' || !agentName) return;
+    if (getAgentLogs(agentName).length === 0 && !agentLogsLoading.value) {
+      void fetchAgentLogs(agentName);
+    }
+  },
+);
+
+type AgentDetailField = {
+  label: string;
+  value: string | number;
+  muted?: boolean;
+};
+
+function getResourceFields(agent: Agent): AgentDetailField[] {
+  const fields: AgentDetailField[] = [];
+  if (Number.isFinite(agent.cpus)) {
+    fields.push({ label: 'CPUs', value: Number(agent.cpus) });
+  }
+  if (Number.isFinite(agent.memoryGb)) {
+    fields.push({ label: 'Memory', value: `${Number(agent.memoryGb)} GB` });
+  }
+  if (Number.isFinite(agent.images)) {
+    fields.push({ label: 'Images', value: Number(agent.images) });
+  }
+  if (agent.uptime) {
+    fields.push({ label: 'Uptime', value: agent.uptime });
+  }
+  return fields;
+}
+
+function getSystemFields(agent: Agent): AgentDetailField[] {
+  const fields: AgentDetailField[] = [];
+  if (agent.dockerVersion) {
+    fields.push({ label: 'Docker', value: agent.dockerVersion });
+  }
+  if (agent.os) {
+    fields.push({ label: 'OS', value: agent.os });
+  }
+  if (agent.arch) {
+    fields.push({ label: 'Architecture', value: agent.arch });
+  }
+  if (agent.version) {
+    fields.push({ label: 'Agent', value: `v${agent.version}` });
+  }
+  return fields;
+}
+
+function getConfigFields(agent: Agent): AgentDetailField[] {
+  const fields: AgentDetailField[] = [{ label: 'Host', value: agent.host }];
+  if (agent.version) {
+    fields.push({ label: 'Agent Version', value: `v${agent.version}` });
+  }
+  if (agent.logLevel) {
+    fields.push({ label: 'Log Level', value: agent.logLevel });
+  }
+  if (agent.pollInterval) {
+    fields.push({ label: 'Poll Interval', value: agent.pollInterval });
+  }
+  fields.push({
+    label: 'Docker Socket',
+    value: agent.host.startsWith('unix://') ? agent.host : '/var/run/docker.sock',
+  });
+  if (agent.lastSeen) {
+    fields.push({
+      label: 'Last Seen',
+      value: agent.lastSeen,
+      muted: agent.lastSeen === 'Never',
+    });
+  }
+  return fields;
+}
 </script>
 
 <template>
@@ -242,7 +475,7 @@ function closeAgentPanel() {
                      :style="{
                        backgroundColor: 'var(--dd-bg-card)',
                        border: '1px solid var(--dd-border-strong)',
-                       boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                       boxShadow: 'var(--dd-shadow-lg)',
                      }">
                   <div class="px-3 py-1 text-[9px] font-bold uppercase tracking-wider dd-text-muted">Columns</div>
                   <button v-for="col in agentAllColumns" :key="col.key"
@@ -307,15 +540,15 @@ function closeAgentPanel() {
               <span class="dd-text-muted">/{{ row.containers.total }}</span>
             </template>
             <template #cell-docker="{ row }">
-              <span class="font-mono" :class="row.dockerVersion === '-' ? 'dd-text-muted' : 'dd-text-secondary'">
-                {{ row.dockerVersion }}
+              <span class="font-mono" :class="row.dockerVersion ? 'dd-text-secondary' : 'dd-text-muted'">
+                {{ row.dockerVersion ?? '—' }}
               </span>
             </template>
             <template #cell-os="{ row }">
-              <span :class="row.os === '-' ? 'dd-text-muted' : 'dd-text-secondary'">{{ row.os }}</span>
+              <span :class="row.os ? 'dd-text-secondary' : 'dd-text-muted'">{{ row.os ?? '—' }}</span>
             </template>
             <template #cell-version="{ row }">
-              <span v-if="row.version === '-'" class="dd-text-muted">-</span>
+              <span v-if="!row.version" class="dd-text-muted">-</span>
               <span v-else class="px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-secondary">
                 v{{ row.version }}
               </span>
@@ -361,19 +594,19 @@ function closeAgentPanel() {
                 <div class="grid grid-cols-2 gap-2 text-[11px]">
                   <div>
                     <span class="dd-text-muted">Docker</span>
-                    <span class="ml-1 font-semibold" :class="agent.dockerVersion === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.dockerVersion }}</span>
+                    <span class="ml-1 font-semibold" :class="agent.dockerVersion ? 'dd-text' : 'dd-text-muted'">{{ agent.dockerVersion ?? '—' }}</span>
                   </div>
                   <div>
                     <span class="dd-text-muted">OS</span>
-                    <span class="ml-1 font-semibold" :class="agent.os === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.os }}</span>
+                    <span class="ml-1 font-semibold" :class="agent.os ? 'dd-text' : 'dd-text-muted'">{{ agent.os ?? '—' }}</span>
                   </div>
                   <div>
                     <span class="dd-text-muted">Arch</span>
-                    <span class="ml-1 font-semibold" :class="agent.arch === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.arch }}</span>
+                    <span class="ml-1 font-semibold" :class="agent.arch ? 'dd-text' : 'dd-text-muted'">{{ agent.arch ?? '—' }}</span>
                   </div>
                   <div>
                     <span class="dd-text-muted">Version</span>
-                    <span class="ml-1 font-semibold" :class="agent.version === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.version === '-' ? '-' : 'v' + agent.version }}</span>
+                    <span class="ml-1 font-semibold" :class="agent.version ? 'dd-text' : 'dd-text-muted'">{{ agent.version ? `v${agent.version}` : '—' }}</span>
                   </div>
                 </div>
               </div>
@@ -428,23 +661,23 @@ function closeAgentPanel() {
               <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 mt-2">
                 <div>
                   <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Docker</div>
-                  <div class="text-[12px] font-mono" :class="agent.dockerVersion === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.dockerVersion }}</div>
+                  <div class="text-[12px] font-mono" :class="agent.dockerVersion ? 'dd-text' : 'dd-text-muted'">{{ agent.dockerVersion ?? '—' }}</div>
                 </div>
                 <div>
                   <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">OS</div>
-                  <div class="text-[12px]" :class="agent.os === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.os }}</div>
+                  <div class="text-[12px]" :class="agent.os ? 'dd-text' : 'dd-text-muted'">{{ agent.os ?? '—' }}</div>
                 </div>
                 <div>
                   <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Architecture</div>
-                  <div class="text-[12px]" :class="agent.arch === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.arch }}</div>
+                  <div class="text-[12px]" :class="agent.arch ? 'dd-text' : 'dd-text-muted'">{{ agent.arch ?? '—' }}</div>
                 </div>
                 <div>
                   <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Version</div>
-                  <div class="text-[12px] font-mono" :class="agent.version === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.version === '-' ? '-' : 'v' + agent.version }}</div>
+                  <div class="text-[12px] font-mono" :class="agent.version ? 'dd-text' : 'dd-text-muted'">{{ agent.version ? `v${agent.version}` : '—' }}</div>
                 </div>
                 <div>
                   <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Uptime</div>
-                  <div class="text-[12px]" :class="agent.uptime === '-' ? 'dd-text-muted' : 'dd-text'">{{ agent.uptime }}</div>
+                  <div class="text-[12px]" :class="agent.uptime ? 'dd-text' : 'dd-text-muted'">{{ agent.uptime ?? '—' }}</div>
                 </div>
                 <div>
                   <div class="text-[10px] font-semibold uppercase tracking-wider mb-0.5 dd-text-muted">Containers</div>
@@ -525,15 +758,10 @@ function closeAgentPanel() {
             <!-- Overview tab -->
             <div v-if="agentDetailTab === 'overview'" class="p-4 space-y-5">
               <!-- Resources -->
-              <div>
+              <div v-if="getResourceFields(selectedAgent).length > 0">
                 <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Resources</div>
                 <div class="grid grid-cols-2 gap-2">
-                  <div v-for="field in [
-                    { label: 'CPUs', value: selectedAgent.cpus, muted: selectedAgent.cpus === 0 },
-                    { label: 'Memory', value: selectedAgent.memoryGb === 0 ? '-' : selectedAgent.memoryGb + ' GB', muted: selectedAgent.memoryGb === 0 },
-                    { label: 'Images', value: selectedAgent.images, muted: selectedAgent.images === 0 },
-                    { label: 'Uptime', value: selectedAgent.uptime, muted: selectedAgent.uptime === '-' },
-                  ]" :key="field.label"
+                  <div v-for="field in getResourceFields(selectedAgent)" :key="field.label"
                        class="px-2.5 py-1.5 dd-rounded text-[11px]"
                        :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                     <div class="text-[10px] dd-text-muted">{{ field.label }}</div>
@@ -543,15 +771,10 @@ function closeAgentPanel() {
               </div>
 
               <!-- System -->
-              <div>
+              <div v-if="getSystemFields(selectedAgent).length > 0">
                 <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">System</div>
                 <div class="space-y-1">
-                  <div v-for="field in [
-                    { label: 'Docker', value: selectedAgent.dockerVersion, muted: selectedAgent.dockerVersion === '-' },
-                    { label: 'OS', value: selectedAgent.os, muted: selectedAgent.os === '-' },
-                    { label: 'Architecture', value: selectedAgent.arch, muted: selectedAgent.arch === '-' },
-                    { label: 'Agent', value: selectedAgent.version === '-' ? '-' : 'v' + selectedAgent.version, muted: selectedAgent.version === '-' },
-                  ]" :key="field.label"
+                  <div v-for="field in getSystemFields(selectedAgent)" :key="field.label"
                        class="flex items-center justify-between px-2.5 py-1.5 dd-rounded text-[11px]"
                        :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                     <span class="dd-text-muted">{{ field.label }}</span>
@@ -581,35 +804,143 @@ function closeAgentPanel() {
                   </div>
                 </div>
               </div>
+
+              <!-- Automation -->
+              <div>
+                <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Automation</div>
+                <div class="space-y-2">
+                  <div class="px-2.5 py-2 dd-rounded text-[11px]"
+                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="font-semibold dd-text">Watchers</span>
+                      <span class="text-[10px] dd-text-muted">{{ selectedAgent.watchers.length }}</span>
+                    </div>
+                    <div class="mt-1.5 flex flex-wrap gap-1.5">
+                      <span v-for="watcherName in selectedAgent.watchers"
+                            :key="watcherName"
+                            class="px-1.5 py-0.5 dd-rounded text-[10px] font-mono dd-bg-elevated dd-text-secondary">
+                        {{ watcherName }}
+                      </span>
+                      <span v-if="selectedAgent.watchers.length === 0"
+                            class="text-[10px] italic dd-text-muted">
+                        None
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="px-2.5 py-2 dd-rounded text-[11px]"
+                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="font-semibold dd-text">Triggers</span>
+                      <span class="text-[10px] dd-text-muted">{{ selectedAgent.triggers.length }}</span>
+                    </div>
+                    <div class="mt-1.5 flex flex-wrap gap-1.5">
+                      <span v-for="triggerName in selectedAgent.triggers"
+                            :key="triggerName"
+                            class="px-1.5 py-0.5 dd-rounded text-[10px] font-mono dd-bg-elevated dd-text-secondary">
+                        {{ triggerName }}
+                      </span>
+                      <span v-if="selectedAgent.triggers.length === 0"
+                            class="text-[10px] italic dd-text-muted">
+                        None
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- Logs tab -->
             <div v-if="agentDetailTab === 'logs'" class="flex flex-col" style="height: calc(100% - 0px);">
+              <div class="px-3 py-2 flex flex-wrap items-center gap-2"
+                   :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+                <select v-model="agentLogLevelFilter"
+                        data-testid="agent-log-level-filter"
+                        class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                  <option value="all">All Levels</option>
+                  <option value="debug">Debug</option>
+                  <option value="info">Info</option>
+                  <option value="warn">Warn</option>
+                  <option value="error">Error</option>
+                </select>
+
+                <select v-model.number="agentLogTail"
+                        data-testid="agent-log-tail-filter"
+                        class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                  <option :value="50">Tail 50</option>
+                  <option :value="100">Tail 100</option>
+                  <option :value="500">Tail 500</option>
+                  <option :value="1000">Tail 1000</option>
+                </select>
+
+                <input v-model="agentLogComponent"
+                       data-testid="agent-log-component-filter"
+                       type="text"
+                       placeholder="Filter by component..."
+                       class="flex-1 min-w-[160px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-placeholder dd-border-strong"
+                       @keyup.enter="refreshSelectedAgentLogs" />
+
+                <button data-testid="agent-log-apply"
+                        class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
+                        :class="agentLogsLoading ? 'opacity-50 pointer-events-none' : ''"
+                        @click="refreshSelectedAgentLogs">
+                  Apply
+                </button>
+                <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text"
+                        :class="agentLogsLoading ? 'opacity-50 pointer-events-none' : ''"
+                        @click="resetAgentLogFilters">
+                  Reset
+                </button>
+                <button data-testid="agent-log-refresh"
+                        class="p-1.5 dd-rounded transition-colors dd-text-muted hover:dd-text"
+                        :class="agentLogsLoading ? 'opacity-50 pointer-events-none' : ''"
+                        title="Refresh"
+                        @click="refreshSelectedAgentLogs">
+                  <AppIcon name="refresh" :size="12" />
+                </button>
+              </div>
+
+              <div class="px-3 py-1 text-[10px] dd-text-muted">
+                Last fetched: {{ formatLastFetched(agentLogsLastFetched) }}
+              </div>
+
               <div class="flex-1 min-h-0 flex flex-col overflow-hidden"
                    :style="{ backgroundColor: 'var(--dd-bg-code)' }">
-                <div class="flex-1 overflow-y-auto px-1"
-                     style="box-shadow: inset 0 8px 16px -8px rgba(0,0,0,0.4);">
+                <div v-if="agentLogsLoading" class="text-[12px] dd-text-muted text-center py-6">
+                  Loading logs...
+                </div>
+                <div v-else-if="agentLogsError"
+                     class="mx-3 mt-3 text-[11px] px-3 py-2 dd-rounded"
+                     :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+                  {{ agentLogsError }}
+                </div>
+                <div v-else class="flex-1 overflow-y-auto px-1"
+                     style="box-shadow: var(--dd-shadow-inset);">
+                  <div v-if="getAgentLogs(selectedAgent.id).length === 0"
+                       class="px-3 py-4 text-[11px] dd-text-muted text-center">
+                    No log entries found for current filters.
+                  </div>
                   <div v-for="(line, i) in getAgentLogs(selectedAgent.id)" :key="i"
                        class="px-3 py-[3px] font-mono text-[11px] leading-relaxed flex gap-3 transition-colors"
-                       :style="{ borderBottom: '1px solid rgba(255,255,255,0.03)' }">
-                    <span class="shrink-0 tabular-nums" style="color: #64748b;">{{ formatAgentLogTimestamp(line.timestamp) }}</span>
+                       :style="{ borderBottom: '1px solid var(--dd-log-line)' }">
+                    <span class="shrink-0 tabular-nums" style="color: var(--dd-text-muted);">{{ formatAgentLogTimestamp(line.timestamp) }}</span>
                     <span class="shrink-0 w-11 text-right font-semibold uppercase text-[10px]"
                           :style="{
                             color: line.level === 'error' ? 'var(--dd-danger)'
                                  : line.level === 'warn' ? 'var(--dd-warning)'
-                                 : line.level === 'debug' ? '#64748b'
+                                 : line.level === 'debug' ? 'var(--dd-text-muted)'
                                  : 'var(--dd-success)'
                           }">
                       {{ line.level }}
                     </span>
-                    <span class="shrink-0" style="color: #0096C7;">{{ line.component }}</span>
-                    <span class="break-all" style="color: #94a3b8;">{{ line.message }}</span>
+                    <span class="shrink-0" style="color: var(--dd-primary);">{{ line.component || '-' }}</span>
+                    <span class="break-all" style="color: var(--dd-text-secondary);">{{ line.message }}</span>
                   </div>
                 </div>
                 <!-- Status bar -->
                 <div class="shrink-0 px-4 py-2 flex items-center justify-between"
-                     :style="{ borderTop: '1px solid rgba(255,255,255,0.06)', backgroundColor: 'rgba(0,0,0,0.2)' }">
-                  <span class="text-[10px] font-medium" style="color: #64748b;">
+                     :style="{ borderTop: '1px solid var(--dd-log-divider)', backgroundColor: 'var(--dd-log-footer-bg)' }">
+                  <span class="text-[10px] font-medium" style="color: var(--dd-text-muted);">
                     {{ getAgentLogs(selectedAgent.id).length }} entries
                   </span>
                   <div class="flex items-center gap-1.5">
@@ -626,14 +957,7 @@ function closeAgentPanel() {
 
             <!-- Config tab -->
             <div v-if="agentDetailTab === 'config'" class="p-4 space-y-3">
-              <div v-for="field in [
-                { label: 'Host', value: selectedAgent.host, muted: false },
-                { label: 'Agent Version', value: selectedAgent.version === '-' ? '-' : 'v' + selectedAgent.version, muted: selectedAgent.version === '-' },
-                { label: 'Log Level', value: selectedAgent.logLevel, muted: selectedAgent.logLevel === '-' },
-                { label: 'Poll Interval', value: selectedAgent.pollInterval, muted: selectedAgent.pollInterval === '-' },
-                { label: 'Docker Socket', value: selectedAgent.host.startsWith('unix://') ? selectedAgent.host : '/var/run/docker.sock', muted: false },
-                { label: 'Last Seen', value: selectedAgent.lastSeen, muted: selectedAgent.lastSeen === 'Never' || selectedAgent.lastSeen === '-' },
-              ]" :key="field.label"
+              <div v-for="field in getConfigFields(selectedAgent)" :key="field.label"
                    class="flex items-center justify-between px-3 py-2 dd-rounded"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <span class="text-[10px] font-semibold uppercase tracking-wider dd-text-muted">{{ field.label }}</span>

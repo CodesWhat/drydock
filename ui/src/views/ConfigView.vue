@@ -10,8 +10,10 @@ import { getUser } from '../services/auth';
 import { getLog, getLogEntries } from '../services/log';
 import { clearIconCache, getSettings, updateSettings } from '../services/settings';
 import { getServer } from '../services/server';
+import { getStore } from '../services/store';
 import { themeFamilies } from '../theme/palettes';
 import { useTheme } from '../theme/useTheme';
+import { errorMessage } from '../utils/error';
 
 const route = useRoute();
 const { themeFamily, themeVariant, isDark, setThemeFamily, transitionTheme } = useTheme();
@@ -47,12 +49,99 @@ const settingsTabs = [
 
 const loading = ref(true);
 const serverFields = ref<Array<{ label: string; value: string }>>([]);
+const storeFields = ref<Array<{ label: string; value: string }>>([]);
 const serverError = ref('');
+const webhookEnabled = ref(false);
+const webhookEndpoints = [
+  {
+    endpoint: 'POST /api/webhook/watch',
+    description: 'Trigger a full watch cycle on all watchers',
+  },
+  {
+    endpoint: 'POST /api/webhook/watch/:name',
+    description: 'Watch a specific container by name',
+  },
+  {
+    endpoint: 'POST /api/webhook/update/:name',
+    description: 'Trigger an update on a specific container',
+  },
+];
+const webhookBaseUrl = computed(() => {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+  return window.location.origin;
+});
+const webhookExample = computed(
+  () =>
+    `curl -X POST ${webhookBaseUrl.value}/api/webhook/watch \\\n  -H "Authorization: Bearer YOUR_TOKEN"`,
+);
 
 // Settings state
 const internetlessMode = ref(false);
 const settingsLoading = ref(false);
 const settingsError = ref('');
+
+interface LegacyInputSourceSummary {
+  total: number;
+  keys: string[];
+}
+
+interface LegacyInputSummary {
+  total: number;
+  env: LegacyInputSourceSummary;
+  label: LegacyInputSourceSummary;
+}
+
+const LEGACY_KEY_PREVIEW_LIMIT = 6;
+const legacyInputSummary = ref<LegacyInputSummary | null>(null);
+const hasLegacyCompatibilityInputs = computed(() => (legacyInputSummary.value?.total ?? 0) > 0);
+const legacyEnvKeysPreview = computed(() =>
+  summarizeLegacyKeys(legacyInputSummary.value?.env.keys ?? []),
+);
+const legacyLabelKeysPreview = computed(() =>
+  summarizeLegacyKeys(legacyInputSummary.value?.label.keys ?? []),
+);
+
+function normalizeLegacyInputSourceSummary(rawValue: unknown): LegacyInputSourceSummary {
+  const parsedTotal = Number((rawValue as { total?: unknown })?.total);
+  const parsedKeys = Array.isArray((rawValue as { keys?: unknown })?.keys)
+    ? (rawValue as { keys: unknown[] }).keys.filter((value): value is string => typeof value === 'string')
+    : [];
+  const uniqueKeys = Array.from(new Set(parsedKeys)).sort((a, b) => a.localeCompare(b));
+  const total = Number.isFinite(parsedTotal) && parsedTotal >= 0
+    ? Math.max(Math.floor(parsedTotal), uniqueKeys.length)
+    : uniqueKeys.length;
+  return { total, keys: uniqueKeys };
+}
+
+function normalizeLegacyInputSummary(rawValue: unknown): LegacyInputSummary | null {
+  if (!rawValue || typeof rawValue !== 'object') {
+    return null;
+  }
+  const env = normalizeLegacyInputSourceSummary((rawValue as { env?: unknown }).env);
+  const label = normalizeLegacyInputSourceSummary((rawValue as { label?: unknown }).label);
+  const parsedTotal = Number((rawValue as { total?: unknown }).total);
+  const totalFromKeys = env.total + label.total;
+  const total = Number.isFinite(parsedTotal) && parsedTotal >= 0
+    ? Math.max(Math.floor(parsedTotal), totalFromKeys)
+    : totalFromKeys;
+
+  if (total <= 0) {
+    return null;
+  }
+
+  return { total, env, label };
+}
+
+function summarizeLegacyKeys(keys: string[]): string {
+  if (keys.length === 0) {
+    return '';
+  }
+  const previewKeys = keys.slice(0, LEGACY_KEY_PREVIEW_LIMIT);
+  const hiddenCount = keys.length - previewKeys.length;
+  return hiddenCount > 0 ? `${previewKeys.join(', ')} (+${hiddenCount} more)` : previewKeys.join(', ');
+}
 
 // Profile state
 interface ProfileData {
@@ -175,8 +264,8 @@ async function refreshAppLogs() {
     if (!scrollBlocked.value) {
       void nextTick(() => scrollToBottom());
     }
-  } catch (e: any) {
-    appLogsError.value = e?.message || 'Failed to load application logs';
+  } catch (e: unknown) {
+    appLogsError.value = errorMessage(e, 'Failed to load application logs');
     appLogEntries.value = [];
   } finally {
     appLogsLoading.value = false;
@@ -207,12 +296,16 @@ async function loadGeneralSettingsData() {
   serverError.value = '';
   settingsError.value = '';
   try {
-    const [serverData, appData, settings] = await Promise.all([
+    const [serverData, appData, storeData, settings] = await Promise.all([
       getServer().catch(() => null),
       getAppInfos().catch(() => null),
+      getStore().catch(() => null),
       getSettings().catch(() => null),
     ]);
     const config = serverData?.configuration ?? {};
+    legacyInputSummary.value = normalizeLegacyInputSummary(serverData?.compatibility?.legacyInputs);
+    const storeConfig = storeData?.configuration ?? {};
+    webhookEnabled.value = Boolean(config.webhook?.enabled);
     const fields = [
       { label: 'Version', value: appData?.version ?? 'unknown' },
       { label: 'Server Port', value: String(config.port ?? 3000) },
@@ -223,13 +316,21 @@ async function loadGeneralSettingsData() {
       { label: 'Webhook', value: config.webhook?.enabled ? 'Enabled' : 'Disabled' },
       { label: 'Delete Enabled', value: config.feature?.delete ? 'Yes' : 'No' },
       { label: 'Trust Proxy', value: config.trustproxy ? 'Enabled' : 'Disabled' },
+      { label: 'Metrics Auth', value: config.metrics?.auth !== false ? 'Enabled' : 'Disabled' },
+    ];
+    const storeConfigFields = [
+      { label: 'Store Path', value: String(storeConfig.path ?? 'unknown') },
+      { label: 'Store File', value: String(storeConfig.file ?? 'unknown') },
     ];
     serverFields.value = fields;
+    storeFields.value = storeConfigFields;
     if (settings) {
       internetlessMode.value = settings.internetlessMode;
     }
-  } catch (e: any) {
-    serverError.value = e?.message || 'Failed to load server info';
+  } catch (e: unknown) {
+    serverError.value = errorMessage(e, 'Failed to load server info');
+    legacyInputSummary.value = null;
+    webhookEnabled.value = false;
     serverFields.value = [{ label: 'Error', value: 'Failed to load server info' }];
   } finally {
     loading.value = false;
@@ -253,8 +354,8 @@ async function loadProfileData() {
         sessions: normalizeSessionCount(user.sessions),
       };
     }
-  } catch (e: any) {
-    profileError.value = e?.message || 'Failed to load profile data';
+  } catch (e: unknown) {
+    profileError.value = errorMessage(e, 'Failed to load profile data');
   } finally {
     profileLoading.value = false;
   }
@@ -274,8 +375,8 @@ async function toggleInternetlessMode() {
   try {
     const updated = await updateSettings({ internetlessMode: !internetlessMode.value });
     internetlessMode.value = updated.internetlessMode;
-  } catch (e: any) {
-    settingsError.value = e?.message || 'Failed to update network settings';
+  } catch (e: unknown) {
+    settingsError.value = errorMessage(e, 'Failed to update network settings');
   } finally {
     settingsLoading.value = false;
   }
@@ -291,8 +392,8 @@ async function handleClearIconCache() {
   try {
     const result = await clearIconCache();
     cacheCleared.value = result.cleared;
-  } catch (e: any) {
-    settingsError.value = e?.message || 'Failed to clear icon cache';
+  } catch (e: unknown) {
+    settingsError.value = errorMessage(e, 'Failed to clear icon cache');
   } finally {
     cacheClearing.value = false;
   }
@@ -331,6 +432,51 @@ async function handleClearIconCache() {
           {{ settingsError }}
         </div>
 
+        <div v-if="hasLegacyCompatibilityInputs"
+             data-testid="legacy-input-banner"
+             class="px-4 py-3 dd-rounded"
+             :style="{
+               backgroundColor: 'var(--dd-warning-muted)',
+               border: '1px solid var(--dd-warning)',
+             }">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="text-[12px] font-semibold" :style="{ color: 'var(--dd-warning)' }">
+                Legacy compatibility inputs detected
+              </div>
+              <p class="text-[11px] dd-text-secondary mt-1">
+                Deprecated <code class="font-mono">WUD_*</code> environment variables and
+                <code class="font-mono">wud.*</code> labels are still in use.
+              </p>
+            </div>
+            <span class="px-2 py-1 text-[10px] font-semibold dd-rounded"
+                  :style="{
+                    backgroundColor: 'var(--dd-bg-card)',
+                    border: '1px solid var(--dd-warning)',
+                    color: 'var(--dd-warning)',
+                  }">
+              {{ legacyInputSummary?.total }} events
+            </span>
+          </div>
+          <div class="mt-2 space-y-1.5 text-[10px] dd-text-secondary">
+            <div v-if="legacyInputSummary?.env.total">
+              Env keys ({{ legacyInputSummary?.env.total }}): {{ legacyEnvKeysPreview }}
+            </div>
+            <div v-if="legacyInputSummary?.label.total">
+              Label keys ({{ legacyInputSummary?.label.total }}): {{ legacyLabelKeysPreview }}
+            </div>
+          </div>
+          <p class="mt-2 text-[10px] dd-text-secondary">
+            Run <code class="font-mono">node dist/index.js config migrate --dry-run</code> then
+            <code class="font-mono">node dist/index.js config migrate --file &lt;path&gt;</code>.
+            <a href="https://drydock.codeswhat.com/docs/quickstart"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="underline ml-1"
+               :style="{ color: 'var(--dd-warning)' }">Migration CLI docs</a>
+          </p>
+        </div>
+
         <!-- Application Info -->
         <div class="dd-rounded overflow-hidden"
              :style="{
@@ -352,6 +498,91 @@ async function handleClearIconCache() {
                 <span class="text-[12px] font-medium font-mono dd-text">{{ field.value }}</span>
               </div>
             </template>
+          </div>
+        </div>
+
+        <!-- Store -->
+        <div class="dd-rounded overflow-hidden"
+             :style="{
+               backgroundColor: 'var(--dd-bg-card)',
+               border: '1px solid var(--dd-border-strong)',
+             }">
+          <div class="px-5 py-3.5 flex items-center gap-2"
+               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+            <AppIcon name="server" :size="14" class="text-drydock-secondary" />
+            <h2 class="text-sm font-semibold dd-text">Store</h2>
+          </div>
+          <div class="p-5 space-y-4">
+            <div v-for="field in storeFields" :key="field.label"
+                 class="flex items-center justify-between py-2"
+                 :style="{ borderBottom: '1px solid var(--dd-border)' }">
+              <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">{{ field.label }}</span>
+              <span class="text-[12px] font-medium font-mono dd-text">{{ field.value }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Webhook API -->
+        <div class="dd-rounded overflow-hidden"
+             :style="{
+               backgroundColor: 'var(--dd-bg-card)',
+               border: '1px solid var(--dd-border-strong)',
+             }">
+          <div class="px-5 py-3.5 flex items-center justify-between gap-3"
+               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+            <div class="flex items-center gap-2">
+              <AppIcon name="bolt" :size="14" class="text-drydock-secondary" />
+              <h2 class="text-sm font-semibold dd-text">Webhook API</h2>
+            </div>
+            <span class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider dd-rounded"
+                  :style="{
+                    backgroundColor: webhookEnabled ? 'var(--dd-success-muted)' : 'var(--dd-bg-inset)',
+                    color: webhookEnabled ? 'var(--dd-success)' : 'var(--dd-text-muted)',
+                    border: webhookEnabled
+                      ? '1px solid var(--dd-success)'
+                      : '1px solid var(--dd-border-strong)',
+                  }">
+              {{ webhookEnabled ? 'Enabled' : 'Disabled' }}
+            </span>
+          </div>
+          <div class="p-5 space-y-4">
+            <p class="text-[11px] dd-text-muted">
+              Use these endpoints to trigger watch cycles and updates via HTTP.
+              All requests require a Bearer token in the Authorization header.
+            </p>
+            <p v-if="!webhookEnabled" class="text-[11px] dd-text-muted">
+              Webhook API is disabled. Set <code class="font-mono">DD_SERVER_WEBHOOK_ENABLED=true</code> and
+              <code class="font-mono">DD_SERVER_WEBHOOK_TOKEN</code> to enable it.
+            </p>
+            <div class="overflow-x-auto dd-rounded"
+                 :style="{ border: '1px solid var(--dd-border-strong)' }">
+              <table class="w-full text-left text-[11px]">
+                <thead :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <tr>
+                    <th class="px-3 py-2 font-semibold uppercase tracking-wider dd-text-muted">Endpoint</th>
+                    <th class="px-3 py-2 font-semibold uppercase tracking-wider dd-text-muted">Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="entry in webhookEndpoints" :key="entry.endpoint"
+                      :style="{ borderTop: '1px solid var(--dd-border)' }">
+                    <td class="px-3 py-2">
+                      <code class="text-[11px] font-mono dd-text">{{ entry.endpoint }}</code>
+                    </td>
+                    <td class="px-3 py-2 dd-text-secondary">{{ entry.description }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <div class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted mb-1.5">Example</div>
+              <pre class="px-3 py-2 text-[11px] font-mono dd-rounded overflow-x-auto"
+                   :style="{
+                     backgroundColor: 'var(--dd-bg-inset)',
+                     border: '1px solid var(--dd-border-strong)',
+                     color: 'var(--dd-text)',
+                   }">{{ webhookExample }}</pre>
+            </div>
           </div>
         </div>
 

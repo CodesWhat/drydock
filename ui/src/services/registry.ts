@@ -76,11 +76,33 @@ function getRegistryProviderColor(provider) {
 
 /**
  * get all registries.
- * @returns {Promise<any>}
+ * @returns {Promise<unknown>}
  */
 async function getAllRegistries() {
   const response = await fetch('/api/registries', { credentials: 'include' });
   return response.json();
 }
 
-export { getRegistryIcon, getRegistryProviderIcon, getRegistryProviderColor, getAllRegistries };
+function buildRegistryDetailPath({ type, name, agent }) {
+  const segments = ['/api/registries'];
+  if (agent) {
+    segments.push(encodeURIComponent(agent));
+  }
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
+  return segments.join('/');
+}
+
+async function getRegistry({ type, name, agent }) {
+  const response = await fetch(buildRegistryDetailPath({ type, name, agent }), {
+    credentials: 'include',
+  });
+  return response.json();
+}
+
+export {
+  getRegistryIcon,
+  getRegistryProviderIcon,
+  getRegistryProviderColor,
+  getAllRegistries,
+  getRegistry,
+};

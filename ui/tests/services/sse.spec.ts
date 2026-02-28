@@ -47,7 +47,7 @@ describe('SseService', () => {
     expect(MockEventSourceCtor).toHaveBeenCalledWith('/api/events/ui');
   });
 
-  it('registers event listeners for dd:connected, dd:self-update, dd:scan-started, dd:scan-completed, and dd:heartbeat', () => {
+  it('registers event listeners for dd:connected, dd:self-update, container lifecycle events, agent status events, dd:scan-started, dd:scan-completed, and dd:heartbeat', () => {
     sseService.connect(mockEventBus);
     expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
       'dd:connected',
@@ -55,6 +55,26 @@ describe('SseService', () => {
     );
     expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
       'dd:self-update',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:container-added',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:container-updated',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:container-removed',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:agent-connected',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:agent-disconnected',
       expect.any(Function),
     );
     expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
@@ -125,6 +145,29 @@ describe('SseService', () => {
     sseService.connect(mockEventBus);
     eventListeners['dd:scan-completed']();
     expect(mockEventBus.emit).toHaveBeenCalledWith('scan-completed');
+  });
+
+  it('emits container-changed on container lifecycle events', () => {
+    sseService.connect(mockEventBus);
+
+    eventListeners['dd:container-added']();
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
+
+    eventListeners['dd:container-updated']();
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
+
+    eventListeners['dd:container-removed']();
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
+  });
+
+  it('emits agent-status-changed on agent lifecycle events', () => {
+    sseService.connect(mockEventBus);
+
+    eventListeners['dd:agent-connected']();
+    expect(mockEventBus.emit).toHaveBeenCalledWith('agent-status-changed');
+
+    eventListeners['dd:agent-disconnected']();
+    expect(mockEventBus.emit).toHaveBeenCalledWith('agent-status-changed');
   });
 
   it('emits connection-lost on error when in self-update mode', () => {

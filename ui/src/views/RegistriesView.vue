@@ -2,23 +2,22 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
-import { getAllRegistries } from '../services/registry';
+import { getAllRegistries, getRegistry } from '../services/registry';
+import type { ApiComponent } from '../types/api';
 
 const registriesViewMode = ref<'table' | 'cards' | 'list'>('table');
 
-const registriesData = ref<any[]>([]);
+const registriesData = ref<Record<string, unknown>[]>([]);
 const loading = ref(true);
 const error = ref('');
 const route = useRoute();
 
 const { isMobile } = useBreakpoints();
-const selectedRegistry = ref<any | null>(null);
+const selectedRegistry = ref<Record<string, unknown> | null>(null);
 const detailOpen = ref(false);
-
-function openDetail(reg: any) {
-  selectedRegistry.value = reg;
-  detailOpen.value = true;
-}
+const detailLoading = ref(false);
+const detailError = ref('');
+let detailRequestId = 0;
 
 /** Well-known default URLs for registry providers without explicit config. */
 const DEFAULT_URLS: Record<string, string> = {
@@ -38,8 +37,9 @@ const DEFAULT_URLS: Record<string, string> = {
   ocir: 'https://ocir.io',
 };
 
-function resolveUrl(reg: any): string {
-  return reg.config?.url || DEFAULT_URLS[reg.type] || '';
+function resolveUrl(reg: Record<string, unknown>): string {
+  const config = reg.config as Record<string, unknown> | undefined;
+  return String(config?.url || DEFAULT_URLS[String(reg.type)] || '');
 }
 
 function registryTypeBadge(type: string) {
@@ -54,9 +54,57 @@ function registryTypeBadge(type: string) {
   return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: type.toUpperCase() };
 }
 
-function isPrivate(reg: any): boolean {
-  const cfg = reg.config ?? {};
+function isPrivate(reg: Record<string, unknown>): boolean {
+  const cfg = (reg.config ?? {}) as Record<string, unknown>;
   return !!(cfg.token || cfg.password || cfg.login || cfg.username);
+}
+
+function mapRegistry(registry: ApiComponent, status = 'connected') {
+  return {
+    id: registry.id,
+    name: registry.name,
+    type: registry.type,
+    status,
+    config: registry.configuration ?? {},
+    agent: registry.agent,
+  };
+}
+
+function resetDetailState() {
+  detailOpen.value = false;
+  detailLoading.value = false;
+  detailError.value = '';
+  selectedRegistry.value = null;
+  detailRequestId += 1;
+}
+
+function handleDetailOpenChange(value: boolean) {
+  if (!value) {
+    resetDetailState();
+  } else {
+    detailOpen.value = true;
+  }
+}
+
+async function openDetail(reg: Record<string, unknown>) {
+  selectedRegistry.value = reg;
+  detailOpen.value = true;
+  detailLoading.value = true;
+  detailError.value = '';
+  const requestId = ++detailRequestId;
+
+  try {
+    const detail = await getRegistry({ type: String(reg.type), name: String(reg.name), agent: reg.agent as string | undefined });
+    if (requestId !== detailRequestId || !detailOpen.value) return;
+    selectedRegistry.value = mapRegistry(detail, String(reg.status));
+  } catch {
+    if (requestId !== detailRequestId) return;
+    detailError.value = 'Unable to load latest registry details';
+  } finally {
+    if (requestId === detailRequestId) {
+      detailLoading.value = false;
+    }
+  }
 }
 
 const searchQuery = ref('');
@@ -93,13 +141,7 @@ const tableColumns = [
 onMounted(async () => {
   try {
     const data = await getAllRegistries();
-    registriesData.value = data.map((r: any) => ({
-      id: r.id,
-      name: r.name,
-      type: r.type,
-      status: 'connected',
-      config: r.configuration ?? {},
-    }));
+    registriesData.value = data.map((registry: ApiComponent) => mapRegistry(registry));
   } catch {
     error.value = 'Failed to load registries';
   } finally {
@@ -271,7 +313,7 @@ onMounted(async () => {
         :is-mobile="isMobile"
         :show-size-controls="false"
         :show-full-page="false"
-        @update:open="detailOpen = $event; if (!$event) selectedRegistry = null"
+        @update:open="handleDetailOpenChange"
       >
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
@@ -289,6 +331,13 @@ onMounted(async () => {
 
         <template v-if="selectedRegistry" #default>
           <div class="p-4 space-y-5">
+            <div v-if="detailLoading" class="text-[11px] dd-text-muted">Refreshing registry details...</div>
+            <div v-if="detailError"
+                 class="px-3 py-2 text-[11px] dd-rounded"
+                 :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+              {{ detailError }}
+            </div>
+
             <!-- Status -->
             <div>
               <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Status</div>

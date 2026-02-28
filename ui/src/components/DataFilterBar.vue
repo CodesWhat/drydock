@@ -11,7 +11,7 @@ defineProps<{
   hideFilter?: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   'update:modelValue': [mode: string];
   'update:showFilters': [val: boolean];
 }>();
@@ -21,6 +21,12 @@ const defaultViewModes = [
   { id: 'cards', icon: 'grid' },
   { id: 'list', icon: 'list' },
 ] as const;
+
+const filterPanelId = `filter-panel-${Math.random().toString(36).slice(2, 10)}`;
+
+function viewModeLabel(id: string): string {
+  return `${id.charAt(0).toUpperCase()}${id.slice(1)} view`;
+}
 </script>
 
 <template>
@@ -33,11 +39,15 @@ const defaultViewModes = [
       <div class="flex items-center gap-2.5 relative">
         <!-- Filter toggle button -->
         <div v-if="!hideFilter" class="relative">
-          <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
+          <button type="button"
+                  class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
                   :class="showFilters || (activeFilterCount ?? 0) > 0 ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
                   :style="{ borderColor: (activeFilterCount ?? 0) > 0 ? 'var(--dd-primary)' : 'var(--dd-border-strong)' }"
                   title="Filters"
-                  @click.stop="$emit('update:showFilters', !showFilters)">
+                  aria-label="Toggle filters"
+                  :aria-expanded="String(showFilters)"
+                  :aria-controls="filterPanelId"
+                  @click.stop="emit('update:showFilters', !showFilters)">
             <AppIcon name="filter" :size="11" />
           </button>
           <span v-if="(activeFilterCount ?? 0) > 0"
@@ -59,20 +69,25 @@ const defaultViewModes = [
             {{ filteredCount }}/{{ totalCount }}<template v-if="countLabel"> {{ countLabel }}</template>
           </span>
           <div class="flex items-center dd-rounded overflow-hidden border"
+               role="group"
+               aria-label="View mode"
                :style="{ borderColor: 'var(--dd-border-strong)' }">
             <button v-for="vm in (viewModes ?? defaultViewModes)" :key="vm.id"
+                    type="button"
                     class="w-7 h-7 flex items-center justify-center text-[11px] transition-colors"
                     :class="modelValue === vm.id ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
                     :style="vm.id !== (viewModes ?? defaultViewModes)[0]?.id ? { borderLeft: '1px solid var(--dd-border-strong)' } : {}"
-                    :title="vm.id.charAt(0).toUpperCase() + vm.id.slice(1) + ' view'"
-                    @click="$emit('update:modelValue', vm.id)">
+                    :title="viewModeLabel(vm.id)"
+                    :aria-label="viewModeLabel(vm.id)"
+                    :aria-pressed="String(modelValue === vm.id)"
+                    @click="emit('update:modelValue', vm.id)">
               <AppIcon :name="vm.icon" :size="11" />
             </button>
           </div>
         </div>
       </div>
       <!-- Collapsible filter panel -->
-      <div v-if="showFilters && !hideFilter" @click.stop
+      <div v-if="showFilters && !hideFilter" :id="filterPanelId" @click.stop
            class="flex flex-wrap items-center gap-2 mt-2 pt-2"
            :style="{ borderTop: '1px solid var(--dd-border)' }">
         <slot name="filters" />
