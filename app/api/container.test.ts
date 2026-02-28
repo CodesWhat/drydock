@@ -230,6 +230,41 @@ describe('Container Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith([{ id: 'c1' }]);
     });
+
+    test('should redact container runtime environment variable values', () => {
+      const container = {
+        id: 'c1',
+        details: {
+          ports: ['8080:8080'],
+          volumes: ['/tmp:/tmp'],
+          env: [
+            { key: 'DB_PASSWORD', value: 'super-secret-password' },
+            { key: 'API_TOKEN', value: 'abcdef' },
+          ],
+        },
+      };
+      storeContainer.getContainers.mockReturnValue([container]);
+
+      const handler = getHandler('get', '/');
+      const res = createResponse();
+      handler({ query: {} }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith([
+        {
+          id: 'c1',
+          details: {
+            ports: ['8080:8080'],
+            volumes: ['/tmp:/tmp'],
+            env: [
+              { key: 'DB_PASSWORD', value: '[REDACTED]' },
+              { key: 'API_TOKEN', value: '[REDACTED]' },
+            ],
+          },
+        },
+      ]);
+      expect(container.details.env[0].value).toBe('super-secret-password');
+    });
   });
 
   describe('getContainersFromStore', () => {
@@ -250,6 +285,34 @@ describe('Container Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ id: 'c1', name: 'test' });
+    });
+
+    test('should redact runtime environment variable values when container is found', () => {
+      const container = {
+        id: 'c1',
+        name: 'test',
+        details: {
+          ports: ['8080:8080'],
+          volumes: ['/tmp:/tmp'],
+          env: [{ key: 'AWS_SECRET_ACCESS_KEY', value: 'top-secret' }],
+        },
+      };
+      storeContainer.getContainer.mockReturnValue(container);
+      const handler = getHandler('get', '/:id');
+      const res = createResponse();
+      handler({ params: { id: 'c1' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        id: 'c1',
+        name: 'test',
+        details: {
+          ports: ['8080:8080'],
+          volumes: ['/tmp:/tmp'],
+          env: [{ key: 'AWS_SECRET_ACCESS_KEY', value: '[REDACTED]' }],
+        },
+      });
+      expect(container.details.env[0].value).toBe('top-secret');
     });
 
     test('should return 404 when container not found', () => {
@@ -716,6 +779,59 @@ describe('Container Router', () => {
       expect(mockBroadcastScanCompleted).toHaveBeenCalledWith('c1', 'scanned');
       expect(mockEmitSecurityAlert).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should redact runtime environment variable values in scan response', async () => {
+      const scanResult = {
+        status: 'scanned',
+        vulnerabilities: [],
+        blockingCount: 0,
+        summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+      };
+      mockScanImageForVulnerabilities.mockResolvedValue(scanResult);
+      registry.getState.mockReturnValue({
+        watcher: {},
+        trigger: {},
+        registry: {
+          hub: {
+            getImageFullName: vi.fn((image, tag) => `my-registry/${image.name}:${tag}`),
+            getAuthPull: vi.fn(async () => ({ username: 'user', password: 'token' })),
+          },
+        },
+      });
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/app',
+          tag: { value: '1.2.3' },
+        },
+        details: {
+          ports: [],
+          volumes: [],
+          env: [{ key: 'DD_API_KEY', value: 'keep-secret' }],
+        },
+        security: {},
+      });
+      getSecurityConfiguration.mockReturnValue({
+        enabled: true,
+        scanner: 'trivy',
+        signature: { verify: false },
+        sbom: { enabled: false, formats: [] },
+      });
+
+      const res = await callScanContainer();
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          details: {
+            ports: [],
+            volumes: [],
+            env: [{ key: 'DD_API_KEY', value: '[REDACTED]' }],
+          },
+        }),
+      );
     });
 
     test('should emit security-alert event when scan finds high/critical vulnerabilities', async () => {
@@ -1269,13 +1385,31 @@ describe('Container Router', () => {
 
     test('should watch container successfully', async () => {
       const mockWatcher = {
-        watchContainer: vi.fn().mockResolvedValue({ container: { id: 'c1', result: {} } }),
+        watchContainer: vi.fn().mockResolvedValue({
+          container: {
+            id: 'c1',
+            result: {},
+            details: {
+              ports: [],
+              volumes: [],
+              env: [{ key: 'API_TOKEN', value: 'token-value' }],
+            },
+          },
+        }),
       };
       storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local' });
       registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
       const res = await callWatchContainer();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ id: 'c1', result: {} });
+      expect(res.json).toHaveBeenCalledWith({
+        id: 'c1',
+        result: {},
+        details: {
+          ports: [],
+          volumes: [],
+          env: [{ key: 'API_TOKEN', value: '[REDACTED]' }],
+        },
+      });
     });
 
     test('should return 500 when watch fails', async () => {
@@ -1568,6 +1702,33 @@ describe('Container Router', () => {
       );
       expect(getUpdatedPolicy()).toEqual({ skipTags: ['2.0.0'] });
       expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should redact runtime environment variable values in update-policy response', () => {
+      const res = callUpdatePolicy(
+        {
+          id: 'c1',
+          updateKind: { kind: 'tag', remoteValue: '2.0.0' },
+          result: { tag: '2.0.0' },
+          details: {
+            ports: ['8080:8080'],
+            volumes: ['/tmp:/tmp'],
+            env: [{ key: 'DB_PASSWORD', value: 'super-secret' }],
+          },
+        },
+        { action: 'skip-current' },
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          details: {
+            ports: ['8080:8080'],
+            volumes: ['/tmp:/tmp'],
+            env: [{ key: 'DB_PASSWORD', value: '[REDACTED]' }],
+          },
+        }),
+      );
     });
 
     test('should skip current digest update', () => {

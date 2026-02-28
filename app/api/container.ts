@@ -51,6 +51,43 @@ export function getContainersFromStore(query) {
   return storeContainer.getContainers(query);
 }
 
+const REDACTED_RUNTIME_ENV_VALUE = '[REDACTED]';
+
+function redactContainerRuntimeDetails(details) {
+  if (!details || typeof details !== 'object' || !Array.isArray(details.env)) {
+    return details;
+  }
+
+  return {
+    ...details,
+    env: details.env
+      .filter((entry) => entry && typeof entry === 'object' && typeof entry.key === 'string')
+      .map((entry) => ({
+        key: entry.key,
+        value: REDACTED_RUNTIME_ENV_VALUE,
+      })),
+  };
+}
+
+function redactContainerRuntimeEnv(container) {
+  if (!container || typeof container !== 'object' || !container.details) {
+    return container;
+  }
+
+  return {
+    ...container,
+    details: redactContainerRuntimeDetails(container.details),
+  };
+}
+
+function redactContainersRuntimeEnv(containers) {
+  if (!Array.isArray(containers)) {
+    return containers;
+  }
+
+  return containers.map((container) => redactContainerRuntimeEnv(container));
+}
+
 function uniqStrings(values = []) {
   return [...new Set(values.filter((value) => typeof value === 'string'))];
 }
@@ -115,7 +152,8 @@ function getSnoozeUntilFromActionPayload(payload = {}) {
  */
 function getContainers(req, res) {
   const { query } = req;
-  res.status(200).json(getContainersFromStore(query));
+  const containers = getContainersFromStore(query);
+  res.status(200).json(redactContainersRuntimeEnv(containers));
 }
 
 /**
@@ -127,7 +165,7 @@ function getContainer(req, res) {
   const { id } = req.params;
   const container = storeContainer.getContainer(id);
   if (container) {
-    res.status(200).json(container);
+    res.status(200).json(redactContainerRuntimeEnv(container));
   } else {
     res.sendStatus(404);
   }
@@ -525,7 +563,7 @@ async function watchContainer(req, res) {
     }
     // Run watchContainer from the Provider
     const containerReport = await watcher.watchContainer(container);
-    res.status(200).json(containerReport.container);
+    res.status(200).json(redactContainerRuntimeEnv(containerReport.container));
   } catch (e) {
     res.status(500).json({
       error: `Error when watching container ${id} (${e.message})`,
@@ -635,7 +673,7 @@ function patchContainerUpdatePolicy(req, res) {
     updatePolicy = normalizeUpdatePolicy(result.policy);
     container.updatePolicy = Object.keys(updatePolicy).length > 0 ? updatePolicy : undefined;
     const containerUpdated = storeContainer.updateContainer(container);
-    res.status(200).json(containerUpdated);
+    res.status(200).json(redactContainerRuntimeEnv(containerUpdated));
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -785,7 +823,7 @@ async function scanContainer(req, res) {
     const updatedContainer = storeContainer.updateContainer(containerToStore);
 
     broadcastScanCompleted(id, scanResult.status);
-    res.status(200).json(updatedContainer);
+    res.status(200).json(redactContainerRuntimeEnv(updatedContainer));
   } catch (e: any) {
     broadcastScanCompleted(id, 'error');
     res.status(500).json({
