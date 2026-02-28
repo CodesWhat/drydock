@@ -23,10 +23,6 @@ vi.mock('@/services/server', () => ({
   getServer: vi.fn(),
 }));
 
-vi.mock('@/services/trigger', () => ({
-  getAllTriggers: vi.fn(),
-}));
-
 vi.mock('@/services/watcher', () => ({
   getAllWatchers: vi.fn(),
 }));
@@ -48,17 +44,15 @@ import { getAuditLog } from '@/services/audit';
 import { getAllContainers } from '@/services/container';
 import { getAllRegistries } from '@/services/registry';
 import { getServer } from '@/services/server';
-import { getAllTriggers } from '@/services/trigger';
 import { getAllWatchers } from '@/services/watcher';
 
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
 const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
 const mockGetServer = getServer as ReturnType<typeof vi.fn>;
-const mockGetAllTriggers = getAllTriggers as ReturnType<typeof vi.fn>;
 const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 const mockGetAllRegistries = getAllRegistries as ReturnType<typeof vi.fn>;
 const mockGetAuditLog = getAuditLog as ReturnType<typeof vi.fn>;
-const DASHBOARD_WIDGET_ORDER_STORAGE_KEY = 'dd-dashboard-widget-order-v2';
+const DASHBOARD_WIDGET_ORDER_STORAGE_KEY = 'dd-dashboard-widget-order-v3';
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
   return {
@@ -79,7 +73,6 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
 }
 
 interface DashboardDataOverrides {
-  triggers?: any[];
   watchers?: any[];
   registries?: any[];
   auditEntries?: any[];
@@ -94,7 +87,6 @@ async function mountDashboard(
   mockGetAllContainers.mockResolvedValue(containers);
   mockGetAgents.mockResolvedValue(agents);
   mockGetServer.mockResolvedValue(server);
-  mockGetAllTriggers.mockResolvedValue(overrides.triggers ?? []);
   mockGetAllWatchers.mockResolvedValue(overrides.watchers ?? []);
   mockGetAllRegistries.mockResolvedValue(overrides.registries ?? []);
   mockGetAuditLog.mockResolvedValue({
@@ -146,6 +138,16 @@ describe('DashboardView', () => {
       expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(containersCallsBefore);
       expect(mockGetServer.mock.calls.length).toBeGreaterThan(serverCallsBefore);
       expect(mockGetAgents.mock.calls.length).toBeGreaterThan(agentsCallsBefore);
+    });
+
+    it('does not show loading state during SSE refresh after initial load', async () => {
+      const wrapper = await mountDashboard([makeContainer()]);
+      mockGetAllContainers.mockReturnValueOnce(new Promise(() => {}));
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+      await flushPromises();
+
+      expect(wrapper.text()).not.toContain('Loading dashboard...');
     });
   });
 
@@ -222,99 +224,20 @@ describe('DashboardView', () => {
       expect(securityCard?.text()).toContain('1');
     });
 
-    it('computes unique images count', async () => {
-      const containers = [
-        makeContainer({ image: 'nginx' }),
-        makeContainer({ id: 'c2', name: 'redis', image: 'redis' }),
-        makeContainer({ id: 'c3', name: 'nginx-2', image: 'nginx' }),
-      ];
-      const wrapper = await mountDashboard(containers);
-      const statCards = wrapper.findAll('.stat-card');
-      const imagesCard = statCards.find((c) => c.text().includes('Images'));
-      // 2 unique images: nginx, redis
-      expect(imagesCard?.text()).toContain('2');
-    });
-
-    it('shows 0 images when no containers exist', async () => {
-      const wrapper = await mountDashboard([]);
-      const statCards = wrapper.findAll('.stat-card');
-      const imagesCard = statCards.find((c) => c.text().includes('Images'));
-      expect(imagesCard?.text()).toContain('0');
-    });
-
-    it('computes trigger, watcher, and registry counts from dashboard inputs', async () => {
+    it('computes registry count from dashboard inputs', async () => {
       const wrapper = await mountDashboard(
         [],
         [],
         {},
         {
-          triggers: [{ id: 't1' }, { id: 't2' }],
-          watchers: [{ id: 'w1' }, { id: 'w2' }, { id: 'w3' }],
           registries: [{ id: 'r1' }],
         },
       );
 
       const statCards = wrapper.findAll('.stat-card');
-      const triggersCard = statCards.find((c) => c.text().includes('Triggers'));
-      const watchersCard = statCards.find((c) => c.text().includes('Watchers'));
       const registriesCard = statCards.find((c) => c.text().includes('Registries'));
 
-      expect(triggersCard?.text()).toContain('2');
-      expect(watchersCard?.text()).toContain('3');
       expect(registriesCard?.text()).toContain('1');
-    });
-
-    it('shows maintenance countdown status on the watchers card', async () => {
-      const wrapper = await mountDashboard(
-        [],
-        [],
-        {},
-        {
-          watchers: [
-            {
-              id: 'watcher-1',
-              configuration: {
-                maintenancewindow: '0 2 * * *',
-                maintenancewindowopen: true,
-              },
-            },
-          ],
-        },
-      );
-
-      const statCards = wrapper.findAll('.stat-card');
-      const watchersCard = statCards.find((c) => c.text().includes('Watchers'));
-      expect(watchersCard?.text()).toContain('Open now');
-    });
-  });
-
-  describe('recent activity', () => {
-    it('shows recent activity entries from audit log', async () => {
-      const wrapper = await mountDashboard(
-        [],
-        [],
-        {},
-        {
-          auditEntries: [
-            {
-              id: 'a1',
-              timestamp: '2026-02-28T10:00:00.000Z',
-              action: 'update-applied',
-              containerName: 'api',
-              status: 'success',
-            },
-          ],
-        },
-      );
-
-      expect(wrapper.text()).toContain('Recent Activity');
-      expect(wrapper.text()).toContain('api');
-      expect(wrapper.text()).toContain('Update Applied');
-    });
-
-    it('shows empty state when there is no recent activity', async () => {
-      const wrapper = await mountDashboard();
-      expect(wrapper.text()).toContain('No activity recorded yet');
     });
   });
 
@@ -746,7 +669,7 @@ describe('DashboardView', () => {
           'stat-containers',
           'stat-updates',
           'stat-security',
-          'stat-images',
+          'stat-registries',
           'host-status',
           'recent-updates',
           'security-overview',
@@ -794,26 +717,22 @@ describe('DashboardView', () => {
         'stat-containers',
         'stat-updates',
         'stat-security',
-        'stat-images',
+        'stat-registries',
         'update-breakdown',
         'recent-updates',
         'security-overview',
         'host-status',
-        'stat-triggers',
-        'stat-watchers',
-        'stat-registries',
-        'recent-activity',
       ]);
     });
 
     it('reorders stat cards on drop', async () => {
       const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
 
-      const draggedStat = wrapper.find('[data-widget-id="stat-images"]');
+      const draggedStat = wrapper.find('[data-widget-id="stat-registries"]');
       const targetStat = wrapper.find('[data-widget-id="stat-containers"]');
       const dataTransfer = {
         setData: vi.fn(),
-        getData: vi.fn(() => 'stat-images'),
+        getData: vi.fn(() => 'stat-registries'),
         effectAllowed: 'move',
         dropEffect: 'move',
       };
@@ -823,9 +742,9 @@ describe('DashboardView', () => {
       await targetStat.trigger('drop', { dataTransfer });
       await draggedStat.trigger('dragend');
 
-      expect(wrapper.find('[data-widget-id="stat-images"]').attributes('data-widget-order')).toBe(
-        '0',
-      );
+      expect(
+        wrapper.find('[data-widget-id="stat-registries"]').attributes('data-widget-order'),
+      ).toBe('0');
       expect(
         wrapper.find('[data-widget-id="stat-containers"]').attributes('data-widget-order'),
       ).toBe('1');

@@ -6,7 +6,6 @@ import { getAuditLog } from '../services/audit';
 import { getAllContainers } from '../services/container';
 import { getAllRegistries } from '../services/registry';
 import { getServer } from '../services/server';
-import { getAllTriggers } from '../services/trigger';
 import { getAllWatchers } from '../services/watcher';
 import type { Container } from '../types/container';
 import type { ApiWatcherConfiguration } from '../types/api';
@@ -19,20 +18,16 @@ function navigateTo(route: RouteLocationRaw) {
   router.push(route);
 }
 
-const DASHBOARD_WIDGET_ORDER_STORAGE_KEY = 'dd-dashboard-widget-order-v2';
+const DASHBOARD_WIDGET_ORDER_STORAGE_KEY = 'dd-dashboard-widget-order-v3';
 const DASHBOARD_WIDGET_IDS = [
   'stat-containers',
   'stat-updates',
   'stat-security',
-  'stat-images',
+  'stat-registries',
   'recent-updates',
   'security-overview',
   'host-status',
   'update-breakdown',
-  'stat-triggers',
-  'stat-watchers',
-  'stat-registries',
-  'recent-activity',
 ] as const;
 type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
 
@@ -87,10 +82,8 @@ interface DashboardAgent {
 
 const serverInfo = ref<DashboardServerInfo | null>(null);
 const agents = ref<DashboardAgent[]>([]);
-const triggers = ref<unknown[]>([]);
 const watchers = ref<unknown[]>([]);
 const registries = ref<unknown[]>([]);
-const recentActivity = ref<Record<string, unknown>[]>([]);
 type RecentAuditStatus = 'updated' | 'pending' | 'failed';
 const recentStatusByContainer = ref<Record<string, RecentAuditStatus>>({});
 const maintenanceCountdownNow = ref(Date.now());
@@ -209,15 +202,28 @@ function resetWidgetOrder() {
   widgetOrder.value = [...DASHBOARD_WIDGET_IDS];
 }
 
-async function fetchDashboardData() {
-  loading.value = true;
-  error.value = null;
+interface DashboardRefreshOptions {
+  background?: boolean;
+}
+
+async function fetchDashboardData(options: DashboardRefreshOptions = {}) {
+  const background = options.background === true;
+  const hasRenderedData =
+    containers.value.length > 0 ||
+    watchers.value.length > 0 ||
+    registries.value.length > 0 ||
+    agents.value.length > 0 ||
+    serverInfo.value !== null;
+
+  if (!background) {
+    loading.value = true;
+    error.value = null;
+  }
   try {
     const [
       containersRes,
       serverRes,
       agentsRes,
-      triggersRes,
       watchersRes,
       registriesRes,
       auditLogRes,
@@ -225,7 +231,6 @@ async function fetchDashboardData() {
       getAllContainers(),
       getServer().catch(() => null),
       getAgents().catch(() => []),
-      getAllTriggers().catch(() => []),
       getAllWatchers().catch(() => []),
       getAllRegistries().catch(() => []),
       getAuditLog({ limit: 100 }).catch(() => ({ entries: [] })),
@@ -233,7 +238,6 @@ async function fetchDashboardData() {
     containers.value = mapApiContainers(containersRes);
     serverInfo.value = serverRes;
     agents.value = agentsRes;
-    triggers.value = Array.isArray(triggersRes) ? triggersRes : [];
     watchers.value = Array.isArray(watchersRes) ? watchersRes : [];
     registries.value = Array.isArray(registriesRes) ? registriesRes : [];
 
@@ -241,16 +245,22 @@ async function fetchDashboardData() {
       ? (auditLogRes as { entries: unknown[] }).entries
       : [];
     recentStatusByContainer.value = buildRecentStatusByContainer(auditEntries);
-    recentActivity.value = auditEntries.slice(0, 5);
+    error.value = null;
   } catch (e: unknown) {
-    error.value = errorMessage(e, 'Failed to load dashboard data');
+    if (!background || !hasRenderedData) {
+      error.value = errorMessage(e, 'Failed to load dashboard data');
+    } else {
+      console.debug(errorMessage(e, 'Dashboard background refresh failed'));
+    }
   } finally {
-    loading.value = false;
+    if (!background) {
+      loading.value = false;
+    }
   }
 }
 
 function handleRealtimeRefresh() {
-  void fetchDashboardData();
+  void fetchDashboardData({ background: true });
 }
 
 const realtimeRefreshListener = handleRealtimeRefresh as EventListener;
@@ -349,73 +359,6 @@ const maintenanceCountdownLabel = computed(() => {
   }
   return formatMaintenanceDuration(remainingMs);
 });
-
-function activityActionLabel(action: string): string {
-  return action
-    .split('-')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
-
-function activityActionIcon(action: string): string {
-  if (action.includes('update-available')) return 'updates';
-  if (action.includes('update-applied')) return 'check';
-  if (action.includes('update-failed')) return 'xmark';
-  if (action.includes('security-alert')) return 'security';
-  if (action.includes('agent-disconnect')) return 'network';
-  if (action.includes('rollback') || action === 'auto-rollback') return 'restart';
-  if (action.includes('start')) return 'play';
-  if (action.includes('stop')) return 'stop';
-  if (action.includes('restart')) return 'restart';
-  if (action.includes('added')) return 'containers';
-  if (action.includes('removed')) return 'trash';
-  if (action.includes('webhook')) return 'bolt';
-  if (action.includes('hook')) return 'triggers';
-  if (action === 'preview') return 'search';
-  return 'info';
-}
-
-function activityBadgeColor(action: string): string {
-  if (action.includes('failed')) return 'var(--dd-danger)';
-  if (action.includes('applied') || action.includes('success')) return 'var(--dd-success)';
-  if (action.includes('security')) return 'var(--dd-warning)';
-  return 'var(--dd-primary)';
-}
-
-function activityBadgeMutedColor(action: string): string {
-  if (action.includes('failed')) return 'var(--dd-danger-muted)';
-  if (action.includes('applied') || action.includes('success')) return 'var(--dd-success-muted)';
-  if (action.includes('security')) return 'var(--dd-warning-muted)';
-  return 'var(--dd-primary-muted)';
-}
-
-function formatActivityTime(timestamp: unknown): string {
-  if (typeof timestamp !== 'string' || !timestamp) return '';
-  const parsed = new Date(timestamp);
-  if (Number.isNaN(parsed.getTime())) return timestamp;
-  return parsed.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-const recentActivityRows = computed(() =>
-  recentActivity.value.map((entry: Record<string, unknown>) => {
-    const action = typeof entry?.action === 'string' ? entry.action : 'event';
-    return {
-      id: String(entry?.id ?? `${action}-${entry?.timestamp ?? ''}`),
-      action,
-      actionLabel: activityActionLabel(action),
-      actionIcon: activityActionIcon(action),
-      actionColor: activityBadgeColor(action),
-      actionMutedColor: activityBadgeMutedColor(action),
-      containerName: String(entry?.containerName ?? entry?.agentName ?? 'system'),
-      timestampLabel: formatActivityTime(entry?.timestamp),
-    };
-  }),
-);
 
 interface ImageSecurityAggregate {
   key: string;
@@ -531,7 +474,6 @@ const stats = computed(() => {
   let running = 0;
   let updatesAvailable = 0;
   const securityImages = new Set<string>();
-  const allImages = new Set<string>();
   for (const container of containers.value) {
     if (container.status === 'running') {
       running += 1;
@@ -542,16 +484,11 @@ const stats = computed(() => {
     if (container.bouncer === 'blocked' || container.bouncer === 'unsafe') {
       securityImages.add(container.image);
     }
-    allImages.add(container.image);
   }
 
   const stopped = Math.max(total - running, 0);
   const securityIssues = securityImages.size;
-  const images = allImages.size;
-  const triggerCount = triggers.value.length;
-  const watcherCount = watchers.value.length;
   const registryCount = registries.value.length;
-  const maintenanceWindowsConfigured = maintenanceWindowWatchers.value.length > 0;
   return [
     {
       id: 'stat-containers' as DashboardWidgetId,
@@ -592,41 +529,6 @@ const stats = computed(() => {
       color: securityIssues > 0 ? 'var(--dd-danger)' : 'var(--dd-success)',
       colorMuted: securityIssues > 0 ? 'var(--dd-danger-muted)' : 'var(--dd-success-muted)',
       route: '/security',
-    },
-    {
-      id: 'stat-images' as DashboardWidgetId,
-      label: 'Images',
-      value: String(images),
-      icon: 'images',
-      color: 'var(--dd-primary)',
-      colorMuted: 'var(--dd-primary-muted)',
-    },
-    {
-      id: 'stat-triggers' as DashboardWidgetId,
-      label: 'Triggers',
-      value: String(triggerCount),
-      icon: 'triggers',
-      color: 'var(--dd-primary)',
-      colorMuted: 'var(--dd-primary-muted)',
-      route: '/triggers',
-    },
-    {
-      id: 'stat-watchers' as DashboardWidgetId,
-      label: 'Watchers',
-      value: String(watcherCount),
-      icon: 'watchers',
-      color: maintenanceWindowsConfigured
-        ? maintenanceWindowOpenCount.value > 0
-          ? 'var(--dd-success)'
-          : 'var(--dd-warning)'
-        : 'var(--dd-primary)',
-      colorMuted: maintenanceWindowsConfigured
-        ? maintenanceWindowOpenCount.value > 0
-          ? 'var(--dd-success-muted)'
-          : 'var(--dd-warning-muted)'
-        : 'var(--dd-primary-muted)',
-      route: '/watchers',
-      detail: maintenanceCountdownLabel.value || undefined,
     },
     {
       id: 'stat-registries' as DashboardWidgetId,
@@ -1334,62 +1236,6 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                   <div class="h-full dd-rounded-sm transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                        :style="{ width: Math.max(kind.count / Math.max(totalUpdates, 1) * 100, 4) + '%', backgroundColor: kind.color }" />
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Recent Activity Widget (full width) -->
-        <div
-             data-widget-id="recent-activity"
-             :data-widget-order="widgetOrderIndex('recent-activity')"
-             draggable="true"
-             aria-label="Recent Activity widget"
-             class="dashboard-widget xl:col-span-3 dd-rounded overflow-hidden"
-             :class="{ 'opacity-60': draggedWidgetId === 'recent-activity' }"
-             :style="{
-               ...widgetOrderStyle('recent-activity'),
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }"
-             @dragstart="onWidgetDragStart('recent-activity', $event)"
-             @dragover="onWidgetDragOver('recent-activity', $event)"
-             @drop="onWidgetDrop('recent-activity', $event)"
-             @dragend="onWidgetDragEnd">
-          <div class="flex items-center justify-between px-5 py-3.5"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <div class="flex items-center gap-2">
-              <AppIcon name="audit" :size="14" class="text-drydock-secondary" />
-              <h2 class="text-sm font-semibold dd-text">
-                Recent Activity
-              </h2>
-            </div>
-            <button class="text-[11px] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo('/audit')">View all &rarr;</button>
-          </div>
-
-          <div v-if="recentActivityRows.length === 0" class="px-5 py-8 text-center">
-            <div class="text-[11px] dd-text-muted">No activity recorded yet</div>
-          </div>
-          <div v-else class="divide-y" :style="{ borderColor: 'var(--dd-border-strong)' }">
-            <div v-for="entry in recentActivityRows" :key="entry.id"
-                 class="px-5 py-3.5 flex items-center justify-between gap-3 min-w-0 transition-colors hover:dd-bg-elevated">
-              <div class="min-w-0 flex items-center gap-3">
-                <span class="badge px-1.5 py-0 text-[9px]"
-                      :style="{ backgroundColor: entry.actionMutedColor, color: entry.actionColor }">
-                  <AppIcon :name="entry.actionIcon" :size="12" />
-                </span>
-                <div class="min-w-0">
-                  <div class="text-[11px] font-semibold dd-text truncate">
-                    {{ entry.actionLabel }}
-                  </div>
-                  <div class="text-[10px] dd-text-muted truncate">
-                    {{ entry.containerName }}
-                  </div>
-                </div>
-              </div>
-              <div class="text-[10px] font-mono dd-text-muted shrink-0">
-                {{ entry.timestampLabel }}
               </div>
             </div>
           </div>
