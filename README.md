@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version"></a>
-  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-20K_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
+  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-20K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
   <a href="https://quay.io/repository/codeswhat/drydock"><img src="https://img.shields.io/badge/Quay.io-image-ee0000?logo=redhat&logoColor=white" alt="Quay.io"></a>
   <br>
@@ -43,27 +43,27 @@
 
 <hr>
 
-<h2 align="center">Contents</h2>
+<h2 align="center">📑 Contents</h2>
 
-- [Documentation](https://drydock.codeswhat.com/docs)
-- [Quick Start](#quick-start)
-- [Screenshots](#screenshots)
-- [UI Workflow](#ui-workflow)
-- [Features](#features)
-- [Update Guard](#update-guard)
-- [Supported Registries](#supported-registries)
-- [Supported Triggers](#supported-triggers)
-- [Authentication](#authentication)
-- [Feature Comparison](#feature-comparison)
-- [Migrating from WUD](#migrating-from-wud)
-- [Roadmap](#roadmap)
-- [Documentation](#documentation)
-- [Star History](#star-history)
+- [📖 Documentation](https://drydock.codeswhat.com/docs)
+- [🚀 Quick Start](#quick-start)
+- [📸 Screenshots](#screenshots)
+- [🖥️ UI Workflow](#ui-workflow)
+- [✨ Features](#features)
+- [🥊 Update Bouncer](#update-bouncer)
+- [📦 Supported Registries](#supported-registries)
+- [🔔 Supported Triggers](#supported-triggers)
+- [🔐 Authentication](#authentication)
+- [⚖️ Feature Comparison](#feature-comparison)
+- [🔄 Migration](#migration)
+- [🗺️ Roadmap](#roadmap)
+- [📖 Documentation](#documentation)
+- [⭐ Star History](#star-history)
 - [Built With](#built-with)
 
 <hr>
 
-<h2 align="center" id="quick-start">Quick Start</h2>
+<h2 align="center" id="quick-start">🚀 Quick Start</h2>
 
 ```bash
 docker run -d \
@@ -170,40 +170,11 @@ Accepted values: `false` (default — no proxy), `true` (trust all), a number (h
 
 <hr>
 
-<h2 align="center" id="screenshots">Screenshots</h2>
+<h2 align="center" id="screenshots">📸 Screenshots</h2>
 
-<table>
-<tr>
-<th align="center">Light</th>
-<th align="center">Dark</th>
-</tr>
-<tr>
-<td><img src="docs/assets/drydock-login-light.png" alt="Login (light)" width="400"></td>
-<td><img src="docs/assets/drydock-login-dark.png" alt="Login (dark)" width="400"></td>
-</tr>
-<tr>
-<td><img src="docs/assets/drydock-dashboard-light.png" alt="Dashboard (light)" width="400"></td>
-<td><img src="docs/assets/drydock-dashboard-dark.png" alt="Dashboard (dark)" width="400"></td>
-</tr>
-<tr>
-<td><img src="docs/assets/drydock-containers-light.png" alt="Containers (light)" width="400"></td>
-<td><img src="docs/assets/drydock-containers-dark.png" alt="Containers (dark)" width="400"></td>
-</tr>
-<tr>
-<td><img src="docs/assets/drydock-container-detail-light.png" alt="Container detail (light)" width="400"></td>
-<td><img src="docs/assets/drydock-container-detail-dark.png" alt="Container detail (dark)" width="400"></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/drydock-mobile-dashboard-light.png" alt="Mobile dashboard (light)" width="200"></td>
-<td align="center"><img src="docs/assets/drydock-mobile-dashboard-dark.png" alt="Mobile dashboard (dark)" width="200"></td>
-</tr>
-<tr>
-<td align="center"><img src="docs/assets/drydock-mobile-containers-light.png" alt="Mobile containers (light)" width="200"></td>
-<td align="center"><img src="docs/assets/drydock-mobile-containers-dark.png" alt="Mobile containers (dark)" width="200"></td>
-</tr>
-</table>
+<!-- TODO: Capture fresh v1.4 screenshots before release (login, dashboard, containers, container detail — light/dark + mobile) -->
 
-<h3 align="center" id="ui-workflow">UI Workflow (v1.4 Finish-Off)</h3>
+<h3 align="center" id="ui-workflow">🖥️ UI Workflow (v1.4 Finish-Off)</h3>
 
 - **Global command palette (`Cmd/Ctrl+K`)** — Search pages, containers, agents, triggers, watchers, registries, auth, and notification rules from one place.
 - **Prefix scopes** — Use `/` for pages, `@` for runtime resources, and `#` for config/settings search.
@@ -216,7 +187,7 @@ Accepted values: `false` (default — no proxy), `true` (trust all), a number (h
 
 <hr>
 
-<h2 align="center" id="features">Features</h2>
+<h2 align="center" id="features">✨ Features</h2>
 
 <table>
 <tr>
@@ -307,7 +278,7 @@ Available on GHCR, Docker Hub, and Quay.io for flexible deployment
 
 <hr>
 
-<h2 align="center" id="update-guard">Update Guard</h2>
+<h2 align="center" id="update-bouncer">🥊 Update Bouncer</h2>
 
 <details>
 <summary><strong>Trivy-powered safe-pull gate for container updates</strong></summary>
@@ -351,7 +322,7 @@ See full configuration in [`docs/configuration/security/README.md`](docs/configu
 
 <hr>
 
-<h2 align="center" id="supported-registries">Supported Registries</h2>
+<h2 align="center" id="supported-registries">📦 Supported Registries</h2>
 
 <details>
 <summary><strong>Public registries</strong> (auto-registered, no config needed)</summary>
@@ -398,7 +369,7 @@ For self-hosted registries, prefer `CAFILE` to trust internal CAs; use `INSECURE
 
 <hr>
 
-<h2 align="center" id="supported-triggers">Supported Triggers</h2>
+<h2 align="center" id="supported-triggers">🔔 Supported Triggers</h2>
 
 <details>
 <summary><strong>Notification triggers</strong> (20 providers)</summary>
@@ -434,7 +405,7 @@ All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) 
 
 <hr>
 
-<h2 align="center" id="authentication">Authentication</h2>
+<h2 align="center" id="authentication">🔐 Authentication</h2>
 
 <details>
 <summary><strong>Supported auth methods</strong></summary>
@@ -486,10 +457,10 @@ If OIDC callback logs or UI errors show "OIDC session is missing or expired", ve
 
 <hr>
 
-<h2 align="center" id="migrating-from-wud">Migrating from WUD</h2>
+<h2 align="center" id="migration">🔄 Migration</h2>
 
 <details>
-<summary><strong>Drop-in replacement for What's Up Docker (WUD)</strong></summary>
+<summary><strong>What's Up Docker (WUD) — Drop-in replacement</strong></summary>
 
 drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the image reference — everything else stays the same:
 
@@ -531,7 +502,7 @@ docker exec -it <drydock-container> node dist/index.js config migrate --dry-run
 
 <hr>
 
-<h2 align="center" id="feature-comparison">Feature Comparison</h2>
+<h2 align="center" id="feature-comparison">⚖️ Feature Comparison</h2>
 
 <details>
 <summary><strong>How does drydock compare to other container update tools?</strong></summary>
@@ -603,7 +574,7 @@ docker exec -it <drydock-container> node dist/index.js config migrate --dry-run
 | **Dry-run preview** | Preview what a container update would do without performing it |
 | **Image backup & rollback** | Automatic pre-update image backup with configurable retention and rollback API |
 | **Grafana dashboard** | Importable JSON template for Prometheus metrics overview |
-| **Update Guard** | Safe-pull gate for Docker updates: Trivy vulnerability scan + optional cosign signature verification + SBOM generation + on-demand scan from UI/API |
+| **Update Bouncer** | Safe-pull gate for Docker updates: Trivy vulnerability scan + optional cosign signature verification + SBOM generation + on-demand scan from UI/API |
 | **Font Awesome 6 icons** | Migrated from MDI to FA6 with support for `fab:`/`far:`/`fas:` prefix syntax |
 | **Icon CDN** | Auto-resolve container icons via selfhst/icons (`sh-` prefix) with homarr-labs fallback, bundled selfhst top icons for internetless startup, plus `hl-`/`si-` and custom URL support |
 | **Mobile responsive UI** | Optimized mobile breakpoints for dashboard, containers, and self-update overlay |
@@ -648,39 +619,31 @@ docker exec -it <drydock-container> node dist/index.js config migrate --dry-run
 
 <hr>
 
-<h2 align="center" id="roadmap">Roadmap</h2>
+<h2 align="center" id="roadmap">🗺️ Roadmap</h2>
 
-Here's what's coming.
-
-### WUD Compatibility Roadmap (Migration-first)
-
-| Target | Plan |
-| --- | --- |
-| **March 2026** ✅ | Local compatibility telemetry + one-time startup warnings for legacy `WUD_*` / `wud.*` usage |
-| **April 2026** ✅ | `config migrate` command to auto-convert legacy env vars/labels in user config files |
-| **June 2026** | Optional CI strict migration check mode: block new `WUD_*` / `wud.*` additions while allowing budgeted legacy exceptions |
-| **August 2026** | TypeScript suppression governance: no new `@ts-nocheck`; require rationale + issue link for `@ts-expect-error` |
-| **Future major (no fixed date)** | Keep runtime legacy compatibility by default; only remove `WUD_*` / `wud.*` fallbacks if maintenance or security feasibility requires it, after explicit deprecation notice and migration tooling |
+Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully supported at runtime — see [🔄 Migration](#migration) for details.
 
 | Version | Theme | Highlights |
 | --- | --- | --- |
-| **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Guard, SBOM, 7 new registries, 4 new triggers, self-update fix, rollback fixes, GHCR auth fix, self-hosted TLS options, re2-wasm → re2js regex engine swap, compose trigger fixes, DB persistence on shutdown, CI caching + pipeline hardening, biome → qlty lint migration |
+| **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Bouncer, SBOM, 7 new registries, 4 new triggers, self-update fix, rollback fixes, GHCR auth fix, self-hosted TLS options, re2-wasm → re2js regex engine swap, compose trigger fixes, DB persistence on shutdown, CI caching + pipeline hardening, biome → qlty lint migration |
 | **v1.4.0** ✅ | UI Modernization | Tailwind CSS 4 migration with custom component library, 4 color themes (Drydock/GitHub/Dracula/Catppuccin), 7 icon libraries, 6 font families, shared data components (DataTable/DataCardGrid/DataListAccordion/DataFilterBar/DetailPanel/EmptyState), settings backend + icon proxy cache, container ghost state during updates, SSE real-time updates, remember-me auth |
+| **v1.4.1** | Reliability & Resilience | Non-self rollback, event-stream reconnect, CSRF, error sanitization, UI resilience |
 | **v1.5.0** | Observability | Real-time log viewer, container resource monitoring, registry webhooks |
+| **v1.5.1** | Scanner Decoupling | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers |
-| **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring |
-| **v1.8.0** | Fleet Management | YAML config, live UI config panels, volume browser, parallel updates, SQLite store migration, i18n framework |
+| **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring, dashboard customization |
+| **v1.8.0** | Fleet Management & Live Config | YAML config, live UI config panels, volume browser, parallel updates, SQLite store migration, i18n framework |
 | **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers, basic GitOps |
-| **v2.1.0** | Deployment Patterns | Health check gates, canary deployments |
+| **v2.1.0** | Advanced Deployment Patterns | Health check gates, canary deployments, durable self-update controller |
 | **v2.2.0** | Container Operations | Web terminal, file browser, image building, basic Podman support |
-| **v2.3.0** | Developer Experience | API keys, passkey auth, TOTP 2FA, OpenAPI docs, TypeScript actions, CLI |
-| **v2.4.0** | Data Safety | Scheduled backups (S3, SFTP), compose templates, secret management |
+| **v2.3.0** | Automation & Developer Experience | API keys, passkey auth, TOTP 2FA, OpenAPI docs, TypeScript actions, CLI |
+| **v2.4.0** | Data Safety & Templates | Scheduled backups (S3, SFTP), compose templates, secret management |
 | **v3.0.0** | Advanced Platform | Network topology, GPU monitoring, full i18n translations |
-| **v3.1.0** | Enterprise Access | RBAC, LDAP/AD, environment-scoped permissions, audit logging, Wolfi hardened image |
+| **v3.1.0** | Enterprise Access & Compliance | RBAC, LDAP/AD, environment-scoped permissions, audit logging, Wolfi hardened image |
 
 <hr>
 
-<h2 align="center" id="documentation">Documentation</h2>
+<h2 align="center" id="documentation">📖 Documentation</h2>
 
 | Resource | Link |
 | --- | --- |
