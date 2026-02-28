@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-02-28
+
 ### Added
 
 #### Backend / Core
@@ -33,18 +35,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No-update reason tracking** — `result.noUpdateReason` field surfaces why tag-family or semver filtering suppressed an available update.
 - **Remove individual skip entries** — `remove-skip` policy action allows removing a single skipped tag or digest without clearing all skips.
 - **Update-operation history API** — `GET /api/containers/:id/update-operations` returns persisted update/rollback history for a container.
+- **Settings backend** — `/api/settings` endpoints with LokiJS collection for persistent UI preferences (internetless mode). Icon proxy cache with atomic file writes and manual cache clear.
+- **SSE real-time updates** — Server-Sent Events push container state changes to the UI without polling.
+- **Remember-me authentication** — Persistent login sessions via remember-me checkbox on the login form.
+- **Docker Compose trigger** — Refresh compose services via Docker Compose CLI when updates are detected.
 
 #### UI / Dashboard
 
+- **Tailwind CSS 4 UI stack** — Complete frontend migration from Vuetify 3 to Tailwind CSS 4 with custom shared components. All 13 views rebuilt with Composition API.
+- **Shared data components** — Reusable DataTable, DataCardGrid, DataListAccordion, DataFilterBar, DetailPanel, DataViewLayout, and EmptyState components used consistently across all views with table/cards/list view modes.
+- **4 color themes** — Drydock (navy tones), GitHub (clean/familiar), Dracula (bold purple), and Catppuccin (warm pastels). Each with dark and light variants. Circle-reveal transition animation between themes.
+- **7 icon libraries** — Phosphor Duotone (default), Phosphor, Lucide, Tabler, Heroicons, Iconoir, and Font Awesome. Switchable in Config > Appearance with icon size slider.
+- **6 font families** — IBM Plex Mono (default/bundled), JetBrains Mono, Source Code Pro, Inconsolata, Commit Mono, and Comic Mono. Lazy-loaded from Google Fonts with internetless fallback.
 - **Command palette** — Global Cmd/Ctrl+K search with scope filtering (`/` pages, `@` runtime, `#` containers), keyboard navigation, grouped sections, and recent history.
 - **Notification rules management view** — View, toggle, and assign triggers to notification rules with direct save through `/api/notifications`.
 - **Audit history view** — Paginated audit log with filtering by container, event text, and action type. Includes security-alert and agent-disconnect event type icons.
 - **Container grouping by stack** — Collapsible sections grouping containers by compose stack with count and update badges.
 - **Container actions tab** — Detail panel tab with update preview, trigger list, backup/rollback management, and update policy controls (skip tags, skip digests, snooze).
 - **Container delete action** — Remove a container from tracking via table row or detail panel.
+- **Container ghost state during updates** — When a container is updated, stopped, or restarted, its position is held in the UI with a spinner overlay while polling for the recreated container, preventing the "disappearing container" UX issue. ([#80](https://github.com/CodesWhat/drydock/issues/80))
+- **Skip update action** — Containers with pending updates can be individually skipped, hiding the update badge for the current session without requiring a backend endpoint.
 - **Slide-in detail panels on all views** — Row-click detail panels for Watchers, Auth, Triggers, Registries, Agents, and Security views.
 - **Interactive column resizing** — Drag-to-resize column handles on all DataTable instances.
-- **Dashboard drag-reorder** — Stat cards and widgets are drag-reorderable with localStorage persistence and reset-to-default action.
+- **Dashboard live data and drag-reorder** — Stat cards (containers, updates, security, registries) computed from real container data with drag-reorderable layout and localStorage persistence. Security donut chart, host status, and update breakdown widgets.
 - **Log viewer auto-fetch and scroll lock** — Configurable auto-fetch intervals (2s/5s/10s/30s) with scroll lock detection and resume for both ConfigView logs and container logs.
 - **Keyboard shortcuts** — Enter/Escape for confirm dialogs, Escape to close detail panels.
 - **SSE connectivity overlay** — Connection-lost overlay with self-update awareness and auto-recovery.
@@ -52,13 +65,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Server name badge for remote watchers** — Shows the watcher name instead of "Local" for multi-host setups.
 - **Dynamic dashboard stat colors** — Color-coded update and security stats based on severity ratio.
 - **About Drydock modal** — Version info and links accessible from sidebar.
+- **View wiring** — Watcher container counts, trigger Test buttons with success/failure feedback, host images count, and registry self-hosted port matching all wired to live API data.
 
 ### Changed
 
 - **Single Docker image** — Removed thin/heavy image variants; all images now bundle Trivy and Cosign.
+- **Removed Vuetify dependency** — All Vuetify imports, components, and archived test files removed. Zero Vuetify references remain.
 - **Fail-closed auth enforcement** — Registry bearer-token flows error on token endpoint failures instead of falling through to anonymous. HTTP trigger auth errors on unsupported types. Docker entrypoint requires explicit `DD_RUN_AS_ROOT` + `DD_ALLOW_INSECURE_ROOT` for root mode.
 - **Dashboard streamlined** — Stat cards reduced from 7 to 4 (Containers, Updates, Security, Registries). Recent Activity widget removed to fit on single viewport. Background refresh prevents loading flicker on SSE events.
-- **Notifications view is now full rule management** — Replaced read-only trigger projection with editable notification rules (enable/disable and trigger assignments) that save directly through `/api/notifications`.
+- **Notifications view is full rule management** — Editable notification rules (enable/disable and trigger assignments) that save directly through `/api/notifications`.
 
 ### Fixed
 
@@ -81,9 +96,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Security badge counts only scan vulnerabilities** — No longer inflated by major version updates.
 - **Trigger test failure shows parsed error message** — Actionable error reason displayed below trigger card on test failure.
 - **Viewport scrollbar eliminated** — Fixed double-nested scroll contexts; long tags truncated with tooltips.
+- **Self-hosted registries ignore port when matching** — Registry matching now respects port numbers in self-hosted registry URLs, preventing mismatches between registries on different ports of the same host.
 
 ### Security
 
+- **Removed plaintext credentials from login request body** — The Basic auth login was redundantly sending username and password in both the Authorization header and the JSON body. The backend only reads the Authorization header via Passport, so the body credentials were unnecessary exposure.
 - **Server-issued SSE client identity** — Self-update ack requests validated against server-issued tokens, preventing spoofed acknowledgments.
 - **Fail-closed auth across watchers, registries, and triggers** — Token exchange failures no longer fall through to anonymous access.
 - **Runtime env values redacted** — Container environment variable values stripped from API responses to prevent credential leakage.
@@ -93,38 +110,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Gzip response compression** — API responses compressed above configurable threshold with automatic SSE exclusion.
 - **Skip connectivity polling when SSE connection is active** — Eliminates unnecessary `/auth/user` fetches every 10s during normal operation.
 - **Set-based lookups replace linear scans** — Repeated array lookups converted to Set operations in core paths.
-
-## [1.4.0] — 2026-02-21
-
-### Added
-
-- **Tailwind CSS 4 UI stack** — Complete frontend migration from Vuetify 3 to Tailwind CSS 4 with custom shared components. All 13 views rebuilt with Composition API.
-- **Shared data components** — Reusable DataTable, DataCardGrid, DataListAccordion, DataFilterBar, DetailPanel, DataViewLayout, and EmptyState components used consistently across all views with table/cards/list view modes.
-- **4 color themes** — Drydock (navy tones), GitHub (clean/familiar), Dracula (bold purple), and Catppuccin (warm pastels). Each with dark and light variants. Circle-reveal transition animation between themes.
-- **7 icon libraries** — Phosphor Duotone (default), Phosphor, Lucide, Tabler, Heroicons, Iconoir, and Font Awesome. Switchable in Config > Appearance with icon size slider.
-- **6 font families** — IBM Plex Mono (default/bundled), JetBrains Mono, Source Code Pro, Inconsolata, Commit Mono, and Comic Mono. Lazy-loaded from Google Fonts with internetless fallback.
-- **Settings backend** — New `/api/settings` endpoints with LokiJS collection for persistent UI preferences (internetless mode). Icon proxy cache with atomic file writes and manual cache clear.
-- **Container ghost state during updates** — When a container is updated, stopped, or restarted, its position is held in the UI with a spinner overlay while polling for the recreated container, preventing the "disappearing container" UX issue. ([#80](https://github.com/CodesWhat/drydock/issues/80))
-- **Skip update action** — Containers with pending updates can be individually skipped, hiding the update badge for the current session without requiring a backend endpoint.
-- **SSE real-time updates** — Server-Sent Events push container state changes to the UI without polling.
-- **Remember-me authentication** — Persistent login sessions via remember-me checkbox on the login form.
-- **Docker Compose trigger** — Refresh compose services via Docker Compose CLI when updates are detected.
-- **Dashboard live data** — Stat cards (containers, updates, security issues, uptime) computed from real container data. Container log, security overview donut chart, host status, and update breakdown widgets.
-- **View wiring** — Watcher container counts, trigger Test buttons with success/failure feedback, host images count, and registry self-hosted port matching all wired to live API data.
-- **Full UI test suite** — 592 tests across 41 files covering shared components, composables, views, and utilities. Shared mount helper with directive stubs and router mocks.
-
-### Changed
-
-- **Notifications view shows real trigger data** — Replaced hardcoded fake notification rules with read-only display of configured triggers from the API. Shows trigger name, type badge, and truncated configuration summary. Info banner notes that notification rules are coming in v1.4.1.
-- **Removed Vuetify dependency** — All Vuetify imports, components, and archived test files removed. Zero Vuetify references remain.
-
-### Security
-
-- **Removed plaintext credentials from login request body** — The Basic auth login was redundantly sending username and password in both the Authorization header and the JSON body. The backend only reads the Authorization header via Passport, so the body credentials were unnecessary exposure.
-
-### Fixed
-
-- **Self-hosted registries ignore port when matching** — Registry matching now respects port numbers in self-hosted registry URLs, preventing mismatches between registries on different ports of the same host.
 
 ## [1.3.9] — 2026-02-22
 
@@ -578,7 +563,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.3.9...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/CodesWhat/drydock/compare/v1.3.9...v1.4.0
 [1.3.9]: https://github.com/CodesWhat/drydock/compare/v1.3.8...v1.3.9
 [1.3.8]: https://github.com/CodesWhat/drydock/compare/v1.3.7...v1.3.8
 [1.3.7]: https://github.com/CodesWhat/drydock/compare/v1.3.6...v1.3.7
