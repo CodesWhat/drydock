@@ -114,7 +114,9 @@ test('model should not be validated when invalid', async () => {
 });
 
 test('model should validate a non-empty error message', async () => {
-  const containerValidated = container.validate(createContainerWithError('Registry request failed'));
+  const containerValidated = container.validate(
+    createContainerWithError('Registry request failed'),
+  );
   expect(containerValidated.error).toEqual({ message: 'Registry request failed' });
 });
 
