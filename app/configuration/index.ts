@@ -314,51 +314,54 @@ export function getWebhookConfiguration() {
 }
 
 function parseSecuritySeverityList(rawValue: string | undefined): SecuritySeverity[] {
-  const defaultBlockSeverities = DEFAULT_SECURITY_BLOCK_SEVERITY.split(',').map(
-    (severity) => severity.trim() as SecuritySeverity,
+  return parseDelimitedEnumList(
+    rawValue,
+    DEFAULT_SECURITY_BLOCK_SEVERITY,
+    (severity) => severity.toUpperCase(),
+    (severity): severity is SecuritySeverity =>
+      SECURITY_SEVERITY_VALUES.includes(severity as SecuritySeverity),
   );
-  if (!rawValue) {
-    return defaultBlockSeverities;
-  }
-  const configuredSeverities = rawValue
-    .split(',')
-    .map((severity) => severity.trim().toUpperCase())
-    .filter((severity) => severity !== '');
-  if (configuredSeverities.length === 0) {
-    return defaultBlockSeverities;
-  }
-  const deduplicated = Array.from(new Set(configuredSeverities));
-  const severitiesParsed = deduplicated.filter((severity): severity is SecuritySeverity =>
-    SECURITY_SEVERITY_VALUES.includes(severity as SecuritySeverity),
-  );
-  if (severitiesParsed.length === 0) {
-    return defaultBlockSeverities;
-  }
-  return severitiesParsed;
 }
 
 function parseSecuritySbomFormatList(rawValue: string | undefined): SecuritySbomFormat[] {
-  const defaultSbomFormats = DEFAULT_SECURITY_SBOM_FORMATS.split(',').map(
-    (format) => format.trim() as SecuritySbomFormat,
+  return parseDelimitedEnumList(
+    rawValue,
+    DEFAULT_SECURITY_SBOM_FORMATS,
+    (format) => format.toLowerCase(),
+    (format): format is SecuritySbomFormat =>
+      SECURITY_SBOM_FORMAT_VALUES.includes(format as SecuritySbomFormat),
   );
-  if (!rawValue) {
-    return defaultSbomFormats;
-  }
-  const configuredFormats = rawValue
+}
+
+function parseDelimitedEnumList<T extends string>(
+  rawValue: string | undefined,
+  defaultRawValue: string,
+  normalizeValue: (value: string) => string,
+  isAllowedValue: (value: string) => value is T,
+): T[] {
+  const defaultValues = defaultRawValue
     .split(',')
-    .map((format) => format.trim().toLowerCase())
-    .filter((format) => format !== '');
-  if (configuredFormats.length === 0) {
-    return defaultSbomFormats;
+    .map((value) => value.trim())
+    .filter((value) => value !== '')
+    .filter(isAllowedValue);
+  if (!rawValue) {
+    return defaultValues;
   }
-  const deduplicated = Array.from(new Set(configuredFormats));
-  const formatsParsed = deduplicated.filter((format): format is SecuritySbomFormat =>
-    SECURITY_SBOM_FORMAT_VALUES.includes(format as SecuritySbomFormat),
-  );
-  if (formatsParsed.length === 0) {
-    return defaultSbomFormats;
+
+  const configuredValues = rawValue
+    .split(',')
+    .map((value) => normalizeValue(value.trim()))
+    .filter((value) => value !== '');
+  if (configuredValues.length === 0) {
+    return defaultValues;
   }
-  return formatsParsed;
+
+  const deduplicatedValues = Array.from(new Set(configuredValues));
+  const parsedValues = deduplicatedValues.filter(isAllowedValue);
+  if (parsedValues.length === 0) {
+    return defaultValues;
+  }
+  return parsedValues;
 }
 
 export function getSecurityConfiguration() {
