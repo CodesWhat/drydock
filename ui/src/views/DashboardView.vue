@@ -13,8 +13,12 @@ function navigateTo(route: RouteLocationRaw) {
   router.push(route);
 }
 
-const DASHBOARD_WIDGET_ORDER_STORAGE_KEY = 'dd-dashboard-widget-order-v1';
+const DASHBOARD_WIDGET_ORDER_STORAGE_KEY = 'dd-dashboard-widget-order-v2';
 const DASHBOARD_WIDGET_IDS = [
+  'stat-containers',
+  'stat-updates',
+  'stat-security',
+  'stat-images',
   'recent-updates',
   'security-overview',
   'host-status',
@@ -186,6 +190,7 @@ const stats = computed(() => {
   const images = new Set(containers.value.map((c) => c.image)).size;
   return [
     {
+      id: 'stat-containers' as DashboardWidgetId,
       label: 'Containers',
       value: String(total),
       icon: 'containers',
@@ -194,6 +199,7 @@ const stats = computed(() => {
       route: '/containers',
     },
     {
+      id: 'stat-updates' as DashboardWidgetId,
       label: 'Updates Available',
       value: String(updatesAvailable),
       icon: 'updates',
@@ -214,6 +220,7 @@ const stats = computed(() => {
       route: { path: '/containers', query: { filterKind: 'any' } },
     },
     {
+      id: 'stat-security' as DashboardWidgetId,
       label: 'Security Issues',
       value: String(securityIssues),
       icon: 'security',
@@ -222,6 +229,7 @@ const stats = computed(() => {
       route: '/security',
     },
     {
+      id: 'stat-images' as DashboardWidgetId,
       label: 'Images',
       value: String(images),
       icon: 'images',
@@ -333,18 +341,29 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
         <component
           :is="stat.route ? 'button' : 'div'"
           v-for="stat in stats"
-          :key="stat.label"
+          :key="stat.id"
+          :data-widget-id="stat.id"
+          :data-widget-order="widgetOrderIndex(stat.id)"
+          draggable="true"
           :type="stat.route ? 'button' : undefined"
           class="stat-card dd-rounded p-4 text-left w-full"
-          :class="stat.route ? 'cursor-pointer transition-colors hover:dd-bg-elevated' : ''"
+          :class="[
+            stat.route ? 'cursor-pointer transition-colors hover:dd-bg-elevated' : '',
+            { 'opacity-60': draggedWidgetId === stat.id },
+          ]"
           :style="{
+            ...widgetOrderStyle(stat.id),
             backgroundColor: 'var(--dd-bg-card)',
             borderTop: '1px solid var(--dd-border-strong)',
             borderRight: '1px solid var(--dd-border-strong)',
             borderBottom: '1px solid var(--dd-border-strong)',
             borderLeft: `4px solid ${stat.color}`,
           }"
-          @click="stat.route && navigateTo(stat.route)">
+          @click="stat.route && navigateTo(stat.route)"
+          @dragstart="onWidgetDragStart(stat.id, $event)"
+          @dragover="onWidgetDragOver(stat.id, $event)"
+          @drop="onWidgetDrop(stat.id, $event)"
+          @dragend="onWidgetDragEnd">
           <div class="flex items-center justify-between mb-2">
             <span class="text-[11px] font-medium uppercase tracking-wider dd-text-muted">
               {{ stat.label }}
@@ -358,16 +377,6 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
             {{ stat.value }}
           </div>
         </component>
-      </div>
-
-      <div class="mb-3 flex items-center justify-between px-1 text-[10px] dd-text-muted">
-        <span>Drag dashboard widgets to reorder your layout</span>
-        <button
-          data-testid="dashboard-reset-layout"
-          class="px-2 py-1 dd-rounded text-[10px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
-          @click="resetWidgetOrder">
-          Reset layout
-        </button>
       </div>
 
       <!-- WIDGET GRID -->

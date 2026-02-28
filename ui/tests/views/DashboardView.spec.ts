@@ -34,7 +34,7 @@ import { getServer } from '@/services/server';
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
 const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
 const mockGetServer = getServer as ReturnType<typeof vi.fn>;
-const DASHBOARD_WIDGET_ORDER_STORAGE_KEY = 'dd-dashboard-widget-order-v1';
+const DASHBOARD_WIDGET_ORDER_STORAGE_KEY = 'dd-dashboard-widget-order-v2';
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
   return {
@@ -326,18 +326,21 @@ describe('DashboardView', () => {
     it('hydrates widget order from localStorage', async () => {
       localStorage.setItem(
         DASHBOARD_WIDGET_ORDER_STORAGE_KEY,
-        JSON.stringify(['host-status', 'recent-updates', 'security-overview', 'update-breakdown']),
+        JSON.stringify([
+          'stat-containers', 'stat-updates', 'stat-security', 'stat-images',
+          'host-status', 'recent-updates', 'security-overview', 'update-breakdown',
+        ]),
       );
 
       const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
 
-      expect(wrapper.find('[data-widget-id="host-status"]').attributes('data-widget-order')).toBe('0');
+      expect(wrapper.find('[data-widget-id="host-status"]').attributes('data-widget-order')).toBe('4');
       expect(wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order')).toBe(
-        '1',
+        '5',
       );
       expect(
         wrapper.find('[data-widget-id="security-overview"]').attributes('data-widget-order'),
-      ).toBe('2');
+      ).toBe('6');
     });
 
     it('reorders widgets on drop and persists the new order', async () => {
@@ -358,12 +361,16 @@ describe('DashboardView', () => {
       await draggedWidget.trigger('dragend');
 
       expect(wrapper.find('[data-widget-id="update-breakdown"]').attributes('data-widget-order')).toBe(
-        '0',
+        '4',
       );
       expect(wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order')).toBe(
-        '1',
+        '5',
       );
       expect(JSON.parse(localStorage.getItem(DASHBOARD_WIDGET_ORDER_STORAGE_KEY) || '[]')).toEqual([
+        'stat-containers',
+        'stat-updates',
+        'stat-security',
+        'stat-images',
         'update-breakdown',
         'recent-updates',
         'security-overview',
@@ -371,31 +378,25 @@ describe('DashboardView', () => {
       ]);
     });
 
-    it('resets widget order to defaults', async () => {
-      localStorage.setItem(
-        DASHBOARD_WIDGET_ORDER_STORAGE_KEY,
-        JSON.stringify(['host-status', 'security-overview', 'recent-updates', 'update-breakdown']),
-      );
-
+    it('reorders stat cards on drop', async () => {
       const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
-      await wrapper.find('[data-testid="dashboard-reset-layout"]').trigger('click');
 
-      expect(wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order')).toBe(
-        '0',
-      );
-      expect(wrapper.find('[data-widget-id="security-overview"]').attributes('data-widget-order')).toBe(
-        '1',
-      );
-      expect(wrapper.find('[data-widget-id="host-status"]').attributes('data-widget-order')).toBe('2');
-      expect(wrapper.find('[data-widget-id="update-breakdown"]').attributes('data-widget-order')).toBe(
-        '3',
-      );
-      expect(JSON.parse(localStorage.getItem(DASHBOARD_WIDGET_ORDER_STORAGE_KEY) || '[]')).toEqual([
-        'recent-updates',
-        'security-overview',
-        'host-status',
-        'update-breakdown',
-      ]);
+      const draggedStat = wrapper.find('[data-widget-id="stat-images"]');
+      const targetStat = wrapper.find('[data-widget-id="stat-containers"]');
+      const dataTransfer = {
+        setData: vi.fn(),
+        getData: vi.fn(() => 'stat-images'),
+        effectAllowed: 'move',
+        dropEffect: 'move',
+      };
+
+      await draggedStat.trigger('dragstart', { dataTransfer });
+      await targetStat.trigger('dragover', { dataTransfer });
+      await targetStat.trigger('drop', { dataTransfer });
+      await draggedStat.trigger('dragend');
+
+      expect(wrapper.find('[data-widget-id="stat-images"]').attributes('data-widget-order')).toBe('0');
+      expect(wrapper.find('[data-widget-id="stat-containers"]').attributes('data-widget-order')).toBe('1');
     });
   });
 
