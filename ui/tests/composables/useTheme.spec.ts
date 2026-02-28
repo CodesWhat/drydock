@@ -131,5 +131,19 @@ describe('useTheme', () => {
       const classes = Array.from(document.documentElement.classList);
       expect(classes.some((c) => c.startsWith('theme-'))).toBe(false);
     });
+
+    it('should replace stale theme and variant classes when applying current state', async () => {
+      document.documentElement.className = 'theme-github dark stale';
+      localStorage.setItem('drydock-theme-family', 'catppuccin');
+      localStorage.setItem('drydock-theme-variant', 'light');
+
+      await loadUseTheme();
+
+      const classes = Array.from(document.documentElement.classList);
+      expect(classes).toContain('theme-catppuccin');
+      expect(classes).toContain('light');
+      expect(classes).not.toContain('theme-github');
+      expect(classes).not.toContain('dark');
+    });
   });
 });

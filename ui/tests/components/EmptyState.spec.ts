@@ -63,6 +63,7 @@ describe('EmptyState', () => {
     const btn = wrapper.find('button');
     expect(btn.exists()).toBe(true);
     expect(btn.text()).toBe('Clear all filters');
+    expect(btn.attributes('aria-label')).toBeUndefined();
   });
 
   it('emits clear when the clear button is clicked', async () => {

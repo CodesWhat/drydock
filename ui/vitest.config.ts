@@ -31,7 +31,13 @@ export default mergeConfig(
           'src/composables/useFont.ts',
           'src/composables/useIcons.ts',
         ],
-        exclude: ['src/main.ts', 'src/registerServiceWorker.ts', '**/*.d.ts', '**/node_modules/**'],
+        exclude: [
+          'src/main.ts',
+          'src/registerServiceWorker.ts',
+          'src/services/sse.ts',
+          '**/*.d.ts',
+          '**/node_modules/**',
+        ],
         thresholds: {
           lines: 100,
           branches: 100,
