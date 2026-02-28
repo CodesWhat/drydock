@@ -43,7 +43,7 @@ function getContainerBackups(req: Request, res: Response) {
  * Rollback a container to its latest backup image.
  */
 async function rollbackContainer(req: Request, res: Response) {
-  const { id } = req.params;
+  const id = req.params.id as string;
 
   const container = storeContainer.getContainer(id);
   if (!container) {

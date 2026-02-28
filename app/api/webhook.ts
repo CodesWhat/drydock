@@ -136,7 +136,7 @@ async function watchAll(req: Request, res: Response) {
  * POST /watch/:containerName — watch a specific container by name.
  */
 async function watchContainer(req: Request, res: Response) {
-  const { containerName } = req.params;
+  const containerName = req.params.containerName as string;
   const container = findContainerByName(containerName);
 
   if (!container) {
@@ -173,7 +173,7 @@ async function watchContainer(req: Request, res: Response) {
  * POST /update/:containerName — trigger update on a specific container by name.
  */
 async function updateContainer(req: Request, res: Response) {
-  const { containerName } = req.params;
+  const containerName = req.params.containerName as string;
   const container = findContainerByName(containerName);
 
   if (!container) {

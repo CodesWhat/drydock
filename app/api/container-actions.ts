@@ -31,7 +31,7 @@ async function executeAction(req: Request, res: Response, action: string, method
     return;
   }
 
-  const { id } = req.params;
+  const id = req.params.id as string;
 
   const container = storeContainer.getContainer(id);
   if (!container) {
@@ -112,7 +112,7 @@ async function updateContainer(req: Request, res: Response) {
     return;
   }
 
-  const { id } = req.params;
+  const id = req.params.id as string;
   const container = storeContainer.getContainer(id);
   if (!container) {
     res.sendStatus(404);
