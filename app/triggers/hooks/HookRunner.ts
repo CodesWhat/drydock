@@ -17,6 +17,53 @@ export interface HookResult {
   timedOut: boolean;
 }
 
+function isTimedOut(error: NodeJS.ErrnoException | null): boolean {
+  return Boolean(error && 'killed' in error && error.killed === true);
+}
+
+function resolveExitCode(
+  error: NodeJS.ErrnoException | null,
+  fallbackExitCode: number | null,
+  timedOut: boolean,
+): number {
+  if (timedOut) return 1;
+  const exitCode = error?.code ?? fallbackExitCode ?? 0;
+  return typeof exitCode === 'number' ? exitCode : 1;
+}
+
+function toTruncatedText(output: unknown): string {
+  return typeof output === 'string' ? output.slice(0, MAX_OUTPUT_BYTES) : '';
+}
+
+function createHookResult(
+  error: NodeJS.ErrnoException | null,
+  stdout: unknown,
+  stderr: unknown,
+  fallbackExitCode: number | null,
+): HookResult {
+  const timedOut = isTimedOut(error);
+  return {
+    exitCode: resolveExitCode(error, fallbackExitCode, timedOut),
+    stdout: toTruncatedText(stdout),
+    stderr: toTruncatedText(stderr),
+    timedOut,
+  };
+}
+
+function logHookResult(hookLog: any, label: string, timeout: number, result: HookResult): void {
+  if (result.timedOut) {
+    hookLog.warn(`Hook ${label} timed out after ${timeout}ms`);
+    return;
+  }
+
+  if (result.exitCode === 0) {
+    hookLog.info(`Hook ${label} completed successfully`);
+    return;
+  }
+
+  hookLog.warn(`Hook ${label} failed with exit code ${result.exitCode}: ${result.stderr}`);
+}
+
 /**
  * Run a shell command as a lifecycle hook.
  *
@@ -30,7 +77,14 @@ export async function runHook(command: string, options: HookRunnerOptions): Prom
   hookLog.info(`Running ${options.label} hook: ${command}`);
 
   return new Promise<HookResult>((resolve) => {
-    const child = execFile(
+    let child: ReturnType<typeof execFile> | undefined;
+    const callback = (error: NodeJS.ErrnoException | null, stdout: unknown, stderr: unknown) => {
+      const result = createHookResult(error, stdout, stderr, child?.exitCode ?? null);
+      logHookResult(hookLog, options.label, timeout, result);
+      resolve(result);
+    };
+
+    child = execFile(
       '/bin/sh',
       ['-c', command],
       {
@@ -38,29 +92,7 @@ export async function runHook(command: string, options: HookRunnerOptions): Prom
         maxBuffer: MAX_OUTPUT_BYTES,
         env: { ...process.env, ...options.env },
       },
-      (error, stdout, stderr) => {
-        const timedOut = error !== null && 'killed' in error && error.killed === true;
-        const exitCode = timedOut ? 1 : (error?.code ?? child.exitCode ?? 0);
-
-        const result: HookResult = {
-          exitCode: typeof exitCode === 'number' ? exitCode : 1,
-          stdout: typeof stdout === 'string' ? stdout.slice(0, MAX_OUTPUT_BYTES) : '',
-          stderr: typeof stderr === 'string' ? stderr.slice(0, MAX_OUTPUT_BYTES) : '',
-          timedOut,
-        };
-
-        if (timedOut) {
-          hookLog.warn(`Hook ${options.label} timed out after ${timeout}ms`);
-        } else if (result.exitCode === 0) {
-          hookLog.info(`Hook ${options.label} completed successfully`);
-        } else {
-          hookLog.warn(
-            `Hook ${options.label} failed with exit code ${result.exitCode}: ${result.stderr}`,
-          );
-        }
-
-        resolve(result);
-      },
+      callback,
     );
   });
 }
