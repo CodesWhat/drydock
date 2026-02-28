@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import path from 'node:path';
+import { resolveConfiguredPathWithinBase } from '../runtime/paths.js';
 
 const DEFAULT_CONFIG_CANDIDATES = [
   '.env',
@@ -36,10 +36,18 @@ const LEGACY_LABEL_MAPPINGS = [
   ['wud.compose.file', 'dd.compose.file'],
 ] as const;
 
+const WATCHTOWER_LABEL_MAPPINGS = [
+  ['com.centurylinklabs.watchtower.enable', 'dd.watch'],
+] as const;
+
+const SUPPORTED_MIGRATION_SOURCES = ['auto', 'wud', 'watchtower'] as const;
+type MigrationSource = (typeof SUPPORTED_MIGRATION_SOURCES)[number];
+
 interface MigrateCliOptions {
   files: string[];
   dryRun: boolean;
   help: boolean;
+  source: MigrationSource;
 }
 
 interface MigrateCliIo {
@@ -58,9 +66,24 @@ interface RunMigrateCliOptions {
   io?: MigrateCliIo;
 }
 
+type ParseOptionsResult =
+  | { kind: 'ok'; options: MigrateCliOptions }
+  | { kind: 'error'; error: string };
+
 function escapeForRegExp(value: string) {
   return value.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+const COMPILED_WUD_LABEL_MAPPINGS = LEGACY_LABEL_MAPPINGS.map(
+  ([legacyLabel, newLabel]) =>
+    [new RegExp(`\\b${escapeForRegExp(legacyLabel)}\\b`, 'g'), newLabel] as const,
+);
+
+const COMPILED_WATCHTOWER_LABEL_MAPPINGS = WATCHTOWER_LABEL_MAPPINGS.map(
+  ([legacyLabel, newLabel]) =>
+    [new RegExp(`\\b${escapeForRegExp(legacyLabel)}\\b`, 'g'), newLabel] as const,
+);
+type CompiledLabelMapping = (typeof COMPILED_WUD_LABEL_MAPPINGS)[number];
 
 function replaceWithCount(
   input: string,
@@ -75,7 +98,23 @@ function replaceWithCount(
   return { output, count };
 }
 
-export function migrateLegacyConfigContent(content: string): MigrationResult {
+function replaceLabelMappings(content: string, labelMappings: readonly CompiledLabelMapping[]) {
+  let migratedContent = content;
+  let labelReplacements = 0;
+
+  for (const [labelPattern, newLabel] of labelMappings) {
+    const replaced = replaceWithCount(migratedContent, labelPattern, () => newLabel);
+    migratedContent = replaced.output;
+    labelReplacements += replaced.count;
+  }
+
+  return {
+    content: migratedContent,
+    labelReplacements,
+  };
+}
+
+function migrateWudLegacyConfigContent(content: string): MigrationResult {
   let migratedContent = content;
   let envReplacements = 0;
   let labelReplacements = 0;
@@ -103,13 +142,9 @@ export function migrateLegacyConfigContent(content: string): MigrationResult {
   );
   migratedContent = yamlMapReplacement.output;
   envReplacements += yamlMapReplacement.count;
-
-  for (const [legacyLabel, newLabel] of LEGACY_LABEL_MAPPINGS) {
-    const labelPattern = new RegExp(`\\b${escapeForRegExp(legacyLabel)}\\b`, 'g');
-    const replaced = replaceWithCount(migratedContent, labelPattern, () => newLabel);
-    migratedContent = replaced.output;
-    labelReplacements += replaced.count;
-  }
+  const labelReplacementResult = replaceLabelMappings(migratedContent, COMPILED_WUD_LABEL_MAPPINGS);
+  migratedContent = labelReplacementResult.content;
+  labelReplacements = labelReplacementResult.labelReplacements;
 
   return {
     content: migratedContent,
@@ -118,22 +153,67 @@ export function migrateLegacyConfigContent(content: string): MigrationResult {
   };
 }
 
+function migrateWatchtowerConfigContent(content: string): MigrationResult {
+  const labelReplacementResult = replaceLabelMappings(content, COMPILED_WATCHTOWER_LABEL_MAPPINGS);
+
+  return {
+    content: labelReplacementResult.content,
+    envReplacements: 0,
+    labelReplacements: labelReplacementResult.labelReplacements,
+  };
+}
+
+function parseMigrationSource(value: string): MigrationSource | null {
+  const normalized = value.toLowerCase();
+  if (
+    normalized === 'auto' ||
+    normalized === 'wud' ||
+    normalized === 'watchtower'
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
+export function migrateLegacyConfigContent(
+  content: string,
+  source: MigrationSource = 'auto',
+): MigrationResult {
+  if (source === 'wud') {
+    return migrateWudLegacyConfigContent(content);
+  }
+
+  if (source === 'watchtower') {
+    return migrateWatchtowerConfigContent(content);
+  }
+
+  const wudResult = migrateWudLegacyConfigContent(content);
+  const watchtowerResult = migrateWatchtowerConfigContent(wudResult.content);
+  return {
+    content: watchtowerResult.content,
+    envReplacements: wudResult.envReplacements + watchtowerResult.envReplacements,
+    labelReplacements: wudResult.labelReplacements + watchtowerResult.labelReplacements,
+  };
+}
+
 function printHelp(io: MigrateCliIo) {
-  io.out('Usage: drydock config migrate [--file <path>] [--dry-run]');
+  io.out('Usage: drydock config migrate [--file <path>] [--dry-run] [--source <name>]');
   io.out('');
-  io.out('Migrates legacy WUD_* env vars and wud.* labels to DD_*/dd.* in config files.');
+  io.out('Migrates legacy config inputs from supported source platforms to drydock format.');
   io.out('');
   io.out('Options:');
   io.out('  --file <path>   Migrate a specific file (can be passed multiple times)');
   io.out('  --dry-run       Show what would change without writing files');
+  io.out(`  --source <name> Migration source: ${SUPPORTED_MIGRATION_SOURCES.join(', ')}`);
   io.out('  --help          Show this help');
 }
 
-function parseOptions(args: string[]): { options?: MigrateCliOptions; error?: string } {
+function parseOptions(args: string[]): ParseOptionsResult {
   const options: MigrateCliOptions = {
     files: [],
     dryRun: false,
     help: false,
+    source: 'auto',
   };
 
   for (let i = 0; i < args.length; i += 1) {
@@ -149,16 +229,39 @@ function parseOptions(args: string[]): { options?: MigrateCliOptions; error?: st
     if (arg === '--file') {
       const value = args[i + 1];
       if (!value || value.startsWith('-')) {
-        return { error: '--file requires a path value' };
+        return { kind: 'error', error: '--file requires a path value' };
       }
       options.files.push(value);
       i += 1;
       continue;
     }
-    return { error: `Unknown argument: ${arg}` };
+    if (arg === '--source') {
+      const value = args[i + 1];
+      if (!value || value.startsWith('-')) {
+        return { kind: 'error', error: '--source requires a value' };
+      }
+      const source = parseMigrationSource(value);
+      if (!source) {
+        return {
+          kind: 'error',
+          error: `Unsupported source "${value}". Supported: ${SUPPORTED_MIGRATION_SOURCES.join(', ')}`,
+        };
+      }
+      options.source = source;
+      i += 1;
+      continue;
+    }
+    return { kind: 'error', error: `Unknown argument: ${arg}` };
   }
 
-  return { options };
+  return { kind: 'ok', options };
+}
+
+function formatCliErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return String(error);
 }
 
 export function runConfigMigrateCommandIfRequested(
@@ -176,20 +279,32 @@ export function runConfigMigrateCommandIfRequested(
   const cwd = options.cwd || process.cwd();
 
   const parsed = parseOptions(argv.slice(2));
-  if (parsed.error) {
+  if (parsed.kind === 'error') {
     io.err(`Error: ${parsed.error}`);
     printHelp(io);
     return 1;
   }
-  const migrateOptions = parsed.options as MigrateCliOptions;
+  const migrateOptions = parsed.options;
   if (migrateOptions.help) {
     printHelp(io);
     return 0;
   }
 
-  const candidateFiles = (
-    migrateOptions.files.length > 0 ? migrateOptions.files : [...DEFAULT_CONFIG_CANDIDATES]
-  ).map((filePath) => path.resolve(cwd, filePath));
+  const configuredFiles =
+    migrateOptions.files.length > 0 ? migrateOptions.files : [...DEFAULT_CONFIG_CANDIDATES];
+
+  let candidateFiles: string[];
+  try {
+    candidateFiles = configuredFiles.map((filePath) =>
+      resolveConfiguredPathWithinBase(cwd, filePath, {
+        label: '--file path',
+      }),
+    );
+  } catch (error) {
+    io.err(`Error: ${(error as Error).message}`);
+    return 1;
+  }
+
   const uniqueCandidates = Array.from(new Set(candidateFiles));
 
   let scannedFiles = 0;
@@ -198,32 +313,55 @@ export function runConfigMigrateCommandIfRequested(
   let envReplacements = 0;
   let labelReplacements = 0;
 
-  uniqueCandidates.forEach((candidate) => {
+  for (const candidate of uniqueCandidates) {
     if (!fs.existsSync(candidate)) {
       missingFiles += 1;
-      return;
+      continue;
+    }
+    let candidateMetadata: fs.Stats;
+    try {
+      candidateMetadata = fs.lstatSync(candidate);
+    } catch (error) {
+      io.err(`Error: Failed to inspect "${candidate}": ${formatCliErrorMessage(error)}`);
+      return 1;
+    }
+    if (candidateMetadata.isSymbolicLink()) {
+      io.err(`Refusing to process symlink: ${candidate}`);
+      continue;
     }
 
     scannedFiles += 1;
-    const originalContent = fs.readFileSync(candidate, 'utf-8');
-    const migrated = migrateLegacyConfigContent(originalContent);
+    let originalContent: string;
+    try {
+      originalContent = fs.readFileSync(candidate, 'utf-8');
+    } catch (error) {
+      io.err(`Error: Failed to read "${candidate}": ${formatCliErrorMessage(error)}`);
+      return 1;
+    }
+
+    const migrated = migrateLegacyConfigContent(originalContent, migrateOptions.source);
     envReplacements += migrated.envReplacements;
     labelReplacements += migrated.labelReplacements;
 
     if (migrated.content === originalContent) {
       io.out(`UNCHANGED ${candidate}`);
-      return;
+      continue;
     }
 
     updatedFiles += 1;
     if (!migrateOptions.dryRun) {
-      fs.writeFileSync(candidate, migrated.content, 'utf-8');
+      try {
+        fs.writeFileSync(candidate, migrated.content, 'utf-8');
+      } catch (error) {
+        io.err(`Error: Failed to write "${candidate}": ${formatCliErrorMessage(error)}`);
+        return 1;
+      }
     }
     const status = migrateOptions.dryRun ? 'DRY-RUN' : 'UPDATED';
     io.out(
       `${status} ${candidate} (env=${migrated.envReplacements}, labels=${migrated.labelReplacements})`,
     );
-  });
+  }
 
   if (scannedFiles === 0) {
     io.out('No config files found to migrate.');

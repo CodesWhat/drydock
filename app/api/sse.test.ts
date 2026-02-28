@@ -1,6 +1,19 @@
-var { mockRouter, mockRegisterSelfUpdateStarting } = vi.hoisted(() => ({
+var {
+  mockRouter,
+  mockRegisterSelfUpdateStarting,
+  mockRegisterContainerAdded,
+  mockRegisterContainerUpdated,
+  mockRegisterContainerRemoved,
+  mockRegisterAgentConnected,
+  mockRegisterAgentDisconnected,
+} = vi.hoisted(() => ({
   mockRouter: { get: vi.fn(), post: vi.fn() },
   mockRegisterSelfUpdateStarting: vi.fn(),
+  mockRegisterContainerAdded: vi.fn(),
+  mockRegisterContainerUpdated: vi.fn(),
+  mockRegisterContainerRemoved: vi.fn(),
+  mockRegisterAgentConnected: vi.fn(),
+  mockRegisterAgentDisconnected: vi.fn(),
 }));
 
 vi.mock('express', () => ({
@@ -9,6 +22,11 @@ vi.mock('express', () => ({
 
 vi.mock('../event/index', () => ({
   registerSelfUpdateStarting: mockRegisterSelfUpdateStarting,
+  registerContainerAdded: mockRegisterContainerAdded,
+  registerContainerUpdated: mockRegisterContainerUpdated,
+  registerContainerRemoved: mockRegisterContainerRemoved,
+  registerAgentConnected: mockRegisterAgentConnected,
+  registerAgentDisconnected: mockRegisterAgentDisconnected,
 }));
 
 vi.mock('../log', () => ({
@@ -116,6 +134,19 @@ describe('SSE Router', () => {
     test('should register self-update event handler', () => {
       sseRouter.init();
       expect(mockRegisterSelfUpdateStarting).toHaveBeenCalledWith(expect.any(Function));
+    });
+
+    test('should register container lifecycle event handlers', () => {
+      sseRouter.init();
+      expect(mockRegisterContainerAdded).toHaveBeenCalledWith(expect.any(Function));
+      expect(mockRegisterContainerUpdated).toHaveBeenCalledWith(expect.any(Function));
+      expect(mockRegisterContainerRemoved).toHaveBeenCalledWith(expect.any(Function));
+    });
+
+    test('should register agent connection lifecycle event handlers', () => {
+      sseRouter.init();
+      expect(mockRegisterAgentConnected).toHaveBeenCalledWith(expect.any(Function));
+      expect(mockRegisterAgentDisconnected).toHaveBeenCalledWith(expect.any(Function));
     });
   });
 
@@ -566,6 +597,70 @@ describe('SSE Router', () => {
       const expected =
         'event: dd:scan-completed\ndata: {"containerId":"container-1","status":"error"}\n\n';
       expect(res.write).toHaveBeenCalledWith(expected);
+    });
+  });
+
+  describe('container lifecycle broadcasts', () => {
+    test('should broadcast dd:container-added when container-added event fires', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onContainerAdded = mockRegisterContainerAdded.mock.calls.at(-1)[0];
+
+      onContainerAdded({ id: 'container-1', name: 'nginx' });
+
+      expect(res.write).toHaveBeenCalledWith(
+        'event: dd:container-added\ndata: {"id":"container-1","name":"nginx"}\n\n',
+      );
+    });
+
+    test('should broadcast dd:container-updated when container-updated event fires', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onContainerUpdated = mockRegisterContainerUpdated.mock.calls.at(-1)[0];
+
+      onContainerUpdated({ id: 'container-1', name: 'nginx' });
+
+      expect(res.write).toHaveBeenCalledWith(
+        'event: dd:container-updated\ndata: {"id":"container-1","name":"nginx"}\n\n',
+      );
+    });
+
+    test('should broadcast dd:container-removed when container-removed event fires', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onContainerRemoved = mockRegisterContainerRemoved.mock.calls.at(-1)[0];
+
+      onContainerRemoved({ id: 'container-1' });
+
+      expect(res.write).toHaveBeenCalledWith(
+        'event: dd:container-removed\ndata: {"id":"container-1"}\n\n',
+      );
+    });
+  });
+
+  describe('agent lifecycle broadcasts', () => {
+    test('should broadcast dd:agent-connected when agent-connected event fires', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onAgentConnected = mockRegisterAgentConnected.mock.calls.at(-1)[0];
+
+      onAgentConnected({ agentName: 'edge-1' });
+
+      expect(res.write).toHaveBeenCalledWith(
+        'event: dd:agent-connected\ndata: {"agentName":"edge-1"}\n\n',
+      );
+    });
+
+    test('should broadcast dd:agent-disconnected when agent-disconnected event fires', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onAgentDisconnected = mockRegisterAgentDisconnected.mock.calls.at(-1)[0];
+
+      onAgentDisconnected({ agentName: 'edge-1', reason: 'SSE connection lost' });
+
+      expect(res.write).toHaveBeenCalledWith(
+        'event: dd:agent-disconnected\ndata: {"agentName":"edge-1","reason":"SSE connection lost"}\n\n',
+      );
     });
   });
 });

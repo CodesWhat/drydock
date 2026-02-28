@@ -2173,6 +2173,55 @@ describe('Docker Watcher', () => {
         String.raw`^v\d+`,
       );
     });
+
+    describe('getLabel dual-prefix fallback for all label pairs', () => {
+      const labelPairs = [
+        ['dd.watch', 'wud.watch'],
+        ['dd.tag.include', 'wud.tag.include'],
+        ['dd.tag.exclude', 'wud.tag.exclude'],
+        ['dd.tag.transform', 'wud.tag.transform'],
+        ['dd.inspect.tag.path', 'wud.inspect.tag.path'],
+        ['dd.registry.lookup.image', 'wud.registry.lookup.image'],
+        ['dd.registry.lookup.url', 'wud.registry.lookup.url'],
+        ['dd.watch.digest', 'wud.watch.digest'],
+        ['dd.link.template', 'wud.link.template'],
+        ['dd.display.name', 'wud.display.name'],
+        ['dd.display.icon', 'wud.display.icon'],
+        ['dd.trigger.include', 'wud.trigger.include'],
+        ['dd.trigger.exclude', 'wud.trigger.exclude'],
+        ['dd.group', 'wud.group'],
+        ['dd.hook.pre', 'wud.hook.pre'],
+        ['dd.hook.post', 'wud.hook.post'],
+        ['dd.hook.pre.abort', 'wud.hook.pre.abort'],
+        ['dd.hook.timeout', 'wud.hook.timeout'],
+        ['dd.rollback.auto', 'wud.rollback.auto'],
+        ['dd.rollback.window', 'wud.rollback.window'],
+        ['dd.rollback.interval', 'wud.rollback.interval'],
+      ];
+
+      test.each(labelPairs)(
+        'should prefer %s over %s when both are present',
+        (ddKey, wudKey) => {
+          const labels = { [ddKey]: 'dd-value', [wudKey]: 'wud-value' };
+          expect(testable_getLabel(labels, ddKey, wudKey)).toBe('dd-value');
+        },
+      );
+
+      test.each(labelPairs)(
+        'should fall back to %s when %s is absent',
+        (ddKey, wudKey) => {
+          const labels = { [wudKey]: 'legacy-value' };
+          expect(testable_getLabel(labels, ddKey, wudKey)).toBe('legacy-value');
+        },
+      );
+
+      test.each(labelPairs)(
+        'should return undefined when neither %s nor %s is set',
+        (ddKey, wudKey) => {
+          expect(testable_getLabel({}, ddKey, wudKey)).toBeUndefined();
+        },
+      );
+    });
   });
 
   describe('Version Finding', () => {
@@ -2461,7 +2510,12 @@ describe('Docker Watcher', () => {
       const mockLogChild = { error: vi.fn(), warn: vi.fn() };
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(result).toEqual({ tag: '1.2.3-ls132' });
+      expect(result).toEqual({
+        tag: '1.2.3-ls132',
+        noUpdateReason: expect.stringContaining(
+          'Strict tag-family policy filtered out 1 higher semver tag(s) outside the inferred family of "1.2.3-ls132"',
+        ),
+      });
       expect(mockLogChild.warn).toHaveBeenCalledWith(
         expect.stringContaining(
           'Strict tag-family policy filtered out 1 higher semver tag(s) outside the inferred family of "1.2.3-ls132"',
@@ -2906,6 +2960,39 @@ describe('Docker Watcher', () => {
 
       expect(mockImage.inspect).toHaveBeenCalled();
       expect(result).toBeDefined();
+    });
+
+    test('should include runtime details from inspect payload', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: { Image: 'nginx:1.0.0' },
+      });
+      mockContainer.inspect.mockResolvedValue({
+        NetworkSettings: {
+          Ports: {
+            '80/tcp': [{ HostIp: '0.0.0.0', HostPort: '8080' }],
+            '443/tcp': null,
+          },
+        },
+        Mounts: [
+          { Name: 'config-vol', Destination: '/config', RW: true },
+          { Source: '/host/data', Destination: '/data', RW: false },
+        ],
+        Config: {
+          Env: ['NODE_ENV=production', 'EMPTY=', 'NO_VALUE'],
+        },
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result.details).toEqual({
+        ports: ['0.0.0.0:8080->80/tcp', '443/tcp'],
+        volumes: ['config-vol:/config', '/host/data:/data:ro'],
+        env: [
+          { key: 'NODE_ENV', value: 'production' },
+          { key: 'EMPTY', value: '' },
+          { key: 'NO_VALUE', value: '' },
+        ],
+      });
     });
 
     test('should default display name to drydock for drydock image', async () => {
@@ -4007,6 +4094,41 @@ describe('Docker Watcher', () => {
       await docker.onDockerEvent(Buffer.from('{"Action":"update","id":"c1"}\n'));
 
       expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+    });
+
+    test('should update runtime details when inspect metadata changes', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      docker.log = createMockLogWithChild(['info']);
+      const existing = {
+        id: 'c1',
+        name: 'mycontainer',
+        displayName: 'mycontainer',
+        status: 'running',
+        labels: {},
+        image: { name: 'library/nginx' },
+        details: {
+          ports: ['80/tcp'],
+          volumes: [],
+          env: [],
+        },
+      };
+      storeContainer.getContainer.mockReturnValue(existing);
+      mockContainer.inspect.mockResolvedValue({
+        Name: '/mycontainer',
+        State: { Status: 'running' },
+        Config: { Labels: {}, Env: ['APP_ENV=prod'] },
+        NetworkSettings: { Ports: { '80/tcp': [{ HostIp: '0.0.0.0', HostPort: '8080' }] } },
+        Mounts: [{ Source: '/srv/data', Destination: '/data', RW: true }],
+      });
+
+      await docker.onDockerEvent(Buffer.from('{"Action":"update","id":"c1"}\n'));
+
+      expect(existing.details).toEqual({
+        ports: ['0.0.0.0:8080->80/tcp'],
+        volumes: ['/srv/data:/data'],
+        env: [{ key: 'APP_ENV', value: 'prod' }],
+      });
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(existing);
     });
   });
 

@@ -27,6 +27,33 @@ export function clearCachedSecurityState(watcher, name) {
   securityStateCache.delete(`${watcher}_${name}`);
 }
 
+function getUpdateDetectedAt(containerCurrent, containerNext) {
+  if (!containerNext.updateAvailable) {
+    return undefined;
+  }
+
+  if (typeof containerNext.updateDetectedAt === 'string' && containerNext.updateDetectedAt.length > 0) {
+    return containerNext.updateDetectedAt;
+  }
+
+  if (!containerCurrent) {
+    return new Date().toISOString();
+  }
+
+  const updateChanged =
+    typeof containerCurrent.resultChanged === 'function' && containerCurrent.resultChanged(containerNext);
+
+  if (!containerCurrent.updateAvailable || updateChanged) {
+    return new Date().toISOString();
+  }
+
+  if (typeof containerCurrent.updateDetectedAt === 'string' && containerCurrent.updateDetectedAt.length > 0) {
+    return containerCurrent.updateDetectedAt;
+  }
+
+  return new Date().toISOString();
+}
+
 /**
  * Create container collections.
  * @param db
@@ -46,6 +73,7 @@ export function insertContainer(container) {
     clearCachedSecurityState(container.watcher, container.name);
   }
   const containerToSave = validateContainer(container);
+  containerToSave.updateDetectedAt = getUpdateDetectedAt(undefined, containerToSave);
   containers.insert({
     data: containerToSave,
   });
@@ -73,6 +101,7 @@ export function updateContainer(container) {
     security: hasSecurity ? container.security : containerCurrent?.security,
   };
   const containerToReturn = validateContainer(containerMerged);
+  containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
 
   // Remove existing container
   containers

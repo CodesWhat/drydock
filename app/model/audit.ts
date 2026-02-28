@@ -5,6 +5,7 @@ export interface AuditEntry {
     | 'update-available'
     | 'update-applied'
     | 'update-failed'
+    | 'container-update'
     | 'security-alert'
     | 'agent-disconnect'
     | 'container-added'

@@ -17,6 +17,7 @@ import {
   verifyImageSignature,
 } from '../security/scan.js';
 import * as storeContainer from '../store/container.js';
+import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { mapComponentsToList } from './component.js';
 import { broadcastScanCompleted, broadcastScanStarted } from './sse.js';
@@ -130,6 +131,23 @@ function getContainer(req, res) {
   } else {
     res.sendStatus(404);
   }
+}
+
+/**
+ * Get persisted update-operation history for a container.
+ * @param req
+ * @param res
+ */
+function getContainerUpdateOperations(req, res) {
+  const { id } = req.params;
+  const container = storeContainer.getContainer(id);
+  if (!container) {
+    res.sendStatus(404);
+    return;
+  }
+
+  const operations = updateOperationStore.getOperationsByContainerName(container.name);
+  res.status(200).json(operations);
 }
 
 function getEmptyVulnerabilityResponse() {
@@ -537,10 +555,42 @@ function applySkipCurrentAction(container, updatePolicy) {
   return { policy: updatePolicy };
 }
 
+function applyRemoveSkipAction(updatePolicy, body = {}) {
+  const kind = body.kind;
+  const value = typeof body.value === 'string' ? body.value.trim() : '';
+
+  if (!['tag', 'digest'].includes(kind)) {
+    return { error: 'Invalid remove-skip kind; expected "tag" or "digest"' };
+  }
+  if (!value) {
+    return { error: 'Invalid remove-skip value; expected a non-empty string' };
+  }
+
+  if (kind === 'tag') {
+    const nextSkipTags = (updatePolicy.skipTags || []).filter((entry) => entry !== value);
+    if (nextSkipTags.length > 0) {
+      updatePolicy.skipTags = uniqStrings(nextSkipTags);
+    } else {
+      delete updatePolicy.skipTags;
+    }
+    return { policy: updatePolicy };
+  }
+
+  const nextSkipDigests = (updatePolicy.skipDigests || []).filter((entry) => entry !== value);
+  if (nextSkipDigests.length > 0) {
+    updatePolicy.skipDigests = uniqStrings(nextSkipDigests);
+  } else {
+    delete updatePolicy.skipDigests;
+  }
+  return { policy: updatePolicy };
+}
+
 function applyPolicyAction(action, container, updatePolicy, body = {}) {
   switch (action) {
     case 'skip-current':
       return applySkipCurrentAction(container, updatePolicy);
+    case 'remove-skip':
+      return applyRemoveSkipAction(updatePolicy, body);
     case 'clear-skips':
       delete updatePolicy.skipTags;
       delete updatePolicy.skipDigests;
@@ -753,6 +803,7 @@ export function init() {
   router.get('/', getContainers);
   router.post('/watch', watchContainers);
   router.get('/:id', getContainer);
+  router.get('/:id/update-operations', getContainerUpdateOperations);
   router.delete('/:id', deleteContainer);
   router.get('/:id/triggers', getContainerTriggers);
   router.post('/:id/triggers/:triggerType/:triggerName', runTrigger);

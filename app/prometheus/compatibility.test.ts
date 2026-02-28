@@ -16,3 +16,18 @@ test('recordLegacyInput should increment counter labels', () => {
 
   expect(incSpy).toHaveBeenCalledWith({ source: 'env', key: 'WUD_EXAMPLE' });
 });
+
+test('getLegacyInputSummary should include tracked env and label keys', () => {
+  const uniqueSuffix = Date.now().toString();
+  const envKey = `WUD_SUMMARY_${uniqueSuffix}`;
+  const labelKey = `wud.summary.${uniqueSuffix}`;
+
+  compatibility.recordLegacyInput('env', envKey);
+  compatibility.recordLegacyInput('label', labelKey);
+
+  const summary = compatibility.getLegacyInputSummary();
+
+  expect(summary.total).toBeGreaterThanOrEqual(2);
+  expect(summary.env.keys).toContain(envKey);
+  expect(summary.label.keys).toContain(labelKey);
+});

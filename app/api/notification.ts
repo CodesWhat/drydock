@@ -43,20 +43,6 @@ function getNotificationRules(req, res) {
 }
 
 /**
- * Get one notification rule.
- */
-function getNotificationRule(req, res) {
-  const { id } = req.params;
-  const allowedTriggerIds = getAllowedNotificationTriggerIds();
-  const rule = notificationStore.getNotificationRule(id);
-  if (!rule) {
-    res.sendStatus(404);
-    return;
-  }
-  res.status(200).json(sanitizeRuleForResponse(rule, allowedTriggerIds));
-}
-
-/**
  * Update one notification rule.
  */
 function updateNotificationRule(req, res) {
@@ -111,8 +97,6 @@ function updateNotificationRule(req, res) {
 export function init() {
   router.use(nocache());
   router.get('/', getNotificationRules);
-  router.get('/:id', getNotificationRule);
   router.patch('/:id', updateNotificationRule);
-  router.put('/:id', updateNotificationRule);
   return router;
 }

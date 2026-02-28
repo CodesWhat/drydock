@@ -15,7 +15,12 @@ vi.mock('../agent', () => ({
   getAgent: mockGetAgent,
 }));
 
+vi.mock('../store/container.js', () => ({
+  getContainers: vi.fn(() => []),
+}));
+
 import { getAgents } from '../agent/index.js';
+import { getContainers } from '../store/container.js';
 import * as agentRouter from './agent.js';
 
 function createResponse() {
@@ -43,13 +48,31 @@ describe('Agent Router', () => {
         name: 'agent-1',
         config: { host: 'localhost', port: 3000 },
         isConnected: true,
+        info: {
+          version: '1.5.0',
+          os: 'linux',
+          arch: 'x64',
+          cpus: 8,
+          memoryGb: 31.4,
+          uptimeSeconds: 3600,
+          lastSeen: '2026-02-28T10:00:00.000Z',
+        },
       },
       {
         name: 'agent-2',
         config: { host: 'remote', port: 4000 },
         isConnected: false,
+        info: {},
       },
     ]);
+    getContainers.mockImplementation((query) => {
+      if (query?.agent !== 'agent-1') return [];
+      return [
+        { id: 'c1', status: 'running', image: { id: 'img-a' } },
+        { id: 'c2', status: 'exited', image: { id: 'img-b' } },
+        { id: 'c3', status: 'running', image: { id: 'img-a' } },
+      ];
+    });
 
     agentRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
@@ -58,8 +81,29 @@ describe('Agent Router', () => {
     handler({}, res);
 
     expect(res.json).toHaveBeenCalledWith([
-      { name: 'agent-1', host: 'localhost', port: 3000, connected: true },
-      { name: 'agent-2', host: 'remote', port: 4000, connected: false },
+      {
+        name: 'agent-1',
+        host: 'localhost',
+        port: 3000,
+        connected: true,
+        version: '1.5.0',
+        os: 'linux',
+        arch: 'x64',
+        cpus: 8,
+        memoryGb: 31.4,
+        uptimeSeconds: 3600,
+        lastSeen: '2026-02-28T10:00:00.000Z',
+        containers: { total: 3, running: 2, stopped: 1 },
+        images: 2,
+      },
+      {
+        name: 'agent-2',
+        host: 'remote',
+        port: 4000,
+        connected: false,
+        containers: { total: 0, running: 0, stopped: 0 },
+        images: 0,
+      },
     ]);
   });
 

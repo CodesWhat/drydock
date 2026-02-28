@@ -32,39 +32,59 @@ class Teams extends Trigger {
   }
 
   async trigger(container) {
-    return this.postMessage(this.composeMessage(container));
+    const message = this.composeMessage(container);
+    const resultLink =
+      typeof container?.result?.link === 'string' && container.result.link.length > 0
+        ? container.result.link
+        : undefined;
+    if (resultLink) {
+      return this.postMessage(message, resultLink);
+    }
+    return this.postMessage(message);
   }
 
   async triggerBatch(containers) {
     return this.postMessage(this.composeBatchMessage(containers));
   }
 
-  buildMessageBody(text) {
+  buildMessageBody(text, resultLink) {
+    const content: any = {
+      type: 'AdaptiveCard',
+      $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+      version: this.configuration.cardversion,
+      body: [
+        {
+          type: 'TextBlock',
+          text,
+          wrap: true,
+        },
+      ],
+    };
+
+    if (resultLink) {
+      content.actions = [
+        {
+          type: 'Action.OpenUrl',
+          title: 'Open release',
+          url: resultLink,
+        },
+      ];
+    }
+
     return {
       type: 'message',
       attachments: [
         {
           contentType: 'application/vnd.microsoft.card.adaptive',
           contentUrl: null,
-          content: {
-            type: 'AdaptiveCard',
-            $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-            version: this.configuration.cardversion,
-            body: [
-              {
-                type: 'TextBlock',
-                text,
-                wrap: true,
-              },
-            ],
-          },
+          content,
         },
       ],
     };
   }
 
-  async postMessage(text) {
-    return axios.post(this.configuration.url, this.buildMessageBody(text), {
+  async postMessage(text, resultLink) {
+    return axios.post(this.configuration.url, this.buildMessageBody(text, resultLink), {
       headers: {
         'content-type': 'application/json',
       },

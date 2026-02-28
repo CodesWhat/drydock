@@ -41,6 +41,7 @@ const containerReportsHandlers: OrderedEventHandler[] = [];
 const containerUpdateAppliedHandlers: OrderedEventHandler[] = [];
 const containerUpdateFailedHandlers: OrderedEventHandler[] = [];
 const securityAlertHandlers: OrderedEventHandler[] = [];
+const agentConnectedHandlers: OrderedEventHandler[] = [];
 const agentDisconnectedHandlers: OrderedEventHandler[] = [];
 const selfUpdateStartingHandlers: OrderedEventHandler[] = [];
 let handlerRegistrationSequence = 0;
@@ -227,6 +228,25 @@ export function registerSecurityAlert(
   options: EventHandlerRegistrationOptions = {},
 ) {
   return registerOrderedEventHandler(securityAlertHandlers, handler, options);
+}
+
+/**
+ * Emit AgentConnected event.
+ * @param payload
+ */
+export async function emitAgentConnected(payload: { agentName: string }) {
+  await emitOrderedHandlers(agentConnectedHandlers, payload);
+}
+
+/**
+ * Register to AgentConnected event.
+ * @param handler
+ */
+export function registerAgentConnected(
+  handler: (payload: { agentName: string }) => any,
+  options: EventHandlerRegistrationOptions = {},
+) {
+  return registerOrderedEventHandler(agentConnectedHandlers, handler, options);
 }
 
 /**
@@ -470,6 +490,7 @@ export function clearAllListenersForTests() {
   containerUpdateAppliedHandlers.length = 0;
   containerUpdateFailedHandlers.length = 0;
   securityAlertHandlers.length = 0;
+  agentConnectedHandlers.length = 0;
   agentDisconnectedHandlers.length = 0;
   selfUpdateStartingHandlers.length = 0;
   securityAlertAuditSeenAt.clear();

@@ -1,8 +1,10 @@
 import type { Request, Response } from 'express';
+import os from 'node:os';
 import { getVersion } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import logger from '../../log/index.js';
 import type { Container } from '../../model/container.js';
+import * as storeContainer from '../../store/container.js';
 
 const log = logger.child({ component: 'agent-api-event' });
 
@@ -30,6 +32,39 @@ function sendSseEvent(eventName: string, data: any) {
   });
 }
 
+function getContainerSummary() {
+  const containers = storeContainer.getContainers();
+  const running = containers.filter(
+    (container: any) => String(container.status ?? '').toLowerCase() === 'running',
+  ).length;
+  const total = containers.length;
+  const images = new Set(
+    containers.map((container: any) => container.image?.id ?? container.image?.name ?? container.id),
+  ).size;
+  return {
+    containers: {
+      total,
+      running,
+      stopped: Math.max(total - running, 0),
+    },
+    images,
+  };
+}
+
+function getAckPayloadData() {
+  const summary = getContainerSummary();
+  return {
+    version: getVersion(),
+    os: os.platform(),
+    arch: os.arch(),
+    cpus: os.cpus().length,
+    memoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
+    uptimeSeconds: Math.floor(process.uptime()),
+    lastSeen: new Date().toISOString(),
+    ...summary,
+  };
+}
+
 /**
  * Subscribe to Events (SSE).
  */
@@ -52,7 +87,7 @@ export function subscribeEvents(req: Request, res: Response) {
   // Send Welcome / Ack
   const ackMessage = {
     type: 'dd:ack',
-    data: { version: getVersion() },
+    data: getAckPayloadData(),
   };
   client.res.write(`data: ${JSON.stringify(ackMessage)}\n\n`);
 

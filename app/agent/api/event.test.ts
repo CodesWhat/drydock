@@ -17,6 +17,24 @@ vi.mock('../../configuration/index.js', () => ({
   getVersion: vi.fn().mockReturnValue('1.0.0'),
 }));
 
+vi.mock('node:os', () => ({
+  default: {
+    platform: vi.fn(() => 'linux'),
+    release: vi.fn(() => '6.8.0'),
+    arch: vi.fn(() => 'x64'),
+    cpus: vi.fn(() => new Array(8).fill({ model: 'cpu' })),
+    totalmem: vi.fn(() => 16 * 1024 * 1024 * 1024),
+  },
+}));
+
+vi.mock('../../store/container.js', () => ({
+  getContainers: vi.fn(() => [
+    { id: 'c1', status: 'running', image: { id: 'img-1' } },
+    { id: 'c2', status: 'exited', image: { id: 'img-2' } },
+    { id: 'c3', status: 'running', image: { id: 'img-1' } },
+  ]),
+}));
+
 describe('agent API event', () => {
   let req;
   let res;
@@ -46,6 +64,12 @@ describe('agent API event', () => {
       expect(ackPayload).toContain('data: ');
       expect(ackPayload).toContain('dd:ack');
       expect(ackPayload).toContain('1.0.0');
+      expect(ackPayload).toContain('linux');
+      expect(ackPayload).toContain('x64');
+      expect(ackPayload).toContain('"cpus":8');
+      expect(ackPayload).toContain('"memoryGb":16');
+      expect(ackPayload).toContain('"containers":{"total":3,"running":2,"stopped":1}');
+      expect(ackPayload).toContain('"images":2');
     });
 
     test('should register close handler', () => {

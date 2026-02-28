@@ -10,6 +10,7 @@ const mockVerifyImageSignature = vi.hoisted(() => vi.fn());
 const mockBroadcastScanStarted = vi.hoisted(() => vi.fn());
 const mockBroadcastScanCompleted = vi.hoisted(() => vi.fn());
 const mockEmitSecurityAlert = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockGetOperationsByContainerName = vi.hoisted(() => vi.fn());
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -24,6 +25,10 @@ vi.mock('../store/container', () => ({
   getContainer: vi.fn(),
   updateContainer: vi.fn((container) => container),
   deleteContainer: vi.fn(),
+}));
+
+vi.mock('../store/update-operation', () => ({
+  getOperationsByContainerName: (...args: unknown[]) => mockGetOperationsByContainerName(...args),
 }));
 
 vi.mock('../registry', () => ({
@@ -198,6 +203,7 @@ describe('Container Router', () => {
       expect(router.post).toHaveBeenCalledWith('/:id/watch', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id/vulnerabilities', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id/sbom', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/:id/update-operations', expect.any(Function));
       expect(router.post).toHaveBeenCalledWith(
         '/:id/scan',
         'rate-limit-middleware',
@@ -253,6 +259,46 @@ describe('Container Router', () => {
       handler({ params: { id: 'missing' } }, res);
 
       expect(res.sendStatus).toHaveBeenCalledWith(404);
+    });
+  });
+
+  describe('getContainerUpdateOperations', () => {
+    test('should return 404 when container not found', () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      const handler = getHandler('get', '/:id/update-operations');
+      const res = createResponse();
+      handler({ params: { id: 'missing' } }, res);
+
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(mockGetOperationsByContainerName).not.toHaveBeenCalled();
+    });
+
+    test('should return operations for container name', () => {
+      storeContainer.getContainer.mockReturnValue({ id: 'c1', name: 'nginx' });
+      const operations = [
+        {
+          id: 'op-1',
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          rollbackReason: 'health_gate_failed',
+          updatedAt: '2026-02-28T10:00:00.000Z',
+        },
+        {
+          id: 'op-2',
+          status: 'succeeded',
+          phase: 'succeeded',
+          updatedAt: '2026-02-28T09:00:00.000Z',
+        },
+      ];
+      mockGetOperationsByContainerName.mockReturnValue(operations);
+
+      const handler = getHandler('get', '/:id/update-operations');
+      const res = createResponse();
+      handler({ params: { id: 'c1' } }, res);
+
+      expect(mockGetOperationsByContainerName).toHaveBeenCalledWith('nginx');
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(operations);
     });
   });
 
@@ -1581,6 +1627,43 @@ describe('Container Router', () => {
       );
       expect(getUpdatedPolicy()).toBeUndefined();
       expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should remove an individual skipped tag', () => {
+      const res = callUpdatePolicy(
+        {
+          id: 'c1',
+          updatePolicy: { skipTags: ['2.0.0', '3.0.0'], skipDigests: ['sha256:abc'] },
+        },
+        { action: 'remove-skip', kind: 'tag', value: '2.0.0' },
+      );
+      expect(getUpdatedPolicy()).toEqual({ skipTags: ['3.0.0'], skipDigests: ['sha256:abc'] });
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should remove an individual skipped digest and normalize empty policy fields', () => {
+      const res = callUpdatePolicy(
+        {
+          id: 'c1',
+          updatePolicy: { skipDigests: ['sha256:abc'] },
+        },
+        { action: 'remove-skip', kind: 'digest', value: 'sha256:abc' },
+      );
+      expect(getUpdatedPolicy()).toBeUndefined();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test.each([
+      ['kind is missing', { action: 'remove-skip', value: '2.0.0' }],
+      ['kind is invalid', { action: 'remove-skip', kind: 'unknown', value: '2.0.0' }],
+      ['value is missing', { action: 'remove-skip', kind: 'tag' }],
+      ['value is empty', { action: 'remove-skip', kind: 'digest', value: '' }],
+    ])('should return 400 when remove-skip payload is invalid: %s', (_label, body) => {
+      const res = callUpdatePolicy({ id: 'c1', updatePolicy: { skipTags: ['2.0.0'] } }, body);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.stringContaining('remove-skip') }),
+      );
     });
 
     test('should snooze with default 7 days', () => {

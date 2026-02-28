@@ -19,6 +19,7 @@ import log from '../../../log/index.js';
 import {
   type Container,
   type ContainerImage,
+  type ContainerRuntimeDetails,
   fullName,
   validate as validateContainer,
 } from '../../../model/container.js';
@@ -497,6 +498,11 @@ interface SemverCandidateFilterStats {
   greaterSkipped: boolean;
 }
 
+interface TagCandidatesResult {
+  tags: string[];
+  noUpdateReason?: string;
+}
+
 function getNumericTagShapeFromTransformedTag(transformedTag: string): NumericTagShape | null {
   const tagShape = /^(.*?)(\d+(?:\.\d+)*)(.*)$/.exec(transformedTag);
   if (!tagShape) {
@@ -719,7 +725,7 @@ function filterSemverOnly(tags: string[], transformTags: string | undefined): st
  * @param tags
  * @returns {*}
  */
-function getTagCandidates(container: Container, tags: string[], logContainer: any) {
+function getTagCandidates(container: Container, tags: string[], logContainer: any): TagCandidatesResult {
   const { filteredTags: baseTags, allowIncludeFilterRecovery } = applyIncludeExcludeFilters(
     container,
     tags,
@@ -727,7 +733,7 @@ function getTagCandidates(container: Container, tags: string[], logContainer: an
   );
 
   if (!container.image.tag.semver && !container.includeTags) {
-    return [];
+    return { tags: [] };
   }
 
   if (!container.image.tag.semver) {
@@ -737,7 +743,7 @@ function getTagCandidates(container: Container, tags: string[], logContainer: an
     );
     const semverTags = filterSemverOnly(baseTags, container.transformTags);
     sortSemverDescending(semverTags, container.transformTags);
-    return semverTags;
+    return { tags: semverTags };
   }
 
   // Semver image -> find higher semver tag
@@ -761,22 +767,22 @@ function getTagCandidates(container: Container, tags: string[], logContainer: an
     logContainer.warn(getPrefixFilterWarning(currentPrefix));
   }
 
+  let noUpdateReason: string | undefined;
   if (tagFamilyPolicy === 'strict') {
     if (stats.afterSemver > 0 && stats.afterFamily === 0) {
       logContainer.warn(
         `No tags found in the same inferred family as "${container.image.tag.value}". Set dd.tag.family=loose to allow cross-family semver updates.`,
       );
     } else if (stats.crossFamilyGreaterDropped > 0 && stats.output === 0) {
-      logContainer.warn(
-        `Strict tag-family policy filtered out ${stats.crossFamilyGreaterDropped} higher semver tag(s) outside the inferred family of "${container.image.tag.value}". Set dd.tag.family=loose to restore cross-family update behavior.`,
-      );
+      noUpdateReason = `Strict tag-family policy filtered out ${stats.crossFamilyGreaterDropped} higher semver tag(s) outside the inferred family of "${container.image.tag.value}". Set dd.tag.family=loose to restore cross-family update behavior.`;
+      logContainer.warn(noUpdateReason);
     }
   }
 
   logSemverCandidateFilterStats(logContainer, tagFamilyPolicy, stats);
 
   sortSemverDescending(filteredTags, container.transformTags);
-  return filteredTags;
+  return { tags: filteredTags, noUpdateReason };
 }
 
 function normalizeContainer(container: Container) {
@@ -935,6 +941,202 @@ async function pruneOldContainers(
       storeContainer.deleteContainer(containerToRemove.id);
     }
   }
+}
+
+function getEmptyRuntimeDetails(): ContainerRuntimeDetails {
+  return {
+    ports: [],
+    volumes: [],
+    env: [],
+  };
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+function normalizeRuntimeStringList(values: unknown): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+  return [...new Set(values.filter(isNonEmptyString).map((value) => value.trim()))];
+}
+
+function normalizeRuntimeEnvList(values: unknown): ContainerRuntimeDetails['env'] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const envList: ContainerRuntimeDetails['env'] = [];
+  for (const value of values) {
+    if (!value || typeof value !== 'object') {
+      continue;
+    }
+    const key = isNonEmptyString((value as any).key) ? (value as any).key.trim() : '';
+    if (key === '') {
+      continue;
+    }
+    const rawEnvValue = (value as any).value;
+    const envValue = typeof rawEnvValue === 'string' ? rawEnvValue : `${rawEnvValue ?? ''}`;
+    const dedupeKey = `${key}\u0000${envValue}`;
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+    seen.add(dedupeKey);
+    envList.push({ key, value: envValue });
+  }
+  return envList;
+}
+
+function normalizeRuntimeDetails(details: unknown): ContainerRuntimeDetails {
+  if (!details || typeof details !== 'object') {
+    return getEmptyRuntimeDetails();
+  }
+  return {
+    ports: normalizeRuntimeStringList((details as any).ports),
+    volumes: normalizeRuntimeStringList((details as any).volumes),
+    env: normalizeRuntimeEnvList((details as any).env),
+  };
+}
+
+function areRuntimeDetailsEqual(
+  detailsA: ContainerRuntimeDetails | undefined,
+  detailsB: ContainerRuntimeDetails | undefined,
+) {
+  return JSON.stringify(normalizeRuntimeDetails(detailsA)) === JSON.stringify(normalizeRuntimeDetails(detailsB));
+}
+
+function formatContainerPortsFromInspect(networkPorts: unknown): string[] {
+  if (!networkPorts || typeof networkPorts !== 'object') {
+    return [];
+  }
+  const formattedPorts: string[] = [];
+  for (const [containerPort, bindings] of Object.entries(networkPorts as Record<string, unknown>)) {
+    if (!Array.isArray(bindings) || bindings.length === 0) {
+      formattedPorts.push(containerPort);
+      continue;
+    }
+    for (const binding of bindings) {
+      if (!binding || typeof binding !== 'object') {
+        continue;
+      }
+      const hostIp = typeof (binding as any).HostIp === 'string' ? (binding as any).HostIp : '';
+      const hostPort =
+        (binding as any).HostPort !== undefined && (binding as any).HostPort !== null
+          ? `${(binding as any).HostPort}`
+          : '';
+      if (hostPort === '') {
+        formattedPorts.push(containerPort);
+        continue;
+      }
+      const hostBinding = hostIp !== '' ? `${hostIp}:${hostPort}` : hostPort;
+      formattedPorts.push(`${hostBinding}->${containerPort}`);
+    }
+  }
+  return normalizeRuntimeStringList(formattedPorts);
+}
+
+function formatContainerPortsFromSummary(containerPorts: unknown): string[] {
+  if (!Array.isArray(containerPorts)) {
+    return [];
+  }
+  const formattedPorts: string[] = [];
+  for (const port of containerPorts) {
+    if (!port || typeof port !== 'object') {
+      continue;
+    }
+    const privatePort = (port as any).PrivatePort;
+    if (privatePort === undefined || privatePort === null) {
+      continue;
+    }
+    const protocol = isNonEmptyString((port as any).Type) ? (port as any).Type : 'tcp';
+    const containerPort = `${privatePort}/${protocol}`;
+    const publicPort = (port as any).PublicPort;
+    if (publicPort === undefined || publicPort === null) {
+      formattedPorts.push(containerPort);
+      continue;
+    }
+    const hostIp = isNonEmptyString((port as any).IP) ? `${(port as any).IP}:` : '';
+    formattedPorts.push(`${hostIp}${publicPort}->${containerPort}`);
+  }
+  return normalizeRuntimeStringList(formattedPorts);
+}
+
+function formatContainerVolumes(mounts: unknown): string[] {
+  if (!Array.isArray(mounts)) {
+    return [];
+  }
+  const formattedVolumes: string[] = [];
+  for (const mount of mounts) {
+    if (!mount || typeof mount !== 'object') {
+      continue;
+    }
+    const source = isNonEmptyString((mount as any).Name)
+      ? (mount as any).Name.trim()
+      : isNonEmptyString((mount as any).Source)
+        ? (mount as any).Source.trim()
+        : '';
+    const destination = isNonEmptyString((mount as any).Destination)
+      ? (mount as any).Destination.trim()
+      : '';
+    if (source === '' && destination === '') {
+      continue;
+    }
+    let volume = source !== '' && destination !== '' ? `${source}:${destination}` : source || destination;
+    if ((mount as any).RW === false) {
+      volume = `${volume}:ro`;
+    }
+    formattedVolumes.push(volume);
+  }
+  return normalizeRuntimeStringList(formattedVolumes);
+}
+
+function formatContainerEnv(envVars: unknown): ContainerRuntimeDetails['env'] {
+  if (!Array.isArray(envVars)) {
+    return [];
+  }
+  const parsedEnv: ContainerRuntimeDetails['env'] = [];
+  for (const envEntry of envVars) {
+    if (!isNonEmptyString(envEntry)) {
+      continue;
+    }
+    const separatorIndex = envEntry.indexOf('=');
+    const key = separatorIndex >= 0 ? envEntry.slice(0, separatorIndex).trim() : envEntry.trim();
+    const value = separatorIndex >= 0 ? envEntry.slice(separatorIndex + 1) : '';
+    if (key === '') {
+      continue;
+    }
+    parsedEnv.push({ key, value });
+  }
+  return normalizeRuntimeEnvList(parsedEnv);
+}
+
+function getRuntimeDetailsFromInspect(containerInspect: any): ContainerRuntimeDetails {
+  return {
+    ports: formatContainerPortsFromInspect(containerInspect?.NetworkSettings?.Ports),
+    volumes: formatContainerVolumes(containerInspect?.Mounts),
+    env: formatContainerEnv(containerInspect?.Config?.Env),
+  };
+}
+
+function getRuntimeDetailsFromContainerSummary(container: any): ContainerRuntimeDetails {
+  return {
+    ports: formatContainerPortsFromSummary(container?.Ports),
+    volumes: formatContainerVolumes(container?.Mounts),
+    env: [],
+  };
+}
+
+function mergeRuntimeDetails(
+  preferredDetails: ContainerRuntimeDetails,
+  fallbackDetails: ContainerRuntimeDetails,
+): ContainerRuntimeDetails {
+  return {
+    ports: preferredDetails.ports.length > 0 ? preferredDetails.ports : fallbackDetails.ports,
+    volumes:
+      preferredDetails.volumes.length > 0 ? preferredDetails.volumes : fallbackDetails.volumes,
+    env: preferredDetails.env.length > 0 ? preferredDetails.env : fallbackDetails.env,
+  };
 }
 
 function getContainerName(container: any) {
@@ -2434,6 +2636,11 @@ class Docker extends Watcher {
     const customDisplayNameFromLabel = getLabel(labelsToApply, ddDisplayName, wudDisplayName);
     const hasCustomDisplayName =
       customDisplayNameFromLabel && customDisplayNameFromLabel.trim() !== '';
+    const runtimeDetailsFromInspect = getRuntimeDetailsFromInspect(containerInspect);
+    const runtimeDetailsChanged = !areRuntimeDetailsEqual(
+      containerFound.details,
+      runtimeDetailsFromInspect,
+    );
 
     let changed = false;
 
@@ -2451,6 +2658,11 @@ class Docker extends Watcher {
 
     if (labelsChanged) {
       containerFound.labels = labelsToApply;
+      changed = true;
+    }
+
+    if (runtimeDetailsChanged) {
+      containerFound.details = runtimeDetailsFromInspect;
       changed = true;
     }
 
@@ -2875,7 +3087,10 @@ class Docker extends Watcher {
     const tags = await registryProvider.getTags(container.image);
 
     // Get candidate tags (based on tag name)
-    const tagsCandidates = getTagCandidates(container, tags, logContainer);
+    const { tags: tagsCandidates, noUpdateReason } = getTagCandidates(container, tags, logContainer);
+    if (noUpdateReason) {
+      result.noUpdateReason = noUpdateReason;
+    }
 
     // Must watch digest? => Find local/remote digests on registry
     if (container.image.digest.watch && container.image.digest.repo) {
@@ -2895,12 +3110,27 @@ class Docker extends Watcher {
   async addImageDetailsToContainer(container: any, labelOverrides: ContainerLabelOverrides = {}) {
     const containerId = container.Id;
     const containerLabels = container.Labels || {};
+    const runtimeDetailsFromSummary = getRuntimeDetailsFromContainerSummary(container);
 
     // Is container already in store? Refresh volatile image fields, then return it
     const containerInStore = storeContainer.getContainer(containerId);
     if (containerInStore !== undefined && containerInStore.error === undefined) {
       this.ensureLogger();
       this.log.debug(`Container ${containerInStore.id} already in store`);
+      let runtimeDetailsToApply = runtimeDetailsFromSummary;
+      try {
+        const containerInspect = await this.dockerApi.getContainer(containerId).inspect();
+        runtimeDetailsToApply = mergeRuntimeDetails(
+          getRuntimeDetailsFromInspect(containerInspect),
+          runtimeDetailsFromSummary,
+        );
+      } catch {
+        // Degrade gracefully to summary details.
+      }
+      if (!areRuntimeDetailsEqual(containerInStore.details, runtimeDetailsToApply)) {
+        containerInStore.details = runtimeDetailsToApply;
+      }
+
       try {
         const currentImage = await this.dockerApi.getImage(container.Image).inspect();
         const freshDigestRepo = getRepoDigest(currentImage);
@@ -2968,6 +3198,16 @@ class Docker extends Watcher {
     const isSemver = parseSemver(transformTag(resolvedConfig.transformTags, tagName)) != null;
     const watchDigest = isDigestToWatch(resolvedConfig.watchDigest, parsedImage, isSemver);
     const repoDigest = getRepoDigest(image);
+    let runtimeDetails = runtimeDetailsFromSummary;
+    try {
+      const containerInspect = await this.dockerApi.getContainer(containerId).inspect();
+      runtimeDetails = mergeRuntimeDetails(
+        getRuntimeDetailsFromInspect(containerInspect),
+        runtimeDetailsFromSummary,
+      );
+    } catch {
+      // Degrade gracefully to summary details.
+    }
     if (!isSemver && !watchDigest) {
       this.ensureLogger();
       this.log.warn(
@@ -3016,6 +3256,7 @@ class Docker extends Watcher {
         created: image.Created,
       },
       labels: containerLabels,
+      details: runtimeDetails,
       result: {
         tag: tagName,
       },

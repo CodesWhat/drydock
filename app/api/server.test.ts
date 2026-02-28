@@ -20,6 +20,14 @@ vi.mock('../security/runtime.js', () => ({
   })),
 }));
 
+vi.mock('../prometheus/compatibility.js', () => ({
+  getLegacyInputSummary: vi.fn(() => ({
+    total: 3,
+    env: { total: 1, keys: ['WUD_SERVER_PORT'] },
+    label: { total: 2, keys: ['wud.watch'] },
+  })),
+}));
+
 // Mock express modules
 vi.mock('express', () => ({
   default: {
@@ -71,6 +79,13 @@ describe('Server Router', () => {
         feature: { delete: true },
         tls: {},
         webhook: { enabled: false },
+      },
+      compatibility: {
+        legacyInputs: {
+          total: 3,
+          env: { total: 1, keys: ['WUD_SERVER_PORT'] },
+          label: { total: 2, keys: ['wud.watch'] },
+        },
       },
     });
   });

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
-import { emitAgentDisconnected, emitContainerReport } from '../event/index.js';
+import { emitAgentConnected, emitAgentDisconnected, emitContainerReport } from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import type { Container, ContainerReport } from '../model/container.js';
@@ -19,6 +19,18 @@ export interface AgentClientConfig {
   keyfile?: string;
 }
 
+export interface AgentClientRuntimeInfo {
+  version?: string;
+  os?: string;
+  arch?: string;
+  cpus?: number;
+  memoryGb?: number;
+  uptimeSeconds?: number;
+  lastSeen?: string;
+  logLevel?: string;
+  pollInterval?: string;
+}
+
 export class AgentClient {
   public name: string;
   public config: AgentClientConfig;
@@ -26,6 +38,7 @@ export class AgentClient {
   private readonly baseUrl: string;
   private readonly axiosOptions: AxiosRequestConfig;
   public isConnected: boolean;
+  public info: AgentClientRuntimeInfo;
   private reconnectTimer: NodeJS.Timeout | null;
 
   constructor(name: string, config: AgentClientConfig) {
@@ -72,6 +85,7 @@ export class AgentClient {
     }
 
     this.isConnected = false;
+    this.info = {};
     this.reconnectTimer = null;
   }
 
@@ -112,6 +126,7 @@ export class AgentClient {
   }
 
   async handshake() {
+    const wasConnected = this.isConnected;
     const response = await axios.get<Container[]>(
       `${this.baseUrl}/api/containers`,
       this.axiosOptions,
@@ -150,6 +165,13 @@ export class AgentClient {
     }
 
     this.isConnected = true;
+    if (!wasConnected) {
+      void emitAgentConnected({
+        agentName: this.name,
+      }).catch((e: any) => {
+        this.log.debug(`Failed to emit agent connected event (${e.message})`);
+      });
+    }
   }
 
   async processContainer(container: Container) {
@@ -270,6 +292,21 @@ export class AgentClient {
 
   async handleEvent(eventName: string, data: any) {
     if (eventName === 'dd:ack') {
+      this.info = {
+        ...this.info,
+        version: typeof data?.version === 'string' ? data.version : this.info.version,
+        os: typeof data?.os === 'string' ? data.os : this.info.os,
+        arch: typeof data?.arch === 'string' ? data.arch : this.info.arch,
+        cpus: Number.isFinite(data?.cpus) ? Number(data.cpus) : this.info.cpus,
+        memoryGb: Number.isFinite(data?.memoryGb) ? Number(data.memoryGb) : this.info.memoryGb,
+        uptimeSeconds: Number.isFinite(data?.uptimeSeconds)
+          ? Number(data.uptimeSeconds)
+          : this.info.uptimeSeconds,
+        lastSeen:
+          typeof data?.lastSeen === 'string' && data.lastSeen
+            ? data.lastSeen
+            : new Date().toISOString(),
+      };
       this.log.info(`Agent ${this.name} connected (version: ${data.version})`);
       this.handshake();
     } else if (eventName === 'dd:container-added' || eventName === 'dd:container-updated') {

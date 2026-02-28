@@ -39,6 +39,7 @@ export interface ContainerResult {
   digest?: string;
   created?: string;
   link?: string;
+  noUpdateReason?: string;
 }
 
 export interface ContainerUpdateKind {
@@ -58,6 +59,17 @@ export interface ContainerSecurityState {
   scan?: ContainerSecurityScan;
   signature?: ContainerSignatureVerification;
   sbom?: ContainerSecuritySbom;
+}
+
+export interface ContainerRuntimeEnv {
+  key: string;
+  value: string;
+}
+
+export interface ContainerRuntimeDetails {
+  ports: string[];
+  volumes: string[];
+  env: ContainerRuntimeEnv[];
 }
 
 export interface Container {
@@ -85,7 +97,9 @@ export interface Container {
   };
   updateAvailable: boolean;
   updateKind: ContainerUpdateKind;
+  updateDetectedAt?: string;
   labels?: Record<string, string>;
+  details?: ContainerRuntimeDetails;
   resultChanged?: (otherContainer: Container | undefined) => boolean;
 }
 
@@ -208,6 +222,7 @@ const schema = joi.object({
     digest: joi.string(),
     created: joi.string().isoDate(),
     link: joi.string(),
+    noUpdateReason: joi.string().min(1),
   }),
   error: joi.object({
     message: joi.string().min(1).required(),
@@ -221,8 +236,22 @@ const schema = joi.object({
       semverDiff: joi.string().allow('major', 'minor', 'patch', 'prerelease', 'unknown'),
     })
     .default({ kind: 'unknown' }),
+  updateDetectedAt: joi.string().isoDate(),
   resultChanged: joi.function(),
   labels: joi.object(),
+  details: joi.object({
+    ports: joi.array().items(joi.string()).required(),
+    volumes: joi.array().items(joi.string()).required(),
+    env: joi
+      .array()
+      .items(
+        joi.object({
+          key: joi.string().required(),
+          value: joi.string().required(),
+        }),
+      )
+      .required(),
+  }),
 });
 
 function getRawTagUpdate(container: Container): ContainerUpdateKind {

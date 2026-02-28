@@ -24,6 +24,7 @@ vi.mock('../store/container.js', () => ({
   deleteContainer: vi.fn(),
 }));
 vi.mock('../event/index.js', () => ({
+  emitAgentConnected: vi.fn().mockResolvedValue(undefined),
   emitAgentDisconnected: vi.fn().mockResolvedValue(undefined),
   emitContainerReport: vi.fn(),
 }));
@@ -267,6 +268,31 @@ describe('AgentClient', () => {
       expect(client.isConnected).toBe(true);
     });
 
+    test('should emit agent-connected when transitioning to connected state', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainers.mockReturnValue([]);
+      await client.handshake();
+
+      expect(event.emitAgentConnected).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should not emit agent-connected when already connected', async () => {
+      client.isConnected = true;
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainers.mockReturnValue([]);
+      await client.handshake();
+
+      expect(event.emitAgentConnected).not.toHaveBeenCalled();
+    });
+
     test('should handle watcher fetch failure gracefully', async () => {
       axios.get
         .mockResolvedValueOnce({ data: [] }) // containers
@@ -485,10 +511,27 @@ describe('AgentClient', () => {
   });
 
   describe('handleEvent', () => {
-    test('should call handshake on dd:ack', async () => {
+    test('should cache runtime info and call handshake on dd:ack', async () => {
       const spy = vi.spyOn(client, 'handshake').mockResolvedValue(undefined);
-      await client.handleEvent('dd:ack', { version: '1.0' });
+      await client.handleEvent('dd:ack', {
+        version: '1.0',
+        os: 'linux',
+        arch: 'x64',
+        cpus: 8,
+        memoryGb: 15.7,
+        uptimeSeconds: 102,
+        lastSeen: '2026-02-28T12:00:00.000Z',
+      });
       expect(spy).toHaveBeenCalled();
+      expect(client.info).toEqual({
+        version: '1.0',
+        os: 'linux',
+        arch: 'x64',
+        cpus: 8,
+        memoryGb: 15.7,
+        uptimeSeconds: 102,
+        lastSeen: '2026-02-28T12:00:00.000Z',
+      });
     });
 
     test('should process container on dd:container-added', async () => {

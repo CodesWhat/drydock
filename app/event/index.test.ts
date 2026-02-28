@@ -181,6 +181,26 @@ test('emitAgentDisconnected should call registered handlers with payload', async
   expect(handler).toHaveBeenCalledWith(payload);
 });
 
+test('emitAgentConnected should call registered handlers with payload', async () => {
+  const handler = vi.fn();
+  const payload = {
+    agentName: 'edge-a',
+  };
+  event.registerAgentConnected(handler, { order: 10 });
+  await event.emitAgentConnected(payload);
+  expect(handler).toHaveBeenCalledWith(payload);
+});
+
+test('deregistration of agent connected handler should work', async () => {
+  const handler = vi.fn();
+  const deregister = event.registerAgentConnected(handler, { order: 10 });
+  deregister();
+  await event.emitAgentConnected({
+    agentName: 'edge-a',
+  });
+  expect(handler).not.toHaveBeenCalled();
+});
+
 test('deregistration of agent disconnected handler should work', async () => {
   const handler = vi.fn();
   const deregister = event.registerAgentDisconnected(handler, { order: 10 });

@@ -2,7 +2,14 @@ import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import express from 'express';
 import type { SelfUpdateStartingEventPayload } from '../event/index.js';
-import { registerSelfUpdateStarting } from '../event/index.js';
+import {
+  registerAgentConnected,
+  registerAgentDisconnected,
+  registerContainerAdded,
+  registerContainerRemoved,
+  registerContainerUpdated,
+  registerSelfUpdateStarting,
+} from '../event/index.js';
 import log from '../log/index.js';
 
 const router = express.Router();
@@ -262,10 +269,33 @@ export function broadcastScanCompleted(containerId: string, status: string): voi
   }
 }
 
+function broadcastContainerEvent(eventName: string, payload: unknown): void {
+  const data = JSON.stringify(payload ?? {});
+  for (const client of clients) {
+    client.write(`event: ${eventName}\ndata: ${data}\n\n`);
+    (client as any).flush?.();
+  }
+}
+
 export function init(): express.Router {
   // Register for self-update events from the trigger system
   registerSelfUpdateStarting(async (payload: SelfUpdateStartingEventPayload) => {
     await broadcastSelfUpdate(payload);
+  });
+  registerContainerAdded((payload: unknown) => {
+    broadcastContainerEvent('dd:container-added', payload);
+  });
+  registerContainerUpdated((payload: unknown) => {
+    broadcastContainerEvent('dd:container-updated', payload);
+  });
+  registerContainerRemoved((payload: unknown) => {
+    broadcastContainerEvent('dd:container-removed', payload);
+  });
+  registerAgentConnected((payload: unknown) => {
+    broadcastContainerEvent('dd:agent-connected', payload);
+  });
+  registerAgentDisconnected((payload: unknown) => {
+    broadcastContainerEvent('dd:agent-disconnected', payload);
   });
 
   router.get('/', eventsHandler);

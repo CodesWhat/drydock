@@ -3,7 +3,6 @@ import { createMockResponse } from '../test/helpers.js';
 const {
   mockRouter,
   mockGetNotificationRules,
-  mockGetNotificationRule,
   mockUpdateNotificationRule,
   mockGetRegistryState,
 } = vi.hoisted(() => ({
@@ -17,13 +16,6 @@ const {
       description: 'When a container has a new version',
     },
   ]),
-  mockGetNotificationRule: vi.fn(() => ({
-    id: 'update-available',
-    name: 'Update Available',
-    enabled: true,
-    triggers: ['slack.ops', 'docker.update'],
-    description: 'When a container has a new version',
-  })),
   mockUpdateNotificationRule: vi.fn((id, update) => ({
     id,
     name: 'Update Available',
@@ -48,7 +40,6 @@ vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
 vi.mock('../store/notification', () => ({
   getNotificationRules: mockGetNotificationRules,
-  getNotificationRule: mockGetNotificationRule,
   updateNotificationRule: mockUpdateNotificationRule,
 }));
 
@@ -68,9 +59,10 @@ describe('Notification Router', () => {
 
     expect(router.use).toHaveBeenCalledWith('nocache-middleware');
     expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
-    expect(router.get).toHaveBeenCalledWith('/:id', expect.any(Function));
     expect(router.patch).toHaveBeenCalledWith('/:id', expect.any(Function));
-    expect(router.put).toHaveBeenCalledWith('/:id', expect.any(Function));
+    expect(router.get).toHaveBeenCalledTimes(1);
+    expect(router.patch).toHaveBeenCalledTimes(1);
+    expect(router.put).not.toHaveBeenCalled();
   });
 
   test('should return all notification rules', () => {
@@ -120,35 +112,6 @@ describe('Notification Router', () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith([undefined]);
-  });
-
-  test('should return one notification rule when it exists', () => {
-    notificationRouter.init();
-    const handler = mockRouter.get.mock.calls.find((call) => call[0] === '/:id')[1];
-    const res = createMockResponse();
-
-    handler({ params: { id: 'update-available' } }, res);
-
-    expect(mockGetNotificationRule).toHaveBeenCalledWith('update-available');
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({
-      id: 'update-available',
-      name: 'Update Available',
-      enabled: true,
-      triggers: ['slack.ops'],
-      description: 'When a container has a new version',
-    });
-  });
-
-  test('should return 404 for unknown notification rule', () => {
-    mockGetNotificationRule.mockReturnValueOnce(undefined);
-    notificationRouter.init();
-    const handler = mockRouter.get.mock.calls.find((call) => call[0] === '/:id')[1];
-    const res = createMockResponse();
-
-    handler({ params: { id: 'missing' } }, res);
-
-    expect(res.sendStatus).toHaveBeenCalledWith(404);
   });
 
   test('should update a notification rule when payload is valid', () => {
@@ -264,7 +227,7 @@ describe('Notification Router', () => {
       throw new Error('update failure');
     });
     notificationRouter.init();
-    const handler = mockRouter.put.mock.calls.find((call) => call[0] === '/:id')[1];
+    const handler = mockRouter.patch.mock.calls.find((call) => call[0] === '/:id')[1];
     const res = createMockResponse();
 
     handler(

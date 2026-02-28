@@ -2,6 +2,7 @@
 import express from 'express';
 import nocache from 'nocache';
 import { getServerConfiguration, getWebhookConfiguration } from '../configuration/index.js';
+import { getLegacyInputSummary } from '../prometheus/compatibility.js';
 import { getSecurityRuntimeStatus } from '../security/runtime.js';
 
 const router = express.Router();
@@ -20,6 +21,9 @@ function getServer(req, res) {
       webhook: {
         enabled: webhookConfig.enabled,
       },
+    },
+    compatibility: {
+      legacyInputs: getLegacyInputSummary(),
     },
   });
 }

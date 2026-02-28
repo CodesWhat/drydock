@@ -1,16 +1,49 @@
 import express from 'express';
 import { getAgent, getAgents } from '../agent/index.js';
+import * as storeContainer from '../store/container.js';
 
 const router = express.Router();
 
+function getAgentContainerStats(agentName: string) {
+  const containers = storeContainer.getContainers({ agent: agentName });
+  const running = containers.filter(
+    (container: any) => String(container.status ?? '').toLowerCase() === 'running',
+  ).length;
+  const total = containers.length;
+  const images = new Set(
+    containers.map((container: any) => container.image?.id ?? container.image?.name ?? container.id),
+  ).size;
+  return {
+    containers: {
+      total,
+      running,
+      stopped: Math.max(total - running, 0),
+    },
+    images,
+  };
+}
+
 function getAgentsList(req, res) {
   const agents = getAgents();
-  const safeAgents = agents.map((agent) => ({
-    name: agent.name,
-    host: agent.config.host,
-    port: agent.config.port,
-    connected: agent.isConnected,
-  }));
+  const safeAgents = agents.map((agent) => {
+    const stats = getAgentContainerStats(agent.name);
+    return {
+      name: agent.name,
+      host: agent.config.host,
+      port: agent.config.port,
+      connected: agent.isConnected,
+      version: agent.info?.version,
+      os: agent.info?.os,
+      arch: agent.info?.arch,
+      cpus: agent.info?.cpus,
+      memoryGb: agent.info?.memoryGb,
+      uptimeSeconds: agent.info?.uptimeSeconds,
+      lastSeen: agent.info?.lastSeen,
+      logLevel: agent.info?.logLevel,
+      pollInterval: agent.info?.pollInterval,
+      ...stats,
+    };
+  });
   res.json(safeAgents);
 }
 
