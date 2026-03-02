@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
-import { useFont } from '../composables/useFont';
+import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
+import { type IconLibrary, iconMap, libraryLabels } from '../icons';
+import { themeFamilies } from '../theme/palettes';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useTheme } from '../theme/useTheme';
