@@ -181,29 +181,33 @@ describe('DetailPanel', () => {
     });
   });
 
-  describe('panelFlex computed', () => {
-    it('uses 30% for sm size', () => {
+  describe('panel width style', () => {
+    it('uses 420px basis for sm size', () => {
       const w = factory({ size: 'sm' });
       const style = w.find('aside').attributes('style');
-      expect(style).toContain('flex: 0 0 30%');
+      expect(style).toContain('flex: 0 0 420px');
+      expect(style).toContain('width: 420px');
     });
 
-    it('uses 45% for md size', () => {
+    it('uses 560px basis for md size', () => {
       const w = factory({ size: 'md' });
       const style = w.find('aside').attributes('style');
-      expect(style).toContain('flex: 0 0 45%');
+      expect(style).toContain('flex: 0 0 560px');
+      expect(style).toContain('width: 560px');
     });
 
-    it('uses 70% for lg size', () => {
+    it('uses 720px basis for lg size', () => {
       const w = factory({ size: 'lg' });
       const style = w.find('aside').attributes('style');
-      expect(style).toContain('flex: 0 0 70%');
+      expect(style).toContain('flex: 0 0 720px');
+      expect(style).toContain('width: 720px');
     });
 
     it('does not set flex on mobile', () => {
       const w = factory({ isMobile: true, size: 'md' });
       const style = w.find('aside').attributes('style') ?? '';
-      expect(style).not.toContain('flex: 0 0 45%');
+      expect(style).not.toContain('flex: 0 0 560px');
+      expect(style).toContain('width: 100%');
     });
   });
 

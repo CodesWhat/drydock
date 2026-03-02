@@ -9,7 +9,7 @@ export function useDetailPanel() {
   const containerFullPage = ref(false);
 
   const panelFlex = computed(() =>
-    panelSize.value === 'sm' ? '0 0 30%' : panelSize.value === 'md' ? '0 0 45%' : '0 0 70%',
+    panelSize.value === 'sm' ? '0 0 420px' : panelSize.value === 'md' ? '0 0 560px' : '0 0 720px',
   );
 
   const detailTabs = [

@@ -22,8 +22,8 @@ const emit = defineEmits<{
   'full-page': [];
 }>();
 
-const panelFlex = computed(() =>
-  props.size === 'sm' ? '0 0 30%' : props.size === 'md' ? '0 0 45%' : '0 0 70%',
+const panelDesktopWidth = computed(() =>
+  props.size === 'sm' ? '420px' : props.size === 'md' ? '560px' : '720px',
 );
 
 function closePanel() {
@@ -53,11 +53,12 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
          role="dialog"
          :aria-modal="isMobile ? 'true' : undefined"
          aria-label="Detail panel"
-         class="detail-panel-inline flex flex-col min-w-0 dd-rounded overflow-clip transition-[color,background-color,border-color,opacity,transform,box-shadow] duration-300 ease-in-out"
+         class="detail-panel-inline flex flex-col min-w-0 dd-rounded overflow-clip transition-[flex-basis,width,max-width,color,background-color,border-color,opacity,transform,box-shadow] duration-300 ease-in-out"
          :class="isMobile ? 'fixed top-0 right-0 h-full z-50' : 'sticky top-0'"
          :style="{
-           flex: isMobile ? undefined : panelFlex,
-           width: isMobile ? '100%' : undefined,
+           flex: isMobile ? undefined : `0 0 ${panelDesktopWidth}`,
+           width: isMobile ? '100%' : panelDesktopWidth,
+           maxWidth: isMobile ? '100%' : 'min(calc(100vw - 32px), 920px)',
            backgroundColor: 'var(--dd-bg-card)',
            border: '1px solid var(--dd-border-strong)',
            height: isMobile ? '100vh' : 'calc(100vh - 96px)',
