@@ -149,5 +149,5 @@ if (!loadedFonts.has(activeFont.value)) {
 }
 
 export function useFont() {
-  return { activeFont, fontLoading, fontOptions, setFont, isFontLoaded, loadFont };
+  return { activeFont, fontLoading, fontOptions, setFont, isFontLoaded, loadFont, applyFont };
 }

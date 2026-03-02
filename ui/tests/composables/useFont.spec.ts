@@ -84,5 +84,14 @@ describe('useFont', () => {
       expect(drydockFont).toBe('"JetBrains Mono", monospace');
       expect(monoFont).toBe('"JetBrains Mono", monospace');
     });
+
+    it('should not set CSS variables for an unknown font id', async () => {
+      const { applyFont } = (await import('@/composables/useFont')).useFont();
+      document.documentElement.style.removeProperty('--drydock-font');
+      document.documentElement.style.removeProperty('--font-mono');
+      applyFont('nonexistent-font' as any);
+      expect(document.documentElement.style.getPropertyValue('--drydock-font')).toBe('');
+      expect(document.documentElement.style.getPropertyValue('--font-mono')).toBe('');
+    });
   });
 });
