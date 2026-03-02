@@ -1,5 +1,5 @@
-import type { Request, Response } from 'express';
 import os from 'node:os';
+import type { Request, Response } from 'express';
 import { getVersion } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import logger from '../../log/index.js';

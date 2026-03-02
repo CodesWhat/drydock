@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/vue3';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import ThemeToggle from './ThemeToggle.vue';
 import { useTheme } from '../theme/useTheme';
+import ThemeToggle from './ThemeToggle.vue';
 
 const meta = {
   component: ThemeToggle,

@@ -103,7 +103,11 @@ describe('HookExecutor', () => {
     expect(executor.isHookFailure({ exitCode: 0, timedOut: true })).toBe(true);
 
     expect(
-      executor.getHookFailureDetails('Pre-update', { timedOut: true, stderr: '', exitCode: 0 }, 5000),
+      executor.getHookFailureDetails(
+        'Pre-update',
+        { timedOut: true, stderr: '', exitCode: 0 },
+        5000,
+      ),
     ).toBe('Pre-update hook timed out after 5000ms');
     expect(
       executor.getHookFailureDetails(

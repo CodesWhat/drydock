@@ -1,7 +1,7 @@
 // @ts-nocheck
 import crypto from 'node:crypto';
-import parse from 'parse-docker-image-name';
 import pLimit from 'p-limit';
+import parse from 'parse-docker-image-name';
 import { getSecurityConfiguration } from '../../../configuration/index.js';
 import { getPreferredLabelValue as resolvePreferredLabelValue } from '../../../docker/legacy-label.js';
 import {
@@ -25,8 +25,8 @@ import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
 import { runHook } from '../../hooks/HookRunner.js';
 import Trigger from '../Trigger.js';
-import ContainerUpdateExecutor from './ContainerUpdateExecutor.js';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
+import ContainerUpdateExecutor from './ContainerUpdateExecutor.js';
 import { startHealthMonitor } from './HealthMonitor.js';
 import HookExecutor from './HookExecutor.js';
 import RegistryResolver from './RegistryResolver.js';
@@ -198,8 +198,7 @@ class Docker extends Trigger {
           generateImageSbom,
         },
         stateStore: {
-          getContainer: (id) =>
-            storeContainer.getContainer(id, { includeRuntimeEnvValues: true }),
+          getContainer: (id) => storeContainer.getContainer(id, { includeRuntimeEnvValues: true }),
           updateContainer: (...args) => storeContainer.updateContainer(...args),
           cacheSecurityState,
         },
@@ -271,16 +270,11 @@ class Docker extends Trigger {
     const registryState = getState().registry || {};
     const requireNormalizeImage =
       this.configuration.prune === true && !this.isSelfUpdate(container);
-    return this.registryResolver.resolveRegistryManager(
-      container,
-      logContainer,
-      registryState,
-      {
-        ...options,
-        requireNormalizeImage,
-        registryName,
-      },
-    );
+    return this.registryResolver.resolveRegistryManager(container, logContainer, registryState, {
+      ...options,
+      requireNormalizeImage,
+      registryName,
+    });
   }
 
   /**

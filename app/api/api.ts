@@ -1,5 +1,5 @@
-import express from 'express';
 import type { Request, Response } from 'express';
+import express from 'express';
 import rateLimit from 'express-rate-limit';
 import * as agentRouter from './agent.js';
 import * as appRouter from './app.js';
@@ -7,9 +7,9 @@ import * as auditRouter from './audit.js';
 import { requireAuthentication } from './auth.js';
 import * as authenticationRouter from './authentication.js';
 import * as backupRouter from './backup.js';
-import { requireSameOriginForMutations } from './csrf.js';
 import * as containerRouter from './container.js';
 import * as containerActionsRouter from './container-actions.js';
+import { requireSameOriginForMutations } from './csrf.js';
 import * as groupRouter from './group.js';
 import * as iconsRouter from './icons.js';
 import * as logRouter from './log.js';

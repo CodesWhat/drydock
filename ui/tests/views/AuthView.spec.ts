@@ -1,8 +1,8 @@
 import { flushPromises } from '@vue/test-utils';
-import AuthView from '@/views/AuthView.vue';
 import { getAllAuthentications, getAuthentication } from '@/services/authentication';
-import { mountWithPlugins } from '../helpers/mount';
+import AuthView from '@/views/AuthView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
+import { mountWithPlugins } from '../helpers/mount';
 
 const { mockRoute } = vi.hoisted(() => ({
   mockRoute: { query: {} as Record<string, unknown> },

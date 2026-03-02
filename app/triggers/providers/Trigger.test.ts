@@ -2,8 +2,8 @@
 import joi from 'joi';
 import * as event from '../../event/index.js';
 import log from '../../log/index.js';
-import * as notificationStore from '../../store/notification.js';
 import * as storeContainer from '../../store/container.js';
+import * as notificationStore from '../../store/notification.js';
 import Trigger from './Trigger.js';
 
 vi.mock('../../log');

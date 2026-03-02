@@ -1,7 +1,7 @@
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent } from 'vue';
-import AuditView from '@/views/AuditView.vue';
 import { getAuditLog } from '@/services/audit';
+import AuditView from '@/views/AuditView.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
 const { mockRoute } = vi.hoisted(() => ({

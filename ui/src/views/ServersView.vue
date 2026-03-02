@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAgents } from '../services/agent';
 import { getAllContainers } from '../services/container';
 import { getServer } from '../services/server';
@@ -16,7 +17,7 @@ interface ServerEntry {
   lastSeen: string;
 }
 
-const serversViewMode = ref<'table' | 'cards' | 'list'>('table');
+const serversViewMode = useViewMode('servers');
 const loading = ref(true);
 const error = ref<string | null>(null);
 const servers = ref<ServerEntry[]>([]);

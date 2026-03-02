@@ -313,7 +313,9 @@ export function getContainers(query = {}, options = {}) {
   if (cachedContainers) {
     setContainersQueryCache(queryKey, cachedContainers);
     const containersCloned = cloneContainers(cachedContainers);
-    return includeRuntimeEnvValues ? containersCloned : redactContainersRuntimeEnv(containersCloned);
+    return includeRuntimeEnvValues
+      ? containersCloned
+      : redactContainersRuntimeEnv(containersCloned);
   }
 
   const filter = {};

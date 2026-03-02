@@ -23,9 +23,7 @@ const DEFAULT_CONTROLLER_ENV = {
 
 type ControllerEnvName = keyof typeof DEFAULT_CONTROLLER_ENV;
 
-function setControllerEnv(
-  overrides: Partial<Record<ControllerEnvName, string | undefined>> = {},
-) {
+function setControllerEnv(overrides: Partial<Record<ControllerEnvName, string | undefined>> = {}) {
   const envValues = {
     ...DEFAULT_CONTROLLER_ENV,
     ...overrides,
@@ -274,9 +272,7 @@ describe('self-update-controller orchestration', () => {
 
   test('handles rollback partial failures without masking original error', async () => {
     const oldContainer = createOldContainer({
-      inspect: vi
-        .fn()
-        .mockResolvedValue({ State: { Running: false }, Name: '/drydock-old-123' }),
+      inspect: vi.fn().mockResolvedValue({ State: { Running: false }, Name: '/drydock-old-123' }),
       rename: vi.fn().mockRejectedValue(new Error('rename failed')),
       start: vi.fn().mockRejectedValue(new Error('restart failed')),
     });
@@ -293,9 +289,7 @@ describe('self-update-controller orchestration', () => {
     expect(logs).toContain(
       '[self-update:op-123] CLEANUP_CANDIDATE_FAILED - candidate remove failed',
     );
-    expect(logs).toContain(
-      '[self-update:op-123] ROLLBACK_RESTORE_NAME_FAILED - rename failed',
-    );
+    expect(logs).toContain('[self-update:op-123] ROLLBACK_RESTORE_NAME_FAILED - rename failed');
     expect(logs).toContain('[self-update:op-123] ROLLBACK_START_OLD_FAILED - restart failed');
     expect(logs).toContain('[self-update:op-123] FAILED_WITH_ROLLBACK - start failed');
   });

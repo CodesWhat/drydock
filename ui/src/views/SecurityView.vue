@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { preferences } from '../preferences/store';
+import { usePreference } from '../preferences/usePreference';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAllContainers, getContainerSbom, scanContainer } from '../services/container';
 import { getSecurityRuntime } from '../services/server';
 import { errorMessage } from '../utils/error';
@@ -143,7 +146,6 @@ function formatTimestamp(value: string | null | undefined): string {
   return date.toISOString();
 }
 
-
 async function fetchSecurityRuntimeStatus() {
   runtimeLoading.value = true;
   runtimeError.value = null;
@@ -238,7 +240,7 @@ async function scanAllContainers() {
 }
 
 // -- View mode --
-const securityViewMode = ref<'table' | 'cards' | 'list'>('table');
+const securityViewMode = useViewMode('security');
 
 // -- Filters --
 const showSecFilters = ref(false);
@@ -255,8 +257,18 @@ function clearSecFilters() {
 }
 
 // -- Sorting --
-const securitySortField = ref('critical');
-const securitySortAsc = ref(false);
+const securitySortField = usePreference(
+  () => preferences.views.security.sortField,
+  (v) => {
+    preferences.views.security.sortField = v;
+  },
+);
+const securitySortAsc = usePreference(
+  () => preferences.views.security.sortAsc,
+  (v) => {
+    preferences.views.security.sortAsc = v;
+  },
+);
 
 const severityOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 

@@ -290,9 +290,7 @@ export function registerAgentConnected(
  * Emit AgentDisconnected event.
  * @param payload
  */
-export async function emitAgentDisconnected(
-  payload: AgentDisconnectedEventPayload,
-): Promise<void> {
+export async function emitAgentDisconnected(payload: AgentDisconnectedEventPayload): Promise<void> {
   await emitOrderedHandlers(agentDisconnectedHandlers, payload);
 }
 
@@ -377,7 +375,9 @@ export function registerWatcherStop(handler: (watcher: unknown) => void): void {
   eventEmitter.on(DD_WATCHER_STOP, handler);
 }
 
-export async function emitSelfUpdateStarting(payload: SelfUpdateStartingEventPayload): Promise<void> {
+export async function emitSelfUpdateStarting(
+  payload: SelfUpdateStartingEventPayload,
+): Promise<void> {
   await emitOrderedHandlers(selfUpdateStartingHandlers, payload);
 }
 

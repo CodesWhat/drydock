@@ -319,7 +319,9 @@ describe('ContainerRuntimeConfigManager', () => {
     const manager = createManager();
     const log = createLog();
 
-    await expect(manager.inspectImageConfig(undefined, 'nginx:latest', log)).resolves.toBeUndefined();
+    await expect(
+      manager.inspectImageConfig(undefined, 'nginx:latest', log),
+    ).resolves.toBeUndefined();
     await expect(
       manager.inspectImageConfig({ getImage: vi.fn() }, undefined, log),
     ).resolves.toBeUndefined();
@@ -344,7 +346,9 @@ describe('ContainerRuntimeConfigManager', () => {
     const failingDockerApi = {
       getImage: vi.fn().mockRejectedValue(new Error('registry down')),
     };
-    await expect(manager.inspectImageConfig(failingDockerApi, 'nginx:latest', log)).resolves.toBeUndefined();
+    await expect(
+      manager.inspectImageConfig(failingDockerApi, 'nginx:latest', log),
+    ).resolves.toBeUndefined();
     expect(log.debug).toHaveBeenCalledWith(
       expect.stringContaining('Unable to inspect image nginx:latest for runtime defaults'),
     );

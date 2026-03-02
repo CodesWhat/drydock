@@ -139,7 +139,10 @@ describe('RegistryResolver', () => {
       'ghcr.io/library/nginx:1.25',
     );
     expect(
-      anonymous.getImageFullName({ name: 'library/nginx' }, 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+      anonymous.getImageFullName(
+        { name: 'library/nginx' },
+        'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ),
     ).toBe('ghcr.io/library/nginx@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
     expect(() => anonymous.getImageFullName({ name: '' }, '1.0.0')).toThrow(
       'Container image name is missing',

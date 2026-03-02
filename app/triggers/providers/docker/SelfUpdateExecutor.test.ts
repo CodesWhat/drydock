@@ -99,7 +99,9 @@ describe('SelfUpdateExecutor', () => {
     });
     const log = { info: vi.fn(), warn: vi.fn() };
 
-    await expect(executor.execute(context, createContainer(), log)).rejects.toThrow('create failed');
+    await expect(executor.execute(context, createContainer(), log)).rejects.toThrow(
+      'create failed',
+    );
 
     expect(context.currentContainer.rename).toHaveBeenNthCalledWith(1, {
       name: expect.stringMatching(/^drydock-old-/),
@@ -162,12 +164,7 @@ describe('SelfUpdateExecutor', () => {
     await expect(executor.execute(context, createContainer(), log, 'op-123')).resolves.toBe(true);
 
     expect(insertContainerImageBackup).toHaveBeenCalled();
-    expect(pullImage).toHaveBeenCalledWith(
-      context.dockerApi,
-      context.auth,
-      context.newImage,
-      log,
-    );
+    expect(pullImage).toHaveBeenCalledWith(context.dockerApi, context.auth, context.newImage, log);
     expect(getCloneRuntimeConfigOptions).toHaveBeenCalledWith(
       context.dockerApi,
       context.currentContainerSpec,

@@ -37,7 +37,9 @@ const {
     };
     return hash;
   }),
-  mockTimingSafeEqual: vi.fn((left: Buffer, right: Buffer) => left.length === right.length && left.equals(right)),
+  mockTimingSafeEqual: vi.fn(
+    (left: Buffer, right: Buffer) => left.length === right.length && left.equals(right),
+  ),
 }));
 
 vi.mock('express', () => ({

@@ -76,7 +76,10 @@ interface UpdateOperationCollectionOptions {
 
 interface UpdateOperationStoreDb {
   getCollection(name: string): UpdateOperationCollection | null;
-  addCollection(name: string, options?: UpdateOperationCollectionOptions): UpdateOperationCollection;
+  addCollection(
+    name: string,
+    options?: UpdateOperationCollectionOptions,
+  ): UpdateOperationCollection;
 }
 
 let updateOperationCollection: UpdateOperationCollection | undefined;

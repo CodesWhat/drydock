@@ -22,7 +22,9 @@ describe('TriggerPipelineError', () => {
 
   test('isTriggerPipelineError detects only TriggerPipelineError instances with string code', () => {
     expect(TriggerPipelineError.isTriggerPipelineError(undefined)).toBe(false);
-    expect(TriggerPipelineError.isTriggerPipelineError({ name: 'TriggerPipelineError' })).toBe(false);
+    expect(TriggerPipelineError.isTriggerPipelineError({ name: 'TriggerPipelineError' })).toBe(
+      false,
+    );
     expect(
       TriggerPipelineError.isTriggerPipelineError({ name: 'Error', code: 'hook-execution-failed' }),
     ).toBe(false);

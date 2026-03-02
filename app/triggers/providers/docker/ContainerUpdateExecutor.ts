@@ -248,7 +248,12 @@ class ContainerUpdateExecutor {
         newImage,
         cloneRuntimeConfigOptions,
       );
-      newContainer = await this.createContainer(dockerApi, containerToCreateInspect, oldName, logContainer);
+      newContainer = await this.createContainer(
+        dockerApi,
+        containerToCreateInspect,
+        oldName,
+        logContainer,
+      );
 
       let newContainerId;
       try {
@@ -292,7 +297,12 @@ class ContainerUpdateExecutor {
             logContainer,
           );
         } else {
-          await this.removeContainer(currentContainer, tempName, currentContainerSpec.Id, logContainer);
+          await this.removeContainer(
+            currentContainer,
+            tempName,
+            currentContainerSpec.Id,
+            logContainer,
+          );
         }
       } catch (cleanupError) {
         if (!this.isContainerNotFoundError(cleanupError)) {

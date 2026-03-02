@@ -1,8 +1,8 @@
 import { flushPromises } from '@vue/test-utils';
-import TriggersView from '@/views/TriggersView.vue';
 import { getAllTriggers, getTrigger, runTrigger } from '@/services/trigger';
-import { mountWithPlugins } from '../helpers/mount';
+import TriggersView from '@/views/TriggersView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
+import { mountWithPlugins } from '../helpers/mount';
 
 const { mockRoute } = vi.hoisted(() => ({
   mockRoute: { query: {} as Record<string, unknown> },

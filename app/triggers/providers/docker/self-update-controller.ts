@@ -1,5 +1,5 @@
-import Dockerode from 'dockerode';
 import { pathToFileURL } from 'node:url';
+import Dockerode from 'dockerode';
 
 type SelfUpdateControllerConfig = {
   opId: string;
@@ -287,10 +287,7 @@ export async function runSelfUpdateController(): Promise<void> {
   await controller.run();
 }
 
-export {
-  getRequiredEnv as testable_getRequiredEnv,
-  parsePositiveInt as testable_parsePositiveInt,
-};
+export { getRequiredEnv as testable_getRequiredEnv, parsePositiveInt as testable_parsePositiveInt };
 
 const scriptEntrypointUrl = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
 if (import.meta.url === scriptEntrypointUrl) {

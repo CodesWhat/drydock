@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { useRouter, type RouteLocationRaw } from 'vue-router';
+import { type RouteLocationRaw, useRouter } from 'vue-router';
+import { preferences } from '../preferences/store';
 import { getAgents } from '../services/agent';
 import { getAuditLog } from '../services/audit';
 import { getAllContainers } from '../services/container';
 import { getAllRegistries } from '../services/registry';
 import { getServer } from '../services/server';
 import { getAllWatchers } from '../services/watcher';
-import type { Container } from '../types/container';
 import type { ApiWatcherConfiguration } from '../types/api';
+import type { Container } from '../types/container';
 import { mapApiContainers } from '../utils/container-mapper';
 import { errorMessage } from '../utils/error';
 
@@ -18,7 +19,6 @@ function navigateTo(route: RouteLocationRaw) {
   router.push(route);
 }
 
-const DASHBOARD_WIDGET_ORDER_STORAGE_KEY = 'dd-dashboard-widget-order-v3';
 const DASHBOARD_REALTIME_REFRESH_DEBOUNCE_MS = 1_000;
 const DASHBOARD_WIDGET_IDS = [
   'stat-containers',
@@ -116,20 +116,11 @@ function buildRecentStatusByContainer(entries: unknown): Record<string, RecentAu
 }
 
 function loadWidgetOrder() {
-  const rawStored = localStorage.getItem(DASHBOARD_WIDGET_ORDER_STORAGE_KEY);
-  if (!rawStored) {
-    widgetOrder.value = [...DASHBOARD_WIDGET_IDS];
-    return;
-  }
-  try {
-    widgetOrder.value = sanitizeWidgetOrder(JSON.parse(rawStored));
-  } catch {
-    widgetOrder.value = [...DASHBOARD_WIDGET_IDS];
-  }
+  widgetOrder.value = sanitizeWidgetOrder(preferences.dashboard.widgetOrder);
 }
 
 function persistWidgetOrder(order: DashboardWidgetId[]) {
-  localStorage.setItem(DASHBOARD_WIDGET_ORDER_STORAGE_KEY, JSON.stringify(order));
+  preferences.dashboard.widgetOrder = [...order];
 }
 
 watch(widgetOrder, (order) => {
@@ -222,21 +213,15 @@ async function fetchDashboardData(options: DashboardRefreshOptions = {}) {
     error.value = null;
   }
   try {
-    const [
-      containersRes,
-      serverRes,
-      agentsRes,
-      watchersRes,
-      registriesRes,
-      auditLogRes,
-    ] = await Promise.all([
-      getAllContainers(),
-      getServer().catch(() => null),
-      getAgents().catch(() => []),
-      getAllWatchers().catch(() => []),
-      getAllRegistries().catch(() => []),
-      getAuditLog({ limit: 100 }).catch(() => ({ entries: [] })),
-    ]);
+    const [containersRes, serverRes, agentsRes, watchersRes, registriesRes, auditLogRes] =
+      await Promise.all([
+        getAllContainers(),
+        getServer().catch(() => null),
+        getAgents().catch(() => []),
+        getAllWatchers().catch(() => []),
+        getAllRegistries().catch(() => []),
+        getAuditLog({ limit: 100 }).catch(() => ({ entries: [] })),
+      ]);
     containers.value = mapApiContainers(containersRes);
     serverInfo.value = serverRes;
     agents.value = agentsRes;

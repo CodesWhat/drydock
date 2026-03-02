@@ -1,5 +1,5 @@
-import { DEFAULTS } from '@/preferences/schema';
 import { mergeDefaults, migrate, migrateFromLegacyKeys } from '@/preferences/migrate';
+import { DEFAULTS } from '@/preferences/schema';
 
 const LEGACY_KEYS = [
   'drydock-theme-family-v1',

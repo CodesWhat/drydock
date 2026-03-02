@@ -2,11 +2,11 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAllTriggers, getTrigger, runTrigger } from '../services/trigger';
 import type { ApiComponent } from '../types/api';
-import { errorMessage } from '../utils/error';
 
-const triggersViewMode = ref<'table' | 'cards' | 'list'>('table');
+const triggersViewMode = useViewMode('triggers');
 const { isMobile } = useBreakpoints();
 const route = useRoute();
 const selectedTrigger = ref<Record<string, unknown> | null>(null);

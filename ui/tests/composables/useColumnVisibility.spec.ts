@@ -1,4 +1,5 @@
 import { nextTick, ref } from 'vue';
+import { setTestPreferences } from '../helpers/preferences';
 
 describe('useColumnVisibility', () => {
   beforeEach(() => {
@@ -90,17 +91,19 @@ describe('useColumnVisibility', () => {
     expect(activeColumns.value).toHaveLength(allColumns.length);
   });
 
-  it('should persist visible columns to localStorage', async () => {
+  it('should persist visible columns to preferences', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const { toggleColumn } = useColumnVisibility(ref(false));
     toggleColumn('bouncer');
     await nextTick();
-    const stored = JSON.parse(localStorage.getItem('dd-table-cols-v1') || '[]');
+    const { flushPreferences } = await import('@/preferences/store');
+    flushPreferences();
+    const stored = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}').containers.columns;
     expect(stored).not.toContain('bouncer');
   });
 
-  it('should restore visible columns from localStorage', async () => {
-    localStorage.setItem('dd-table-cols-v1', JSON.stringify(['icon', 'name', 'status']));
+  it('should restore visible columns from preferences', async () => {
+    setTestPreferences({ containers: { columns: ['icon', 'name', 'status'] } });
     const { useColumnVisibility } = await loadColumnVisibility();
     const { visibleColumns } = useColumnVisibility(ref(false));
     expect(visibleColumns.value.size).toBe(3);
@@ -108,8 +111,8 @@ describe('useColumnVisibility', () => {
     expect(visibleColumns.value.has('status')).toBe(true);
   });
 
-  it('should fall back to defaults when localStorage contains invalid JSON', async () => {
-    localStorage.setItem('dd-table-cols-v1', '{invalid json');
+  it('should fall back to defaults when preferences contain invalid data', async () => {
+    localStorage.setItem('dd-preferences', '{invalid json');
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns, visibleColumns } = useColumnVisibility(ref(false));
     expect(visibleColumns.value.size).toBe(allColumns.length);

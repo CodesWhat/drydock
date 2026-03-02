@@ -1,3 +1,5 @@
+import { setTestPreferences } from '../helpers/preferences';
+
 describe('useFont', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -19,14 +21,14 @@ describe('useFont', () => {
       expect(activeFont.value).toBe('ibm-plex-mono');
     });
 
-    it('should load saved font from localStorage', async () => {
-      localStorage.setItem('drydock-font-family-v1', 'jetbrains-mono');
+    it('should load saved font from preferences', async () => {
+      setTestPreferences({ font: { family: 'jetbrains-mono' } });
       const { activeFont } = await loadUseFont();
       expect(activeFont.value).toBe('jetbrains-mono');
     });
 
-    it('should ignore invalid localStorage values', async () => {
-      localStorage.setItem('drydock-font-family-v1', 'comic-sans-ms');
+    it('should fall back to default when preference value is invalid', async () => {
+      setTestPreferences({ font: { family: 'comic-sans-ms' } });
       const { activeFont } = await loadUseFont();
       expect(activeFont.value).toBe('ibm-plex-mono');
     });
@@ -75,7 +77,7 @@ describe('useFont', () => {
     });
 
     it('should apply saved font to both CSS variables on init', async () => {
-      localStorage.setItem('drydock-font-family-v1', 'jetbrains-mono');
+      setTestPreferences({ font: { family: 'jetbrains-mono' } });
       await loadUseFont();
       const drydockFont = document.documentElement.style.getPropertyValue('--drydock-font');
       const monoFont = document.documentElement.style.getPropertyValue('--font-mono');

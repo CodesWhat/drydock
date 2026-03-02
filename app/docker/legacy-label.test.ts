@@ -21,14 +21,18 @@ describe('getPreferredLabelValue', () => {
     const warnedFallbacks = new Set<string>();
     const warn = vi.fn();
 
-    expect(getPreferredLabelValue({ 'wud.watch': 'legacy-1' }, 'dd.watch', 'wud.watch', {
-      warnedFallbacks,
-      warn,
-    })).toBe('legacy-1');
-    expect(getPreferredLabelValue({ 'wud.watch': 'legacy-2' }, 'dd.watch', 'wud.watch', {
-      warnedFallbacks,
-      warn,
-    })).toBe('legacy-2');
+    expect(
+      getPreferredLabelValue({ 'wud.watch': 'legacy-1' }, 'dd.watch', 'wud.watch', {
+        warnedFallbacks,
+        warn,
+      }),
+    ).toBe('legacy-1');
+    expect(
+      getPreferredLabelValue({ 'wud.watch': 'legacy-2' }, 'dd.watch', 'wud.watch', {
+        warnedFallbacks,
+        warn,
+      }),
+    ).toBe('legacy-2');
 
     expect(recordLegacyInput).toHaveBeenCalledTimes(2);
     expect(recordLegacyInput).toHaveBeenCalledWith('label', 'wud.watch');
@@ -49,10 +53,14 @@ describe('getPreferredLabelValue', () => {
     const warn = vi.fn();
 
     expect(
-      getPreferredLabelValue({ 'wud.unique-key': 'legacy-1' }, 'dd.watch', 'wud.unique-key', { warn }),
+      getPreferredLabelValue({ 'wud.unique-key': 'legacy-1' }, 'dd.watch', 'wud.unique-key', {
+        warn,
+      }),
     ).toBe('legacy-1');
     expect(
-      getPreferredLabelValue({ 'wud.unique-key': 'legacy-2' }, 'dd.watch', 'wud.unique-key', { warn }),
+      getPreferredLabelValue({ 'wud.unique-key': 'legacy-2' }, 'dd.watch', 'wud.unique-key', {
+        warn,
+      }),
     ).toBe('legacy-2');
 
     expect(recordLegacyInput).toHaveBeenCalledWith('label', 'wud.unique-key');

@@ -1,8 +1,8 @@
 import {
+  type AuthLogger,
   failClosedAuth,
   requireAuthString,
   withAuthorizationHeader,
-  type AuthLogger,
 } from './auth.js';
 
 test('requireAuthString should return provided value', () => {

@@ -8,9 +8,9 @@
     "build": "tsc && node scripts/copy-static-assets.mjs",
     "start": "nodemon --exec \"ts-node --esm\" index.ts",
     "doc": ".docsify serve ./docs",
-    "format": "qlty fmt --filter biome --no-progress .",
-    "lint:fix": "qlty check --fix --filter biome --no-progress .",
-    "lint": "qlty check --filter biome --no-progress .",
+    "format": "biome format --write .",
+    "lint:fix": "biome check --fix .",
+    "lint": "biome check .",
     "test": "vitest run --coverage",
     "knip": "knip"
   },

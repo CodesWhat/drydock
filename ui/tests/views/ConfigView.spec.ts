@@ -221,8 +221,8 @@ vi.mock('@/theme/palettes', () => ({
 }));
 
 import { mount } from '@vue/test-utils';
-import ConfigView from '@/views/ConfigView.vue';
 import ToggleSwitch from '@/components/ToggleSwitch.vue';
+import ConfigView from '@/views/ConfigView.vue';
 
 const stubs: Record<string, any> = {
   DataViewLayout: defineComponent({
@@ -286,6 +286,41 @@ describe('ConfigView', () => {
         expect(mockGetAppInfos).toHaveBeenCalledOnce();
         expect(mockGetSettings).toHaveBeenCalledOnce();
       });
+    });
+
+    it('refreshes general server/settings data from the refresh button', async () => {
+      mockGetServer
+        .mockResolvedValueOnce({
+          configuration: {
+            port: 3000,
+            feature: { containeractions: true, delete: false },
+            webhook: { enabled: true },
+            trustproxy: false,
+          },
+        })
+        .mockResolvedValueOnce({
+          configuration: {
+            port: 8080,
+            feature: { containeractions: true, delete: false },
+            webhook: { enabled: true },
+            trustproxy: false,
+          },
+        });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalledTimes(1));
+      await nextTick();
+
+      const refreshButton = w.find('[data-testid="general-refresh"]');
+      expect(refreshButton.exists()).toBe(true);
+      await vi.waitFor(() => {
+        expect(refreshButton.attributes('disabled')).toBeUndefined();
+      });
+      await refreshButton.trigger('click');
+
+      await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalledTimes(2));
+      expect(w.text()).toContain('8080');
     });
 
     it('displays server fields after loading', async () => {

@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version"></a>
-  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-20K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
+  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-22K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
   <a href="https://quay.io/repository/codeswhat/drydock"><img src="https://img.shields.io/badge/Quay.io-image-ee0000?logo=redhat&logoColor=white" alt="Quay.io"></a>
   <br>
@@ -50,10 +50,7 @@
 - [📸 Screenshots](#screenshots)
 - [🖥️ UI Workflow](#ui-workflow)
 - [✨ Features](#features)
-- [🥊 Update Bouncer](#update-bouncer)
-- [📦 Supported Registries](#supported-registries)
-- [🔔 Supported Triggers](#supported-triggers)
-- [🔐 Authentication](#authentication)
+- [🔌 Supported Integrations](#supported-integrations)
 - [⚖️ Feature Comparison](#feature-comparison)
 - [🔄 Migration](#migration)
 - [🗺️ Roadmap](#roadmap)
@@ -75,98 +72,7 @@ docker run -d \
 
 The image includes `trivy` and `cosign` binaries for local vulnerability scanning and image verification.
 
-<details>
-<summary><strong>Docker Compose</strong></summary>
-
-```yaml
-services:
-  drydock:
-    image: codeswhat/drydock:latest
-    container_name: drydock
-    ports:
-      - "3000:3000"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    restart: unless-stopped
-```
-
-</details>
-
-<details>
-<summary><strong>Docker socket access (secure-first)</strong></summary>
-
-`drydock` needs Docker API access to monitor/update containers.
-
-- Recommended: use a socket proxy and point Drydock to it (`DD_WATCHER_DOCKER_SOCKET=tcp://dockerproxy:2375`).
-- Direct socket mounts are supported, but root mode is break-glass only.
-
-If you must use break-glass root mode, set both flags explicitly:
-
-```yaml
-environment:
-  - DD_RUN_AS_ROOT=true
-  - DD_ALLOW_INSECURE_ROOT=true
-```
-
-If `DD_RUN_AS_ROOT=true` is set without `DD_ALLOW_INSECURE_ROOT=true`, startup now fails closed by design.
-
-See the docs for full guidance:
-
-- [Docker Socket Security](https://drydock.codeswhat.com/docs/configuration/watchers/#docker-socket-security)
-- [Docker Compose Trigger Permissions](https://drydock.codeswhat.com/docs/configuration/triggers/docker-compose/#permissions-and-compose-cli-access)
-
-</details>
-
-<details>
-<summary><strong>Alternative registries</strong></summary>
-
-```bash
-# GHCR
-docker pull ghcr.io/codeswhat/drydock:latest
-
-# Quay.io
-docker pull quay.io/codeswhat/drydock:latest
-```
-
-</details>
-
-<details>
-<summary><strong>Verify it's running</strong></summary>
-
-```bash
-# Health check
-curl http://localhost:3000/health
-
-# Open the UI
-open http://localhost:3000
-```
-
-</details>
-
-<details>
-<summary><strong>If GHCR requires auth</strong></summary>
-
-```bash
-echo '<GITHUB_PAT>' | docker login ghcr.io -u <github-username> --password-stdin
-docker pull ghcr.io/codeswhat/drydock:latest
-```
-
-</details>
-
-<details>
-<summary><strong>Behind a reverse proxy (Traefik, nginx, Caddy, etc.)</strong></summary>
-
-If drydock sits behind a reverse proxy, set `DD_SERVER_TRUSTPROXY` so Express correctly resolves the client IP from `X-Forwarded-For` headers. This is required for rate limiting to work per-client instead of per-proxy.
-
-```yaml
-environment:
-  # Number of trusted hops (1 = single reverse proxy)
-  - DD_SERVER_TRUSTPROXY=1
-```
-
-Accepted values: `false` (default — no proxy), `true` (trust all), a number (hop count), or an IP/CIDR string. See the [Express trust proxy docs](https://expressjs.com/en/guide/behind-proxies.html) for details.
-
-</details>
+See the [Quick Start guide](https://drydock.codeswhat.com/docs/quickstart) for Docker Compose, socket security, reverse proxy, and alternative registries.
 
 <hr>
 
@@ -278,227 +184,23 @@ Available on GHCR, Docker Hub, and Quay.io for flexible deployment
 
 <hr>
 
-<h2 align="center" id="update-bouncer">🥊 Update Bouncer</h2>
+<h2 align="center" id="supported-integrations">🔌 Supported Integrations</h2>
 
-<details>
-<summary><strong>Trivy-powered safe-pull gate for container updates</strong></summary>
+**📦 Registries (23)** — [Configuration docs](https://drydock.codeswhat.com/docs/configuration/registries)
 
-1. Scan the candidate image before pull/restart
-2. Block the update when vulnerabilities exceed configured severity threshold
-3. Verify candidate image signatures with cosign (optional block gate)
-4. Generate SBOM documents (`spdx-json`, `cyclonedx-json`) for candidate images
-5. Persist security state to `container.security.{scan,signature,sbom}` for API/UI visibility
+Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Custom · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
 
-Security scanning is disabled by default and is enabled with `DD_SECURITY_SCANNER=trivy`.
+**🔔 Triggers (20)** — [Configuration docs](https://drydock.codeswhat.com/docs/configuration/triggers)
 
-> The image includes both `trivy` and `cosign` for local CLI mode. Trivy server mode is also supported via `DD_SECURITY_TRIVY_SERVER`.
+Apprise · Command · Discord · Docker · Docker Compose · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram
 
-```yaml
-services:
-  drydock:
-    image: codeswhat/drydock:latest
-    environment:
-      - DD_SECURITY_SCANNER=trivy
-      - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
-      # Optional: block updates when signature verification fails
-      # - DD_SECURITY_VERIFY_SIGNATURES=true
-      # - DD_SECURITY_COSIGN_KEY=/keys/cosign.pub
-      # Optional: generate and persist SBOM
-      # - DD_SECURITY_SBOM_ENABLED=true
-      # - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json
-      # Optional: use Trivy server mode instead of local CLI
-      # - DD_SECURITY_TRIVY_SERVER=http://trivy:4954
-```
+**🔐 Authentication** — [Configuration docs](https://drydock.codeswhat.com/docs/configuration/authentications)
 
-Security APIs:
+Anonymous (default) · Basic (username + password hash) · OIDC (Authelia, Auth0, Authentik). All auth flows fail closed by default.
 
-- `GET /api/containers/:id/vulnerabilities`
-- `GET /api/containers/:id/sbom?format={format}` where `format` is `spdx-json` or `cyclonedx-json`
-- `POST /api/containers/:id/scan` — trigger on-demand vulnerability scan, signature verification, and SBOM generation
+**🥊 Update Bouncer** — [Configuration docs](https://drydock.codeswhat.com/docs/configuration/security)
 
-See full configuration in [`docs/configuration/security/README.md`](docs/configuration/security/README.md).
-
-</details>
-
-<hr>
-
-<h2 align="center" id="supported-registries">📦 Supported Registries</h2>
-
-<details>
-<summary><strong>Public registries</strong> (auto-registered, no config needed)</summary>
-
-| Registry | Provider | URL |
-| --- | --- | --- |
-| Docker Hub | `hub` | `hub.docker.com` |
-| GitHub Container Registry | `ghcr` | `ghcr.io` |
-| Google Container Registry | `gcr` | `gcr.io` |
-| Google Artifact Registry | `gar` | `*-docker.pkg.dev` |
-| Quay | `quay` | `quay.io` |
-| LinuxServer (LSCR) | `lscr` | `lscr.io` |
-| DigitalOcean | `docr` | `registry.digitalocean.com` |
-| Codeberg | `codeberg` | `codeberg.org` |
-| DHI | `dhi` | `dhi.io` |
-| Amazon ECR Public | `ecr` | `public.ecr.aws` |
-| IBM Cloud | `ibmcr` | `*.icr.io` |
-| Oracle Cloud (OCIR) | `ocir` | `*.ocir.io` |
-| Alibaba Cloud (ALICR) | `alicr` | `*.aliyuncs.com` |
-
-</details>
-
-<details>
-<summary><strong>Private registries</strong> (require credentials)</summary>
-
-| Registry | Provider | Env vars |
-| --- | --- | --- |
-| Docker Hub | `hub` | `DD_REGISTRY_HUB_{name}_LOGIN`, `_TOKEN` |
-| Amazon ECR | `ecr` | `DD_REGISTRY_ECR_{name}_ACCESSKEYID`, `_SECRETACCESSKEY`, `_REGION` |
-| Azure ACR | `acr` | `DD_REGISTRY_ACR_{name}_CLIENTID`, `_CLIENTSECRET` |
-| GitLab | `gitlab` | `DD_REGISTRY_GITLAB_{name}_TOKEN` |
-| GitHub (GHCR) | `ghcr` | `DD_REGISTRY_GHCR_{name}_TOKEN` |
-| Gitea / Forgejo | `gitea` | `DD_REGISTRY_GITEA_{name}_URL`, `_LOGIN`, `_PASSWORD` + optional `_CAFILE`, `_INSECURE` |
-| Harbor | `harbor` | `DD_REGISTRY_HARBOR_{name}_URL`, `_LOGIN`, `_PASSWORD` + optional `_CAFILE`, `_INSECURE` |
-| JFrog Artifactory | `artifactory` | `DD_REGISTRY_ARTIFACTORY_{name}_URL`, `_LOGIN`, `_PASSWORD` + optional `_CAFILE`, `_INSECURE` |
-| Sonatype Nexus | `nexus` | `DD_REGISTRY_NEXUS_{name}_URL`, `_LOGIN`, `_PASSWORD` + optional `_CAFILE`, `_INSECURE` |
-| TrueForge | `trueforge` | `DD_REGISTRY_TRUEFORGE_{name}_NAMESPACE`, `_ACCOUNT`, `_TOKEN` |
-| Custom (any v2) | `custom` | `DD_REGISTRY_CUSTOM_{name}_URL` + optional auth, `_CAFILE`, `_INSECURE` |
-
-See the [documentation](https://drydock.codeswhat.com/docs/configuration/registries) for full configuration.
-For self-hosted registries, prefer `CAFILE` to trust internal CAs; use `INSECURE=true` only as a fallback on trusted internal networks.
-
-</details>
-
-<hr>
-
-<h2 align="center" id="supported-triggers">🔔 Supported Triggers</h2>
-
-<details>
-<summary><strong>Notification triggers</strong> (20 providers)</summary>
-
-All env vars use the `DD_` prefix; Docker labels use the `dd.` prefix.
-
-| Trigger | Description |
-| --- | --- |
-| Apprise | Universal notification gateway |
-| Command | Run arbitrary shell commands |
-| Discord | Discord webhook |
-| Docker | Auto-pull and restart containers |
-| Docker Compose | Auto-pull and recreate compose services |
-| Google Chat | Google Chat incoming webhook |
-| Gotify | Gotify push notifications |
-| HTTP | Generic webhook (POST) |
-| IFTTT | IFTTT applet trigger |
-| Kafka | Kafka message producer |
-| Matrix | Matrix room notifications |
-| Mattermost | Mattermost incoming webhook |
-| MQTT | MQTT message (Home Assistant compatible) |
-| MS Teams | Microsoft Teams webhook (Adaptive Cards) |
-| NTFY | ntfy.sh push notifications |
-| Pushover | Pushover notifications |
-| Rocket.Chat | Rocket.Chat webhook |
-| Slack | Slack webhook |
-| SMTP | Email notifications |
-| Telegram | Telegram bot messages |
-
-All triggers support **threshold filtering** (`all`, `major`, `minor`, `patch`) to control which updates fire notifications.
-
-</details>
-
-<hr>
-
-<h2 align="center" id="authentication">🔐 Authentication</h2>
-
-<details>
-<summary><strong>Supported auth methods</strong></summary>
-
-| Method | Description | Docs |
-| --- | --- | --- |
-| Anonymous | No auth (default) | — |
-| Basic | Username + password hash | [docs](docs/configuration/authentications/basic/README.md) |
-| OIDC | OpenID Connect (Authelia, Auth0, Authentik) | [docs](docs/configuration/authentications/oidc/README.md) |
-
-</details>
-
-<details>
-<summary><strong>Auth hardening defaults (fail-closed)</strong></summary>
-
-As of 2026 hardening updates, auth-related remote flows now fail closed by default:
-
-- **Remote Docker watcher auth** fails when credentials are incomplete, auth type is unsupported, or HTTPS/TLS is missing.
-  - Break-glass override is explicit: `DD_WATCHER_{watcher_name}_AUTH_INSECURE=true`
-- **Registry bearer token exchange** fails when token endpoints error or return no token (no silent anonymous fallback).
-- **Hub/DHI public legacy token-auth migration path** keeps startup non-breaking for partial/mixed `DD_REGISTRY_{HUB|DHI}_PUBLIC_*` credentials by falling back to anonymous `hub.public` / `dhi.public` with startup warnings. This compatibility fallback is deprecated and will be removed in a future major release.
-- **HTTP trigger auth** fails when `AUTH_TYPE` is unsupported or required `BASIC`/`BEARER` values are missing.
-
-See:
-
-- [Watcher auth configuration](https://drydock.codeswhat.com/docs/configuration/watchers)
-- [HTTP trigger configuration](https://drydock.codeswhat.com/docs/configuration/triggers/http)
-- [Registry configuration](https://drydock.codeswhat.com/docs/configuration/registries)
-
-</details>
-
-<details>
-<summary><strong>OIDC session cookie policy (SameSite)</strong></summary>
-
-For OIDC providers hosted on a different domain (Auth0, Authentik, Authelia, etc.), drydock defaults to:
-
-- `DD_SERVER_COOKIE_SAMESITE=lax`
-
-This keeps login callbacks compatible while still reducing CSRF risk for normal cross-site requests.
-
-You can override with:
-
-- `DD_SERVER_COOKIE_SAMESITE=strict` for fully same-site deployments
-- `DD_SERVER_COOKIE_SAMESITE=none` for fully cross-site/embed scenarios (HTTPS required; drydock forces `Secure` cookies automatically)
-
-If OIDC callback logs or UI errors show "OIDC session is missing or expired", verify this setting first.
-
-</details>
-
-<hr>
-
-<h2 align="center" id="migration">🔄 Migration</h2>
-
-<details>
-<summary><strong>What's Up Docker (WUD) — Drop-in replacement</strong></summary>
-
-drydock is a drop-in replacement for What's Up Docker (WUD). Switch only the image reference — everything else stays the same:
-
-```diff
-- image: getwud/wud:8.1.1
-+ image: codeswhat/drydock:latest
-```
-
-**Full backwards compatibility is built in.** You do not need to rename anything in your compose file, environment, or labels:
-
-| WUD (legacy) | drydock (new) | Status |
-| --- | --- | --- |
-| `WUD_` env vars | `DD_` env vars | Both work — `WUD_` vars are automatically mapped to their `DD_` equivalents at startup. If both are set, `DD_` takes priority. |
-| `wud.*` container labels | `dd.*` container labels | Both work for legacy-equivalent settings — core `wud.*` labels (`wud.watch`, `wud.tag.include`, `wud.display.name`, etc.) are recognized alongside `dd.*`; newer drydock-only labels are `dd.*` only. |
-| `/store/wud.json` state file | `/store/dd.json` state file | Automatic migration — on first start, if `wud.json` exists and `dd.json` does not, drydock renames it in place. No data loss. |
-| Session store (connect-loki) | Session store (connect-loki) | Auto-healed — WUD's session data is incompatible (different secret key), but drydock automatically regenerates corrupt sessions instead of failing. No manual cleanup needed. |
-| Docker socket mount | Docker socket mount | Unchanged — same `/var/run/docker.sock` bind mount. |
-| Health endpoint `/health` | Health endpoint `/health` | Unchanged — same path, same port (default 3000). |
-
-**In short:** swap the image, restart the container, done. Your watchers, triggers, registries, and authentication config all carry over with zero changes.
-
-If you want to rewrite existing config files to the drydock naming convention in one pass, use:
-
-```bash
-# from the app directory
-node dist/index.js config migrate --dry-run
-node dist/index.js config migrate --file .env --file compose.yaml
-```
-
-For containerized installs:
-
-```bash
-docker exec -it <drydock-container> node dist/index.js config migrate --dry-run
-```
-
-`config migrate` only reads and updates your local config files. It does not call home or send usage data to external services.
-
-</details>
+Trivy-powered vulnerability scanning blocks unsafe updates before they deploy. Includes cosign signature verification and SBOM generation (CycloneDX & SPDX).
 
 <hr>
 
@@ -552,6 +254,12 @@ docker exec -it <drydock-container> node dist/index.js config migrate --dry-run
 
 <hr>
 
+<h2 align="center" id="migration">🔄 Migration</h2>
+
+Drop-in WUD replacement — swap the image, restart, done. All `WUD_*` env vars and `wud.*` labels are auto-mapped at startup. State file migrates automatically. Use `config migrate --dry-run` to preview, then `config migrate --file .env --file compose.yaml` to rewrite config to drydock naming.
+
+<hr>
+
 <h2 align="center" id="roadmap">🗺️ Roadmap</h2>
 
 Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully supported at runtime — see [🔄 Migration](#migration) for details.
@@ -581,9 +289,9 @@ Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully suppo
 | Resource | Link |
 | --- | --- |
 | Website | [drydock.codeswhat.com](https://drydock.codeswhat.com/) |
-| Docs | [`docs/README.md`](docs/README.md) |
-| Configuration | [`docs/configuration/README.md`](docs/configuration/README.md) |
-| Quick Start | [`docs/quickstart/README.md`](docs/quickstart/README.md) |
+| Docs | [drydock.codeswhat.com/docs](https://drydock.codeswhat.com/docs) |
+| Configuration | [Configuration](https://drydock.codeswhat.com/docs/configuration) |
+| Quick Start | [Quick Start](https://drydock.codeswhat.com/docs/quickstart) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
 | Roadmap | See [Roadmap](#roadmap) section above |
 | Issues | [GitHub Issues](https://github.com/CodesWhat/drydock/issues) |

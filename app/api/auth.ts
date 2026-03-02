@@ -244,7 +244,9 @@ function setRememberMe(req, res) {
  */
 function login(req, res) {
   const rememberMe =
-    req.body?.remember !== undefined ? req.body.remember === true : req.session?.rememberMe === true;
+    req.body?.remember !== undefined
+      ? req.body.remember === true
+      : req.session?.rememberMe === true;
 
   if (!req.session || typeof req.session.regenerate !== 'function') {
     const errorMessage = 'Unable to regenerate session during login (session unavailable)';

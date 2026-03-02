@@ -81,11 +81,7 @@ function installConfigMock(options: ConfigMockOptions = {}) {
 }
 
 function resetConfigState() {
-  localStorage.removeItem('drydock-theme-family-v1');
-  localStorage.removeItem('drydock-theme-variant-v1');
-  localStorage.removeItem('drydock-icon-library-v1');
-  localStorage.removeItem('drydock-icon-scale-v1');
-  localStorage.removeItem('drydock-font-family-v1');
+  localStorage.removeItem('dd-preferences');
   document.documentElement.classList.remove('theme-github', 'theme-dracula', 'theme-catppuccin');
 }
 

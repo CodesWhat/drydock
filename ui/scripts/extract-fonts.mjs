@@ -9,7 +9,7 @@
  * Output: public/fonts/{font-id}/{weight}.css  (with rewritten url() paths)
  *         public/fonts/{font-id}/files/*.woff2
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

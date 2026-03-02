@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useViewMode } from '../preferences/useViewMode';
 import type { NotificationRule, NotificationRuleUpdate } from '../services/notification';
 import { getAllNotificationRules, updateNotificationRule } from '../services/notification';
 import { getAllTriggers } from '../services/trigger';
@@ -20,7 +21,7 @@ function isNotificationTriggerType(type: string) {
   return !NON_NOTIFICATION_TRIGGER_TYPES.has(type.toLowerCase());
 }
 
-const notificationsViewMode = ref<'table' | 'cards' | 'list'>('table');
+const notificationsViewMode = useViewMode('notifications');
 const loading = ref(true);
 const error = ref('');
 const saveError = ref('');

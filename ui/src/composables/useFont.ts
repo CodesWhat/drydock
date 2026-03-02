@@ -1,6 +1,5 @@
-import { ref, watch } from 'vue';
-
-const STORAGE_KEY = 'drydock-font-family-v1';
+import { computed, ref, watch } from 'vue';
+import { preferences } from '../preferences/store';
 
 export type FontId =
   | 'ibm-plex-mono'
@@ -63,33 +62,25 @@ export const fontOptions: FontOption[] = [
   },
 ];
 
+const DEFAULT_FONT_ID: FontId = 'ibm-plex-mono';
+const FONT_IDS = new Set<FontId>(fontOptions.map((option) => option.id));
+
+export function isFontId(value: unknown): value is FontId {
+  return typeof value === 'string' && FONT_IDS.has(value as FontId);
+}
+
 /** Track which lazy fonts have been loaded */
-const loadedFonts = new Set<FontId>(['ibm-plex-mono']);
+const loadedFonts = new Set<FontId>([DEFAULT_FONT_ID]);
 
 /** Track in-flight loads */
 const loadingFonts = new Map<FontId, Promise<void>>();
 
-function loadSavedFont(): FontId {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && fontOptions.some((f) => f.id === stored)) {
-      return stored as FontId;
-    }
-  } catch {
-    /* ignored */
-  }
-  return 'ibm-plex-mono';
-}
-
-const activeFont = ref<FontId>(loadSavedFont());
+const activeFont = computed<FontId>(() =>
+  isFontId(preferences.font.family) ? preferences.font.family : DEFAULT_FONT_ID,
+);
 const fontLoading = ref(false);
 
 watch(activeFont, (id) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, id);
-  } catch {
-    /* ignored */
-  }
   applyFont(id);
 });
 
@@ -144,7 +135,7 @@ async function loadFont(id: FontId): Promise<void> {
 
 async function setFont(id: FontId) {
   await loadFont(id);
-  activeFont.value = id;
+  preferences.font.family = id;
 }
 
 function isFontLoaded(id: FontId): boolean {

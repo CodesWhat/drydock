@@ -352,7 +352,9 @@ describe('SecurityGate', () => {
         },
       })),
       verifyImageSignature: vi.fn(),
-      scanImageForVulnerabilities: vi.fn().mockRejectedValue(new Error('docker daemon unavailable')),
+      scanImageForVulnerabilities: vi
+        .fn()
+        .mockRejectedValue(new Error('docker daemon unavailable')),
       generateImageSbom: vi.fn(),
       emitSecurityAlert: vi.fn(),
       getContainer: vi.fn(() => createContainer()),
@@ -733,7 +735,9 @@ describe('SecurityGate', () => {
       scanners: {
         verifyImageSignature: vi.fn().mockResolvedValue({ status: 'verified', signatures: 1 }),
         scanImageForVulnerabilities,
-        generateImageSbom: vi.fn().mockResolvedValue({ status: 'generated', formats: ['spdx-json'] }),
+        generateImageSbom: vi
+          .fn()
+          .mockResolvedValue({ status: 'generated', formats: ['spdx-json'] }),
       },
       stateStore: {
         getContainer: vi.fn(() => createContainer()),

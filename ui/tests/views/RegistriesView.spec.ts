@@ -1,8 +1,8 @@
 import { flushPromises } from '@vue/test-utils';
-import RegistriesView from '@/views/RegistriesView.vue';
 import { getAllRegistries, getRegistry } from '@/services/registry';
-import { mountWithPlugins } from '../helpers/mount';
+import RegistriesView from '@/views/RegistriesView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
+import { mountWithPlugins } from '../helpers/mount';
 
 const { mockRoute } = vi.hoisted(() => ({
   mockRoute: { query: {} as Record<string, unknown> },

@@ -52,7 +52,7 @@ const mockGetServer = getServer as ReturnType<typeof vi.fn>;
 const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 const mockGetAllRegistries = getAllRegistries as ReturnType<typeof vi.fn>;
 const mockGetAuditLog = getAuditLog as ReturnType<typeof vi.fn>;
-const DASHBOARD_WIDGET_ORDER_STORAGE_KEY = 'dd-dashboard-widget-order-v3';
+const PREFERENCES_STORAGE_KEY = 'dd-preferences';
 const mountedWrappers: VueWrapper[] = [];
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
@@ -111,10 +111,12 @@ function mountDashboardView() {
 }
 
 describe('DashboardView', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockRouterPush.mockClear();
-    localStorage.removeItem(DASHBOARD_WIDGET_ORDER_STORAGE_KEY);
+    localStorage.removeItem(PREFERENCES_STORAGE_KEY);
+    const { resetPreferences } = await import('@/preferences/store');
+    resetPreferences();
   });
 
   afterEach(() => {
@@ -726,20 +728,18 @@ describe('DashboardView', () => {
   });
 
   describe('dashboard widget ordering', () => {
-    it('hydrates widget order from localStorage', async () => {
-      localStorage.setItem(
-        DASHBOARD_WIDGET_ORDER_STORAGE_KEY,
-        JSON.stringify([
-          'stat-containers',
-          'stat-updates',
-          'stat-security',
-          'stat-registries',
-          'host-status',
-          'recent-updates',
-          'security-overview',
-          'update-breakdown',
-        ]),
-      );
+    it('hydrates widget order from preferences', async () => {
+      const { preferences } = await import('@/preferences/store');
+      preferences.dashboard.widgetOrder = [
+        'stat-containers',
+        'stat-updates',
+        'stat-security',
+        'stat-registries',
+        'host-status',
+        'recent-updates',
+        'security-overview',
+        'update-breakdown',
+      ];
 
       const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
 
@@ -777,7 +777,10 @@ describe('DashboardView', () => {
       expect(
         wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order'),
       ).toBe('5');
-      expect(JSON.parse(localStorage.getItem(DASHBOARD_WIDGET_ORDER_STORAGE_KEY) || '[]')).toEqual([
+      const { flushPreferences } = await import('@/preferences/store');
+      flushPreferences();
+      const prefs = JSON.parse(localStorage.getItem(PREFERENCES_STORAGE_KEY) || '{}');
+      expect(prefs.dashboard.widgetOrder).toEqual([
         'stat-containers',
         'stat-updates',
         'stat-security',

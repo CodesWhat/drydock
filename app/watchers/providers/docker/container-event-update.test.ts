@@ -1,9 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 
-import {
-  processDockerEvent,
-  updateContainerFromInspect,
-} from './container-event-update.js';
+import { processDockerEvent, updateContainerFromInspect } from './container-event-update.js';
 
 function createMockContainer(overrides: Record<string, any> = {}) {
   return {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { useTheme } from '../theme/useTheme';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useTheme } from '../theme/useTheme';
 
 const props = withDefaults(
   defineProps<{
@@ -39,7 +39,11 @@ function select(id: 'light' | 'system' | 'dark', e: MouseEvent) {
 }
 
 function activeIconColor() {
-  return isDark.value ? 'dd-text-info' : themeVariant.value === 'dark' ? 'dd-text-info' : 'dd-text-caution';
+  return isDark.value
+    ? 'dd-text-info'
+    : themeVariant.value === 'dark'
+      ? 'dd-text-info'
+      : 'dd-text-caution';
 }
 
 function iconColor(id: string) {

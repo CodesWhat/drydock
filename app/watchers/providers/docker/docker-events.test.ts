@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import {
-  DOCKER_EVENTS_RECONNECT_BASE_DELAY_MS,
   cleanupDockerEventsStream,
+  DOCKER_EVENTS_RECONNECT_BASE_DELAY_MS,
   getDockerEventsOptions,
   isRecoverableDockerEventParseError,
   onDockerEventsStreamFailure,
@@ -321,7 +321,17 @@ describe('docker events helpers extraction', () => {
     expect(getDockerEventsOptions()).toEqual({
       filters: {
         type: ['container'],
-        event: ['create', 'destroy', 'start', 'stop', 'pause', 'unpause', 'die', 'update', 'rename'],
+        event: [
+          'create',
+          'destroy',
+          'start',
+          'stop',
+          'pause',
+          'unpause',
+          'die',
+          'update',
+          'rename',
+        ],
       },
     });
   });

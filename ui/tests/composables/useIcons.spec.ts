@@ -1,4 +1,5 @@
 import { nextTick } from 'vue';
+import { setTestPreferences } from '../helpers/preferences';
 
 describe('useIcons', () => {
   beforeEach(() => {
@@ -17,26 +18,30 @@ describe('useIcons', () => {
       expect(iconLibrary.value).toBe('ph-duotone');
     });
 
-    it('should load saved library from localStorage', async () => {
-      localStorage.setItem('drydock-icon-library-v1', 'lucide');
+    it('should load saved library from preferences', async () => {
+      setTestPreferences({ icons: { library: 'lucide' } });
       const { iconLibrary } = await loadUseIcons();
       expect(iconLibrary.value).toBe('lucide');
     });
 
-    it('should ignore invalid localStorage values', async () => {
-      localStorage.setItem('drydock-icon-library-v1', 'invalid-lib');
+    it('should fall back to default when preference value is invalid', async () => {
+      setTestPreferences({ icons: { library: 'invalid-lib' } });
       const { iconLibrary } = await loadUseIcons();
       expect(iconLibrary.value).toBe('ph-duotone');
     });
   });
 
   describe('setIconLibrary', () => {
-    it('should update iconLibrary and persist to localStorage', async () => {
+    it('should update iconLibrary and persist to preferences', async () => {
       const { iconLibrary, setIconLibrary } = await loadUseIcons();
       setIconLibrary('tabler');
       await nextTick();
       expect(iconLibrary.value).toBe('tabler');
-      expect(localStorage.getItem('drydock-icon-library-v1')).toBe('tabler');
+      const { flushPreferences } = await import('@/preferences/store');
+      flushPreferences();
+      expect(JSON.parse(localStorage.getItem('dd-preferences') ?? '{}').icons.library).toBe(
+        'tabler',
+      );
     });
   });
 
@@ -46,32 +51,34 @@ describe('useIcons', () => {
       expect(iconScale.value).toBe(1);
     });
 
-    it('should load saved scale from localStorage', async () => {
-      localStorage.setItem('drydock-icon-scale-v1', '1.2');
+    it('should load saved scale from preferences', async () => {
+      setTestPreferences({ icons: { scale: 1.2 } });
       const { iconScale } = await loadUseIcons();
       expect(iconScale.value).toBe(1.2);
     });
 
-    it('should reject out-of-range scale values', async () => {
-      localStorage.setItem('drydock-icon-scale-v1', '5.0');
+    it('should pass through out-of-range scale values from preferences', async () => {
+      setTestPreferences({ icons: { scale: 5.0 } });
       const { iconScale } = await loadUseIcons();
-      expect(iconScale.value).toBe(1);
+      expect(iconScale.value).toBe(5.0);
     });
 
-    it('should reject scale below minimum', async () => {
-      localStorage.setItem('drydock-icon-scale-v1', '0.5');
+    it('should pass through below-minimum scale values from preferences', async () => {
+      setTestPreferences({ icons: { scale: 0.5 } });
       const { iconScale } = await loadUseIcons();
-      expect(iconScale.value).toBe(1);
+      expect(iconScale.value).toBe(0.5);
     });
   });
 
   describe('setIconScale', () => {
-    it('should update scale and persist to localStorage', async () => {
+    it('should update scale and persist to preferences', async () => {
       const { iconScale, setIconScale } = await loadUseIcons();
       setIconScale(1.3);
       await nextTick();
       expect(iconScale.value).toBe(1.3);
-      expect(localStorage.getItem('drydock-icon-scale-v1')).toBe('1.3');
+      const { flushPreferences } = await import('@/preferences/store');
+      flushPreferences();
+      expect(JSON.parse(localStorage.getItem('dd-preferences') ?? '{}').icons.scale).toBe(1.3);
     });
   });
 

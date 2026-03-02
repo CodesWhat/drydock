@@ -1,7 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 
 import {
-  OIDC_ACCESS_TOKEN_REFRESH_WINDOW_MS,
   applyRemoteOidcTokenPayload,
   buildDeviceCodeTokenRequest,
   buildTokenRequestBody,
@@ -10,6 +9,7 @@ import {
   getRemoteAuthResolution,
   handleTokenErrorResponse,
   isRemoteOidcTokenRefreshRequired,
+  OIDC_ACCESS_TOKEN_REFRESH_WINDOW_MS,
 } from './oidc.js';
 
 function getFirstConfigString(value: any, paths: string[]) {

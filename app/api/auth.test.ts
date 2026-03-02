@@ -61,8 +61,8 @@ vi.mock('./audit-events.js', () => ({
 }));
 
 import session from 'express-session';
-import log from '../log/index.js';
 import passport from 'passport';
+import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as auth from './auth.js';
 

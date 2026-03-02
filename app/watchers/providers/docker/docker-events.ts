@@ -81,7 +81,9 @@ export function scheduleDockerEventsReconnect(
 
   if (state.dockerEventsReconnectTimeout) {
     if (state.log && typeof state.log.debug === 'function') {
-      state.log.debug(`Docker event stream reconnect already scheduled; ignoring "${reason}" signal`);
+      state.log.debug(
+        `Docker event stream reconnect already scheduled; ignoring "${reason}" signal`,
+      );
     }
     return;
   }

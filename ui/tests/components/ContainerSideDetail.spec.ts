@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils';
-import { nextTick, ref } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { nextTick, ref } from 'vue';
 import ContainerSideDetail from '@/components/containers/ContainerSideDetail.vue';
 import DetailPanel from '@/components/DetailPanel.vue';
 

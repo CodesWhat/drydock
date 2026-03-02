@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { useBreakpoints } from '../composables/useBreakpoints';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAllContainers } from '../services/container';
 import { getAllWatchers, getWatcher } from '../services/watcher';
-import { useBreakpoints } from '../composables/useBreakpoints';
 import type { ApiComponent } from '../types/api';
 
 const { isMobile } = useBreakpoints();
 const route = useRoute();
-const watchersViewMode = ref<'table' | 'cards' | 'list'>('table');
+const watchersViewMode = useViewMode('watchers');
 const selectedWatcher = ref<Record<string, unknown> | null>(null);
 const detailOpen = ref(false);
 const detailLoading = ref(false);

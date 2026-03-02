@@ -84,9 +84,9 @@ vi.mock('./sse', () => ({
   broadcastScanCompleted: (...args: unknown[]) => mockBroadcastScanCompleted(...args),
 }));
 
+import rateLimit from 'express-rate-limit';
 import { getAgent } from '../agent/manager.js';
 import { getSecurityConfiguration, getServerConfiguration } from '../configuration/index.js';
-import rateLimit from 'express-rate-limit';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import Trigger from '../triggers/providers/Trigger.js';

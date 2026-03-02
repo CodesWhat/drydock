@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils';
-import { tooltip as tooltipDirective } from '@/directives/tooltip';
 import DataFilterBar from '@/components/DataFilterBar.vue';
+import { tooltip as tooltipDirective } from '@/directives/tooltip';
 
 function factory(props: Record<string, any> = {}, slots: Record<string, any> = {}) {
   return mount(DataFilterBar, {
@@ -118,7 +118,9 @@ describe('DataFilterBar', () => {
         { id: 'timeline', icon: 'clock' },
       ];
       const w = factory({ viewModes: customModes });
-      const viewBtns = w.findAll('button').filter((b) => b.attributes('aria-label')?.endsWith('view'));
+      const viewBtns = w
+        .findAll('button')
+        .filter((b) => b.attributes('aria-label')?.endsWith('view'));
       expect(viewBtns).toHaveLength(2);
       expect(viewBtns[0].attributes('aria-label')).toBe('Grid view');
       expect(viewBtns[1].attributes('aria-label')).toBe('Timeline view');
@@ -148,7 +150,9 @@ describe('DataFilterBar', () => {
 
     it('sets aria-label on each view mode button', () => {
       const w = factory();
-      const viewBtns = w.findAll('button').filter((b) => b.attributes('aria-label')?.endsWith('view'));
+      const viewBtns = w
+        .findAll('button')
+        .filter((b) => b.attributes('aria-label')?.endsWith('view'));
       expect(viewBtns[0].attributes('aria-label')).toBe('Table view');
       expect(viewBtns[1].attributes('aria-label')).toBe('Cards view');
       expect(viewBtns[2].attributes('aria-label')).toBe('List view');
@@ -199,7 +203,9 @@ describe('DataFilterBar', () => {
 
     it('shows tooltip for view mode icon buttons', async () => {
       const w = factoryWithTooltip();
-      const cardsButton = w.findAll('button').find((b) => b.attributes('aria-label') === 'Cards view');
+      const cardsButton = w
+        .findAll('button')
+        .find((b) => b.attributes('aria-label') === 'Cards view');
       expect(cardsButton).toBeDefined();
       await cardsButton?.trigger('mouseenter');
       const tip = document.body.querySelector('[role="tooltip"]');

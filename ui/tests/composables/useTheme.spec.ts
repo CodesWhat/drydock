@@ -1,3 +1,5 @@
+import { setTestPreferences } from '../helpers/preferences';
+
 describe('useTheme', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -16,14 +18,14 @@ describe('useTheme', () => {
       expect(themeFamily.value).toBe('drydock');
     });
 
-    it('should load saved family from localStorage', async () => {
-      localStorage.setItem('drydock-theme-family-v1', 'github');
+    it('should load saved family from preferences', async () => {
+      setTestPreferences({ theme: { family: 'github' } });
       const { themeFamily } = await loadUseTheme();
       expect(themeFamily.value).toBe('github');
     });
 
-    it('should ignore invalid localStorage values', async () => {
-      localStorage.setItem('drydock-theme-family-v1', 'nonexistent');
+    it('should use default for invalid preference values', async () => {
+      setTestPreferences({ theme: { family: 'nonexistent' } });
       const { themeFamily } = await loadUseTheme();
       expect(themeFamily.value).toBe('drydock');
     });
@@ -35,14 +37,14 @@ describe('useTheme', () => {
       expect(themeVariant.value).toBe('dark');
     });
 
-    it('should load saved variant from localStorage', async () => {
-      localStorage.setItem('drydock-theme-variant-v1', 'light');
+    it('should load saved variant from preferences', async () => {
+      setTestPreferences({ theme: { variant: 'light' } });
       const { themeVariant } = await loadUseTheme();
       expect(themeVariant.value).toBe('light');
     });
 
-    it('should ignore invalid variant values', async () => {
-      localStorage.setItem('drydock-theme-variant-v1', 'midnight');
+    it('should use default for invalid variant values from preferences', async () => {
+      setTestPreferences({ theme: { variant: 'midnight' } });
       const { themeVariant } = await loadUseTheme();
       expect(themeVariant.value).toBe('dark');
     });
@@ -53,7 +55,11 @@ describe('useTheme', () => {
       const { themeFamily, setThemeFamily } = await loadUseTheme();
       setThemeFamily('dracula');
       expect(themeFamily.value).toBe('dracula');
-      expect(localStorage.getItem('drydock-theme-family-v1')).toBe('dracula');
+      const { flushPreferences } = await import('@/preferences/store');
+      flushPreferences();
+      expect(JSON.parse(localStorage.getItem('dd-preferences') ?? '{}').theme.family).toBe(
+        'dracula',
+      );
     });
   });
 
@@ -62,12 +68,16 @@ describe('useTheme', () => {
       const { themeVariant, setThemeVariant } = await loadUseTheme();
       setThemeVariant('light');
       expect(themeVariant.value).toBe('light');
-      expect(localStorage.getItem('drydock-theme-variant-v1')).toBe('light');
+      const { flushPreferences } = await import('@/preferences/store');
+      flushPreferences();
+      expect(JSON.parse(localStorage.getItem('dd-preferences') ?? '{}').theme.variant).toBe(
+        'light',
+      );
     });
   });
 
   describe('toggleVariant', () => {
-    it('should cycle dark → light → system → dark', async () => {
+    it('should cycle dark -> light -> system -> dark', async () => {
       const { themeVariant, toggleVariant } = await loadUseTheme();
       expect(themeVariant.value).toBe('dark');
 
@@ -115,13 +125,13 @@ describe('useTheme', () => {
     });
 
     it('should add light class when variant is light', async () => {
-      localStorage.setItem('drydock-theme-variant-v1', 'light');
+      setTestPreferences({ theme: { variant: 'light' } });
       await loadUseTheme();
       expect(document.documentElement.classList.contains('light')).toBe(true);
     });
 
     it('should add theme-{family} class for non-drydock families', async () => {
-      localStorage.setItem('drydock-theme-family-v1', 'github');
+      setTestPreferences({ theme: { family: 'github' } });
       await loadUseTheme();
       expect(document.documentElement.classList.contains('theme-github')).toBe(true);
     });
@@ -134,8 +144,7 @@ describe('useTheme', () => {
 
     it('should replace stale theme and variant classes when applying current state', async () => {
       document.documentElement.className = 'theme-github dark stale';
-      localStorage.setItem('drydock-theme-family-v1', 'catppuccin');
-      localStorage.setItem('drydock-theme-variant-v1', 'light');
+      setTestPreferences({ theme: { family: 'catppuccin', variant: 'light' } });
 
       await loadUseTheme();
 

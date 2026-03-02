@@ -50,13 +50,13 @@ import * as mockPrometheus from '../../../prometheus/watcher.js';
 import * as mockTag from '../../../tag/index.js';
 import * as maintenance from './maintenance.js';
 import {
-  OIDC_DEVICE_URL_PATHS,
-  OIDC_GRANT_TYPE_PATHS,
   applyRemoteOidcTokenPayload,
   getOidcGrantType,
   handleTokenErrorResponse,
   initializeRemoteOidcStateFromConfiguration,
   isRemoteOidcTokenRefreshRequired,
+  OIDC_DEVICE_URL_PATHS,
+  OIDC_GRANT_TYPE_PATHS,
   performDeviceCodeFlow,
   pollDeviceCodeToken,
   refreshRemoteOidcAccessToken,
@@ -5461,15 +5461,19 @@ describe('Docker Watcher', () => {
       mockAxios.post.mockResolvedValue(undefined as any);
 
       await expect(
-        performDeviceCodeFlow(createDockerOidcContext(docker), 'https://idp.example.com/device/code', {
-          tokenEndpoint: 'https://idp.example.com/token',
-          clientId: 'client-id',
-          clientSecret: 'client-secret',
-          scope: undefined,
-          audience: undefined,
-          resource: undefined,
-          timeout: 1000,
-        }),
+        performDeviceCodeFlow(
+          createDockerOidcContext(docker),
+          'https://idp.example.com/device/code',
+          {
+            tokenEndpoint: 'https://idp.example.com/token',
+            clientId: 'client-id',
+            clientSecret: 'client-secret',
+            scope: undefined,
+            audience: undefined,
+            resource: undefined,
+            timeout: 1000,
+          },
+        ),
       ).rejects.toThrow('response does not contain device_code');
     });
 

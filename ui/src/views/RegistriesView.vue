@@ -2,10 +2,11 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAllRegistries, getRegistry } from '../services/registry';
 import type { ApiComponent } from '../types/api';
 
-const registriesViewMode = ref<'table' | 'cards' | 'list'>('table');
+const registriesViewMode = useViewMode('registries');
 
 const registriesData = ref<Record<string, unknown>[]>([]);
 const loading = ref(true);

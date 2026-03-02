@@ -1,14 +1,14 @@
-import { type PreferencesSchema, DEFAULTS } from './schema';
 import { deepMerge } from './deepMerge';
+import { DEFAULTS, type PreferencesSchema } from './schema';
 import {
   FONT_FAMILIES,
   ICON_LIBRARIES,
+  isValidScale,
+  isViewMode,
   RADIUS_PRESETS,
   TABLE_ACTIONS,
   THEME_FAMILIES,
   THEME_VARIANTS,
-  isValidScale,
-  isViewMode,
 } from './validators';
 
 /** Deep-merge source into a clone of defaults, preserving only keys that exist in defaults. */
@@ -139,7 +139,10 @@ export function migrateFromLegacyKeys(): PreferencesSchema {
   const iconLib = readString('drydock-icon-library-v1');
   const iconScaleRaw = readString('drydock-icon-scale-v1');
   const iconScale = iconScaleRaw ? Number.parseFloat(iconScaleRaw) : undefined;
-  if ((iconLib && ICON_LIBRARIES.has(iconLib)) || (iconScale !== undefined && isValidScale(iconScale))) {
+  if (
+    (iconLib && ICON_LIBRARIES.has(iconLib)) ||
+    (iconScale !== undefined && isValidScale(iconScale))
+  ) {
     const i: Record<string, unknown> = {};
     if (iconLib && ICON_LIBRARIES.has(iconLib)) i.library = iconLib;
     if (iconScale !== undefined && isValidScale(iconScale)) i.scale = iconScale;

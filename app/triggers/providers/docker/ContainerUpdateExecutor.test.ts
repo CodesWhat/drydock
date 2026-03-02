@@ -1,15 +1,12 @@
 // @ts-nocheck
-import { describe, expect, test, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-const {
-  mockGetInProgressOperationByContainerName,
-  mockInsertOperation,
-  mockUpdateOperation,
-} = vi.hoisted(() => ({
-  mockGetInProgressOperationByContainerName: vi.fn(),
-  mockInsertOperation: vi.fn(),
-  mockUpdateOperation: vi.fn(),
-}));
+const { mockGetInProgressOperationByContainerName, mockInsertOperation, mockUpdateOperation } =
+  vi.hoisted(() => ({
+    mockGetInProgressOperationByContainerName: vi.fn(),
+    mockInsertOperation: vi.fn(),
+    mockUpdateOperation: vi.fn(),
+  }));
 
 vi.mock('../../../store/update-operation.js', () => ({
   getInProgressOperationByContainerName: mockGetInProgressOperationByContainerName,
@@ -122,14 +119,22 @@ describe('ContainerUpdateExecutor', () => {
     };
     const executor = createExecutor();
 
-    await expect(executor.inspectContainerByIdentifier(dockerApi, undefined)).resolves.toBeUndefined();
-    await expect(executor.inspectContainerByIdentifier(dockerApi, 'container-id')).resolves.toEqual({
-      container: { inspect },
-      inspection: { State: { Running: true } },
-    });
+    await expect(
+      executor.inspectContainerByIdentifier(dockerApi, undefined),
+    ).resolves.toBeUndefined();
+    await expect(executor.inspectContainerByIdentifier(dockerApi, 'container-id')).resolves.toEqual(
+      {
+        container: { inspect },
+        inspection: { State: { Running: true } },
+      },
+    );
 
-    dockerApi.getContainer = vi.fn(() => ({ inspect: vi.fn().mockRejectedValue(new Error('boom')) }));
-    await expect(executor.inspectContainerByIdentifier(dockerApi, 'container-id')).resolves.toBeUndefined();
+    dockerApi.getContainer = vi.fn(() => ({
+      inspect: vi.fn().mockRejectedValue(new Error('boom')),
+    }));
+    await expect(
+      executor.inspectContainerByIdentifier(dockerApi, 'container-id'),
+    ).resolves.toBeUndefined();
   });
 
   test('stopAndRemoveContainerBestEffort handles missing, stop failure, and remove failure cases', async () => {
@@ -195,10 +200,13 @@ describe('ContainerUpdateExecutor', () => {
 
     await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
 
-    expect(mockUpdateOperation).toHaveBeenCalledWith('op-1', expect.objectContaining({
-      status: 'succeeded',
-      phase: 'recovered-cleanup-temp',
-    }));
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'succeeded',
+        phase: 'recovered-cleanup-temp',
+      }),
+    );
   });
 
   test('reconcile restores old name when only temp container exists and restart is needed', async () => {
@@ -228,14 +236,21 @@ describe('ContainerUpdateExecutor', () => {
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({ container: tempContainer, inspection: {} });
 
-    await executor.reconcileInProgressContainerUpdateOperation(dockerApi, createContainer(), createLog());
+    await executor.reconcileInProgressContainerUpdateOperation(
+      dockerApi,
+      createContainer(),
+      createLog(),
+    );
 
     expect(tempContainer.rename).toHaveBeenCalledWith({ name: 'web' });
     expect(restored.start).toHaveBeenCalled();
-    expect(mockUpdateOperation).toHaveBeenCalledWith('op-1', expect.objectContaining({
-      status: 'rolled-back',
-      phase: 'recovered-rollback',
-    }));
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'rolled-back',
+        phase: 'recovered-rollback',
+      }),
+    );
   });
 
   test('reconcile restores old name without restart when old container was not stopped', async () => {
@@ -262,14 +277,21 @@ describe('ContainerUpdateExecutor', () => {
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({ container: tempContainer, inspection: {} });
 
-    await executor.reconcileInProgressContainerUpdateOperation(dockerApi, createContainer(), createLog());
+    await executor.reconcileInProgressContainerUpdateOperation(
+      dockerApi,
+      createContainer(),
+      createLog(),
+    );
 
     expect(tempContainer.rename).toHaveBeenCalledWith({ name: 'web' });
     expect(dockerApi.getContainer).not.toHaveBeenCalled();
-    expect(mockUpdateOperation).toHaveBeenCalledWith('op-1', expect.objectContaining({
-      status: 'rolled-back',
-      phase: 'recovered-rollback',
-    }));
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'rolled-back',
+        phase: 'recovered-rollback',
+      }),
+    );
   });
 
   test('reconcile records failures when restoring from temp-only state fails', async () => {
@@ -295,11 +317,14 @@ describe('ContainerUpdateExecutor', () => {
 
     await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
 
-    expect(mockUpdateOperation).toHaveBeenCalledWith('op-1', expect.objectContaining({
-      status: 'failed',
-      phase: 'recovery-failed',
-      lastError: 'rename failed',
-    }));
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'recovery-failed',
+        lastError: 'rename failed',
+      }),
+    );
   });
 
   test('reconcile records string errors when restoring from temp-only state fails with non-Error', async () => {
@@ -325,11 +350,14 @@ describe('ContainerUpdateExecutor', () => {
 
     await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
 
-    expect(mockUpdateOperation).toHaveBeenCalledWith('op-1', expect.objectContaining({
-      status: 'failed',
-      phase: 'recovery-failed',
-      lastError: 'rename failed as string',
-    }));
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'recovery-failed',
+        lastError: 'rename failed as string',
+      }),
+    );
   });
 
   test('reconcile handles active-only and missing-container recovery states', async () => {
@@ -349,19 +377,23 @@ describe('ContainerUpdateExecutor', () => {
       .mockResolvedValueOnce({ container: {}, inspection: {} })
       .mockResolvedValueOnce(undefined);
     await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
-    expect(mockUpdateOperation).toHaveBeenCalledWith('op-1', expect.objectContaining({
-      status: 'succeeded',
-      phase: 'recovered-active',
-    }));
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'succeeded',
+        phase: 'recovered-active',
+      }),
+    );
 
-    inspectSpy
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(undefined);
+    inspectSpy.mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
     await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
-    expect(mockUpdateOperation).toHaveBeenCalledWith('op-1', expect.objectContaining({
-      status: 'failed',
-      phase: 'recovery-missing-containers',
-    }));
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'recovery-missing-containers',
+      }),
+    );
   });
 
   test('execute returns false for dry-run mode after image pull', async () => {
@@ -371,7 +403,9 @@ describe('ContainerUpdateExecutor', () => {
       pullImage,
     });
 
-    await expect(executor.execute(createContext(), createContainer(), createLog())).resolves.toBe(false);
+    await expect(executor.execute(createContext(), createContainer(), createLog())).resolves.toBe(
+      false,
+    );
     expect(pullImage).toHaveBeenCalled();
   });
 
@@ -394,11 +428,18 @@ describe('ContainerUpdateExecutor', () => {
     });
     expect(executor.removeContainer).toHaveBeenCalled();
     expect(executor.stopContainer).not.toHaveBeenCalled();
-    expect(executor.startContainer).not.toHaveBeenCalledWith(context.newContainer, 'web', expect.anything());
-    expect(mockUpdateOperation).toHaveBeenCalledWith('op-1', expect.objectContaining({
-      status: 'succeeded',
-      phase: 'succeeded',
-    }));
+    expect(executor.startContainer).not.toHaveBeenCalledWith(
+      context.newContainer,
+      'web',
+      expect.anything(),
+    );
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'succeeded',
+        phase: 'succeeded',
+      }),
+    );
   });
 
   test('execute runs stop/start/health and auto-remove cleanup when old container was running', async () => {
@@ -426,9 +467,12 @@ describe('ContainerUpdateExecutor', () => {
     expect(log.info).toHaveBeenCalledWith(
       expect.stringContaining('was already removed during cleanup'),
     );
-    expect(mockUpdateOperation).toHaveBeenCalledWith('op-1', expect.objectContaining({
-      phase: 'health-gate-passed',
-    }));
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        phase: 'health-gate-passed',
+      }),
+    );
   });
 
   test('execute rolls back and rethrows original error when rollback succeeds', async () => {
@@ -439,13 +483,18 @@ describe('ContainerUpdateExecutor', () => {
       buildRuntimeConfigCompatibilityError: vi.fn(() => undefined),
     });
 
-    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow('create failed');
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      'create failed',
+    );
 
     expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'web' });
-    expect(mockUpdateOperation).toHaveBeenCalledWith('op-1', expect.objectContaining({
-      status: 'rolled-back',
-      rollbackReason: 'create_new_failed',
-    }));
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'rolled-back',
+        rollbackReason: 'create_new_failed',
+      }),
+    );
     expect(executor.recordRollbackTelemetry).toHaveBeenCalledWith(
       expect.anything(),
       'success',
@@ -476,12 +525,16 @@ describe('ContainerUpdateExecutor', () => {
       isContainerNotFoundError: vi.fn(() => false),
     });
 
-    await expect(executor.execute(context, container, createLog())).rejects.toThrow('cleanup exploded');
+    await expect(executor.execute(context, container, createLog())).rejects.toThrow(
+      'cleanup exploded',
+    );
 
-    expect(mockInsertOperation).toHaveBeenCalledWith(expect.objectContaining({
-      fromVersion: '1.0.0',
-      toVersion: '1.0.0',
-    }));
+    expect(mockInsertOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fromVersion: '1.0.0',
+        toVersion: '1.0.0',
+      }),
+    );
     expect(executor.recordRollbackTelemetry).toHaveBeenCalledWith(
       container,
       'success',
@@ -520,11 +573,14 @@ describe('ContainerUpdateExecutor', () => {
       'runtime compatibility error',
     );
 
-    expect(mockUpdateOperation).toHaveBeenCalledWith('op-1', expect.objectContaining({
-      status: 'failed',
-      phase: 'rollback-failed',
-      rollbackReason: 'start_new_failed',
-    }));
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'rollback-failed',
+        rollbackReason: 'start_new_failed',
+      }),
+    );
     expect(executor.recordRollbackTelemetry).toHaveBeenCalledWith(
       expect.anything(),
       'error',

@@ -4,9 +4,9 @@
   "description": "drydock - e2e",
   "main": "index.js",
   "scripts": {
-    "format": "qlty fmt --filter biome --no-progress .",
-    "lint:fix": "qlty check --fix --filter biome --no-progress .",
-    "lint": "qlty check --filter biome --no-progress .",
+    "format": "biome format --write .",
+    "lint:fix": "biome check --fix .",
+    "lint": "biome check .",
     "cucumber": "cucumber-js **/*.feature",
     "test:local": "dotenvx run -- ../scripts/run-e2e-tests.sh",
     "test:setup": "dotenvx run -- ../scripts/setup-test-containers.sh",

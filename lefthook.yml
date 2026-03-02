@@ -6,47 +6,52 @@
 pre-commit:
   piped: true
   commands:
-    lint-fix:
-      glob: '*.{ts,js,json,vue,css,yml,yaml,sh,Dockerfile}'
-      run: qlty check --fix --no-progress {staged_files} && git add {staged_files}
+    biome-fix:
+      glob: '*.{ts,js,json,vue,css}'
+      run: npx biome check --fix {staged_files} && git add {staged_files}
       priority: 1
-    lint-verify:
-      glob: '*.{ts,js,json,vue,css,yml,yaml,sh,Dockerfile}'
-      run: CI=1 qlty check --no-progress {staged_files}
+    biome-format:
+      glob: '*.{ts,js,json,vue,css}'
+      run: npx biome format --write {staged_files} && git add {staged_files}
       priority: 2
 
 pre-push:
   piped: true
   commands:
-    # ── Lint: mirrors CI "Lint" job (qlty check --all from root) ──
+    # ── Biome: lint + format check ─────────────────────────────
+    biome:
+      run: npx biome check .
+      priority: 1
+
+    # ── Qlty: all other linters (actionlint, hadolint, etc.) ──
     qlty:
       run: CI=1 qlty check --all --no-progress
-      priority: 1
+      priority: 2
 
     # ── Build: mirrors CI "Build" job ─────────────────────────────
     build-app:
       root: app/
       run: npm run build
-      priority: 2
+      priority: 3
     build-ui:
       root: ui/
       run: npm run build
-      priority: 3
+      priority: 4
 
     # ── Test: mirrors CI "Test & Coverage" job ────────────────────
     test-app:
       root: app/
       run: npm test
-      priority: 4
+      priority: 5
     test-ui:
       root: ui/
       run: npm run test:unit
-      priority: 5
+      priority: 6
 
     # ── E2E: mirrors CI "E2E Tests" job ───────────────────────────
     e2e:
       run: ./scripts/run-e2e-tests.sh
-      priority: 6
+      priority: 7
 
     # ── Advisory: mirrors CI advisory jobs (non-blocking) ─────────
     zizmor:
@@ -54,7 +59,7 @@ pre-push:
       run: zizmor .github/workflows/ || true
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
-      priority: 7
+      priority: 8
 
     # ── Local security gates (not in CI, skip if tool missing) ────
     snyk-deps:
@@ -62,9 +67,9 @@ pre-push:
       run: ../scripts/snyk-deps-gate.sh --org=codeswhat
       skip:
         - run: '! command -v snyk >/dev/null 2>&1'
-      priority: 8
+      priority: 9
     snyk-code:
       run: scripts/snyk-code-gate.sh --org=codeswhat
       skip:
         - run: '! command -v snyk >/dev/null 2>&1'
-      priority: 9
+      priority: 10

@@ -47,6 +47,7 @@ services:
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL
       - DD_SECURITY_SBOM_ENABLED=true
       - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json
+      - DD_SECURITY_VERIFY_SIGNATURES=true
       # --- Maintenance window (QA) ---
       # Uncomment to test; adjust cron to match/not-match current time
       # - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=0 2-6 * * *

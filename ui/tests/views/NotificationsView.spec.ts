@@ -1,13 +1,13 @@
 import { flushPromises } from '@vue/test-utils';
-import NotificationsView from '@/views/NotificationsView.vue';
 import {
   getAllNotificationRules,
-  updateNotificationRule,
   type NotificationRule,
+  updateNotificationRule,
 } from '@/services/notification';
 import { getAllTriggers } from '@/services/trigger';
-import { mountWithPlugins } from '../helpers/mount';
+import NotificationsView from '@/views/NotificationsView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
+import { mountWithPlugins } from '../helpers/mount';
 
 const { mockRoute } = vi.hoisted(() => ({
   mockRoute: { query: {} as Record<string, unknown> },

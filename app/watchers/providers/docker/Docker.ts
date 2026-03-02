@@ -12,9 +12,9 @@ import parse from 'parse-docker-image-name';
 const debounce: typeof import('just-debounce').default =
   (debounceImport as any).default || (debounceImport as any);
 
+import { getPreferredLabelValue } from '../../../docker/legacy-label.js';
 import * as event from '../../../event/index.js';
 import log from '../../../log/index.js';
-import { getPreferredLabelValue } from '../../../docker/legacy-label.js';
 import {
   type Container,
   fullName,
@@ -25,43 +25,28 @@ import {
   getMaintenanceSkipCounter,
   getWatchContainerGauge,
 } from '../../../prometheus/watcher.js';
-import { failClosedAuth } from '../../../security/auth.js';
 import type { ComponentConfiguration } from '../../../registry/Component.js';
 import * as registry from '../../../registry/index.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
+import { failClosedAuth } from '../../../security/auth.js';
 import * as storeContainer from '../../../store/container.js';
 import { parse as parseSemver, transform as transformTag } from '../../../tag/index.js';
 import Watcher from '../../Watcher.js';
 import {
-  ddDisplayIcon,
-  ddDisplayName,
-  ddInspectTagPath,
-  ddLinkTemplate,
-  ddTagFamily,
-  ddRegistryLookupImage,
-  ddRegistryLookupUrl,
-  ddTagExclude,
-  ddTagInclude,
-  ddTagTransform,
-  ddTriggerExclude,
-  ddTriggerInclude,
-  ddWatch,
-  ddWatchDigest,
-  wudDisplayIcon,
-  wudDisplayName,
-  wudInspectTagPath,
-  wudLinkTemplate,
-  wudRegistryLookupImage,
-  wudRegistryLookupUrl,
-  wudTagExclude,
-  wudTagInclude,
-  wudTagTransform,
-  wudTriggerExclude,
-  wudTriggerInclude,
-  wudWatch,
-  wudWatchDigest,
-} from './label.js';
-import { getNextMaintenanceWindow, isInMaintenanceWindow } from './maintenance.js';
+  processDockerEvent as processDockerEventState,
+  updateContainerFromInspect as updateContainerFromInspectState,
+} from './container-event-update.js';
+import {
+  cleanupDockerEventsStream as cleanupDockerEventsStreamState,
+  DOCKER_EVENTS_RECONNECT_BASE_DELAY_MS,
+  getDockerEventsOptions,
+  isRecoverableDockerEventParseError as isRecoverableDockerEventParseErrorHelper,
+  onDockerEventsStreamFailure as onDockerEventsStreamFailureHelper,
+  resetDockerEventsReconnectBackoff as resetDockerEventsReconnectBackoffState,
+  scheduleDockerEventsReconnect as scheduleDockerEventsReconnectState,
+  shouldAttemptBufferedPayloadParse,
+  splitDockerEventChunk,
+} from './docker-events.js';
 import {
   buildFallbackContainerReport,
   getContainerConfigValue,
@@ -83,25 +68,37 @@ import {
   normalizeConfigNumberValue,
   shouldUpdateDisplayNameFromContainerName,
 } from './docker-helpers.js';
+import { createStderrFallbackLogger, serializeFallbackLogValue } from './fallback-logger.js';
 import {
-  processDockerEvent as processDockerEventState,
-  updateContainerFromInspect as updateContainerFromInspectState,
-} from './container-event-update.js';
-import {
-  DOCKER_EVENTS_RECONNECT_BASE_DELAY_MS,
-  cleanupDockerEventsStream as cleanupDockerEventsStreamState,
-  getDockerEventsOptions,
-  isRecoverableDockerEventParseError as isRecoverableDockerEventParseErrorHelper,
-  onDockerEventsStreamFailure as onDockerEventsStreamFailureHelper,
-  resetDockerEventsReconnectBackoff as resetDockerEventsReconnectBackoffState,
-  scheduleDockerEventsReconnect as scheduleDockerEventsReconnectState,
-  shouldAttemptBufferedPayloadParse,
-  splitDockerEventChunk,
-} from './docker-events.js';
-import {
-  createStderrFallbackLogger,
-  serializeFallbackLogValue,
-} from './fallback-logger.js';
+  ddDisplayIcon,
+  ddDisplayName,
+  ddInspectTagPath,
+  ddLinkTemplate,
+  ddRegistryLookupImage,
+  ddRegistryLookupUrl,
+  ddTagExclude,
+  ddTagFamily,
+  ddTagInclude,
+  ddTagTransform,
+  ddTriggerExclude,
+  ddTriggerInclude,
+  ddWatch,
+  ddWatchDigest,
+  wudDisplayIcon,
+  wudDisplayName,
+  wudInspectTagPath,
+  wudLinkTemplate,
+  wudRegistryLookupImage,
+  wudRegistryLookupUrl,
+  wudTagExclude,
+  wudTagInclude,
+  wudTagTransform,
+  wudTriggerExclude,
+  wudTriggerInclude,
+  wudWatch,
+  wudWatchDigest,
+} from './label.js';
+import { getNextMaintenanceWindow, isInMaintenanceWindow } from './maintenance.js';
 import {
   createMutableOidcState,
   getRemoteAuthResolution,
@@ -1487,7 +1484,10 @@ class Docker extends Watcher {
       this.ensureLogger();
       this.log.debug(`Container ${containerInStore.id} already in store`);
       const cachedRuntimeDetails = normalizeRuntimeDetails(containerInStore.details);
-      let runtimeDetailsToApply = mergeRuntimeDetails(runtimeDetailsFromSummary, cachedRuntimeDetails);
+      let runtimeDetailsToApply = mergeRuntimeDetails(
+        runtimeDetailsFromSummary,
+        cachedRuntimeDetails,
+      );
 
       // When Docker events are enabled, runtime detail updates are handled by event-driven inspect calls.
       // Skip per-cron container inspect to avoid doubling inspect API calls for every tracked container.

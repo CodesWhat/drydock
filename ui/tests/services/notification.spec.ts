@@ -1,7 +1,7 @@
 import {
   getAllNotificationRules,
-  updateNotificationRule,
   type NotificationRule,
+  updateNotificationRule,
 } from '@/services/notification';
 
 describe('Notification Service', () => {

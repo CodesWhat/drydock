@@ -2,11 +2,14 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { preferences } from '../preferences/store';
+import { usePreference } from '../preferences/usePreference';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAgents } from '../services/agent';
 import { getLogEntries } from '../services/log';
-import { getAllWatchers } from '../services/watcher';
 import { getAllTriggers } from '../services/trigger';
-import type { ApiComponent, ApiAgent, ApiAgentLogEntry } from '../types/api';
+import { getAllWatchers } from '../services/watcher';
+import type { ApiAgent, ApiAgentLogEntry, ApiComponent } from '../types/api';
 import { errorMessage } from '../utils/error';
 
 interface Agent {
@@ -273,11 +276,21 @@ const filteredAgents = computed(() => {
 });
 
 // -- View mode --
-const agentViewMode = ref<'table' | 'cards' | 'list'>('table');
+const agentViewMode = useViewMode('agents');
 
 // -- Sorting --
-const agentSortKey = ref('name');
-const agentSortAsc = ref(true);
+const agentSortKey = usePreference(
+  () => preferences.views.agents.sortKey,
+  (v) => {
+    preferences.views.agents.sortKey = v;
+  },
+);
+const agentSortAsc = usePreference(
+  () => preferences.views.agents.sortAsc,
+  (v) => {
+    preferences.views.agents.sortAsc = v;
+  },
+);
 
 const sortedAgents = computed(() => {
   const list = [...filteredAgents.value];

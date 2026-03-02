@@ -2,8 +2,8 @@ import * as event from '../../event/index.js';
 import { type Container, fullName } from '../../model/container.js';
 import { getTriggerCounter } from '../../prometheus/trigger.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
-import * as notificationStore from '../../store/notification.js';
 import * as storeContainer from '../../store/container.js';
+import * as notificationStore from '../../store/notification.js';
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
 import {
   isThresholdReached as isThresholdReachedHelper,

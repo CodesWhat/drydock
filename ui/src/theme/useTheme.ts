@@ -1,35 +1,26 @@
 import { computed, ref, watch } from 'vue';
-import type { ThemeFamily, ThemeVariant } from './palettes';
+import { preferences } from '../preferences/store';
+import { type ThemeFamily, type ThemeVariant, themeFamilies } from './palettes';
 
-const FAMILY_KEY = 'drydock-theme-family-v1';
-const VARIANT_KEY = 'drydock-theme-variant-v1';
+const DEFAULT_THEME_FAMILY: ThemeFamily = 'drydock';
+const DEFAULT_THEME_VARIANT: ThemeVariant = 'dark';
+const THEME_FAMILIES = new Set<ThemeFamily>(themeFamilies.map((family) => family.id));
+const THEME_VARIANTS = new Set<ThemeVariant>(['dark', 'light', 'system']);
 
-function loadFamily(): ThemeFamily {
-  try {
-    const stored = localStorage.getItem(FAMILY_KEY);
-    if (stored && ['drydock', 'github', 'dracula', 'catppuccin'].includes(stored)) {
-      return stored as ThemeFamily;
-    }
-  } catch {
-    /* SSR or blocked storage */
-  }
-  return 'drydock';
+function isThemeFamily(value: unknown): value is ThemeFamily {
+  return typeof value === 'string' && THEME_FAMILIES.has(value as ThemeFamily);
 }
 
-function loadVariant(): ThemeVariant {
-  try {
-    const stored = localStorage.getItem(VARIANT_KEY);
-    if (stored && ['dark', 'light', 'system'].includes(stored)) {
-      return stored as ThemeVariant;
-    }
-  } catch {
-    /* SSR or blocked storage */
-  }
-  return 'dark';
+function isThemeVariant(value: unknown): value is ThemeVariant {
+  return typeof value === 'string' && THEME_VARIANTS.has(value as ThemeVariant);
 }
 
-const themeFamily = ref<ThemeFamily>(loadFamily());
-const themeVariant = ref<ThemeVariant>(loadVariant());
+const themeFamily = computed<ThemeFamily>(() =>
+  isThemeFamily(preferences.theme.family) ? preferences.theme.family : DEFAULT_THEME_FAMILY,
+);
+const themeVariant = computed<ThemeVariant>(() =>
+  isThemeVariant(preferences.theme.variant) ? preferences.theme.variant : DEFAULT_THEME_VARIANT,
+);
 
 const systemDark = ref(globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true);
 
@@ -82,44 +73,20 @@ watch(
   { flush: 'sync' },
 );
 
-// Persist to localStorage
-watch(
-  themeFamily,
-  (val) => {
-    try {
-      localStorage.setItem(FAMILY_KEY, val);
-    } catch {
-      /* ignored */
-    }
-  },
-  { flush: 'sync' },
-);
-watch(
-  themeVariant,
-  (val) => {
-    try {
-      localStorage.setItem(VARIANT_KEY, val);
-    } catch {
-      /* ignored */
-    }
-  },
-  { flush: 'sync' },
-);
-
 let isTransitioning = false;
 
 function setThemeFamily(family: ThemeFamily) {
-  themeFamily.value = family;
+  preferences.theme.family = family;
 }
 
 function setThemeVariant(variant: ThemeVariant) {
-  themeVariant.value = variant;
+  preferences.theme.variant = variant;
 }
 
 function toggleVariant() {
-  if (themeVariant.value === 'dark') themeVariant.value = 'light';
-  else if (themeVariant.value === 'light') themeVariant.value = 'system';
-  else themeVariant.value = 'dark';
+  if (preferences.theme.variant === 'dark') preferences.theme.variant = 'light';
+  else if (preferences.theme.variant === 'light') preferences.theme.variant = 'system';
+  else preferences.theme.variant = 'dark';
 }
 
 interface ViewTransitionDocument extends Document {

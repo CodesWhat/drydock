@@ -2,7 +2,9 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAuditLog } from '../services/audit';
+import { resolveAuditViewModeFromQuery } from './auditViewMode';
 
 interface AuditEntry {
   id: string;
@@ -55,12 +57,6 @@ function parsePageQuery(value: unknown): number {
   return Math.max(1, Number.parseInt(raw, 10));
 }
 
-function parseViewModeQuery(value: unknown): 'table' | 'cards' | 'list' {
-  const raw = firstQueryValue(value);
-  if (raw === 'cards' || raw === 'list') return raw;
-  return 'table';
-}
-
 function parseActionQuery(value: unknown): string {
   const raw = firstQueryValue(value);
   return raw && actionTypes.includes(raw) ? raw : '';
@@ -78,7 +74,14 @@ function parseDateQuery(value: unknown): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : '';
 }
 
-const auditViewMode = ref<'table' | 'cards' | 'list'>(parseViewModeQuery(route.query.view));
+const persistedAuditView = useViewMode('audit');
+// URL query takes precedence over localStorage
+const auditViewMode = ref<'table' | 'cards' | 'list'>(
+  resolveAuditViewModeFromQuery(persistedAuditView.value, route.query.view),
+);
+watch(auditViewMode, (v) => {
+  persistedAuditView.value = v;
+});
 const selectedEntry = ref<AuditEntry | null>(null);
 const detailOpen = ref(false);
 
@@ -235,7 +238,7 @@ watch(
     page.value = parsePageQuery(nextPage);
     actionFilter.value = parseActionQuery(nextAction);
     searchQuery.value = firstQueryValue(nextSearch) ?? '';
-    auditViewMode.value = parseViewModeQuery(nextView);
+    auditViewMode.value = resolveAuditViewModeFromQuery(auditViewMode.value, nextView);
     containerFilter.value = parseContainerQuery(nextContainer);
     fromDateFilter.value = parseDateQuery(nextFrom);
     toDateFilter.value = parseDateQuery(nextTo);

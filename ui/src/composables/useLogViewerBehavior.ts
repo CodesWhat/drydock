@@ -1,4 +1,4 @@
-import { type Ref, onScopeDispose, ref, watch } from 'vue';
+import { onScopeDispose, type Ref, ref, watch } from 'vue';
 
 export function useLogViewport() {
   const logContainer = ref<HTMLElement | null>(null);

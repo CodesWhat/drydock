@@ -1,4 +1,5 @@
 import { computed, ref, watch } from 'vue';
+import { preferences } from '../preferences/store';
 
 export interface ColumnDef {
   key: string;
@@ -56,25 +57,15 @@ const allColumns: ColumnDef[] = [
 ];
 
 const defaultVisibleCols = allColumns.map((c) => c.key);
-const STORAGE_KEY = 'dd-table-cols-v1';
 
-function loadVisibleColumnsFromStorage(): string[] {
-  const storedValue = localStorage.getItem(STORAGE_KEY);
-  if (storedValue === null) {
-    return defaultVisibleCols;
-  }
-  try {
-    const parsed = JSON.parse(storedValue);
-    return Array.isArray(parsed) ? parsed : defaultVisibleCols;
-  } catch {
-    return defaultVisibleCols;
-  }
-}
-
-const visibleColumns = ref<Set<string>>(new Set(loadVisibleColumnsFromStorage()));
-watch(visibleColumns, (v) => localStorage.setItem(STORAGE_KEY, JSON.stringify([...v])), {
-  deep: true,
-});
+const visibleColumns = ref<Set<string>>(new Set(preferences.containers.columns));
+watch(
+  visibleColumns,
+  (v) => {
+    preferences.containers.columns = [...v];
+  },
+  { deep: true },
+);
 
 const showColumnPicker = ref(false);
 

@@ -20,12 +20,7 @@ class HookExecutor {
   buildHookConfig(container) {
     const logger = this.getLogger()?.child?.({});
     return {
-      hookPre: this.getPreferredLabelValue(
-        container.labels,
-        'dd.hook.pre',
-        'wud.hook.pre',
-        logger,
-      ),
+      hookPre: this.getPreferredLabelValue(container.labels, 'dd.hook.pre', 'wud.hook.pre', logger),
       hookPost: this.getPreferredLabelValue(
         container.labels,
         'dd.hook.post',

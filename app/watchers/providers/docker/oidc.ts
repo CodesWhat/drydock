@@ -206,10 +206,7 @@ export function getOidcGrantType(input: {
   return 'client_credentials';
 }
 
-export function isRemoteOidcTokenRefreshRequired(
-  state: MutableOidcState,
-  now = Date.now(),
-) {
+export function isRemoteOidcTokenRefreshRequired(state: MutableOidcState, now = Date.now()) {
   if (!state.accessToken) {
     return true;
   }
@@ -219,7 +216,10 @@ export function isRemoteOidcTokenRefreshRequired(
   return state.accessTokenExpiresAt <= now + OIDC_ACCESS_TOKEN_REFRESH_WINDOW_MS;
 }
 
-export function determineGrantType(context: OidcContext): { grantType: string; deviceUrl?: string } {
+export function determineGrantType(context: OidcContext): {
+  grantType: string;
+  deviceUrl?: string;
+} {
   let grantType = getOidcGrantType({
     configuredGrantType: context.getOidcAuthString(OIDC_GRANT_TYPE_PATHS),
     refreshToken: context.state.refreshToken,
@@ -525,7 +525,10 @@ export function handleTokenErrorResponse(
  * Poll the token endpoint with the device_code until the user authorizes,
  * the code expires, or the maximum timeout is reached.
  */
-export async function pollDeviceCodeToken(context: OidcContext, options: DeviceCodeTokenPollOptions) {
+export async function pollDeviceCodeToken(
+  context: OidcContext,
+  options: DeviceCodeTokenPollOptions,
+) {
   const {
     tokenEndpoint,
     deviceCode,

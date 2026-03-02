@@ -53,10 +53,7 @@ describe('docker fallback logger module', () => {
       expect(traceRecord.level).toBe('trace');
       expect(traceRecord.msg).toBe('trace-msg');
       expect(traceRecord.context).toEqual({ kind: 'trace' });
-      expect(traceRecord.args).toEqual([
-        '1',
-        expect.objectContaining({ message: 'trace-err' }),
-      ]);
+      expect(traceRecord.args).toEqual(['1', expect.objectContaining({ message: 'trace-err' })]);
 
       const debugRecord = JSON.parse(`${stderrSpy.mock.calls[1][0]}`);
       expect(debugRecord.level).toBe('debug');

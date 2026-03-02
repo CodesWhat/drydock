@@ -138,9 +138,7 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.maybeNotifySelfUpdate).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.stringMatching(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-      ),
+      expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
     );
     expect(selfUpdateOperationId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
@@ -164,13 +162,21 @@ describe('UpdateLifecycleExecutor', () => {
       createTriggerContext: vi.fn().mockResolvedValue(context),
       buildHookConfig: vi.fn(() => hookConfig),
       performContainerUpdate: vi.fn().mockResolvedValue(true),
-      getRollbackConfig: vi.fn(() => ({ autoRollback: true, rollbackWindow: 1, rollbackInterval: 2 })),
+      getRollbackConfig: vi.fn(() => ({
+        autoRollback: true,
+        rollbackWindow: 1,
+        rollbackInterval: 2,
+      })),
       getBackupCount: vi.fn(() => 5),
     });
 
     await harness.executor.run(container, { runtime: true });
 
-    expect(harness.maybeScanAndGateUpdate).toHaveBeenCalledWith(context, container, expect.anything());
+    expect(harness.maybeScanAndGateUpdate).toHaveBeenCalledWith(
+      context,
+      container,
+      expect.anything(),
+    );
     expect(harness.recordHookConfigurationAudit).toHaveBeenCalledWith(container, hookConfig);
     expect(harness.runPreUpdateHook).toHaveBeenCalledWith(container, hookConfig, expect.anything());
     expect(harness.runPreRuntimeUpdateLifecycle).toHaveBeenCalledWith(
@@ -185,7 +191,11 @@ describe('UpdateLifecycleExecutor', () => {
       expect.anything(),
       { runtime: true },
     );
-    expect(harness.runPostUpdateHook).toHaveBeenCalledWith(container, hookConfig, expect.anything());
+    expect(harness.runPostUpdateHook).toHaveBeenCalledWith(
+      container,
+      hookConfig,
+      expect.anything(),
+    );
     expect(harness.cleanupOldImages).toHaveBeenCalledWith(
       context.dockerApi,
       context.registry,

@@ -35,10 +35,7 @@ const COMMAND_CHECK_BUFFER_BYTES = 256 * 1024;
 const DISALLOWED_COMMAND_CHARACTERS_PATTERN = /[;|$]/;
 
 function hasValidCommandPath(command: string): boolean {
-  if (
-    command.includes('\0') ||
-    DISALLOWED_COMMAND_CHARACTERS_PATTERN.test(command)
-  ) {
+  if (command.includes('\0') || DISALLOWED_COMMAND_CHARACTERS_PATTERN.test(command)) {
     return false;
   }
 

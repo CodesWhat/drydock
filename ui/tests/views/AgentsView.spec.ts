@@ -1,8 +1,8 @@
 import { flushPromises } from '@vue/test-utils';
 import { getAgents } from '@/services/agent';
 import { getLogEntries } from '@/services/log';
-import { getAllWatchers } from '@/services/watcher';
 import { getAllTriggers } from '@/services/trigger';
+import { getAllWatchers } from '@/services/watcher';
 import AgentsView from '@/views/AgentsView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
 import { mountWithPlugins } from '../helpers/mount';

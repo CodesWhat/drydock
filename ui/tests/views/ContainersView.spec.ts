@@ -126,14 +126,6 @@ vi.mock('@/composables/useColumnVisibility', () => ({
   })),
 }));
 
-vi.mock('@/composables/useSorting', () => ({
-  useSorting: vi.fn(() => ({
-    sortKey: ref('name'),
-    sortAsc: ref(true),
-    toggleSort: vi.fn(),
-  })),
-}));
-
 const mockContainerScrollBlocked = ref(false);
 const mockContainerAutoFetchInterval = ref(0);
 
@@ -234,11 +226,11 @@ const childStubs = {
 import {
   getAllContainers,
   getContainerGroups,
-  getContainerUpdateOperations,
-  scanContainer,
   getContainerSbom,
-  updateContainerPolicy,
+  getContainerUpdateOperations,
   getContainerVulnerabilities,
+  scanContainer,
+  updateContainerPolicy,
 } from '@/services/container';
 import { updateContainer as apiUpdateContainer } from '@/services/container-actions';
 
@@ -270,7 +262,11 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
   };
 }
 
-async function mountContainersView(containers: Container[] = [], apiContainersInput?: any[]) {
+async function mountContainersView(
+  containers: Container[] = [],
+  apiContainersInput?: any[],
+  options: { initialFilterKind?: string } = {},
+) {
   // The API returns raw objects; mapApiContainers transforms them
   const apiContainers =
     apiContainersInput ??
@@ -291,7 +287,7 @@ async function mountContainersView(containers: Container[] = [], apiContainersIn
   mockFilterRegistry.value = 'all';
   mockFilterBouncer.value = 'all';
   mockFilterServer.value = 'all';
-  mockFilterKind.value = 'all';
+  mockFilterKind.value = options.initialFilterKind ?? 'all';
   mockSelectedContainer.value = null;
   mockDetailPanelOpen.value = false;
   mockContainerFullPage.value = false;
@@ -306,7 +302,7 @@ async function mountContainersView(containers: Container[] = [], apiContainersIn
 }
 
 describe('ContainersView', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockIsMobile.value = false;
     mockWindowNarrow.value = false;
@@ -333,6 +329,8 @@ describe('ContainersView', () => {
     mockRoute.query = {};
     localStorage.clear();
     sessionStorage.clear();
+    const { resetPreferences } = await import('@/preferences/store');
+    resetPreferences();
   });
 
   afterEach(() => {
@@ -372,6 +370,12 @@ describe('ContainersView', () => {
       mockRoute.query = { filterKind: 'invalid-value' };
       await mountContainersView([makeContainer()]);
       expect(mockFilterKind.value).toBe('all');
+    });
+
+    it('preserves existing filterKind when query omits filterKind', async () => {
+      mockRoute.query = {};
+      await mountContainersView([makeContainer()], undefined, { initialFilterKind: 'major' });
+      expect(mockFilterKind.value).toBe('major');
     });
   });
 
@@ -1024,7 +1028,7 @@ describe('ContainersView', () => {
 
   describe('grouping', () => {
     beforeEach(() => {
-      localStorage.removeItem('dd-group-by-stack-v1');
+      localStorage.removeItem('dd-preferences');
     });
 
     it('groupByStack defaults to false', async () => {
@@ -1083,17 +1087,22 @@ describe('ContainersView', () => {
       expect(groups[1].containers).toHaveLength(1);
     });
 
-    it('persists toggle state to localStorage', async () => {
+    it('persists toggle state to preferences', async () => {
       const wrapper = await mountContainersView([makeContainer()]);
       const vm = wrapper.vm as any;
 
       vm.groupByStack = true;
       await flushPromises();
-      expect(localStorage.getItem('dd-group-by-stack-v1')).toBe('true');
+      const { flushPreferences } = await import('@/preferences/store');
+      flushPreferences();
+      const prefs1 = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
+      expect(prefs1.containers.groupByStack).toBe(true);
 
       vm.groupByStack = false;
       await flushPromises();
-      expect(localStorage.getItem('dd-group-by-stack-v1')).toBe('false');
+      flushPreferences();
+      const prefs2 = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
+      expect(prefs2.containers.groupByStack).toBe(false);
     });
 
     it('toggles collapse state for groups', async () => {

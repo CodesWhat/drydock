@@ -1,14 +1,23 @@
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { preferences } from '../preferences/store';
 import type { Container } from '../types/container';
 
 export function useContainerFilters(containers: { value: Container[] }) {
   const filterSearch = ref('');
-  const filterStatus = ref('all');
-  const filterRegistry = ref('all');
-  const filterBouncer = ref('all');
-  const filterServer = ref('all');
-  const filterKind = ref('all');
+  const filterStatus = ref(preferences.containers.filters.status);
+  const filterRegistry = ref(preferences.containers.filters.registry);
+  const filterBouncer = ref(preferences.containers.filters.bouncer);
+  const filterServer = ref(preferences.containers.filters.server);
+  const filterKind = ref(preferences.containers.filters.kind);
   const showFilters = ref(false);
+
+  watch([filterStatus, filterRegistry, filterBouncer, filterServer, filterKind], () => {
+    preferences.containers.filters.status = filterStatus.value;
+    preferences.containers.filters.registry = filterRegistry.value;
+    preferences.containers.filters.bouncer = filterBouncer.value;
+    preferences.containers.filters.server = filterServer.value;
+    preferences.containers.filters.kind = filterKind.value;
+  });
 
   const activeFilterCount = computed(
     () =>

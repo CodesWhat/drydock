@@ -52,21 +52,21 @@ describe('useDetailPanel', () => {
   });
 
   describe('panelFlex', () => {
-    it('should return 30% for sm', () => {
+    it('should return 420px basis for sm', () => {
       const { panelFlex } = useDetailPanel();
-      expect(panelFlex.value).toBe('0 0 30%');
+      expect(panelFlex.value).toBe('0 0 420px');
     });
 
-    it('should return 45% for md', () => {
+    it('should return 560px basis for md', () => {
       const { panelSize, panelFlex } = useDetailPanel();
       panelSize.value = 'md';
-      expect(panelFlex.value).toBe('0 0 45%');
+      expect(panelFlex.value).toBe('0 0 560px');
     });
 
-    it('should return 70% for lg', () => {
+    it('should return 720px basis for lg', () => {
       const { panelSize, panelFlex } = useDetailPanel();
       panelSize.value = 'lg';
-      expect(panelFlex.value).toBe('0 0 70%');
+      expect(panelFlex.value).toBe('0 0 720px');
     });
   });
 

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import whaleLogo from '@/assets/whale-logo.png';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import { useIcons } from '@/composables/useIcons';
+import { loadRecentItems, saveRecentItems } from '@/layouts/recentStorage';
+import { preferences } from '@/preferences/store';
+import { usePreference } from '@/preferences/usePreference';
 import { getAgents } from '@/services/agent';
-import { getAllAuthentications } from '@/services/authentication';
 import { getUser, logout } from '@/services/auth';
+import { getAllAuthentications } from '@/services/authentication';
 import { getAllContainers } from '@/services/container';
 import { getEffectiveDisplayIcon } from '@/services/image-icon';
 import { getAllNotificationRules } from '@/services/notification';
@@ -22,7 +24,12 @@ const { icon } = useIcons();
 const { isDark } = useTheme();
 const { isMobile, windowNarrow } = useBreakpoints();
 
-const sidebarCollapsed = ref(false);
+const sidebarCollapsed = usePreference(
+  () => preferences.layout.sidebarCollapsed,
+  (v) => {
+    preferences.layout.sidebarCollapsed = v;
+  },
+);
 const isMobileMenuOpen = ref(false);
 const isCollapsed = computed(() => sidebarCollapsed.value && !isMobile.value);
 
@@ -282,7 +289,8 @@ const SEARCH_GROUP_DEFINITIONS: SearchGroupDefinition[] = [
   },
 ];
 
-const SEARCH_RECENT_STORAGE_KEY = 'dd-cmdk-recent-v1';
+const SEARCH_RECENT_STORAGE_KEY = 'dd-cmdk-recent';
+const SEARCH_RECENT_STORAGE_LEGACY_KEY = 'dd-cmdk-recent-v1';
 const SEARCH_RECENT_MAX_ITEMS = 8;
 const SEARCH_SCOPE_ORDER: SearchScope[] = SEARCH_SCOPE_OPTIONS.map((option) => option.id);
 const EMPTY_QUERY_GROUP_LIMIT = 4;
@@ -316,41 +324,30 @@ function normalizeSearchValue(value: unknown): string {
   return `${value ?? ''}`.trim();
 }
 
+function isSearchResultItem(item: unknown): item is SearchResultItem {
+  return (
+    item !== null &&
+    typeof item === 'object' &&
+    typeof (item as Record<string, unknown>).id === 'string' &&
+    typeof (item as Record<string, unknown>).title === 'string' &&
+    typeof (item as Record<string, unknown>).subtitle === 'string' &&
+    typeof (item as Record<string, unknown>).icon === 'string' &&
+    typeof (item as Record<string, unknown>).route === 'string' &&
+    typeof (item as Record<string, unknown>).kind === 'string'
+  );
+}
+
 function loadRecentSearchResults(): SearchResultItem[] {
-  try {
-    const raw = localStorage.getItem(SEARCH_RECENT_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return parsed
-      .filter((item): item is SearchResultItem => {
-        return (
-          item &&
-          typeof item === 'object' &&
-          typeof item.id === 'string' &&
-          typeof item.title === 'string' &&
-          typeof item.subtitle === 'string' &&
-          typeof item.icon === 'string' &&
-          typeof item.route === 'string' &&
-          typeof item.kind === 'string'
-        );
-      })
-      .slice(0, SEARCH_RECENT_MAX_ITEMS);
-  } catch {
-    return [];
-  }
+  return loadRecentItems({
+    key: SEARCH_RECENT_STORAGE_KEY,
+    legacyKey: SEARCH_RECENT_STORAGE_LEGACY_KEY,
+    maxItems: SEARCH_RECENT_MAX_ITEMS,
+    validate: isSearchResultItem,
+  });
 }
 
 function saveRecentSearchResults(items: SearchResultItem[]) {
-  try {
-    localStorage.setItem(SEARCH_RECENT_STORAGE_KEY, JSON.stringify(items));
-  } catch {
-    // Ignore storage errors.
-  }
+  saveRecentItems(SEARCH_RECENT_STORAGE_KEY, items);
 }
 
 const recentSearchResults = ref<SearchResultItem[]>(loadRecentSearchResults());

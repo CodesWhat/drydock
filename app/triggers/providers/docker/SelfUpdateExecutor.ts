@@ -69,7 +69,12 @@ class SelfUpdateExecutor {
         newImage,
         cloneRuntimeConfigOptions,
       );
-      newContainer = await this.createContainer(dockerApi, containerToCreateInspect, oldName, logContainer);
+      newContainer = await this.createContainer(
+        dockerApi,
+        containerToCreateInspect,
+        oldName,
+        logContainer,
+      );
     } catch (e) {
       logContainer.warn(`Failed to create new container, rolling back rename: ${e.message}`);
       await currentContainer.rename({ name: oldName });

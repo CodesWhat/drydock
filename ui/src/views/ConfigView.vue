@@ -9,13 +9,13 @@ import {
   useLogViewport,
 } from '../composables/useLogViewerBehavior';
 import { type IconLibrary, iconMap, libraryLabels } from '../icons';
+import { themeFamilies } from '../theme/palettes';
 import { getAppInfos } from '../services/app';
 import { getUser } from '../services/auth';
 import { getLog, getLogEntries } from '../services/log';
-import { clearIconCache, getSettings, updateSettings } from '../services/settings';
 import { getServer } from '../services/server';
+import { clearIconCache, getSettings, updateSettings } from '../services/settings';
 import { getStore } from '../services/store';
-import { themeFamilies } from '../theme/palettes';
 import { useTheme } from '../theme/useTheme';
 import { errorMessage } from '../utils/error';
 
@@ -440,6 +440,17 @@ async function handleClearIconCache() {
 
       <!-- GENERAL TAB -->
       <div v-if="activeSettingsTab === 'general'" class="space-y-6">
+        <div class="flex items-center justify-end">
+          <button
+            data-testid="general-refresh"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90 disabled:opacity-50"
+            :disabled="loading"
+            @click="loadGeneralSettingsData">
+            <AppIcon name="refresh" :size="12" />
+            Refresh
+          </button>
+        </div>
+
         <div v-if="serverError"
              class="px-3 py-2 text-[11px] dd-rounded"
              :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">

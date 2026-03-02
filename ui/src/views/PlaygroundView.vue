@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
-import { type FontId, fontOptions, useFont } from '../composables/useFont';
+import { useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
-import { type IconLibrary, iconMap, libraryLabels } from '../icons';
-import { themeFamilies } from '../theme/palettes';
+import { preferences } from '../preferences/store';
+import { usePreference } from '../preferences/usePreference';
 import { useTheme } from '../theme/useTheme';
 
 const { themeFamily, themeVariant, isDark, setThemeFamily, transitionTheme } = useTheme();
@@ -56,14 +56,12 @@ const radiusPresets = [
   { id: 'round', label: 'Round', sm: 8, md: 16, lg: 24 },
 ];
 
-function loadRadius() {
-  try {
-    return localStorage.getItem('drydock-radius-v1') || 'sharp';
-  } catch {
-    return 'sharp';
-  }
-}
-const activeRadius = ref(loadRadius());
+const activeRadius = usePreference(
+  () => preferences.appearance.radius,
+  (v) => {
+    preferences.appearance.radius = v;
+  },
+);
 function setRadius(id: string) {
   activeRadius.value = id;
   const p = radiusPresets.find((r) => r.id === id) ?? radiusPresets[1];
@@ -71,11 +69,6 @@ function setRadius(id: string) {
   el.style.setProperty('--dd-radius', `${p.md}px`);
   el.style.setProperty('--dd-radius-sm', `${p.sm}px`);
   el.style.setProperty('--dd-radius-lg', `${p.lg}px`);
-  try {
-    localStorage.setItem('drydock-radius-v1', id);
-  } catch {
-    /* ignored */
-  }
 }
 setRadius(activeRadius.value);
 

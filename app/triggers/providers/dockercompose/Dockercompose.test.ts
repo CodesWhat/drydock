@@ -1,6 +1,7 @@
 // @ts-nocheck
-import { EventEmitter } from 'node:events';
+
 import { execFile } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import { emitContainerUpdateApplied, emitContainerUpdateFailed } from '../../../event/index.js';
 import { getState } from '../../../registry/index.js';

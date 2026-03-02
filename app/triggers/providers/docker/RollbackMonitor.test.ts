@@ -96,7 +96,12 @@ describe('RollbackMonitor', () => {
       startHealthMonitor,
     });
 
-    await monitor.start({}, createContainer(), { autoRollback: false }, { info: vi.fn(), warn: vi.fn() });
+    await monitor.start(
+      {},
+      createContainer(),
+      { autoRollback: false },
+      { info: vi.fn(), warn: vi.fn() },
+    );
 
     expect(startHealthMonitor).not.toHaveBeenCalled();
   });
@@ -108,7 +113,12 @@ describe('RollbackMonitor', () => {
       getCurrentContainer,
     });
 
-    await monitor.start({}, createContainer(), { autoRollback: true, rollbackWindow: 1, rollbackInterval: 1 }, { info: vi.fn(), warn });
+    await monitor.start(
+      {},
+      createContainer(),
+      { autoRollback: true, rollbackWindow: 1, rollbackInterval: 1 },
+      { info: vi.fn(), warn },
+    );
 
     expect(getCurrentContainer).toHaveBeenCalledWith({}, { id: 'web' });
     expect(warn).toHaveBeenCalledWith(
@@ -158,9 +168,7 @@ describe('RollbackMonitor', () => {
       { info, warn: vi.fn() },
     );
 
-    expect(info).toHaveBeenCalledWith(
-      'Starting health monitor (window=120000ms, interval=3000ms)',
-    );
+    expect(info).toHaveBeenCalledWith('Starting health monitor (window=120000ms, interval=3000ms)');
     expect(startHealthMonitor).toHaveBeenCalledWith({
       dockerApi: { api: true },
       containerId: 'new-container-id',

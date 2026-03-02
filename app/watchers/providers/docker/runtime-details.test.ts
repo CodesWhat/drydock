@@ -99,17 +99,14 @@ describe('docker runtime details module', () => {
     });
 
     expect(
-      areRuntimeDetailsEqual(
-        normalized,
-        {
-          ports: ['8080->80/tcp'],
-          volumes: ['/data:/app'],
-          env: [
-            { key: 'A', value: '1' },
-            { key: 'B', value: '' },
-          ],
-        },
-      ),
+      areRuntimeDetailsEqual(normalized, {
+        ports: ['8080->80/tcp'],
+        volumes: ['/data:/app'],
+        env: [
+          { key: 'A', value: '1' },
+          { key: 'B', value: '' },
+        ],
+      }),
     ).toBe(true);
   });
 
@@ -156,7 +153,11 @@ describe('docker runtime details module', () => {
         { PrivatePort: 5000, Type: '', PublicPort: null, IP: '1.1.1.1' },
         { PrivatePort: 6000, PublicPort: 16000, IP: '' },
       ],
-      Mounts: [undefined, { Name: 'named', Destination: '/named', RW: true }, { Source: '', Destination: '' }],
+      Mounts: [
+        undefined,
+        { Name: 'named', Destination: '/named', RW: true },
+        { Source: '', Destination: '' },
+      ],
     } as any);
 
     expect(details).toEqual({

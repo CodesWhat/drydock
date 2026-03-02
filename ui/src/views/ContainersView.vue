@@ -1,44 +1,47 @@
 <script setup lang="ts">
-import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import ContainerFullPageDetail from '../components/containers/ContainerFullPageDetail.vue';
-import ContainersListContent from '../components/containers/ContainersListContent.vue';
 import ContainerSideDetail from '../components/containers/ContainerSideDetail.vue';
+import ContainersListContent from '../components/containers/ContainersListContent.vue';
 import { containersViewTemplateContextKey } from '../components/containers/containersViewTemplateContext';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useColumnVisibility } from '../composables/useColumnVisibility';
+import { useConfirmDialog } from '../composables/useConfirmDialog';
+import { useContainerFilters } from '../composables/useContainerFilters';
+import { useDetailPanel } from '../composables/useDetailPanel';
 import {
   LOG_AUTO_FETCH_INTERVALS,
   useAutoFetchLogs,
   useLogViewport,
 } from '../composables/useLogViewerBehavior';
-import { useColumnVisibility } from '../composables/useColumnVisibility';
-import { useContainerFilters } from '../composables/useContainerFilters';
-import { useDetailPanel } from '../composables/useDetailPanel';
-import { useSorting } from '../composables/useSorting';
+import { preferences } from '../preferences/store';
+import { usePreference } from '../preferences/usePreference';
+import { useViewMode } from '../preferences/useViewMode';
+import { getBackups, rollback } from '../services/backup';
+import type { ContainerGroup } from '../services/container';
 import {
   deleteContainer as apiDeleteContainer,
+  scanContainer as apiScanContainer,
   getContainerLogs as fetchContainerLogs,
-  getContainerUpdateOperations as fetchContainerUpdateOperations,
   getContainerSbom as fetchContainerSbom,
+  getContainerUpdateOperations as fetchContainerUpdateOperations,
   getContainerVulnerabilities as fetchContainerVulnerabilities,
   getAllContainers,
   getContainerGroups,
   getContainerTriggers,
   refreshAllContainers,
-  scanContainer as apiScanContainer,
   runTrigger as runContainerTrigger,
   updateContainerPolicy,
 } from '../services/container';
-import type { ContainerGroup } from '../services/container';
 import {
-  startContainer as apiStartContainer,
   restartContainer as apiRestartContainer,
+  startContainer as apiStartContainer,
   stopContainer as apiStopContainer,
   updateContainer as apiUpdateContainer,
 } from '../services/container-actions';
-import { getBackups, rollback } from '../services/backup';
 import { previewContainer } from '../services/preview';
+import type { ApiContainerTrigger, ApiSbomDocument, ApiVulnerability } from '../types/api';
 import type { Container } from '../types/container';
 import { mapApiContainers } from '../utils/container-mapper';
 import {
@@ -50,7 +53,6 @@ import {
   updateKindColor,
 } from '../utils/display';
 import { errorMessage } from '../utils/error';
-import type { ApiSbomDocument, ApiVulnerability, ApiContainerTrigger } from '../types/api';
 
 const confirm = useConfirmDialog();
 
@@ -966,13 +968,12 @@ watch(
 );
 
 // View mode
-const containerViewMode = ref<'table' | 'cards' | 'list'>('table');
-const tableActionStyle = ref<'icons' | 'buttons'>(
-  (localStorage.getItem('dd-table-actions-v1') as 'icons' | 'buttons') || 'icons',
-);
-watch(
-  () => tableActionStyle.value,
-  (v) => localStorage.setItem('dd-table-actions-v1', v),
+const containerViewMode = useViewMode('containers');
+const tableActionStyle = usePreference(
+  () => preferences.containers.tableActions,
+  (v) => {
+    preferences.containers.tableActions = v;
+  },
 );
 
 // Filters
@@ -993,6 +994,9 @@ const VALID_FILTER_KINDS = new Set(['all', 'any', 'major', 'minor', 'patch', 'di
 
 function applyFilterKindFromQuery(queryValue: unknown) {
   const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
+  if (raw === undefined || raw === null) {
+    return;
+  }
   if (typeof raw !== 'string') {
     filterKind.value = 'all';
     return;
@@ -1020,11 +1024,26 @@ watch(
 const serverNames = computed(() => [...new Set(containers.value.map((c) => c.server))]);
 
 // Sorting
-const {
-  sortKey: containerSortKey,
-  sortAsc: containerSortAsc,
-  toggleSort: toggleContainerSort,
-} = useSorting('name');
+const containerSortKey = usePreference(
+  () => preferences.containers.sort.key,
+  (v) => {
+    preferences.containers.sort.key = v;
+  },
+);
+const containerSortAsc = usePreference(
+  () => preferences.containers.sort.asc,
+  (v) => {
+    preferences.containers.sort.asc = v;
+  },
+);
+function toggleContainerSort(key: string) {
+  if (containerSortKey.value === key) {
+    containerSortAsc.value = !containerSortAsc.value;
+  } else {
+    containerSortKey.value = key;
+    containerSortAsc.value = true;
+  }
+}
 
 const sortedContainers = computed(() => {
   const list = [...filteredContainers.value];
@@ -1085,7 +1104,12 @@ const displayContainers = computed(() => {
 });
 
 // Grouping / stacks
-const groupByStack = ref(localStorage.getItem('dd-group-by-stack-v1') === 'true');
+const groupByStack = usePreference(
+  () => preferences.containers.groupByStack,
+  (v) => {
+    preferences.containers.groupByStack = v;
+  },
+);
 const groupMembershipMap = ref<Record<string, string>>({});
 const collapsedGroups = ref(new Set<string>());
 const groupUpdateInProgress = ref(new Set<string>());
@@ -1093,7 +1117,6 @@ const groupUpdateInProgress = ref(new Set<string>());
 watch(
   () => groupByStack.value,
   (v) => {
-    localStorage.setItem('dd-group-by-stack-v1', String(v));
     if (v && Object.keys(groupMembershipMap.value).length === 0) {
       loadGroups();
     }

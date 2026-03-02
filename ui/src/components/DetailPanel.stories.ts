@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3';
-import { ref, watch } from 'vue';
 import { expect, fn, userEvent, within } from 'storybook/test';
+import { ref, watch } from 'vue';
 import DetailPanel from './DetailPanel.vue';
 
 const meta = {

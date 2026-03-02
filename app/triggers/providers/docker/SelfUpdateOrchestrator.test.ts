@@ -81,8 +81,12 @@ describe('SelfUpdateOrchestrator', () => {
     const orchestrator = createOrchestrator();
 
     expect(orchestrator.isSelfUpdate(createContainer({ image: { name: 'drydock' } }))).toBe(true);
-    expect(orchestrator.isSelfUpdate(createContainer({ image: { name: 'ghcr.io/acme/drydock' } }))).toBe(true);
-    expect(orchestrator.isSelfUpdate(createContainer({ image: { name: 'ghcr.io/acme/web' } }))).toBe(false);
+    expect(
+      orchestrator.isSelfUpdate(createContainer({ image: { name: 'ghcr.io/acme/drydock' } })),
+    ).toBe(true);
+    expect(
+      orchestrator.isSelfUpdate(createContainer({ image: { name: 'ghcr.io/acme/web' } })),
+    ).toBe(false);
 
     expect(
       orchestrator.findDockerSocketBind({
@@ -171,7 +175,12 @@ describe('SelfUpdateOrchestrator', () => {
     expect(insertContainerImageBackup).toHaveBeenCalled();
     expect(pullImage).toHaveBeenCalled();
     expect(getCloneRuntimeConfigOptions).toHaveBeenCalled();
-    expect(createContainerFn).toHaveBeenCalledWith(context.dockerApi, { cloned: true }, 'drydock', expect.anything());
+    expect(createContainerFn).toHaveBeenCalledWith(
+      context.dockerApi,
+      { cloned: true },
+      'drydock',
+      expect.anything(),
+    );
     expect(context.helperContainer.start).toHaveBeenCalled();
     expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -186,9 +195,14 @@ describe('SelfUpdateOrchestrator', () => {
       createContainer: vi.fn().mockRejectedValue(new Error('create failed')),
     });
     await expect(
-      orchestratorCreateFail.execute(contextCreateFail, createContainer(), { info: vi.fn(), warn: vi.fn() }),
+      orchestratorCreateFail.execute(contextCreateFail, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
     ).rejects.toThrow('create failed');
-    expect(contextCreateFail.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'drydock' });
+    expect(contextCreateFail.currentContainer.rename).toHaveBeenNthCalledWith(2, {
+      name: 'drydock',
+    });
 
     const contextInspectFail = createContext();
     contextInspectFail.newContainer.inspect.mockRejectedValue(new Error('inspect failed'));
@@ -196,10 +210,15 @@ describe('SelfUpdateOrchestrator', () => {
       createContainer: vi.fn().mockResolvedValue(contextInspectFail.newContainer),
     });
     await expect(
-      orchestratorInspectFail.execute(contextInspectFail, createContainer(), { info: vi.fn(), warn: vi.fn() }),
+      orchestratorInspectFail.execute(contextInspectFail, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
     ).rejects.toThrow('inspect failed');
     expect(contextInspectFail.newContainer.remove).toHaveBeenCalledWith({ force: true });
-    expect(contextInspectFail.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'drydock' });
+    expect(contextInspectFail.currentContainer.rename).toHaveBeenNthCalledWith(2, {
+      name: 'drydock',
+    });
 
     const contextHelperFail = createContext({
       dockerApi: {
@@ -210,9 +229,14 @@ describe('SelfUpdateOrchestrator', () => {
       createContainer: vi.fn().mockResolvedValue(contextHelperFail.newContainer),
     });
     await expect(
-      orchestratorHelperFail.execute(contextHelperFail, createContainer(), { info: vi.fn(), warn: vi.fn() }),
+      orchestratorHelperFail.execute(contextHelperFail, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
     ).rejects.toThrow('helper failed');
     expect(contextHelperFail.newContainer.remove).toHaveBeenCalledWith({ force: true });
-    expect(contextHelperFail.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'drydock' });
+    expect(contextHelperFail.currentContainer.rename).toHaveBeenNthCalledWith(2, {
+      name: 'drydock',
+    });
   });
 });

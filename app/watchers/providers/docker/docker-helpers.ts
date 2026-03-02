@@ -239,7 +239,10 @@ export function getResolvedImgsetConfiguration(name: string, imgsetConfiguration
   } as ResolvedImgset;
 }
 
-export function getContainerConfigValue(labelValue: string | undefined, imgsetValue: string | undefined) {
+export function getContainerConfigValue(
+  labelValue: string | undefined,
+  imgsetValue: string | undefined,
+) {
   return normalizeConfigStringValue(labelValue) || normalizeConfigStringValue(imgsetValue);
 }
 
@@ -336,7 +339,11 @@ export function isContainerToWatch(watchLabelValue: string, watchByDefault: bool
  * @param {boolean} isSemver - true if the current image tag is a semver tag
  * @returns {boolean}
  */
-export function isDigestToWatch(watchDigestLabelValue: string, parsedImage: any, isSemver: boolean) {
+export function isDigestToWatch(
+  watchDigestLabelValue: string,
+  parsedImage: any,
+  isSemver: boolean,
+) {
   const domain = parsedImage.domain;
   const isDockerHub =
     !domain || domain === '' || domain === 'docker.io' || domain.endsWith('.docker.io');

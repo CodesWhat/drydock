@@ -1,5 +1,5 @@
-import { inject } from 'vue';
 import type { InjectionKey, Ref } from 'vue';
+import { inject } from 'vue';
 
 export interface ContainersViewTemplateContext {
   error: unknown;

@@ -1,63 +1,29 @@
-import { ref, watch } from 'vue';
-import { type IconLibrary, iconMap } from '../icons';
+import { computed } from 'vue';
+import { type IconLibrary, iconMap, libraryLabels } from '../icons';
+import { preferences } from '../preferences/store';
 
-const STORAGE_KEY = 'drydock-icon-library-v1';
-const SCALE_KEY = 'drydock-icon-scale-v1';
+const DEFAULT_ICON_LIBRARY: IconLibrary = 'ph-duotone';
+const ICON_LIBRARIES = new Set<IconLibrary>(Object.keys(libraryLabels) as IconLibrary[]);
 
-function loadLibrary(): IconLibrary {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && stored in iconMap[Object.keys(iconMap)[0]]) {
-      return stored as IconLibrary;
-    }
-  } catch {
-    /* SSR or blocked storage */
-  }
-  return 'ph-duotone';
+export function isIconLibrary(value: unknown): value is IconLibrary {
+  return typeof value === 'string' && ICON_LIBRARIES.has(value as IconLibrary);
 }
 
-function loadScale(): number {
-  try {
-    const stored = localStorage.getItem(SCALE_KEY);
-    if (stored) {
-      const val = parseFloat(stored);
-      if (val >= 0.8 && val <= 1.5) return val;
-    }
-  } catch {
-    /* ignored */
-  }
-  return 1;
-}
-
-const iconLibrary = ref<IconLibrary>(loadLibrary());
-const iconScale = ref(loadScale());
-
-watch(iconLibrary, (lib) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, lib);
-  } catch {
-    /* ignored */
-  }
-});
-
-watch(iconScale, (scale) => {
-  try {
-    localStorage.setItem(SCALE_KEY, String(scale));
-  } catch {
-    /* ignored */
-  }
-});
+const iconLibrary = computed<IconLibrary>(() =>
+  isIconLibrary(preferences.icons.library) ? preferences.icons.library : DEFAULT_ICON_LIBRARY,
+);
+const iconScale = computed(() => preferences.icons.scale);
 
 function icon(name: string): string {
   return iconMap[name]?.[iconLibrary.value] ?? name;
 }
 
 function setIconLibrary(lib: IconLibrary) {
-  iconLibrary.value = lib;
+  preferences.icons.library = lib;
 }
 
 function setIconScale(scale: number) {
-  iconScale.value = scale;
+  preferences.icons.scale = scale;
 }
 
 export function useIcons() {

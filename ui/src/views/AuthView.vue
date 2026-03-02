@@ -2,10 +2,11 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAllAuthentications, getAuthentication } from '../services/authentication';
 import type { ApiComponent } from '../types/api';
 
-const authViewMode = ref<'table' | 'cards' | 'list'>('table');
+const authViewMode = useViewMode('auth');
 
 const authData = ref<Record<string, unknown>[]>([]);
 const loading = ref(true);

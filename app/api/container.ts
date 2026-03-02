@@ -1,7 +1,7 @@
 // @ts-nocheck
 import express, { type Request, type Response } from 'express';
-import nocache from 'nocache';
 import rateLimit from 'express-rate-limit';
+import nocache from 'nocache';
 import { getAgent } from '../agent/manager.js';
 import { getSecurityConfiguration, getServerConfiguration } from '../configuration/index.js';
 import { emitSecurityAlert } from '../event/index.js';

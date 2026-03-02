@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router';
-import { getUser } from '@/services/auth';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { getUser } from '@/services/auth';
 
 export const viewLoaders = {
   dashboard: () => import('../views/DashboardView.vue'),
