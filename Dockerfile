@@ -25,8 +25,7 @@ RUN apk add --no-cache \
     su-exec \
     tini \
     tzdata \
-    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing cosign \
-    && curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/75c4dc0f45c5d7ffd05ae26df1e0c666787bdf2a/contrib/install.sh | sh -s -- -b /usr/local/bin v0.69.1 \
+    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing cosign trivy \
     && mkdir /store && chown node:node /store
 
 # Build stage for backend app
