@@ -66,7 +66,7 @@ for (const [prefix, names] of Object.entries(byPrefix)) {
 }
 
 const outputPath = join(__dirname, '../src/boot/icon-bundle.json');
-const json = JSON.stringify(bundle);
+const json = `${JSON.stringify(bundle, null, 2)}\n`;
 writeFileSync(outputPath, json);
 
 const sizeKB = (Buffer.byteLength(json) / 1024).toFixed(1);
