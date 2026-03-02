@@ -170,7 +170,7 @@ const {
                 :style="{ backgroundColor: 'var(--dd-warning-muted)' }"
               >
                 <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
-                <span style="color: var(--dd-warning);">{{ selectedContainer.noUpdateReason }}</span>
+                <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-warning);">{{ selectedContainer.noUpdateReason }}</span>
               </div>
               <a
                 v-if="selectedContainer.releaseLink"
@@ -237,7 +237,7 @@ const {
                    class="mt-3 flex items-start gap-2 px-3 py-2 dd-rounded text-[12px]"
                    :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
                 <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-danger);" />
-                <span style="color: var(--dd-danger);">{{ selectedContainer.registryError }}</span>
+                <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-danger);">{{ selectedContainer.registryError }}</span>
               </div>
             </div>
           </div>
@@ -272,7 +272,7 @@ const {
                      class="flex items-start gap-2 px-3 py-2 dd-rounded text-[12px]"
                      :style="{ backgroundColor: 'var(--dd-warning-muted)' }">
                   <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
-                  <span class="min-w-0 whitespace-normal break-words" style="color: var(--dd-warning);">{{ warning }}</span>
+                  <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-warning);">{{ warning }}</span>
                 </div>
               </div>
             </div>
