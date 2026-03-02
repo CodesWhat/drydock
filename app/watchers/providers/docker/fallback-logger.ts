@@ -1,4 +1,4 @@
-import log from '../../../log/index.js';
+import type log from '../../../log/index.js';
 
 export function serializeFallbackLogValue(value: unknown): unknown {
   if (value instanceof Error) {
