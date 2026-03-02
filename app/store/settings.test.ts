@@ -156,4 +156,61 @@ describe('Settings Store', () => {
       }),
     ).toThrow();
   });
+
+  test('getSettings should cache validated settings and invalidate cache after writes', () => {
+    const collection = createCollection({
+      internetlessMode: false,
+    });
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(),
+    };
+
+    settings.createCollections(db);
+    collection.findOne.mockClear();
+
+    settings.getSettings();
+    const readCountAfterFirstGet = collection.findOne.mock.calls.length;
+    settings.getSettings();
+    expect(collection.findOne.mock.calls.length).toBe(readCountAfterFirstGet);
+
+    settings.updateSettings({ internetlessMode: true });
+    const readCountBeforeGetAfterWrite = collection.findOne.mock.calls.length;
+    const settingsAfterWrite = settings.getSettings();
+    expect(settingsAfterWrite).toEqual({ internetlessMode: true });
+    expect(collection.findOne.mock.calls.length).toBe(readCountBeforeGetAfterWrite + 1);
+  });
+
+  test('getSettings should normalize persisted settings after cache invalidation', () => {
+    const collection = createCollection({
+      internetlessMode: false,
+    });
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(),
+    };
+
+    settings.createCollections(db);
+    settings.updateSettings({ internetlessMode: true });
+    collection.findOne.mockClear();
+
+    expect(settings.getSettings()).toEqual({ internetlessMode: true });
+    expect(collection.findOne).toHaveBeenCalledWith({});
+  });
+
+  test('getSettings should fall back to defaults when cache is invalidated and persisted row disappears', () => {
+    const collection = createCollection({
+      internetlessMode: true,
+    });
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(),
+    };
+
+    settings.createCollections(db);
+    settings.updateSettings({ internetlessMode: true });
+    collection.findOne.mockImplementationOnce(() => null);
+
+    expect(settings.getSettings()).toEqual({ internetlessMode: false });
+  });
 });

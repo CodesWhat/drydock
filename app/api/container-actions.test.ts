@@ -258,6 +258,30 @@ describe('Container Actions Router', () => {
       expect(mockAuditInc).toHaveBeenCalledWith({ action: 'container-start' });
       expect(mockActionsInc).toHaveBeenCalledWith({ action: 'container-start' });
     });
+
+    test('should return original container when status refresh lookups are unavailable', async () => {
+      const container = { id: 'c1', name: 'nginx', image: { name: 'nginx' } };
+      mockGetContainer
+        .mockReturnValueOnce(container)
+        .mockReturnValueOnce(undefined)
+        .mockReturnValueOnce(undefined);
+      const { trigger } = createDockerTrigger();
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+
+      const handler = getHandler('post', '/:id/start');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockUpdateContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Container started successfully',
+          container,
+        }),
+      );
+    });
   });
 
   describe('stopContainer', () => {
