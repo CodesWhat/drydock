@@ -142,7 +142,7 @@ async function findBundledIconPath(provider: string, slug: string, extension: st
 function sendCachedIcon(res, iconPath: string, contentType: string) {
   res.set('Cache-Control', CACHE_CONTROL_HEADER);
   res.type(contentType);
-  res.sendFile(iconPath);
+  res.sendFile(path.basename(iconPath), { root: path.dirname(iconPath) });
 }
 
 function shouldServeImageFallback(req): boolean {

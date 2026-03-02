@@ -150,7 +150,9 @@ describe('Icons Router', () => {
     expect(mockAxiosGet).not.toHaveBeenCalled();
     expect(res.set).toHaveBeenCalledWith('Cache-Control', 'public, max-age=31536000, immutable');
     expect(res.type).toHaveBeenCalledWith('image/png');
-    expect(res.sendFile).toHaveBeenCalledWith('/store/icons/homarr/docker.png');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
+      root: '/store/icons/homarr',
+    });
   });
 
   test('should serve bundled selfhst icon when cache is missing', async () => {
@@ -174,7 +176,9 @@ describe('Icons Router', () => {
     );
 
     expect(mockAxiosGet).not.toHaveBeenCalled();
-    expect(res.sendFile).toHaveBeenCalledWith('/runtime/assets/icons/selfhst/docker.png');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
+      root: '/runtime/assets/icons/selfhst',
+    });
   });
 
   test('should serve bundled selfhst icon when internetless mode is enabled', async () => {
@@ -199,7 +203,9 @@ describe('Icons Router', () => {
     );
 
     expect(mockAxiosGet).not.toHaveBeenCalled();
-    expect(res.sendFile).toHaveBeenCalledWith('/runtime/assets/icons/selfhst/docker.png');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
+      root: '/runtime/assets/icons/selfhst',
+    });
   });
 
   test('should return 404 on cache miss when internetless mode is enabled', async () => {
@@ -260,7 +266,9 @@ describe('Icons Router', () => {
       '/store/icons/simple/docker.svg.tmp.uuid-test',
       '/store/icons/simple/docker.svg',
     );
-    expect(res.sendFile).toHaveBeenCalledWith('/store/icons/simple/docker.svg');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
   });
 
   test('should normalize slug extension and fetch homarr icon URL', async () => {
@@ -288,7 +296,9 @@ describe('Icons Router', () => {
         timeout: 10000,
       },
     );
-    expect(res.sendFile).toHaveBeenCalledWith('/store/icons/homarr/docker.png');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
+      root: '/store/icons/homarr',
+    });
   });
 
   test('should skip axios when icon appears in cache after first miss', async () => {
@@ -307,7 +317,9 @@ describe('Icons Router', () => {
     );
 
     expect(mockAxiosGet).not.toHaveBeenCalled();
-    expect(res.sendFile).toHaveBeenCalledWith('/store/icons/simple/docker.svg');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
   });
 
   test('should refresh stale cached icon when ttl has expired', async () => {
@@ -341,7 +353,9 @@ describe('Icons Router', () => {
         timeout: 10000,
       },
     );
-    expect(res.sendFile).toHaveBeenCalledWith('/store/icons/simple/docker.svg');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
   });
 
   test('should evict oldest cached icons when cache size limit is exceeded', async () => {
@@ -375,7 +389,9 @@ describe('Icons Router', () => {
     );
 
     expect(mockUnlink).toHaveBeenCalledWith('/store/icons/simple/old.svg');
-    expect(res.sendFile).toHaveBeenCalledWith('/store/icons/simple/docker.svg');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
   });
 
   test('should return 404 when upstream icon is missing', async () => {
@@ -465,7 +481,9 @@ describe('Icons Router', () => {
     expect(res.json).not.toHaveBeenCalled();
     expect(res.set).toHaveBeenCalledWith('Cache-Control', 'public, max-age=31536000, immutable');
     expect(res.type).toHaveBeenCalledWith('image/png');
-    expect(res.sendFile).toHaveBeenCalledWith('/runtime/assets/icons/selfhst/docker.png');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
+      root: '/runtime/assets/icons/selfhst',
+    });
   });
 
   test('should cleanup temp file and return 502 when atomic rename fails', async () => {
@@ -545,8 +563,12 @@ describe('Icons Router', () => {
     });
     await Promise.all([pending1, pending2]);
 
-    expect(res1.sendFile).toHaveBeenCalledWith('/store/icons/simple/docker.svg');
-    expect(res2.sendFile).toHaveBeenCalledWith('/store/icons/simple/docker.svg');
+    expect(res1.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
+    expect(res2.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
   });
 
   test('should release in-flight dedupe lock when fetch hangs', async () => {
