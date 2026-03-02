@@ -56,7 +56,7 @@
 - [🗺️ Roadmap](#roadmap)
 - [📖 Documentation](#documentation)
 - [⭐ Star History](#star-history)
-- [Built With](#built-with)
+- [🔧 Built With](#built-with)
 
 <hr>
 
@@ -186,19 +186,19 @@ Available on GHCR, Docker Hub, and Quay.io for flexible deployment
 
 <h2 align="center" id="supported-integrations">🔌 Supported Integrations</h2>
 
-**📦 Registries (23)** — [Configuration docs](https://drydock.codeswhat.com/docs/configuration/registries)
+### 📦 Registries (23)
 
 Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Custom · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
 
-**🔔 Triggers (20)** — [Configuration docs](https://drydock.codeswhat.com/docs/configuration/triggers)
+### 🔔 Triggers (20)
 
 Apprise · Command · Discord · Docker · Docker Compose · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram
 
-**🔐 Authentication** — [Configuration docs](https://drydock.codeswhat.com/docs/configuration/authentications)
+### 🔐 Authentication
 
 Anonymous (default) · Basic (username + password hash) · OIDC (Authelia, Auth0, Authentik). All auth flows fail closed by default.
 
-**🥊 Update Bouncer** — [Configuration docs](https://drydock.codeswhat.com/docs/configuration/security)
+### 🥊 Update Bouncer
 
 Trivy-powered vulnerability scanning blocks unsafe updates before they deploy. Includes cosign signature verification and SBOM generation (CycloneDX & SPDX).
 
@@ -216,34 +216,34 @@ Trivy-powered vulnerability scanning blocks unsafe updates before they deploy. I
 <tr>
 <th width="28%">Feature</th>
 <th width="14%" align="center">drydock</th>
-<th width="16%" align="center">Watchtower</th>
 <th width="14%" align="center">WUD</th>
 <th width="14%" align="center">Diun</th>
-<th width="14%" align="center">Ouroboros</th>
+<th width="16%" align="center">Watchtower&nbsp;†</th>
+<th width="14%" align="center">Ouroboros&nbsp;†</th>
 </tr>
 </thead>
 <tbody>
-<tr><td>Web UI / Dashboard</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Auto-update containers</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>Docker Compose updates</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Notification triggers</td><td align="center">20</td><td align="center">~19</td><td align="center">16</td><td align="center">17</td><td align="center">~6</td></tr>
-<tr><td>Registry providers</td><td align="center">23</td><td align="center">⚠️</td><td align="center">13</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
-<tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>REST API</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
-<tr><td>Prometheus metrics</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>Web UI / Dashboard</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Auto-update containers</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Docker Compose updates</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>Notification triggers</td><td align="center">20</td><td align="center">16</td><td align="center">17</td><td align="center">~19</td><td align="center">~6</td></tr>
+<tr><td>Registry providers</td><td align="center">23</td><td align="center">13</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>REST API</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>Prometheus metrics</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Image backup & rollback</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Container grouping / stacks</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Lifecycle hooks (pre/post)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Webhook API for CI/CD</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Container grouping / stacks</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>Lifecycle hooks (pre/post)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>Webhook API for CI/CD</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td></tr>
 <tr><td>Container start/stop/restart/update</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Distributed agents (remote)</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>Distributed agents (remote)</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
 <tr><td>Audit log</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Security scanning (Trivy)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Semver-aware updates</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>Semver-aware updates</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Digest watching</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Multi-arch (amd64/arm64)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Actively maintained</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>Actively maintained</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 </tbody>
 </table>
 
@@ -256,7 +256,12 @@ Trivy-powered vulnerability scanning blocks unsafe updates before they deploy. I
 
 <h2 align="center" id="migration">🔄 Migration</h2>
 
-Drop-in WUD replacement — swap the image, restart, done. All `WUD_*` env vars and `wud.*` labels are auto-mapped at startup. State file migrates automatically. Use `config migrate --dry-run` to preview, then `config migrate --file .env --file compose.yaml` to rewrite config to drydock naming.
+<details>
+<summary><strong>Migrating from WUD (What's Up Docker?)</strong></summary>
+
+Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and `wud.*` labels are auto-mapped at startup. State file migrates automatically. Use `config migrate --dry-run` to preview, then `config migrate --file .env --file compose.yaml` to rewrite config to drydock naming.
+
+</details>
 
 <hr>
 
@@ -328,7 +333,7 @@ Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully suppo
 [![Biome](https://img.shields.io/badge/Biome_2.3-60a5fa?logo=biome&logoColor=fff)](https://biomejs.dev/)
 [![Node 24](https://img.shields.io/badge/Node_24_Alpine-339933?logo=nodedotjs&logoColor=fff)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=fff)](https://www.docker.com/)
-[![Built with AI](https://img.shields.io/badge/Built_with_AI-000000?style=flat&logo=anthropic&logoColor=white)](https://claude.ai/)
+[![Anthropic](https://img.shields.io/badge/Anthropic-000000?style=flat&logo=anthropic&logoColor=white)](https://claude.ai/)
 
 ---
 
