@@ -283,6 +283,26 @@ Then(/^response body should contain (.+)$/, function (text) {
   assert.ok(this.responseBody.includes(text), `Expected response body to contain "${text}"`);
 });
 
+Then(/^within (\d+) seconds response body should contain (.+)$/, async function (seconds, text) {
+  const timeoutMs = Number(seconds) * 1000;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    if (this.responseBody.includes(text)) {
+      return;
+    }
+
+    if (this.lastRequest?.method !== 'GET' || !this.lastRequest?.path) {
+      break;
+    }
+
+    await doGet.call(this, this.lastRequest.path);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  throw new Error(`Timed out after ${seconds}s waiting for response body to contain "${text}"`);
+});
+
 Then(/^response header (.+) should be (.+)$/, function (header, expected) {
   const actual = this.responseHeaders.get(header);
   assert.ok(actual, `Header ${header} not found`);
