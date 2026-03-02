@@ -272,7 +272,7 @@ const {
                      class="flex items-start gap-2 px-3 py-2 dd-rounded text-[12px]"
                      :style="{ backgroundColor: 'var(--dd-warning-muted)' }">
                   <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
-                  <span style="color: var(--dd-warning);">{{ warning }}</span>
+                  <span class="min-w-0 whitespace-normal break-words" style="color: var(--dd-warning);">{{ warning }}</span>
                 </div>
               </div>
             </div>
