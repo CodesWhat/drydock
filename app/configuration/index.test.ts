@@ -395,12 +395,37 @@ describe('getSecurityConfiguration', () => {
   test('should fallback to default block severities when configured list is invalid', () => {
     configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
     configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = 'foo,bar';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const result = configuration.getSecurityConfiguration();
     expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Invalid DD_SECURITY_BLOCK_SEVERITY values: FOO, BAR. Allowed values: UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL. Falling back to defaults: CRITICAL, HIGH.',
+      ),
+    );
 
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+    warnSpy.mockRestore();
+  });
+
+  test('should warn and ignore invalid block severities when valid values are present', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = 'critical,foo,medium,foo';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).toEqual(['CRITICAL', 'MEDIUM']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Invalid DD_SECURITY_BLOCK_SEVERITY values: FOO. Allowed values: UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL. Invalid values were ignored.',
+      ),
+    );
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+    warnSpy.mockRestore();
   });
 
   test('should fallback to default block severities when list is empty after normalization', () => {

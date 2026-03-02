@@ -237,6 +237,61 @@ describe('useAutoFetchLogs', () => {
 
     scope.stop();
   });
+
+  it('should pause polling while tab is hidden and resume when visible', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(undefined);
+    const originalHidden = Object.getOwnPropertyDescriptor(document, 'hidden');
+    const originalVisibilityState = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+
+    const setVisibility = (hidden: boolean) => {
+      Object.defineProperty(document, 'hidden', {
+        configurable: true,
+        get: () => hidden,
+      });
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => (hidden ? 'hidden' : 'visible'),
+      });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+
+    setVisibility(false);
+
+    const scope = effectScope();
+    try {
+      scope.run(() => {
+        const { autoFetchInterval } = useAutoFetchLogs({
+          fetchFn,
+          scrollToBottom: vi.fn(),
+          scrollBlocked: ref(false),
+        });
+        autoFetchInterval.value = 2000;
+      });
+
+      await nextTick();
+      vi.advanceTimersByTime(2000);
+      await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
+
+      setVisibility(true);
+      await nextTick();
+      vi.advanceTimersByTime(4000);
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+
+      setVisibility(false);
+      await nextTick();
+      vi.advanceTimersByTime(2000);
+      await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(2));
+    } finally {
+      scope.stop();
+      if (originalHidden) Object.defineProperty(document, 'hidden', originalHidden);
+      else Reflect.deleteProperty(document, 'hidden');
+      if (originalVisibilityState) {
+        Object.defineProperty(document, 'visibilityState', originalVisibilityState);
+      } else {
+        Reflect.deleteProperty(document, 'visibilityState');
+      }
+    }
+  });
 });
 
 describe('LOG_AUTO_FETCH_INTERVALS', () => {

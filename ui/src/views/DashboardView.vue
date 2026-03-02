@@ -11,6 +11,10 @@ import { getAllWatchers } from '../services/watcher';
 import type { ApiWatcherConfiguration } from '../types/api';
 import type { Container } from '../types/container';
 import { mapApiContainers } from '../utils/container-mapper';
+import {
+  buildDashboardContainerMetrics,
+  type ImageSecurityAggregate,
+} from '../utils/dashboard-container-metrics';
 import { errorMessage } from '../utils/error';
 
 const router = useRouter();
@@ -357,75 +361,10 @@ const maintenanceCountdownLabel = computed(() => {
   return formatMaintenanceDuration(remainingMs);
 });
 
-interface ImageSecurityAggregate {
-  key: string;
-  scanned: boolean;
-  hasIssue: boolean;
-  summary: {
-    unknown: number;
-    low: number;
-    medium: number;
-    high: number;
-    critical: number;
-  };
-}
-
-const securityByImage = computed<ImageSecurityAggregate[]>(() => {
-  const map = new Map<string, ImageSecurityAggregate>();
-
-  for (const container of containers.value) {
-    const key = container.image || container.name || container.id;
-    let aggregate = map.get(key);
-    if (!aggregate) {
-      aggregate = {
-        key,
-        scanned: false,
-        hasIssue: false,
-        summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
-      };
-      map.set(key, aggregate);
-    }
-
-    const isScanned = container.securityScanState !== 'not-scanned';
-    if (isScanned) {
-      aggregate.scanned = true;
-    }
-
-    if (container.securitySummary) {
-      aggregate.summary.unknown = Math.max(
-        aggregate.summary.unknown,
-        container.securitySummary.unknown,
-      );
-      aggregate.summary.low = Math.max(aggregate.summary.low, container.securitySummary.low);
-      aggregate.summary.medium = Math.max(
-        aggregate.summary.medium,
-        container.securitySummary.medium,
-      );
-      aggregate.summary.high = Math.max(aggregate.summary.high, container.securitySummary.high);
-      aggregate.summary.critical = Math.max(
-        aggregate.summary.critical,
-        container.securitySummary.critical,
-      );
-
-      const totalSummaryCount =
-        container.securitySummary.unknown +
-        container.securitySummary.low +
-        container.securitySummary.medium +
-        container.securitySummary.high +
-        container.securitySummary.critical;
-      if (totalSummaryCount > 0) {
-        aggregate.hasIssue = true;
-      }
-      continue;
-    }
-
-    if (container.bouncer === 'blocked' || container.bouncer === 'unsafe') {
-      aggregate.hasIssue = true;
-    }
-  }
-
-  return [...map.values()];
-});
+const containerMetrics = computed(() => buildDashboardContainerMetrics(containers.value));
+const securityByImage = computed<ImageSecurityAggregate[]>(
+  () => containerMetrics.value.securityByImage,
+);
 
 const securityCounts = computed(() => {
   let clean = 0;
@@ -467,24 +406,14 @@ const securityTotalCount = computed(() => securityByImage.value.length);
 
 // Computed: stat cards
 const stats = computed(() => {
-  const total = containers.value.length;
-  let running = 0;
-  let updatesAvailable = 0;
-  const securityImages = new Set<string>();
-  for (const container of containers.value) {
-    if (container.status === 'running') {
-      running += 1;
-    }
-    if (container.updateKind) {
-      updatesAvailable += 1;
-    }
-    if (container.bouncer === 'blocked' || container.bouncer === 'unsafe') {
-      securityImages.add(container.image);
-    }
-  }
+  const {
+    totalContainers: total,
+    runningContainers: running,
+    updatesAvailable,
+    securityIssueImageCount: securityIssues,
+  } = containerMetrics.value;
 
   const stopped = Math.max(total - running, 0);
-  const securityIssues = securityImages.size;
   const registryCount = registries.value.length;
   return [
     {

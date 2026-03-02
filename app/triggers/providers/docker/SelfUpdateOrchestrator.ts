@@ -1,4 +1,3 @@
-// @ts-nocheck
 import crypto from 'node:crypto';
 
 const SELF_UPDATE_START_TIMEOUT_MS = 30_000;
@@ -23,7 +22,7 @@ class SelfUpdateOrchestrator {
 
   createOperationId;
 
-  constructor(options = {}) {
+  constructor(options: Record<string, any> = {}) {
     this.getConfiguration = options.getConfiguration || (() => ({}));
     this.runtimeConfigManager = options.runtimeConfigManager;
     this.pullImage = options.pullImage;

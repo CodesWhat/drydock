@@ -6,6 +6,7 @@ const baseUrl = `${config.protocol}://${config.host}:${config.port}`;
 const credentials = `${config.username}:${config.password}`;
 const authHeader = `Basic ${Buffer.from(credentials).toString('base64')}`;
 const FORBIDDEN_PROPERTY_NAMES = new Set(['__proto__', 'prototype', 'constructor']);
+const SSE_CONNECTED_EVENT_REGEX = /event:\s*dd:connected\r?\ndata:\s*(\{[^\n]*\})/;
 
 function hasOwn(obj, key) {
   return Object.hasOwn(obj, key);
@@ -172,11 +173,42 @@ function matchesDynamicPattern(actual, pattern) {
   return matchesPatternTokens(tokens, actual);
 }
 
-async function doRequest(path, method) {
+function getDocStringContent(docString) {
+  if (typeof docString === 'string') {
+    return docString;
+  }
+  if (docString && typeof docString.content === 'string') {
+    return docString.content;
+  }
+  return '';
+}
+
+function parseJsonDocString(docString, scope) {
+  const rawBody = resolveTemplate(getDocStringContent(docString), scope);
+  try {
+    return JSON.parse(rawBody);
+  } catch (error) {
+    throw new Error(
+      `JSON body is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+async function doRequest(path, method, options = {}) {
   const url = `${baseUrl}${path}`;
-  const res = await fetch(url, {
+  const headers = {
+    Authorization: authHeader,
+    ...(options.headers || {}),
+  };
+  const requestOptions = {
     method,
-    headers: { Authorization: authHeader },
+    headers,
+  };
+  if (options.body !== undefined) {
+    requestOptions.body = options.body;
+  }
+  const res = await fetch(url, {
+    ...requestOptions,
   });
   this.responseStatus = res.status;
   this.responseHeaders = res.headers;
@@ -195,6 +227,65 @@ async function doGet(path) {
 
 async function doPost(path) {
   await doRequest.call(this, path, 'POST');
+}
+
+async function requestWithJsonBody(context, method, path, docString) {
+  const resolvedPath = resolveTemplate(path, context.scenarioScope);
+  const body = parseJsonDocString(docString, context.scenarioScope);
+  await doRequest.call(context, resolvedPath, method, {
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+async function readSseConnectedPayload(response, timeoutMs = 5000) {
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    throw new Error('SSE response body is not readable');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const deadline = Date.now() + timeoutMs;
+  let body = '';
+
+  try {
+    while (Date.now() < deadline) {
+      const timeRemainingMs = deadline - Date.now();
+      let timeoutHandle;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error(`Timed out after ${timeoutMs}ms waiting for dd:connected event`));
+        }, timeRemainingMs);
+      });
+
+      let chunk;
+      try {
+        chunk = await Promise.race([reader.read(), timeoutPromise]);
+      } finally {
+        clearTimeout(timeoutHandle);
+      }
+
+      if (chunk.done) {
+        break;
+      }
+      body += decoder.decode(chunk.value, { stream: true });
+
+      const connectedMatch = body.match(SSE_CONNECTED_EVENT_REGEX);
+      if (connectedMatch) {
+        const payload = JSON.parse(connectedMatch[1]);
+        return {
+          body,
+          payload,
+        };
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+
+  throw new Error('SSE dd:connected event was not received');
 }
 
 function assertResponsePathValue(context, path, expected) {
@@ -220,6 +311,46 @@ When(/^I GET (.+)$/, async function (path) {
 When(/^I POST to (.+)$/, async function (path) {
   const resolved = resolveTemplate(path, this.scenarioScope);
   await doPost.call(this, resolved);
+});
+
+When(/^I (PUT|PATCH|DELETE) (?:to )?(.+) with json body:$/, async function (method, path, body) {
+  await requestWithJsonBody(this, method, path, body);
+});
+
+When(/^I POST json to (.+):$/, async function (path, body) {
+  await requestWithJsonBody(this, 'POST', path, body);
+});
+
+When(/^I open SSE connection at (.+)$/, async function (path) {
+  const resolvedPath = resolveTemplate(path, this.scenarioScope);
+  const url = `${baseUrl}${resolvedPath}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: authHeader,
+      Accept: 'text/event-stream',
+    },
+  });
+
+  this.responseStatus = response.status;
+  this.responseHeaders = response.headers;
+  this.lastRequest = { method: 'GET', path: resolvedPath };
+
+  if (response.status !== 200) {
+    this.responseBody = await response.text();
+    try {
+      this.responseJson = JSON.parse(this.responseBody);
+    } catch {
+      this.responseJson = undefined;
+    }
+    return;
+  }
+
+  const connected = await readSseConnectedPayload(response);
+  this.responseBody = connected.body;
+  this.responseJson = undefined;
+  this.scenarioScope.sseClientId = connected.payload.clientId;
+  this.scenarioScope.sseClientToken = connected.payload.clientToken;
 });
 
 Then(/^response code should be (\d+)$/, function (code) {
@@ -347,6 +478,21 @@ Then(
     );
   },
 );
+
+Then(/^scenario scope value (.+) should match (.+)$/, function (name, expected) {
+  const actual = this.scenarioScope[name];
+  assert.ok(actual !== undefined, `Scenario scope value "${name}" is undefined`);
+  const actualStr = String(actual);
+  const resolvedExpected = resolveTemplate(expected, this.scenarioScope);
+  if (isDynamicPattern(resolvedExpected)) {
+    assert.ok(
+      matchesDynamicPattern(actualStr, resolvedExpected),
+      `Expected scenario scope value "${name}"="${actualStr}" to match "${resolvedExpected}"`,
+    );
+  } else {
+    assert.strictEqual(actualStr, resolvedExpected);
+  }
+});
 
 When(/^I store the value of body path (.+) as (.+) in scenario scope$/, function (path, varName) {
   const resolvedPath = resolveTemplate(path, this.scenarioScope);

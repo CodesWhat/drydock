@@ -12,29 +12,41 @@ beforeEach(async () => {
 });
 
 test('createCollections should create collection containers when not exist', async () => {
+  const collection = {
+    findOne: () => {},
+    insert: () => {},
+    ensureIndex: vi.fn(),
+  };
   const db = {
     getCollection: () => null,
-    addCollection: () => ({
-      findOne: () => {},
-      insert: () => {},
-    }),
+    addCollection: () => collection,
   };
   const spy = vi.spyOn(db, 'addCollection');
   container.createCollections(db);
-  expect(spy).toHaveBeenCalledWith('containers');
+  expect(spy).toHaveBeenCalledWith('containers', {
+    indices: ['data.watcher', 'data.status', 'data.updateAvailable'],
+  });
+  expect(collection.ensureIndex).toHaveBeenCalledWith('data.watcher');
+  expect(collection.ensureIndex).toHaveBeenCalledWith('data.status');
+  expect(collection.ensureIndex).toHaveBeenCalledWith('data.updateAvailable');
 });
 
 test('createCollections should not create collection containers when already exist', async () => {
+  const existingCollection = {
+    findOne: () => {},
+    insert: () => {},
+    ensureIndex: vi.fn(),
+  };
   const db = {
-    getCollection: () => ({
-      findOne: () => {},
-      insert: () => {},
-    }),
+    getCollection: () => existingCollection,
     addCollection: () => null,
   };
   const spy = vi.spyOn(db, 'addCollection');
   container.createCollections(db);
   expect(spy).not.toHaveBeenCalled();
+  expect(existingCollection.ensureIndex).toHaveBeenCalledWith('data.watcher');
+  expect(existingCollection.ensureIndex).toHaveBeenCalledWith('data.status');
+  expect(existingCollection.ensureIndex).toHaveBeenCalledWith('data.updateAvailable');
 });
 
 test('insertContainer should insert doc and emit an event', async () => {

@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import * as updateOperation from './update-operation.js';
 
 function createDb() {

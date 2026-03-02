@@ -3,8 +3,9 @@ import type { Container } from '@/types/container';
 import DashboardView from '@/views/DashboardView.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
-const { mockRouterPush } = vi.hoisted(() => ({
+const { mockRouterPush, mockBuildDashboardContainerMetrics } = vi.hoisted(() => ({
   mockRouterPush: vi.fn(),
+  mockBuildDashboardContainerMetrics: vi.fn(),
 }));
 
 vi.mock('vue-router', () => ({
@@ -38,6 +39,21 @@ vi.mock('@/services/audit', () => ({
 vi.mock('@/utils/container-mapper', () => ({
   mapApiContainers: vi.fn((x: any) => x),
 }));
+
+vi.mock('@/utils/dashboard-container-metrics', async () => {
+  const actual = await vi.importActual<typeof import('@/utils/dashboard-container-metrics')>(
+    '@/utils/dashboard-container-metrics',
+  );
+  return {
+    ...actual,
+    buildDashboardContainerMetrics: (
+      ...args: Parameters<typeof actual.buildDashboardContainerMetrics>
+    ) => {
+      mockBuildDashboardContainerMetrics(...args);
+      return actual.buildDashboardContainerMetrics(...args);
+    },
+  };
+});
 
 import { getAgents } from '@/services/agent';
 import { getAuditLog } from '@/services/audit';
@@ -114,6 +130,7 @@ describe('DashboardView', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockRouterPush.mockClear();
+    mockBuildDashboardContainerMetrics.mockClear();
     localStorage.removeItem(PREFERENCES_STORAGE_KEY);
     const { resetPreferences } = await import('@/preferences/store');
     resetPreferences();
@@ -232,6 +249,30 @@ describe('DashboardView', () => {
   });
 
   describe('stat cards', () => {
+    it('computes stats and security aggregates from one container metrics pass', async () => {
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx-1', image: 'nginx', bouncer: 'blocked' }),
+        makeContainer({
+          id: 'c2',
+          name: 'nginx-2',
+          image: 'nginx',
+          updateKind: 'minor',
+          bouncer: 'unsafe',
+        }),
+        makeContainer({
+          id: 'c3',
+          name: 'redis',
+          image: 'redis',
+          status: 'stopped',
+          bouncer: 'safe',
+        }),
+      ];
+
+      await mountDashboard(containers);
+
+      expect(mockBuildDashboardContainerMetrics).toHaveBeenCalledTimes(1);
+    });
+
     it('computes total containers count', async () => {
       const containers = [makeContainer(), makeContainer({ id: 'c2', name: 'redis' })];
       const wrapper = await mountDashboard(containers);

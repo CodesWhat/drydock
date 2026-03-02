@@ -75,33 +75,51 @@ export function requireAuthentication(req, res, next): any {
   }
 
   if (req.method === 'POST' && req.path === '/login') {
-    let loginFailureAudited = false;
-    const maybeRecordLoginFailure = () => {
-      if (!loginFailureAudited && res.statusCode === 401) {
-        loginFailureAudited = true;
-        recordLoginAuditEvent(req, 'error', 'Authentication failed (invalid credentials)');
-      }
-    };
-
-    if (typeof res.sendStatus === 'function') {
-      const originalSendStatus = res.sendStatus;
-      res.sendStatus = function (statusCode) {
-        res.statusCode = statusCode;
-        maybeRecordLoginFailure();
-        return originalSendStatus.call(this, statusCode);
-      };
-    }
-
-    if (typeof res.end === 'function') {
-      const originalEnd = res.end;
-      res.end = function (...args) {
-        maybeRecordLoginFailure();
-        return originalEnd.apply(this, args);
-      };
-    }
+    return authenticateLogin(req, res, next);
   }
 
   return passport.authenticate(getAllIds(), { session: true })(req, res, next);
+}
+
+function sendUnauthorized(res) {
+  if (typeof res.sendStatus === 'function') {
+    res.sendStatus(401);
+    return;
+  }
+
+  if (typeof res.status === 'function') {
+    const statusResponse = res.status(401);
+    if (typeof statusResponse?.end === 'function') {
+      statusResponse.end();
+      return;
+    }
+  }
+
+  if (typeof res.end === 'function') {
+    res.statusCode = 401;
+    res.end();
+    return;
+  }
+
+  res.statusCode = 401;
+}
+
+function authenticateLogin(req, res, next) {
+  return passport.authenticate(getAllIds(), { session: false }, (error, user) => {
+    if (error) {
+      next(error);
+      return;
+    }
+
+    if (!user) {
+      recordLoginAuditEvent(req, 'error', 'Authentication failed (invalid credentials)');
+      sendUnauthorized(res);
+      return;
+    }
+
+    req.user = user;
+    next();
+  })(req, res, next);
 }
 
 /**

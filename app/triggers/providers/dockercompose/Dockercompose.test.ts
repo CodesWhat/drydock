@@ -3,6 +3,7 @@
 import { execFile } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { emitContainerUpdateApplied, emitContainerUpdateFailed } from '../../../event/index.js';
 import { getState } from '../../../registry/index.js';
 import * as backupStore from '../../../store/backup.js';
@@ -1138,18 +1139,48 @@ describe('Dockercompose Trigger', () => {
 
   test('runComposeCommand should use docker compose when available', async () => {
     const logContainer = { debug: vi.fn(), warn: vi.fn() };
+    const composeFilePath = path.resolve(process.cwd(), 'test', 'stack.yml');
 
-    await trigger.runComposeCommand('/opt/drydock/test/stack.yml', ['pull', 'nginx'], logContainer);
+    await trigger.runComposeCommand(composeFilePath, ['pull', 'nginx'], logContainer);
 
     expect(execFile).toHaveBeenCalledWith(
       'docker',
-      ['compose', '-f', '/opt/drydock/test/stack.yml', 'pull', 'nginx'],
+      ['compose', '-f', composeFilePath, 'pull', 'nginx'],
       expect.objectContaining({
-        cwd: '/opt/drydock/test',
+        cwd: path.dirname(composeFilePath),
       }),
       expect.any(Function),
     );
     expect(logContainer.warn).not.toHaveBeenCalled();
+  });
+
+  test('runComposeCommand should not forward non-allowlisted parent environment variables', async () => {
+    const secretKey = 'DRYDOCK_TEST_COMPOSE_SECRET';
+    const originalSecret = process.env[secretKey];
+    const originalPath = process.env.PATH;
+    process.env[secretKey] = 'top-secret';
+    process.env.PATH = '/tmp/drydock-compose-path';
+    const composeFilePath = path.resolve(process.cwd(), 'test', 'stack.yml');
+
+    try {
+      const logContainer = { debug: vi.fn(), warn: vi.fn() };
+      await trigger.runComposeCommand(composeFilePath, ['pull', 'nginx'], logContainer);
+
+      const commandOptions = execFile.mock.calls[0][2];
+      expect(commandOptions.env.PATH).toBe('/tmp/drydock-compose-path');
+      expect(commandOptions.env[secretKey]).toBeUndefined();
+    } finally {
+      if (originalSecret === undefined) {
+        delete process.env[secretKey];
+      } else {
+        process.env[secretKey] = originalSecret;
+      }
+      if (originalPath === undefined) {
+        delete process.env.PATH;
+      } else {
+        process.env.PATH = originalPath;
+      }
+    }
   });
 
   test('runComposeCommand should fall back to docker-compose when docker compose plugin is missing', async () => {
@@ -1166,21 +1197,22 @@ describe('Dockercompose Trigger', () => {
       });
 
     const logContainer = { debug: vi.fn(), warn: vi.fn() };
+    const composeFilePath = path.resolve(process.cwd(), 'test', 'stack.yml');
 
-    await trigger.runComposeCommand('/opt/drydock/test/stack.yml', ['pull', 'nginx'], logContainer);
+    await trigger.runComposeCommand(composeFilePath, ['pull', 'nginx'], logContainer);
 
     expect(execFile).toHaveBeenNthCalledWith(
       1,
       'docker',
-      ['compose', '-f', '/opt/drydock/test/stack.yml', 'pull', 'nginx'],
-      expect.objectContaining({ cwd: '/opt/drydock/test' }),
+      ['compose', '-f', composeFilePath, 'pull', 'nginx'],
+      expect.objectContaining({ cwd: path.dirname(composeFilePath) }),
       expect.any(Function),
     );
     expect(execFile).toHaveBeenNthCalledWith(
       2,
       'docker-compose',
-      ['-f', '/opt/drydock/test/stack.yml', 'pull', 'nginx'],
-      expect.objectContaining({ cwd: '/opt/drydock/test' }),
+      ['-f', composeFilePath, 'pull', 'nginx'],
+      expect.objectContaining({ cwd: path.dirname(composeFilePath) }),
       expect.any(Function),
     );
     expect(logContainer.warn).toHaveBeenCalledWith(
@@ -1195,12 +1227,11 @@ describe('Dockercompose Trigger', () => {
     });
 
     const logContainer = { debug: vi.fn(), warn: vi.fn() };
+    const composeFilePath = path.resolve(process.cwd(), 'test', 'stack.yml');
 
     await expect(
-      trigger.runComposeCommand('/opt/drydock/test/stack.yml', ['pull', 'nginx'], logContainer),
-    ).rejects.toThrow(
-      'Error when running docker compose pull nginx for /opt/drydock/test/stack.yml (boom)',
-    );
+      trigger.runComposeCommand(composeFilePath, ['pull', 'nginx'], logContainer),
+    ).rejects.toThrow(`Error when running docker compose pull nginx for ${composeFilePath} (boom)`);
 
     expect(execFile).toHaveBeenCalledTimes(1);
   });
@@ -1212,11 +1243,12 @@ describe('Dockercompose Trigger', () => {
     });
 
     const logContainer = { debug: vi.fn(), warn: vi.fn() };
+    const composeFilePath = path.resolve(process.cwd(), 'test', 'stack.yml');
 
     await expect(
-      trigger.runComposeCommand('/opt/drydock/test/stack.yml', ['pull', 'nginx'], logContainer),
+      trigger.runComposeCommand(composeFilePath, ['pull', 'nginx'], logContainer),
     ).rejects.toThrow(
-      'Error when running docker compose pull nginx for /opt/drydock/test/stack.yml (boom-without-stderr)',
+      `Error when running docker compose pull nginx for ${composeFilePath} (boom-without-stderr)`,
     );
   });
 
@@ -1226,8 +1258,9 @@ describe('Dockercompose Trigger', () => {
       return {};
     });
     const logContainer = { debug: vi.fn(), warn: vi.fn() };
+    const composeFilePath = path.resolve(process.cwd(), 'test', 'stack.yml');
 
-    await trigger.runComposeCommand('/opt/drydock/test/stack.yml', ['pull', 'nginx'], logContainer);
+    await trigger.runComposeCommand(composeFilePath, ['pull', 'nginx'], logContainer);
 
     expect(logContainer.debug).toHaveBeenCalledWith(
       expect.stringContaining('docker compose pull nginx stdout:\npulled image'),
@@ -1235,6 +1268,16 @@ describe('Dockercompose Trigger', () => {
     expect(logContainer.debug).toHaveBeenCalledWith(
       expect.stringContaining('docker compose pull nginx stderr:\nminor warning'),
     );
+  });
+
+  test('runComposeCommand should reject compose file path traversal', async () => {
+    const logContainer = { debug: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      trigger.runComposeCommand('../outside/stack.yml', ['pull', 'nginx'], logContainer),
+    ).rejects.toThrow(/Compose file path must stay inside/);
+
+    expect(execFile).not.toHaveBeenCalled();
   });
 
   test('getContainerRunningState should assume running when inspect fails', async () => {

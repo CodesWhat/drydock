@@ -1,4 +1,3 @@
-// @ts-nocheck
 import TriggerPipelineError from './TriggerPipelineError.js';
 
 class HookExecutor {
@@ -10,7 +9,7 @@ class HookExecutor {
 
   recordHookAudit;
 
-  constructor(options = {}) {
+  constructor(options: Record<string, any> = {}) {
     this.runHook = options.runHook;
     this.getPreferredLabelValue = options.getPreferredLabelValue;
     this.getLogger = options.getLogger || (() => undefined);

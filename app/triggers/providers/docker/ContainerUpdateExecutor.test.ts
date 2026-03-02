@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const { mockGetInProgressOperationByContainerName, mockInsertOperation, mockUpdateOperation } =

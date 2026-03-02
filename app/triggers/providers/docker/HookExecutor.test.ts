@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, test, vi } from 'vitest';
 import HookExecutor from './HookExecutor.js';
 

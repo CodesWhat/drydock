@@ -152,6 +152,7 @@ const mockDetailPanelOpen = ref(false);
 const mockContainerFullPage = ref(false);
 const mockActiveDetailTab = ref('overview');
 const mockSelectContainer = vi.fn();
+const mockDetailPanelStorageRead = vi.fn(() => null);
 
 vi.mock('@/composables/useDetailPanel', () => ({
   useDetailPanel: vi.fn(() => ({
@@ -170,6 +171,11 @@ vi.mock('@/composables/useDetailPanel', () => ({
     openFullPage: vi.fn(),
     closeFullPage: vi.fn(),
     closePanel: vi.fn(),
+  })),
+  useDetailPanelStorage: vi.fn(() => ({
+    read: mockDetailPanelStorageRead,
+    write: vi.fn(),
+    remove: vi.fn(),
   })),
 }));
 
@@ -326,6 +332,7 @@ describe('ContainersView', () => {
     mockFilterKind.value = 'all';
     mockContainerScrollBlocked.value = false;
     mockContainerAutoFetchInterval.value = 0;
+    mockDetailPanelStorageRead.mockReturnValue(null);
     mockRoute.query = {};
     localStorage.clear();
     sessionStorage.clear();

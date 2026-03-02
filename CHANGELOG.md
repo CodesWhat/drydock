@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Log auto-fetch pauses in background tabs** — `useAutoFetchLogs` now stops polling when the browser tab is hidden and automatically resumes when it becomes visible again.
+
 ## [1.4.0] — 2026-02-28
 
 ### Added

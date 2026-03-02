@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 const RUNTIME_PROCESS_FIELDS = ['Entrypoint', 'Cmd'];
 const RUNTIME_ORIGIN_EXPLICIT = 'explicit';
 const RUNTIME_ORIGIN_INHERITED = 'inherited';
@@ -20,7 +18,7 @@ class ContainerRuntimeConfigManager {
 
   getLogger;
 
-  constructor(options = {}) {
+  constructor(options: Record<string, any> = {}) {
     this.getPreferredLabelValue = options.getPreferredLabelValue;
     this.getLogger = options.getLogger || (() => undefined);
   }

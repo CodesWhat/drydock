@@ -1,4 +1,3 @@
-// @ts-nocheck
 import TriggerPipelineError from './TriggerPipelineError.js';
 
 class SecurityGate {
@@ -10,7 +9,7 @@ class SecurityGate {
 
   telemetry;
 
-  constructor(options = {}) {
+  constructor(options: Record<string, any> = {}) {
     this.securityConfig = {
       getSecurityConfiguration:
         options.securityConfig?.getSecurityConfiguration || options.getSecurityConfiguration,

@@ -6,18 +6,55 @@ var {
   mockRegisterContainerRemoved,
   mockRegisterAgentConnected,
   mockRegisterAgentDisconnected,
-} = vi.hoisted(() => ({
-  mockRouter: { get: vi.fn(), post: vi.fn() },
-  mockRegisterSelfUpdateStarting: vi.fn(),
-  mockRegisterContainerAdded: vi.fn(),
-  mockRegisterContainerUpdated: vi.fn(),
-  mockRegisterContainerRemoved: vi.fn(),
-  mockRegisterAgentConnected: vi.fn(),
-  mockRegisterAgentDisconnected: vi.fn(),
-}));
+  mockRandomUUID,
+  mockCreateHash,
+  mockTimingSafeEqual,
+} = vi.hoisted(() => {
+  let uuidCounter = 0;
+  return {
+    mockRouter: { get: vi.fn(), post: vi.fn() },
+    mockRegisterSelfUpdateStarting: vi.fn(),
+    mockRegisterContainerAdded: vi.fn(),
+    mockRegisterContainerUpdated: vi.fn(),
+    mockRegisterContainerRemoved: vi.fn(),
+    mockRegisterAgentConnected: vi.fn(),
+    mockRegisterAgentDisconnected: vi.fn(),
+    mockRandomUUID: vi.fn(() => {
+      uuidCounter += 1;
+      return `uuid-${uuidCounter}`;
+    }),
+    mockCreateHash: vi.fn(() => {
+      const chunks: Buffer[] = [];
+      const hash = {
+        update: vi.fn((value: string, encoding?: BufferEncoding) => {
+          chunks.push(Buffer.from(value, encoding ?? 'utf8'));
+          return hash;
+        }),
+        digest: vi.fn(() => {
+          const data = Buffer.concat(chunks);
+          const digest = Buffer.alloc(32);
+          for (let i = 0; i < data.length; i += 1) {
+            digest[i % 32] ^= data[i];
+          }
+          return digest;
+        }),
+      };
+      return hash;
+    }),
+    mockTimingSafeEqual: vi.fn(
+      (left: Buffer, right: Buffer) => left.length === right.length && left.equals(right),
+    ),
+  };
+});
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
+}));
+
+vi.mock('node:crypto', () => ({
+  randomUUID: mockRandomUUID,
+  createHash: mockCreateHash,
+  timingSafeEqual: mockTimingSafeEqual,
 }));
 
 vi.mock('../event/index', () => ({
@@ -307,6 +344,35 @@ describe('SSE Router', () => {
       vi.advanceTimersByTime(30000);
       expect(res.write).not.toHaveBeenCalled();
     });
+
+    test('should periodically sweep stale client and pending ack map entries', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const activeClient = sseRouter._activeSseClientsByResponse.get(res);
+
+      expect(activeClient).toBeDefined();
+      expect(sseRouter._activeSseClientsByToken.size).toBe(1);
+
+      // Simulate orphaned entries that were not cleaned up by connection events.
+      sseRouter._clients.delete(res);
+      (activeClient as any).connectedAtMs = Date.now() - 60 * 60 * 1000;
+      sseRouter._pendingSelfUpdateAcks.set('op-stale-sweep', {
+        operationId: 'op-stale-sweep',
+        requiresAck: true,
+        ackTimeoutMs: 1000,
+        clientsAtEmit: 1,
+        eligibleClientTokens: new Set<string>(),
+        ackedClientIds: new Set<string>(),
+        resolved: false,
+        createdAtMs: Date.now() - 60 * 60 * 1000,
+      } as any);
+
+      vi.advanceTimersByTime(31 * 60 * 1000);
+
+      expect(sseRouter._activeSseClientsByResponse.size).toBe(0);
+      expect(sseRouter._activeSseClientsByToken.size).toBe(0);
+      expect(sseRouter._pendingSelfUpdateAcks.has('op-stale-sweep')).toBe(false);
+    });
   });
 
   describe('per-IP connection limits', () => {
@@ -555,6 +621,38 @@ describe('SSE Router', () => {
   });
 
   describe('acknowledgeSelfUpdate', () => {
+    test('should use timing-safe comparison for client tokens', () => {
+      const handler = getHandler();
+      const { clientId, clientToken } = connectSseClient(handler);
+      sseRouter._pendingSelfUpdateAcks.set('op-timing-safe', {
+        operationId: 'op-timing-safe',
+        requiresAck: true,
+        ackTimeoutMs: 1000,
+        createdAtMs: Date.now(),
+        clientsAtEmit: 1,
+        eligibleClientTokens: new Set<string>(['different-token']),
+        ackedClientIds: new Set<string>(),
+        resolved: false,
+      });
+      const ackHandler = getAckHandler();
+      const req = {
+        params: { operationId: 'op-timing-safe' },
+        body: { clientId, clientToken },
+      };
+      const jsonRes = createJsonResponse();
+
+      ackHandler(req, jsonRes);
+
+      expect(jsonRes.status).toHaveBeenCalledWith(403);
+      expect(jsonRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'rejected',
+          reason: 'client-not-bound-to-operation',
+        }),
+      );
+      expect(mockTimingSafeEqual).toHaveBeenCalled();
+    });
+
     test('should return ignored for unknown operation', () => {
       const ackHandler = getAckHandler();
       const req = {
@@ -609,6 +707,7 @@ describe('SSE Router', () => {
         operationId: 'op-unknown-client',
         requiresAck: true,
         ackTimeoutMs: 1000,
+        createdAtMs: Date.now(),
         clientsAtEmit: 1,
         eligibleClientTokens: new Set<string>(['known-token']),
         ackedClientIds: new Set<string>(),

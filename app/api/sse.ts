@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Request, Response } from 'express';
 import express from 'express';
 import type { SelfUpdateStartingEventPayload } from '../event/index.js';
@@ -19,12 +19,14 @@ interface ActiveSseClient {
   clientId: string;
   clientToken: string;
   response: Response;
+  connectedAtMs: number;
 }
 
 interface PendingSelfUpdateAck {
   operationId: string;
   requiresAck: boolean;
   ackTimeoutMs: number;
+  createdAtMs: number;
   clientsAtEmit: number;
   eligibleClientTokens: Set<string>;
   ackedClientIds: Set<string>;
@@ -37,6 +39,7 @@ const clients = new Set<Response>();
 const activeSseClientsByToken = new Map<string, ActiveSseClient>();
 const activeSseClientsByResponse = new Map<Response, ActiveSseClient>();
 const pendingSelfUpdateAcks = new Map<string, PendingSelfUpdateAck>();
+let staleSweepIntervalHandle: ReturnType<typeof globalThis.setInterval> | undefined;
 
 // Per-IP and per-session connection tracking to prevent connection exhaustion.
 const MAX_CONNECTIONS_PER_IP = 10;
@@ -45,6 +48,8 @@ const connectionsPerIp = new Map<string, number>();
 const connectionsPerSession = new Map<string, number>();
 const DEFAULT_SELF_UPDATE_ACK_TIMEOUT_MS = 3000;
 const SSE_HEARTBEAT_INTERVAL_MS = 15000;
+const SSE_STALE_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+const SSE_STALE_ENTRY_TTL_MS = 30 * 60 * 1000;
 
 function getClientIp(req: Request): string {
   return req.ip ?? 'unknown';
@@ -60,6 +65,91 @@ function getClientSessionKey(req: Request): string {
 
 function issueServerClientId(prefix: string): string {
   return `${prefix}-${randomUUID()}`;
+}
+
+function hashToken(token: string): Buffer {
+  return createHash('sha256').update(token, 'utf8').digest();
+}
+
+function findActiveClientByTokenConstantTime(clientToken: string): ActiveSseClient | undefined {
+  const providedTokenHash = hashToken(clientToken);
+  let matchedClient: ActiveSseClient | undefined;
+  let hasMatch = false;
+  for (const [candidateToken, activeClient] of activeSseClientsByToken.entries()) {
+    const candidateTokenHash = hashToken(candidateToken);
+    const isMatch = timingSafeEqual(providedTokenHash, candidateTokenHash);
+    if (isMatch && !hasMatch) {
+      matchedClient = activeClient;
+      hasMatch = true;
+    }
+  }
+  return matchedClient;
+}
+
+function hasEligibleClientTokenConstantTime(
+  eligibleClientTokens: Set<string>,
+  clientToken: string,
+): boolean {
+  const providedTokenHash = hashToken(clientToken);
+  let hasMatch = false;
+  for (const candidateToken of eligibleClientTokens) {
+    const candidateTokenHash = hashToken(candidateToken);
+    hasMatch = timingSafeEqual(providedTokenHash, candidateTokenHash) || hasMatch;
+  }
+  return hasMatch;
+}
+
+function isResponseClosed(response: Response): boolean {
+  const writableEnded = (response as Response & { writableEnded?: boolean }).writableEnded;
+  const writableFinished = (response as Response & { writableFinished?: boolean }).writableFinished;
+  const destroyed = (response as Response & { destroyed?: boolean }).destroyed;
+  return writableEnded === true || writableFinished === true || destroyed === true;
+}
+
+function dropActiveClient(client: ActiveSseClient): void {
+  clients.delete(client.response);
+  activeSseClientsByToken.delete(client.clientToken);
+  activeSseClientsByResponse.delete(client.response);
+}
+
+function sweepStaleSseState(nowMs = Date.now()): void {
+  for (const [response, activeClient] of activeSseClientsByResponse) {
+    const ageMs = nowMs - activeClient.connectedAtMs;
+    const missingClientSetEntry = !clients.has(response);
+    const missingTokenEntry =
+      activeSseClientsByToken.get(activeClient.clientToken) !== activeClient;
+    const shouldDrop = missingClientSetEntry || missingTokenEntry || isResponseClosed(response);
+    if (shouldDrop && ageMs >= SSE_STALE_ENTRY_TTL_MS) {
+      dropActiveClient(activeClient);
+    }
+  }
+
+  for (const [token, activeClient] of activeSseClientsByToken) {
+    const ageMs = nowMs - activeClient.connectedAtMs;
+    const responseRef = activeSseClientsByResponse.get(activeClient.response);
+    const missingResponseEntry = responseRef !== activeClient;
+    const missingClientSetEntry = !clients.has(activeClient.response);
+    const shouldDrop =
+      missingResponseEntry || missingClientSetEntry || isResponseClosed(activeClient.response);
+    if (shouldDrop && ageMs >= SSE_STALE_ENTRY_TTL_MS) {
+      activeSseClientsByToken.delete(token);
+      if (responseRef === activeClient) {
+        activeSseClientsByResponse.delete(activeClient.response);
+      }
+      clients.delete(activeClient.response);
+    }
+  }
+
+  for (const [operationId, pending] of pendingSelfUpdateAcks) {
+    const ageMs = nowMs - pending.createdAtMs;
+    const staleThresholdMs = Math.max(
+      pending.ackTimeoutMs + SSE_STALE_SWEEP_INTERVAL_MS,
+      SSE_STALE_ENTRY_TTL_MS,
+    );
+    if (pending.resolved || ageMs >= staleThresholdMs) {
+      finalizePendingAck(operationId);
+    }
+  }
 }
 
 function eventsHandler(req: Request, res: Response): void {
@@ -96,6 +186,7 @@ function eventsHandler(req: Request, res: Response): void {
     clientId: issueServerClientId('sse-client'),
     clientToken: issueServerClientId('sse-token'),
     response: res,
+    connectedAtMs: Date.now(),
   };
   activeSseClientsByResponse.set(res, activeClient);
   activeSseClientsByToken.set(activeClient.clientToken, activeClient);
@@ -207,6 +298,7 @@ async function broadcastSelfUpdate(payload: SelfUpdateStartingEventPayload): Pro
       operationId,
       requiresAck,
       ackTimeoutMs,
+      createdAtMs: Date.now(),
       clientsAtEmit: eligibleClientTokens.size,
       eligibleClientTokens,
       ackedClientIds: new Set<string>(),
@@ -247,7 +339,7 @@ function acknowledgeSelfUpdate(req: Request, res: Response): void {
     return;
   }
 
-  const activeClient = activeSseClientsByToken.get(clientToken);
+  const activeClient = findActiveClientByTokenConstantTime(clientToken);
   if (!activeClient) {
     res.status(403).json({
       status: 'rejected',
@@ -264,7 +356,7 @@ function acknowledgeSelfUpdate(req: Request, res: Response): void {
     });
     return;
   }
-  if (!pending.eligibleClientTokens.has(clientToken)) {
+  if (!hasEligibleClientTokenConstantTime(pending.eligibleClientTokens, clientToken)) {
     res.status(403).json({
       status: 'rejected',
       operationId,
@@ -319,6 +411,11 @@ export function init(): express.Router {
     return router;
   }
   initialized = true;
+  if (!staleSweepIntervalHandle) {
+    staleSweepIntervalHandle = globalThis.setInterval(() => {
+      sweepStaleSseState();
+    }, SSE_STALE_SWEEP_INTERVAL_MS);
+  }
 
   // Register for self-update events from the trigger system
   registerSelfUpdateStarting(async (payload: SelfUpdateStartingEventPayload) => {
@@ -347,6 +444,10 @@ export function init(): express.Router {
 
 function resetInitializationStateForTests(): void {
   initialized = false;
+  if (staleSweepIntervalHandle) {
+    globalThis.clearInterval(staleSweepIntervalHandle);
+    staleSweepIntervalHandle = undefined;
+  }
 }
 
 // For testing
@@ -359,7 +460,10 @@ export {
   MAX_CONNECTIONS_PER_IP as _MAX_CONNECTIONS_PER_IP,
   MAX_CONNECTIONS_PER_SESSION as _MAX_CONNECTIONS_PER_SESSION,
   SSE_HEARTBEAT_INTERVAL_MS as _SSE_HEARTBEAT_INTERVAL_MS,
+  SSE_STALE_SWEEP_INTERVAL_MS as _SSE_STALE_SWEEP_INTERVAL_MS,
+  SSE_STALE_ENTRY_TTL_MS as _SSE_STALE_ENTRY_TTL_MS,
   pendingSelfUpdateAcks as _pendingSelfUpdateAcks,
+  sweepStaleSseState as _sweepStaleSseState,
   clearPendingSelfUpdateAcks as _clearPendingSelfUpdateAcks,
   resetInitializationStateForTests as _resetInitializationStateForTests,
   broadcastSelfUpdate as _broadcastSelfUpdate,

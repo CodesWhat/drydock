@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 class RollbackMonitor {
   getPreferredLabelValue;
 
@@ -13,7 +11,7 @@ class RollbackMonitor {
 
   getTriggerInstance;
 
-  constructor(options = {}) {
+  constructor(options: Record<string, any> = {}) {
     this.getPreferredLabelValue = options.getPreferredLabelValue;
     this.getLogger = options.getLogger || (() => undefined);
     this.getCurrentContainer = options.getCurrentContainer;

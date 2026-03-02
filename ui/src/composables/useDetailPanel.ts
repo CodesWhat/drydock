@@ -1,7 +1,34 @@
 import { computed, ref, watch } from 'vue';
 import type { Container } from '../types/container';
+import { useSessionStorageItem } from './useSessionStorageItem';
+
+export interface DetailPanelState {
+  name: string;
+  tab: string;
+  panel: boolean;
+  full: boolean;
+  size: 'sm' | 'md' | 'lg';
+}
+
+const DETAIL_PANEL_KEY = 'dd-panel';
+const PANEL_SIZES = new Set<DetailPanelState['size']>(['sm', 'md', 'lg']);
+
+export function isDetailPanelState(value: unknown): value is DetailPanelState {
+  if (typeof value !== 'object' || value === null) return false;
+  if (!('name' in value) || typeof value.name !== 'string') return false;
+  if (!('tab' in value) || typeof value.tab !== 'string') return false;
+  if (!('panel' in value) || typeof value.panel !== 'boolean') return false;
+  if (!('full' in value) || typeof value.full !== 'boolean') return false;
+  if (!('size' in value) || typeof value.size !== 'string') return false;
+  return PANEL_SIZES.has(value.size as DetailPanelState['size']);
+}
+
+export function useDetailPanelStorage() {
+  return useSessionStorageItem<DetailPanelState>(DETAIL_PANEL_KEY, isDetailPanelState);
+}
 
 export function useDetailPanel() {
+  const panelStorage = useDetailPanelStorage();
   const selectedContainer = ref<Container | null>(null);
   const detailPanelOpen = ref(false);
   const activeDetailTab = ref('overview');
@@ -22,18 +49,15 @@ export function useDetailPanel() {
 
   function savePanelState() {
     if (selectedContainer.value) {
-      sessionStorage.setItem(
-        'dd-panel',
-        JSON.stringify({
-          name: selectedContainer.value.name,
-          tab: activeDetailTab.value,
-          panel: detailPanelOpen.value,
-          full: containerFullPage.value,
-          size: panelSize.value,
-        }),
-      );
+      panelStorage.write({
+        name: selectedContainer.value.name,
+        tab: activeDetailTab.value,
+        panel: detailPanelOpen.value,
+        full: containerFullPage.value,
+        size: panelSize.value,
+      });
     } else {
-      sessionStorage.removeItem('dd-panel');
+      panelStorage.remove();
     }
   }
 
@@ -59,7 +83,7 @@ export function useDetailPanel() {
     detailPanelOpen.value = false;
     panelSize.value = 'sm';
     selectedContainer.value = null;
-    sessionStorage.removeItem('dd-panel');
+    panelStorage.remove();
   }
 
   watch([activeDetailTab, panelSize], savePanelState);

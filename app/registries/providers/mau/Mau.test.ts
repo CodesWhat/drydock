@@ -1,5 +1,5 @@
-// @ts-nocheck
 import axios from 'axios';
+import { expect, test, vi } from 'vitest';
 import Mau from './Mau.js';
 
 const TEST_TOKEN = 'abcdef';

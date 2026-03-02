@@ -1,4 +1,3 @@
-// @ts-nocheck
 import crypto from 'node:crypto';
 
 class UpdateLifecycleExecutor {
@@ -42,7 +41,7 @@ class UpdateLifecycleExecutor {
 
   getBackupCount;
 
-  constructor(options = {}) {
+  constructor(options: Record<string, any> = {}) {
     this.getLogger = options.getLogger || (() => undefined);
     this.getContainerFullName = options.getContainerFullName;
     this.createTriggerContext = options.createTriggerContext;

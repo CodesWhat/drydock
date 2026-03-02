@@ -160,7 +160,10 @@ async function fetchSecurityRuntimeStatus() {
 }
 
 async function fetchVulnerabilities() {
-  loading.value = true;
+  // Only show full loading state on initial load (no data yet)
+  if (securityVulnerabilities.value.length === 0) {
+    loading.value = true;
+  }
   error.value = null;
   try {
     const containers = await getAllContainers();
@@ -210,6 +213,9 @@ async function fetchVulnerabilities() {
 }
 
 function handleSseScanCompleted() {
+  // During a batch scan, skip SSE-triggered refreshes — the final
+  // fetchVulnerabilities() at the end of scanAllContainers covers it.
+  if (scanning.value) return;
   fetchVulnerabilities();
 }
 
@@ -232,8 +238,9 @@ async function scanAllContainers() {
         // Individual scan failures shouldn't stop the batch
       }
       scanProgress.value.done++;
+      // Incrementally refresh findings so results build up as scans complete
+      await fetchVulnerabilities();
     }
-    await fetchVulnerabilities();
   } finally {
     scanning.value = false;
   }
@@ -603,6 +610,20 @@ onUnmounted(() => {
           </template>
         </template>
       </DataFilterBar>
+
+      <!-- Scan progress banner -->
+      <div v-if="scanning"
+           class="mb-2 px-3 py-2 dd-rounded flex items-center gap-2.5"
+           :style="{ backgroundColor: 'var(--dd-info-muted)', border: '1px solid var(--dd-info)' }">
+        <AppIcon name="restart" :size="12" class="animate-spin shrink-0" :style="{ color: 'var(--dd-info)' }" />
+        <span class="text-[11px] font-semibold" :style="{ color: 'var(--dd-info)' }">
+          Scanning {{ scanProgress.done }}/{{ scanProgress.total }} containers...
+        </span>
+        <div class="flex-1 h-1 dd-rounded overflow-hidden" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+          <div class="h-full dd-rounded transition-all duration-300"
+               :style="{ width: scanProgress.total > 0 ? `${(scanProgress.done / scanProgress.total) * 100}%` : '0%', backgroundColor: 'var(--dd-info)' }" />
+        </div>
+      </div>
 
       <!-- Table view — grouped by image -->
       <DataTable v-if="securityViewMode === 'table' && !loading"

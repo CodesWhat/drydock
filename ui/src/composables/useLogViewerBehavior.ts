@@ -43,6 +43,10 @@ export function useAutoFetchLogs(options: AutoFetchOptions) {
   const autoFetchInterval = ref(0);
   let timerId: ReturnType<typeof setInterval> | undefined;
 
+  function isTabHidden() {
+    return typeof document !== 'undefined' && document.hidden;
+  }
+
   function startAutoFetch() {
     if (timerId) clearInterval(timerId);
     timerId = setInterval(async () => {
@@ -59,9 +63,18 @@ export function useAutoFetchLogs(options: AutoFetchOptions) {
   }
 
   watch(autoFetchInterval, (val) => {
-    if (val > 0) startAutoFetch();
+    if (val > 0 && !isTabHidden()) startAutoFetch();
     else stopAutoFetch();
   });
+
+  if (typeof document !== 'undefined') {
+    const handleVisibilityChange = () => {
+      if (isTabHidden()) stopAutoFetch();
+      else if (autoFetchInterval.value > 0) startAutoFetch();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    onScopeDispose(() => document.removeEventListener('visibilitychange', handleVisibilityChange));
+  }
 
   onScopeDispose(() => stopAutoFetch());
 

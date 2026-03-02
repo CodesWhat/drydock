@@ -1,376 +1,32 @@
-import crypto from 'node:crypto';
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import axios from 'axios';
-import express from 'express';
-import joi from 'joi';
+import express, { type Request, type Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
-import {
-  resolveConfiguredPath,
-  resolveConfiguredPathWithinBase,
-  resolveFromRuntimeRoot,
-} from '../runtime/paths.js';
-import * as store from '../store/index.js';
 import * as settingsStore from '../store/settings.js';
+import { fetchAndCacheIconOnce } from './icons.fetch.js';
+import { normalizeSlug, providers } from './icons.providers.js';
+import { sendCachedIcon, sendMissingIconResponse } from './icons.response.js';
+import {
+  ICON_PROXY_RATE_LIMIT_MAX,
+  ICON_PROXY_RATE_LIMIT_WINDOW_MS,
+  MISSING_UPSTREAM_STATUS_CODES,
+} from './icons.settings.js';
+import {
+  clearIconCache,
+  findBundledIconPath,
+  getIconCachePath,
+  isCachedIconUsable,
+} from './icons.storage.js';
+import { iconRequestSchema } from './icons.validation.js';
 
 const router = express.Router();
 const log = logger.child({ component: 'icons' });
 
-const CACHE_CONTROL_HEADER = 'public, max-age=31536000, immutable';
-const FALLBACK_ICON = 'fab fa-docker';
-const FALLBACK_IMAGE_PROVIDER = 'selfhst';
-const FALLBACK_IMAGE_SLUG = 'docker';
-const MISSING_UPSTREAM_STATUS_CODES = new Set([403, 404]);
-const DEFAULT_ICON_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const DEFAULT_ICON_CACHE_MAX_FILES = 5000;
-const DEFAULT_ICON_CACHE_MAX_BYTES = 100 * 1024 * 1024;
-const DEFAULT_ICON_IN_FLIGHT_TIMEOUT_MS = 15 * 1000;
-const inFlightIconFetches = new Map<string, Promise<void>>();
-const BUNDLED_ICON_PROVIDERS = new Set(['selfhst']);
-
-const providers = {
-  homarr: {
-    extension: 'png',
-    url: (slug: string) =>
-      `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/${slug}.png`,
-    contentType: 'image/png',
-  },
-  selfhst: {
-    extension: 'png',
-    url: (slug: string) => `https://cdn.jsdelivr.net/gh/selfhst/icons/png/${slug}.png`,
-    contentType: 'image/png',
-  },
-  simple: {
-    extension: 'svg',
-    url: (slug: string) => `https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/${slug}.svg`,
-    contentType: 'image/svg+xml',
-  },
-};
-
-const iconRequestSchema = joi.object({
-  provider: joi
-    .string()
-    .valid(...Object.keys(providers))
-    .required(),
-  slug: joi
-    .string()
-    .pattern(/^[a-z0-9][a-z0-9._-]{0,127}$/i)
-    .required(),
-});
-
-function toPositiveInteger(rawValue: string | undefined, fallbackValue: number): number {
-  const parsedValue = Number.parseInt(String(rawValue ?? ''), 10);
-  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-    return fallbackValue;
-  }
-  return parsedValue;
-}
-
-const ICON_CACHE_TTL_MS = toPositiveInteger(
-  process.env.DD_ICON_CACHE_TTL_MS,
-  DEFAULT_ICON_CACHE_TTL_MS,
-);
-const ICON_CACHE_MAX_FILES = toPositiveInteger(
-  process.env.DD_ICON_CACHE_MAX_FILES,
-  DEFAULT_ICON_CACHE_MAX_FILES,
-);
-const ICON_CACHE_MAX_BYTES = toPositiveInteger(
-  process.env.DD_ICON_CACHE_MAX_BYTES,
-  DEFAULT_ICON_CACHE_MAX_BYTES,
-);
-
-function getIconInFlightTimeoutMs() {
-  return toPositiveInteger(
-    process.env.DD_ICON_IN_FLIGHT_TIMEOUT_MS,
-    DEFAULT_ICON_IN_FLIGHT_TIMEOUT_MS,
-  );
-}
-
-function normalizeSlug(slug: string, extension: string): string {
-  const slugNormalized = slug.toLowerCase();
-  const suffix = `.${extension}`;
-  if (slugNormalized.endsWith(suffix)) {
-    return slugNormalized.slice(0, -suffix.length);
-  }
-  return slugNormalized;
-}
-
-function getIconCacheBaseDirectory() {
-  const storeDirectory = resolveConfiguredPath(store.getConfiguration().path, {
-    label: 'DD_STORE_PATH',
-  });
-  return resolveConfiguredPathWithinBase(storeDirectory, 'icons', {
-    label: 'Icon cache base path',
-  });
-}
-
-function getIconCachePath(provider: string, slug: string, extension: string) {
-  const cacheBase = getIconCacheBaseDirectory();
-  const providerDirectory = resolveConfiguredPathWithinBase(cacheBase, provider, {
-    label: 'Icon provider path',
-  });
-  return resolveConfiguredPathWithinBase(providerDirectory, `${slug}.${extension}`, {
-    label: 'Icon slug path',
-  });
-}
-
-function getBundledIconCandidates(provider: string, slug: string, extension: string) {
-  const fileName = `${slug}.${extension}`;
-  return Array.from(
-    new Set([
-      resolveFromRuntimeRoot('assets', 'icons', provider, fileName),
-      // Source-tree fallback for local dev/test when runtime root resolves to dist.
-      resolveFromRuntimeRoot('..', 'assets', 'icons', provider, fileName),
-    ]),
-  );
-}
-
-async function findBundledIconPath(provider: string, slug: string, extension: string) {
-  if (!BUNDLED_ICON_PROVIDERS.has(provider)) {
-    return null;
-  }
-  const candidates = getBundledIconCandidates(provider, slug, extension);
-  for (const candidate of candidates) {
-    if (await iconExists(candidate)) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
-function sendCachedIcon(res, iconPath: string, contentType: string) {
-  res.set('Cache-Control', CACHE_CONTROL_HEADER);
-  res.type(contentType);
-  res.sendFile(path.basename(iconPath), { root: path.dirname(iconPath) });
-}
-
-function shouldServeImageFallback(req): boolean {
-  const fetchDestination = req?.headers?.['sec-fetch-dest'];
-  const fetchDestinationValue = Array.isArray(fetchDestination)
-    ? fetchDestination.join(',')
-    : fetchDestination;
-  if (
-    typeof fetchDestinationValue === 'string' &&
-    fetchDestinationValue.toLowerCase() === 'image'
-  ) {
-    return true;
-  }
-
-  const acceptHeader = req?.headers?.accept;
-  const acceptHeaderValue = Array.isArray(acceptHeader) ? acceptHeader.join(',') : acceptHeader;
-  return (
-    typeof acceptHeaderValue === 'string' && acceptHeaderValue.toLowerCase().includes('image/')
-  );
-}
-
-async function sendMissingIconResponse({
-  req,
-  res,
-  provider,
-  slug,
-  errorMessage,
-}: {
-  req;
-  res;
-  provider: string;
-  slug: string;
-  errorMessage: string;
-}) {
-  if (shouldServeImageFallback(req)) {
-    const fallbackPath = await findBundledIconPath(
-      FALLBACK_IMAGE_PROVIDER,
-      FALLBACK_IMAGE_SLUG,
-      providers[FALLBACK_IMAGE_PROVIDER].extension,
-    );
-    if (fallbackPath) {
-      sendCachedIcon(res, fallbackPath, providers[FALLBACK_IMAGE_PROVIDER].contentType);
-      return;
-    }
-  }
-
-  res.status(404).json({
-    error: errorMessage,
-    fallbackIcon: FALLBACK_ICON,
-  });
-}
-
-async function iconExists(iconPath: string) {
-  try {
-    await fs.access(iconPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function isCachedIconUsable(iconPath: string) {
-  if (!(await iconExists(iconPath))) {
-    return false;
-  }
-
-  try {
-    const iconStats = await fs.stat(iconPath);
-    if (!iconStats.isFile()) {
-      return false;
-    }
-    if (Date.now() - iconStats.mtimeMs > ICON_CACHE_TTL_MS) {
-      await fs.unlink(iconPath).catch(() => {});
-      return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-type IconCacheEntry = {
-  path: string;
-  mtimeMs: number;
-  size: number;
-};
-
-async function listIconCacheEntries() {
-  const cacheBase = getIconCacheBaseDirectory();
-  const providerEntries = await fs.readdir(cacheBase, { withFileTypes: true }).catch(() => []);
-  const cacheEntries: IconCacheEntry[] = [];
-
-  for (const providerEntry of providerEntries) {
-    if (!providerEntry.isDirectory()) {
-      continue;
-    }
-    const providerDirectory = path.join(cacheBase, providerEntry.name);
-    const iconEntries = await fs.readdir(providerDirectory).catch(() => []);
-    for (const iconEntry of iconEntries) {
-      const iconPath = path.join(providerDirectory, iconEntry);
-      try {
-        const iconStats = await fs.stat(iconPath);
-        if (!iconStats.isFile()) {
-          continue;
-        }
-        cacheEntries.push({
-          path: iconPath,
-          mtimeMs: iconStats.mtimeMs,
-          size: iconStats.size,
-        });
-      } catch {
-        // Ignore entries that disappear between directory scan and stat.
-      }
-    }
-  }
-
-  return cacheEntries;
-}
-
-async function enforceIconCacheLimits(options: { protectedPath?: string } = {}) {
-  const nowMs = Date.now();
-  const cacheEntries = await listIconCacheEntries();
-  const activeEntries: IconCacheEntry[] = [];
-  let totalBytes = 0;
-
-  for (const cacheEntry of cacheEntries) {
-    if (nowMs - cacheEntry.mtimeMs > ICON_CACHE_TTL_MS) {
-      await fs.unlink(cacheEntry.path).catch(() => {});
-      continue;
-    }
-    activeEntries.push(cacheEntry);
-    totalBytes += cacheEntry.size;
-  }
-
-  activeEntries.sort((left, right) => left.mtimeMs - right.mtimeMs);
-  while (activeEntries.length > ICON_CACHE_MAX_FILES || totalBytes > ICON_CACHE_MAX_BYTES) {
-    const indexToEvict = activeEntries.findIndex(
-      (cacheEntry) => cacheEntry.path !== options.protectedPath,
-    );
-    if (indexToEvict === -1) {
-      break;
-    }
-
-    const [entryToEvict] = activeEntries.splice(indexToEvict, 1);
-    await fs.unlink(entryToEvict.path).catch(() => {});
-    totalBytes = Math.max(0, totalBytes - entryToEvict.size);
-  }
-}
-
-async function writeIconAtomically(iconPath: string, data: Buffer) {
-  const tmpPath = `${iconPath}.tmp.${crypto.randomUUID()}`;
-  await fs.mkdir(path.dirname(iconPath), { recursive: true });
-  try {
-    await fs.writeFile(tmpPath, data);
-    await fs.rename(tmpPath, iconPath);
-  } catch (e) {
-    await fs.unlink(tmpPath).catch(() => {});
-    throw e;
-  }
-}
-
-async function fetchAndCacheIcon({
-  provider,
-  slug,
-  cachePath,
-}: {
-  provider: string;
-  slug: string;
-  cachePath: string;
-}) {
-  const providerConfig = providers[provider];
-  if (await isCachedIconUsable(cachePath)) {
-    return;
-  }
-  const response = await axios.get(providerConfig.url(slug), {
-    responseType: 'arraybuffer',
-    timeout: 10000,
-  });
-  await writeIconAtomically(cachePath, Buffer.from(response.data));
-  await enforceIconCacheLimits({ protectedPath: cachePath });
-}
-
-function fetchAndCacheIconOnce({
-  provider,
-  slug,
-  cachePath,
-}: {
-  provider: string;
-  slug: string;
-  cachePath: string;
-}) {
-  const cacheKey = `${provider}/${slug}`;
-  const inFlightRequest = inFlightIconFetches.get(cacheKey);
-  if (inFlightRequest) {
-    return inFlightRequest;
-  }
-
-  const timeoutMs = getIconInFlightTimeoutMs();
-  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-
-  const fetchPromise = Promise.race([
-    fetchAndCacheIcon({
-      provider,
-      slug,
-      cachePath,
-    }),
-    new Promise<void>((_, reject) => {
-      timeoutHandle = setTimeout(() => {
-        reject(new Error(`Icon fetch timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
-    }),
-  ]).finally(() => {
-    if (timeoutHandle !== undefined) {
-      clearTimeout(timeoutHandle);
-    }
-    inFlightIconFetches.delete(cacheKey);
-  });
-
-  inFlightIconFetches.set(cacheKey, fetchPromise);
-  return fetchPromise;
-}
-
 /**
  * Get icon from cache, bundled assets, or jsDelivr.
- * @param req
- * @param res
  */
-async function getIcon(req, res) {
+async function getIcon(req: Request, res: Response) {
   const iconRequest = iconRequestSchema.validate(req.params || {}, { stripUnknown: true });
   if (iconRequest.error) {
     res.status(400).json({
@@ -399,8 +55,6 @@ async function getIcon(req, res) {
     await sendMissingIconResponse({
       req,
       res,
-      provider,
-      slug,
       errorMessage: `Icon ${provider}/${slug} is not cached`,
     });
     return;
@@ -419,8 +73,6 @@ async function getIcon(req, res) {
       await sendMissingIconResponse({
         req,
         res,
-        provider,
-        slug,
         errorMessage: `Icon ${provider}/${slug} was not found`,
       });
       return;
@@ -438,24 +90,10 @@ async function getIcon(req, res) {
 /**
  * Clear icon cache.
  * Removes all cached icons from disk.
- * @param req
- * @param res
  */
-async function clearCache(req, res) {
+async function clearCache(_req: Request, res: Response) {
   try {
-    const cacheBase = getIconCacheBaseDirectory();
-    const entries = await fs.readdir(cacheBase, { withFileTypes: true }).catch(() => []);
-    let cleared = 0;
-    for (const entry of entries) {
-      const entryPath = path.join(cacheBase, entry.name);
-      if (entry.isDirectory()) {
-        const files = await fs.readdir(entryPath).catch(() => []);
-        for (const file of files) {
-          await fs.unlink(path.join(entryPath, file)).catch(() => {});
-          cleared++;
-        }
-      }
-    }
+    const cleared = await clearIconCache();
     log.info(`Cleared ${cleared} cached icons`);
     res.status(200).json({ cleared });
   } catch (e) {
@@ -470,7 +108,14 @@ async function clearCache(req, res) {
  * @returns {*}
  */
 export function init() {
-  router.get('/:provider/:slug', getIcon);
+  const iconProxyRateLimiter = rateLimit({
+    windowMs: ICON_PROXY_RATE_LIMIT_WINDOW_MS,
+    max: ICON_PROXY_RATE_LIMIT_MAX,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+  });
+  router.get('/:provider/:slug', iconProxyRateLimiter, getIcon);
   router.delete('/cache', clearCache);
   return router;
 }

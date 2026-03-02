@@ -90,6 +90,7 @@ Hooks execute via `/bin/sh -c` inside the Drydock container. The following envir
 
 A non-zero exit code or timeout is treated as failure. When `dd.hook.pre.abort` is `true` (the default), a failed pre-hook prevents the update from proceeding.
 
+<Callout type="warn">Hook labels are ignored unless `DD_HOOKS_ENABLED=true` is set on the Drydock container.</Callout>
 <Callout type="info">Lifecycle hooks are **not** executed during self-updates.</Callout>
 <Callout type="info">When hook labels are present, Drydock records `hook-configured` in the audit log before execution, then `hook-pre-*` / `hook-post-*` based on outcomes.</Callout>
 

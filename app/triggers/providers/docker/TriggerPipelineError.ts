@@ -1,17 +1,20 @@
-// @ts-nocheck
+type TriggerPipelineErrorOptions = {
+  source?: string;
+  cause?: unknown;
+};
 
 class TriggerPipelineError extends Error {
   code;
 
   source;
 
-  constructor(code, message, options = {}) {
+  constructor(code: string, message: string, options: TriggerPipelineErrorOptions = {}) {
     super(message);
     this.name = 'TriggerPipelineError';
     this.code = code;
     this.source = options.source;
     if (Object.hasOwn(options, 'cause')) {
-      this.cause = options.cause;
+      (this as Error & { cause?: unknown }).cause = options.cause;
     }
   }
 
@@ -19,7 +22,7 @@ class TriggerPipelineError extends Error {
     return error?.name === 'TriggerPipelineError' && typeof error?.code === 'string';
   }
 
-  static fromUnknown(error, code, message, options = {}) {
+  static fromUnknown(error, code: string, message, options: TriggerPipelineErrorOptions = {}) {
     if (TriggerPipelineError.isTriggerPipelineError(error)) {
       return error;
     }

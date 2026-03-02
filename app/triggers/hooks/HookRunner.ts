@@ -1,8 +1,11 @@
 import { execFile } from 'node:child_process';
 import log from '../../log/index.js';
+import { buildHookCommandEnvironment } from '../../runtime/child-process-env.js';
 
 const MAX_OUTPUT_BYTES = 10 * 1024; // 10 KB
 const DEFAULT_TIMEOUT_MS = 60_000; // 1 minute
+const HOOKS_DISABLED_MESSAGE =
+  'Lifecycle hooks are disabled. Set DD_HOOKS_ENABLED=true to enable execution.';
 
 export interface HookRunnerOptions {
   timeout?: number;
@@ -15,6 +18,10 @@ export interface HookResult {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+}
+
+function isHooksExecutionEnabled(): boolean {
+  return process.env.DD_HOOKS_ENABLED?.trim().toLowerCase() === 'true';
 }
 
 function isTimedOut(error: NodeJS.ErrnoException | null): boolean {
@@ -72,6 +79,16 @@ function logHookResult(hookLog: any, label: string, timeout: number, result: Hoo
  */
 export async function runHook(command: string, options: HookRunnerOptions): Promise<HookResult> {
   const hookLog = log.child({ hook: options.label });
+  if (!isHooksExecutionEnabled()) {
+    hookLog.info(`Skipping ${options.label} hook because DD_HOOKS_ENABLED is not true`);
+    return {
+      exitCode: 0,
+      stdout: '',
+      stderr: HOOKS_DISABLED_MESSAGE,
+      timedOut: false,
+    };
+  }
+
   const timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
 
   hookLog.info(`Running ${options.label} hook: ${command}`);
@@ -90,7 +107,7 @@ export async function runHook(command: string, options: HookRunnerOptions): Prom
       {
         timeout,
         maxBuffer: MAX_OUTPUT_BYTES,
-        env: { ...process.env, ...options.env },
+        env: buildHookCommandEnvironment(options.env),
       },
       callback,
     );

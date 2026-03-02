@@ -1580,6 +1580,29 @@ describe('Docker Watcher', () => {
       );
       expect(docker.dockerEventsBuffer).toBe('{"Action":"create","id":"c1"}');
     });
+
+    test('should reconnect when docker events buffer exceeds 1MB', async () => {
+      vi.useFakeTimers();
+      try {
+        await docker.register('watcher', 'docker', 'test', {
+          watchevents: false,
+        });
+        docker.configuration.watchevents = true;
+        docker.isDockerEventsListenerActive = true;
+        docker.log = createMockLog(['warn', 'debug']);
+        docker.processDockerEventPayload = vi.fn().mockResolvedValue(false);
+        docker.dockerEventsBuffer = 'a'.repeat(1024 * 1024 - 10);
+
+        await docker.onDockerEvent(Buffer.from('{"Action":"create","id":"overflow"}'));
+
+        expect(docker.log.warn).toHaveBeenCalledWith(expect.stringContaining('buffer overflow'));
+        expect(docker.dockerEventsReconnectAttempt).toBe(1);
+        expect(docker.dockerEventsReconnectTimeout).toBeDefined();
+        expect(docker.dockerEventsBuffer).toBe('');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('Container Watching', () => {

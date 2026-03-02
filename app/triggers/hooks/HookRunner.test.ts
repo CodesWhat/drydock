@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { runHook } from './HookRunner.js';
 
 var childProcessMockControl = vi.hoisted(() => ({
@@ -27,6 +27,49 @@ vi.mock('../../log/index.js', () => ({
 }));
 
 describe('HookRunner', () => {
+  const originalHooksEnabled = process.env.DD_HOOKS_ENABLED;
+
+  beforeEach(() => {
+    process.env.DD_HOOKS_ENABLED = 'true';
+  });
+
+  afterAll(() => {
+    if (originalHooksEnabled === undefined) {
+      delete process.env.DD_HOOKS_ENABLED;
+      return;
+    }
+    process.env.DD_HOOKS_ENABLED = originalHooksEnabled;
+  });
+
+  test('should skip command execution when hooks are disabled', async () => {
+    process.env.DD_HOOKS_ENABLED = 'false';
+    var execFileCalls = 0;
+
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      execFileCalls += 1;
+      setImmediate(() => callback(null, 'unexpected execution', ''));
+      return { exitCode: 0 };
+    };
+
+    try {
+      const result = await runHook('echo hello', { label: 'test' });
+      expect(execFileCalls).toBe(0);
+      expect(result).toStrictEqual({
+        exitCode: 0,
+        stdout: '',
+        stderr: 'Lifecycle hooks are disabled. Set DD_HOOKS_ENABLED=true to enable execution.',
+        timedOut: false,
+      });
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+    }
+  });
+
   test('should execute a command successfully', async () => {
     var result = await runHook('echo hello', { label: 'test' });
     expect(result.exitCode).toBe(0);
@@ -61,6 +104,50 @@ describe('HookRunner', () => {
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toBe('hello-hook');
+  });
+
+  test('should not forward non-allowlisted parent environment variables', async () => {
+    const secretKey = 'DRYDOCK_TEST_HOOK_SECRET';
+    const originalSecret = process.env[secretKey];
+    const originalPath = process.env.PATH;
+    process.env[secretKey] = 'top-secret';
+    process.env.PATH = '/tmp/drydock-hook-path';
+
+    let capturedEnv: Record<string, string | undefined> | undefined;
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      options: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+      setImmediate(() => callback(null, '', ''));
+      return { exitCode: 0 };
+    };
+
+    try {
+      const result = await runHook('echo ignored', {
+        label: 'test',
+        env: { MY_VAR: 'hello-hook' },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(capturedEnv?.MY_VAR).toBe('hello-hook');
+      expect(capturedEnv?.PATH).toBe('/tmp/drydock-hook-path');
+      expect(capturedEnv?.[secretKey]).toBeUndefined();
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+      if (originalSecret === undefined) {
+        delete process.env[secretKey];
+      } else {
+        process.env[secretKey] = originalSecret;
+      }
+      if (originalPath === undefined) {
+        delete process.env.PATH;
+      } else {
+        process.env.PATH = originalPath;
+      }
+    }
   });
 
   test('should truncate stdout to 10KB', async () => {

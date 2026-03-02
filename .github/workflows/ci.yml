@@ -102,6 +102,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Block new @ts-nocheck usage
+        run: node scripts/check-ts-nocheck-allowlist.mjs
+
       - name: Biome check
         run: npx biome check .
 

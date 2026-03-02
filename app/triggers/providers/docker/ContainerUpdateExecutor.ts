@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as updateOperationStore from '../../../store/update-operation.js';
 
 class ContainerUpdateExecutor {
@@ -32,7 +31,7 @@ class ContainerUpdateExecutor {
 
   waitForContainerHealthy;
 
-  constructor(options = {}) {
+  constructor(options: Record<string, any> = {}) {
     this.getConfiguration = options.getConfiguration || (() => ({}));
     this.getTriggerId = options.getTriggerId;
     this.stopContainer = options.stopContainer;

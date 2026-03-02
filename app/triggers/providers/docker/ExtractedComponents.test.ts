@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { expect, test, vi } from 'vitest';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
 import HookExecutor from './HookExecutor.js';
 import RegistryResolver from './RegistryResolver.js';

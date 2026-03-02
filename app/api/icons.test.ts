@@ -2,6 +2,7 @@ import path from 'node:path';
 
 const {
   mockRouter,
+  mockRateLimit,
   mockRandomUUID,
   mockAccess,
   mockMkdir,
@@ -17,6 +18,7 @@ const {
   mockResolveFromRuntimeRoot,
 } = vi.hoisted(() => ({
   mockRouter: { get: vi.fn(), delete: vi.fn() },
+  mockRateLimit: vi.fn(() => 'icon-rate-limit-middleware'),
   mockRandomUUID: vi.fn(() => 'uuid-test'),
   mockAccess: vi.fn(),
   mockMkdir: vi.fn(),
@@ -34,6 +36,10 @@ const {
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
+}));
+
+vi.mock('express-rate-limit', () => ({
+  default: mockRateLimit,
 }));
 
 vi.mock('node:crypto', () => ({
@@ -85,7 +91,8 @@ import * as iconsRouter from './icons.js';
 
 function getHandler() {
   iconsRouter.init();
-  return mockRouter.get.mock.calls.find((call) => call[0] === '/:provider/:slug')[1];
+  const route = mockRouter.get.mock.calls.find((call) => call[0] === '/:provider/:slug');
+  return route[route.length - 1];
 }
 
 function getDeleteHandler() {
@@ -128,8 +135,27 @@ describe('Icons Router', () => {
 
   test('should initialize router with icon and cache routes', () => {
     const router = iconsRouter.init();
-    expect(router.get).toHaveBeenCalledWith('/:provider/:slug', expect.any(Function));
+    const iconRoute = mockRouter.get.mock.calls.find((call) => call[0] === '/:provider/:slug');
+    expect(iconRoute).toBeDefined();
+    expect(iconRoute?.[iconRoute.length - 1]).toEqual(expect.any(Function));
     expect(router.delete).toHaveBeenCalledWith('/cache', expect.any(Function));
+  });
+
+  test('should register ip rate-limiter on icon proxy route', () => {
+    iconsRouter.init();
+
+    expect(mockRateLimit).toHaveBeenCalledWith({
+      windowMs: 60 * 1000,
+      max: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
+      validate: { xForwardedForHeader: false },
+    });
+    expect(mockRouter.get).toHaveBeenCalledWith(
+      '/:provider/:slug',
+      'icon-rate-limit-middleware',
+      expect.any(Function),
+    );
   });
 
   test('should serve icon from cache when available', async () => {
@@ -358,6 +384,108 @@ describe('Icons Router', () => {
     });
   });
 
+  test('should continue fetching when stale cache cleanup unlink fails', async () => {
+    mockAccess.mockResolvedValue(undefined);
+    mockStat.mockResolvedValue({
+      mtimeMs: 0,
+      size: 512,
+      isFile: () => true,
+    });
+    mockUnlink.mockRejectedValue(new Error('permission denied'));
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from('<svg />'),
+    });
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'simple',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(mockAxiosGet).toHaveBeenCalledTimes(1);
+    expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
+  });
+
+  test('should refetch icon when cache path exists but is not a regular file', async () => {
+    mockAccess.mockResolvedValue(undefined);
+    mockStat.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/store/icons/simple/docker.svg') {
+        return {
+          mtimeMs: Date.now(),
+          size: 512,
+          isFile: () => false,
+        };
+      }
+      return {
+        mtimeMs: Date.now(),
+        size: 512,
+        isFile: () => true,
+      };
+    });
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from('<svg />'),
+    });
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'simple',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(mockAxiosGet).toHaveBeenCalledTimes(1);
+    expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
+  });
+
+  test('should refetch icon when cache stat fails unexpectedly', async () => {
+    mockAccess.mockResolvedValue(undefined);
+    mockStat.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/store/icons/simple/docker.svg') {
+        throw new Error('stat failed');
+      }
+      return {
+        mtimeMs: Date.now(),
+        size: 512,
+        isFile: () => true,
+      };
+    });
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from('<svg />'),
+    });
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'simple',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(mockAxiosGet).toHaveBeenCalledTimes(1);
+    expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
+  });
+
   test('should evict oldest cached icons when cache size limit is exceeded', async () => {
     mockAccess.mockRejectedValue(new Error('not found'));
     mockAxiosGet.mockResolvedValue({
@@ -389,6 +517,209 @@ describe('Icons Router', () => {
     );
 
     expect(mockUnlink).toHaveBeenCalledWith('/store/icons/simple/old.svg');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
+  });
+
+  test('should skip non-directory and non-file cache entries during enforcement', async () => {
+    mockAccess.mockRejectedValue(new Error('not found'));
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from('<svg />'),
+    });
+    mockReaddir
+      .mockResolvedValueOnce([
+        { name: '.gitkeep', isDirectory: () => false },
+        { name: 'simple', isDirectory: () => true },
+      ])
+      .mockResolvedValueOnce(['stale.svg', 'nested', 'docker.svg']);
+    mockStat.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/store/icons/simple/stale.svg') {
+        return { mtimeMs: 0, size: 1024, isFile: () => true };
+      }
+      if (targetPath === '/store/icons/simple/nested') {
+        return { mtimeMs: Date.now(), size: 0, isFile: () => false };
+      }
+      if (targetPath === '/store/icons/simple/docker.svg') {
+        return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
+      }
+      return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
+    });
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'simple',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(mockUnlink).toHaveBeenCalledWith('/store/icons/simple/stale.svg');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
+  });
+
+  test('should continue when cache base directory scan fails during enforcement', async () => {
+    mockAccess.mockRejectedValue(new Error('not found'));
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from('<svg />'),
+    });
+    mockReaddir.mockRejectedValueOnce(new Error('EACCES'));
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'simple',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
+  });
+
+  test('should continue when provider cache directory scan fails during enforcement', async () => {
+    mockAccess.mockRejectedValue(new Error('not found'));
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from('<svg />'),
+    });
+    mockReaddir
+      .mockResolvedValueOnce([{ name: 'simple', isDirectory: () => true }])
+      .mockRejectedValueOnce(new Error('EACCES'));
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'simple',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
+  });
+
+  test('should continue when stale entry eviction unlink fails during enforcement', async () => {
+    mockAccess.mockRejectedValue(new Error('not found'));
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from('<svg />'),
+    });
+    mockReaddir
+      .mockResolvedValueOnce([{ name: 'simple', isDirectory: () => true }])
+      .mockResolvedValueOnce(['stale.svg', 'docker.svg']);
+    mockStat.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/store/icons/simple/stale.svg') {
+        return { mtimeMs: 0, size: 1024, isFile: () => true };
+      }
+      if (targetPath === '/store/icons/simple/docker.svg') {
+        return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
+      }
+      return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
+    });
+    mockUnlink.mockRejectedValue(new Error('permission denied'));
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'simple',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(mockUnlink).toHaveBeenCalledWith('/store/icons/simple/stale.svg');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
+  });
+
+  test('should continue when size-based eviction unlink fails during enforcement', async () => {
+    mockAccess.mockRejectedValue(new Error('not found'));
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from('<svg />'),
+    });
+    mockReaddir
+      .mockResolvedValueOnce([{ name: 'simple', isDirectory: () => true }])
+      .mockResolvedValueOnce(['old.svg', 'docker.svg']);
+    mockStat.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/store/icons/simple/old.svg') {
+        return { mtimeMs: Date.now() - 1_000, size: 150 * 1024 * 1024, isFile: () => true };
+      }
+      if (targetPath === '/store/icons/simple/docker.svg') {
+        return { mtimeMs: Date.now(), size: 50 * 1024 * 1024, isFile: () => true };
+      }
+      return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
+    });
+    mockUnlink.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/store/icons/simple/old.svg') {
+        throw new Error('unlink failed');
+      }
+    });
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'simple',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(mockUnlink).toHaveBeenCalledWith('/store/icons/simple/old.svg');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
+  });
+
+  test('should keep protected cache file when it alone exceeds cache size budget', async () => {
+    mockAccess.mockRejectedValue(new Error('not found'));
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from('<svg />'),
+    });
+    mockReaddir
+      .mockResolvedValueOnce([{ name: 'simple', isDirectory: () => true }])
+      .mockResolvedValueOnce(['docker.svg']);
+    mockStat.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/store/icons/simple/docker.svg') {
+        return { mtimeMs: Date.now(), size: 150 * 1024 * 1024, isFile: () => true };
+      }
+      return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
+    });
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'simple',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(mockUnlink).not.toHaveBeenCalledWith('/store/icons/simple/docker.svg');
     expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
       root: '/store/icons/simple',
     });
@@ -483,6 +814,102 @@ describe('Icons Router', () => {
     expect(res.type).toHaveBeenCalledWith('image/png');
     expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
       root: '/runtime/assets/icons/selfhst',
+    });
+  });
+
+  test('should serve bundled fallback image when sec-fetch-dest header is an array', async () => {
+    const upstreamError = Object.assign(new Error('forbidden'), {
+      response: { status: 403 },
+    });
+    mockAccess.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/runtime/assets/icons/selfhst/docker.png') {
+        return;
+      }
+      throw new Error('not found');
+    });
+    mockAxiosGet.mockRejectedValue(upstreamError);
+    mockAxiosIsAxiosError.mockReturnValue(true);
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'selfhst',
+          slug: 'missing',
+        },
+        headers: {
+          'sec-fetch-dest': ['image'],
+        },
+      },
+      res,
+    );
+
+    expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
+      root: '/runtime/assets/icons/selfhst',
+    });
+  });
+
+  test('should serve bundled fallback image when accept header is an array of image types', async () => {
+    const upstreamError = Object.assign(new Error('forbidden'), {
+      response: { status: 403 },
+    });
+    mockAccess.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/runtime/assets/icons/selfhst/docker.png') {
+        return;
+      }
+      throw new Error('not found');
+    });
+    mockAxiosGet.mockRejectedValue(upstreamError);
+    mockAxiosIsAxiosError.mockReturnValue(true);
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'selfhst',
+          slug: 'missing',
+        },
+        headers: {
+          accept: ['text/html', 'image/webp'],
+        },
+      },
+      res,
+    );
+
+    expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
+      root: '/runtime/assets/icons/selfhst',
+    });
+  });
+
+  test('should return 404 metadata when fallback image is requested but unavailable', async () => {
+    const upstreamError = Object.assign(new Error('forbidden'), {
+      response: { status: 403 },
+    });
+    mockAccess.mockRejectedValue(new Error('not found'));
+    mockAxiosGet.mockRejectedValue(upstreamError);
+    mockAxiosIsAxiosError.mockReturnValue(true);
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'selfhst',
+          slug: 'missing',
+        },
+        headers: {
+          accept: 'image/png',
+        },
+      },
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Icon selfhst/missing was not found',
+      fallbackIcon: 'fab fa-docker',
     });
   });
 
@@ -607,6 +1034,38 @@ describe('Icons Router', () => {
         process.env.DD_ICON_IN_FLIGHT_TIMEOUT_MS = previousTimeout;
       }
     }
+  });
+
+  test('should complete fetch even when timeout handle is undefined', async () => {
+    mockAccess.mockRejectedValue(new Error('not found'));
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from('<svg />'),
+    });
+    const setTimeoutSpy = vi
+      .spyOn(globalThis, 'setTimeout')
+      .mockImplementation((..._args: unknown[]) => {
+        return undefined as unknown as ReturnType<typeof setTimeout>;
+      });
+    const handler = getHandler();
+    const res = createResponse();
+
+    try {
+      await handler(
+        {
+          params: {
+            provider: 'simple',
+            slug: 'docker',
+          },
+        },
+        res,
+      );
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+
+    expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
+      root: '/store/icons/simple',
+    });
   });
 
   test('should reject invalid provider', async () => {

@@ -1,4 +1,6 @@
 import { mount } from '@vue/test-utils';
+import { vi } from 'vitest';
+import { nextTick } from 'vue';
 import DataTable from '@/components/DataTable.vue';
 
 const columns = [
@@ -239,6 +241,61 @@ describe('DataTable', () => {
       const actionsHeader = w.findAll('thead th')[2];
       expect(actionsHeader.text()).toContain('Actions');
       expect(actionsHeader.find('[role="separator"]').exists()).toBe(true);
+    });
+  });
+
+  describe('column resize performance', () => {
+    it('does not re-render on every mousemove while dragging a column', async () => {
+      const updatedSpy = vi.fn();
+      const resizeColumns = [
+        { key: 'name', label: 'Name', sortable: true },
+        { key: 'status', label: 'Status', sortable: true },
+      ];
+      const w = mount(DataTable, {
+        props: { columns: resizeColumns, rows, rowKey: 'id' },
+        global: {
+          stubs: { AppIcon: { template: '<span class="app-icon-stub" />' } },
+          mixins: [
+            {
+              updated() {
+                updatedSpy();
+              },
+            },
+          ],
+        },
+      });
+
+      const firstHeader = w.findAll('thead th')[0];
+      const resizeHandle = firstHeader.find('[role="separator"]');
+      expect(resizeHandle.exists()).toBe(true);
+
+      vi.spyOn(firstHeader.element, 'getBoundingClientRect').mockReturnValue({
+        width: 120,
+        height: 24,
+        top: 0,
+        left: 0,
+        right: 120,
+        bottom: 24,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      await resizeHandle.trigger('mousedown', { clientX: 100, button: 0 });
+      await nextTick();
+      const updatesAfterDragStart = updatedSpy.mock.calls.length;
+
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 110 }));
+      await nextTick();
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 130 }));
+      await nextTick();
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 160 }));
+      await nextTick();
+
+      expect(updatedSpy.mock.calls.length).toBe(updatesAfterDragStart);
+
+      document.dispatchEvent(new MouseEvent('mouseup'));
+      await nextTick();
     });
   });
 

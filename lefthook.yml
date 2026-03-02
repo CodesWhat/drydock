@@ -18,40 +18,45 @@ pre-commit:
 pre-push:
   piped: true
   commands:
+    # ── Type safety debt guard: block new @ts-nocheck ─────────────
+    ts-nocheck-allowlist:
+      run: node scripts/check-ts-nocheck-allowlist.mjs
+      priority: 1
+
     # ── Biome: lint + format check ─────────────────────────────
     biome:
       run: npx biome check .
-      priority: 1
+      priority: 2
 
     # ── Qlty: all other linters (actionlint, hadolint, etc.) ──
     qlty:
       run: CI=1 qlty check --all --no-progress
-      priority: 2
+      priority: 3
 
     # ── Build: mirrors CI "Build" job ─────────────────────────────
     build-app:
       root: app/
       run: npm run build
-      priority: 3
+      priority: 4
     build-ui:
       root: ui/
       run: npm run build
-      priority: 4
+      priority: 5
 
     # ── Test: mirrors CI "Test & Coverage" job ────────────────────
     test-app:
       root: app/
       run: npm test
-      priority: 5
+      priority: 6
     test-ui:
       root: ui/
       run: npm run test:unit
-      priority: 6
+      priority: 7
 
     # ── E2E: mirrors CI "E2E Tests" job ───────────────────────────
     e2e:
       run: ./scripts/run-e2e-tests.sh
-      priority: 7
+      priority: 8
 
     # ── Advisory: mirrors CI advisory jobs (non-blocking) ─────────
     zizmor:
@@ -59,7 +64,7 @@ pre-push:
       run: zizmor .github/workflows/ || true
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
-      priority: 8
+      priority: 9
 
     # ── Local security gates (not in CI, skip if tool missing) ────
     snyk-deps:
@@ -67,9 +72,9 @@ pre-push:
       run: ../scripts/snyk-deps-gate.sh --org=codeswhat
       skip:
         - run: '! command -v snyk >/dev/null 2>&1'
-      priority: 9
+      priority: 10
     snyk-code:
       run: scripts/snyk-code-gate.sh --org=codeswhat
       skip:
         - run: '! command -v snyk >/dev/null 2>&1'
-      priority: 10
+      priority: 11

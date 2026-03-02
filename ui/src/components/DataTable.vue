@@ -72,6 +72,24 @@ function initWidths() {
   }
 }
 
+function getHeaderEl(colKey: string): HTMLElement | null {
+  if (!tableRef.value) return null;
+  const headers = tableRef.value.querySelectorAll<HTMLElement>('thead th[data-col-key]');
+  for (const header of headers) {
+    if (header.dataset.colKey === colKey) {
+      return header;
+    }
+  }
+  return null;
+}
+
+function applyLiveWidth(colKey: string, width: number) {
+  const header = getHeaderEl(colKey);
+  if (!header) return;
+  header.style.width = `${width}px`;
+  header.style.minWidth = `${Math.min(width, 40)}px`;
+}
+
 function onResizeStart(colKey: string, event: MouseEvent) {
   event.preventDefault();
   event.stopPropagation();
@@ -81,16 +99,20 @@ function onResizeStart(colKey: string, event: MouseEvent) {
   initWidths();
 
   const startX = event.clientX;
-  const startWidth = colWidths[colKey] ?? 100;
+  const headerWidth = getHeaderEl(colKey)?.getBoundingClientRect().width;
+  const startWidth = (headerWidth && headerWidth > 0 ? headerWidth : colWidths[colKey]) ?? 100;
+  let liveWidth = Math.max(40, startWidth);
 
   function onMove(e: MouseEvent) {
     const delta = e.clientX - startX;
-    colWidths[colKey] = Math.max(40, startWidth + delta);
+    liveWidth = Math.max(40, startWidth + delta);
+    applyLiveWidth(colKey, liveWidth);
   }
 
   function onUp() {
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
+    colWidths[colKey] = liveWidth;
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
     // Delay clearing resizing flag to prevent click-through to sort

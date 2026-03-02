@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { describe, expect, test, vi } from 'vitest';
 import { requireSameOriginForMutations } from './csrf.js';
 
 function createReq({ method = 'GET', protocol = 'http', headers = {} } = {}) {

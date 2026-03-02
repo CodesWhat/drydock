@@ -1,4 +1,3 @@
-// @ts-nocheck
 import TriggerPipelineError from './TriggerPipelineError.js';
 
 class RegistryResolver {
@@ -76,7 +75,7 @@ class RegistryResolver {
     return candidates;
   }
 
-  isRegistryManagerCompatible(registry, options = {}) {
+  isRegistryManagerCompatible(registry, options: Record<string, any> = {}) {
     const { requireNormalizeImage = false } = options;
     if (!registry || typeof registry !== 'object') {
       return false;
@@ -150,7 +149,12 @@ class RegistryResolver {
     };
   }
 
-  resolveRegistryManager(container, logContainer, registryState = {}, options = {}) {
+  resolveRegistryManager(
+    container,
+    logContainer,
+    registryState: Record<string, any> = {},
+    options: Record<string, any> = {},
+  ) {
     const {
       allowAnonymousFallback = false,
       requireNormalizeImage = false,

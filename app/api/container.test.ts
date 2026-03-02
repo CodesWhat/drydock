@@ -1868,6 +1868,18 @@ describe('Container Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
+    test('should remove the last skipped tag and drop skipTags from policy', () => {
+      const res = callUpdatePolicy(
+        {
+          id: 'c1',
+          updatePolicy: { skipTags: ['2.0.0'], skipDigests: ['sha256:abc'] },
+        },
+        { action: 'remove-skip', kind: 'tag', value: '2.0.0' },
+      );
+      expect(getUpdatedPolicy()).toEqual({ skipDigests: ['sha256:abc'] });
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
     test('should remove an individual skipped digest and normalize empty policy fields', () => {
       const res = callUpdatePolicy(
         {
@@ -1877,6 +1889,42 @@ describe('Container Router', () => {
         { action: 'remove-skip', kind: 'digest', value: 'sha256:abc' },
       );
       expect(getUpdatedPolicy()).toBeUndefined();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should remove one skipped digest and keep remaining digests', () => {
+      const res = callUpdatePolicy(
+        {
+          id: 'c1',
+          updatePolicy: { skipDigests: ['sha256:abc', 'sha256:def', 'sha256:def'] },
+        },
+        { action: 'remove-skip', kind: 'digest', value: 'sha256:abc' },
+      );
+      expect(getUpdatedPolicy()).toEqual({ skipDigests: ['sha256:def'] });
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should keep policy stable when remove-skip tag runs with no skipTags array', () => {
+      const res = callUpdatePolicy(
+        {
+          id: 'c1',
+          updatePolicy: { skipDigests: ['sha256:abc'] },
+        },
+        { action: 'remove-skip', kind: 'tag', value: '2.0.0' },
+      );
+      expect(getUpdatedPolicy()).toEqual({ skipDigests: ['sha256:abc'] });
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should keep policy stable when remove-skip digest runs with no skipDigests array', () => {
+      const res = callUpdatePolicy(
+        {
+          id: 'c1',
+          updatePolicy: { skipTags: ['2.0.0'] },
+        },
+        { action: 'remove-skip', kind: 'digest', value: 'sha256:abc' },
+      );
+      expect(getUpdatedPolicy()).toEqual({ skipTags: ['2.0.0'] });
       expect(res.status).toHaveBeenCalledWith(200);
     });
 

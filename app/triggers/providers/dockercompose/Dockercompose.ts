@@ -4,7 +4,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import yaml from 'yaml';
 import { getState } from '../../../registry/index.js';
-import { resolveConfiguredPath } from '../../../runtime/paths.js';
+import { buildComposeCommandEnvironment } from '../../../runtime/child-process-env.js';
+import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
 import Docker from '../docker/Docker.js';
 
 const COMPOSE_COMMAND_TIMEOUT_MS = 60_000;
@@ -667,9 +668,16 @@ class Dockercompose extends Docker {
   }
 
   async runComposeCommand(composeFile, composeArgs, logContainer) {
-    const composeFilePath = resolveConfiguredPath(composeFile, {
+    const composeFilePathRaw = resolveConfiguredPath(composeFile, {
       label: 'Compose file path',
     });
+    const composeFilePath = resolveConfiguredPathWithinBase(
+      process.cwd(),
+      path.relative(process.cwd(), composeFilePathRaw),
+      {
+        label: 'Compose file path',
+      },
+    );
     const composeWorkingDirectory = path.dirname(composeFilePath);
     const commandsToTry = [
       {
@@ -691,7 +699,7 @@ class Dockercompose extends Docker {
           composeCommand.args,
           {
             cwd: composeWorkingDirectory,
-            env: process.env,
+            env: buildComposeCommandEnvironment(),
           },
         );
         if (stdout.trim()) {

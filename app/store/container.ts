@@ -19,6 +19,7 @@ const securityStateCache = new Map();
 const DEFAULT_CONTAINERS_QUERY_CACHE_MAX_ENTRIES = 500;
 const DEFAULT_SECURITY_STATE_CACHE_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_SECURITY_STATE_CACHE_MAX_ENTRIES = 500;
+const CONTAINER_COLLECTION_INDICES = ['data.watcher', 'data.status', 'data.updateAvailable'];
 
 function toCacheKey(watcher, name) {
   return `${watcher}_${name}`;
@@ -226,7 +227,9 @@ function getUpdateDetectedAt(containerCurrent, containerNext) {
  * @param db
  */
 export function createCollections(db) {
-  containers = initCollection(db, 'containers');
+  containers = initCollection(db, 'containers', {
+    indices: CONTAINER_COLLECTION_INDICES,
+  });
   invalidateContainersCache();
 }
 

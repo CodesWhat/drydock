@@ -1,5 +1,5 @@
 // @ts-nocheck
-import express, { type Request, type Response } from 'express';
+import express from 'express';
 import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import { getAgent } from '../agent/manager.js';
@@ -12,7 +12,6 @@ import * as registry from '../registry/index.js';
 import {
   generateImageSbom,
   SECURITY_SBOM_FORMATS,
-  type SecuritySbomFormat,
   scanImageForVulnerabilities,
   verifyImageSignature,
 } from '../security/scan.js';
@@ -21,6 +20,19 @@ import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { uniqStrings } from '../util/string-array.js';
 import { mapComponentsToList } from './component.js';
+import { createCrudHandlers } from './container/crud.js';
+import { createLogHandlers } from './container/logs.js';
+import { createSecurityHandlers } from './container/security.js';
+import {
+  getErrorMessage,
+  getErrorStatusCode,
+  redactContainerRuntimeEnv,
+  redactContainersRuntimeEnv,
+  resolveContainerImageFullName,
+  resolveContainerRegistryAuth,
+} from './container/shared.js';
+import { createTriggerHandlers } from './container/triggers.js';
+import { createUpdatePolicyHandlers } from './container/update-policy.js';
 import { broadcastScanCompleted, broadcastScanStarted } from './sse.js';
 
 const log = logger.child({ component: 'container' });
@@ -52,824 +64,76 @@ export function getContainersFromStore(query) {
   return storeContainer.getContainers(query);
 }
 
-const REDACTED_RUNTIME_ENV_VALUE = '[REDACTED]';
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error && typeof error.message === 'string' && error.message.trim() !== '') {
-    return error.message;
-  }
-  if (typeof error === 'string' && error.trim() !== '') {
-    return error;
-  }
-  if (
-    error &&
-    typeof error === 'object' &&
-    typeof (error as { message?: unknown }).message === 'string' &&
-    ((error as { message: string }).message || '').trim() !== ''
-  ) {
-    return (error as { message: string }).message;
-  }
-  return 'unknown error';
-}
-
-function getErrorStatusCode(error: unknown): number | undefined {
-  if (!error || typeof error !== 'object') {
-    return undefined;
-  }
-
-  const response = (error as { response?: unknown }).response;
-  if (!response || typeof response !== 'object') {
-    return undefined;
-  }
-
-  const status = (response as { status?: unknown }).status;
-  return typeof status === 'number' ? status : undefined;
-}
-
-function redactContainerRuntimeDetails(details) {
-  if (!details || typeof details !== 'object' || !Array.isArray(details.env)) {
-    return details;
-  }
-
-  return {
-    ...details,
-    env: details.env
-      .filter((entry) => entry && typeof entry === 'object' && typeof entry.key === 'string')
-      .map((entry) => ({
-        key: entry.key,
-        value: REDACTED_RUNTIME_ENV_VALUE,
-      })),
-  };
-}
-
-function redactContainerRuntimeEnv(container) {
-  if (!container || typeof container !== 'object' || !container.details) {
-    return container;
-  }
-
-  return {
-    ...container,
-    details: redactContainerRuntimeDetails(container.details),
-  };
-}
-
-function redactContainersRuntimeEnv(containers) {
-  if (!Array.isArray(containers)) {
-    return containers;
-  }
-
-  return containers.map((container) => redactContainerRuntimeEnv(container));
-}
-
-function normalizeUpdatePolicy(updatePolicy = {}) {
-  const normalizedPolicy = {};
-
-  if (Array.isArray(updatePolicy.skipTags)) {
-    const skipTags = uniqStrings(updatePolicy.skipTags);
-    if (skipTags.length > 0) {
-      normalizedPolicy.skipTags = skipTags;
-    }
-  }
-
-  if (Array.isArray(updatePolicy.skipDigests)) {
-    const skipDigests = uniqStrings(updatePolicy.skipDigests);
-    if (skipDigests.length > 0) {
-      normalizedPolicy.skipDigests = skipDigests;
-    }
-  }
-
-  if (updatePolicy.snoozeUntil) {
-    const snoozeUntil = new Date(updatePolicy.snoozeUntil);
-    if (!Number.isNaN(snoozeUntil.getTime())) {
-      normalizedPolicy.snoozeUntil = snoozeUntil.toISOString();
-    }
-  }
-
-  return normalizedPolicy;
-}
-
-function getCurrentUpdateValue(container, kind) {
-  if (kind === 'tag') {
-    return container.updateKind?.remoteValue || container.result?.tag;
-  }
-  if (kind === 'digest') {
-    return container.updateKind?.remoteValue || container.result?.digest;
-  }
-  return undefined;
-}
-
-function getSnoozeUntilFromActionPayload(payload = {}) {
-  if (payload.snoozeUntil) {
-    const customDate = new Date(payload.snoozeUntil);
-    if (Number.isNaN(customDate.getTime())) {
-      throw new TypeError('Invalid snoozeUntil date');
-    }
-    return customDate.toISOString();
-  }
-  const days = Number(payload.days ?? 7);
-  if (!Number.isFinite(days) || days <= 0 || days > 365) {
-    throw new Error('Invalid snooze days value');
-  }
-  const snoozeUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-  return snoozeUntil.toISOString();
-}
-
-/**
- * Get all (filtered) containers.
- * @param req
- * @param res
- */
-function getContainers(req: Request, res: Response) {
-  const { query } = req;
-  const containers = getContainersFromStore(query);
-  res.status(200).json(redactContainersRuntimeEnv(containers));
-}
-
-/**
- * Get a container by id.
- * @param req
- * @param res
- */
-function getContainer(req: Request, res: Response) {
-  const { id } = req.params;
-  const container = storeContainer.getContainer(id);
-  if (container) {
-    res.status(200).json(redactContainerRuntimeEnv(container));
-  } else {
-    res.sendStatus(404);
-  }
-}
-
-/**
- * Get persisted update-operation history for a container.
- * @param req
- * @param res
- */
-function getContainerUpdateOperations(req: Request, res: Response) {
-  const { id } = req.params;
-  const container = storeContainer.getContainer(id);
-  if (!container) {
-    res.sendStatus(404);
-    return;
-  }
-
-  const operations = updateOperationStore.getOperationsByContainerName(container.name);
-  res.status(200).json(operations);
-}
-
-function getEmptyVulnerabilityResponse() {
-  return {
-    scanner: undefined,
-    scannedAt: undefined,
-    status: 'not-scanned',
-    blockSeverities: [],
-    blockingCount: 0,
-    summary: {
-      unknown: 0,
-      low: 0,
-      medium: 0,
-      high: 0,
-      critical: 0,
-    },
-    vulnerabilities: [],
-  };
-}
-
-function resolveSbomFormat(rawFormat: unknown): SecuritySbomFormat | undefined {
-  const format = `${rawFormat || 'spdx-json'}`.toLowerCase();
-  if (SECURITY_SBOM_FORMATS.includes(format as SecuritySbomFormat)) {
-    return format as SecuritySbomFormat;
-  }
-  return undefined;
-}
-
 function getContainerImageFullName(container, tagOverride?: string) {
-  const tag = tagOverride || container.image.tag.value;
-  const registryState = registry.getState().registry || {};
-  const containerRegistry = registryState[container.image.registry.name];
-  if (containerRegistry && typeof containerRegistry.getImageFullName === 'function') {
-    return containerRegistry.getImageFullName(container.image, tag);
-  }
-  return `${container.image.registry.url}/${container.image.name}:${tag}`;
+  return resolveContainerImageFullName(container, registry.getState().registry || {}, tagOverride);
 }
 
 async function getContainerRegistryAuth(container) {
-  try {
-    const registryState = registry.getState().registry || {};
-    const containerRegistry = registryState[container.image.registry.name];
-    if (containerRegistry && typeof containerRegistry.getAuthPull === 'function') {
-      return await containerRegistry.getAuthPull();
-    }
-  } catch (error: unknown) {
-    log.warn(
-      `Unable to retrieve registry auth for SBOM generation (container=${sanitizeLogParam(
-        container.id,
-      )}): ${sanitizeLogParam(getErrorMessage(error))}`,
-    );
-  }
-  return undefined;
-}
-
-/**
- * Get latest vulnerability scan result for a container.
- * @param req
- * @param res
- */
-export function getContainerVulnerabilities(req: Request, res: Response) {
-  const { id } = req.params;
-  const container = storeContainer.getContainer(id);
-  if (!container) {
-    res.sendStatus(404);
-    return;
-  }
-  if (!container.security?.scan) {
-    res.status(200).json(getEmptyVulnerabilityResponse());
-    return;
-  }
-  res.status(200).json(container.security.scan);
-}
-
-export async function getContainerSbom(req: Request, res: Response) {
-  const { id } = req.params;
-  const sbomFormat = resolveSbomFormat(req.query.format);
-  if (!sbomFormat) {
-    res.status(400).json({
-      error: `Unsupported SBOM format. Supported values: ${SECURITY_SBOM_FORMATS.join(', ')}`,
-    });
-    return;
-  }
-
-  const container = storeContainer.getContainer(id, {
-    includeRuntimeEnvValues: true,
+  return await resolveContainerRegistryAuth(container, registry.getState().registry || {}, {
+    log,
+    sanitizeLogParam,
   });
-  if (!container) {
-    res.sendStatus(404);
-    return;
-  }
-
-  const existingSbom = container.security?.sbom;
-  const existingSbomDocument = existingSbom?.documents?.[sbomFormat];
-  if (existingSbom?.status === 'generated' && existingSbomDocument) {
-    res.status(200).json({
-      generator: existingSbom.generator,
-      image: existingSbom.image,
-      generatedAt: existingSbom.generatedAt,
-      format: sbomFormat,
-      document: existingSbomDocument,
-      error: existingSbom.error,
-    });
-    return;
-  }
-
-  try {
-    const image = getContainerImageFullName(container);
-    const auth = await getContainerRegistryAuth(container);
-    const sbomResult = await generateImageSbom({
-      image,
-      auth,
-      formats: [sbomFormat],
-    });
-    const existingSbomState = container.security?.sbom;
-    const containerToStore = {
-      ...container,
-      security: {
-        ...(container.security || {}),
-        sbom: {
-          ...existingSbomState,
-          ...sbomResult,
-          documents: {
-            ...(existingSbomState?.documents || {}),
-            ...sbomResult.documents,
-          },
-        },
-      },
-    };
-    storeContainer.updateContainer(containerToStore);
-
-    const generatedDocument = sbomResult.documents?.[sbomFormat];
-    if (sbomResult.status !== 'generated' || !generatedDocument) {
-      res.status(500).json({
-        error: `Error generating SBOM (${sbomResult.error || 'unknown SBOM error'})`,
-      });
-      return;
-    }
-
-    res.status(200).json({
-      generator: sbomResult.generator,
-      image: sbomResult.image,
-      generatedAt: sbomResult.generatedAt,
-      format: sbomFormat,
-      document: generatedDocument,
-      error: sbomResult.error,
-    });
-  } catch (error: unknown) {
-    res.status(500).json({
-      error: `Error generating SBOM (${getErrorMessage(error)})`,
-    });
-  }
 }
 
-/**
- * Delete a container by id.
- * @param req
- * @param res
- */
-export async function deleteContainer(req: Request, res: Response) {
-  const serverConfiguration = getServerConfiguration();
-  if (!serverConfiguration.feature.delete) {
-    res.sendStatus(403);
-    return;
-  }
+const crudHandlers = createCrudHandlers({
+  getContainersFromStore,
+  storeContainer,
+  updateOperationStore,
+  getServerConfiguration,
+  getAgent,
+  getErrorMessage,
+  getErrorStatusCode,
+  getWatchers,
+  redactContainerRuntimeEnv,
+  redactContainersRuntimeEnv,
+});
 
-  const { id } = req.params;
-  const container = storeContainer.getContainer(id);
-  if (!container) {
-    res.sendStatus(404);
-    return;
-  }
+const triggerHandlers = createTriggerHandlers({
+  storeContainer,
+  mapComponentsToList,
+  getTriggers,
+  Trigger,
+  sanitizeLogParam,
+  getErrorMessage,
+  log,
+});
 
-  if (!container.agent) {
-    storeContainer.deleteContainer(id);
-    res.sendStatus(204);
-    return;
-  }
+const updatePolicyHandlers = createUpdatePolicyHandlers({
+  storeContainer,
+  uniqStrings,
+  getErrorMessage,
+  redactContainerRuntimeEnv,
+});
 
-  const agent = getAgent(container.agent);
-  if (!agent) {
-    res.status(500).json({
-      error: `Agent ${container.agent} not found`,
-    });
-    return;
-  }
+const securityHandlers = createSecurityHandlers({
+  storeContainer,
+  getSecurityConfiguration,
+  SECURITY_SBOM_FORMATS,
+  generateImageSbom,
+  scanImageForVulnerabilities,
+  verifyImageSignature,
+  emitSecurityAlert,
+  fullName,
+  broadcastScanStarted,
+  broadcastScanCompleted,
+  redactContainerRuntimeEnv,
+  getErrorMessage,
+  getContainerImageFullName,
+  getContainerRegistryAuth,
+  log,
+});
 
-  try {
-    await agent.deleteContainer(id);
-    storeContainer.deleteContainer(id);
-    res.sendStatus(204);
-  } catch (error: unknown) {
-    if (getErrorStatusCode(error) === 404) {
-      storeContainer.deleteContainer(id);
-      res.sendStatus(204);
-    } else {
-      res.status(500).json({
-        error: `Error deleting container on agent (${getErrorMessage(error)})`,
-      });
-    }
-  }
-}
+const logHandlers = createLogHandlers({
+  storeContainer,
+  getAgent,
+  getWatchers,
+  getErrorMessage,
+});
 
-/**
- * Watch all containers.
- * @param req
- * @param res
- * @returns {Promise<void>}
- */
-async function watchContainers(req: Request, res: Response) {
-  try {
-    await Promise.all(Object.values(getWatchers()).map((watcher) => watcher.watch()));
-    getContainers(req, res);
-  } catch (error: unknown) {
-    res.status(500).json({
-      error: `Error when watching images (${getErrorMessage(error)})`,
-    });
-  }
-}
-
-function parseTriggerList(triggerString) {
-  if (!triggerString) {
-    return undefined;
-  }
-  return triggerString
-    .split(',')
-    .map((entry) => entry.trim())
-    .map((entry) => Trigger.parseIncludeOrIncludeTriggerString(entry));
-}
-
-function isTriggerAgentCompatible(trigger, container) {
-  if (trigger.agent && trigger.agent !== container.agent) {
-    return false;
-  }
-  if (container.agent && !trigger.agent && ['docker', 'dockercompose'].includes(trigger.type)) {
-    return false;
-  }
-  return true;
-}
-
-function resolveTriggerAssociation(trigger, includedTriggers, excludedTriggers) {
-  const triggerId = `${trigger.type}.${trigger.name}`;
-  const triggerToAssociate = { ...trigger };
-
-  if (includedTriggers) {
-    const includedTrigger = includedTriggers.find((tr) =>
-      Trigger.doesReferenceMatchId(tr.id, triggerId),
-    );
-    if (!includedTrigger) {
-      return undefined;
-    }
-    triggerToAssociate.configuration.threshold = includedTrigger.threshold;
-  }
-
-  if (
-    excludedTriggers?.some((excludedTrigger) =>
-      Trigger.doesReferenceMatchId(excludedTrigger.id, triggerId),
-    )
-  ) {
-    return undefined;
-  }
-
-  return triggerToAssociate;
-}
-
-export async function getContainerTriggers(req: Request, res: Response) {
-  const { id } = req.params;
-
-  const container = storeContainer.getContainer(id);
-  if (!container) {
-    res.sendStatus(404);
-    return;
-  }
-
-  const allTriggers = mapComponentsToList(getTriggers());
-  const includedTriggers = parseTriggerList(container.triggerInclude);
-  const excludedTriggers = parseTriggerList(container.triggerExclude);
-
-  const associatedTriggers = allTriggers
-    .filter((trigger) => isTriggerAgentCompatible(trigger, container))
-    .map((trigger) => resolveTriggerAssociation(trigger, includedTriggers, excludedTriggers))
-    .filter((trigger) => trigger !== undefined);
-
-  res.status(200).json(associatedTriggers);
-}
-
-/**
- * Run trigger.
- * @param {*} req
- * @param {*} res
- */
-async function runTrigger(req: Request, res: Response) {
-  const { id, triggerAgent, triggerType, triggerName } = req.params;
-
-  const containerToTrigger = storeContainer.getContainer(id, {
-    includeRuntimeEnvValues: true,
-  });
-  const triggerId = triggerAgent
-    ? `${triggerAgent}.${triggerType}.${triggerName}`
-    : `${triggerType}.${triggerName}`;
-  if (containerToTrigger) {
-    if (
-      containerToTrigger.agent &&
-      !triggerAgent &&
-      ['docker', 'dockercompose'].includes(triggerType)
-    ) {
-      res.status(400).json({
-        error: `Cannot execute local ${triggerType} trigger on remote container ${containerToTrigger.agent}.${containerToTrigger.id}`,
-      });
-      return;
-    }
-    const triggerToRun = getTriggers()[triggerId];
-    if (triggerToRun) {
-      try {
-        await triggerToRun.trigger(containerToTrigger);
-        log.info(
-          `Trigger executed with success (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}, container=${sanitizeLogParam(JSON.stringify(containerToTrigger), 500)})`,
-        );
-        res.status(200).json({});
-      } catch (error: unknown) {
-        log.warn(
-          `Error when running trigger (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}) (${sanitizeLogParam(getErrorMessage(error))})`,
-        );
-        res.status(500).json({
-          error: `Error when running trigger (type=${triggerType}, name=${triggerName})`,
-        });
-      }
-    } else {
-      res.status(404).json({
-        error: 'Trigger not found',
-      });
-    }
-  } else {
-    res.status(404).json({
-      error: 'Container not found',
-    });
-  }
-}
-
-/**
- * Watch an image.
- * @param req
- * @param res
- * @returns {Promise<void>}
- */
-async function watchContainer(req: Request, res: Response) {
-  const { id } = req.params;
-
-  const container = storeContainer.getContainer(id, {
-    includeRuntimeEnvValues: true,
-  });
-  if (!container) {
-    res.sendStatus(404);
-    return;
-  }
-
-  let watcherId = `docker.${container.watcher}`;
-  if (container.agent) {
-    watcherId = `${container.agent}.${watcherId}`;
-  }
-  const watcher = getWatchers()[watcherId];
-  if (!watcher) {
-    res.status(500).json({
-      error: `No provider found for container ${id} and provider ${watcherId}`,
-    });
-    return;
-  }
-
-  try {
-    if (typeof watcher.getContainers === 'function') {
-      // Ensure container is still in store
-      // (for cases where it has been removed before running a new watchAll)
-      const containers = await watcher.getContainers();
-      const containerFound = containers.some(
-        (containerInList) => containerInList.id === container.id,
-      );
-      if (!containerFound) {
-        res.status(404).send();
-        return;
-      }
-    }
-    // Run watchContainer from the Provider
-    const containerReport = await watcher.watchContainer(container);
-    res.status(200).json(redactContainerRuntimeEnv(containerReport.container));
-  } catch {
-    res.status(500).json({
-      error: `Error when watching container ${id}`,
-    });
-  }
-}
-
-/**
- * Update container update policy (skip/snooze controls).
- * @param req
- * @param res
- */
-function applySkipCurrentAction(container, updatePolicy) {
-  const updateKind = container.updateKind?.kind;
-  const updateValue = getCurrentUpdateValue(container, updateKind);
-  if (!['tag', 'digest'].includes(updateKind)) {
-    return { error: 'No current update available to skip' };
-  }
-  if (!updateValue) {
-    return { error: 'No update value available to skip' };
-  }
-  if (updateKind === 'tag') {
-    updatePolicy.skipTags = uniqStrings([...(updatePolicy.skipTags || []), updateValue]);
-  } else {
-    updatePolicy.skipDigests = uniqStrings([...(updatePolicy.skipDigests || []), updateValue]);
-  }
-  return { policy: updatePolicy };
-}
-
-function applyRemoveSkipAction(updatePolicy, body = {}) {
-  const kind = body.kind;
-  const value = typeof body.value === 'string' ? body.value.trim() : '';
-
-  if (!['tag', 'digest'].includes(kind)) {
-    return { error: 'Invalid remove-skip kind; expected "tag" or "digest"' };
-  }
-  if (!value) {
-    return { error: 'Invalid remove-skip value; expected a non-empty string' };
-  }
-
-  if (kind === 'tag') {
-    const nextSkipTags = (updatePolicy.skipTags || []).filter((entry) => entry !== value);
-    if (nextSkipTags.length > 0) {
-      updatePolicy.skipTags = uniqStrings(nextSkipTags);
-    } else {
-      delete updatePolicy.skipTags;
-    }
-    return { policy: updatePolicy };
-  }
-
-  const nextSkipDigests = (updatePolicy.skipDigests || []).filter((entry) => entry !== value);
-  if (nextSkipDigests.length > 0) {
-    updatePolicy.skipDigests = uniqStrings(nextSkipDigests);
-  } else {
-    delete updatePolicy.skipDigests;
-  }
-  return { policy: updatePolicy };
-}
-
-function applyPolicyAction(action, container, updatePolicy, body = {}) {
-  switch (action) {
-    case 'skip-current':
-      return applySkipCurrentAction(container, updatePolicy);
-    case 'remove-skip':
-      return applyRemoveSkipAction(updatePolicy, body);
-    case 'clear-skips':
-      delete updatePolicy.skipTags;
-      delete updatePolicy.skipDigests;
-      return { policy: updatePolicy };
-    case 'snooze':
-      updatePolicy.snoozeUntil = getSnoozeUntilFromActionPayload(body);
-      return { policy: updatePolicy };
-    case 'unsnooze':
-      delete updatePolicy.snoozeUntil;
-      return { policy: updatePolicy };
-    case 'clear':
-      return { policy: {} };
-    default:
-      return { error: `Unknown action ${action}` };
-  }
-}
-
-function patchContainerUpdatePolicy(req: Request, res: Response) {
-  const { id } = req.params;
-  const { action } = req.body || {};
-  const container = storeContainer.getContainer(id, {
-    includeRuntimeEnvValues: true,
-  });
-
-  if (!container) {
-    res.sendStatus(404);
-    return;
-  }
-
-  if (!action) {
-    res.status(400).json({ error: 'Action is required' });
-    return;
-  }
-
-  try {
-    let updatePolicy = normalizeUpdatePolicy(container.updatePolicy || {});
-    const result = applyPolicyAction(action, container, updatePolicy, req.body);
-
-    if (result.error) {
-      res.status(400).json({ error: result.error });
-      return;
-    }
-
-    updatePolicy = normalizeUpdatePolicy(result.policy);
-    container.updatePolicy = Object.keys(updatePolicy).length > 0 ? updatePolicy : undefined;
-    const containerUpdated = storeContainer.updateContainer(container);
-    res.status(200).json(redactContainerRuntimeEnv(containerUpdated));
-  } catch (error: unknown) {
-    res.status(400).json({ error: getErrorMessage(error) });
-  }
-}
-
-/**
- * Demultiplex Docker stream output.
- * Docker uses an 8-byte header per frame: [streamType(1), padding(3), size(4BE)].
- * This strips those headers and returns the raw log text.
- */
-function demuxDockerStream(buffer) {
-  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
-  const lines = [];
-  let offset = 0;
-  while (offset + 8 <= buf.length) {
-    const size = buf.readUInt32BE(offset + 4);
-    offset += 8;
-    if (offset + size > buf.length) break;
-    lines.push(buf.subarray(offset, offset + size).toString('utf-8'));
-    offset += size;
-  }
-  return lines.join('');
-}
-
-/**
- * Get container logs.
- * @param req
- * @param res
- */
-async function getContainerLogs(req: Request, res: Response) {
-  const { id } = req.params;
-  const container = storeContainer.getContainer(id);
-  if (!container) {
-    res.sendStatus(404);
-    return;
-  }
-
-  const tail = Number.parseInt(req.query.tail, 10) || 100;
-  const since = Number.parseInt(req.query.since, 10) || 0;
-  const timestamps = req.query.timestamps !== 'false';
-
-  if (container.agent) {
-    try {
-      const agent = getAgent(container.agent);
-      if (!agent) {
-        res.status(500).json({
-          error: `Agent ${container.agent} not found`,
-        });
-        return;
-      }
-      const result = await agent.getContainerLogs(id, { tail, since, timestamps });
-      res.status(200).json(result);
-    } catch (error: unknown) {
-      res.status(500).json({
-        error: `Error fetching logs from agent (${getErrorMessage(error)})`,
-      });
-    }
-    return;
-  }
-
-  const watcherId = `docker.${container.watcher}`;
-  const watcher = getWatchers()[watcherId];
-  if (!watcher) {
-    res.status(500).json({
-      error: `No watcher found for container ${id}`,
-    });
-    return;
-  }
-
-  try {
-    const logsBuffer = await watcher.dockerApi
-      .getContainer(container.name)
-      .logs({ stdout: true, stderr: true, tail, since, timestamps, follow: false });
-    const logs = demuxDockerStream(logsBuffer);
-    res.status(200).json({ logs });
-  } catch (error: unknown) {
-    res.status(500).json({
-      error: `Error fetching container logs (${getErrorMessage(error)})`,
-    });
-  }
-}
-
-async function scanContainer(req: Request, res: Response) {
-  const { id } = req.params;
-  const container = storeContainer.getContainer(id, {
-    includeRuntimeEnvValues: true,
-  });
-  if (!container) {
-    res.sendStatus(404);
-    return;
-  }
-
-  const securityConfiguration = getSecurityConfiguration();
-  if (!securityConfiguration.enabled || securityConfiguration.scanner !== 'trivy') {
-    res.status(400).json({ error: 'Security scanner is not configured' });
-    return;
-  }
-
-  broadcastScanStarted(id);
-
-  try {
-    const updateTag = container.updateKind?.remoteValue;
-    const image = getContainerImageFullName(container, updateTag);
-    log.info(`Running on-demand security scan for ${image}`);
-    const auth = await getContainerRegistryAuth(container);
-    const securityPatch: Record<string, any> = {};
-
-    // Run vulnerability scan
-    const scanResult = await scanImageForVulnerabilities({ image, auth });
-    securityPatch.scan = scanResult;
-
-    const summary = scanResult.summary;
-    if (summary && (summary.critical > 0 || summary.high > 0)) {
-      const details = `critical=${summary.critical}, high=${summary.high}, medium=${summary.medium}, low=${summary.low}, unknown=${summary.unknown}`;
-      await emitSecurityAlert({
-        containerName: fullName(container),
-        details,
-        status: scanResult.status,
-        summary,
-        blockingCount: scanResult.blockingCount,
-        container,
-      });
-    }
-
-    // Run signature verification if configured
-    if (securityConfiguration.signature.verify) {
-      const signatureResult = await verifyImageSignature({ image, auth });
-      securityPatch.signature = signatureResult;
-    }
-
-    // Generate SBOM if configured
-    if (securityConfiguration.sbom.enabled) {
-      const sbomResult = await generateImageSbom({
-        image,
-        auth,
-        formats: securityConfiguration.sbom.formats,
-      });
-      securityPatch.sbom = sbomResult;
-    }
-
-    // Persist results
-    const containerToStore = {
-      ...container,
-      security: {
-        ...(container.security || {}),
-        ...securityPatch,
-      },
-    };
-    const updatedContainer = storeContainer.updateContainer(containerToStore);
-
-    broadcastScanCompleted(id, scanResult.status);
-    res.status(200).json(redactContainerRuntimeEnv(updatedContainer));
-  } catch (error: unknown) {
-    broadcastScanCompleted(id, 'error');
-    res.status(500).json({
-      error: `Security scan failed (${getErrorMessage(error)})`,
-    });
-  }
-}
+export const deleteContainer = crudHandlers.deleteContainer;
+export const getContainerTriggers = triggerHandlers.getContainerTriggers;
+export const getContainerVulnerabilities = securityHandlers.getContainerVulnerabilities;
+export const getContainerSbom = securityHandlers.getContainerSbom;
 
 /**
  * Init Router.
@@ -877,18 +141,18 @@ async function scanContainer(req: Request, res: Response) {
  */
 export function init() {
   router.use(nocache());
-  router.get('/', getContainers);
-  router.post('/watch', watchContainers);
-  router.get('/:id', getContainer);
-  router.get('/:id/update-operations', getContainerUpdateOperations);
-  router.delete('/:id', deleteContainer);
-  router.get('/:id/triggers', getContainerTriggers);
-  router.post('/:id/triggers/:triggerType/:triggerName', runTrigger);
-  router.post('/:id/triggers/:triggerAgent/:triggerType/:triggerName', runTrigger);
-  router.patch('/:id/update-policy', patchContainerUpdatePolicy);
-  router.post('/:id/watch', watchContainer);
-  router.get('/:id/vulnerabilities', getContainerVulnerabilities);
-  router.get('/:id/sbom', getContainerSbom);
+  router.get('/', crudHandlers.getContainers);
+  router.post('/watch', crudHandlers.watchContainers);
+  router.get('/:id', crudHandlers.getContainer);
+  router.get('/:id/update-operations', crudHandlers.getContainerUpdateOperations);
+  router.delete('/:id', crudHandlers.deleteContainer);
+  router.get('/:id/triggers', triggerHandlers.getContainerTriggers);
+  router.post('/:id/triggers/:triggerType/:triggerName', triggerHandlers.runTrigger);
+  router.post('/:id/triggers/:triggerAgent/:triggerType/:triggerName', triggerHandlers.runTrigger);
+  router.patch('/:id/update-policy', updatePolicyHandlers.patchContainerUpdatePolicy);
+  router.post('/:id/watch', crudHandlers.watchContainer);
+  router.get('/:id/vulnerabilities', securityHandlers.getContainerVulnerabilities);
+  router.get('/:id/sbom', securityHandlers.getContainerSbom);
   router.post(
     '/:id/scan',
     rateLimit({
@@ -898,8 +162,8 @@ export function init() {
       legacyHeaders: false,
       validate: { xForwardedForHeader: false },
     }),
-    scanContainer,
+    securityHandlers.scanContainer,
   );
-  router.get('/:id/logs', getContainerLogs);
+  router.get('/:id/logs', logHandlers.getContainerLogs);
   return router;
 }

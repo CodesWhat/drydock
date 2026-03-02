@@ -312,13 +312,45 @@ export function getWebhookConfiguration() {
 }
 
 function parseSecuritySeverityList(rawValue: string | undefined): SecuritySeverity[] {
-  return parseDelimitedEnumList(
-    rawValue,
-    DEFAULT_SECURITY_BLOCK_SEVERITY,
-    (severity) => severity.toUpperCase(),
-    (severity): severity is SecuritySeverity =>
-      SECURITY_SEVERITY_VALUES.includes(severity as SecuritySeverity),
+  const defaultValues = DEFAULT_SECURITY_BLOCK_SEVERITY.split(',')
+    .map((value) => value.trim())
+    .filter((value) => value !== '')
+    .filter((value): value is SecuritySeverity =>
+      SECURITY_SEVERITY_VALUES.includes(value as SecuritySeverity),
+    );
+  if (!rawValue) {
+    return defaultValues;
+  }
+
+  const configuredValues = rawValue
+    .split(',')
+    .map((value) => value.trim().toUpperCase())
+    .filter((value) => value !== '');
+  if (configuredValues.length === 0) {
+    return defaultValues;
+  }
+
+  const deduplicatedValues = Array.from(new Set(configuredValues));
+  const parsedValues = deduplicatedValues.filter((severity): severity is SecuritySeverity =>
+    SECURITY_SEVERITY_VALUES.includes(severity as SecuritySeverity),
   );
+  const invalidValues = deduplicatedValues.filter(
+    (severity) => !SECURITY_SEVERITY_VALUES.includes(severity as SecuritySeverity),
+  );
+
+  if (invalidValues.length > 0) {
+    const warningBase = `Invalid DD_SECURITY_BLOCK_SEVERITY values: ${invalidValues.join(', ')}. Allowed values: ${SECURITY_SEVERITY_VALUES.join(', ')}.`;
+    if (parsedValues.length === 0) {
+      console.warn(`${warningBase} Falling back to defaults: ${defaultValues.join(', ')}.`);
+    } else {
+      console.warn(`${warningBase} Invalid values were ignored.`);
+    }
+  }
+
+  if (parsedValues.length === 0) {
+    return defaultValues;
+  }
+  return parsedValues;
 }
 
 function parseSecuritySbomFormatList(rawValue: string | undefined): SecuritySbomFormat[] {

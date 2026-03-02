@@ -9,7 +9,7 @@ import { useBreakpoints } from '../composables/useBreakpoints';
 import { useColumnVisibility } from '../composables/useColumnVisibility';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { useContainerFilters } from '../composables/useContainerFilters';
-import { useDetailPanel } from '../composables/useDetailPanel';
+import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailPanel';
 import {
   LOG_AUTO_FETCH_INTERVALS,
   useAutoFetchLogs,
@@ -177,6 +177,7 @@ const {
   closeFullPage,
   closePanel,
 } = useDetailPanel();
+const detailPanelStorage = useDetailPanelStorage();
 
 const isCompact = computed(() => windowNarrow.value || detailPanelOpen.value);
 
@@ -1225,21 +1226,16 @@ const tableColumns = computed(() =>
 
 // Restore panel state on mount
 onMounted(() => {
-  const saved = sessionStorage.getItem('dd-panel');
-  if (saved) {
-    try {
-      const s = JSON.parse(saved);
-      const c = containers.value.find((x) => x.name === s.name);
-      if (c) {
-        selectedContainer.value = c;
-        activeDetailTab.value = s.tab || 'overview';
-        detailPanelOpen.value = s.panel ?? false;
-        containerFullPage.value = s.full ?? false;
-        panelSize.value = s.size || 'sm';
-      }
-    } catch {
-      /* ignore corrupt data */
-    }
+  const saved = detailPanelStorage.read();
+  if (!saved) return;
+
+  const c = containers.value.find((x) => x.name === saved.name);
+  if (c) {
+    selectedContainer.value = c;
+    activeDetailTab.value = saved.tab;
+    detailPanelOpen.value = saved.panel;
+    containerFullPage.value = saved.full;
+    panelSize.value = saved.size;
   }
 });
 

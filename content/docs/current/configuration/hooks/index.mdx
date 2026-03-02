@@ -25,6 +25,14 @@ Lifecycle hooks let you run shell commands before or after a container is update
 
 <Callout type="info">Legacy `wud.hook.*` labels are still supported for backward compatibility. When used, drydock logs a one-time deprecation warning and records the fallback in `dd_legacy_input_total`. You can rewrite labels with `node dist/index.js config migrate`.</Callout>
 
+## Hook enablement
+
+| Env var | Required | Description | Supported values | Default |
+| --- | --- | --- | --- | --- |
+| `DD_HOOKS_ENABLED` | ⚪ | Enable execution of lifecycle hook labels (`dd.hook.*` / `wud.hook.*`) | `true`, `false` | `false` |
+
+<Callout type="warn">Hooks sourced from labels are skipped by default. Set `DD_HOOKS_ENABLED=true` to opt in.</Callout>
+
 ## Hook environment variables
 
 When a hook runs, drydock injects environment variables describing the update:
@@ -41,7 +49,7 @@ When a hook runs, drydock injects environment variables describing the update:
 
 ## Execution details
 
-- Hooks run inside the drydock container using `/bin/sh -c`
+- Hooks run inside the drydock container using `/bin/sh -c` only when `DD_HOOKS_ENABLED=true`
 - Combined stdout and stderr output is capped at **10 KB**
 - An exit code of `0` is treated as success; any non-zero code is a failure
 - If a hook exceeds its timeout, it is killed and treated as a failure (exit code 1)

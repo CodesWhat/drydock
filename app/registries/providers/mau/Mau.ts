@@ -1,4 +1,3 @@
-// @ts-nocheck
 import axios from 'axios';
 import { withAuthorizationHeader } from '../../../security/auth.js';
 import Gitlab from '../gitlab/Gitlab.js';
@@ -19,13 +18,13 @@ class Mau extends Gitlab {
         authurl: this.joi.string().uri().default('https://dock.mau.dev'),
         token: this.joi.string(),
       }),
-    ]);
+    ]) as any;
   }
 
   /**
    * Custom init behavior.
    */
-  init() {
+  async init() {
     this.configuration = this.configuration || {};
     if (typeof this.configuration === 'string') {
       this.configuration = {};
@@ -64,7 +63,11 @@ class Mau extends Gitlab {
    * @returns {Promise<*>}
    */
   async authenticate(image, requestOptions) {
-    const request = {
+    const request: {
+      method: string;
+      url: string;
+      headers: Record<string, string>;
+    } = {
       method: 'GET',
       url: `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=repository:${image.name}:pull`,
       headers: {

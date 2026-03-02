@@ -143,8 +143,8 @@ describe('Auth Router', () => {
     });
 
     test('should record failed login audit when credentials are invalid', () => {
-      passport.authenticate.mockImplementation(() => {
-        return (_req, res) => res.sendStatus(401);
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
       });
 
       const req = {
@@ -153,54 +153,29 @@ describe('Auth Router', () => {
         path: '/login',
       };
       const res = createResponse();
-      const originalSendStatus = res.sendStatus;
       const next = vi.fn();
 
       auth.requireAuthentication(req, res, next);
 
-      expect(passport.authenticate).toHaveBeenCalledWith(auth.getAllIds(), { session: true });
+      expect(passport.authenticate).toHaveBeenCalledWith(
+        auth.getAllIds(),
+        { session: false },
+        expect.any(Function),
+      );
       expect(mockRecordAuditEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'auth-login',
           status: 'error',
         }),
       );
-      expect(originalSendStatus).toHaveBeenCalledWith(401);
+      expect(res.sendStatus).toHaveBeenCalledWith(401);
       expect(next).not.toHaveBeenCalled();
     });
 
-    test('should record failed login audit when auth middleware ends response with 401', () => {
-      passport.authenticate.mockImplementation(() => {
-        return (_req, res) => {
-          res.statusCode = 401;
-          res.end();
-        };
-      });
-
-      const req = {
-        isAuthenticated: vi.fn(() => false),
-        method: 'POST',
-        path: '/login',
-      };
-      const res = createResponse();
-      const originalEnd = res.end;
-      const next = vi.fn();
-
-      auth.requireAuthentication(req, res, next);
-
-      expect(originalEnd).toHaveBeenCalled();
-      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'auth-login',
-          status: 'error',
-        }),
-      );
-      expect(next).not.toHaveBeenCalled();
-    });
-
-    test('should not record failed login audit when login response is not 401', () => {
-      passport.authenticate.mockImplementation(() => {
-        return (_req, res) => res.sendStatus(403);
+    test('should call next with login authentication errors', () => {
+      const error = new Error('auth blew up');
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(error, false, undefined, 500);
       });
 
       const req = {
@@ -213,8 +188,30 @@ describe('Auth Router', () => {
 
       auth.requireAuthentication(req, res, next);
 
+      expect(next).toHaveBeenCalledWith(error);
+      expect(res.sendStatus).not.toHaveBeenCalled();
       expect(mockRecordAuditEvent).not.toHaveBeenCalled();
-      expect(next).not.toHaveBeenCalled();
+    });
+
+    test('should continue to login handler when login credentials are valid', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, { username: 'john' }, undefined, 200);
+      });
+
+      const req = {
+        isAuthenticated: vi.fn(() => false),
+        method: 'POST',
+        path: '/login',
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      auth.requireAuthentication(req, res, next);
+
+      expect(req.user).toEqual({ username: 'john' });
+      expect(next).toHaveBeenCalled();
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+      expect(res.sendStatus).not.toHaveBeenCalled();
     });
 
     test('should handle login requests even when response has no sendStatus/end helpers', () => {
@@ -232,6 +229,75 @@ describe('Auth Router', () => {
       auth.requireAuthentication(req, res, next);
 
       expect(authMiddleware).toHaveBeenCalledWith(req, res, next);
+    });
+
+    test('should fall back to res.status(401).end() when sendStatus is unavailable', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const statusEnd = vi.fn();
+      const req = {
+        isAuthenticated: vi.fn(() => false),
+        method: 'POST',
+        path: '/login',
+      };
+      const res = {
+        status: vi.fn(() => ({ end: statusEnd })),
+      };
+      const next = vi.fn();
+
+      auth.requireAuthentication(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(statusEnd).toHaveBeenCalledTimes(1);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    test('should fall back to res.end with statusCode when status response has no end', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const req = {
+        isAuthenticated: vi.fn(() => false),
+        method: 'POST',
+        path: '/login',
+      };
+      const res = {
+        status: vi.fn(() => ({})),
+        end: vi.fn(),
+        statusCode: 200,
+      };
+      const next = vi.fn();
+
+      auth.requireAuthentication(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.statusCode).toBe(401);
+      expect(res.end).toHaveBeenCalledTimes(1);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    test('should set statusCode when no response helpers are available', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const req = {
+        isAuthenticated: vi.fn(() => false),
+        method: 'POST',
+        path: '/login',
+      };
+      const res = {
+        statusCode: 200,
+      };
+      const next = vi.fn();
+
+      auth.requireAuthentication(req, res, next);
+
+      expect(res.statusCode).toBe(401);
+      expect(next).not.toHaveBeenCalled();
     });
   });
 
