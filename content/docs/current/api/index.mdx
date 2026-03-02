@@ -36,7 +36,11 @@ The [webhook endpoints](/docs/configuration/webhooks) use a separate Bearer toke
 | `/health` | `GET` | Health check (returns 200 when healthy) |
 | `/metrics` | `GET` | Prometheus metrics (optional auth via `DD_SERVER_METRICS_AUTH`) |
 | `/api/events/ui` | `GET` | Server-Sent Events for real-time UI updates |
-| `/api/audit` | `GET` | Audit trail entries |
+| `/api/audit` | `GET` | Audit trail entries (paginated, filterable by action/container/date) |
+| `/api/notifications` | `GET`, `PATCH` | Notification rules (per-event enable/disable and trigger assignments) |
+| `/api/settings` | `GET`, `PUT` | UI settings (internetless mode) |
+| `/api/server` | `GET` | Server configuration and compatibility info |
+| `/api/containers/groups` | `GET` | Container groups (by stack/compose project) |
 | `/api/webhook/watch` | `POST` | [Webhook](/docs/configuration/webhooks) — trigger watch on all containers |
 | `/api/webhook/watch/:name` | `POST` | [Webhook](/docs/configuration/webhooks) — watch specific container |
 | `/api/webhook/update/:name` | `POST` | [Webhook](/docs/configuration/webhooks) — update specific container |

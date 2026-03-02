@@ -17,6 +17,8 @@ The `nexus` registry lets you configure a [Sonatype Nexus](https://www.sonatype.
 | `DD_REGISTRY_NEXUS_{REGISTRY_NAME}_LOGIN` | ⚪ | Nexus username | DD_REGISTRY_NEXUS_\{REGISTRY_NAME\}_PASSWORD must be defined | |
 | `DD_REGISTRY_NEXUS_{REGISTRY_NAME}_PASSWORD` | ⚪ | Nexus password | DD_REGISTRY_NEXUS_\{REGISTRY_NAME\}_LOGIN must be defined | |
 | `DD_REGISTRY_NEXUS_{REGISTRY_NAME}_AUTH` | ⚪ | Base64 encoded `login:password` string | DD_REGISTRY_NEXUS_\{REGISTRY_NAME\}_LOGIN/PASSWORD must not be defined | |
+| `DD_REGISTRY_NEXUS_{REGISTRY_NAME}_CAFILE` | ⚪ | Path to custom CA certificate file | | |
+| `DD_REGISTRY_NEXUS_{REGISTRY_NAME}_INSECURE` | ⚪ | Allow insecure (non-TLS) connections | `true`, `false` | `false` |
 
 ## Examples
 

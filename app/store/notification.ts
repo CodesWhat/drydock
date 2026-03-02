@@ -3,9 +3,11 @@
  */
 import joi from 'joi';
 import { byString } from 'sort-es';
+import { uniqStrings } from '../util/string-array.js';
 import { initCollection } from './util.js';
 
 let notifications;
+let notificationRulesCache: NotificationRule[] | null = null;
 
 export interface NotificationRule {
   id: string;
@@ -71,26 +73,16 @@ const notificationRuleSchema = joi.object({
   triggers: joi.array().items(joi.string().trim().min(1)).default([]),
 });
 
-function uniqStrings(values: unknown): string[] {
-  if (!Array.isArray(values)) {
-    return [];
-  }
-  return Array.from(
-    new Set(
-      values
-        .filter((value): value is string => typeof value === 'string')
-        .map((value) => value.trim())
-        .filter((value) => value.length > 0),
-    ),
-  ).sort(byString());
-}
-
 function normalizeRule(ruleToValidate: Partial<NotificationRule>): NotificationRule {
   const ruleValidated = notificationRuleSchema.validate(
     {
       ...ruleToValidate,
       id: ruleToValidate.id?.toLowerCase(),
-      triggers: uniqStrings(ruleToValidate.triggers),
+      triggers: uniqStrings(ruleToValidate.triggers, {
+        trim: true,
+        removeEmpty: true,
+        sortComparator: byString(),
+      }),
     },
     {
       stripUnknown: true,
@@ -133,17 +125,25 @@ function normalizeRules(rulesToNormalize: unknown): NotificationRule[] {
   return [...rulesNormalized, ...customRules];
 }
 
-function hasNotificationCollection() {
-  return notifications && typeof notifications.find === 'function';
+function cloneRules(rules: NotificationRule[]): NotificationRule[] {
+  return rules.map((rule) => ({
+    ...rule,
+    triggers: [...rule.triggers],
+  }));
 }
 
-function findDefaultRule(id: string): NotificationRule | undefined {
-  return DEFAULT_NOTIFICATION_RULES.find((rule) => rule.id === id);
+function invalidateNotificationRulesCache() {
+  notificationRulesCache = null;
+}
+
+function hasNotificationCollection() {
+  return notifications && typeof notifications.find === 'function';
 }
 
 function replaceRules(rulesToSave: NotificationRule[]) {
   notifications.find().forEach((rule) => notifications.remove(rule));
   rulesToSave.forEach((rule) => notifications.insert(rule));
+  invalidateNotificationRulesCache();
 }
 
 /**
@@ -155,16 +155,22 @@ export function createCollections(db) {
   const rulesSaved = notifications.find();
   const rulesNormalized = normalizeRules(rulesSaved);
   replaceRules(rulesNormalized);
+  notificationRulesCache = rulesNormalized;
 }
 
 /**
  * Get all notification rules.
  */
 export function getNotificationRules(): NotificationRule[] {
-  if (!hasNotificationCollection()) {
-    return normalizeRules(DEFAULT_NOTIFICATION_RULES);
+  if (notificationRulesCache) {
+    return cloneRules(notificationRulesCache);
   }
-  return normalizeRules(notifications.find());
+
+  const rulesNormalized = hasNotificationCollection()
+    ? normalizeRules(notifications.find())
+    : normalizeRules(DEFAULT_NOTIFICATION_RULES);
+  notificationRulesCache = rulesNormalized;
+  return cloneRules(rulesNormalized);
 }
 
 /**
@@ -175,16 +181,7 @@ export function getNotificationRule(id: string): NotificationRule | undefined {
   if (!idNormalized) {
     return undefined;
   }
-  if (!hasNotificationCollection()) {
-    const defaultRule = findDefaultRule(idNormalized);
-    return defaultRule ? normalizeRule(defaultRule) : undefined;
-  }
-  const rule = notifications.findOne({ id: idNormalized });
-  if (!rule) {
-    const defaultRule = findDefaultRule(idNormalized);
-    return defaultRule ? normalizeRule(defaultRule) : undefined;
-  }
-  return normalizeRule(rule);
+  return getNotificationRules().find((rule) => rule.id === idNormalized);
 }
 
 /**
@@ -211,6 +208,7 @@ export function updateNotificationRule(
 
   notifications.remove(ruleCurrent);
   notifications.insert(ruleUpdated);
+  invalidateNotificationRulesCache();
 
   return ruleUpdated;
 }

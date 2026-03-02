@@ -47,6 +47,21 @@ When a hook runs, drydock injects environment variables describing the update:
 - If a hook exceeds its timeout, it is killed and treated as a failure (exit code 1)
 - Hooks are NOT executed during [self-update](/docs/configuration/self-update)
 
+## Threat model (label-sourced commands)
+
+Hooks are sourced from container labels and then executed by drydock. Treat hook labels as a code-execution boundary.
+
+- Trust boundary: Container labels (`dd.hook.*` / `wud.hook.*`) cross into the drydock runtime command executor.
+- Trust boundary: Hook execution can cross from drydock into Docker host control when the socket is mounted.
+- High-value assets: Docker socket access, mounted credentials/secrets, and network-reachable internal services.
+- Attacker capability: Anyone who can modify deployed container labels (Compose manifests, swarm specs, API-driven container creation) can inject hook commands.
+- Abuse path: A malicious label can execute arbitrary shell via `/bin/sh -c`, including secret exfiltration or unauthorized Docker API actions.
+- Abuse path: Expensive hooks can degrade availability (for example long-running or fork-heavy commands), bounded by `dd.hook.timeout`.
+- Mitigation: Restrict who can modify container specs/labels and protect deployment pipelines.
+- Mitigation: Run drydock with least privilege; mount `/var/run/docker.sock` only when required.
+- Mitigation: Keep `dd.hook.pre.abort=true` when you want fail-closed behavior on pre-hook errors.
+- Mitigation: Monitor audit events (`hook-configured`, `hook-pre-*`, `hook-post-*`) for unauthorized hook changes and executions.
+
 ## Pre-hook abort behavior
 
 When `dd.hook.pre.abort` is `true` (the default), a failed pre-hook cancels the update entirely. Set it to `false` if you want the update to proceed regardless of hook outcome.
@@ -55,6 +70,7 @@ When `dd.hook.pre.abort` is `true` (the default), a failed pre-hook cancels the 
 
 | Event | Description |
 | --- | --- |
+| `hook-configured` | Hook labels were detected for the update lifecycle |
 | `hook-pre-success` | Pre-hook completed successfully |
 | `hook-pre-failed` | Pre-hook exited non-zero or timed out |
 | `hook-post-success` | Post-hook completed successfully |

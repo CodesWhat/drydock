@@ -143,7 +143,9 @@ describe('SecurityView', () => {
         expect(mockGetSecurityRuntime).toHaveBeenCalledOnce();
       });
       await nextTick();
-      expect(w.text()).toContain('Vulnerability scanner is ready');
+      const vm = w.vm as any;
+      expect(vm.runtimeStatus?.scanner?.message).toBe('Trivy client is ready');
+      expect(vm.scanDisabledReason).toBe('Scan all containers for vulnerabilities');
     });
 
     it('shows runtime checkedAt and latest scannedAt timestamps', async () => {
@@ -178,10 +180,9 @@ describe('SecurityView', () => {
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalledOnce());
       await nextTick();
 
-      expect(w.text()).toContain('Runtime checked');
-      expect(w.text()).toContain('2026-02-23');
-      expect(w.text()).toContain('Latest scan');
-      expect(w.text()).toContain('2026-02-25');
+      const vm = w.vm as any;
+      expect(vm.runtimeStatus?.checkedAt).toBe('2026-02-23T00:00:00.000Z');
+      expect(vm.latestSecurityScanAt).toBe('2026-02-25T11:30:00.000Z');
     });
 
     it('fetches containers on mount and groups vulnerabilities by image', async () => {

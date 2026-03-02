@@ -1,5 +1,4 @@
-import { Buffer } from 'node:buffer';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
@@ -42,10 +41,10 @@ function authenticateToken(req: Request, res: Response, next: NextFunction) {
     return;
   }
 
-  // Constant-time comparison to prevent timing attacks
-  const tokenBuf = Buffer.from(token, 'utf8');
-  const expectedBuf = Buffer.from(configuredToken, 'utf8');
-  if (tokenBuf.length !== expectedBuf.length || !timingSafeEqual(tokenBuf, expectedBuf)) {
+  // Hash tokens first so timingSafeEqual always compares fixed-length buffers.
+  const tokenHash = createHash('sha256').update(token, 'utf8').digest();
+  const expectedHash = createHash('sha256').update(configuredToken, 'utf8').digest();
+  if (!timingSafeEqual(tokenHash, expectedHash)) {
     res.status(401).json({ error: 'Invalid token' });
     return;
   }
@@ -57,7 +56,7 @@ function authenticateToken(req: Request, res: Response, next: NextFunction) {
  * Find a container by name from the store.
  */
 function findContainerByName(containerName: string) {
-  const containers = storeContainer.getContainers();
+  const containers = storeContainer.getContainers({}, { includeRuntimeEnvValues: true });
   return containers.find((c) => c.name === containerName);
 }
 
@@ -70,6 +69,8 @@ type ContainerWebhookErrorContext = {
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
+
+const CONTAINER_NOT_FOUND_ERROR = 'Container not found';
 
 function handleContainerActionError(
   error: unknown,
@@ -140,7 +141,7 @@ async function watchContainer(req: Request, res: Response) {
   const container = findContainerByName(containerName);
 
   if (!container) {
-    res.status(404).json({ error: `Container ${containerName} not found` });
+    res.status(404).json({ error: CONTAINER_NOT_FOUND_ERROR });
     return;
   }
 
@@ -177,7 +178,7 @@ async function updateContainer(req: Request, res: Response) {
   const container = findContainerByName(containerName);
 
   if (!container) {
-    res.status(404).json({ error: `Container ${containerName} not found` });
+    res.status(404).json({ error: CONTAINER_NOT_FOUND_ERROR });
     return;
   }
 

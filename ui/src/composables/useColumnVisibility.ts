@@ -57,9 +57,21 @@ const allColumns: ColumnDef[] = [
 
 const defaultVisibleCols = allColumns.map((c) => c.key);
 const STORAGE_KEY = 'dd-table-cols-v1';
-const visibleColumns = ref<Set<string>>(
-  new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') || defaultVisibleCols),
-);
+
+function loadVisibleColumnsFromStorage(): string[] {
+  const storedValue = localStorage.getItem(STORAGE_KEY);
+  if (storedValue === null) {
+    return defaultVisibleCols;
+  }
+  try {
+    const parsed = JSON.parse(storedValue);
+    return Array.isArray(parsed) ? parsed : defaultVisibleCols;
+  } catch {
+    return defaultVisibleCols;
+  }
+}
+
+const visibleColumns = ref<Set<string>>(new Set(loadVisibleColumnsFromStorage()));
 watch(visibleColumns, (v) => localStorage.setItem(STORAGE_KEY, JSON.stringify([...v])), {
   deep: true,
 });

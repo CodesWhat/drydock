@@ -1,5 +1,5 @@
-// @ts-nocheck
 import express from 'express';
+import type { Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import * as agentRouter from './agent.js';
 import * as appRouter from './app.js';
@@ -7,6 +7,7 @@ import * as auditRouter from './audit.js';
 import { requireAuthentication } from './auth.js';
 import * as authenticationRouter from './authentication.js';
 import * as backupRouter from './backup.js';
+import { requireSameOriginForMutations } from './csrf.js';
 import * as containerRouter from './container.js';
 import * as containerActionsRouter from './container-actions.js';
 import * as groupRouter from './group.js';
@@ -27,7 +28,7 @@ import * as webhookRouter from './webhook.js';
  * Init the API router.
  * @returns {*|Router}
  */
-export function init() {
+export function init(): express.Router {
   const router = express.Router();
 
   const apiLimiter = rateLimit({
@@ -47,6 +48,7 @@ export function init() {
 
   // Routes to protect after this line
   router.use(requireAuthentication);
+  router.use(requireSameOriginForMutations);
 
   // Mount SSE events endpoint (authenticated — UI sends session cookie)
   router.use('/events/ui', sseRouter.init());
@@ -103,7 +105,9 @@ export function init() {
   router.use('/settings', settingsRouter.init());
 
   // All other API routes => 404
-  router.get('/{*path}', (req, res) => res.sendStatus(404));
+  router.get('/{*path}', (_req: Request, res: Response) => {
+    res.sendStatus(404);
+  });
 
   return router;
 }

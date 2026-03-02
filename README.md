@@ -200,7 +200,7 @@ Auto-detect running containers and check for image updates across registries
 Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, HTTP webhooks, Gotify, NTFY, and more
 </td>
 <td align="center" width="33%">
-<h3>22 Registry Providers</h3>
+<h3>23 Registry Providers</h3>
 Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more
 </td>
 </tr>
@@ -524,9 +524,9 @@ docker exec -it <drydock-container> node dist/index.js config migrate --dry-run
 <tr><td>Web UI / Dashboard</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Auto-update containers</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Docker Compose updates</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Notification triggers</td><td align="center">20</td><td align="center">~18</td><td align="center">14</td><td align="center">17</td><td align="center">~6</td></tr>
-<tr><td>Registry providers</td><td align="center">22</td><td align="center">⚠️</td><td align="center">8</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
-<tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Notification triggers</td><td align="center">20</td><td align="center">~19</td><td align="center">16</td><td align="center">17</td><td align="center">~6</td></tr>
+<tr><td>Registry providers</td><td align="center">23</td><td align="center">⚠️</td><td align="center">13</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>REST API</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
 <tr><td>Prometheus metrics</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
@@ -547,73 +547,6 @@ docker exec -it <drydock-container> node dist/index.js config migrate --dry-run
 
 > Data based on publicly available documentation as of February 2026.
 > Contributions welcome if any information is inaccurate.
-
-</details>
-
-<details>
-<summary><strong>Additional features over WUD</strong></summary>
-
-| Feature | Description |
-| --- | --- |
-| **Agent mode** | Distributed monitoring with remote agents over SSE |
-| **OIDC token lifecycle** | Bearer/Basic auth for remote watcher HTTPS connections |
-| **Container update policy** | Skip/snooze specific versions per container via API and UI |
-| **Metrics auth toggle** | `DD_SERVER_METRICS_AUTH=false` to expose `/metrics` without auth |
-| **Trust proxy config** | `DD_SERVER_TRUSTPROXY` — set to `1` (hop count) behind a reverse proxy, or `false` (default) for direct exposure |
-| **Session cookie policy** | `DD_SERVER_COOKIE_SAMESITE` — `lax` (default, OIDC-friendly), `strict`, or `none` (forces secure cookies) |
-| **NTFY provider-level threshold** | Set threshold at the ntfy provider level, not just per-trigger |
-| **Docker pull progress logging** | Rate-limited pull progress during compose updates |
-| **Registry lookup image override** | `lookupImage` field to override tag lookup image |
-| **DHI registry** | `dhi.io` registry provider |
-| **Custom URL icons** | URL-based icons via `dd.display.icon` label |
-| **Version skip UI** | Skip specific versions from the web interface |
-| **In-app log viewer** | View container stdout/stderr logs and application runtime logs with level filtering, auto-fetch polling, scroll lock, and auto-scroll. Agent runtime logs are available in the Agents detail panel Logs tab. |
-| **Semver tag recovery** | Recover mismatched semver tags from include filters |
-| **Per-image config presets** | `imgset` defaults for per-image configuration |
-| **Audit log** | Event-based audit trail with LokiJS storage, REST API, and Prometheus counter |
-| **Dry-run preview** | Preview what a container update would do without performing it |
-| **Image backup & rollback** | Automatic pre-update image backup with configurable retention and rollback API |
-| **Grafana dashboard** | Importable JSON template for Prometheus metrics overview |
-| **Update Bouncer** | Safe-pull gate for Docker updates: Trivy vulnerability scan + optional cosign signature verification + SBOM generation + on-demand scan from UI/API |
-| **Font Awesome 6 icons** | Migrated from MDI to FA6 with support for `fab:`/`far:`/`fas:` prefix syntax |
-| **Icon CDN** | Auto-resolve container icons via selfhst/icons (`sh-` prefix) with homarr-labs fallback, bundled selfhst top icons for internetless startup, plus `hl-`/`si-` and custom URL support |
-| **Mobile responsive UI** | Optimized mobile breakpoints for dashboard, containers, and self-update overlay |
-| **Container actions** | Start/stop/restart/update containers via API and UI, gated by `DD_SERVER_FEATURE_CONTAINERACTIONS` |
-| **Webhook API** | Token-authenticated HTTP endpoints for CI/CD integration to trigger watch cycles and updates, gated by `DD_SERVER_WEBHOOK_ENABLED` and `DD_SERVER_WEBHOOK_TOKEN` |
-| **Lifecycle hooks** | Pre/post-update shell command hooks with configurable timeout |
-| **Auto rollback on health failure** | Monitors container health after updates and rolls back if unhealthy, configured via `dd.rollback.auto=true` |
-| **Graceful self-update** | Full-screen animated overlay during drydock's own container update with SSE-based reconnect |
-| **7 additional registries** | ALICR (Alibaba Cloud), JFrog Artifactory, GAR (Google Artifact Registry), Harbor, IBMCR (IBM Cloud), Sonatype Nexus, OCIR (Oracle Cloud) |
-| **4 additional triggers** | Google Chat, Matrix, Mattermost, Microsoft Teams (Adaptive Cards) |
-| **Container grouping / stacks** | Smart stack detection via `dd.group` label or compose project, with collapsible UI groups and batch-update |
-
-</details>
-
-<details>
-<summary><strong>Bug fixes over WUD</strong></summary>
-
-| Fix | Impact |
-| --- | --- |
-| `eval()` code injection | Replaced with safe `String.replace()` interpolation |
-| OIDC session state races | Serialized redirect checks, multiple pending states |
-| OIDC session resilience | Auto-regenerates corrupt sessions from WUD migration, JSON error responses |
-| Docker event stream crash | Buffered split payloads before JSON parse |
-| Multi-network container recreate | Reconnects additional networks after recreation |
-| docker-compose post_start hooks | Hooks now execute after updates |
-| Express 5 wildcard routes | Named wildcard params for Express 5 compat |
-
-</details>
-
-<details>
-<summary><strong>Tech stack comparison</strong></summary>
-
-| | WUD | drydock |
-| --- | --- | --- |
-| **Language** | JavaScript | TypeScript (ESM, `NodeNext`) |
-| **Test runner** | Jest | Vitest 4 |
-| **Linter** | ESLint + Prettier | Biome |
-| **Express** | 4.x | 5.x |
-| **Build system** | Babel | `tsc` (no transpiler) |
 
 </details>
 

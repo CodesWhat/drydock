@@ -14,17 +14,17 @@ The `mqtt` trigger lets you send container update notifications to an MQTT broke
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_TRIGGER_MQTT_{trigger_name}_URL` | 🔴 | The URL of the MQTT broker | Valid mqtt, mqtts, tcp, ws, wss url | |
+| `DD_TRIGGER_MQTT_{trigger_name}_URL` | 🔴 | The URL of the MQTT broker | Valid mqtt, mqtts, tcp, tls, ws, wss url | |
 | `DD_TRIGGER_MQTT_{trigger_name}_USER` | ⚪ | The username if broker authentication is enabled | | |
 | `DD_TRIGGER_MQTT_{trigger_name}_PASSWORD` | ⚪ | The password if broker authentication is enabled | | |
-| `DD_TRIGGER_MQTT_{trigger_name}_CLIENTID` | ⚪ | The Mqtt client Id to use | | `drydock_$random` |
-| `DD_TRIGGER_MQTT_{trigger_name}_TOPIC` | ⚪ | The base topic where the updates are published to | | `drydock/container` |
+| `DD_TRIGGER_MQTT_{trigger_name}_CLIENTID` | ⚪ | The Mqtt client Id to use | | `dd_$random` |
+| `DD_TRIGGER_MQTT_{trigger_name}_TOPIC` | ⚪ | The base topic where the updates are published to | | `dd/container` |
 | `DD_TRIGGER_MQTT_{trigger_name}_HASS_ENABLED` | ⚪ | Enable [Home-assistant](https://www.home-assistant.io/) integration and deliver additional topics | `true`, `false` | `false` |
 | `DD_TRIGGER_MQTT_{trigger_name}_HASS_DISCOVERY` | ⚪ | Enable [Home-assistant](https://www.home-assistant.io/) integration including discovery | `true`, `false` | `false` |
 | `DD_TRIGGER_MQTT_{trigger_name}_HASS_PREFIX` | ⚪ | Base topic for hass entity discovery | | `homeassistant` |
 | `DD_TRIGGER_MQTT_{trigger_name}_TLS_CACHAIN` | ⚪ | The path to the file containing the server CA chain (when TLS with a private Certificate Authority) | Any valid file path | |
-| `DD_TRIGGER_MQTT_{trigger_name}_TLS_CLIENTCERT` | ⚪ | The path to the file containing the client public certificate (when TLS mutual authzentication) | Any valid file path | |
-| `DD_TRIGGER_MQTT_{trigger_name}_TLS_CLIENTKEY` | ⚪ | The path to the file containing the client private key (when TLS mutual authzentication) | Any valid file path | |
+| `DD_TRIGGER_MQTT_{trigger_name}_TLS_CLIENTCERT` | ⚪ | The path to the file containing the client public certificate (when TLS mutual authentication) | Any valid file path | |
+| `DD_TRIGGER_MQTT_{trigger_name}_TLS_CLIENTKEY` | ⚪ | The path to the file containing the client private key (when TLS mutual authentication) | Any valid file path | |
 | `DD_TRIGGER_MQTT_{trigger_name}_TLS_REJECTUNAUTHORIZED` | ⚪ | Accept or reject when the TLS server certificate cannot be trusted | `true`, `false` | `true` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). but only supports the `simple` mode.</Callout>

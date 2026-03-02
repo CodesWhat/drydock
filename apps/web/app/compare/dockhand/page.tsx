@@ -7,7 +7,7 @@ const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.c
 export const metadata: Metadata = {
   title: "Dockhand vs Drydock — Container Update Monitoring Comparison",
   description:
-    "Compare Dockhand and Drydock for container update monitoring. See how Drydock's 22 registries, 20 notification triggers, automatic rollback, and distributed agents compare to Dockhand's approach.",
+    "Compare Dockhand and Drydock for container update monitoring. See how Drydock's 23 registries, 20 notification triggers, automatic rollback, and distributed agents compare to Dockhand's approach.",
   keywords: [
     "dockhand vs drydock",
     "dockhand alternative",
@@ -69,7 +69,7 @@ const comparisonData: ComparisonRow[] = [
   },
   {
     feature: "Vulnerability scanning",
-    competitor: "Yes (Update Guard)",
+    competitor: "Yes (🥊 Update Bouncer)",
     drydock: "Yes (Trivy + SBOM + cosign)",
     verdict: "tie",
   },
@@ -106,7 +106,7 @@ const comparisonData: ComparisonRow[] = [
   {
     feature: "Registry providers",
     competitor: "Major registries",
-    drydock: "22 dedicated integrations",
+    drydock: "23 dedicated integrations",
     verdict: "drydock",
   },
   {
@@ -186,7 +186,7 @@ const highlights: Highlight[] = [
   },
   {
     icon: Radio,
-    title: "22 Registry Providers",
+    title: "23 Registry Providers",
     description:
       "Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more — broader registry support than Dockhand.",
   },

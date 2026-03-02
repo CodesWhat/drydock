@@ -42,7 +42,7 @@ class Apprise extends Trigger {
     let uri = `${this.configuration.url}/notify`;
     const body = {
       title: this.renderSimpleTitle(container),
-      data: this.renderSimpleBody(container),
+      body: this.renderSimpleBody(container),
       format: 'text',
       type: 'info',
     };
@@ -80,7 +80,7 @@ class Apprise extends Trigger {
       data: {
         urls: this.configuration.urls,
         title: this.renderBatchTitle(containers),
-        data: this.renderBatchBody(containers),
+        body: this.renderBatchBody(containers),
         format: 'text',
         type: 'info',
       },

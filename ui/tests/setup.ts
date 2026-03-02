@@ -92,3 +92,7 @@ config.global.provide = {
     forward: vi.fn(),
   },
 };
+
+config.global.directives = {
+  tooltip: {},
+};

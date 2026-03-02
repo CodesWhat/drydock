@@ -843,12 +843,14 @@ async function checkConnectivity() {
   try {
     const res = await fetch('/auth/user', { credentials: 'include', redirect: 'manual' });
     if (res.ok || res.status === 401) {
-      // Server is back — redirect to login (session likely expired)
-      connectionLost.value = false;
+      // Server is back — stop SSE reconnect loop, then hard-reload to login.
+      // Hard reload is required because a server restart produces new asset
+      // hashes; router.push would try to lazy-load stale chunks and fail.
+      sseService.disconnect();
       if (connectivityTimer) {
         clearInterval(connectivityTimer);
       }
-      router.push('/login');
+      globalThis.location.replace('/login');
     }
   } catch {
     // Network error — server is unreachable
@@ -1095,14 +1097,14 @@ onUnmounted(() => {
            :style="{ borderTop: '1px solid var(--dd-border)' }">
         <button aria-label="About Drydock"
                 class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                title="About Drydock"
+                v-tooltip.top="'About Drydock'"
                 @click="showAbout = true">
           <AppIcon name="info" :size="14" />
         </button>
         <button v-if="!isMobile"
                 :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
                 class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+                v-tooltip.top="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
                 @click="sidebarCollapsed = !sidebarCollapsed">
           <AppIcon :name="sidebarCollapsed ? 'sidebar-expand' : 'sidebar-collapse'" :size="14" />
         </button>

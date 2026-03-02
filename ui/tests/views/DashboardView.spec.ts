@@ -1,4 +1,4 @@
-import { flushPromises } from '@vue/test-utils';
+import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import type { Container } from '@/types/container';
 import DashboardView from '@/views/DashboardView.vue';
 import { mountWithPlugins } from '../helpers/mount';
@@ -53,6 +53,7 @@ const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 const mockGetAllRegistries = getAllRegistries as ReturnType<typeof vi.fn>;
 const mockGetAuditLog = getAuditLog as ReturnType<typeof vi.fn>;
 const DASHBOARD_WIDGET_ORDER_STORAGE_KEY = 'dd-dashboard-widget-order-v3';
+const mountedWrappers: VueWrapper[] = [];
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
   return {
@@ -98,7 +99,14 @@ async function mountDashboard(
   (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue(containers);
 
   const wrapper = mountWithPlugins(DashboardView);
+  mountedWrappers.push(wrapper);
   await flushPromises();
+  return wrapper;
+}
+
+function mountDashboardView() {
+  const wrapper = mountWithPlugins(DashboardView);
+  mountedWrappers.push(wrapper);
   return wrapper;
 }
 
@@ -109,13 +117,20 @@ describe('DashboardView', () => {
     localStorage.removeItem(DASHBOARD_WIDGET_ORDER_STORAGE_KEY);
   });
 
+  afterEach(() => {
+    for (const wrapper of mountedWrappers.splice(0)) {
+      wrapper.unmount();
+    }
+    vi.useRealTimers();
+  });
+
   describe('loading state', () => {
     it('shows loading text before data resolves', () => {
       mockGetAllContainers.mockReturnValue(new Promise(() => {}));
       mockGetAgents.mockReturnValue(new Promise(() => {}));
       mockGetServer.mockReturnValue(new Promise(() => {}));
 
-      const wrapper = mountWithPlugins(DashboardView);
+      const wrapper = mountDashboardView();
       expect(wrapper.text()).toContain('Loading dashboard...');
     });
 
@@ -127,27 +142,76 @@ describe('DashboardView', () => {
 
   describe('SSE refresh behavior', () => {
     it('refreshes dashboard data on dd:sse-container-changed', async () => {
-      await mountDashboard([makeContainer()]);
-      const containersCallsBefore = mockGetAllContainers.mock.calls.length;
-      const serverCallsBefore = mockGetServer.mock.calls.length;
-      const agentsCallsBefore = mockGetAgents.mock.calls.length;
+      vi.useFakeTimers();
+      try {
+        await mountDashboard([makeContainer()]);
+        const containersCallsBefore = mockGetAllContainers.mock.calls.length;
+        const serverCallsBefore = mockGetServer.mock.calls.length;
+        const agentsCallsBefore = mockGetAgents.mock.calls.length;
 
-      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
-      await flushPromises();
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+        vi.advanceTimersByTime(1000);
+        await flushPromises();
 
-      expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(containersCallsBefore);
-      expect(mockGetServer.mock.calls.length).toBeGreaterThan(serverCallsBefore);
-      expect(mockGetAgents.mock.calls.length).toBeGreaterThan(agentsCallsBefore);
+        expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(containersCallsBefore);
+        expect(mockGetServer.mock.calls.length).toBeGreaterThan(serverCallsBefore);
+        expect(mockGetAgents.mock.calls.length).toBeGreaterThan(agentsCallsBefore);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('debounces burst SSE events into a single dashboard refresh', async () => {
+      vi.useFakeTimers();
+      try {
+        await mountDashboard([makeContainer()]);
+        const containersCallsBefore = mockGetAllContainers.mock.calls.length;
+        const serverCallsBefore = mockGetServer.mock.calls.length;
+        const agentsCallsBefore = mockGetAgents.mock.calls.length;
+        const watchersCallsBefore = mockGetAllWatchers.mock.calls.length;
+        const registriesCallsBefore = mockGetAllRegistries.mock.calls.length;
+        const auditCallsBefore = mockGetAuditLog.mock.calls.length;
+
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-scan-completed'));
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-connected'));
+        await flushPromises();
+
+        expect(mockGetAllContainers).toHaveBeenCalledTimes(containersCallsBefore);
+        expect(mockGetServer).toHaveBeenCalledTimes(serverCallsBefore);
+        expect(mockGetAgents).toHaveBeenCalledTimes(agentsCallsBefore);
+        expect(mockGetAllWatchers).toHaveBeenCalledTimes(watchersCallsBefore);
+        expect(mockGetAllRegistries).toHaveBeenCalledTimes(registriesCallsBefore);
+        expect(mockGetAuditLog).toHaveBeenCalledTimes(auditCallsBefore);
+
+        vi.advanceTimersByTime(1000);
+        await flushPromises();
+
+        expect(mockGetAllContainers).toHaveBeenCalledTimes(containersCallsBefore + 1);
+        expect(mockGetServer).toHaveBeenCalledTimes(serverCallsBefore + 1);
+        expect(mockGetAgents).toHaveBeenCalledTimes(agentsCallsBefore + 1);
+        expect(mockGetAllWatchers).toHaveBeenCalledTimes(watchersCallsBefore + 1);
+        expect(mockGetAllRegistries).toHaveBeenCalledTimes(registriesCallsBefore + 1);
+        expect(mockGetAuditLog).toHaveBeenCalledTimes(auditCallsBefore + 1);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('does not show loading state during SSE refresh after initial load', async () => {
-      const wrapper = await mountDashboard([makeContainer()]);
-      mockGetAllContainers.mockReturnValueOnce(new Promise(() => {}));
+      vi.useFakeTimers();
+      try {
+        const wrapper = await mountDashboard([makeContainer()]);
+        mockGetAllContainers.mockReturnValueOnce(new Promise(() => {}));
 
-      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
-      await flushPromises();
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+        vi.advanceTimersByTime(1000);
+        await flushPromises();
 
-      expect(wrapper.text()).not.toContain('Loading dashboard...');
+        expect(wrapper.text()).not.toContain('Loading dashboard...');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
@@ -157,7 +221,7 @@ describe('DashboardView', () => {
       mockGetAgents.mockResolvedValue([]);
       mockGetServer.mockResolvedValue({});
 
-      const wrapper = mountWithPlugins(DashboardView);
+      const wrapper = mountDashboardView();
       await flushPromises();
 
       expect(wrapper.text()).toContain('Failed to load dashboard');
@@ -412,13 +476,13 @@ describe('DashboardView', () => {
     it('shows an empty state when no recent updates are available', async () => {
       const wrapper = await mountDashboard([makeContainer()]);
       const widget = wrapper.find('[data-widget-id="recent-updates"]');
-      expect(widget.text()).toContain('No recent updates yet');
+      expect(widget.text()).toContain('No updates available');
     });
 
     it('shows the same empty state when there are zero containers', async () => {
       const wrapper = await mountDashboard([]);
       const widget = wrapper.find('[data-widget-id="recent-updates"]');
-      expect(widget.text()).toContain('No recent updates yet');
+      expect(widget.text()).toContain('No updates available');
     });
   });
 

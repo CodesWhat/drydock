@@ -81,7 +81,7 @@ test('trigger should send POST http request to notify endpoint', async () => {
     data: {
       urls: 'maito://user:pass@gmail.com',
       title: 'New tag found for container container1',
-      data: 'Container container1 running with tag 1.0.0 can be updated to tag 2.0.0',
+      body: 'Container container1 running with tag 1.0.0 can be updated to tag 2.0.0',
       format: 'text',
       type: 'info',
     },
@@ -109,7 +109,7 @@ test('trigger should use config and tag when configured', async () => {
   expect(axios).toHaveBeenCalledWith({
     data: {
       title: expect.any(String),
-      data: expect.any(String),
+      body: expect.any(String),
       format: 'text',
       type: 'info',
       tag: 'mytag',
@@ -137,7 +137,7 @@ test('trigger should use config without tag', async () => {
   expect(axios).toHaveBeenCalledWith({
     data: {
       title: expect.any(String),
-      data: expect.any(String),
+      body: expect.any(String),
       format: 'text',
       type: 'info',
     },
@@ -172,7 +172,7 @@ test('triggerBatch should send batch notification', async () => {
     data: {
       urls: 'mailto://test@example.com',
       title: expect.any(String),
-      data: expect.any(String),
+      body: expect.any(String),
       format: 'text',
       type: 'info',
     },

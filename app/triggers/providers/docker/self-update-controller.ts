@@ -23,8 +23,12 @@ function parsePositiveInt(rawValue: string | undefined, fallback: number): numbe
   if (!rawValue) {
     return fallback;
   }
-  const parsed = Number.parseInt(rawValue, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  const normalizedValue = rawValue.trim();
+  if (!/^\d+$/.test(normalizedValue)) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(normalizedValue, 10);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
     return fallback;
   }
   return parsed;
@@ -282,6 +286,11 @@ export async function runSelfUpdateController(): Promise<void> {
   const controller = new SelfUpdateController(config);
   await controller.run();
 }
+
+export {
+  getRequiredEnv as testable_getRequiredEnv,
+  parsePositiveInt as testable_parsePositiveInt,
+};
 
 const scriptEntrypointUrl = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
 if (import.meta.url === scriptEntrypointUrl) {

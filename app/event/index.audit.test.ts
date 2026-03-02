@@ -86,6 +86,40 @@ describe('event default audit listeners', () => {
     );
   });
 
+  test('should record update-applied audits', async () => {
+    const event = await loadEventModule();
+
+    await event.emitContainerUpdateApplied('container-123');
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'update-applied',
+        containerName: 'container-123',
+        status: 'success',
+      }),
+    );
+    expect(mockInc).toHaveBeenCalledWith({ action: 'update-applied' });
+  });
+
+  test('should record update-failed audits', async () => {
+    const event = await loadEventModule();
+
+    await event.emitContainerUpdateFailed({
+      containerName: 'api',
+      error: 'pull denied',
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'update-failed',
+        containerName: 'api',
+        status: 'error',
+        details: 'pull denied',
+      }),
+    );
+    expect(mockInc).toHaveBeenCalledWith({ action: 'update-failed' });
+  });
+
   test('should record container added and removed audits with fallback names', async () => {
     const event = await loadEventModule();
 

@@ -111,4 +111,25 @@ describe('Server Router', () => {
       }),
     );
   });
+
+  test('should return 500 when security runtime status lookup throws', async () => {
+    const { getSecurityRuntimeStatus } = await import('../security/runtime.js');
+    vi.mocked(getSecurityRuntimeStatus).mockRejectedValueOnce(new Error('runtime unavailable'));
+    const router = serverRouter.init();
+
+    const runtimeRoute = router.get.mock.calls.find((call) => call[0] === '/security/runtime');
+    const runtimeHandler = runtimeRoute[1];
+    const mockRes = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    };
+
+    await runtimeHandler({}, mockRes);
+
+    expect(getSecurityRuntimeStatus).toHaveBeenCalled();
+    expect(mockRes.status).toHaveBeenCalledWith(500);
+    expect(mockRes.json).toHaveBeenCalledWith({
+      error: 'Error loading security runtime status (runtime unavailable)',
+    });
+  });
 });

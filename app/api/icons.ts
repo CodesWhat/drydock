@@ -22,6 +22,10 @@ const FALLBACK_ICON = 'fab fa-docker';
 const FALLBACK_IMAGE_PROVIDER = 'selfhst';
 const FALLBACK_IMAGE_SLUG = 'docker';
 const MISSING_UPSTREAM_STATUS_CODES = new Set([403, 404]);
+const DEFAULT_ICON_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const DEFAULT_ICON_CACHE_MAX_FILES = 5000;
+const DEFAULT_ICON_CACHE_MAX_BYTES = 100 * 1024 * 1024;
+const DEFAULT_ICON_IN_FLIGHT_TIMEOUT_MS = 15 * 1000;
 const inFlightIconFetches = new Map<string, Promise<void>>();
 const BUNDLED_ICON_PROVIDERS = new Set(['selfhst']);
 
@@ -54,6 +58,34 @@ const iconRequestSchema = joi.object({
     .pattern(/^[a-z0-9][a-z0-9._-]{0,127}$/i)
     .required(),
 });
+
+function toPositiveInteger(rawValue: string | undefined, fallbackValue: number): number {
+  const parsedValue = Number.parseInt(String(rawValue ?? ''), 10);
+  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+    return fallbackValue;
+  }
+  return parsedValue;
+}
+
+const ICON_CACHE_TTL_MS = toPositiveInteger(
+  process.env.DD_ICON_CACHE_TTL_MS,
+  DEFAULT_ICON_CACHE_TTL_MS,
+);
+const ICON_CACHE_MAX_FILES = toPositiveInteger(
+  process.env.DD_ICON_CACHE_MAX_FILES,
+  DEFAULT_ICON_CACHE_MAX_FILES,
+);
+const ICON_CACHE_MAX_BYTES = toPositiveInteger(
+  process.env.DD_ICON_CACHE_MAX_BYTES,
+  DEFAULT_ICON_CACHE_MAX_BYTES,
+);
+
+function getIconInFlightTimeoutMs() {
+  return toPositiveInteger(
+    process.env.DD_ICON_IN_FLIGHT_TIMEOUT_MS,
+    DEFAULT_ICON_IN_FLIGHT_TIMEOUT_MS,
+  );
+}
 
 function normalizeSlug(slug: string, extension: string): string {
   const slugNormalized = slug.toLowerCase();
@@ -172,6 +204,94 @@ async function iconExists(iconPath: string) {
   }
 }
 
+async function isCachedIconUsable(iconPath: string) {
+  if (!(await iconExists(iconPath))) {
+    return false;
+  }
+
+  try {
+    const iconStats = await fs.stat(iconPath);
+    if (!iconStats.isFile()) {
+      return false;
+    }
+    if (Date.now() - iconStats.mtimeMs > ICON_CACHE_TTL_MS) {
+      await fs.unlink(iconPath).catch(() => {});
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+type IconCacheEntry = {
+  path: string;
+  mtimeMs: number;
+  size: number;
+};
+
+async function listIconCacheEntries() {
+  const cacheBase = getIconCacheBaseDirectory();
+  const providerEntries = await fs.readdir(cacheBase, { withFileTypes: true }).catch(() => []);
+  const cacheEntries: IconCacheEntry[] = [];
+
+  for (const providerEntry of providerEntries) {
+    if (!providerEntry.isDirectory()) {
+      continue;
+    }
+    const providerDirectory = path.join(cacheBase, providerEntry.name);
+    const iconEntries = await fs.readdir(providerDirectory).catch(() => []);
+    for (const iconEntry of iconEntries) {
+      const iconPath = path.join(providerDirectory, iconEntry);
+      try {
+        const iconStats = await fs.stat(iconPath);
+        if (!iconStats.isFile()) {
+          continue;
+        }
+        cacheEntries.push({
+          path: iconPath,
+          mtimeMs: iconStats.mtimeMs,
+          size: iconStats.size,
+        });
+      } catch {
+        // Ignore entries that disappear between directory scan and stat.
+      }
+    }
+  }
+
+  return cacheEntries;
+}
+
+async function enforceIconCacheLimits(options: { protectedPath?: string } = {}) {
+  const nowMs = Date.now();
+  const cacheEntries = await listIconCacheEntries();
+  const activeEntries: IconCacheEntry[] = [];
+  let totalBytes = 0;
+
+  for (const cacheEntry of cacheEntries) {
+    if (nowMs - cacheEntry.mtimeMs > ICON_CACHE_TTL_MS) {
+      await fs.unlink(cacheEntry.path).catch(() => {});
+      continue;
+    }
+    activeEntries.push(cacheEntry);
+    totalBytes += cacheEntry.size;
+  }
+
+  activeEntries.sort((left, right) => left.mtimeMs - right.mtimeMs);
+  while (activeEntries.length > ICON_CACHE_MAX_FILES || totalBytes > ICON_CACHE_MAX_BYTES) {
+    const indexToEvict = activeEntries.findIndex(
+      (cacheEntry) => cacheEntry.path !== options.protectedPath,
+    );
+    if (indexToEvict === -1) {
+      break;
+    }
+
+    const [entryToEvict] = activeEntries.splice(indexToEvict, 1);
+    await fs.unlink(entryToEvict.path).catch(() => {});
+    totalBytes = Math.max(0, totalBytes - entryToEvict.size);
+  }
+}
+
 async function writeIconAtomically(iconPath: string, data: Buffer) {
   const tmpPath = `${iconPath}.tmp.${crypto.randomUUID()}`;
   await fs.mkdir(path.dirname(iconPath), { recursive: true });
@@ -194,7 +314,7 @@ async function fetchAndCacheIcon({
   cachePath: string;
 }) {
   const providerConfig = providers[provider];
-  if (await iconExists(cachePath)) {
+  if (await isCachedIconUsable(cachePath)) {
     return;
   }
   const response = await axios.get(providerConfig.url(slug), {
@@ -202,6 +322,7 @@ async function fetchAndCacheIcon({
     timeout: 10000,
   });
   await writeIconAtomically(cachePath, Buffer.from(response.data));
+  await enforceIconCacheLimits({ protectedPath: cachePath });
 }
 
 function fetchAndCacheIconOnce({
@@ -219,11 +340,24 @@ function fetchAndCacheIconOnce({
     return inFlightRequest;
   }
 
-  const fetchPromise = fetchAndCacheIcon({
-    provider,
-    slug,
-    cachePath,
-  }).finally(() => {
+  const timeoutMs = getIconInFlightTimeoutMs();
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+  const fetchPromise = Promise.race([
+    fetchAndCacheIcon({
+      provider,
+      slug,
+      cachePath,
+    }),
+    new Promise<void>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        reject(new Error(`Icon fetch timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timeoutHandle !== undefined) {
+      clearTimeout(timeoutHandle);
+    }
     inFlightIconFetches.delete(cacheKey);
   });
 
@@ -250,7 +384,7 @@ async function getIcon(req, res) {
   const slug = normalizeSlug(iconRequest.value.slug, providerConfig.extension);
   const cachePath = getIconCachePath(provider, slug, providerConfig.extension);
 
-  if (await iconExists(cachePath)) {
+  if (await isCachedIconUsable(cachePath)) {
     sendCachedIcon(res, cachePath, providerConfig.contentType);
     return;
   }
@@ -296,7 +430,7 @@ async function getIcon(req, res) {
       `Unable to fetch icon provider=${sanitizeLogParam(provider)} slug=${sanitizeLogParam(slug)} (${sanitizeLogParam(errorMessage)})`,
     );
     res.status(502).json({
-      error: `Unable to fetch icon ${provider}/${slug} (${errorMessage})`,
+      error: `Unable to fetch icon ${provider}/${slug}`,
     });
   }
 }

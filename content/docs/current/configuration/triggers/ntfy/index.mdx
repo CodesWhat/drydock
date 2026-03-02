@@ -18,8 +18,8 @@ The `ntfy` trigger lets you send container update notifications via [Ntfy](https
 | `DD_TRIGGER_NTFY_{trigger_name}_AUTH_TOKEN` | ⚪ | Bearer token (if bearer auth is enabled) | | |
 | `DD_TRIGGER_NTFY_{trigger_name}_AUTH_USER` | ⚪ | User (if basic auth is enabled) | | |
 | `DD_TRIGGER_NTFY_{trigger_name}_PRIORITY` | ⚪ | The Ntfy message priority | Integer between `0` and `5` [see here](https://docs.ntfy.sh/publish/#message-priority) | |
-| `DD_TRIGGER_NTFY_{trigger_name}_TOPIC` | 🔴 | The Ntfy topic name | | |
-| `DD_TRIGGER_NTFY_{trigger_name}_URL` | 🔴 | The Ntfy server url | The `http` or `https` gotify server address | `https://notify.sh` |
+| `DD_TRIGGER_NTFY_{trigger_name}_TOPIC` | ⚪ | The Ntfy topic name | | |
+| `DD_TRIGGER_NTFY_{trigger_name}_URL` | ⚪ | The Ntfy server url | The `http` or `https` ntfy server address | `https://ntfy.sh` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 

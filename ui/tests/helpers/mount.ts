@@ -7,14 +7,6 @@
 import { type ComponentMountingOptions, mount as vtuMount } from '@vue/test-utils';
 import { type Component, defineComponent, h } from 'vue';
 
-/** Minimal plugin stub — registers directive stubs only. */
-const DirectiveStub = {
-  install(app: any) {
-    // Stub v-tooltip directive
-    app.directive('tooltip', {});
-  },
-};
-
 /** Stub router for provide injection. */
 const routerStub = {
   push: vi.fn(),
@@ -44,7 +36,7 @@ export function mountWithPlugins<T extends Component>(
   return vtuMount(component, {
     ...rest,
     global: {
-      plugins: [DirectiveStub, ...plugins],
+      plugins: [...plugins],
       provide: {
         // Vue Router symbols
         'Symbol(route location)': routeStub,

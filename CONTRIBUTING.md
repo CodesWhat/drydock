@@ -129,7 +129,7 @@ If lefthook passes locally, CI will pass. Fix any issues **before** pushing.
 
 ## Documentation
 
-Documentation lives in `docs/content/` (MDX format) and is published to [drydock.codeswhat.com](https://drydock.codeswhat.com). When your code change affects user-facing behavior, include the corresponding documentation update in the same PR.
+Documentation lives in `content/docs/current/` (MDX format) and is published to [drydock.codeswhat.com](https://drydock.codeswhat.com). When your code change affects user-facing behavior, include the corresponding documentation update in the same PR.
 
 CHANGELOG and README updates should accompany each logical change — don't batch them separately.
 

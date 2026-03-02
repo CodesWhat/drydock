@@ -391,7 +391,7 @@ const INDEX_ONLY_DIRS = [
   { path: "changelog", title: "Changelog" },
   { path: "configuration/agents", title: "Agents" },
   { path: "configuration/logs", title: "Logs" },
-  { path: "configuration/security", title: "Update Guard" },
+  { path: "configuration/security", title: "🥊 Update Bouncer" },
   { path: "configuration/server", title: "Server" },
   { path: "configuration/storage", title: "Storage" },
   { path: "configuration/timezone", title: "Timezone" },

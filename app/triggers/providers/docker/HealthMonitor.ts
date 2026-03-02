@@ -1,6 +1,7 @@
 import { getAuditCounter } from '../../../prometheus/audit.js';
 import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
+import { toErrorMessage } from '../../../util/error.js';
 
 export interface HealthMonitorOptions {
   dockerApi: any;
@@ -41,10 +42,6 @@ interface HealthPollContext {
   cleanup: () => void;
   onUnhealthy: () => Promise<void>;
   log: any;
-}
-
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function createContainerRef(containerId: string, containerName: string): ContainerRef {

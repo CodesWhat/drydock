@@ -9,6 +9,8 @@ const {
   mockInsertAudit,
   mockGetAuditCounter,
   mockGetWebhookCounter,
+  mockCreateHash,
+  mockTimingSafeEqual,
 } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), post: vi.fn() },
   mockGetWebhookConfiguration: vi.fn(() => ({ enabled: true, token: 'test-token' })),
@@ -17,6 +19,25 @@ const {
   mockInsertAudit: vi.fn(),
   mockGetAuditCounter: vi.fn(),
   mockGetWebhookCounter: vi.fn(),
+  mockCreateHash: vi.fn(() => {
+    const chunks: Buffer[] = [];
+    const hash = {
+      update: vi.fn((value: string, encoding?: BufferEncoding) => {
+        chunks.push(Buffer.from(value, encoding ?? 'utf8'));
+        return hash;
+      }),
+      digest: vi.fn(() => {
+        const data = Buffer.concat(chunks);
+        const digest = Buffer.alloc(32);
+        for (let i = 0; i < data.length; i += 1) {
+          digest[i % 32] ^= data[i];
+        }
+        return digest;
+      }),
+    };
+    return hash;
+  }),
+  mockTimingSafeEqual: vi.fn((left: Buffer, right: Buffer) => left.length === right.length && left.equals(right)),
 }));
 
 vi.mock('express', () => ({
@@ -29,9 +50,14 @@ vi.mock('express-rate-limit', () => ({
   default: vi.fn(() => 'rate-limit-middleware'),
 }));
 
+vi.mock('node:crypto', () => ({
+  createHash: mockCreateHash,
+  timingSafeEqual: mockTimingSafeEqual,
+}));
+
 vi.mock('../configuration/index.js', () => ({
   getWebhookConfiguration: mockGetWebhookConfiguration,
-  getServerConfiguration: vi.fn(() => ({ feature: { webhook: true } })),
+  getServerConfiguration: vi.fn(() => ({ feature: {} })),
 }));
 
 vi.mock('../store/container.js', () => ({
@@ -131,6 +157,18 @@ describe('Webhook Router', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ error: expect.stringContaining('Invalid token') }),
       );
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    test('should use timing-safe token comparison for different-length tokens', () => {
+      const middleware = getAuthMiddleware();
+      const req = createMockRequest({ headers: { authorization: 'Bearer x' } });
+      const res = createMockResponse();
+      const next = vi.fn();
+      middleware(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(mockTimingSafeEqual).toHaveBeenCalledTimes(1);
       expect(next).not.toHaveBeenCalled();
     });
 
@@ -324,18 +362,16 @@ describe('Webhook Router', () => {
   });
 
   describe('POST /watch/:containerName', () => {
-    test('should return 404 when container not found', async () => {
+    test('should return 404 when container not found without reflecting raw containerName', async () => {
       mockGetContainers.mockReturnValue([]);
 
       const handler = getHandler('post', '/watch/:containerName');
-      const req = createMockRequest({ params: { containerName: 'missing-container' } });
+      const req = createMockRequest({ params: { containerName: '<script>alert(1)</script>' } });
       const res = createMockResponse();
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('missing-container') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('should trigger watch on specific container', async () => {
@@ -468,18 +504,16 @@ describe('Webhook Router', () => {
   });
 
   describe('POST /update/:containerName', () => {
-    test('should return 404 when container not found', async () => {
+    test('should return 404 when container not found without reflecting raw containerName', async () => {
       mockGetContainers.mockReturnValue([]);
 
       const handler = getHandler('post', '/update/:containerName');
-      const req = createMockRequest({ params: { containerName: 'missing-container' } });
+      const req = createMockRequest({ params: { containerName: '\u001b[31mspoofed\u001b[0m' } });
       const res = createMockResponse();
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('missing-container') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('should return 404 when no docker trigger found', async () => {

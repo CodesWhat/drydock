@@ -257,6 +257,15 @@ body {
   border-radius: 3px;
 }
 
+/* Hidden scrollbar utility (for horizontal tab bars) */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* Sidebar transitions */
 .sidebar-transition {
   transition:

@@ -1,11 +1,11 @@
 ---
-title: "Update Guard"
+title: "Update Bouncer"
 description: "Run security scanning, signature verification, and SBOM generation before applying container updates."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-Update Guard runs security scanning in a safe-pull flow:
+Update Bouncer runs security scanning in a safe-pull flow:
 
 1. Candidate image is scanned before update
 2. Update is blocked when CVEs match configured blocking severities
@@ -117,7 +117,7 @@ services:
 
 ## SBOM Generation
 
-When enabled, Trivy generates Software Bill of Materials (SBOM) documents for candidate images during the Update Guard flow. SBOMs are persisted in `container.security.sbom` and available via the API.
+When enabled, Trivy generates Software Bill of Materials (SBOM) documents for candidate images during the Update Bouncer flow. SBOMs are persisted in `container.security.sbom` and available via the API.
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |

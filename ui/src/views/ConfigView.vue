@@ -925,7 +925,7 @@ async function handleClearIconCache() {
               </button>
               <button class="p-1.5 dd-rounded transition-colors dd-text-muted hover:dd-text"
                       :class="appLogsLoading ? 'opacity-50 pointer-events-none' : ''"
-                      title="Refresh"
+                      v-tooltip.top="'Refresh'"
                       @click="refreshAppLogs">
                 <AppIcon name="refresh" :size="12" />
               </button>

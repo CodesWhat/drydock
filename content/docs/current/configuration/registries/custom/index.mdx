@@ -16,7 +16,9 @@ The `custom` registry lets you configure a self-hosted [Docker Registry](https:/
 | `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_URL` | 🔴 | Registry URL (e.g. `http://localhost:5000`) | | |
 | `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_LOGIN` | ⚪ | Login (when htpasswd auth is enabled on the registry) | DD_REGISTRY_CUSTOM_\{REGISTRY_NAME\}_PASSWORD must be defined | |
 | `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_PASSWORD` | ⚪ | Password (when htpasswd auth is enabled on the registry) | DD_REGISTRY_CUSTOM_\{REGISTRY_NAME\}_LOGIN must be defined | |
-| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_AUTH` | ⚪ | Htpasswd string (when htpasswd auth is enabled on the registry) | DD_REGISTRY_CUSTOM_\{REGISTRY_NAME\}_LOGIN/TOKEN  must not be defined | |
+| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | DD_REGISTRY_CUSTOM_\{REGISTRY_NAME\}_LOGIN/PASSWORD must not be defined | |
+| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_CAFILE` | ⚪ | Path to custom CA certificate file | | |
+| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_INSECURE` | ⚪ | Allow insecure (non-TLS) connections | `true`, `false` | `false` |
 
 ## Examples
 

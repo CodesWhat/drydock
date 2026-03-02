@@ -238,12 +238,10 @@ export function getServerConfiguration() {
       .object({
         delete: joi.boolean().default(true),
         containeractions: joi.boolean().default(true),
-        webhook: joi.boolean().default(true),
       })
       .default({
         delete: true,
         containeractions: true,
-        webhook: true,
       }),
     cookie: joi
       .object({

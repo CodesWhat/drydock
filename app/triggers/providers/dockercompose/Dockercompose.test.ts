@@ -683,6 +683,35 @@ describe('Dockercompose Trigger', () => {
     expect(hooksSpy).toHaveBeenCalledWith(container, 'nginx', serviceDefinition);
   });
 
+  test('processComposeFile should pass compose context through update lifecycle', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+
+    const container = makeContainer();
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const runLifecycleSpy = vi
+      .spyOn(trigger, 'runContainerUpdateLifecycle')
+      .mockResolvedValue(undefined);
+
+    await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+
+    expect(runLifecycleSpy).toHaveBeenCalledWith(
+      container,
+      expect.objectContaining({
+        composeFile: '/opt/drydock/test/stack.yml',
+        service: 'nginx',
+        serviceDefinition: expect.objectContaining({ image: 'nginx:1.0.0' }),
+      }),
+    );
+  });
+
   test('processComposeFile should filter out containers where mapCurrentVersionToUpdateVersion returns undefined', async () => {
     trigger.configuration.dryrun = false;
 
@@ -1006,12 +1035,11 @@ describe('Dockercompose Trigger', () => {
         'com.docker.compose.service': 'drydock',
       },
     });
-
-    trigger._composeContextMap.set('drydock', {
+    const composeContext = {
       composeFile: '/opt/drydock/test/stack.yml',
       service: 'drydock',
       serviceDefinition: {},
-    });
+    };
 
     const insertBackupSpy = vi.spyOn(trigger, 'insertContainerImageBackup');
     const composeUpdateSpy = vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
@@ -1028,6 +1056,8 @@ describe('Dockercompose Trigger', () => {
       },
       container,
       mockLog,
+      undefined,
+      composeContext,
     );
 
     expect(updated).toBe(true);
@@ -1072,11 +1102,11 @@ describe('Dockercompose Trigger', () => {
 
   test('executeSelfUpdate should skip work in dry-run mode', async () => {
     trigger.configuration.dryrun = true;
-    trigger._composeContextMap.set('drydock', {
+    const composeContext = {
       composeFile: '/opt/drydock/test/stack.yml',
       service: 'drydock',
       serviceDefinition: {},
-    });
+    };
     const composeUpdateSpy = vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
     const hooksSpy = vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
 
@@ -1093,6 +1123,8 @@ describe('Dockercompose Trigger', () => {
         name: 'drydock',
       },
       mockLog,
+      undefined,
+      composeContext,
     );
 
     expect(updated).toBe(false);

@@ -4,8 +4,10 @@ import https from 'node:https';
 import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
+import helmet from 'helmet';
 import logger from '../log/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
+import { toErrorMessage } from '../util/error.js';
 
 const log = logger.child({ component: 'api' });
 
@@ -17,10 +19,6 @@ import * as prometheusRouter from './prometheus.js';
 import * as uiRouter from './ui.js';
 
 const configuration = getServerConfiguration();
-
-function toErrorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
 
 function shouldSkipCompression(req) {
   const acceptsEventStream =
@@ -52,6 +50,10 @@ function configureCors(app) {
       methods: configuration.cors.methods,
     }),
   );
+}
+
+function configureSecurityHeaders(app) {
+  app.use(helmet());
 }
 
 function registerRoutes(app) {
@@ -121,6 +123,8 @@ function createApp() {
 
   // Replace undefined values by null to prevent them from being removed from json responses
   app.set('json replacer', (key, value) => (value === undefined ? null : value));
+
+  configureSecurityHeaders(app);
 
   if (configuration.compression?.enabled !== false) {
     app.use(createCompressionMiddleware());

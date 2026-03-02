@@ -172,3 +172,93 @@ test('getSecurityRuntimeStatus should include server mode message when trivy ser
   expect(status.scanner.server).toBe('http://trivy:4954');
   expect(status.scanner.message).toContain('server mode');
 });
+
+test('getSecurityRuntimeStatus should reject relative scanner command paths', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: {
+      ...createEnabledConfiguration().trivy,
+      command: '../bin/trivy',
+    },
+    signature: {
+      ...createEnabledConfiguration().signature,
+      verify: false,
+    },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, 'ok', '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const status = await getSecurityRuntimeStatus();
+
+  expect(execFileMock).not.toHaveBeenCalled();
+  expect(status.ready).toBe(false);
+  expect(status.scanner.status).toBe('missing');
+  expect(status.scanner.commandAvailable).toBe(false);
+  expect(status.scanner.message).toContain('invalid');
+});
+
+test('getSecurityRuntimeStatus should reject scanner commands with shell metacharacters', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: {
+      ...createEnabledConfiguration().trivy,
+      command: 'trivy;echo',
+    },
+    signature: {
+      ...createEnabledConfiguration().signature,
+      verify: false,
+    },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, 'ok', '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const status = await getSecurityRuntimeStatus();
+
+  expect(execFileMock).not.toHaveBeenCalled();
+  expect(status.ready).toBe(false);
+  expect(status.scanner.status).toBe('missing');
+  expect(status.scanner.commandAvailable).toBe(false);
+  expect(status.scanner.message).toContain('invalid');
+});
+
+test('getSecurityRuntimeStatus should reject signature commands with shell metacharacters', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    signature: {
+      ...createEnabledConfiguration().signature,
+      verify: true,
+      cosign: {
+        ...createEnabledConfiguration().signature.cosign,
+        command: 'co$sign|cat',
+      },
+    },
+  });
+  const execFileMock = vi.fn((command, _args, _options, callback) => {
+    if (command === 'trivy') {
+      callback(null, 'ok', '');
+      return { exitCode: 0 };
+    }
+    callback(null, 'ok', '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const status = await getSecurityRuntimeStatus();
+
+  expect(execFileMock).toHaveBeenCalledTimes(1);
+  expect(execFileMock).toHaveBeenCalledWith(
+    'trivy',
+    ['--version'],
+    expect.objectContaining({ timeout: 4000 }),
+    expect.any(Function),
+  );
+  expect(status.signature.status).toBe('missing');
+  expect(status.signature.commandAvailable).toBe(false);
+  expect(status.signature.message).toContain('invalid');
+});

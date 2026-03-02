@@ -50,6 +50,13 @@ describe('DataTable', () => {
       expect(ths[3].text()).toBe('Actions');
     });
 
+    it('centers Actions header text', () => {
+      const w = factory({ showActions: true });
+      const actionsHeader = w.findAll('thead th')[3];
+      expect(actionsHeader.classes()).toContain('text-center');
+      expect(actionsHeader.classes()).not.toContain('text-right');
+    });
+
     it('does not show Actions header when showActions is false', () => {
       const w = factory({ showActions: false });
       const ths = w.findAll('thead th');
@@ -221,6 +228,17 @@ describe('DataTable', () => {
       const w = factory();
       const tds = w.findAll('tbody tr')[0].findAll('td');
       expect(tds).toHaveLength(3);
+    });
+
+    it('shows a resize handle at the registry-actions boundary when actions is shown', () => {
+      const resizeColumns = [
+        { key: 'host', label: 'Host', sortable: true },
+        { key: 'registry', label: 'Registry', sortable: true },
+      ];
+      const w = factory({ columns: resizeColumns, showActions: true });
+      const actionsHeader = w.findAll('thead th')[2];
+      expect(actionsHeader.text()).toContain('Actions');
+      expect(actionsHeader.find('[role="separator"]').exists()).toBe(true);
     });
   });
 

@@ -5,6 +5,7 @@ import joi from 'joi';
 import { initCollection } from './util.js';
 
 let settings;
+let settingsCache: Record<string, any> | null = null;
 
 const settingsSchema = joi.object({
   internetlessMode: joi.boolean().default(false),
@@ -20,12 +21,23 @@ function normalizeSettings(settingsToValidate: Record<string, any> = {}) {
   return settingsValidated.value;
 }
 
+function cloneSettings(settingsToClone: Record<string, any>) {
+  return {
+    ...settingsToClone,
+  };
+}
+
+function invalidateSettingsCache() {
+  settingsCache = null;
+}
+
 function replaceSettings(settingsToSave: Record<string, any>) {
   const settingsSaved = settings.findOne({});
   if (settingsSaved) {
     settings.remove(settingsSaved);
   }
   settings.insert(settingsToSave);
+  invalidateSettingsCache();
 }
 
 /**
@@ -37,6 +49,7 @@ export function createCollections(db) {
   const settingsSaved = settings.findOne({});
   const settingsNormalized = normalizeSettings(settingsSaved || {});
   replaceSettings(settingsNormalized);
+  settingsCache = settingsNormalized;
 }
 
 /**
@@ -44,8 +57,13 @@ export function createCollections(db) {
  * @returns {{internetlessMode: boolean}}
  */
 export function getSettings() {
+  if (settingsCache) {
+    return cloneSettings(settingsCache);
+  }
   const settingsSaved = settings.findOne({});
-  return normalizeSettings(settingsSaved || {});
+  const settingsNormalized = normalizeSettings(settingsSaved || {});
+  settingsCache = settingsNormalized;
+  return cloneSettings(settingsNormalized);
 }
 
 /**

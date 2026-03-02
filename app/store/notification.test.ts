@@ -392,4 +392,27 @@ describe('Notification Store', () => {
     );
     expect(freshNotification.getNotificationRule('missing-default')).toBeUndefined();
   });
+
+  test('getNotificationRules should cache normalized rules and invalidate cache after writes', () => {
+    const collection = createCollection();
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(() => collection),
+    };
+
+    notification.createCollections(db);
+    collection.find.mockClear();
+
+    notification.getNotificationRules();
+    const readCountAfterFirstGet = collection.find.mock.calls.length;
+    notification.getNotificationRules();
+    expect(collection.find.mock.calls.length).toBe(readCountAfterFirstGet);
+
+    notification.updateNotificationRule('update-applied', { enabled: false });
+    const readCountBeforeGetAfterWrite = collection.find.mock.calls.length;
+    const rulesAfterWrite = notification.getNotificationRules();
+
+    expect(rulesAfterWrite.find((rule) => rule.id === 'update-applied')?.enabled).toBe(false);
+    expect(collection.find.mock.calls.length).toBe(readCountBeforeGetAfterWrite + 1);
+  });
 });

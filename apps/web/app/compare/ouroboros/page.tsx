@@ -73,7 +73,7 @@ const comparisonData: ComparisonRow[] = [
   {
     feature: "Registry support",
     competitor: "Docker Hub + private via Docker config",
-    drydock: "22 dedicated registry integrations",
+    drydock: "23 dedicated registry integrations",
     verdict: "drydock",
   },
   {
@@ -195,7 +195,7 @@ const highlights: Highlight[] = [
   },
   {
     icon: Radio,
-    title: "22 Registry Integrations",
+    title: "23 Registry Integrations",
     description:
       "Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more — far beyond Ouroboros's Docker-config-based approach.",
   },

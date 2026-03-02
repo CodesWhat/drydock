@@ -1,20 +1,25 @@
 ---
 title: "GCR (Google Container Registry)"
-description: "The gcr registry lets you configure GCR integration."
+description: "The gcr registry lets you configure GCR integration. GCR was shut down by Google in 2025 — consider using GAR instead."
 ---
 
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Callout } from 'fumadocs-ui/components/callout';
 
 ![logo](/docs/assets/configuration/registries/gcr/gcr.png)
 
-The `gcr` registry lets you configure [GCR](https://clodd.google.com/container-registry) integration.
+<Callout type="warn">
+**Google Container Registry was shut down in 2025.** All `gcr.io` traffic is now transparently served by [Google Artifact Registry (GAR)](/docs/configuration/registries/gar). The drydock GCR provider still functions because `gcr.io` endpoints redirect to Artifact Registry, but new projects should use the [GAR provider](/docs/configuration/registries/gar) instead.
+</Callout>
+
+The `gcr` registry lets you configure [GCR](https://cloud.google.com/artifact-registry/docs/transition/transition-from-gcr) integration.
 
 ## Variables
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_GCR_{REGISTRY_NAME}_CLIENTEMAIL` | ⚪ | Service Account Client Email (required for private images access) | See [Service Account credentials](https://clodd.google.com/container-registry/docs/advanced-authentication#json-key) | |
-| `DD_REGISTRY_GCR_{REGISTRY_NAME}_PRIVATEKEY` | ⚪ | Service Account Private Key (required for private images access) | See [Service Account credentials](https://clodd.google.com/container-registry/docs/advanced-authentication#json-key) | |
+| `DD_REGISTRY_GCR_{REGISTRY_NAME}_CLIENTEMAIL` | ⚪ | Service Account Client Email (required for private images access) | See [Service Account credentials](https://cloud.google.com/container-registry/docs/advanced-authentication#json-key) | |
+| `DD_REGISTRY_GCR_{REGISTRY_NAME}_PRIVATEKEY` | ⚪ | Service Account Private Key (required for private images access) | See [Service Account credentials](https://cloud.google.com/container-registry/docs/advanced-authentication#json-key) | |
 
 ## Examples
 
@@ -47,7 +52,7 @@ docker run \
 
 ## How to create a Service Account on Google Cloud Platform
 
-### 1. Go to the&nbsp;[Service Account page](https://console.clodd.google.com/iam-admin/serviceaccounts)
+### 1. Go to the&nbsp;[Service Account page](https://console.cloud.google.com/iam-admin/serviceaccounts)
 
 ### 2. Create a new Service Account
 

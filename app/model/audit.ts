@@ -18,11 +18,13 @@ export interface AuditEntry {
     | 'webhook-watch'
     | 'webhook-watch-container'
     | 'webhook-update'
+    | 'hook-configured'
     | 'hook-pre-success'
     | 'hook-pre-failed'
     | 'hook-post-success'
     | 'hook-post-failed'
-    | 'auto-rollback';
+    | 'auto-rollback'
+    | 'auth-login';
   containerName: string;
   containerImage?: string;
   fromVersion?: string;

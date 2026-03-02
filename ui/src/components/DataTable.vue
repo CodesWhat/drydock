@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 
 export interface DataTableColumn {
   key: string;
@@ -52,6 +52,14 @@ function toggleSort(
 const tableRef = ref<HTMLTableElement | null>(null);
 const colWidths = reactive<Record<string, number>>({});
 const resizing = ref(false);
+const lastResizableColumnKey = computed(() => {
+  for (let i = props.columns.length - 1; i >= 0; i -= 1) {
+    if (!props.columns[i].icon) {
+      return props.columns[i].key;
+    }
+  }
+  return null;
+});
 
 function initWidths() {
   if (!tableRef.value) return;
@@ -168,7 +176,17 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                      style="background: var(--dd-text-muted)" />
               </div>
             </th>
-            <th v-if="showActions" class="text-right px-4 py-2.5 font-semibold uppercase tracking-wider text-[10px] whitespace-nowrap dd-text-muted">Actions</th>
+            <th v-if="showActions" class="text-center px-4 py-2.5 font-semibold uppercase tracking-wider text-[10px] whitespace-nowrap dd-text-muted relative">
+              Actions
+              <div v-if="lastResizableColumnKey"
+                   role="separator"
+                   aria-label="Resize column"
+                   class="absolute top-0 left-0 w-2 h-full cursor-col-resize z-10 flex items-center justify-center transition-colors hover:bg-drydock-secondary/20"
+                   @mousedown="onResizeStart(lastResizableColumnKey, $event)">
+                <div class="w-px h-3/5 rounded-full opacity-25 hover:opacity-60 transition-opacity"
+                     style="background: var(--dd-text-muted)" />
+              </div>
+            </th>
           </tr>
         </thead>
         <tbody>

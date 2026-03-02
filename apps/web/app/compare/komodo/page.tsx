@@ -101,7 +101,7 @@ const comparisonData: ComparisonRow[] = [
   {
     feature: "Registry providers",
     competitor: "Limited",
-    drydock: "22 dedicated integrations",
+    drydock: "23 dedicated integrations",
     verdict: "drydock",
   },
   {
@@ -199,7 +199,7 @@ const highlights: Highlight[] = [
   },
   {
     icon: Radio,
-    title: "22 Registry Providers",
+    title: "23 Registry Providers",
     description:
       "Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more. Komodo supports fewer registries out of the box.",
   },

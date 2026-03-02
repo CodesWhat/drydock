@@ -48,18 +48,24 @@ function getAckHandler() {
 }
 
 function createSSEResponse() {
+  const listeners = {};
   return {
     writeHead: vi.fn(),
     write: vi.fn(),
     flush: vi.fn(),
     flushHeaders: vi.fn(),
+    on: vi.fn((event, handler) => {
+      listeners[event] = handler;
+    }),
+    _listeners: listeners,
   };
 }
 
-function createSSERequest(ip = '127.0.0.1') {
+function createSSERequest(ip = '127.0.0.1', sessionID = `session-${ip}`) {
   const listeners = {};
   return {
     ip,
+    sessionID,
     on: vi.fn((event, handler) => {
       listeners[event] = handler;
     }),
@@ -105,11 +111,13 @@ describe('SSE Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    sseRouter._resetInitializationStateForTests();
     // Clear clients and connection tracking between tests
     sseRouter._clients.clear();
     sseRouter._activeSseClientsByToken.clear();
     sseRouter._activeSseClientsByResponse.clear();
     sseRouter._connectionsPerIp.clear();
+    sseRouter._connectionsPerSession.clear();
     sseRouter._clearPendingSelfUpdateAcks();
   });
 
@@ -118,6 +126,20 @@ describe('SSE Router', () => {
   });
 
   describe('init', () => {
+    test('should not register routes or event handlers more than once', () => {
+      sseRouter.init();
+      sseRouter.init();
+
+      expect(mockRouter.get).toHaveBeenCalledTimes(1);
+      expect(mockRouter.post).toHaveBeenCalledTimes(1);
+      expect(mockRegisterSelfUpdateStarting).toHaveBeenCalledTimes(1);
+      expect(mockRegisterContainerAdded).toHaveBeenCalledTimes(1);
+      expect(mockRegisterContainerUpdated).toHaveBeenCalledTimes(1);
+      expect(mockRegisterContainerRemoved).toHaveBeenCalledTimes(1);
+      expect(mockRegisterAgentConnected).toHaveBeenCalledTimes(1);
+      expect(mockRegisterAgentDisconnected).toHaveBeenCalledTimes(1);
+    });
+
     test('should register GET route on /', () => {
       sseRouter.init();
       expect(mockRouter.get).toHaveBeenCalledWith('/', expect.any(Function));
@@ -151,6 +173,10 @@ describe('SSE Router', () => {
   });
 
   describe('eventsHandler', () => {
+    test('should expose heartbeat interval constant', () => {
+      expect(sseRouter._SSE_HEARTBEAT_INTERVAL_MS).toBe(15000);
+    });
+
     test('should set correct SSE headers', () => {
       const handler = getHandler();
       const req = createSSERequest();
@@ -213,6 +239,43 @@ describe('SSE Router', () => {
       expect(sseRouter._clients.has(res)).toBe(false);
     });
 
+    test('should remove client tracking on request abort', () => {
+      const handler = getHandler();
+      const req = createSSERequest();
+      const res = createSSEResponse();
+
+      handler(req, res);
+      expect(sseRouter._clients.has(res)).toBe(true);
+      expect(sseRouter._activeSseClientsByResponse.has(res)).toBe(true);
+      expect(sseRouter._activeSseClientsByToken.size).toBe(1);
+      expect(sseRouter._connectionsPerIp.get('127.0.0.1')).toBe(1);
+
+      // Simulate abrupt client-side abort
+      req._listeners.aborted();
+
+      expect(sseRouter._clients.has(res)).toBe(false);
+      expect(sseRouter._activeSseClientsByResponse.has(res)).toBe(false);
+      expect(sseRouter._activeSseClientsByToken.size).toBe(0);
+      expect(sseRouter._connectionsPerIp.has('127.0.0.1')).toBe(false);
+    });
+
+    test('should remove client tracking on response close', () => {
+      const handler = getHandler();
+      const req = createSSERequest();
+      const res = createSSEResponse();
+
+      handler(req, res);
+      expect(sseRouter._clients.has(res)).toBe(true);
+
+      // Simulate abrupt socket close on the response stream
+      res._listeners.close();
+
+      expect(sseRouter._clients.has(res)).toBe(false);
+      expect(sseRouter._activeSseClientsByResponse.has(res)).toBe(false);
+      expect(sseRouter._activeSseClientsByToken.size).toBe(0);
+      expect(sseRouter._connectionsPerIp.has('127.0.0.1')).toBe(false);
+    });
+
     test('should set up heartbeat interval', () => {
       const handler = getHandler();
       const req = createSSERequest();
@@ -224,7 +287,7 @@ describe('SSE Router', () => {
       res.write.mockClear();
 
       // Advance 15s to trigger heartbeat
-      vi.advanceTimersByTime(15000);
+      vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
 
       expect(res.write).toHaveBeenCalledWith('event: dd:heartbeat\ndata: {}\n\n');
     });
@@ -295,10 +358,12 @@ describe('SSE Router', () => {
 
       handler(req, res);
       expect(sseRouter._connectionsPerIp.get(ip)).toBe(1);
+      expect(sseRouter._connectionsPerSession.get(`session-${ip}`)).toBe(1);
 
       // Simulate disconnect
       req._listeners.close();
       expect(sseRouter._connectionsPerIp.has(ip)).toBe(false);
+      expect(sseRouter._connectionsPerSession.has(`session-${ip}`)).toBe(false);
     });
 
     test('should use unknown key when request ip is missing', () => {
@@ -347,6 +412,25 @@ describe('SSE Router', () => {
       handler(newReq, newRes);
 
       expect(newRes.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+    });
+
+    test('should enforce session limit even when request ip changes', () => {
+      const handler = getHandler();
+      const sessionID = 'shared-session';
+
+      for (let i = 0; i < sseRouter._MAX_CONNECTIONS_PER_SESSION; i++) {
+        handler(createSSERequest(`10.0.0.${i + 1}`, sessionID), createSSEResponse());
+      }
+
+      const rejectedRes = {
+        ...createSSEResponse(),
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      };
+      handler(createSSERequest('203.0.113.11', sessionID), rejectedRes);
+
+      expect(rejectedRes.status).toHaveBeenCalledWith(429);
+      expect(rejectedRes.json).toHaveBeenCalledWith({ message: 'Too many SSE connections' });
     });
   });
 

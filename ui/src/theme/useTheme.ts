@@ -128,8 +128,7 @@ interface ViewTransitionDocument extends Document {
 
 async function transitionTheme(change: () => void, e?: MouseEvent) {
   const vtDoc = document as ViewTransitionDocument;
-  const startViewTransition = vtDoc.startViewTransition;
-  if (!startViewTransition) {
+  if (!vtDoc.startViewTransition) {
     change();
     return;
   }
@@ -141,7 +140,7 @@ async function transitionTheme(change: () => void, e?: MouseEvent) {
   document.documentElement.classList.add('dd-transitioning');
 
   isTransitioning = true;
-  const transition = startViewTransition(() => {
+  const transition = vtDoc.startViewTransition(() => {
     change();
     applyClasses();
   });

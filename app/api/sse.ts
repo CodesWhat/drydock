@@ -13,6 +13,7 @@ import {
 import log from '../log/index.js';
 
 const router = express.Router();
+let initialized = false;
 
 interface ActiveSseClient {
   clientId: string;
@@ -37,13 +38,24 @@ const activeSseClientsByToken = new Map<string, ActiveSseClient>();
 const activeSseClientsByResponse = new Map<Response, ActiveSseClient>();
 const pendingSelfUpdateAcks = new Map<string, PendingSelfUpdateAck>();
 
-// Per-IP connection tracking to prevent connection exhaustion
+// Per-IP and per-session connection tracking to prevent connection exhaustion.
 const MAX_CONNECTIONS_PER_IP = 10;
+const MAX_CONNECTIONS_PER_SESSION = 10;
 const connectionsPerIp = new Map<string, number>();
+const connectionsPerSession = new Map<string, number>();
 const DEFAULT_SELF_UPDATE_ACK_TIMEOUT_MS = 3000;
+const SSE_HEARTBEAT_INTERVAL_MS = 15000;
 
 function getClientIp(req: Request): string {
   return req.ip ?? 'unknown';
+}
+
+function getClientSessionKey(req: Request): string {
+  const sessionId = (req as Request & { sessionID?: unknown }).sessionID;
+  if (typeof sessionId === 'string' && sessionId.trim() !== '') {
+    return sessionId;
+  }
+  return `ip:${getClientIp(req)}`;
 }
 
 function issueServerClientId(prefix: string): string {
@@ -53,15 +65,24 @@ function issueServerClientId(prefix: string): string {
 function eventsHandler(req: Request, res: Response): void {
   const logger = log.child({ component: 'sse' });
   const ip = getClientIp(req);
-  const currentCount = connectionsPerIp.get(ip) ?? 0;
+  const sessionKey = getClientSessionKey(req);
+  const currentIpCount = connectionsPerIp.get(ip) ?? 0;
+  const currentSessionCount = connectionsPerSession.get(sessionKey) ?? 0;
 
-  if (currentCount >= MAX_CONNECTIONS_PER_IP) {
-    logger.warn(`SSE connection limit reached for ${ip} (${currentCount})`);
+  if (currentIpCount >= MAX_CONNECTIONS_PER_IP) {
+    logger.warn(`SSE connection limit reached for ${ip} (${currentIpCount})`);
     res.status(429).json({ message: 'Too many SSE connections' });
     return;
   }
 
-  connectionsPerIp.set(ip, currentCount + 1);
+  if (currentSessionCount >= MAX_CONNECTIONS_PER_SESSION) {
+    logger.warn(`SSE session connection limit reached (${currentSessionCount})`);
+    res.status(429).json({ message: 'Too many SSE connections' });
+    return;
+  }
+
+  connectionsPerIp.set(ip, currentIpCount + 1);
+  connectionsPerSession.set(sessionKey, currentSessionCount + 1);
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -94,9 +115,14 @@ function eventsHandler(req: Request, res: Response): void {
   // Heartbeat every 15s
   const heartbeatInterval = globalThis.setInterval(() => {
     res.write('event: dd:heartbeat\ndata: {}\n\n');
-  }, 15000);
+  }, SSE_HEARTBEAT_INTERVAL_MS);
 
-  req.on('close', () => {
+  let disconnected = false;
+  const cleanup = () => {
+    if (disconnected) {
+      return;
+    }
+    disconnected = true;
     globalThis.clearInterval(heartbeatInterval);
     clients.delete(res);
     const disconnectedClient = activeSseClientsByResponse.get(res);
@@ -104,14 +130,25 @@ function eventsHandler(req: Request, res: Response): void {
       activeSseClientsByToken.delete(disconnectedClient.clientToken);
       activeSseClientsByResponse.delete(res);
     }
-    const count = connectionsPerIp.get(ip) ?? 1;
-    if (count <= 1) {
+    const count = connectionsPerIp.get(ip);
+    if (count === undefined || count <= 1) {
       connectionsPerIp.delete(ip);
     } else {
       connectionsPerIp.set(ip, count - 1);
     }
+    const sessionCount = connectionsPerSession.get(sessionKey);
+    if (sessionCount === undefined || sessionCount <= 1) {
+      connectionsPerSession.delete(sessionKey);
+    } else {
+      connectionsPerSession.set(sessionKey, sessionCount - 1);
+    }
     logger.debug(`SSE client disconnected (${clients.size} total)`);
-  });
+  };
+
+  req.on('close', cleanup);
+  req.on('aborted', cleanup);
+  res.on('close', cleanup);
+  res.on('error', cleanup);
 }
 
 function parseAckTimeoutMs(value: unknown): number {
@@ -278,6 +315,11 @@ function broadcastContainerEvent(eventName: string, payload: unknown): void {
 }
 
 export function init(): express.Router {
+  if (initialized) {
+    return router;
+  }
+  initialized = true;
+
   // Register for self-update events from the trigger system
   registerSelfUpdateStarting(async (payload: SelfUpdateStartingEventPayload) => {
     await broadcastSelfUpdate(payload);
@@ -303,15 +345,23 @@ export function init(): express.Router {
   return router;
 }
 
+function resetInitializationStateForTests(): void {
+  initialized = false;
+}
+
 // For testing
 export {
   clients as _clients,
   activeSseClientsByToken as _activeSseClientsByToken,
   activeSseClientsByResponse as _activeSseClientsByResponse,
   connectionsPerIp as _connectionsPerIp,
+  connectionsPerSession as _connectionsPerSession,
   MAX_CONNECTIONS_PER_IP as _MAX_CONNECTIONS_PER_IP,
+  MAX_CONNECTIONS_PER_SESSION as _MAX_CONNECTIONS_PER_SESSION,
+  SSE_HEARTBEAT_INTERVAL_MS as _SSE_HEARTBEAT_INTERVAL_MS,
   pendingSelfUpdateAcks as _pendingSelfUpdateAcks,
   clearPendingSelfUpdateAcks as _clearPendingSelfUpdateAcks,
+  resetInitializationStateForTests as _resetInitializationStateForTests,
   broadcastSelfUpdate as _broadcastSelfUpdate,
   acknowledgeSelfUpdate as _acknowledgeSelfUpdate,
   broadcastScanStarted as _broadcastScanStarted,

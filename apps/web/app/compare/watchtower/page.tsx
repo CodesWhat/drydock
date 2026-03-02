@@ -7,7 +7,7 @@ const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.c
 export const metadata: Metadata = {
   title: "Watchtower vs Drydock — Container Update Monitoring Comparison",
   description:
-    "Compare Watchtower and Drydock for container update monitoring. Watchtower was archived Dec 2025 — see how Drydock provides a modern, actively maintained alternative with a full UI, 22 registries, security scanning, and more.",
+    "Compare Watchtower and Drydock for container update monitoring. Watchtower was archived Dec 2025 — see how Drydock provides a modern, actively maintained alternative with a full UI, 23 registries, security scanning, and more.",
   keywords: [
     "watchtower vs drydock",
     "watchtower alternative",
@@ -79,7 +79,7 @@ const comparisonData: ComparisonRow[] = [
   {
     feature: "Registry support",
     competitor: "Docker Hub + private via Docker config",
-    drydock: "22 dedicated registry integrations",
+    drydock: "23 dedicated registry integrations",
     verdict: "drydock",
   },
   {
@@ -201,7 +201,7 @@ const highlights: Highlight[] = [
   },
   {
     icon: Radio,
-    title: "22 Registry Integrations",
+    title: "23 Registry Integrations",
     description:
       "Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, LSCR, ACR, Harbor, Artifactory, Nexus, and more — rather than relying on Docker's credential config.",
   },

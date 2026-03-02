@@ -3,6 +3,49 @@ title: "TrueForge (TrueForge OCI Registry)"
 description: "The TrueForge registry lets you configure integration for ContainerForge-project containers."
 ---
 
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
 ![logo](/docs/assets/configuration/registries/trueforge/trueforge.png)
 
 The [TrueForge](https://trueforge.org/) registry lets you configure integration for [ContainerForge](https://trueforge.org/truetech/containerforge/)-project containers.
+
+Drydock automatically detects TrueForge registries by matching `oci.trueforge.org` hostnames.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_TRUEFORGE_{REGISTRY_NAME}_NAMESPACE` | ⚪ | TrueForge namespace (required for private images) | | |
+| `DD_REGISTRY_TRUEFORGE_{REGISTRY_NAME}_ACCOUNT` | ⚪ | TrueForge account (required for private images) | | |
+| `DD_REGISTRY_TRUEFORGE_{REGISTRY_NAME}_TOKEN` | ⚪ | TrueForge token (required for private images) | | |
+
+## Examples
+
+### Configure to access private images
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_TRUEFORGE_PRIVATE_NAMESPACE=mynamespace
+      - DD_REGISTRY_TRUEFORGE_PRIVATE_ACCOUNT=myaccount
+      - DD_REGISTRY_TRUEFORGE_PRIVATE_TOKEN=xxxxx
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_REGISTRY_TRUEFORGE_PRIVATE_NAMESPACE="mynamespace" \
+  -e DD_REGISTRY_TRUEFORGE_PRIVATE_ACCOUNT="myaccount" \
+  -e DD_REGISTRY_TRUEFORGE_PRIVATE_TOKEN="xxxxx" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

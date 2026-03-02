@@ -37,7 +37,7 @@ const features = [
   },
   {
     icon: Radio,
-    title: "22 Registries",
+    title: "23 Registries",
     emoji: "\u{1F4E6}",
     color: "text-purple-500 dark:text-purple-400",
     bg: "bg-purple-100 dark:bg-purple-900/50",
@@ -216,7 +216,7 @@ const roadmap = [
       "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
     items: [
       "Trivy vulnerability scanning",
-      "Update Guard (block vulnerable deploys)",
+      "🥊 Update Bouncer (block vulnerable deploys)",
       "SBOM generation (CycloneDX, SPDX)",
       "Image signing verification (cosign)",
     ],
@@ -229,10 +229,12 @@ const roadmap = [
     dotColor:
       "border-amber-500 bg-amber-50 text-amber-600 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-400",
     items: [
-      "PrimeVue migration & Composition API",
-      "Vite-native build cleanup",
-      "Test & performance hardening",
-      "UI personalization & font options",
+      "Tailwind CSS 4 with custom component library",
+      "4 color themes, 7 icon libraries, 6 font families",
+      "Shared data components & settings backend",
+      "SSE real-time updates & remember-me auth",
+      "Non-self rollback & CSRF protection",
+      "Event-stream reconnect & error sanitization",
     ],
   },
   {
@@ -242,7 +244,12 @@ const roadmap = [
     status: "planned" as const,
     dotColor:
       "border-sky-400 bg-sky-50 text-sky-500 dark:border-sky-500 dark:bg-sky-950 dark:text-sky-400",
-    items: ["Real-time log viewer", "Container resource monitoring", "Registry webhook receiver"],
+    items: [
+      "Real-time log viewer",
+      "Container resource monitoring",
+      "Registry webhook receiver",
+      "Scanner decoupling & Grype support",
+    ],
   },
   {
     version: "v1.6.0",
@@ -269,6 +276,7 @@ const roadmap = [
       "Clickable port links",
       "Image prune from UI",
       "Static image monitoring",
+      "Dashboard customization",
     ],
   },
   {
@@ -306,7 +314,11 @@ const roadmap = [
     status: "planned" as const,
     dotColor:
       "border-indigo-400 bg-indigo-50 text-indigo-500 dark:border-indigo-500 dark:bg-indigo-950 dark:text-indigo-400",
-    items: ["Health check gate with auto-rollback", "Canary deployments (Kubernetes)"],
+    items: [
+      "Health check gate with auto-rollback",
+      "Canary deployments (Kubernetes)",
+      "Durable self-update controller",
+    ],
   },
   {
     version: "v2.2.0",
@@ -437,7 +449,7 @@ export default function Home() {
 
                 <p className="mx-auto mb-10 max-w-2xl text-lg text-neutral-600 sm:text-xl dark:text-neutral-400">
                   Keep your containers up-to-date. Auto-discover running containers, detect image
-                  updates across 22 registries, scan for vulnerabilities, and trigger notifications
+                  updates across 23 registries, scan for vulnerabilities, and trigger notifications
                   via 20+ services.
                 </p>
 

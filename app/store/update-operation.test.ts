@@ -2,6 +2,14 @@
 import * as updateOperation from './update-operation.js';
 
 function createDb() {
+  function getByPath(object, path) {
+    return path.split('.').reduce((acc, key) => acc?.[key], object);
+  }
+
+  function matchesQuery(doc, query = {}) {
+    return Object.entries(query).every(([key, value]) => getByPath(doc, key) === value);
+  }
+
   const collections = {};
   return {
     getCollection: (name) => collections[name] || null,
@@ -12,7 +20,8 @@ function createDb() {
           doc.$loki = docs.length;
           docs.push(doc);
         },
-        find: () => [...docs],
+        find: (query = {}) => docs.filter((doc) => matchesQuery(doc, query)),
+        findOne: (query = {}) => docs.find((doc) => matchesQuery(doc, query)) || null,
         remove: (doc) => {
           const idx = docs.indexOf(doc);
           if (idx >= 0) docs.splice(idx, 1);
@@ -34,7 +43,12 @@ describe('Update Operation Store', () => {
       addCollection: vi.fn(() => ({ insert: vi.fn(), find: vi.fn(), remove: vi.fn() })),
     };
     updateOperation.createCollections(db);
-    expect(db.addCollection).toHaveBeenCalledWith('updateOperations');
+    expect(db.addCollection).toHaveBeenCalledWith(
+      'updateOperations',
+      expect.objectContaining({
+        indices: expect.arrayContaining(['data.id', 'data.containerName', 'data.status']),
+      }),
+    );
   });
 
   test('insertOperation should default to in-progress prepare state', () => {
@@ -108,5 +122,156 @@ describe('Update Operation Store', () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
     expect(fresh.getInProgressOperationByContainerName('web')).toBeUndefined();
+  });
+
+  test('getOperationsByContainerName should return container operations sorted by latest update', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
+      const first = updateOperation.insertOperation({
+        containerName: 'web',
+        containerId: 'abc',
+        triggerName: 'docker.update',
+      });
+
+      vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
+      const second = updateOperation.insertOperation({
+        containerName: 'web',
+        containerId: 'def',
+        triggerName: 'docker.update',
+      });
+
+      vi.setSystemTime(new Date('2026-02-23T00:02:00.000Z'));
+      updateOperation.updateOperation(first.id, {
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+
+      vi.setSystemTime(new Date('2026-02-23T00:03:00.000Z'));
+      updateOperation.insertOperation({
+        containerName: 'db',
+        containerId: 'ghi',
+        triggerName: 'docker.update',
+      });
+
+      const operations = updateOperation.getOperationsByContainerName('web');
+      expect(operations).toHaveLength(2);
+      expect(operations.map((operation) => operation.id)).toEqual([first.id, second.id]);
+      expect(operations.every((operation) => operation.containerName === 'web')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('retention should keep only the newest terminal operations when max entries is exceeded', async () => {
+    vi.resetModules();
+    const previousMaxEntries = process.env.DD_UPDATE_OPERATION_MAX_ENTRIES;
+    const previousRetentionDays = process.env.DD_UPDATE_OPERATION_RETENTION_DAYS;
+    process.env.DD_UPDATE_OPERATION_MAX_ENTRIES = '2';
+    process.env.DD_UPDATE_OPERATION_RETENTION_DAYS = '365';
+    vi.useFakeTimers();
+
+    try {
+      const fresh = await import('./update-operation.js');
+      fresh.createCollections(createDb());
+
+      vi.setSystemTime(new Date('2026-02-01T00:00:00.000Z'));
+      const first = fresh.insertOperation({
+        containerName: 'web',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+
+      vi.setSystemTime(new Date('2026-02-01T00:00:01.000Z'));
+      const second = fresh.insertOperation({
+        containerName: 'web',
+        status: 'rolled-back',
+        phase: 'rolled-back',
+      });
+
+      vi.setSystemTime(new Date('2026-02-01T00:00:02.000Z'));
+      const third = fresh.insertOperation({
+        containerName: 'web',
+        status: 'failed',
+        phase: 'rollback-failed',
+      });
+
+      const operations = fresh.getOperationsByContainerName('web');
+      expect(operations).toHaveLength(2);
+      expect(operations.map((operation) => operation.id)).toEqual([third.id, second.id]);
+      expect(operations.find((operation) => operation.id === first.id)).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+      if (previousMaxEntries === undefined) {
+        delete process.env.DD_UPDATE_OPERATION_MAX_ENTRIES;
+      } else {
+        process.env.DD_UPDATE_OPERATION_MAX_ENTRIES = previousMaxEntries;
+      }
+      if (previousRetentionDays === undefined) {
+        delete process.env.DD_UPDATE_OPERATION_RETENTION_DAYS;
+      } else {
+        process.env.DD_UPDATE_OPERATION_RETENTION_DAYS = previousRetentionDays;
+      }
+    }
+  });
+
+  test('retention should not prune in-progress operations', async () => {
+    vi.resetModules();
+    const previousMaxEntries = process.env.DD_UPDATE_OPERATION_MAX_ENTRIES;
+    const previousRetentionDays = process.env.DD_UPDATE_OPERATION_RETENTION_DAYS;
+    process.env.DD_UPDATE_OPERATION_MAX_ENTRIES = '1';
+    process.env.DD_UPDATE_OPERATION_RETENTION_DAYS = '365';
+    vi.useFakeTimers();
+
+    try {
+      const fresh = await import('./update-operation.js');
+      fresh.createCollections(createDb());
+
+      vi.setSystemTime(new Date('2026-02-01T00:00:00.000Z'));
+      const inProgress = fresh.insertOperation({
+        containerName: 'web',
+      });
+
+      vi.setSystemTime(new Date('2026-02-01T00:00:01.000Z'));
+      fresh.insertOperation({
+        containerName: 'web',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+
+      vi.setSystemTime(new Date('2026-02-01T00:00:02.000Z'));
+      const latestTerminal = fresh.insertOperation({
+        containerName: 'web',
+        status: 'failed',
+        phase: 'rollback-failed',
+      });
+
+      const operations = fresh.getOperationsByContainerName('web');
+      expect(operations).toHaveLength(2);
+      expect(operations.find((operation) => operation.id === inProgress.id)?.status).toBe(
+        'in-progress',
+      );
+      expect(operations.find((operation) => operation.id === latestTerminal.id)?.status).toBe(
+        'failed',
+      );
+    } finally {
+      vi.useRealTimers();
+      if (previousMaxEntries === undefined) {
+        delete process.env.DD_UPDATE_OPERATION_MAX_ENTRIES;
+      } else {
+        process.env.DD_UPDATE_OPERATION_MAX_ENTRIES = previousMaxEntries;
+      }
+      if (previousRetentionDays === undefined) {
+        delete process.env.DD_UPDATE_OPERATION_RETENTION_DAYS;
+      } else {
+        process.env.DD_UPDATE_OPERATION_RETENTION_DAYS = previousRetentionDays;
+      }
+    }
+  });
+
+  test('getOperationsByContainerName should return empty array when uninitialized', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    expect(fresh.getOperationsByContainerName('web')).toEqual([]);
   });
 });

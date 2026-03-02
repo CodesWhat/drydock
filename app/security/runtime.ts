@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { isAbsolute as isAbsolutePath, win32 as win32Path } from 'node:path';
 import { getSecurityConfiguration, type SecuritySbomFormat } from '../configuration/index.js';
 
 export type SecurityRuntimeToolStatus = {
@@ -26,15 +27,37 @@ export interface SecurityRuntimeStatus {
 
 interface CommandAvailabilityResult {
   available: boolean;
+  invalidPath: boolean;
 }
 
 const COMMAND_CHECK_TIMEOUT_MS = 4_000;
 const COMMAND_CHECK_BUFFER_BYTES = 256 * 1024;
+const DISALLOWED_COMMAND_CHARACTERS_PATTERN = /[;|$]/;
+
+function hasValidCommandPath(command: string): boolean {
+  if (
+    command.includes('\0') ||
+    DISALLOWED_COMMAND_CHARACTERS_PATTERN.test(command)
+  ) {
+    return false;
+  }
+
+  const hasPathSeparator = command.includes('/') || command.includes('\\');
+  if (hasPathSeparator) {
+    return isAbsolutePath(command) || win32Path.isAbsolute(command);
+  }
+
+  return !/\s/.test(command);
+}
 
 function checkCommandAvailability(command: string): Promise<CommandAvailabilityResult> {
   const commandValue = `${command || ''}`.trim();
   if (!commandValue) {
-    return Promise.resolve({ available: false });
+    return Promise.resolve({ available: false, invalidPath: false });
+  }
+
+  if (!hasValidCommandPath(commandValue)) {
+    return Promise.resolve({ available: false, invalidPath: true });
   }
 
   return new Promise((resolve) => {
@@ -48,7 +71,7 @@ function checkCommandAvailability(command: string): Promise<CommandAvailabilityR
       },
       (error) => {
         if (!error) {
-          resolve({ available: true });
+          resolve({ available: true, invalidPath: false });
           return;
         }
 
@@ -59,12 +82,12 @@ function checkCommandAvailability(command: string): Promise<CommandAvailabilityR
           errorCode === 'EPERM' ||
           errorCode === 'ETIMEDOUT'
         ) {
-          resolve({ available: false });
+          resolve({ available: false, invalidPath: false });
           return;
         }
 
         // A non-zero exit code still means the command exists and can be invoked.
-        resolve({ available: true });
+        resolve({ available: true, invalidPath: false });
       },
     );
   });
@@ -87,7 +110,7 @@ export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus>
   const scannerCommand = scannerEnabled ? configuration.trivy.command || 'trivy' : '';
   const scannerAvailability = scannerEnabled
     ? await checkCommandAvailability(scannerCommand)
-    : { available: false };
+    : { available: false, invalidPath: false };
 
   const signatureEnabled = Boolean(configuration.signature.verify);
   const signatureCommand = signatureEnabled
@@ -95,7 +118,7 @@ export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus>
     : '';
   const signatureAvailability = signatureEnabled
     ? await checkCommandAvailability(signatureCommand)
-    : { available: false };
+    : { available: false, invalidPath: false };
 
   const scannerStatus: SecurityRuntimeToolStatus & { scanner: string; server: string } =
     scannerEnabled
@@ -108,7 +131,9 @@ export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus>
             ? configuration.trivy.server
               ? 'Trivy client is ready (server mode enabled)'
               : 'Trivy client is ready'
-            : `Trivy command "${scannerCommand}" is not available in this runtime`,
+            : scannerAvailability.invalidPath
+              ? `Trivy command "${scannerCommand}" is invalid; use a command name or absolute path`
+              : `Trivy command "${scannerCommand}" is not available in this runtime`,
           scanner: 'trivy',
           server: configuration.trivy.server || '',
         }
@@ -126,7 +151,9 @@ export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus>
         status: signatureAvailability.available ? 'ready' : 'missing',
         message: signatureAvailability.available
           ? 'Cosign is ready for signature verification'
-          : `Cosign command "${signatureCommand}" is not available in this runtime`,
+          : signatureAvailability.invalidPath
+            ? `Cosign command "${signatureCommand}" is invalid; use a command name or absolute path`
+            : `Cosign command "${signatureCommand}" is not available in this runtime`,
       }
     : buildDisabledToolStatus('Signature verification is disabled');
 

@@ -30,6 +30,9 @@ vi.mock('./sse', mockInit);
 vi.mock('./auth', () => ({
   requireAuthentication: vi.fn((req, res, next) => next()),
 }));
+vi.mock('./csrf', () => ({
+  requireSameOriginForMutations: vi.fn((req, res, next) => next()),
+}));
 
 import * as api from './api.js';
 
@@ -91,6 +94,24 @@ describe('API Router', () => {
   test('should use requireAuthentication middleware', async () => {
     const auth = await import('./auth.js');
     expect(router.use).toHaveBeenCalledWith(auth.requireAuthentication);
+  });
+
+  test('should use CSRF middleware', async () => {
+    const csrf = await import('./csrf.js');
+    expect(router.use).toHaveBeenCalledWith(csrf.requireSameOriginForMutations);
+  });
+
+  test('should mount CSRF middleware after requireAuthentication middleware', async () => {
+    const auth = await import('./auth.js');
+    const csrf = await import('./csrf.js');
+    const useCalls = router.use.mock.calls;
+
+    const authIndex = useCalls.findIndex((c) => c[0] === auth.requireAuthentication);
+    const csrfIndex = useCalls.findIndex((c) => c[0] === csrf.requireSameOriginForMutations);
+
+    expect(authIndex).toBeGreaterThan(-1);
+    expect(csrfIndex).toBeGreaterThan(-1);
+    expect(csrfIndex).toBeGreaterThan(authIndex);
   });
 
   test('should mount SSE after requireAuthentication middleware', async () => {

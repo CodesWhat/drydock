@@ -41,7 +41,7 @@ services:
       - DD_REGISTRY_GITEA_PRIVATE_LOGIN=gitea-bot
       - DD_REGISTRY_GITEA_PRIVATE_PASSWORD=replace-me
       - DD_REGISTRY_GITEA_PRIVATE_CAFILE=/certs/internal-ca.pem
-      # --- Update Guard (security scanning) ---
+      # --- Update Bouncer (security scanning) ---
       - DD_SECURITY_SCANNER=trivy
       - DD_SECURITY_TRIVY_SERVER=http://trivy-server:4954
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL

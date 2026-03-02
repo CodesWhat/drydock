@@ -91,10 +91,13 @@ vi.mock('@/composables/useContainerFilters', () => ({
 
 vi.mock('@/composables/useBreakpoints', () => ({
   useBreakpoints: vi.fn(() => ({
-    isMobile: ref(false),
-    windowNarrow: ref(false),
+    isMobile: mockIsMobile,
+    windowNarrow: mockWindowNarrow,
   })),
 }));
+
+const mockIsMobile = ref(false);
+const mockWindowNarrow = ref(false);
 
 const mockVisibleColumns = ref(
   new Set(['icon', 'name', 'version', 'kind', 'status', 'bouncer', 'server', 'registry']),
@@ -305,6 +308,8 @@ async function mountContainersView(containers: Container[] = [], apiContainersIn
 describe('ContainersView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsMobile.value = false;
+    mockWindowNarrow.value = false;
     mockGetContainerGroups.mockResolvedValue([]);
     mockGetContainerUpdateOperations.mockResolvedValue([]);
     mockGetContainerVulnerabilities.mockResolvedValue({
@@ -381,10 +386,38 @@ describe('ContainersView', () => {
   });
 
   describe('view mode', () => {
+    it('renders the extracted list content section component', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect(wrapper.find('[data-test="containers-list-content"]').exists()).toBe(true);
+    });
+
+    it('renders the extracted grouped views subsection component', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect(wrapper.find('[data-test="containers-grouped-views"]').exists()).toBe(true);
+    });
+
+    it('renders the extracted side-detail tab content component when a container is selected', async () => {
+      const container = makeContainer();
+      const wrapper = await mountContainersView([container]);
+
+      mockSelectedContainer.value = container;
+      mockDetailPanelOpen.value = true;
+      await flushPromises();
+
+      expect(wrapper.find('[data-test="container-side-tab-content"]').exists()).toBe(true);
+    });
+
     it('renders DataTable by default (table mode)', async () => {
       const containers = [makeContainer()];
       const wrapper = await mountContainersView(containers);
       expect(wrapper.find('.data-table').exists()).toBe(true);
+    });
+
+    it('keeps DataTable actions enabled in compact mode', async () => {
+      mockWindowNarrow.value = true;
+      const wrapper = await mountContainersView([makeContainer()]);
+      const dataTable = wrapper.findComponent(childStubs.DataTable as any);
+      expect(dataTable.props('showActions')).toBe(true);
     });
 
     it('renders DataFilterBar', async () => {
@@ -602,6 +635,38 @@ describe('ContainersView', () => {
       // Ghost entry should exist in actionPending
       expect(vm.actionPending.has('mycontainer')).toBe(true);
     });
+
+    it('uses a single poll timer for multiple pending actions', async () => {
+      const first = makeContainer({ id: 'c1', name: 'alpha' });
+      const second = makeContainer({ id: 'c2', name: 'beta' });
+      const wrapper = await mountContainersView([first, second]);
+      const vm = wrapper.vm as any;
+
+      vm.containerIdMap = { alpha: 'id-alpha', beta: 'id-beta' };
+      mockApiUpdate.mockResolvedValue({});
+
+      mockGetAllContainers
+        .mockResolvedValueOnce([{ ...second, displayName: second.name }])
+        .mockResolvedValueOnce([]);
+
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce([second])
+        .mockReturnValueOnce([]);
+
+      const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+      try {
+        await vm.executeAction('alpha', mockApiUpdate);
+        await vm.executeAction('beta', mockApiUpdate);
+        await flushPromises();
+
+        expect(vm.actionPending.has('alpha')).toBe(true);
+        expect(vm.actionPending.has('beta')).toBe(true);
+        expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        setIntervalSpy.mockRestore();
+      }
+    });
   });
 
   describe('container actions', () => {
@@ -660,6 +725,7 @@ describe('ContainersView', () => {
       mockDetailPanelOpen.value = true;
       await flushPromises();
       expect(wrapper.find('.detail-panel').exists()).toBe(true);
+      expect(wrapper.find('[data-test="container-side-detail"]').exists()).toBe(true);
     });
 
     it('loads vulnerabilities and sbom for selected container details', async () => {
@@ -923,6 +989,19 @@ describe('ContainersView', () => {
       await flushPromises();
       // The v-if="!containerFullPage" should hide DataViewLayout
       expect(wrapper.find('.data-view-layout').exists()).toBe(false);
+      expect(wrapper.find('[data-test="container-full-page-detail"]').exists()).toBe(true);
+    });
+
+    it('renders the extracted full-page tab content component', async () => {
+      const c = makeContainer();
+      const wrapper = await mountContainersView([c]);
+
+      mockContainerFullPage.value = true;
+      mockSelectedContainer.value = c;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+
+      expect(wrapper.find('[data-test="container-full-page-tab-content"]').exists()).toBe(true);
     });
   });
 

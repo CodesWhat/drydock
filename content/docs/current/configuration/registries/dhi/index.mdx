@@ -17,10 +17,10 @@ Supported credentials:
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_DHI_PUBLIC_LOGIN` | ⚪ | Docker ID login | `DD_REGISTRY_DHI_PUBLIC_PASSWORD` must be defined | |
-| `DD_REGISTRY_DHI_PUBLIC_PASSWORD` | ⚪ | Docker ID password or access token | `DD_REGISTRY_DHI_PUBLIC_LOGIN` must be defined | |
-| `DD_REGISTRY_DHI_PUBLIC_TOKEN` | ⚪ | Alias for password/access token (deprecated; replaced by `DD_REGISTRY_DHI_PUBLIC_PASSWORD`) | `DD_REGISTRY_DHI_PUBLIC_LOGIN` must be defined | |
-| `DD_REGISTRY_DHI_PUBLIC_AUTH` | ⚪ | Base64 auth string (`login:password`) | `DD_REGISTRY_DHI_PUBLIC_LOGIN/PASSWORD` must not be set | |
+| `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` | ⚪ | Docker ID login | Required with `PASSWORD` or `TOKEN` | |
+| `DD_REGISTRY_DHI_{REGISTRY_NAME}_PASSWORD` | ⚪ | Docker ID password or access token | `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` must be defined | |
+| `DD_REGISTRY_DHI_{REGISTRY_NAME}_TOKEN` | ⚪ | Access token (alternative to `PASSWORD`) | `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` must be defined | |
+| `DD_REGISTRY_DHI_{REGISTRY_NAME}_AUTH` | ⚪ | Base64 auth string (`login:password`) | Cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN` | |
 
 <Callout type="warn">Registry auth now fails closed for invalid combinations. `LOGIN` must be paired with `PASSWORD` (or `TOKEN` alias), and `AUTH` cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`.</Callout>
 

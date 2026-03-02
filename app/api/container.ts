@@ -1,5 +1,5 @@
 // @ts-nocheck
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import rateLimit from 'express-rate-limit';
 import { getAgent } from '../agent/manager.js';
@@ -19,6 +19,7 @@ import {
 import * as storeContainer from '../store/container.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
+import { uniqStrings } from '../util/string-array.js';
 import { mapComponentsToList } from './component.js';
 import { broadcastScanCompleted, broadcastScanStarted } from './sse.js';
 
@@ -53,6 +54,38 @@ export function getContainersFromStore(query) {
 
 const REDACTED_RUNTIME_ENV_VALUE = '[REDACTED]';
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && typeof error.message === 'string' && error.message.trim() !== '') {
+    return error.message;
+  }
+  if (typeof error === 'string' && error.trim() !== '') {
+    return error;
+  }
+  if (
+    error &&
+    typeof error === 'object' &&
+    typeof (error as { message?: unknown }).message === 'string' &&
+    ((error as { message: string }).message || '').trim() !== ''
+  ) {
+    return (error as { message: string }).message;
+  }
+  return 'unknown error';
+}
+
+function getErrorStatusCode(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+
+  const response = (error as { response?: unknown }).response;
+  if (!response || typeof response !== 'object') {
+    return undefined;
+  }
+
+  const status = (response as { status?: unknown }).status;
+  return typeof status === 'number' ? status : undefined;
+}
+
 function redactContainerRuntimeDetails(details) {
   if (!details || typeof details !== 'object' || !Array.isArray(details.env)) {
     return details;
@@ -86,10 +119,6 @@ function redactContainersRuntimeEnv(containers) {
   }
 
   return containers.map((container) => redactContainerRuntimeEnv(container));
-}
-
-function uniqStrings(values = []) {
-  return [...new Set(values.filter((value) => typeof value === 'string'))];
 }
 
 function normalizeUpdatePolicy(updatePolicy = {}) {
@@ -150,7 +179,7 @@ function getSnoozeUntilFromActionPayload(payload = {}) {
  * @param req
  * @param res
  */
-function getContainers(req, res) {
+function getContainers(req: Request, res: Response) {
   const { query } = req;
   const containers = getContainersFromStore(query);
   res.status(200).json(redactContainersRuntimeEnv(containers));
@@ -161,7 +190,7 @@ function getContainers(req, res) {
  * @param req
  * @param res
  */
-function getContainer(req, res) {
+function getContainer(req: Request, res: Response) {
   const { id } = req.params;
   const container = storeContainer.getContainer(id);
   if (container) {
@@ -176,7 +205,7 @@ function getContainer(req, res) {
  * @param req
  * @param res
  */
-function getContainerUpdateOperations(req, res) {
+function getContainerUpdateOperations(req: Request, res: Response) {
   const { id } = req.params;
   const container = storeContainer.getContainer(id);
   if (!container) {
@@ -231,11 +260,11 @@ async function getContainerRegistryAuth(container) {
     if (containerRegistry && typeof containerRegistry.getAuthPull === 'function') {
       return await containerRegistry.getAuthPull();
     }
-  } catch (e: any) {
+  } catch (error: unknown) {
     log.warn(
       `Unable to retrieve registry auth for SBOM generation (container=${sanitizeLogParam(
         container.id,
-      )}): ${sanitizeLogParam(e.message)}`,
+      )}): ${sanitizeLogParam(getErrorMessage(error))}`,
     );
   }
   return undefined;
@@ -246,7 +275,7 @@ async function getContainerRegistryAuth(container) {
  * @param req
  * @param res
  */
-export function getContainerVulnerabilities(req, res) {
+export function getContainerVulnerabilities(req: Request, res: Response) {
   const { id } = req.params;
   const container = storeContainer.getContainer(id);
   if (!container) {
@@ -260,7 +289,7 @@ export function getContainerVulnerabilities(req, res) {
   res.status(200).json(container.security.scan);
 }
 
-export async function getContainerSbom(req, res) {
+export async function getContainerSbom(req: Request, res: Response) {
   const { id } = req.params;
   const sbomFormat = resolveSbomFormat(req.query.format);
   if (!sbomFormat) {
@@ -270,7 +299,9 @@ export async function getContainerSbom(req, res) {
     return;
   }
 
-  const container = storeContainer.getContainer(id);
+  const container = storeContainer.getContainer(id, {
+    includeRuntimeEnvValues: true,
+  });
   if (!container) {
     res.sendStatus(404);
     return;
@@ -331,9 +362,9 @@ export async function getContainerSbom(req, res) {
       document: generatedDocument,
       error: sbomResult.error,
     });
-  } catch (e: any) {
+  } catch (error: unknown) {
     res.status(500).json({
-      error: `Error generating SBOM (${e.message})`,
+      error: `Error generating SBOM (${getErrorMessage(error)})`,
     });
   }
 }
@@ -343,7 +374,7 @@ export async function getContainerSbom(req, res) {
  * @param req
  * @param res
  */
-export async function deleteContainer(req, res) {
+export async function deleteContainer(req: Request, res: Response) {
   const serverConfiguration = getServerConfiguration();
   if (!serverConfiguration.feature.delete) {
     res.sendStatus(403);
@@ -375,13 +406,13 @@ export async function deleteContainer(req, res) {
     await agent.deleteContainer(id);
     storeContainer.deleteContainer(id);
     res.sendStatus(204);
-  } catch (e) {
-    if (e.response?.status === 404) {
+  } catch (error: unknown) {
+    if (getErrorStatusCode(error) === 404) {
       storeContainer.deleteContainer(id);
       res.sendStatus(204);
     } else {
       res.status(500).json({
-        error: `Error deleting container on agent (${e.message})`,
+        error: `Error deleting container on agent (${getErrorMessage(error)})`,
       });
     }
   }
@@ -393,13 +424,13 @@ export async function deleteContainer(req, res) {
  * @param res
  * @returns {Promise<void>}
  */
-async function watchContainers(req, res) {
+async function watchContainers(req: Request, res: Response) {
   try {
     await Promise.all(Object.values(getWatchers()).map((watcher) => watcher.watch()));
     getContainers(req, res);
-  } catch (e) {
+  } catch (error: unknown) {
     res.status(500).json({
-      error: `Error when watching images (${e.message})`,
+      error: `Error when watching images (${getErrorMessage(error)})`,
     });
   }
 }
@@ -449,7 +480,7 @@ function resolveTriggerAssociation(trigger, includedTriggers, excludedTriggers) 
   return triggerToAssociate;
 }
 
-export async function getContainerTriggers(req, res) {
+export async function getContainerTriggers(req: Request, res: Response) {
   const { id } = req.params;
 
   const container = storeContainer.getContainer(id);
@@ -475,10 +506,12 @@ export async function getContainerTriggers(req, res) {
  * @param {*} req
  * @param {*} res
  */
-async function runTrigger(req, res) {
+async function runTrigger(req: Request, res: Response) {
   const { id, triggerAgent, triggerType, triggerName } = req.params;
 
-  const containerToTrigger = storeContainer.getContainer(id);
+  const containerToTrigger = storeContainer.getContainer(id, {
+    includeRuntimeEnvValues: true,
+  });
   const triggerId = triggerAgent
     ? `${triggerAgent}.${triggerType}.${triggerName}`
     : `${triggerType}.${triggerName}`;
@@ -501,12 +534,12 @@ async function runTrigger(req, res) {
           `Trigger executed with success (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}, container=${sanitizeLogParam(JSON.stringify(containerToTrigger), 500)})`,
         );
         res.status(200).json({});
-      } catch (e) {
+      } catch (error: unknown) {
         log.warn(
-          `Error when running trigger (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}) (${sanitizeLogParam(e.message)})`,
+          `Error when running trigger (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}) (${sanitizeLogParam(getErrorMessage(error))})`,
         );
         res.status(500).json({
-          error: `Error when running trigger (type=${triggerType}, name=${triggerName}) (${e.message})`,
+          error: `Error when running trigger (type=${triggerType}, name=${triggerName})`,
         });
       }
     } else {
@@ -527,10 +560,12 @@ async function runTrigger(req, res) {
  * @param res
  * @returns {Promise<void>}
  */
-async function watchContainer(req, res) {
+async function watchContainer(req: Request, res: Response) {
   const { id } = req.params;
 
-  const container = storeContainer.getContainer(id);
+  const container = storeContainer.getContainer(id, {
+    includeRuntimeEnvValues: true,
+  });
   if (!container) {
     res.sendStatus(404);
     return;
@@ -564,9 +599,9 @@ async function watchContainer(req, res) {
     // Run watchContainer from the Provider
     const containerReport = await watcher.watchContainer(container);
     res.status(200).json(redactContainerRuntimeEnv(containerReport.container));
-  } catch (e) {
+  } catch {
     res.status(500).json({
-      error: `Error when watching container ${id} (${e.message})`,
+      error: `Error when watching container ${id}`,
     });
   }
 }
@@ -646,10 +681,12 @@ function applyPolicyAction(action, container, updatePolicy, body = {}) {
   }
 }
 
-function patchContainerUpdatePolicy(req, res) {
+function patchContainerUpdatePolicy(req: Request, res: Response) {
   const { id } = req.params;
   const { action } = req.body || {};
-  const container = storeContainer.getContainer(id);
+  const container = storeContainer.getContainer(id, {
+    includeRuntimeEnvValues: true,
+  });
 
   if (!container) {
     res.sendStatus(404);
@@ -674,8 +711,8 @@ function patchContainerUpdatePolicy(req, res) {
     container.updatePolicy = Object.keys(updatePolicy).length > 0 ? updatePolicy : undefined;
     const containerUpdated = storeContainer.updateContainer(container);
     res.status(200).json(redactContainerRuntimeEnv(containerUpdated));
-  } catch (e) {
-    res.status(400).json({ error: e.message });
+  } catch (error: unknown) {
+    res.status(400).json({ error: getErrorMessage(error) });
   }
 }
 
@@ -703,7 +740,7 @@ function demuxDockerStream(buffer) {
  * @param req
  * @param res
  */
-async function getContainerLogs(req, res) {
+async function getContainerLogs(req: Request, res: Response) {
   const { id } = req.params;
   const container = storeContainer.getContainer(id);
   if (!container) {
@@ -726,9 +763,9 @@ async function getContainerLogs(req, res) {
       }
       const result = await agent.getContainerLogs(id, { tail, since, timestamps });
       res.status(200).json(result);
-    } catch (e) {
+    } catch (error: unknown) {
       res.status(500).json({
-        error: `Error fetching logs from agent (${e.message})`,
+        error: `Error fetching logs from agent (${getErrorMessage(error)})`,
       });
     }
     return;
@@ -749,16 +786,18 @@ async function getContainerLogs(req, res) {
       .logs({ stdout: true, stderr: true, tail, since, timestamps, follow: false });
     const logs = demuxDockerStream(logsBuffer);
     res.status(200).json({ logs });
-  } catch (e) {
+  } catch (error: unknown) {
     res.status(500).json({
-      error: `Error fetching container logs (${e.message})`,
+      error: `Error fetching container logs (${getErrorMessage(error)})`,
     });
   }
 }
 
-async function scanContainer(req, res) {
+async function scanContainer(req: Request, res: Response) {
   const { id } = req.params;
-  const container = storeContainer.getContainer(id);
+  const container = storeContainer.getContainer(id, {
+    includeRuntimeEnvValues: true,
+  });
   if (!container) {
     res.sendStatus(404);
     return;
@@ -824,10 +863,10 @@ async function scanContainer(req, res) {
 
     broadcastScanCompleted(id, scanResult.status);
     res.status(200).json(redactContainerRuntimeEnv(updatedContainer));
-  } catch (e: any) {
+  } catch (error: unknown) {
     broadcastScanCompleted(id, 'error');
     res.status(500).json({
-      error: `Security scan failed (${e.message})`,
+      error: `Security scan failed (${getErrorMessage(error)})`,
     });
   }
 }

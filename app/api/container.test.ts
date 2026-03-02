@@ -680,6 +680,27 @@ describe('Container Router', () => {
         }),
       );
     });
+
+    test('should return 500 when sbom generation throws a non-error value', async () => {
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/app',
+          tag: { value: '1.2.3' },
+        },
+      });
+      mockGenerateImageSbom.mockRejectedValue(null);
+      const handler = getHandler('get', '/:id/sbom');
+      const res = createResponse();
+      await handler({ params: { id: 'c1' }, query: {} }, res);
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('unknown error'),
+        }),
+      );
+    });
   });
 
   describe('scanContainer', () => {
@@ -1091,6 +1112,36 @@ describe('Container Router', () => {
         }),
       );
     });
+
+    test('should return 500 on scan failure when rejection is not an Error instance', async () => {
+      mockScanImageForVulnerabilities.mockRejectedValue({ code: 'E_SCAN_DOWN' });
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/app',
+          tag: { value: '1.2.3' },
+        },
+        security: {},
+      });
+      getSecurityConfiguration.mockReturnValue({
+        enabled: true,
+        scanner: 'trivy',
+        signature: { verify: false },
+        sbom: { enabled: false, formats: [] },
+      });
+
+      const res = await callScanContainer();
+
+      expect(mockBroadcastScanStarted).toHaveBeenCalledWith('c1');
+      expect(mockBroadcastScanCompleted).toHaveBeenCalledWith('c1', 'error');
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('unknown error'),
+        }),
+      );
+    });
   });
 
   describe('deleteContainer', () => {
@@ -1155,6 +1206,18 @@ describe('Container Router', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           error: expect.stringContaining('Error deleting container on agent'),
+        }),
+      );
+    });
+
+    test('should return 500 on non-error rejection from agent delete', async () => {
+      getServerConfiguration.mockReturnValue({ feature: { delete: true } });
+      const mockAgentObj = { deleteContainer: vi.fn().mockRejectedValue(null) };
+      const res = await callDeleteRemoteContainer(mockAgentObj);
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('unknown error'),
         }),
       );
     });
@@ -1329,6 +1392,9 @@ describe('Container Router', () => {
       registry.getState.mockReturnValue({ watcher: {}, trigger: { 'slack.default': mockTrigger } });
       const res = await callRunTrigger({ id: 'c1', triggerType: 'slack', triggerName: 'default' });
       expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error when running trigger (type=slack, name=default)',
+      });
     });
 
     test('should use triggerAgent in trigger id when provided', async () => {
@@ -1420,9 +1486,9 @@ describe('Container Router', () => {
       registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
       const res = await callWatchContainer();
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('watch error') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error when watching container c1',
+      });
     });
 
     test('should check getContainers and return 404 when container not in list', async () => {

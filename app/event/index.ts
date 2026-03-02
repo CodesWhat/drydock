@@ -1,8 +1,10 @@
-// @ts-nocheck
-import events from 'node:events';
+import { EventEmitter } from 'node:events';
+import type { Container, ContainerReport } from '../model/container.js';
+import { getAuditCounter } from '../prometheus/audit.js';
+import * as auditStore from '../store/audit.js';
 
 // Build EventEmitter
-const eventEmitter = new events.EventEmitter();
+const eventEmitter = new EventEmitter();
 
 // Container related events
 const DD_CONTAINER_ADDED = 'dd:container-added';
@@ -22,8 +24,10 @@ interface EventHandlerRegistrationOptions {
   id?: string;
 }
 
-interface OrderedEventHandler {
-  handler: (payload: any) => any;
+type OrderedEventHandlerFn<TPayload> = (payload: TPayload) => void | Promise<void>;
+
+interface OrderedEventHandler<TPayload> {
+  handler: OrderedEventHandlerFn<TPayload>;
   order: number;
   id: string;
   sequence: number;
@@ -36,41 +40,89 @@ export interface SelfUpdateStartingEventPayload {
   startedAt?: string;
 }
 
-const containerReportHandlers: OrderedEventHandler[] = [];
-const containerReportsHandlers: OrderedEventHandler[] = [];
-const containerUpdateAppliedHandlers: OrderedEventHandler[] = [];
-const containerUpdateFailedHandlers: OrderedEventHandler[] = [];
-const securityAlertHandlers: OrderedEventHandler[] = [];
-const agentConnectedHandlers: OrderedEventHandler[] = [];
-const agentDisconnectedHandlers: OrderedEventHandler[] = [];
-const selfUpdateStartingHandlers: OrderedEventHandler[] = [];
+export interface ContainerUpdateFailedEventPayload {
+  containerName: string;
+  error: string;
+}
+
+export interface SecurityAlertSummary {
+  unknown: number;
+  low: number;
+  medium: number;
+  high: number;
+  critical: number;
+}
+
+export interface SecurityAlertEventPayload {
+  containerName: string;
+  details: string;
+  status?: string;
+  summary?: SecurityAlertSummary;
+  blockingCount?: number;
+  container?: Container;
+}
+
+export interface AgentConnectedEventPayload {
+  agentName: string;
+}
+
+export interface AgentDisconnectedEventPayload {
+  agentName: string;
+  reason?: string;
+}
+
+export interface ContainerLifecycleEventPayload {
+  id?: string;
+  name?: string;
+  image?: {
+    name?: string;
+  };
+  [key: string]: unknown;
+}
+
+const containerReportHandlers = new Map<number, OrderedEventHandler<ContainerReport>>();
+const containerReportsHandlers = new Map<number, OrderedEventHandler<ContainerReport[]>>();
+const containerUpdateAppliedHandlers = new Map<number, OrderedEventHandler<string>>();
+const containerUpdateFailedHandlers = new Map<
+  number,
+  OrderedEventHandler<ContainerUpdateFailedEventPayload>
+>();
+const securityAlertHandlers = new Map<number, OrderedEventHandler<SecurityAlertEventPayload>>();
+const agentConnectedHandlers = new Map<number, OrderedEventHandler<AgentConnectedEventPayload>>();
+const agentDisconnectedHandlers = new Map<
+  number,
+  OrderedEventHandler<AgentDisconnectedEventPayload>
+>();
+const selfUpdateStartingHandlers = new Map<
+  number,
+  OrderedEventHandler<SelfUpdateStartingEventPayload>
+>();
 let handlerRegistrationSequence = 0;
 const securityAlertAuditSeenAt = new Map<string, number>();
 const agentDisconnectedAuditSeenAt = new Map<string, number>();
 
-function registerOrderedEventHandler(
-  handlers: OrderedEventHandler[],
-  handler: (payload: any) => any,
+function registerOrderedEventHandler<TPayload>(
+  handlers: Map<number, OrderedEventHandler<TPayload>>,
+  handler: OrderedEventHandlerFn<TPayload>,
   options: EventHandlerRegistrationOptions = {},
-) {
+): () => void {
   const orderNumber = Number(options.order);
-  handlers.push({
+  const registrationKey = handlerRegistrationSequence++;
+  handlers.set(registrationKey, {
     handler,
     order: Number.isFinite(orderNumber) ? orderNumber : DEFAULT_HANDLER_ORDER,
     id: options.id || '',
-    sequence: handlerRegistrationSequence++,
+    sequence: registrationKey,
   });
   return () => {
-    const handlerIndex = handlers.findIndex(
-      (registeredHandler) => registeredHandler.handler === handler,
-    );
-    if (handlerIndex >= 0) {
-      handlers.splice(handlerIndex, 1);
-    }
+    handlers.delete(registrationKey);
   };
 }
 
-function compareOrderedHandlers(handlerA: OrderedEventHandler, handlerB: OrderedEventHandler) {
+function compareOrderedHandlers<TPayload>(
+  handlerA: OrderedEventHandler<TPayload>,
+  handlerB: OrderedEventHandler<TPayload>,
+): number {
   if (handlerA.order !== handlerB.order) {
     return handlerA.order - handlerB.order;
   }
@@ -80,8 +132,11 @@ function compareOrderedHandlers(handlerA: OrderedEventHandler, handlerB: Ordered
   return handlerA.sequence - handlerB.sequence;
 }
 
-async function emitOrderedHandlers(handlers: OrderedEventHandler[], payload: any) {
-  const handlersOrdered = [...handlers].sort(compareOrderedHandlers);
+async function emitOrderedHandlers<TPayload>(
+  handlers: Map<number, OrderedEventHandler<TPayload>>,
+  payload: TPayload,
+): Promise<void> {
+  const handlersOrdered = [...handlers.values()].sort(compareOrderedHandlers);
   for (const handler of handlersOrdered) {
     await handler.handler(payload);
   }
@@ -119,7 +174,7 @@ function isDuplicateAuditEvent(
  * Emit ContainerReports event.
  * @param containerReports
  */
-export async function emitContainerReports(containerReports) {
+export async function emitContainerReports(containerReports: ContainerReport[]): Promise<void> {
   await emitOrderedHandlers(containerReportsHandlers, containerReports);
 }
 
@@ -127,7 +182,10 @@ export async function emitContainerReports(containerReports) {
  * Register to ContainersResult event.
  * @param handler
  */
-export function registerContainerReports(handler, options: EventHandlerRegistrationOptions = {}) {
+export function registerContainerReports(
+  handler: OrderedEventHandlerFn<ContainerReport[]>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
   return registerOrderedEventHandler(containerReportsHandlers, handler, options);
 }
 
@@ -135,7 +193,7 @@ export function registerContainerReports(handler, options: EventHandlerRegistrat
  * Emit ContainerReport event.
  * @param containerReport
  */
-export async function emitContainerReport(containerReport) {
+export async function emitContainerReport(containerReport: ContainerReport): Promise<void> {
   await emitOrderedHandlers(containerReportHandlers, containerReport);
 }
 
@@ -143,7 +201,10 @@ export async function emitContainerReport(containerReport) {
  * Register to ContainerReport event.
  * @param handler
  */
-export function registerContainerReport(handler, options: EventHandlerRegistrationOptions = {}) {
+export function registerContainerReport(
+  handler: OrderedEventHandlerFn<ContainerReport>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
   return registerOrderedEventHandler(containerReportHandlers, handler, options);
 }
 
@@ -151,7 +212,7 @@ export function registerContainerReport(handler, options: EventHandlerRegistrati
  * Emit ContainerUpdateApplied event.
  * @param containerId
  */
-export async function emitContainerUpdateApplied(containerId: string) {
+export async function emitContainerUpdateApplied(containerId: string): Promise<void> {
   await emitOrderedHandlers(containerUpdateAppliedHandlers, containerId);
 }
 
@@ -160,9 +221,9 @@ export async function emitContainerUpdateApplied(containerId: string) {
  * @param handler
  */
 export function registerContainerUpdateApplied(
-  handler: (containerId: string) => any,
+  handler: OrderedEventHandlerFn<string>,
   options: EventHandlerRegistrationOptions = {},
-) {
+): () => void {
   return registerOrderedEventHandler(containerUpdateAppliedHandlers, handler, options);
 }
 
@@ -170,7 +231,9 @@ export function registerContainerUpdateApplied(
  * Emit ContainerUpdateFailed event.
  * @param payload
  */
-export async function emitContainerUpdateFailed(payload: { containerName: string; error: string }) {
+export async function emitContainerUpdateFailed(
+  payload: ContainerUpdateFailedEventPayload,
+): Promise<void> {
   await emitOrderedHandlers(containerUpdateFailedHandlers, payload);
 }
 
@@ -179,9 +242,9 @@ export async function emitContainerUpdateFailed(payload: { containerName: string
  * @param handler
  */
 export function registerContainerUpdateFailed(
-  handler: (payload: { containerName: string; error: string }) => any,
+  handler: OrderedEventHandlerFn<ContainerUpdateFailedEventPayload>,
   options: EventHandlerRegistrationOptions = {},
-) {
+): () => void {
   return registerOrderedEventHandler(containerUpdateFailedHandlers, handler, options);
 }
 
@@ -189,20 +252,7 @@ export function registerContainerUpdateFailed(
  * Emit SecurityAlert event.
  * @param payload
  */
-export async function emitSecurityAlert(payload: {
-  containerName: string;
-  details: string;
-  status?: string;
-  summary?: {
-    unknown: number;
-    low: number;
-    medium: number;
-    high: number;
-    critical: number;
-  };
-  blockingCount?: number;
-  container?: any;
-}) {
+export async function emitSecurityAlert(payload: SecurityAlertEventPayload): Promise<void> {
   await emitOrderedHandlers(securityAlertHandlers, payload);
 }
 
@@ -211,22 +261,9 @@ export async function emitSecurityAlert(payload: {
  * @param handler
  */
 export function registerSecurityAlert(
-  handler: (payload: {
-    containerName: string;
-    details: string;
-    status?: string;
-    summary?: {
-      unknown: number;
-      low: number;
-      medium: number;
-      high: number;
-      critical: number;
-    };
-    blockingCount?: number;
-    container?: any;
-  }) => any,
+  handler: OrderedEventHandlerFn<SecurityAlertEventPayload>,
   options: EventHandlerRegistrationOptions = {},
-) {
+): () => void {
   return registerOrderedEventHandler(securityAlertHandlers, handler, options);
 }
 
@@ -234,7 +271,7 @@ export function registerSecurityAlert(
  * Emit AgentConnected event.
  * @param payload
  */
-export async function emitAgentConnected(payload: { agentName: string }) {
+export async function emitAgentConnected(payload: AgentConnectedEventPayload): Promise<void> {
   await emitOrderedHandlers(agentConnectedHandlers, payload);
 }
 
@@ -243,9 +280,9 @@ export async function emitAgentConnected(payload: { agentName: string }) {
  * @param handler
  */
 export function registerAgentConnected(
-  handler: (payload: { agentName: string }) => any,
+  handler: OrderedEventHandlerFn<AgentConnectedEventPayload>,
   options: EventHandlerRegistrationOptions = {},
-) {
+): () => void {
   return registerOrderedEventHandler(agentConnectedHandlers, handler, options);
 }
 
@@ -253,7 +290,9 @@ export function registerAgentConnected(
  * Emit AgentDisconnected event.
  * @param payload
  */
-export async function emitAgentDisconnected(payload: { agentName: string; reason?: string }) {
+export async function emitAgentDisconnected(
+  payload: AgentDisconnectedEventPayload,
+): Promise<void> {
   await emitOrderedHandlers(agentDisconnectedHandlers, payload);
 }
 
@@ -262,9 +301,9 @@ export async function emitAgentDisconnected(payload: { agentName: string; reason
  * @param handler
  */
 export function registerAgentDisconnected(
-  handler: (payload: { agentName: string; reason?: string }) => any,
+  handler: OrderedEventHandlerFn<AgentDisconnectedEventPayload>,
   options: EventHandlerRegistrationOptions = {},
-) {
+): () => void {
   return registerOrderedEventHandler(agentDisconnectedHandlers, handler, options);
 }
 
@@ -272,7 +311,7 @@ export function registerAgentDisconnected(
  * Emit container added.
  * @param containerAdded
  */
-export function emitContainerAdded(containerAdded) {
+export function emitContainerAdded(containerAdded: ContainerLifecycleEventPayload): void {
   eventEmitter.emit(DD_CONTAINER_ADDED, containerAdded);
 }
 
@@ -280,15 +319,17 @@ export function emitContainerAdded(containerAdded) {
  * Register to container added event.
  * @param handler
  */
-export function registerContainerAdded(handler) {
-  eventEmitter.on(DD_CONTAINER_ADDED, handler);
+export function registerContainerAdded(
+  handler: (payload: ContainerLifecycleEventPayload) => void,
+): void {
+  eventEmitter.on(DD_CONTAINER_ADDED, handler as (payload: unknown) => void);
 }
 
 /**
  * Emit container added.
  * @param containerUpdated
  */
-export function emitContainerUpdated(containerUpdated) {
+export function emitContainerUpdated(containerUpdated: ContainerLifecycleEventPayload): void {
   eventEmitter.emit(DD_CONTAINER_UPDATED, containerUpdated);
 }
 
@@ -296,15 +337,17 @@ export function emitContainerUpdated(containerUpdated) {
  * Register to container updated event.
  * @param handler
  */
-export function registerContainerUpdated(handler) {
-  eventEmitter.on(DD_CONTAINER_UPDATED, handler);
+export function registerContainerUpdated(
+  handler: (payload: ContainerLifecycleEventPayload) => void,
+): void {
+  eventEmitter.on(DD_CONTAINER_UPDATED, handler as (payload: unknown) => void);
 }
 
 /**
  * Emit container removed.
  * @param containerRemoved
  */
-export function emitContainerRemoved(containerRemoved) {
+export function emitContainerRemoved(containerRemoved: ContainerLifecycleEventPayload): void {
   eventEmitter.emit(DD_CONTAINER_REMOVED, containerRemoved);
 }
 
@@ -312,44 +355,43 @@ export function emitContainerRemoved(containerRemoved) {
  * Register to container removed event.
  * @param handler
  */
-export function registerContainerRemoved(handler) {
-  eventEmitter.on(DD_CONTAINER_REMOVED, handler);
+export function registerContainerRemoved(
+  handler: (payload: ContainerLifecycleEventPayload) => void,
+): void {
+  eventEmitter.on(DD_CONTAINER_REMOVED, handler as (payload: unknown) => void);
 }
 
-export function emitWatcherStart(watcher) {
+export function emitWatcherStart(watcher: unknown): void {
   eventEmitter.emit(DD_WATCHER_START, watcher);
 }
 
-export function registerWatcherStart(handler) {
+export function registerWatcherStart(handler: (watcher: unknown) => void): void {
   eventEmitter.on(DD_WATCHER_START, handler);
 }
 
-export function emitWatcherStop(watcher) {
+export function emitWatcherStop(watcher: unknown): void {
   eventEmitter.emit(DD_WATCHER_STOP, watcher);
 }
 
-export function registerWatcherStop(handler) {
+export function registerWatcherStop(handler: (watcher: unknown) => void): void {
   eventEmitter.on(DD_WATCHER_STOP, handler);
 }
 
-export async function emitSelfUpdateStarting(payload: SelfUpdateStartingEventPayload) {
+export async function emitSelfUpdateStarting(payload: SelfUpdateStartingEventPayload): Promise<void> {
   await emitOrderedHandlers(selfUpdateStartingHandlers, payload);
 }
 
 export function registerSelfUpdateStarting(
-  handler: (payload: SelfUpdateStartingEventPayload) => any,
+  handler: OrderedEventHandlerFn<SelfUpdateStartingEventPayload>,
   options: EventHandlerRegistrationOptions = {},
-) {
+): () => void {
   return registerOrderedEventHandler(selfUpdateStartingHandlers, handler, options);
 }
 
-import { getAuditCounter } from '../prometheus/audit.js';
 // Audit log integration
-import * as auditStore from '../store/audit.js';
-
 registerContainerReport(
   async (containerReport) => {
-    if (containerReport?.container?.updateAvailable) {
+    if (containerReport.container?.updateAvailable) {
       auditStore.insertAudit({
         id: '',
         timestamp: new Date().toISOString(),
@@ -478,21 +520,21 @@ export function pruneAuditDedupeCacheForTests(
   cache: Map<string, number>,
   now: number,
   dedupeWindowMs: number,
-) {
+): void {
   pruneAuditDedupeCache(cache, now, dedupeWindowMs);
 }
 
 // Testing helper.
-export function clearAllListenersForTests() {
+export function clearAllListenersForTests(): void {
   eventEmitter.removeAllListeners();
-  containerReportHandlers.length = 0;
-  containerReportsHandlers.length = 0;
-  containerUpdateAppliedHandlers.length = 0;
-  containerUpdateFailedHandlers.length = 0;
-  securityAlertHandlers.length = 0;
-  agentConnectedHandlers.length = 0;
-  agentDisconnectedHandlers.length = 0;
-  selfUpdateStartingHandlers.length = 0;
+  containerReportHandlers.clear();
+  containerReportsHandlers.clear();
+  containerUpdateAppliedHandlers.clear();
+  containerUpdateFailedHandlers.clear();
+  securityAlertHandlers.clear();
+  agentConnectedHandlers.clear();
+  agentDisconnectedHandlers.clear();
+  selfUpdateStartingHandlers.clear();
   securityAlertAuditSeenAt.clear();
   agentDisconnectedAuditSeenAt.clear();
   handlerRegistrationSequence = 0;

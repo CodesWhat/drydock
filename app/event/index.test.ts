@@ -132,6 +132,31 @@ test('deregistration function should be idempotent', async () => {
   expect(handler).not.toHaveBeenCalled();
 });
 
+test('deregister should remove the exact registration when the same handler is registered twice', async () => {
+  const calls: string[] = [];
+  const sharedHandler = async () => {
+    calls.push('shared');
+  };
+
+  event.registerContainerReport(
+    async () => {
+      calls.push('middle');
+    },
+    { id: 'middle', order: 15 },
+  );
+
+  event.registerContainerReport(sharedHandler, { id: 'first', order: 10 });
+  const deregisterSecond = event.registerContainerReport(sharedHandler, {
+    id: 'second',
+    order: 20,
+  });
+
+  deregisterSecond();
+  await event.emitContainerReport({});
+
+  expect(calls).toEqual(['shared', 'middle']);
+});
+
 test('emitContainerUpdateApplied should call registered handlers', async () => {
   const handler = vi.fn();
   event.registerContainerUpdateApplied(handler, { order: 10 });
@@ -144,6 +169,28 @@ test('deregistration of containerUpdateApplied handler should work', async () =>
   const deregister = event.registerContainerUpdateApplied(handler, { order: 10 });
   deregister();
   await event.emitContainerUpdateApplied('container-456');
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test('emitContainerUpdateFailed should call registered handlers', async () => {
+  const handler = vi.fn();
+  const payload = {
+    containerName: 'web',
+    error: 'failed to recreate container',
+  };
+  event.registerContainerUpdateFailed(handler, { order: 10 });
+  await event.emitContainerUpdateFailed(payload);
+  expect(handler).toHaveBeenCalledWith(payload);
+});
+
+test('deregistration of containerUpdateFailed handler should work', async () => {
+  const handler = vi.fn();
+  const deregister = event.registerContainerUpdateFailed(handler, { order: 10 });
+  deregister();
+  await event.emitContainerUpdateFailed({
+    containerName: 'api',
+    error: 'update skipped',
+  });
   expect(handler).not.toHaveBeenCalled();
 });
 

@@ -15,9 +15,10 @@ The `kafka` trigger lets you publish container update notifications to a Kafka t
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
 | `DD_TRIGGER_KAFKA_{trigger_name}_BROKERS` | 🔴 | Comma separated list of Kafka brokers | | |
+| `DD_TRIGGER_KAFKA_{trigger_name}_CLIENTID` | ⚪ | The Kafka client ID | | `drydock` |
 | `DD_TRIGGER_KAFKA_{trigger_name}_SSL` | ⚪ | Is SSL enabled on the TLS connection | `true`, `false` | `false` |
 | `DD_TRIGGER_KAFKA_{trigger_name}_TOPIC` | ⚪ | The name of the topic to publish | | `drydock-container` |
-| `DD_TRIGGER_KAFKA_{trigger_name}_AUTHENTICATION_TYPE` | ⚪ | The type for authentication | `PLAIN`, `SCRAM-SHA-256`, `SCRAM-SHA-12` | `PLAIN` |
+| `DD_TRIGGER_KAFKA_{trigger_name}_AUTHENTICATION_TYPE` | ⚪ | The type for authentication | `PLAIN`, `SCRAM-SHA-256`, `SCRAM-SHA-512` | `PLAIN` |
 | `DD_TRIGGER_KAFKA_{trigger_name}_AUTHENTICATION_USER` | ⚪ | The name of the user (required if authentication is enabled) | | |
 | `DD_TRIGGER_KAFKA_{trigger_name}_AUTHENTICATION_PASSWORD` | ⚪ | The password of the user (required if authentication is enabled) | | |
 

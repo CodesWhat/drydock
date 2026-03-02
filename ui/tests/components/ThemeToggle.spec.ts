@@ -36,8 +36,12 @@ describe('ThemeToggle', () => {
 
   it('always renders 3 buttons in fixed order: light, system, dark', () => {
     const wrapper = factory();
-    const titles = wrapper.findAll('button').map((b) => b.attributes('title'));
-    expect(titles).toEqual(['Light', 'System', 'Dark']);
+    const labels = wrapper.findAll('button').map((b) => b.attributes('aria-label'));
+    expect(labels).toEqual([
+      'Switch to light theme',
+      'Switch to system theme',
+      'Switch to dark theme',
+    ]);
   });
 
   it('renders icons in fixed order: sun, monitor, moon', () => {
@@ -49,8 +53,12 @@ describe('ThemeToggle', () => {
   it('keeps the same order regardless of active variant', () => {
     mockThemeVariant.value = 'light';
     const wrapper = factory();
-    const titles = wrapper.findAll('button').map((b) => b.attributes('title'));
-    expect(titles).toEqual(['Light', 'System', 'Dark']);
+    const labels = wrapper.findAll('button').map((b) => b.attributes('aria-label'));
+    expect(labels).toEqual([
+      'Switch to light theme',
+      'Switch to system theme',
+      'Switch to dark theme',
+    ]);
   });
 
   it('is collapsed by default showing only the active icon width', () => {

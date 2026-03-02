@@ -108,6 +108,15 @@ describe('useColumnVisibility', () => {
     expect(visibleColumns.value.has('status')).toBe(true);
   });
 
+  it('should fall back to defaults when localStorage contains invalid JSON', async () => {
+    localStorage.setItem('dd-table-cols-v1', '{invalid json');
+    const { useColumnVisibility } = await loadColumnVisibility();
+    const { allColumns, visibleColumns } = useColumnVisibility(ref(false));
+    expect(visibleColumns.value.size).toBe(allColumns.length);
+    expect(visibleColumns.value.has('icon')).toBe(true);
+    expect(visibleColumns.value.has('name')).toBe(true);
+  });
+
   it('should default showColumnPicker to false', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const { showColumnPicker } = useColumnVisibility(ref(false));

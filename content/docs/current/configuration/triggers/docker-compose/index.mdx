@@ -26,10 +26,12 @@ The trigger will:
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_FILE` | 🔴 | The docker-compose.yml file location | | |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_FILE` | ⚪ | The docker-compose.yml file location (can also be set per container via the `dd.compose.file` label) | | |
 | `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_BACKUP` | ⚪ | Backup the docker-compose.yml file as `.back` before updating? | `true`, `false` | `false` |
 | `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_PRUNE` | ⚪ | If the old image must be pruned after upgrade | `true`, `false` | `false` |
 | `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_DRYRUN` | ⚪ | When enabled, only pull the new image ahead of time | `true`, `false` | `false` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of image backups to retain per container | Integer | `3` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_AUTOREMOVETIMEOUT` | ⚪ | Wait timeout for container auto-removal (ms) | Integer | `10000` |
 | `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILELABEL` | ⚪ | Container label name used to locate the compose file per container | Label name | `dd.compose.file` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). but only supports the `batch` mode.</Callout>
@@ -112,7 +114,7 @@ docker run \
 <Tab value="Label">
 ```yaml
 labels:
-  dd.compose.file: "/my/path/docker-compose.yaml
+  dd.compose.file: "/my/path/docker-compose.yaml"
 ```
 </Tab>
 </Tabs>

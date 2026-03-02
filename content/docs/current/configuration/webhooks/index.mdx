@@ -14,10 +14,10 @@ The webhook API lets external systems trigger container watches and updates. Thi
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_SERVER_FEATURE_WEBHOOK` | ⚪ | Enable webhook endpoints | `true`, `false` | `true` |
-| `DD_SERVER_WEBHOOK_TOKEN` | 🔴 | Bearer token for webhook authentication | Any string | — |
+| `DD_SERVER_WEBHOOK_ENABLED` | ⚪ | Enable webhook endpoints | `true`, `false` | `false` |
+| `DD_SERVER_WEBHOOK_TOKEN` | 🔴 | Bearer token for webhook authentication (required when enabled) | Any string | — |
 
-<Callout type="warn">Webhooks require a `DD_SERVER_WEBHOOK_TOKEN` to be set. Without it, webhook endpoints will reject all requests.</Callout>
+<Callout type="warn">Webhooks are disabled by default. Set `DD_SERVER_WEBHOOK_ENABLED=true` and provide a `DD_SERVER_WEBHOOK_TOKEN` to activate them. Without a token, webhook endpoints will reject all requests.</Callout>
 
 ## Endpoints
 
@@ -93,6 +93,7 @@ services:
   drydock:
     image: codeswhat/drydock
     environment:
+      - DD_SERVER_WEBHOOK_ENABLED=true
       - DD_SERVER_WEBHOOK_TOKEN=my-secret-token
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -104,6 +105,7 @@ services:
 <Tab value="Docker">
 ```bash
 docker run -d \
+  -e DD_SERVER_WEBHOOK_ENABLED=true \
   -e DD_SERVER_WEBHOOK_TOKEN=my-secret-token \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -p 3000:3000 \

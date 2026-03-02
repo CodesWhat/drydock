@@ -3,7 +3,6 @@ import os from 'node:os';
 import { getVersion } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import logger from '../../log/index.js';
-import type { Container } from '../../model/container.js';
 import * as storeContainer from '../../store/container.js';
 
 const log = logger.child({ component: 'agent-api-event' });
@@ -103,13 +102,13 @@ export function subscribeEvents(req: Request, res: Response) {
  * Initialize event listeners.
  */
 export function initEvents() {
-  event.registerContainerAdded((container: Container) =>
+  event.registerContainerAdded((container: event.ContainerLifecycleEventPayload) =>
     sendSseEvent('dd:container-added', container),
   );
-  event.registerContainerUpdated((container: Container) =>
+  event.registerContainerUpdated((container: event.ContainerLifecycleEventPayload) =>
     sendSseEvent('dd:container-updated', container),
   );
-  event.registerContainerRemoved((container: Container) =>
+  event.registerContainerRemoved((container: event.ContainerLifecycleEventPayload) =>
     sendSseEvent('dd:container-removed', { id: container.id }),
   );
 }

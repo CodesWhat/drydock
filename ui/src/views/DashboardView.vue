@@ -19,6 +19,7 @@ function navigateTo(route: RouteLocationRaw) {
 }
 
 const DASHBOARD_WIDGET_ORDER_STORAGE_KEY = 'dd-dashboard-widget-order-v3';
+const DASHBOARD_REALTIME_REFRESH_DEBOUNCE_MS = 1_000;
 const DASHBOARD_WIDGET_IDS = [
   'stat-containers',
   'stat-updates',
@@ -88,6 +89,7 @@ type RecentAuditStatus = 'updated' | 'pending' | 'failed';
 const recentStatusByContainer = ref<Record<string, RecentAuditStatus>>({});
 const maintenanceCountdownNow = ref(Date.now());
 let maintenanceCountdownTimer: ReturnType<typeof setInterval> | undefined;
+let realtimeRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 const widgetOrder = ref<DashboardWidgetId[]>([...DASHBOARD_WIDGET_IDS]);
 const draggedWidgetId = ref<DashboardWidgetId | null>(null);
 
@@ -260,7 +262,13 @@ async function fetchDashboardData(options: DashboardRefreshOptions = {}) {
 }
 
 function handleRealtimeRefresh() {
-  void fetchDashboardData({ background: true });
+  if (realtimeRefreshTimer !== undefined) {
+    clearTimeout(realtimeRefreshTimer);
+  }
+  realtimeRefreshTimer = window.setTimeout(() => {
+    realtimeRefreshTimer = undefined;
+    void fetchDashboardData({ background: true });
+  }, DASHBOARD_REALTIME_REFRESH_DEBOUNCE_MS);
 }
 
 const realtimeRefreshListener = handleRealtimeRefresh as EventListener;
@@ -280,6 +288,10 @@ onUnmounted(() => {
   globalThis.removeEventListener('dd:sse-container-changed', realtimeRefreshListener);
   globalThis.removeEventListener('dd:sse-scan-completed', realtimeRefreshListener);
   globalThis.removeEventListener('dd:sse-connected', realtimeRefreshListener);
+  if (realtimeRefreshTimer !== undefined) {
+    clearTimeout(realtimeRefreshTimer);
+    realtimeRefreshTimer = undefined;
+  }
   if (maintenanceCountdownTimer !== undefined) {
     clearInterval(maintenanceCountdownTimer);
     maintenanceCountdownTimer = undefined;
@@ -705,6 +717,7 @@ const servers = computed(() => {
     name: string;
     host?: string;
     status: 'connected' | 'disconnected';
+    statusLabel?: string;
     containers: { running: number; total: number };
   }> = [];
 
@@ -736,12 +749,21 @@ const servers = computed(() => {
     });
   }
 
-  return list;
-});
+  const webhookEnabled = serverInfo.value?.configuration?.webhook?.enabled;
+  if (typeof webhookEnabled === 'boolean') {
+    list.push({
+      name: 'Webhook API',
+      host: '/api/webhook',
+      status: webhookEnabled ? 'connected' : 'disconnected',
+      statusLabel: webhookEnabled ? 'Enabled' : 'Disabled',
+      containers: {
+        running: 0,
+        total: 0,
+      },
+    });
+  }
 
-const webhookEnabled = computed<boolean | null>(() => {
-  const enabled = serverInfo.value?.configuration?.webhook?.enabled;
-  return typeof enabled === 'boolean' ? enabled : null;
+  return list;
 });
 
 // Computed: security donut chart data
@@ -840,7 +862,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
              data-widget-id="recent-updates"
              :data-widget-order="widgetOrderIndex('recent-updates')"
              draggable="true"
-             aria-label="Recent Updates widget"
+             aria-label="Updates Available widget"
              class="dashboard-widget xl:col-span-2 dd-rounded overflow-hidden min-w-0"
              :class="{ 'opacity-60': draggedWidgetId === 'recent-updates' }"
              :style="{
@@ -857,7 +879,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
             <div class="flex items-center gap-2">
               <AppIcon name="recent-updates" :size="14" class="text-drydock-secondary" />
               <h2 class="text-xs font-semibold dd-text">
-                Recent Updates
+                Updates Available
               </h2>
             </div>
             <button class="text-[11px] font-medium text-drydock-secondary hover:underline"
@@ -870,8 +892,11 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                 <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <th class="w-10 px-0 py-2.5" />
                   <th class="text-left px-3 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Container</th>
-                  <th class="text-center px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Version</th>
-                  <th class="text-center px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Status</th>
+                  <th class="text-center px-2 sm:px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Version</th>
+                  <th class="w-10 sm:w-auto text-center px-1 sm:px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">
+                    <span class="hidden sm:inline">Status</span>
+                    <span class="sm:hidden inline-flex items-center justify-center"><AppIcon name="info" :size="12" /></span>
+                  </th>
                 </tr>
               </thead>
             </table>
@@ -904,22 +929,31 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                       Release notes
                     </a>
                   </td>
-                  <td class="px-5 py-3 align-middle overflow-hidden">
-                    <div class="grid items-center gap-1.5 min-w-0" style="grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);">
-                      <span class="px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium text-right justify-self-end dd-bg-elevated dd-text-secondary truncate max-w-full">
+                  <td class="px-2 sm:px-5 py-3 align-middle overflow-hidden">
+                    <!-- Desktop: horizontal old → new -->
+                    <div class="hidden sm:flex items-center justify-center gap-1.5 min-w-0">
+                      <span class="text-[11px] dd-text-secondary truncate max-w-[100px]" v-tooltip.top="row.oldVer">
                         {{ row.oldVer }}
                       </span>
-                      <AppIcon name="arrow-right" :size="8" class="justify-self-center dd-text-muted shrink-0" />
-                      <span class="px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium justify-self-start truncate max-w-full"
-                            :style="{
-                              backgroundColor: getRecentUpdateStatusMutedColor(row.status),
-                              color: getRecentUpdateStatusColor(row.status),
-                            }">
+                      <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
+                      <span class="text-[11px] font-semibold truncate max-w-[120px]"
+                            :style="{ color: getRecentUpdateStatusColor(row.status) }">
+                        {{ row.newVer }}
+                      </span>
+                    </div>
+                    <!-- Mobile: stacked old ↓ new -->
+                    <div class="flex sm:hidden flex-col items-start gap-0.5 min-w-0">
+                      <span class="text-[9px] dd-text-secondary break-all leading-tight">
+                        {{ row.oldVer }}
+                      </span>
+                      <AppIcon name="chevron-down" :size="7" class="dd-text-muted shrink-0 self-center" />
+                      <span class="text-[9px] font-semibold break-all leading-tight"
+                            :style="{ color: getRecentUpdateStatusColor(row.status) }">
                         {{ row.newVer }}
                       </span>
                     </div>
                   </td>
-                  <td class="px-5 py-3 text-center align-middle">
+                  <td class="px-1 sm:px-5 py-3 text-center align-middle">
                     <span class="badge px-1.5 py-0 text-[9px] md:!hidden"
                           :style="{
                             backgroundColor: getRecentUpdateStatusMutedColor(row.status),
@@ -940,7 +974,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                 </tr>
                 <tr v-if="recentUpdates.length === 0">
                   <td colspan="4" class="px-4 py-6 text-center text-[11px] dd-text-muted">
-                    No recent updates yet
+                    No updates available
                   </td>
                 </tr>
               </tbody>
@@ -1134,21 +1168,10 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
           </div>
 
           <div class="p-4 space-y-3">
-            <div v-if="webhookEnabled !== null"
-                 class="flex items-center justify-between p-3 dd-rounded"
-                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              <span class="text-[10px] font-semibold uppercase tracking-wider dd-text-muted">Webhook API</span>
-              <span class="badge text-[9px] uppercase font-bold"
-                    :style="{
-                      backgroundColor: webhookEnabled ? 'var(--dd-success-muted)' : 'var(--dd-neutral-muted)',
-                      color: webhookEnabled ? 'var(--dd-success)' : 'var(--dd-neutral)',
-                    }">
-                {{ webhookEnabled ? 'Enabled' : 'Disabled' }}
-              </span>
-            </div>
             <div v-for="server in servers" :key="server.name"
-                 class="flex items-center gap-3 p-3 dd-rounded"
-                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                 class="flex items-center gap-3 p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated"
+                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
+                 @click="navigateTo('/servers')">
               <span class="badge px-1.5 py-0 text-[9px] max-md:!hidden"
                     :style="{
                       backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
@@ -1175,7 +1198,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
                       backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                       color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
                     }">
-                {{ server.status }}
+                {{ server.statusLabel ?? server.status }}
               </span>
             </div>
           </div>

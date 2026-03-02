@@ -14,9 +14,9 @@ The `ecr` registry lets you configure [ECR](https://aws.amazon.com/ecr/) integra
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_ECR_{REGISTRY_NAME}_REGION` | 🔴 | A valid AWS Region Code | [AWS Region list](https://docs.aws.amazon.com/general/latest/gr/rande.html#regional-endpoints) | |
-| `DD_REGISTRY_ECR_{REGISTRY_NAME}_ACCESSKEYID` | 🔴 | A valid AWS Access Key Id | [Standard AWS Credentials](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html) | |
-| `DD_REGISTRY_ECR_{REGISTRY_NAME}_SECRETACCESSKEY` | 🔴 | A valid AWS Secret Access Key | [Standard AWS Credentials](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html) | |
+| `DD_REGISTRY_ECR_{REGISTRY_NAME}_ACCESSKEYID` | ⚪ | A valid AWS Access Key Id (required for private images) | [Standard AWS Credentials](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html) | |
+| `DD_REGISTRY_ECR_{REGISTRY_NAME}_SECRETACCESSKEY` | ⚪ | A valid AWS Secret Access Key (required for private images) | [Standard AWS Credentials](https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html) | |
+| `DD_REGISTRY_ECR_{REGISTRY_NAME}_REGION` | ⚪ | A valid AWS Region Code (required for private images) | [AWS Region list](https://docs.aws.amazon.com/general/latest/gr/rande.html#regional-endpoints) | |
 
 <Callout type="warn">The AmazonEC2ContainerRegistryReadOnly Policy (or higher) must be attached to the AWS IAM User.</Callout>
 

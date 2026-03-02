@@ -462,7 +462,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                 <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
                         :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
                         :style="{ borderColor: 'var(--dd-border-strong)' }"
-                        title="Toggle columns"
+                        v-tooltip.top="'Toggle columns'"
                         @click.stop="showAgentColumnPicker = !showAgentColumnPicker">
                   <AppIcon name="config" :size="10" />
                 </button>
@@ -890,7 +890,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                 <button data-testid="agent-log-refresh"
                         class="p-1.5 dd-rounded transition-colors dd-text-muted hover:dd-text"
                         :class="agentLogsLoading ? 'opacity-50 pointer-events-none' : ''"
-                        title="Refresh"
+                        v-tooltip.top="'Refresh'"
                         @click="refreshSelectedAgentLogs">
                   <AppIcon name="refresh" :size="12" />
                 </button>

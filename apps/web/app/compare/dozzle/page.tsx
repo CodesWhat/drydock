@@ -65,7 +65,7 @@ const comparisonData: ComparisonRow[] = [
   {
     feature: "Image update detection",
     competitor: "No",
-    drydock: "Yes, across 22 registries",
+    drydock: "Yes, across 23 registries",
     verdict: "drydock",
   },
   {
@@ -183,7 +183,7 @@ const highlights: Highlight[] = [
     icon: Eye,
     title: "Image Update Detection",
     description:
-      "Dozzle is a log viewer — it doesn't monitor for image updates. Drydock continuously checks 22 registries and notifies you when new versions are available.",
+      "Dozzle is a log viewer — it doesn't monitor for image updates. Drydock continuously checks 23 registries and notifies you when new versions are available.",
   },
   {
     icon: Shield,
@@ -205,7 +205,7 @@ const highlights: Highlight[] = [
   },
   {
     icon: Radio,
-    title: "22 Registry Integrations",
+    title: "23 Registry Integrations",
     description:
       "Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more.",
   },

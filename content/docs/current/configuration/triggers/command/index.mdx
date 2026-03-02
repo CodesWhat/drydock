@@ -15,8 +15,8 @@ The `command` trigger lets you run arbitrary commands upon container update noti
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
 | `DD_TRIGGER_COMMAND_{trigger_name}_CMD` | 🔴 | The command to run | | |
-| `DD_TRIGGER_COMMAND_{trigger_name}_SHELL` | 🔴 | The shell to use | Any valid installed shell path | `/bin/sh` |
-| `DD_TRIGGER_COMMAND_{trigger_name}_TIMEOUT` | 🔴 | The command timeout (in ms) | Any positive integer (`0` means no timeout) | `60000` |
+| `DD_TRIGGER_COMMAND_{trigger_name}_SHELL` | ⚪ | The shell to use | Any valid installed shell path | `/bin/sh` |
+| `DD_TRIGGER_COMMAND_{trigger_name}_TIMEOUT` | ⚪ | The command timeout (in ms) | Any positive integer (`0` means no timeout) | `60000` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 

@@ -86,67 +86,6 @@ const scannerReady = computed(() => {
   return runtimeStatus.value.scanner.status === 'ready';
 });
 
-const runtimeCardStyle = computed(() => {
-  if (runtimeError.value) {
-    return {
-      borderColor: 'var(--dd-danger)',
-      backgroundColor: 'var(--dd-danger-muted)',
-      color: 'var(--dd-danger)',
-    };
-  }
-
-  if (runtimeLoading.value) {
-    return {
-      borderColor: 'var(--dd-border-strong)',
-      backgroundColor: 'var(--dd-bg-card)',
-      color: 'var(--dd-text)',
-    };
-  }
-
-  if (scannerReady.value) {
-    return {
-      borderColor: 'var(--dd-success)',
-      backgroundColor: 'var(--dd-success-muted)',
-      color: 'var(--dd-success)',
-    };
-  }
-
-  return {
-    borderColor: 'var(--dd-warning)',
-    backgroundColor: 'var(--dd-warning-muted)',
-    color: 'var(--dd-warning)',
-  };
-});
-
-const runtimeHeadline = computed(() => {
-  if (runtimeError.value) {
-    return 'Unable to verify security tooling';
-  }
-  if (runtimeLoading.value) {
-    return 'Checking security runtime status';
-  }
-  if (!runtimeStatus.value) {
-    return 'Security runtime status unavailable';
-  }
-  if (runtimeStatus.value.scanner.status === 'ready') {
-    return 'Vulnerability scanner is ready';
-  }
-  return 'Vulnerability scanner is not ready';
-});
-
-const runtimeDescription = computed(() => {
-  if (runtimeError.value) {
-    return runtimeError.value;
-  }
-  if (runtimeLoading.value) {
-    return 'Detecting trivy/cosign availability in the current runtime.';
-  }
-  if (!runtimeStatus.value) {
-    return 'Security runtime status endpoint did not return data.';
-  }
-  return runtimeStatus.value.scanner.message;
-});
-
 const scanDisabledReason = computed(() => {
   if (runtimeLoading.value) {
     return 'Checking scanner availability';
@@ -204,8 +143,6 @@ function formatTimestamp(value: string | null | undefined): string {
   return date.toISOString();
 }
 
-const runtimeCheckedAtLabel = computed(() => formatTimestamp(runtimeStatus.value?.checkedAt));
-const latestScanLabel = computed(() => formatTimestamp(latestSecurityScanAt.value));
 
 async function fetchSecurityRuntimeStatus() {
   runtimeLoading.value = true;
@@ -591,58 +528,6 @@ onUnmounted(() => {
 
       <div v-if="loading" class="text-[11px] dd-text-muted py-3 px-1">Loading vulnerability data...</div>
 
-      <div class="mb-3 px-3 py-2 dd-rounded border" :style="runtimeCardStyle">
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <div class="text-[10px] font-semibold uppercase tracking-wide opacity-80">Security runtime</div>
-            <div class="text-[12px] font-semibold mt-0.5">{{ runtimeHeadline }}</div>
-            <div class="text-[10px] mt-1 opacity-90">{{ runtimeDescription }}</div>
-            <div class="text-[10px] mt-1 opacity-90 flex items-center gap-3 flex-wrap">
-              <span v-if="runtimeStatus">Runtime checked: {{ runtimeCheckedAtLabel }}</span>
-              <span v-if="latestSecurityScanAt">Latest scan: {{ latestScanLabel }}</span>
-            </div>
-          </div>
-          <button class="w-7 h-7 dd-rounded flex items-center justify-center border transition-colors"
-                  :style="{ borderColor: 'var(--dd-border-strong)' }"
-                  :class="runtimeLoading ? 'cursor-wait opacity-70' : 'hover:dd-bg-elevated'"
-                  :disabled="runtimeLoading"
-                  title="Refresh runtime status"
-                  @click="fetchSecurityRuntimeStatus">
-            <AppIcon name="restart" :size="11" :class="{ 'animate-spin': runtimeLoading }" />
-          </button>
-        </div>
-
-        <div v-if="runtimeStatus" class="mt-2 flex items-center gap-1.5 flex-wrap">
-          <span class="badge text-[9px] font-bold uppercase"
-                :style="{ backgroundColor: statusBadgeTone(runtimeStatus.scanner.status).bg, color: statusBadgeTone(runtimeStatus.scanner.status).text }">
-            trivy {{ runtimeStatus.scanner.status }}
-          </span>
-          <span class="badge text-[9px] font-bold uppercase"
-                :style="{ backgroundColor: statusBadgeTone(runtimeStatus.signature.status).bg, color: statusBadgeTone(runtimeStatus.signature.status).text }">
-            cosign {{ runtimeStatus.signature.status }}
-          </span>
-          <span class="badge text-[9px] font-bold uppercase"
-                :style="{
-                  backgroundColor: runtimeStatus.sbom.enabled ? 'var(--dd-info-muted)' : 'var(--dd-neutral-muted)',
-                  color: runtimeStatus.sbom.enabled ? 'var(--dd-info)' : 'var(--dd-neutral)',
-                }">
-            sbom {{ runtimeStatus.sbom.enabled ? 'enabled' : 'disabled' }}
-          </span>
-          <span v-if="runtimeStatus.scanner.server"
-                class="text-[10px] dd-text-muted">
-            server: {{ runtimeStatus.scanner.server }} (local trivy client required)
-          </span>
-        </div>
-
-        <div v-if="runtimeStatus && runtimeStatus.requirements.length > 0"
-             class="mt-2 text-[10px] dd-text-muted">
-          {{ runtimeStatus.requirements.join(' • ') }}.
-          <RouterLink to="/config?tab=general" class="underline hover:no-underline ml-1">
-            Open settings
-          </RouterLink>
-        </div>
-      </div>
-
       <!-- Filter bar -->
       <DataFilterBar
         v-model="securityViewMode"
@@ -673,16 +558,37 @@ onUnmounted(() => {
           </button>
         </template>
         <template #left>
-          <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
-                  :class="scanning || runtimeLoading || !scannerReady
-                    ? 'dd-text-muted cursor-not-allowed'
-                    : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
-                  :style="{ borderColor: 'var(--dd-border-strong)' }"
-                  :disabled="scanning || runtimeLoading || !scannerReady"
-                  :title="scanDisabledReason"
-                  @click="scanAllContainers">
-            <AppIcon name="restart" :size="11" :class="{ 'animate-spin': scanning }" />
-          </button>
+          <span class="inline-flex" v-tooltip.top="scanDisabledReason">
+            <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
+                    :class="scanning || runtimeLoading || !scannerReady
+                      ? 'dd-text-muted cursor-not-allowed'
+                      : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
+                    :style="{ borderColor: 'var(--dd-border-strong)' }"
+                    :disabled="scanning || runtimeLoading || !scannerReady"
+                    @click="scanAllContainers">
+              <AppIcon name="restart" :size="11" :class="{ 'animate-spin': scanning }" />
+            </button>
+          </span>
+          <template v-if="runtimeStatus">
+            <span class="badge text-[9px] font-bold uppercase cursor-default"
+                  :style="{ backgroundColor: statusBadgeTone(runtimeStatus.scanner.status).bg, color: statusBadgeTone(runtimeStatus.scanner.status).text }"
+                  v-tooltip.top="runtimeStatus.scanner.message + (runtimeStatus.scanner.server ? ' · server: ' + runtimeStatus.scanner.server : '')">
+              trivy
+            </span>
+            <span class="badge text-[9px] font-bold uppercase cursor-default"
+                  :style="{ backgroundColor: statusBadgeTone(runtimeStatus.signature.status).bg, color: statusBadgeTone(runtimeStatus.signature.status).text }"
+                  v-tooltip.top="runtimeStatus.signature.message">
+              cosign
+            </span>
+            <span class="badge text-[9px] font-bold uppercase cursor-default"
+                  :style="{
+                    backgroundColor: runtimeStatus.sbom.enabled ? 'var(--dd-info-muted)' : 'var(--dd-neutral-muted)',
+                    color: runtimeStatus.sbom.enabled ? 'var(--dd-info)' : 'var(--dd-neutral)',
+                  }"
+                  v-tooltip.top="runtimeStatus.sbom.enabled ? 'SBOM generation enabled (' + runtimeStatus.sbom.formats.join(', ') + ')' : 'SBOM generation disabled'">
+              sbom
+            </span>
+          </template>
         </template>
       </DataFilterBar>
 
@@ -775,17 +681,17 @@ onUnmounted(() => {
                       @click="clearSecFilters">
                 Clear all filters
               </button>
-              <button v-if="securityVulnerabilities.length === 0"
-                      class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
-                      :class="scanning || runtimeLoading || !scannerReady
-                        ? 'dd-text-muted cursor-not-allowed dd-bg-elevated'
-                        : 'text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20'"
-                      :disabled="scanning || runtimeLoading || !scannerReady"
-                      :title="scanDisabledReason"
-                      @click="scanAllContainers">
-                <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
-                {{ scanning ? `Scanning ${scanProgress.done}/${scanProgress.total}...` : 'Scan Now' }}
-              </button>
+              <span v-if="securityVulnerabilities.length === 0" class="inline-flex" v-tooltip.top="scanDisabledReason">
+                <button class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
+                        :class="scanning || runtimeLoading || !scannerReady
+                          ? 'dd-text-muted cursor-not-allowed dd-bg-elevated'
+                          : 'text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20'"
+                        :disabled="scanning || runtimeLoading || !scannerReady"
+                        @click="scanAllContainers">
+                  <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
+                  {{ scanning ? `Scanning ${scanProgress.done}/${scanProgress.total}...` : 'Scan Now' }}
+                </button>
+              </span>
             </div>
           </div>
         </template>
@@ -857,17 +763,17 @@ onUnmounted(() => {
                   @click="clearSecFilters">
             Clear all filters
           </button>
-          <button v-if="securityVulnerabilities.length === 0"
-                  class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
-                  :class="scanning || runtimeLoading || !scannerReady
-                    ? 'dd-text-muted cursor-not-allowed dd-bg-elevated'
-                    : 'text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20'"
-                  :disabled="scanning || runtimeLoading || !scannerReady"
-                  :title="scanDisabledReason"
-                  @click="scanAllContainers">
-            <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
-            {{ scanning ? `Scanning ${scanProgress.done}/${scanProgress.total}...` : 'Scan Now' }}
-          </button>
+          <span v-if="securityVulnerabilities.length === 0" class="inline-flex" v-tooltip.top="scanDisabledReason">
+            <button class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
+                    :class="scanning || runtimeLoading || !scannerReady
+                      ? 'dd-text-muted cursor-not-allowed dd-bg-elevated'
+                      : 'text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20'"
+                    :disabled="scanning || runtimeLoading || !scannerReady"
+                    @click="scanAllContainers">
+              <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
+              {{ scanning ? `Scanning ${scanProgress.done}/${scanProgress.total}...` : 'Scan Now' }}
+            </button>
+          </span>
         </div>
       </div>
 
@@ -918,17 +824,17 @@ onUnmounted(() => {
                   @click="clearSecFilters">
             Clear all filters
           </button>
-          <button v-if="securityVulnerabilities.length === 0"
-                  class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
-                  :class="scanning || runtimeLoading || !scannerReady
-                    ? 'dd-text-muted cursor-not-allowed dd-bg-elevated'
-                    : 'text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20'"
-                  :disabled="scanning || runtimeLoading || !scannerReady"
-                  :title="scanDisabledReason"
-                  @click="scanAllContainers">
-            <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
-            {{ scanning ? `Scanning ${scanProgress.done}/${scanProgress.total}...` : 'Scan Now' }}
-          </button>
+          <span v-if="securityVulnerabilities.length === 0" class="inline-flex" v-tooltip.top="scanDisabledReason">
+            <button class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
+                    :class="scanning || runtimeLoading || !scannerReady
+                      ? 'dd-text-muted cursor-not-allowed dd-bg-elevated'
+                      : 'text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20'"
+                    :disabled="scanning || runtimeLoading || !scannerReady"
+                    @click="scanAllContainers">
+              <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
+              {{ scanning ? `Scanning ${scanProgress.done}/${scanProgress.total}...` : 'Scan Now' }}
+            </button>
+          </span>
         </div>
       </div>
 

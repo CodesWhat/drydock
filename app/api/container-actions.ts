@@ -56,8 +56,17 @@ async function executeAction(req: Request, res: Response, action: string, method
     const newStatus = inspectResult?.State?.Status;
     let updatedContainer = container;
     if (newStatus) {
-      updatedContainer = storeContainer.updateContainer({ ...container, status: newStatus });
+      const containerForUpdate = storeContainer.getContainer(id, {
+        includeRuntimeEnvValues: true,
+      });
+      if (containerForUpdate) {
+        updatedContainer = storeContainer.updateContainer({
+          ...containerForUpdate,
+          status: newStatus,
+        });
+      }
     }
+    const responseContainer = storeContainer.getContainer(id) || updatedContainer;
 
     recordAuditEvent({
       action,
@@ -66,7 +75,7 @@ async function executeAction(req: Request, res: Response, action: string, method
     });
     getContainerActionsCounter()?.inc({ action });
 
-    res.status(200).json({ message: ACTION_MESSAGES[method], container: updatedContainer });
+    res.status(200).json({ message: ACTION_MESSAGES[method], container: responseContainer });
   } catch (e: unknown) {
     handleContainerActionError({
       error: e,
@@ -113,7 +122,9 @@ async function updateContainer(req: Request, res: Response) {
   }
 
   const id = req.params.id as string;
-  const container = storeContainer.getContainer(id);
+  const container = storeContainer.getContainer(id, {
+    includeRuntimeEnvValues: true,
+  });
   if (!container) {
     res.sendStatus(404);
     return;

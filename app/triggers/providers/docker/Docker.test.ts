@@ -1382,6 +1382,23 @@ test('triggerBatch should call trigger for each container', async () => {
   expect(triggerSpy).toHaveBeenCalledWith({ name: 'c2' });
 });
 
+test('triggerBatch should limit concurrent container updates to 3', async () => {
+  const containers = Array.from({ length: 8 }, (_, index) => ({ name: `c${index}` }));
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const triggerSpy = vi.spyOn(docker, 'trigger').mockImplementation(async () => {
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    inFlight -= 1;
+  });
+
+  await docker.triggerBatch(containers);
+
+  expect(triggerSpy).toHaveBeenCalledTimes(containers.length);
+  expect(maxInFlight).toBeLessThanOrEqual(3);
+});
+
 // --- pruneImages (parametric: exclusion filters) ---
 
 describe('pruneImages exclusion filters', () => {
@@ -1694,35 +1711,6 @@ test('formatPullProgress should return formatted percentage', () => {
   );
 });
 
-// --- sanitizeEndpointConfig ---
-
-test('sanitizeEndpointConfig should return empty object for undefined config', () => {
-  expect(docker.sanitizeEndpointConfig(undefined, 'abc')).toEqual({});
-});
-
-test('sanitizeEndpointConfig should copy IPAMConfig, Links, DriverOpts, MacAddress', () => {
-  const config = {
-    IPAMConfig: { IPv4Address: '10.0.0.5' },
-    Links: ['link1'],
-    DriverOpts: { opt: 'val' },
-    MacAddress: '02:42:ac:11:00:02',
-  };
-  const result = docker.sanitizeEndpointConfig(config, 'abc');
-  expect(result).toEqual(config);
-});
-
-// --- getPrimaryNetworkName ---
-
-test('getPrimaryNetworkName should return NetworkMode when it exists in network names', () => {
-  const container = { HostConfig: { NetworkMode: 'custom_net' } };
-  expect(docker.getPrimaryNetworkName(container, ['bridge', 'custom_net'])).toBe('custom_net');
-});
-
-test('getPrimaryNetworkName should return first network when NetworkMode not in list', () => {
-  const container = { HostConfig: { NetworkMode: 'host' } };
-  expect(docker.getPrimaryNetworkName(container, ['bridge', 'custom'])).toBe('bridge');
-});
-
 // --- Lifecycle hooks ---
 
 describe('lifecycle hooks', () => {
@@ -1751,6 +1739,25 @@ describe('lifecycle hooks', () => {
     expect(mockRunHook).toHaveBeenCalledWith(
       'echo after',
       expect.objectContaining({ label: 'post-update' }),
+    );
+  });
+
+  test('trigger should emit hook-configured audit when hook labels are present', async () => {
+    mockRunHook.mockResolvedValue({ exitCode: 0, stdout: 'ok', stderr: '', timedOut: false });
+
+    await docker.trigger(
+      createTriggerContainer({
+        labels: { 'dd.hook.pre': 'echo before' },
+      }),
+    );
+
+    expect(mockAuditCounterInc).toHaveBeenCalledWith({ action: 'hook-configured' });
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'hook-configured',
+        status: 'info',
+        details: expect.stringContaining('pre=true'),
+      }),
     );
   });
 
@@ -3111,6 +3118,126 @@ describe('executeSelfUpdate', () => {
 
     expect(result).toBe(false);
     expect(context.currentContainer.rename).not.toHaveBeenCalled();
+  });
+});
+
+describe('extracted lifecycle delegation', () => {
+  test('executeSelfUpdate should delegate to selfUpdateOrchestrator', async () => {
+    const originalSelfUpdateOrchestrator = docker.selfUpdateOrchestrator;
+    const execute = vi.fn().mockResolvedValue('delegated-self-update');
+    docker.selfUpdateOrchestrator = { execute };
+    const context = { any: 'context' };
+    const container = createTriggerContainer();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+
+    try {
+      const result = await docker.executeSelfUpdate(context, container, logContainer, 'op-123');
+
+      expect(execute).toHaveBeenCalledWith(context, container, logContainer, 'op-123');
+      expect(result).toBe('delegated-self-update');
+    } finally {
+      docker.selfUpdateOrchestrator = originalSelfUpdateOrchestrator;
+    }
+  });
+
+  test('maybeNotifySelfUpdate should delegate to selfUpdateOrchestrator', async () => {
+    const originalSelfUpdateOrchestrator = docker.selfUpdateOrchestrator;
+    const maybeNotify = vi.fn().mockResolvedValue(undefined);
+    docker.selfUpdateOrchestrator = { maybeNotify };
+    const container = createTriggerContainer();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+
+    try {
+      await docker.maybeNotifySelfUpdate(container, logContainer, 'op-123');
+      expect(maybeNotify).toHaveBeenCalledWith(container, logContainer, 'op-123');
+    } finally {
+      docker.selfUpdateOrchestrator = originalSelfUpdateOrchestrator;
+    }
+  });
+
+  test('executeContainerUpdate should delegate to containerUpdateExecutor', async () => {
+    const originalContainerUpdateExecutor = docker.containerUpdateExecutor;
+    const execute = vi.fn().mockResolvedValue('delegated-container-update');
+    docker.containerUpdateExecutor = { execute };
+    const context = { any: 'context' };
+    const container = createTriggerContainer();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+
+    try {
+      const result = await docker.executeContainerUpdate(context, container, logContainer);
+
+      expect(execute).toHaveBeenCalledWith(context, container, logContainer);
+      expect(result).toBe('delegated-container-update');
+    } finally {
+      docker.containerUpdateExecutor = originalContainerUpdateExecutor;
+    }
+  });
+
+  test('runContainerUpdateLifecycle should delegate to updateLifecycleExecutor', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockResolvedValue(undefined);
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+    const runtimeContext = { composeFile: '/tmp/docker-compose.yml' };
+
+    try {
+      await docker.runContainerUpdateLifecycle(container, runtimeContext);
+
+      expect(run).toHaveBeenCalledWith(container, runtimeContext);
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('getRollbackConfig should delegate to rollbackMonitor', () => {
+    const originalRollbackMonitor = docker.rollbackMonitor;
+    const getConfig = vi.fn().mockReturnValue({
+      autoRollback: true,
+      rollbackWindow: 45_000,
+      rollbackInterval: 2_000,
+    });
+    docker.rollbackMonitor = { getConfig };
+    const container = createTriggerContainer();
+
+    try {
+      const result = docker.getRollbackConfig(container);
+
+      expect(getConfig).toHaveBeenCalledWith(container);
+      expect(result).toEqual({
+        autoRollback: true,
+        rollbackWindow: 45_000,
+        rollbackInterval: 2_000,
+      });
+    } finally {
+      docker.rollbackMonitor = originalRollbackMonitor;
+    }
+  });
+
+  test('maybeStartAutoRollbackMonitor should delegate to rollbackMonitor', async () => {
+    const originalRollbackMonitor = docker.rollbackMonitor;
+    const start = vi.fn().mockResolvedValue(undefined);
+    docker.rollbackMonitor = { start };
+    const dockerApi = { any: 'docker' };
+    const container = createTriggerContainer();
+    const rollbackConfig = {
+      autoRollback: true,
+      rollbackWindow: 60_000,
+      rollbackInterval: 5_000,
+    };
+    const logContainer = createMockLog('info', 'warn', 'debug');
+
+    try {
+      await docker.maybeStartAutoRollbackMonitor(
+        dockerApi,
+        container,
+        rollbackConfig,
+        logContainer,
+      );
+
+      expect(start).toHaveBeenCalledWith(dockerApi, container, rollbackConfig, logContainer);
+    } finally {
+      docker.rollbackMonitor = originalRollbackMonitor;
+    }
   });
 });
 

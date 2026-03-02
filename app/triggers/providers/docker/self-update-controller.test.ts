@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { runSelfUpdateController } from './self-update-controller.js';
+import {
+  runSelfUpdateController,
+  testable_getRequiredEnv,
+  testable_parsePositiveInt,
+} from './self-update-controller.js';
 
 const mockDockerodeCtor = vi.hoisted(() => vi.fn());
 
@@ -7,27 +11,119 @@ vi.mock('dockerode', () => ({
   default: mockDockerodeCtor,
 }));
 
-function setControllerEnv() {
-  process.env.DD_SELF_UPDATE_OP_ID = 'op-123';
-  process.env.DD_SELF_UPDATE_OLD_CONTAINER_ID = 'old-container-id';
-  process.env.DD_SELF_UPDATE_OLD_CONTAINER_NAME = 'drydock';
-  process.env.DD_SELF_UPDATE_NEW_CONTAINER_ID = 'new-container-id';
-  process.env.DD_SELF_UPDATE_START_TIMEOUT_MS = '1000';
-  process.env.DD_SELF_UPDATE_HEALTH_TIMEOUT_MS = '1000';
-  process.env.DD_SELF_UPDATE_POLL_INTERVAL_MS = '1';
+const DEFAULT_CONTROLLER_ENV = {
+  DD_SELF_UPDATE_OP_ID: 'op-123',
+  DD_SELF_UPDATE_OLD_CONTAINER_ID: 'old-container-id',
+  DD_SELF_UPDATE_OLD_CONTAINER_NAME: 'drydock',
+  DD_SELF_UPDATE_NEW_CONTAINER_ID: 'new-container-id',
+  DD_SELF_UPDATE_START_TIMEOUT_MS: '1000',
+  DD_SELF_UPDATE_HEALTH_TIMEOUT_MS: '1000',
+  DD_SELF_UPDATE_POLL_INTERVAL_MS: '1',
+} as const;
+
+type ControllerEnvName = keyof typeof DEFAULT_CONTROLLER_ENV;
+
+function setControllerEnv(
+  overrides: Partial<Record<ControllerEnvName, string | undefined>> = {},
+) {
+  const envValues = {
+    ...DEFAULT_CONTROLLER_ENV,
+    ...overrides,
+  };
+  for (const [key, value] of Object.entries(envValues)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
 }
 
 function clearControllerEnv() {
-  delete process.env.DD_SELF_UPDATE_OP_ID;
-  delete process.env.DD_SELF_UPDATE_OLD_CONTAINER_ID;
-  delete process.env.DD_SELF_UPDATE_OLD_CONTAINER_NAME;
-  delete process.env.DD_SELF_UPDATE_NEW_CONTAINER_ID;
-  delete process.env.DD_SELF_UPDATE_START_TIMEOUT_MS;
-  delete process.env.DD_SELF_UPDATE_HEALTH_TIMEOUT_MS;
-  delete process.env.DD_SELF_UPDATE_POLL_INTERVAL_MS;
+  for (const key of Object.keys(DEFAULT_CONTROLLER_ENV)) {
+    delete process.env[key];
+  }
 }
 
-describe('self-update-controller', () => {
+function createOldContainer(overrides = {}) {
+  return {
+    stop: vi.fn().mockResolvedValue(undefined),
+    inspect: vi.fn().mockResolvedValue({ State: { Running: false }, Name: '/drydock' }),
+    start: vi.fn().mockResolvedValue(undefined),
+    rename: vi.fn().mockResolvedValue(undefined),
+    remove: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
+function createNewContainer(overrides = {}) {
+  return {
+    start: vi.fn().mockResolvedValue(undefined),
+    inspect: vi.fn().mockResolvedValue({ State: { Running: true } }),
+    remove: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
+function mockDocker(oldContainer: any, newContainer: any) {
+  const getContainer = vi.fn((id: string) => {
+    if (id === 'old-container-id') {
+      return oldContainer;
+    }
+    if (id === 'new-container-id') {
+      return newContainer;
+    }
+    throw new Error(`unexpected container id ${id}`);
+  });
+
+  mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+    return { getContainer };
+  });
+}
+
+function getLoggedStates(): string[] {
+  return (console.log as unknown as ReturnType<typeof vi.fn>).mock.calls.map(([message]) =>
+    String(message),
+  );
+}
+
+describe('self-update-controller helpers', () => {
+  beforeEach(() => {
+    clearControllerEnv();
+  });
+
+  afterEach(() => {
+    clearControllerEnv();
+  });
+
+  test('parsePositiveInt returns fallback for undefined, non-positive, and malformed inputs', () => {
+    expect(testable_parsePositiveInt(undefined, 99)).toBe(99);
+    expect(testable_parsePositiveInt('', 99)).toBe(99);
+    expect(testable_parsePositiveInt('0', 99)).toBe(99);
+    expect(testable_parsePositiveInt('-5', 99)).toBe(99);
+    expect(testable_parsePositiveInt('abc', 99)).toBe(99);
+    expect(testable_parsePositiveInt('10ms', 99)).toBe(99);
+  });
+
+  test('parsePositiveInt parses valid positive integers', () => {
+    expect(testable_parsePositiveInt('42', 99)).toBe(42);
+    expect(testable_parsePositiveInt(' 7 ', 99)).toBe(7);
+  });
+
+  test('getRequiredEnv throws on missing or whitespace-only env', () => {
+    delete process.env.DD_SELF_UPDATE_OLD_CONTAINER_ID;
+    process.env.DD_SELF_UPDATE_NEW_CONTAINER_ID = '   ';
+
+    expect(() => testable_getRequiredEnv('DD_SELF_UPDATE_OLD_CONTAINER_ID')).toThrow(
+      'Missing required environment variable: DD_SELF_UPDATE_OLD_CONTAINER_ID',
+    );
+    expect(() => testable_getRequiredEnv('DD_SELF_UPDATE_NEW_CONTAINER_ID')).toThrow(
+      'Missing required environment variable: DD_SELF_UPDATE_NEW_CONTAINER_ID',
+    );
+  });
+});
+
+describe('self-update-controller orchestration', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     setControllerEnv();
@@ -40,32 +136,10 @@ describe('self-update-controller', () => {
     vi.restoreAllMocks();
   });
 
-  test('runs controller success path and commits by removing old container', async () => {
-    const oldContainer = {
-      stop: vi.fn().mockResolvedValue(undefined),
-      inspect: vi.fn().mockResolvedValue({ State: { Running: false } }),
-      start: vi.fn().mockResolvedValue(undefined),
-      rename: vi.fn().mockResolvedValue(undefined),
-      remove: vi.fn().mockResolvedValue(undefined),
-    };
-    const newContainer = {
-      start: vi.fn().mockResolvedValue(undefined),
-      inspect: vi.fn().mockResolvedValue({ State: { Running: true } }),
-      remove: vi.fn().mockResolvedValue(undefined),
-    };
-
-    const getContainer = vi.fn((id: string) => {
-      if (id === 'old-container-id') {
-        return oldContainer;
-      }
-      if (id === 'new-container-id') {
-        return newContainer;
-      }
-      throw new Error(`unexpected container id ${id}`);
-    });
-    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
-      return { getContainer };
-    });
+  test('runs success path and commits by removing old container', async () => {
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer();
+    mockDocker(oldContainer, newContainer);
 
     await runSelfUpdateController();
 
@@ -77,44 +151,194 @@ describe('self-update-controller', () => {
     expect(oldContainer.rename).not.toHaveBeenCalled();
   });
 
-  test('rolls back by removing candidate, restoring old name, and restarting old container when start-new fails', async () => {
-    const oldContainer = {
-      stop: vi.fn().mockResolvedValue(undefined),
-      inspect: vi.fn().mockResolvedValue({ State: { Running: false }, Name: '/drydock-old-123' }),
-      start: vi.fn().mockResolvedValue(undefined),
-      rename: vi.fn().mockResolvedValue(undefined),
-      remove: vi.fn().mockResolvedValue(undefined),
-    };
-    const newContainer = {
-      start: vi.fn().mockRejectedValue(new Error('start failed')),
-      inspect: vi.fn().mockResolvedValue({ State: { Running: false } }),
-      remove: vi.fn().mockResolvedValue(undefined),
-    };
+  test('uses default op id and old container name when optional env vars are unset', async () => {
+    setControllerEnv({
+      DD_SELF_UPDATE_OP_ID: undefined,
+      DD_SELF_UPDATE_OLD_CONTAINER_NAME: undefined,
+    });
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer();
+    mockDocker(oldContainer, newContainer);
 
-    const getContainer = vi.fn((id: string) => {
-      if (id === 'old-container-id') {
-        return oldContainer;
-      }
-      if (id === 'new-container-id') {
-        return newContainer;
-      }
-      throw new Error(`unexpected container id ${id}`);
+    await runSelfUpdateController();
+
+    expect(getLoggedStates()).toContain(
+      '[self-update:unknown] PREPARE - old=drydock(old-container-id), new=new-container-id',
+    );
+  });
+
+  test('handles healthcheck transition from starting to healthy', async () => {
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer({
+      inspect: vi
+        .fn()
+        .mockResolvedValueOnce({ State: { Running: true } })
+        .mockResolvedValueOnce({ State: { Running: true, Health: { Status: 'starting' } } })
+        .mockResolvedValueOnce({ State: { Running: true, Health: { Status: 'starting' } } })
+        .mockResolvedValueOnce({ State: { Running: true, Health: { Status: 'healthy' } } }),
     });
-    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
-      return { getContainer };
+    mockDocker(oldContainer, newContainer);
+
+    await runSelfUpdateController();
+
+    expect(newContainer.inspect).toHaveBeenCalledTimes(4);
+    expect(oldContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(getLoggedStates()).toContain('[self-update:op-123] HEALTH_GATE');
+  });
+
+  test('rolls back when healthcheck transitions to unhealthy', async () => {
+    const oldContainer = createOldContainer({
+      inspect: vi.fn().mockResolvedValue({ State: { Running: false }, Name: '/drydock-old-1' }),
     });
+    const newContainer = createNewContainer({
+      inspect: vi
+        .fn()
+        .mockResolvedValueOnce({ State: { Running: true } })
+        .mockResolvedValueOnce({ State: { Running: true, Health: { Status: 'starting' } } })
+        .mockResolvedValueOnce({ State: { Running: true, Health: { Status: 'unhealthy' } } }),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).rejects.toThrow(
+      'New container became unhealthy (new-container-id)',
+    );
+
+    expect(newContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(oldContainer.start).toHaveBeenCalledTimes(1);
+  });
+
+  test('times out waiting for old container to stop and rolls back', async () => {
+    setControllerEnv({
+      DD_SELF_UPDATE_START_TIMEOUT_MS: '3',
+      DD_SELF_UPDATE_POLL_INTERVAL_MS: '1',
+    });
+    const oldContainer = createOldContainer({
+      inspect: vi.fn().mockResolvedValue({ State: { Running: true }, Name: '/drydock' }),
+    });
+    const newContainer = createNewContainer();
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).rejects.toThrow(
+      'Timed out waiting for old container old-container-id to stop',
+    );
+
+    expect(newContainer.start).not.toHaveBeenCalled();
+    expect(newContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(oldContainer.start).toHaveBeenCalledTimes(1);
+  });
+
+  test('times out waiting for new container to enter running state and rolls back', async () => {
+    setControllerEnv({
+      DD_SELF_UPDATE_START_TIMEOUT_MS: '3',
+      DD_SELF_UPDATE_POLL_INTERVAL_MS: '1',
+    });
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer({
+      inspect: vi.fn().mockResolvedValue({ State: { Running: false } }),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).rejects.toThrow(
+      'Timed out waiting for new container new-container-id to enter running state',
+    );
+
+    expect(newContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(oldContainer.start).toHaveBeenCalledTimes(1);
+  });
+
+  test('times out waiting for new container health and rolls back', async () => {
+    setControllerEnv({
+      DD_SELF_UPDATE_HEALTH_TIMEOUT_MS: '3',
+      DD_SELF_UPDATE_POLL_INTERVAL_MS: '1',
+    });
+    const oldContainer = createOldContainer();
+    let inspectCallCount = 0;
+    const newContainer = createNewContainer({
+      inspect: vi.fn().mockImplementation(() => {
+        inspectCallCount += 1;
+        if (inspectCallCount === 1) {
+          return Promise.resolve({ State: { Running: true } });
+        }
+        return Promise.resolve({ State: { Running: true, Health: { Status: 'starting' } } });
+      }),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).rejects.toThrow(
+      'Timed out waiting for new container new-container-id to become healthy',
+    );
+
+    expect(newContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(oldContainer.start).toHaveBeenCalledTimes(1);
+  });
+
+  test('handles rollback partial failures without masking original error', async () => {
+    const oldContainer = createOldContainer({
+      inspect: vi
+        .fn()
+        .mockResolvedValue({ State: { Running: false }, Name: '/drydock-old-123' }),
+      rename: vi.fn().mockRejectedValue(new Error('rename failed')),
+      start: vi.fn().mockRejectedValue(new Error('restart failed')),
+    });
+    const newContainer = createNewContainer({
+      start: vi.fn().mockRejectedValue(new Error('start failed')),
+      remove: vi.fn().mockRejectedValue(new Error('candidate remove failed')),
+    });
+    mockDocker(oldContainer, newContainer);
 
     await expect(runSelfUpdateController()).rejects.toThrow('start failed');
 
-    expect(newContainer.remove).toHaveBeenCalledWith({ force: true });
-    expect(oldContainer.rename).toHaveBeenCalledWith({ name: 'drydock' });
-    expect(oldContainer.start).toHaveBeenCalledTimes(1);
-    expect(oldContainer.remove).not.toHaveBeenCalled();
+    const logs = getLoggedStates();
+    expect(logs).toContain('[self-update:op-123] CLEANUP_CANDIDATE');
+    expect(logs).toContain(
+      '[self-update:op-123] CLEANUP_CANDIDATE_FAILED - candidate remove failed',
+    );
+    expect(logs).toContain(
+      '[self-update:op-123] ROLLBACK_RESTORE_NAME_FAILED - rename failed',
+    );
+    expect(logs).toContain('[self-update:op-123] ROLLBACK_START_OLD_FAILED - restart failed');
+    expect(logs).toContain('[self-update:op-123] FAILED_WITH_ROLLBACK - start failed');
+  });
 
-    const removeCall = newContainer.remove.mock.invocationCallOrder[0];
-    const renameCall = oldContainer.rename.mock.invocationCallOrder[0];
-    const startCall = oldContainer.start.mock.invocationCallOrder[0];
-    expect(removeCall).toBeLessThan(renameCall);
-    expect(renameCall).toBeLessThan(startCall);
+  test('treats Docker 304 responses as already-stopped/already-started in forward path', async () => {
+    const oldContainer = createOldContainer({
+      stop: vi.fn().mockRejectedValue({ statusCode: 304, message: 'already stopped' }),
+    });
+    const newContainer = createNewContainer({
+      start: vi.fn().mockRejectedValue({ status: 304, message: 'already started' }),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await runSelfUpdateController();
+
+    expect(oldContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(newContainer.remove).not.toHaveBeenCalled();
+    expect(oldContainer.start).not.toHaveBeenCalled();
+  });
+
+  test('does not log rollback-start failure when old container start returns 304', async () => {
+    const oldContainer = createOldContainer({
+      inspect: vi.fn().mockResolvedValue({ State: { Running: false }, Name: '/drydock' }),
+      start: vi.fn().mockRejectedValue({ statusCode: 304, message: 'already started' }),
+    });
+    const newContainer = createNewContainer({
+      start: vi.fn().mockRejectedValue(new Error('start failed')),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).rejects.toThrow('start failed');
+
+    expect(getLoggedStates().some((line) => line.includes('ROLLBACK_START_OLD_FAILED'))).toBe(
+      false,
+    );
+  });
+
+  test('fails early when required env is missing', async () => {
+    clearControllerEnv();
+    process.env.DD_SELF_UPDATE_NEW_CONTAINER_ID = 'new-container-id';
+
+    await expect(runSelfUpdateController()).rejects.toThrow(
+      'Missing required environment variable: DD_SELF_UPDATE_OLD_CONTAINER_ID',
+    );
   });
 });

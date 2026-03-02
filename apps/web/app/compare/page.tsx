@@ -75,7 +75,7 @@ const tools = [
     name: "Dockhand",
     slug: "dockhand",
     description:
-      "Container update tool with Update Guard scanning and git-based deployment. Compare rollback, hooks, and registry support.",
+      "Container update tool with 🥊 Update Bouncer scanning and git-based deployment. Compare rollback, hooks, and registry support.",
     status: "Active",
     statusColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400",
   },

@@ -1,29 +1,58 @@
 // @ts-nocheck
 
 import ConnectLoki from 'connect-loki';
+import { randomBytes } from 'crypto';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
+import joi from 'joi';
 
 const LokiStore = ConnectLoki(session);
 
-import getmac from 'getmac';
 import passport from 'passport';
-import { v5 as uuidV5 } from 'uuid';
-import { getServerConfiguration, getVersion } from '../configuration/index.js';
+import { getServerConfiguration } from '../configuration/index.js';
 import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as store from '../store/index.js';
+import { recordAuditEvent } from './audit-events.js';
 
 const router = express.Router();
 
 // The configured strategy ids.
 const STRATEGY_IDS = [];
 
-// Constant DD namespace for uuid v5 bound sessions.
-const DD_NAMESPACE = 'dee41e92-5fc4-460e-beec-528c9ea7d760';
 const DEFAULT_SESSION_DAYS = 7;
 const REMEMBER_ME_DAYS = 30;
+let generatedSessionSecret: string | undefined;
+const sessionUserSchema = joi
+  .object({
+    username: joi.string().required(),
+  })
+  .required()
+  .unknown(false);
+
+function deserializeSessionUser(serializedUser) {
+  if (typeof serializedUser !== 'string') {
+    throw new Error('Serialized user must be a JSON string');
+  }
+
+  let parsedUser;
+  try {
+    parsedUser = JSON.parse(serializedUser);
+  } catch {
+    throw new Error('Serialized user JSON is malformed');
+  }
+
+  const validatedUser = sessionUserSchema.validate(parsedUser, {
+    convert: false,
+    stripUnknown: false,
+  });
+  if (validatedUser.error) {
+    throw new Error(validatedUser.error.message);
+  }
+
+  return validatedUser.value;
+}
 
 /**
  * Get all strategies id.
@@ -44,6 +73,34 @@ export function requireAuthentication(req, res, next): any {
   if (req.isAuthenticated()) {
     return next();
   }
+
+  if (req.method === 'POST' && req.path === '/login') {
+    let loginFailureAudited = false;
+    const maybeRecordLoginFailure = () => {
+      if (!loginFailureAudited && res.statusCode === 401) {
+        loginFailureAudited = true;
+        recordLoginAuditEvent(req, 'error', 'Authentication failed (invalid credentials)');
+      }
+    };
+
+    if (typeof res.sendStatus === 'function') {
+      const originalSendStatus = res.sendStatus;
+      res.sendStatus = function (statusCode) {
+        res.statusCode = statusCode;
+        maybeRecordLoginFailure();
+        return originalSendStatus.call(this, statusCode);
+      };
+    }
+
+    if (typeof res.end === 'function') {
+      const originalEnd = res.end;
+      res.end = function (...args) {
+        maybeRecordLoginFailure();
+        return originalEnd.apply(this, args);
+      };
+    }
+  }
+
   return passport.authenticate(getAllIds(), { session: true })(req, res, next);
 }
 
@@ -59,7 +116,7 @@ function getCookieMaxAge(days) {
 /**
  * Get session secret key.
  * Uses DD_SESSION_SECRET env var if set, otherwise falls back to a
- * deterministic UUIDv5 derived from the application version and MAC address.
+ * process-local cryptographic secret.
  * @returns {string}
  */
 function getSessionSecretKey() {
@@ -68,8 +125,30 @@ function getSessionSecretKey() {
     log.info('Using session secret from DD_SESSION_SECRET environment variable');
     return envSecret;
   }
-  const stringToHash = `dd.${getVersion()}.${getmac()}`;
-  return uuidV5(stringToHash, DD_NAMESPACE);
+  if (!generatedSessionSecret) {
+    generatedSessionSecret = randomBytes(64).toString('hex');
+    log.warn(
+      'DD_SESSION_SECRET is not set; using an ephemeral session secret. Set DD_SESSION_SECRET to a strong persistent value.',
+    );
+  }
+  return generatedSessionSecret;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : `${error}`;
+}
+
+function getAuditUsername(req): string {
+  return typeof req.user?.username === 'string' ? req.user.username : 'unknown';
+}
+
+function recordLoginAuditEvent(req, status: 'success' | 'error', details: string) {
+  recordAuditEvent({
+    action: 'auth-login',
+    status,
+    containerName: 'authentication',
+    details: `${details}; user=${getAuditUsername(req)}`,
+  });
 }
 
 /**
@@ -82,8 +161,10 @@ function useStrategy(authentication, app) {
     const strategy = authentication.getStrategy(app);
     passport.use(authentication.getId(), strategy);
     STRATEGY_IDS.push(authentication.getId());
-  } catch (e) {
-    log.warn(`Unable to apply authentication ${authentication.getId()} (${e.message})`);
+  } catch (error: unknown) {
+    log.warn(
+      `Unable to apply authentication ${authentication.getId()} (${getErrorMessage(error)})`,
+    );
   }
 }
 
@@ -162,12 +243,48 @@ function setRememberMe(req, res) {
  * @param res
  */
 function login(req, res) {
-  // Accept remember from the body (basic auth) or from session (pre-set)
-  if (req.body?.remember !== undefined) {
-    req.session.rememberMe = req.body.remember === true;
+  const rememberMe =
+    req.body?.remember !== undefined ? req.body.remember === true : req.session?.rememberMe === true;
+
+  if (!req.session || typeof req.session.regenerate !== 'function') {
+    const errorMessage = 'Unable to regenerate session during login (session unavailable)';
+    log.warn(errorMessage);
+    recordLoginAuditEvent(req, 'error', errorMessage);
+    res.status(500).json({ error: 'Unable to establish session' });
+    return;
   }
-  applyRememberMe(req);
-  return getUser(req, res);
+
+  req.session.regenerate((regenerateError) => {
+    if (regenerateError) {
+      const errorMessage = `Unable to regenerate session during login (${getErrorMessage(regenerateError)})`;
+      log.warn(errorMessage);
+      recordLoginAuditEvent(req, 'error', errorMessage);
+      res.status(500).json({ error: 'Unable to establish session' });
+      return;
+    }
+
+    req.session.rememberMe = rememberMe;
+    applyRememberMe(req);
+
+    if (typeof req.login !== 'function') {
+      recordLoginAuditEvent(req, 'success', 'Login succeeded');
+      getUser(req, res);
+      return;
+    }
+
+    req.login(req.user, (loginError) => {
+      if (loginError) {
+        const errorMessage = `Unable to persist login session (${getErrorMessage(loginError)})`;
+        log.warn(errorMessage);
+        recordLoginAuditEvent(req, 'error', errorMessage);
+        res.status(500).json({ error: 'Unable to establish session' });
+        return;
+      }
+
+      recordLoginAuditEvent(req, 'success', 'Login succeeded');
+      getUser(req, res);
+    });
+  });
 }
 
 /**
@@ -227,7 +344,12 @@ export function init(app) {
   });
 
   passport.deserializeUser((user, done) => {
-    done(null, JSON.parse(user));
+    try {
+      done(null, deserializeSessionUser(user));
+    } catch (error: unknown) {
+      log.warn(`Unable to deserialize session user (${getErrorMessage(error)})`);
+      done(null, false);
+    }
   });
 
   const authLimiter = rateLimit({

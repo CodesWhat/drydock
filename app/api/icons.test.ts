@@ -9,6 +9,7 @@ const {
   mockRename,
   mockUnlink,
   mockReaddir,
+  mockStat,
   mockAxiosGet,
   mockAxiosIsAxiosError,
   mockIsInternetlessModeEnabled,
@@ -23,6 +24,7 @@ const {
   mockRename: vi.fn(),
   mockUnlink: vi.fn(),
   mockReaddir: vi.fn(),
+  mockStat: vi.fn(),
   mockAxiosGet: vi.fn(),
   mockAxiosIsAxiosError: vi.fn(() => false),
   mockIsInternetlessModeEnabled: vi.fn(() => false),
@@ -48,6 +50,7 @@ vi.mock('node:fs/promises', () => ({
     rename: mockRename,
     unlink: mockUnlink,
     readdir: mockReaddir,
+    stat: mockStat,
   },
 }));
 
@@ -103,7 +106,7 @@ function createResponse() {
 
 describe('Icons Router', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockIsInternetlessModeEnabled.mockReturnValue(false);
     mockGetStoreConfiguration.mockReturnValue({ path: '/store', file: 'dd.json' });
     mockResolveFromRuntimeRoot.mockImplementation((...segments: string[]) =>
@@ -115,6 +118,12 @@ describe('Icons Router', () => {
     mockWriteFile.mockResolvedValue(undefined);
     mockRename.mockResolvedValue(undefined);
     mockUnlink.mockResolvedValue(undefined);
+    mockReaddir.mockResolvedValue([]);
+    mockStat.mockResolvedValue({
+      mtimeMs: Date.now(),
+      size: 1024,
+      isFile: () => true,
+    });
   });
 
   test('should initialize router with icon and cache routes', () => {
@@ -301,6 +310,74 @@ describe('Icons Router', () => {
     expect(res.sendFile).toHaveBeenCalledWith('/store/icons/simple/docker.svg');
   });
 
+  test('should refresh stale cached icon when ttl has expired', async () => {
+    mockAccess.mockResolvedValue(undefined);
+    mockStat.mockResolvedValue({
+      mtimeMs: 0,
+      size: 512,
+      isFile: () => true,
+    });
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from('<svg />'),
+    });
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'simple',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(mockUnlink).toHaveBeenCalledWith('/store/icons/simple/docker.svg');
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/docker.svg',
+      {
+        responseType: 'arraybuffer',
+        timeout: 10000,
+      },
+    );
+    expect(res.sendFile).toHaveBeenCalledWith('/store/icons/simple/docker.svg');
+  });
+
+  test('should evict oldest cached icons when cache size limit is exceeded', async () => {
+    mockAccess.mockRejectedValue(new Error('not found'));
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from('<svg />'),
+    });
+    mockReaddir
+      .mockResolvedValueOnce([{ name: 'simple', isDirectory: () => true }])
+      .mockResolvedValueOnce(['old.svg', 'docker.svg']);
+    mockStat.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/store/icons/simple/old.svg') {
+        return { mtimeMs: Date.now() - 1_000, size: 150 * 1024 * 1024, isFile: () => true };
+      }
+      if (targetPath === '/store/icons/simple/docker.svg') {
+        return { mtimeMs: Date.now(), size: 50 * 1024 * 1024, isFile: () => true };
+      }
+      return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
+    });
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'simple',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(mockUnlink).toHaveBeenCalledWith('/store/icons/simple/old.svg');
+    expect(res.sendFile).toHaveBeenCalledWith('/store/icons/simple/docker.svg');
+  });
+
   test('should return 404 when upstream icon is missing', async () => {
     const upstreamError = Object.assign(new Error('not found'), {
       response: { status: 404 },
@@ -413,7 +490,7 @@ describe('Icons Router', () => {
     expect(mockUnlink).toHaveBeenCalledWith('/store/icons/simple/docker.svg.tmp.uuid-test');
     expect(res.status).toHaveBeenCalledWith(502);
     expect(res.json).toHaveBeenCalledWith({
-      error: expect.stringContaining('rename failed'),
+      error: 'Unable to fetch icon simple/docker',
     });
   });
 
@@ -435,7 +512,7 @@ describe('Icons Router', () => {
 
     expect(res.status).toHaveBeenCalledWith(502);
     expect(res.json).toHaveBeenCalledWith({
-      error: 'Unable to fetch icon simple/docker (boom)',
+      error: 'Unable to fetch icon simple/docker',
     });
   });
 
@@ -470,6 +547,44 @@ describe('Icons Router', () => {
 
     expect(res1.sendFile).toHaveBeenCalledWith('/store/icons/simple/docker.svg');
     expect(res2.sendFile).toHaveBeenCalledWith('/store/icons/simple/docker.svg');
+  });
+
+  test('should release in-flight dedupe lock when fetch hangs', async () => {
+    const previousTimeout = process.env.DD_ICON_IN_FLIGHT_TIMEOUT_MS;
+    process.env.DD_ICON_IN_FLIGHT_TIMEOUT_MS = '20';
+    try {
+      mockAccess.mockRejectedValue(new Error('not found'));
+      mockAxiosGet.mockImplementation(() => new Promise(() => {}));
+      const handler = getHandler();
+      const req = {
+        params: {
+          provider: 'simple',
+          slug: 'docker-hang',
+        },
+      };
+
+      void handler(req, createResponse());
+      void handler(req, createResponse());
+      await vi.waitFor(() => {
+        expect(mockAxiosGet).toHaveBeenCalledTimes(1);
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      void handler(req, createResponse());
+      await vi.waitFor(
+        () => {
+          expect(mockAxiosGet).toHaveBeenCalledTimes(2);
+        },
+        { timeout: 300 },
+      );
+    } finally {
+      if (previousTimeout === undefined) {
+        delete process.env.DD_ICON_IN_FLIGHT_TIMEOUT_MS;
+      } else {
+        process.env.DD_ICON_IN_FLIGHT_TIMEOUT_MS = previousTimeout;
+      }
+    }
   });
 
   test('should reject invalid provider', async () => {
@@ -526,7 +641,7 @@ describe('Icons Router', () => {
 
     expect(res.status).toHaveBeenCalledWith(502);
     expect(res.json).toHaveBeenCalledWith({
-      error: expect.stringContaining('rename failed'),
+      error: 'Unable to fetch icon simple/docker',
     });
   });
 

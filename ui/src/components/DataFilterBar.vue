@@ -38,12 +38,11 @@ function viewModeLabel(id: string): string {
          }">
       <div class="flex items-center gap-2.5 relative">
         <!-- Filter toggle button -->
-        <div v-if="!hideFilter" class="relative">
+        <div v-if="!hideFilter" class="relative" v-tooltip.top="'Filters'">
           <button type="button"
                   class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
                   :class="showFilters || (activeFilterCount ?? 0) > 0 ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
                   :style="{ borderColor: (activeFilterCount ?? 0) > 0 ? 'var(--dd-primary)' : 'var(--dd-border-strong)' }"
-                  title="Filters"
                   aria-label="Toggle filters"
                   :aria-expanded="String(showFilters)"
                   :aria-controls="filterPanelId"
@@ -51,7 +50,7 @@ function viewModeLabel(id: string): string {
             <AppIcon name="filter" :size="11" />
           </button>
           <span v-if="(activeFilterCount ?? 0) > 0"
-                class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-[8px] font-bold flex items-center justify-center text-white"
+                class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-[8px] font-bold flex items-center justify-center text-white pointer-events-none"
                 style="background: var(--dd-primary);">
             {{ activeFilterCount }}
           </span>
@@ -77,7 +76,7 @@ function viewModeLabel(id: string): string {
                     class="w-7 h-7 flex items-center justify-center text-[11px] transition-colors"
                     :class="modelValue === vm.id ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
                     :style="vm.id !== (viewModes ?? defaultViewModes)[0]?.id ? { borderLeft: '1px solid var(--dd-border-strong)' } : {}"
-                    :title="viewModeLabel(vm.id)"
+                    v-tooltip.top="viewModeLabel(vm.id)"
                     :aria-label="viewModeLabel(vm.id)"
                     :aria-pressed="String(modelValue === vm.id)"
                     @click="emit('update:modelValue', vm.id)">

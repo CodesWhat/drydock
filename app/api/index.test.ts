@@ -21,6 +21,7 @@ const { mockApp, mockFs, mockHttps, mockGetServerConfiguration } = vi.hoisted(()
     tls: {},
   })),
 }));
+const mockHelmet = vi.hoisted(() => vi.fn(() => 'helmet-middleware'));
 
 vi.mock('node:fs', () => ({
   default: mockFs,
@@ -48,6 +49,10 @@ vi.mock('compression', () => {
   compression.filter = vi.fn(() => true);
   return { default: compression };
 });
+
+vi.mock('helmet', () => ({
+  default: mockHelmet,
+}));
 
 vi.mock('../log', () => ({
   default: {
@@ -88,6 +93,7 @@ describe('API Index', () => {
     mockApp.set.mockClear();
     mockApp.use.mockClear();
     mockApp.listen.mockClear();
+    mockHelmet.mockClear();
   });
 
   test('should not start server when disabled', async () => {
@@ -159,6 +165,22 @@ describe('API Index', () => {
     expect(mockApp.use).toHaveBeenCalledWith('/api', 'api-router');
     expect(mockApp.use).toHaveBeenCalledWith('/metrics', 'prometheus-router');
     expect(mockApp.use).toHaveBeenCalledWith('/', 'ui-router');
+  });
+
+  test('should enable helmet security headers', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockHelmet).toHaveBeenCalledWith();
+    expect(mockApp.use).toHaveBeenCalledWith('helmet-middleware');
   });
 
   test('should enable compression by default', async () => {
@@ -243,6 +265,27 @@ describe('API Index', () => {
     const jsonCallOrder = mockApp.use.mock.invocationCallOrder[jsonCallIndex];
     const authInitCallOrder = freshAuth.init.mock.invocationCallOrder[0];
     expect(jsonCallOrder).toBeLessThan(authInitCallOrder);
+  });
+
+  test('should register helmet middleware before auth init', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    const freshAuth = await import('./auth.js');
+    await indexRouter.init();
+
+    const helmetCallIndex = mockApp.use.mock.calls.findIndex((c) => c[0] === 'helmet-middleware');
+    expect(helmetCallIndex).toBeGreaterThanOrEqual(0);
+
+    const helmetCallOrder = mockApp.use.mock.invocationCallOrder[helmetCallIndex];
+    const authInitCallOrder = freshAuth.init.mock.invocationCallOrder[0];
+    expect(helmetCallOrder).toBeLessThan(authInitCallOrder);
   });
 
   test('should not set trust proxy when default (false)', async () => {

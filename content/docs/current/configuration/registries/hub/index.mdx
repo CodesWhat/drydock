@@ -23,10 +23,10 @@ Don't forget to configure authentication if you're using [Docker Hub Private Rep
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_HUB_PUBLIC_LOGIN` | ⚪ | A valid Docker Hub Login | DD_REGISTRY_HUB_PUBLIC_TOKEN must be defined | |
-| `DD_REGISTRY_HUB_PUBLIC_PASSWORD` | ⚪ | A valid Docker Hub Token | DD_REGISTRY_HUB_PUBLIC_LOGIN must be defined | |
-| `DD_REGISTRY_HUB_PUBLIC_TOKEN` | ⚪ | A valid Docker Hub Token (deprecated; replaced by `DD_REGISTRY_HUB_PUBLIC_PASSWORD` | DD_REGISTRY_HUB_PUBLIC_LOGIN must be defined | |
-| `DD_REGISTRY_HUB_PUBLIC_AUTH` | ⚪ | A valid Docker Hub Base64 Auth String | DD_REGISTRY_HUB_PUBLIC_LOGIN/TOKEN  must not be defined | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_LOGIN` | ⚪ | A valid Docker Hub Login | Required with `PASSWORD` or `TOKEN` | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_PASSWORD` | ⚪ | A valid Docker Hub password or access token | `DD_REGISTRY_HUB_{REGISTRY_NAME}_LOGIN` must be defined | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_TOKEN` | ⚪ | A valid Docker Hub access token (alternative to `PASSWORD`) | `DD_REGISTRY_HUB_{REGISTRY_NAME}_LOGIN` must be defined | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_AUTH` | ⚪ | A valid Docker Hub Base64 Auth String | Cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN` | |
 
 <Callout type="warn">Registry auth now fails closed for invalid combinations. `LOGIN` must be paired with `PASSWORD` (or `TOKEN` alias), and `AUTH` cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`.</Callout>
 

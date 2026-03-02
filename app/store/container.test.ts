@@ -216,6 +216,54 @@ test('updateContainer should clear security when explicitly set to undefined', a
   expect(updated.security).toBeUndefined();
 });
 
+test('updateContainer should preserve raw runtime env values when payload contains redacted values', async () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      id: 'container-runtime-redaction',
+      details: {
+        ports: [],
+        volumes: [],
+        env: [{ key: 'DB_PASSWORD', value: 'super-secret-password' }],
+      },
+    }),
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: vi.fn((doc) => {
+      existingContainer.data = doc.data;
+    }),
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const containerToSave = createContainerFixture({
+    id: 'container-runtime-redaction',
+    details: {
+      ports: [],
+      volumes: [],
+      env: [{ key: 'DB_PASSWORD', value: '[REDACTED]' }],
+    },
+  });
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  expect(updated.details.env[0]).toEqual({
+    key: 'DB_PASSWORD',
+    value: 'super-secret-password',
+  });
+  expect(existingContainer.data.details.env[0]).toEqual({
+    key: 'DB_PASSWORD',
+    value: 'super-secret-password',
+  });
+});
+
 test('insertContainer should stamp updateDetectedAt when update is available', async () => {
   const collection = {
     findOne: () => {},
@@ -392,6 +440,65 @@ test('getContainers should sort by tag when watcher and name are equal', async (
   expect(results[1].image.tag.value).toEqual('2.0.0');
 });
 
+test('getContainers should redact runtime env values by default', async () => {
+  const containerExample = createContainerFixture({
+    details: {
+      ports: [],
+      volumes: [],
+      env: [{ key: 'API_TOKEN', value: 'super-secret' }],
+    },
+  });
+  const containers = [{ data: containerExample }];
+  const collection = {
+    find: () => containers,
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({
+      findOne: () => {},
+      insert: () => {},
+    }),
+  };
+  container.createCollections(db);
+
+  const result = container.getContainers();
+
+  expect(result[0].details.env[0]).toEqual({
+    key: 'API_TOKEN',
+    value: '[REDACTED]',
+  });
+  expect(containers[0].data.details.env[0].value).toBe('super-secret');
+});
+
+test('getContainers should return raw runtime env values when explicitly requested', async () => {
+  const containerExample = createContainerFixture({
+    details: {
+      ports: [],
+      volumes: [],
+      env: [{ key: 'API_TOKEN', value: 'super-secret' }],
+    },
+  });
+  const containers = [{ data: containerExample }];
+  const collection = {
+    find: () => containers,
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({
+      findOne: () => {},
+      insert: () => {},
+    }),
+  };
+  container.createCollections(db);
+
+  const result = container.getContainers({}, { includeRuntimeEnvValues: true });
+
+  expect(result[0].details.env[0]).toEqual({
+    key: 'API_TOKEN',
+    value: 'super-secret',
+  });
+});
+
 test('getContainer should return 1 container by id', async () => {
   const containerExample = { data: createContainerFixture() };
   const collection = {
@@ -403,6 +510,61 @@ test('getContainer should return 1 container by id', async () => {
   container.createCollections(db);
   const result = container.getContainer('132456789');
   expect(result.name).toEqual(containerExample.data.name);
+});
+
+test('getContainer should redact runtime env values by default', async () => {
+  const containerExample = {
+    data: createContainerFixture({
+      details: {
+        ports: [],
+        volumes: [],
+        env: [{ key: 'DB_PASSWORD', value: 'raw-secret' }],
+      },
+    }),
+  };
+  const collection = {
+    findOne: () => containerExample,
+  };
+  const db = {
+    getCollection: () => collection,
+  };
+  container.createCollections(db);
+
+  const result = container.getContainer('132456789');
+
+  expect(result.details.env[0]).toEqual({
+    key: 'DB_PASSWORD',
+    value: '[REDACTED]',
+  });
+  expect(containerExample.data.details.env[0].value).toBe('raw-secret');
+});
+
+test('getContainer should return raw runtime env values when explicitly requested', async () => {
+  const containerExample = {
+    data: createContainerFixture({
+      details: {
+        ports: [],
+        volumes: [],
+        env: [{ key: 'DB_PASSWORD', value: 'raw-secret' }],
+      },
+    }),
+  };
+  const collection = {
+    findOne: () => containerExample,
+  };
+  const db = {
+    getCollection: () => collection,
+  };
+  container.createCollections(db);
+
+  const result = container.getContainer('132456789', {
+    includeRuntimeEnvValues: true,
+  });
+
+  expect(result.details.env[0]).toEqual({
+    key: 'DB_PASSWORD',
+    value: 'raw-secret',
+  });
 });
 
 test('getContainer should return undefined when not found', async () => {
@@ -588,4 +750,111 @@ test('insertContainer should not overwrite explicit security state with cache', 
   container.cacheSecurityState('test', 'test', cachedSecurity);
   const result = container.insertContainer(createContainerFixture({ security: explicitSecurity }));
   expect(result.security).toEqual(explicitSecurity);
+});
+
+test('getCachedSecurityState should expire entries after cache TTL', async () => {
+  vi.useFakeTimers();
+  try {
+    container.clearAllCachedSecurityState();
+    vi.setSystemTime(new Date('2026-02-01T00:00:00.000Z'));
+
+    const securityData = {
+      scan: {
+        scanner: 'trivy',
+        image: 'registry/image:1.2.3',
+        scannedAt: new Date().toISOString(),
+        status: 'passed',
+        blockSeverities: [],
+        blockingCount: 0,
+        summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+        vulnerabilities: [],
+      },
+    };
+    container.cacheSecurityState('ttl', 'entry', securityData);
+
+    vi.advanceTimersByTime(container.SECURITY_STATE_CACHE_TTL_MS + 1);
+
+    expect(container.getCachedSecurityState('ttl', 'entry')).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+    container.clearAllCachedSecurityState();
+  }
+});
+
+test('cacheSecurityState should evict oldest entries when max size is exceeded', async () => {
+  container.clearAllCachedSecurityState();
+  const maxEntries = container.SECURITY_STATE_CACHE_MAX_ENTRIES;
+  for (let index = 0; index <= maxEntries; index += 1) {
+    container.cacheSecurityState('limit', `container-${index}`, { status: 'ok', index });
+  }
+
+  expect(container.getCachedSecurityState('limit', 'container-0')).toBeUndefined();
+  expect(container.getCachedSecurityState('limit', `container-${maxEntries}`)).toEqual({
+    status: 'ok',
+    index: maxEntries,
+  });
+
+  for (let index = 0; index <= maxEntries; index += 1) {
+    container.clearCachedSecurityState('limit', `container-${index}`);
+  }
+});
+
+test('getContainers should evict oldest query cache entries when size cap is exceeded', async () => {
+  const containerExample = createContainerFixture();
+  const collection = {
+    find: vi.fn(() => [{ data: containerExample }]),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+  collection.find.mockClear();
+  const maxEntries = container.CONTAINERS_QUERY_CACHE_MAX_ENTRIES;
+
+  for (let index = 0; index <= maxEntries; index += 1) {
+    container.getContainers({ watcher: `watcher-${index}` });
+  }
+  const readCountAfterUniqueQueries = collection.find.mock.calls.length;
+
+  container.getContainers({ watcher: 'watcher-0' });
+  expect(collection.find.mock.calls.length).toBe(readCountAfterUniqueQueries + 1);
+});
+
+test('getContainers should cache validated results and invalidate cache after writes', async () => {
+  const containerExample = createContainerFixture();
+  const docs = [{ data: containerExample }];
+  const collection = {
+    find: vi.fn(() => [...docs]),
+    insert: vi.fn((doc) => {
+      docs.push(doc);
+    }),
+    findOne: vi.fn(() => undefined),
+    chain: vi.fn(() => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    })),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+  collection.find.mockClear();
+
+  container.getContainers();
+  const readCountAfterFirstGet = collection.find.mock.calls.length;
+  container.getContainers();
+  expect(collection.find.mock.calls.length).toBe(readCountAfterFirstGet);
+
+  container.insertContainer(
+    createContainerFixture({
+      id: 'cache-test-insert',
+      name: 'cache-test-insert',
+    }),
+  );
+  const readCountBeforeGetAfterWrite = collection.find.mock.calls.length;
+  container.getContainers();
+  expect(collection.find.mock.calls.length).toBe(readCountBeforeGetAfterWrite + 1);
 });

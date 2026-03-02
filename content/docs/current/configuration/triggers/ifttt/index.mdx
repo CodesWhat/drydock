@@ -15,7 +15,7 @@ The `ifttt` trigger lets you send container update notifications to Ifttt via th
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
 | `DD_TRIGGER_IFTTT_{trigger_name}_KEY` | 🔴 | The Webhook key | | |
-| `DD_TRIGGER_IFTTT_{trigger_name}_EVENT` | ⚪ | The event name | | `drydock-image`. |
+| `DD_TRIGGER_IFTTT_{trigger_name}_EVENT` | ⚪ | The event name | | `dd-image` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 
@@ -58,7 +58,7 @@ docker run \
 
 ### Ifttt captured ingredients
 
-- EventName: `drydock-container`
+- EventName: `dd-image`
 - OccuredAt: `August 30, 2019 at 06:51PM`
 - Value1: `homeassistant`
 - Value2: `2021.6.5`
@@ -96,7 +96,7 @@ And copy the key from the URL
 
 ![image](/docs/assets/configuration/triggers/ifttt/ifttt_request_trigger.png)
 
-### Enter the trigger event name (drydock-container by default)
+### Enter the trigger event name (dd-image by default)
 
 ![image](/docs/assets/configuration/triggers/ifttt/ifttt_event.png)
 

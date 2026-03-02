@@ -239,15 +239,6 @@ function updateComposeServiceImagesInText(composeFileText, serviceImageUpdates) 
  * Update a Docker compose stack with an updated one.
  */
 class Dockercompose extends Docker {
-  /**
-   * Per-container compose context stashed by processComposeFile for use
-   * inside performContainerUpdate (which runs via the shared lifecycle).
-   */
-  _composeContextMap = new Map<
-    string,
-    { composeFile: string; service: string; serviceDefinition: any }
-  >();
-
   _composeFileLocksHeld = new Set<string>();
 
   /**
@@ -435,7 +426,7 @@ class Dockercompose extends Docker {
    * Override: compose doesn't need to inspect the existing container
    * (compose CLI handles the container lifecycle). Lighter context.
    */
-  async createTriggerContext(container, logContainer) {
+  async createTriggerContext(container, logContainer, _composeContext) {
     const watcher = this.getWatcher(container);
     const { dockerApi } = watcher;
     const registry = getState().registry[container.image.registry.name];
@@ -454,8 +445,7 @@ class Dockercompose extends Docker {
   /**
    * Override: use compose CLI for pull/recreate instead of Docker API.
    */
-  async performContainerUpdate(_context, container) {
-    const composeCtx = this._composeContextMap.get(container.name);
+  async performContainerUpdate(_context, container, _logContainer, composeCtx) {
     if (!composeCtx) {
       throw new Error(`Missing compose context for container ${container.name}`);
     }
@@ -472,20 +462,19 @@ class Dockercompose extends Docker {
   /**
    * Keep compose dry-run side-effect free: no prune and no backup records.
    */
-  async runPreRuntimeUpdateLifecycle(context, container, logContainer) {
+  async runPreRuntimeUpdateLifecycle(context, container, logContainer, _composeContext) {
     if (this.configuration.dryrun) {
       logContainer.info('Skip prune/backup in compose dry-run mode');
       return;
     }
-    await super.runPreRuntimeUpdateLifecycle(context, container, logContainer);
+    await super.runPreRuntimeUpdateLifecycle(context, container, logContainer, _composeContext);
   }
 
   /**
    * Self-update for compose-managed Drydock service. This must stay in compose
    * lifecycle instead of Docker API recreate to preserve compose ownership.
    */
-  async executeSelfUpdate(context, container, logContainer) {
-    const composeCtx = this._composeContextMap.get(container.name);
+  async executeSelfUpdate(context, container, logContainer, _operationId, composeCtx) {
     if (!composeCtx) {
       throw new Error(`Missing compose context for self-update container ${container.name}`);
     }
@@ -642,16 +631,12 @@ class Dockercompose extends Docker {
     // Refresh all containers requiring a runtime update via the shared
     // lifecycle orchestrator (security gate, hooks, prune/backup, events).
     for (const { container, service } of mappingsNeedingRuntimeUpdate) {
-      this._composeContextMap.set(container.name, {
+      const composeContext = {
         composeFile,
         service,
         serviceDefinition: compose.services[service],
-      });
-      try {
-        await this.runContainerUpdateLifecycle(container);
-      } finally {
-        this._composeContextMap.delete(container.name);
-      }
+      };
+      await this.runContainerUpdateLifecycle(container, composeContext);
     }
   }
 

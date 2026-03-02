@@ -72,13 +72,13 @@ const comparisonData: ComparisonRow[] = [
   },
   {
     feature: "Registry providers",
-    competitor: "8",
-    drydock: "22",
+    competitor: "13",
+    drydock: "23",
     verdict: "drydock",
   },
   {
     feature: "Notifications",
-    competitor: "14 triggers",
+    competitor: "16 triggers",
     drydock: "20 native trigger integrations",
     verdict: "drydock",
   },
@@ -90,7 +90,7 @@ const comparisonData: ComparisonRow[] = [
   },
   {
     feature: "OIDC authentication",
-    competitor: "None",
+    competitor: "OIDC supported",
     drydock: "Authelia, Auth0, Authentik",
     verdict: "drydock",
   },
@@ -191,7 +191,7 @@ const highlights: Highlight[] = [
     icon: Shield,
     title: "Security Scanning",
     description:
-      "Trivy vulnerability scanning, SBOM generation (CycloneDX & SPDX), cosign signature verification, and Update Guard to block vulnerable deploys. WUD has no security scanning.",
+      "Trivy vulnerability scanning, SBOM generation (CycloneDX & SPDX), cosign signature verification, and 🥊 Update Bouncer to block vulnerable deploys. WUD has no security scanning.",
   },
   {
     icon: Network,
@@ -201,9 +201,9 @@ const highlights: Highlight[] = [
   },
   {
     icon: Radio,
-    title: "22 Registry Providers",
+    title: "23 Registry Providers",
     description:
-      "14 more registries than WUD — including GAR, Harbor, Artifactory, Nexus, Alibaba Cloud, IBM Cloud, and Oracle Cloud.",
+      "10 more registries than WUD — including GAR, Harbor, Artifactory, Nexus, Alibaba Cloud, IBM Cloud, and Oracle Cloud.",
   },
   {
     icon: RotateCcw,
@@ -213,7 +213,7 @@ const highlights: Highlight[] = [
   },
   {
     icon: Bell,
-    title: "6 More Trigger Services",
+    title: "4 More Trigger Services",
     description:
       "Google Chat, Matrix, Mattermost, and Microsoft Teams (Adaptive Cards) plus enhanced configuration for existing triggers.",
   },
@@ -231,7 +231,7 @@ export default function WudComparison() {
             fork of What&apos;s Up Docker (WUD)
           </strong>{" "}
           that has evolved significantly — migrating to TypeScript, adding security scanning,
-          distributed agents, audit logging, rollback, and 14 additional registry providers.
+          distributed agents, audit logging, rollback, and 10 additional registry providers.
         </p>
       }
       competitorBadge={{

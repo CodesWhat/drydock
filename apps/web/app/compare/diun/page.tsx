@@ -7,7 +7,7 @@ const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.c
 export const metadata: Metadata = {
   title: "Diun vs Drydock — Container Update Monitoring Comparison",
   description:
-    "Compare Diun (Docker Image Update Notifier) and Drydock for container update monitoring. See how Drydock adds a full web UI, auto-updates, security scanning, and 22 registry integrations beyond Diun's notification-only approach.",
+    "Compare Diun (Docker Image Update Notifier) and Drydock for container update monitoring. See how Drydock adds a full web UI, auto-updates, security scanning, and 23 registry integrations beyond Diun's notification-only approach.",
   keywords: [
     "diun vs drydock",
     "diun alternative",
@@ -72,7 +72,7 @@ const comparisonData: ComparisonRow[] = [
   {
     feature: "Registry support",
     competitor: "Docker Hub + private via Docker config",
-    drydock: "22 dedicated registry integrations",
+    drydock: "23 dedicated registry integrations",
     verdict: "drydock",
   },
   {
@@ -194,7 +194,7 @@ const highlights: Highlight[] = [
   },
   {
     icon: Radio,
-    title: "22 Registry Integrations",
+    title: "23 Registry Integrations",
     description:
       "Drydock has dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more. Diun relies on Docker credential configuration.",
   },

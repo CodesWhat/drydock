@@ -49,6 +49,18 @@ import mockParse from 'parse-docker-image-name';
 import * as mockPrometheus from '../../../prometheus/watcher.js';
 import * as mockTag from '../../../tag/index.js';
 import * as maintenance from './maintenance.js';
+import {
+  OIDC_DEVICE_URL_PATHS,
+  OIDC_GRANT_TYPE_PATHS,
+  applyRemoteOidcTokenPayload,
+  getOidcGrantType,
+  handleTokenErrorResponse,
+  initializeRemoteOidcStateFromConfiguration,
+  isRemoteOidcTokenRefreshRequired,
+  performDeviceCodeFlow,
+  pollDeviceCodeToken,
+  refreshRemoteOidcAccessToken,
+} from './oidc.js';
 
 const mockAxios = axios as Mocked<typeof axios>;
 
@@ -194,6 +206,47 @@ function createHaParseMock() {
       return { domain: 'ghcr.io', path: 'home-assistant/home-assistant' };
     }
     return { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' };
+  };
+}
+
+function createDockerOidcStateAdapter(docker) {
+  return {
+    get accessToken() {
+      return docker.remoteOidcAccessToken;
+    },
+    set accessToken(value) {
+      docker.remoteOidcAccessToken = value;
+    },
+    get refreshToken() {
+      return docker.remoteOidcRefreshToken;
+    },
+    set refreshToken(value) {
+      docker.remoteOidcRefreshToken = value;
+    },
+    get accessTokenExpiresAt() {
+      return docker.remoteOidcAccessTokenExpiresAt;
+    },
+    set accessTokenExpiresAt(value) {
+      docker.remoteOidcAccessTokenExpiresAt = value;
+    },
+    get deviceCodeCompleted() {
+      return docker.remoteOidcDeviceCodeCompleted;
+    },
+    set deviceCodeCompleted(value) {
+      docker.remoteOidcDeviceCodeCompleted = value;
+    },
+  };
+}
+
+function createDockerOidcContext(docker) {
+  return {
+    watcherName: docker.name,
+    log: docker.log,
+    state: createDockerOidcStateAdapter(docker),
+    getOidcAuthString: (paths) => docker.getOidcAuthString(paths),
+    getOidcAuthNumber: (paths) => docker.getOidcAuthNumber(paths),
+    normalizeNumber: testable_normalizeConfigNumberValue,
+    sleep: (ms) => docker.sleep(ms),
   };
 }
 
@@ -747,6 +800,19 @@ describe('Docker Watcher', () => {
   });
 
   describe('OIDC Device Code Flow', () => {
+    test('should not expose legacy OIDC passthrough helper methods', async () => {
+      await docker.register('watcher', 'docker', 'test', createOidcConfig());
+
+      expect(docker.getOidcGrantType).toBeUndefined();
+      expect(docker.initializeRemoteOidcStateFromConfiguration).toBeUndefined();
+      expect(docker.isRemoteOidcTokenRefreshRequired).toBeUndefined();
+      expect(docker.applyRemoteOidcTokenPayload).toBeUndefined();
+      expect(docker.performDeviceCodeFlow).toBeUndefined();
+      expect(docker.handleTokenErrorResponse).toBeUndefined();
+      expect(docker.pollDeviceCodeToken).toBeUndefined();
+      expect(docker.refreshRemoteOidcAccessToken).toBeUndefined();
+    });
+
     test('should validate configuration with device flow oidc settings', async () => {
       const config = createDeviceFlowConfig(
         { scope: 'docker.read' },
@@ -758,7 +824,11 @@ describe('Docker Watcher', () => {
     test('should auto-detect device_code grant type when deviceurl is configured', async () => {
       await docker.register('watcher', 'docker', 'test', createDeviceFlowConfig());
 
-      const grantType = docker.getOidcGrantType();
+      const grantType = getOidcGrantType({
+        configuredGrantType: docker.getOidcAuthString(OIDC_GRANT_TYPE_PATHS),
+        refreshToken: docker.remoteOidcRefreshToken,
+        deviceUrl: docker.getOidcAuthString(OIDC_DEVICE_URL_PATHS),
+      });
       expect(grantType).toBe('urn:ietf:params:oauth:grant-type:device_code');
     });
 
@@ -772,8 +842,13 @@ describe('Docker Watcher', () => {
         }),
       );
 
-      docker.initializeRemoteOidcStateFromConfiguration();
-      const grantType = docker.getOidcGrantType();
+      const context = createDockerOidcContext(docker);
+      initializeRemoteOidcStateFromConfiguration(context);
+      const grantType = getOidcGrantType({
+        configuredGrantType: docker.getOidcAuthString(OIDC_GRANT_TYPE_PATHS),
+        refreshToken: context.state.refreshToken,
+        deviceUrl: docker.getOidcAuthString(OIDC_DEVICE_URL_PATHS),
+      });
       expect(grantType).toBe('refresh_token');
     });
 
@@ -2784,6 +2859,85 @@ describe('Docker Watcher', () => {
       expect(result).toBe(existingContainer);
     });
 
+    test('should skip container inspect for store container when watch events are enabled', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      docker.log = createMockLog(['debug']);
+      const existingContainer = {
+        id: '123',
+        error: undefined,
+        image: {
+          digest: { repo: 'sha256:abc' },
+          id: 'image123',
+          created: '2023-01-01',
+        },
+        details: {
+          ports: ['80/tcp'],
+          volumes: ['/old/data:/data'],
+          env: [{ key: 'APP_ENV', value: 'prod' }],
+        },
+      };
+      storeContainer.getContainer.mockReturnValue(existingContainer);
+      mockImage.inspect.mockResolvedValue({
+        Id: 'image123',
+        RepoDigests: ['nginx@sha256:abc'],
+        Created: '2023-01-01',
+      });
+
+      const result = await docker.addImageDetailsToContainer({
+        Id: '123',
+        Image: 'nginx:latest',
+        Ports: [{ PrivatePort: 8080, Type: 'tcp', PublicPort: 18080, IP: '0.0.0.0' }],
+        Mounts: [{ Source: '/host/data', Destination: '/data', RW: false }],
+      });
+
+      expect(result).toBe(existingContainer);
+      expect(mockContainer.inspect).not.toHaveBeenCalled();
+      expect(result.details).toEqual({
+        ports: ['0.0.0.0:18080->8080/tcp'],
+        volumes: ['/host/data:/data:ro'],
+        env: [{ key: 'APP_ENV', value: 'prod' }],
+      });
+    });
+
+    test('should inspect store container runtime details when watch events are disabled', async () => {
+      await docker.register('watcher', 'docker', 'test', { watchevents: false });
+      docker.log = createMockLog(['debug']);
+      const existingContainer = {
+        id: '123',
+        error: undefined,
+        image: {
+          digest: { repo: 'sha256:abc' },
+          id: 'image123',
+          created: '2023-01-01',
+        },
+        details: {
+          ports: [],
+          volumes: [],
+          env: [],
+        },
+      };
+      storeContainer.getContainer.mockReturnValue(existingContainer);
+      mockContainer.inspect.mockResolvedValue({
+        Config: {
+          Env: ['APP_ENV=prod'],
+        },
+      });
+      mockImage.inspect.mockResolvedValue({
+        Id: 'image123',
+        RepoDigests: ['nginx@sha256:abc'],
+        Created: '2023-01-01',
+      });
+
+      const result = await docker.addImageDetailsToContainer({
+        Id: '123',
+        Image: 'nginx:latest',
+      });
+
+      expect(result).toBe(existingContainer);
+      expect(mockContainer.inspect).toHaveBeenCalledTimes(1);
+      expect(result.details.env).toEqual([{ key: 'APP_ENV', value: 'prod' }]);
+    });
+
     test('should refresh image fields when digest changed in store container', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.log = createMockLog(['debug']);
@@ -3898,7 +4052,7 @@ describe('Docker Watcher', () => {
         protocol: 'https',
         auth: { type: 'oidc', oidc: {} },
       });
-      await expect(docker.refreshRemoteOidcAccessToken()).rejects.toThrow(
+      await expect(refreshRemoteOidcAccessToken(createDockerOidcContext(docker))).rejects.toThrow(
         'missing auth.oidc token endpoint',
       );
     });
@@ -3912,7 +4066,7 @@ describe('Docker Watcher', () => {
       });
       const logMock = createMockLog(['warn', 'info', 'debug']);
       docker.log = logMock;
-      await docker.refreshRemoteOidcAccessToken();
+      await refreshRemoteOidcAccessToken(createDockerOidcContext(docker));
       expect(logMock.warn).toHaveBeenCalledWith(
         expect.stringContaining('refresh token is missing'),
       );
@@ -3926,7 +4080,7 @@ describe('Docker Watcher', () => {
         protocol: 'https',
         auth: { type: 'oidc', oidc: { tokenurl: 'https://idp/token' } },
       });
-      await expect(docker.refreshRemoteOidcAccessToken()).rejects.toThrow(
+      await expect(refreshRemoteOidcAccessToken(createDockerOidcContext(docker))).rejects.toThrow(
         'does not contain access_token',
       );
     });
@@ -3940,7 +4094,7 @@ describe('Docker Watcher', () => {
       });
       const logMock = createMockLog(['warn', 'info', 'debug']);
       docker.log = logMock;
-      await docker.refreshRemoteOidcAccessToken();
+      await refreshRemoteOidcAccessToken(createDockerOidcContext(docker));
       expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining('unsupported'));
     });
 
@@ -4447,7 +4601,12 @@ describe('Docker Watcher', () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.remoteOidcAccessToken = 'some-token';
       docker.remoteOidcAccessTokenExpiresAt = undefined;
-      expect(docker.isRemoteOidcTokenRefreshRequired()).toBe(false);
+      expect(
+        isRemoteOidcTokenRefreshRequired({
+          accessToken: docker.remoteOidcAccessToken,
+          accessTokenExpiresAt: docker.remoteOidcAccessTokenExpiresAt,
+        }),
+      ).toBe(false);
     });
   });
 
@@ -4549,8 +4708,9 @@ describe('Docker Watcher', () => {
       // Directly call pollDeviceCodeToken with a very short timeout so it exits immediately
       docker.sleep = vi.fn().mockResolvedValue(undefined);
       mockAxios.post.mockRejectedValue({ response: { data: { error: 'authorization_pending' } } });
+      const context = createDockerOidcContext(docker);
       await expect(
-        docker.pollDeviceCodeToken({
+        pollDeviceCodeToken(context, {
           tokenEndpoint: 'https://idp.example.com/oauth/token',
           deviceCode: 'device-code',
           clientId: 'client',
@@ -4583,11 +4743,10 @@ describe('Docker Watcher', () => {
   describe('Additional Coverage - ensureRemoteAuthHeaders no token', () => {
     test('should throw when no OIDC access token available after refresh', async () => {
       await docker.register('watcher', 'docker', 'test', createOidcConfig());
-      // Mock refreshRemoteOidcAccessToken to succeed but leave token undefined
-      docker.refreshRemoteOidcAccessToken = vi.fn().mockResolvedValue(undefined);
+      mockAxios.post.mockResolvedValue({ data: {} } as any);
       docker.remoteOidcAccessToken = undefined;
       await expect(docker.ensureRemoteAuthHeaders()).rejects.toThrow(
-        'no OIDC access token available',
+        'token endpoint response does not contain access_token',
       );
     });
   });
@@ -4861,7 +5020,7 @@ describe('Docker Watcher', () => {
           accesstoken: 'string-expires-token',
         }),
       );
-      docker.initializeRemoteOidcStateFromConfiguration();
+      initializeRemoteOidcStateFromConfiguration(createDockerOidcContext(docker));
       expect(docker.remoteOidcAccessTokenExpiresAt).toBeDefined();
     });
   });
@@ -5231,9 +5390,12 @@ describe('Docker Watcher', () => {
 
   describe('Additional Coverage - OIDC edge branches', () => {
     test('applyRemoteOidcTokenPayload should return false when access token is missing and allowed', () => {
-      const applied = docker.applyRemoteOidcTokenPayload(
+      const applied = applyRemoteOidcTokenPayload(
+        createDockerOidcStateAdapter(docker),
         {},
         {
+          watcherName: docker.name,
+          normalizeNumber: testable_normalizeConfigNumberValue,
           allowMissingAccessToken: true,
         },
       );
@@ -5254,7 +5416,7 @@ describe('Docker Watcher', () => {
           },
         });
 
-      await docker.pollDeviceCodeToken({
+      await pollDeviceCodeToken(createDockerOidcContext(docker), {
         tokenEndpoint: 'https://idp.example.com/token',
         deviceCode: 'device-code',
         clientId: 'client-id',
@@ -5289,7 +5451,7 @@ describe('Docker Watcher', () => {
       docker.configuration = createOidcConfig();
       mockAxios.post.mockResolvedValue(undefined as any);
 
-      await expect(docker.refreshRemoteOidcAccessToken()).rejects.toThrow(
+      await expect(refreshRemoteOidcAccessToken(createDockerOidcContext(docker))).rejects.toThrow(
         'token endpoint response does not contain access_token',
       );
     });
@@ -5299,7 +5461,7 @@ describe('Docker Watcher', () => {
       mockAxios.post.mockResolvedValue(undefined as any);
 
       await expect(
-        docker.performDeviceCodeFlow('https://idp.example.com/device/code', {
+        performDeviceCodeFlow(createDockerOidcContext(docker), 'https://idp.example.com/device/code', {
           tokenEndpoint: 'https://idp.example.com/token',
           clientId: 'client-id',
           clientSecret: 'client-secret',
@@ -5313,9 +5475,12 @@ describe('Docker Watcher', () => {
 
     test('handleTokenErrorResponse should fallback to error.message when response payload is missing', () => {
       docker.name = 'test';
-      expect(() => docker.handleTokenErrorResponse(new Error('network down'), 1000)).toThrow(
-        'failed: network down',
-      );
+      expect(() =>
+        handleTokenErrorResponse(new Error('network down'), 1000, {
+          watcherName: docker.name,
+          log: docker.log,
+        }),
+      ).toThrow('failed: network down');
     });
 
     test('pollDeviceCodeToken should continue when first token response is undefined', async () => {
@@ -5328,7 +5493,7 @@ describe('Docker Watcher', () => {
         },
       });
 
-      await docker.pollDeviceCodeToken({
+      await pollDeviceCodeToken(createDockerOidcContext(docker), {
         tokenEndpoint: 'https://idp.example.com/token',
         deviceCode: 'device-code',
         clientId: 'client-id',
@@ -5351,11 +5516,11 @@ describe('Docker Watcher', () => {
           password: 'password',
         },
       });
-      const refreshSpy = vi.spyOn(docker, 'refreshRemoteOidcAccessToken');
+      mockAxios.post.mockClear();
 
       await docker.ensureRemoteAuthHeaders();
 
-      expect(refreshSpy).not.toHaveBeenCalled();
+      expect(mockAxios.post).not.toHaveBeenCalled();
     });
   });
 

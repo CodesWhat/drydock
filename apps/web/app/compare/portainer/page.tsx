@@ -7,7 +7,7 @@ const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://drydock.codeswhat.c
 export const metadata: Metadata = {
   title: "Portainer vs Drydock — Container Update Monitoring Comparison",
   description:
-    "Compare Portainer and Drydock for container update monitoring. Portainer is a full container management platform — see how Drydock's focused update monitoring with rollback, security scanning, and 22 registries offers a lightweight alternative.",
+    "Compare Portainer and Drydock for container update monitoring. Portainer is a full container management platform — see how Drydock's focused update monitoring with rollback, security scanning, and 23 registries offers a lightweight alternative.",
   keywords: [
     "portainer vs drydock",
     "portainer alternative",
@@ -101,7 +101,7 @@ const comparisonData: ComparisonRow[] = [
   {
     feature: "Registry providers",
     competitor: "Major registries",
-    drydock: "22 dedicated integrations",
+    drydock: "23 dedicated integrations",
     verdict: "drydock",
   },
   {
@@ -205,7 +205,7 @@ const highlights: Highlight[] = [
   },
   {
     icon: Radio,
-    title: "22 Registry Integrations",
+    title: "23 Registry Integrations",
     description:
       "Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more with per-registry configuration.",
   },
