@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 import type { Container, ContainerUpdatePolicy } from '../../model/container.js';
+import { getPathParamValue } from './request-helpers.js';
 
-interface StoreContainerApi {
+interface UpdatePolicyStoreContainerApi {
   getContainer: (
     id: string,
     options?: {
@@ -12,17 +13,10 @@ interface StoreContainerApi {
 }
 
 export interface UpdatePolicyHandlerDependencies {
-  storeContainer: StoreContainerApi;
+  storeContainer: UpdatePolicyStoreContainerApi;
   uniqStrings: (values: string[]) => string[];
   getErrorMessage: (error: unknown) => string;
   redactContainerRuntimeEnv: (container: Container) => Container;
-}
-
-function getPathParamValue(value: string | string[] | undefined): string {
-  if (Array.isArray(value)) {
-    return value[0] || '';
-  }
-  return value || '';
 }
 
 export function createUpdatePolicyHandlers({

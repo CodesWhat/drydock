@@ -1,8 +1,13 @@
 import type { Request, Response } from 'express';
 import type { AgentClient } from '../../agent/AgentClient.js';
 import type { Container } from '../../model/container.js';
+import {
+  getPathParamValue,
+  parseBooleanQueryParam,
+  parseIntegerQueryParam,
+} from './request-helpers.js';
 
-interface StoreContainerApi {
+interface LogStoreContainerApi {
   getContainer: (id: string) => Container | undefined;
 }
 
@@ -18,46 +23,26 @@ interface LocalDockerContainerApi {
 }
 
 interface LocalDockerWatcherApi {
-  dockerApi: {
+  dockerApi?: {
     getContainer: (containerName: string) => LocalDockerContainerApi;
   };
 }
 
 export interface LogHandlerDependencies {
-  storeContainer: StoreContainerApi;
+  storeContainer: LogStoreContainerApi;
   getAgent: (name: string) => AgentClient | undefined;
-  getWatchers: () => Record<string, LocalDockerWatcherApi>;
+  getWatchers: () => Record<string, unknown>;
   getErrorMessage: (error: unknown) => string;
 }
 
-function parseIntegerQueryParam(rawValue: unknown, fallback: number): number {
-  const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
-  if (typeof value !== 'string') {
-    return fallback;
-  }
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function parseBooleanQueryParam(rawValue: unknown, fallback: boolean): boolean {
-  const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
-  if (typeof value !== 'string') {
-    return fallback;
-  }
-  if (value === 'true') {
-    return true;
-  }
-  if (value === 'false') {
+export function isLocalDockerWatcherApi(value: unknown): value is LocalDockerWatcherApi {
+  if (!value || typeof value !== 'object') {
     return false;
   }
-  return fallback;
-}
-
-function getPathParamValue(value: string | string[] | undefined): string {
-  if (Array.isArray(value)) {
-    return value[0] || '';
-  }
-  return value || '';
+  const dockerApi = (value as { dockerApi?: unknown }).dockerApi;
+  return (
+    !!dockerApi && typeof (dockerApi as { getContainer?: unknown }).getContainer === 'function'
+  );
 }
 
 export function createLogHandlers({
@@ -123,7 +108,7 @@ export function createLogHandlers({
 
     const watcherId = `docker.${container.watcher}`;
     const watcher = getWatchers()[watcherId];
-    if (!watcher) {
+    if (!isLocalDockerWatcherApi(watcher) || !watcher.dockerApi) {
       res.status(500).json({
         error: `No watcher found for container ${id}`,
       });

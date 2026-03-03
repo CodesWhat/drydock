@@ -6,8 +6,9 @@ import type {
   ContainerSecurityScan,
   ContainerSignatureVerification,
 } from '../../security/scan.js';
+import { getPathParamValue } from './request-helpers.js';
 
-interface StoreContainerApi {
+interface SecurityStoreContainerApi {
   getContainer: (
     id: string,
     options?: {
@@ -44,7 +45,7 @@ interface SecurityAlertPayload {
 }
 
 export interface SecurityHandlerDependencies {
-  storeContainer: StoreContainerApi;
+  storeContainer: SecurityStoreContainerApi;
   getSecurityConfiguration: () => SecurityConfiguration;
   SECURITY_SBOM_FORMATS: readonly SecuritySbomFormat[];
   generateImageSbom: (options: {
@@ -71,13 +72,6 @@ export interface SecurityHandlerDependencies {
   log: {
     info: (message: string) => void;
   };
-}
-
-function getPathParamValue(value: string | string[] | undefined): string {
-  if (Array.isArray(value)) {
-    return value[0] || '';
-  }
-  return value || '';
 }
 
 export function createSecurityHandlers({

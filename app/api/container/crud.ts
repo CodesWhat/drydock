@@ -1,8 +1,9 @@
 import type { Request, Response } from 'express';
 import type { AgentClient } from '../../agent/AgentClient.js';
 import type { Container, ContainerReport } from '../../model/container.js';
+import { getPathParamValue } from './request-helpers.js';
 
-interface StoreContainerApi {
+interface CrudStoreContainerApi {
   getContainer: (
     id: string,
     options?: {
@@ -30,7 +31,7 @@ interface LocalContainerWatcher {
 
 export interface CrudHandlerDependencies {
   getContainersFromStore: (query: Request['query']) => Container[];
-  storeContainer: StoreContainerApi;
+  storeContainer: CrudStoreContainerApi;
   updateOperationStore: UpdateOperationStoreApi;
   getServerConfiguration: () => ServerConfiguration;
   getAgent: (name: string) => AgentClient | undefined;
@@ -39,13 +40,6 @@ export interface CrudHandlerDependencies {
   getWatchers: () => Record<string, LocalContainerWatcher>;
   redactContainerRuntimeEnv: (container: Container) => Container;
   redactContainersRuntimeEnv: (containers: Container[]) => Container[];
-}
-
-function getPathParamValue(value: string | string[] | undefined): string {
-  if (Array.isArray(value)) {
-    return value[0] || '';
-  }
-  return value || '';
 }
 
 export function createCrudHandlers({

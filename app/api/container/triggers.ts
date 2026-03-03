@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
 import type { Container } from '../../model/container.js';
+import type { ApiComponent } from '../component.js';
+import { getPathParamValue } from './request-helpers.js';
 
-interface StoreContainerApi {
+interface TriggerStoreContainerApi {
   getContainer: (
     id: string,
     options?: {
@@ -22,7 +24,10 @@ interface TriggerComponent {
   configuration: {
     threshold?: string;
   };
-  trigger: (container: Container) => Promise<void>;
+}
+
+interface TriggerRuntimeComponent extends TriggerComponent {
+  trigger: (container: Container) => Promise<unknown>;
 }
 
 interface TriggerStaticApi {
@@ -31,9 +36,9 @@ interface TriggerStaticApi {
 }
 
 export interface TriggerHandlerDependencies {
-  storeContainer: StoreContainerApi;
-  mapComponentsToList: (components: Record<string, TriggerComponent>) => TriggerComponent[];
-  getTriggers: () => Record<string, TriggerComponent>;
+  storeContainer: TriggerStoreContainerApi;
+  mapComponentsToList: (components: Record<string, TriggerRuntimeComponent>) => ApiComponent[];
+  getTriggers: () => Record<string, TriggerRuntimeComponent>;
   Trigger: TriggerStaticApi;
   sanitizeLogParam: (value: unknown, maxLength?: number) => string;
   getErrorMessage: (error: unknown) => string;
@@ -41,13 +46,6 @@ export interface TriggerHandlerDependencies {
     info: (message: string) => void;
     warn: (message: string) => void;
   };
-}
-
-function getPathParamValue(value: string | string[] | undefined): string {
-  if (Array.isArray(value)) {
-    return value[0] || '';
-  }
-  return value || '';
 }
 
 export function createTriggerHandlers({
