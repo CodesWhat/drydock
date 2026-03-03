@@ -208,6 +208,28 @@ test('handleContainerReport should warn when trigger method of the trigger fails
   expect(spyLog).toHaveBeenCalledWith('Error (Fail!!!)');
 });
 
+test('handleContainerReport should stringify non-Error failures', async () => {
+  trigger.configuration = {
+    threshold: 'all',
+    mode: 'simple',
+  };
+  trigger.trigger = () => {
+    throw 'string failure';
+  };
+  await trigger.init();
+  const spyLog = vi.spyOn(log, 'warn');
+
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      name: 'container1',
+      updateAvailable: true,
+    },
+  });
+
+  expect(spyLog).toHaveBeenCalledWith('Error (string failure)');
+});
+
 const handleContainerReportsTestCases = [
   {
     shouldTrigger: true,

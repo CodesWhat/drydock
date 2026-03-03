@@ -86,3 +86,13 @@ test('validateConfiguration should return empty object when value is falsy', () 
   const result = component.validateConfiguration({});
   expect(result).toEqual({});
 });
+
+test('validateConfiguration should support schemas without a validate function', () => {
+  const component = new Component();
+  const configuration = { foo: 'bar' };
+  component.getConfigurationSchema = () => ({}) as any;
+
+  const result = component.validateConfiguration(configuration);
+
+  expect(result).toEqual(configuration);
+});

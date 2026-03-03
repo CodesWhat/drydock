@@ -1,4 +1,3 @@
-// @ts-nocheck
 import joi from 'joi';
 import { Kafka as KafkaClient } from 'kafkajs';
 
@@ -143,7 +142,34 @@ test('initTrigger should init kafka client with auth when configured', async () 
     clientId: 'drydock',
     ssl: false,
     sasl: {
-      mechanism: 'PLAIN',
+      mechanism: 'plain',
+      password: 'password',
+      username: 'user',
+    },
+  });
+});
+
+test('initTrigger should fallback to plain mechanism for unknown auth type', async () => {
+  kafka.configuration = {
+    brokers: 'broker1:9000, broker2:9000',
+    topic: 'drydock-container',
+    clientId: 'drydock',
+    ssl: false,
+    authentication: {
+      type: 'UNKNOWN',
+      user: 'user',
+      password: 'password',
+    },
+  };
+
+  await kafka.initTrigger();
+
+  expect(KafkaClient).toHaveBeenCalledWith({
+    brokers: ['broker1:9000', 'broker2:9000'],
+    clientId: 'drydock',
+    ssl: false,
+    sasl: {
+      mechanism: 'plain',
       password: 'password',
       username: 'user',
     },

@@ -135,6 +135,10 @@ test('getStrategy should return an Authentication strategy', async () => {
   expect(strategy.name).toEqual('oidc');
 });
 
+test('getStrategy should throw when express app instance is missing', async () => {
+  expect(() => oidc.getStrategy()).toThrowError('OIDC strategy requires an express app instance');
+});
+
 test('getStrategy should wire redirect/callback routes to oidc handlers', async () => {
   const appMock = {
     use: vi.fn(),

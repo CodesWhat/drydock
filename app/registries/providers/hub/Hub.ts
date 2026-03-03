@@ -1,4 +1,3 @@
-// @ts-nocheck
 import axios from 'axios';
 import { withAuthorizationHeader } from '../../../security/auth.js';
 import Custom from '../custom/Custom.js';
@@ -73,7 +72,7 @@ class Hub extends Custom {
       url: `https://auth.docker.io/token?service=registry.docker.io&scope=repository:${image.name}:pull&grant_type=password`,
       headers: {
         Accept: 'application/json',
-      },
+      } as Record<string, string>,
     };
 
     // Add Authorization if any

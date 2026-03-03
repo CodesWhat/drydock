@@ -124,6 +124,20 @@ describe('Backup Router', () => {
       expect(res.json).toHaveBeenCalledWith(backups);
     });
 
+    test('should use first id when route param id is an array', () => {
+      const handler = getHandler('get', '/:id/backups');
+      mockGetContainer.mockReturnValue({ id: 'c1', name: 'nginx' });
+      mockGetBackupsByName.mockReturnValue([]);
+
+      const req = createMockRequest({ params: { id: ['c1', 'ignored'] } });
+      const res = createMockResponse();
+      handler(req, res);
+
+      expect(mockGetContainer).toHaveBeenCalledWith('c1');
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith([]);
+    });
+
     test('should return empty array when container has no backups', () => {
       const handler = getHandler('get', '/:id/backups');
       mockGetContainer.mockReturnValue({ id: 'c1', name: 'nginx' });

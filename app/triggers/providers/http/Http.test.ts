@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Http from './Http.js';
 
 // Mock axios
@@ -216,7 +215,7 @@ describe('HTTP Trigger', () => {
       url: 'https://example.com/webhook',
       timeout: 30000,
       data: container,
-      proxy: { host: 'proxy', port: '8080' },
+      proxy: { host: 'proxy', port: 8080 },
     });
   });
 });

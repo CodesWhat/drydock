@@ -1,4 +1,3 @@
-// @ts-nocheck
 import axios from 'axios';
 import { withAuthorizationHeader } from '../../../security/auth.js';
 import Custom from '../custom/Custom.js';
@@ -59,7 +58,7 @@ class Dhi extends Custom {
       url: `https://dhi.io/token?service=registry.docker.io&scope=repository:${image.name}:pull&grant_type=password`,
       headers: {
         Accept: 'application/json',
-      },
+      } as Record<string, string>,
     };
 
     const credentials = this.getAuthCredentials();
