@@ -1,8 +1,7 @@
-// @ts-nocheck
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import yaml from 'yaml';
+import yaml, { type Pair, type ParsedNode } from 'yaml';
 import { getState } from '../../../registry/index.js';
 import { buildComposeCommandEnvironment } from '../../../runtime/child-process-env.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
@@ -10,12 +9,51 @@ import Docker from '../docker/Docker.js';
 
 const COMPOSE_COMMAND_TIMEOUT_MS = 60_000;
 const COMPOSE_COMMAND_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+const YAML_MAX_ALIAS_COUNT = 10_000;
 const COMPOSE_FILE_LOCK_SUFFIX = '.drydock.lock';
 const COMPOSE_FILE_LOCK_RETRY_MS = 100;
 const COMPOSE_FILE_LOCK_MAX_WAIT_MS = 10_000;
 const COMPOSE_FILE_LOCK_STALE_MS = 120_000;
 const ROOT_MODE_BREAK_GLASS_HINT =
   'use socket proxy or adjust file permissions/group_add; break-glass root mode requires DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true';
+
+interface DockerApiLike {
+  modem: {
+    socketPath: string;
+  };
+  getContainer: (containerName: string) => {
+    inspect: () => Promise<{
+      State?: {
+        Running?: boolean;
+      };
+    }>;
+    exec: (options: unknown) => Promise<{
+      start: (options: { Detach: boolean; Tty: boolean }) => Promise<{
+        once?: (event: string, callback: (error?: unknown) => void) => void;
+        removeListener: (event: string, callback: (error?: unknown) => void) => void;
+        resume?: () => void;
+      }>;
+      inspect: () => Promise<{
+        ExitCode?: number;
+      }>;
+    }>;
+  };
+}
+
+function getDockerApiFromWatcher(watcher: unknown): DockerApiLike | undefined {
+  if (!watcher || typeof watcher !== 'object') {
+    return undefined;
+  }
+  const dockerApi = (watcher as { dockerApi?: unknown }).dockerApi;
+  if (!dockerApi || typeof dockerApi !== 'object') {
+    return undefined;
+  }
+  const maybeDockerApi = dockerApi as Partial<DockerApiLike>;
+  if (!maybeDockerApi.modem || typeof maybeDockerApi.getContainer !== 'function') {
+    return undefined;
+  }
+  return maybeDockerApi as DockerApiLike;
+}
 
 function getServiceKey(compose, container, currentImage) {
   const composeServiceName = container.labels?.['com.docker.compose.service'];
@@ -138,12 +176,15 @@ function getPreferredChildIndentation(parentIndentation) {
   return `${parentIndentation}  `;
 }
 
-function getMapPairByKey(mapNode, keyName) {
+function getMapPairByKey(
+  mapNode: unknown,
+  keyName: string,
+): Pair<ParsedNode | null, ParsedNode | null> | undefined {
   if (!yaml.isMap(mapNode)) {
     return undefined;
   }
-  return mapNode.items.find((pair) => {
-    const pairKeyValue = pair?.key?.value ?? pair?.key?.source;
+  return mapNode.items.find((pair): pair is Pair<ParsedNode | null, ParsedNode | null> => {
+    const pairKeyValue = yaml.isScalar(pair?.key) ? pair.key.value : undefined;
     return `${pairKeyValue}` === keyName;
   });
 }
@@ -164,10 +205,12 @@ function formatReplacementImageValue(currentImageValueText, newImage) {
  */
 function updateComposeServiceImageInText(composeFileText, serviceName, newImage) {
   const newline = composeFileText.includes('\r\n') ? '\r\n' : '\n';
-  const composeDoc = yaml.parseDocument(composeFileText, {
-    maxAliasCount: 10000,
+  const parseDocumentOptions = {
     keepSourceTokens: true,
-    keepNodeTypes: true,
+    maxAliasCount: YAML_MAX_ALIAS_COUNT,
+  };
+  const composeDoc = yaml.parseDocument(composeFileText, {
+    ...(parseDocumentOptions as unknown as { keepSourceTokens: true }),
   });
   if (composeDoc.errors?.length > 0) {
     throw composeDoc.errors[0];
@@ -187,7 +230,7 @@ function updateComposeServiceImageInText(composeFileText, serviceName, newImage)
   if (yaml.isMap(serviceValueNode)) {
     const imagePair = getMapPairByKey(serviceValueNode, 'image');
     if (imagePair) {
-      const imageValueRange = imagePair?.value?.range;
+      const imageValueRange = imagePair.value?.range;
       if (!Array.isArray(imageValueRange) || imageValueRange.length < 2) {
         throw new Error(`Unable to locate compose image value for service ${serviceName}`);
       }
@@ -209,7 +252,7 @@ function updateComposeServiceImageInText(composeFileText, serviceName, newImage)
     throw new Error(`Unable to patch compose service ${serviceName} because it is not a map`);
   }
 
-  const serviceKeyOffset = servicePair?.key?.range?.[0];
+  const serviceKeyOffset = servicePair.key?.range?.[0];
   if (typeof serviceKeyOffset !== 'number') {
     throw new Error(`Unable to locate compose service ${serviceName}`);
   }
@@ -509,14 +552,15 @@ class Dockercompose extends Docker {
    * @param containers the containers
    * @returns {Promise<void>}
    */
-  async triggerBatch(containers) {
+  async triggerBatch(containers): Promise<unknown[]> {
     // Group containers by their compose file
     const containersByComposeFile = new Map();
 
     for (const container of containers) {
       // Filter on containers running on local host
       const watcher = this.getWatcher(container);
-      if (watcher.dockerApi.modem.socketPath === '') {
+      const dockerApi = getDockerApiFromWatcher(watcher);
+      if (!dockerApi || dockerApi.modem.socketPath === '') {
         this.log.warn(
           `Cannot update container ${container.name} because not running on local host`,
         );
@@ -550,9 +594,11 @@ class Dockercompose extends Docker {
     }
 
     // Process each compose file group
+    const batchResults: unknown[] = [];
     for (const [composeFile, containersInFile] of containersByComposeFile) {
-      await this.processComposeFile(composeFile, containersInFile);
+      batchResults.push(await this.processComposeFile(composeFile, containersInFile));
     }
+    return batchResults;
   }
 
   /**
@@ -694,14 +740,14 @@ class Dockercompose extends Docker {
 
     for (const composeCommand of commandsToTry) {
       try {
-        const { stdout, stderr } = await this.executeCommand(
+        const { stdout, stderr } = (await this.executeCommand(
           composeCommand.command,
           composeCommand.args,
           {
             cwd: composeWorkingDirectory,
             env: buildComposeCommandEnvironment(),
           },
-        );
+        )) as { stdout: string; stderr: string };
         if (stdout.trim()) {
           logContainer.debug(
             `${composeCommand.label} ${composeArgs.join(' ')} stdout:\n${stdout.trim()}`,
@@ -740,7 +786,10 @@ class Dockercompose extends Docker {
   async getContainerRunningState(container, logContainer) {
     try {
       const watcher = this.getWatcher(container);
-      const { dockerApi } = watcher;
+      const dockerApi = getDockerApiFromWatcher(watcher);
+      if (!dockerApi) {
+        return true;
+      }
       const containerToInspect = dockerApi.getContainer(container.name);
       const containerState = await containerToInspect.inspect();
       return containerState?.State?.Running !== false;
@@ -857,7 +906,13 @@ class Dockercompose extends Docker {
     }
 
     const watcher = this.getWatcher(container);
-    const { dockerApi } = watcher;
+    const dockerApi = getDockerApiFromWatcher(watcher);
+    if (!dockerApi) {
+      this.log.warn(
+        `Skip compose post_start hooks for ${container.name} (${serviceKey}) because watcher Docker API is unavailable`,
+      );
+      return;
+    }
     const containerToUpdate = dockerApi.getContainer(container.name);
     const containerState = await containerToUpdate.inspect();
 
@@ -1012,7 +1067,7 @@ class Dockercompose extends Docker {
   /**
    * Read docker-compose file as a buffer.
    * @param file - Optional file path, defaults to configuration file
-   * @returns {Promise<any>}
+   * @returns {Promise<Buffer>}
    */
   getComposeFile(file = null) {
     const filePath = resolveConfiguredPath(file || this.configuration.file, {
@@ -1029,11 +1084,13 @@ class Dockercompose extends Docker {
   /**
    * Read docker-compose file as an object.
    * @param file - Optional file path, defaults to configuration file
-   * @returns {Promise<any>}
+   * @returns {Promise<unknown>}
    */
   async getComposeFileAsObject(file = null) {
     try {
-      return yaml.parse((await this.getComposeFile(file)).toString(), { maxAliasCount: 10000 });
+      return yaml.parse((await this.getComposeFile(file)).toString(), {
+        maxAliasCount: YAML_MAX_ALIAS_COUNT,
+      });
     } catch (e) {
       const filePath = file || this.configuration.file;
       this.log.error(`Error when parsing the docker-compose yaml file ${filePath} (${e.message})`);

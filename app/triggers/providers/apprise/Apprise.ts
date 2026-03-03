@@ -1,7 +1,15 @@
-// @ts-nocheck
 import axios from 'axios';
 
 import Trigger from '../Trigger.js';
+
+interface AppriseNotifyBody {
+  title: string;
+  body: string;
+  format: 'text';
+  type: 'info';
+  tag?: string;
+  urls?: string;
+}
 
 /**
  * Apprise Trigger implementation
@@ -40,7 +48,7 @@ class Apprise extends Trigger {
    */
   async trigger(container) {
     let uri = `${this.configuration.url}/notify`;
-    const body = {
+    const body: AppriseNotifyBody = {
       title: this.renderSimpleTitle(container),
       body: this.renderSimpleBody(container),
       format: 'text',

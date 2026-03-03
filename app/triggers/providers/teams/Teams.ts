@@ -1,4 +1,3 @@
-// @ts-nocheck
 import axios from 'axios';
 import Trigger from '../Trigger.js';
 
@@ -47,7 +46,7 @@ class Teams extends Trigger {
     return this.postMessage(this.composeBatchMessage(containers));
   }
 
-  buildMessageBody(text, resultLink) {
+  buildMessageBody(text, resultLink?) {
     const content: any = {
       type: 'AdaptiveCard',
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
@@ -83,7 +82,7 @@ class Teams extends Trigger {
     };
   }
 
-  async postMessage(text, resultLink) {
+  async postMessage(text, resultLink?) {
     return axios.post(this.configuration.url, this.buildMessageBody(text, resultLink), {
       headers: {
         'content-type': 'application/json',

@@ -1,11 +1,27 @@
-// @ts-nocheck
-import { Kafka as KafkaClient } from 'kafkajs';
+import { Kafka as KafkaClient, type KafkaConfig, type SASLOptions } from 'kafkajs';
 import Trigger from '../Trigger.js';
+
+type UserPasswordSaslMechanism = 'plain' | 'scram-sha-256' | 'scram-sha-512';
+type UserPasswordSaslOptions = Extract<SASLOptions, { username: string; password: string }>;
+
+const AUTH_TYPE_TO_SASL_MECHANISM = {
+  PLAIN: 'plain',
+  'SCRAM-SHA-256': 'scram-sha-256',
+  'SCRAM-SHA-512': 'scram-sha-512',
+} as const;
+
+function toSaslMechanism(authType: string): UserPasswordSaslMechanism {
+  return (
+    AUTH_TYPE_TO_SASL_MECHANISM[authType as keyof typeof AUTH_TYPE_TO_SASL_MECHANISM] ?? 'plain'
+  );
+}
 
 /**
  * Kafka Trigger implementation
  */
 class Kafka extends Trigger {
+  private kafka!: KafkaClient;
+
   /**
    * Get the Trigger configuration schema.
    * @returns {*}
@@ -55,17 +71,18 @@ class Kafka extends Trigger {
    */
   initTrigger() {
     const brokers = this.configuration.brokers.split(',').map((broker) => broker.trim());
-    const clientConfiguration = {
+    const clientConfiguration: KafkaConfig = {
       clientId: this.configuration.clientId,
       brokers,
       ssl: this.configuration.ssl,
     };
     if (this.configuration.authentication) {
-      clientConfiguration.sasl = {
-        mechanism: this.configuration.authentication.type,
+      const sasl: UserPasswordSaslOptions = {
+        mechanism: toSaslMechanism(this.configuration.authentication.type),
         username: this.configuration.authentication.user,
         password: this.configuration.authentication.password,
       };
+      clientConfiguration.sasl = sasl;
     }
     this.kafka = new KafkaClient(clientConfiguration);
   }

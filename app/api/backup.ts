@@ -28,7 +28,7 @@ function getBackups(req: Request, res: Response) {
  * Get backups for a specific container.
  */
 function getContainerBackups(req: Request, res: Response) {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 
   const container = storeContainer.getContainer(id);
   if (!container) {

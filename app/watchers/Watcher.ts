@@ -5,6 +5,8 @@ import Component from '../registry/Component.js';
  * Watcher abstract class.
  */
 abstract class Watcher extends Component {
+  dockerApi?: unknown;
+
   /**
    * Watch main method.
    * @returns {Promise<any[]>}

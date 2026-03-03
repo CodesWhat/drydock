@@ -1,11 +1,10 @@
-// @ts-nocheck
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
-import mqtt from 'mqtt';
+import mqtt, { type IClientOptions, type MqttClient } from 'mqtt';
 import { registerContainerAdded, registerContainerUpdated } from '../../../event/index.js';
 import { flatten } from '../../../model/container.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 import Hass from './Hass.js';
 
 const containerDefaultTopic = 'dd/container';
@@ -26,10 +25,45 @@ function getContainerTopic({ baseTopic, container }) {
   return `${baseTopic}/${container.watcher}/${containerName}`;
 }
 
+interface MqttConfiguration extends TriggerConfiguration {
+  url: string;
+  topic: string;
+  clientid: string;
+  user?: string;
+  password?: string;
+  hass: {
+    enabled: boolean;
+    prefix: string;
+    discovery: boolean;
+  };
+  tls: {
+    clientkey?: string;
+    clientcert?: string;
+    cachain?: string;
+    rejectunauthorized: boolean;
+  };
+}
+
 /**
  * MQTT Trigger implementation
  */
 class Mqtt extends Trigger {
+  public configuration: MqttConfiguration = {
+    url: '',
+    topic: containerDefaultTopic,
+    clientid: '',
+    hass: {
+      enabled: false,
+      prefix: hassDefaultPrefix,
+      discovery: false,
+    },
+    tls: {
+      rejectunauthorized: true,
+    },
+  };
+  private client!: MqttClient;
+  private hass?: Hass;
+
   handleContainerEvent(container) {
     void this.trigger(container).catch((error) => {
       this.log.warn(`Error (${error.message})`);
@@ -92,7 +126,7 @@ class Mqtt extends Trigger {
     // Enforce simple mode
     this.configuration.mode = 'simple';
 
-    const options = {
+    const options: IClientOptions = {
       clientId: this.configuration.clientid,
     };
     if (this.configuration.user) {

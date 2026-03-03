@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import fs from 'node:fs';
 import path from 'node:path';
 import joi from 'joi';
@@ -53,7 +51,11 @@ function createCollections() {
  * @param reject
  * @returns {Promise<void>}
  */
-async function loadDb(err, resolve, reject) {
+async function loadDb(
+  err: unknown,
+  resolve: () => void,
+  reject: (reason?: unknown) => void,
+): Promise<void> {
   if (err) {
     reject(err);
   } else {
@@ -68,7 +70,7 @@ async function loadDb(err, resolve, reject) {
  * @param options
  * @returns {Promise<unknown>}
  */
-export async function init(options = {}) {
+export async function init(options: { memory?: boolean } = {}) {
   isMemoryMode = options.memory || false;
   const storeDirectory = resolveConfiguredPath(configuration.path, {
     label: 'DD_STORE_PATH',
@@ -102,7 +104,7 @@ export async function init(options = {}) {
     log.info(`Create folder ${storeDirectory}`);
     fs.mkdirSync(storeDirectory);
   }
-  return new Promise((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     db.loadDatabase({}, (err) => loadDb(err, resolve, reject));
   });
 }
@@ -116,7 +118,7 @@ export async function save() {
   if (!db || isMemoryMode) {
     return;
   }
-  return new Promise((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     db.saveDatabase((err) => {
       if (err) {
         reject(err);

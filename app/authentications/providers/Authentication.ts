@@ -1,6 +1,13 @@
 import type { Strategy } from 'passport';
 import Component from '../../registry/Component.js';
 
+export interface StrategyDescription {
+  type: string;
+  name: string;
+  redirect?: string;
+  logoutUrl?: string;
+}
+
 class Authentication extends Component {
   /**
    * Init the Trigger.
@@ -19,11 +26,11 @@ class Authentication extends Component {
   /**
    * Return passport strategy.
    */
-  getStrategy(): Strategy {
+  getStrategy(_app?: unknown): Strategy {
     throw new Error('getStrategy must be implemented');
   }
 
-  getStrategyDescription() {
+  getStrategyDescription(): StrategyDescription {
     throw new Error('getStrategyDescription must be implemented');
   }
 }

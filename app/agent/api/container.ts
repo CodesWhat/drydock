@@ -35,7 +35,7 @@ function demuxDockerStream(buffer: Buffer | string): string {
  * @param res
  */
 export async function getContainerLogs(req: Request, res: Response) {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const container = storeContainer.getContainer(id);
   if (!container) {
     res.sendStatus(404);
@@ -76,7 +76,7 @@ export async function getContainerLogs(req: Request, res: Response) {
 export function deleteContainer(req: Request, res: Response) {
   const serverConfiguration = getServerConfiguration();
   if (serverConfiguration.feature.delete) {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const container = storeContainer.getContainer(id);
     if (container) {
       storeContainer.deleteContainer(id);

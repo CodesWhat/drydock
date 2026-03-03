@@ -1,5 +1,4 @@
-// @ts-nocheck
-
+import type { Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import * as openidClientLibrary from 'openid-client';
 import { v4 as uuid } from 'uuid';
@@ -12,6 +11,37 @@ const OIDC_MAX_PENDING_CHECKS = 5;
 const oidcSessionLocks = new Map<string, Promise<void>>();
 const OIDC_STATE_PATTERN = /^[A-Za-z0-9._~-]{1,256}$/;
 
+interface OidcAppLike {
+  use: (path: string, middleware: unknown) => void;
+  get: (path: string, handler: (req: Request, res: Response) => void) => void;
+}
+
+interface OidcPendingCheck {
+  state: string;
+  codeVerifier: string;
+  createdAt: number;
+}
+
+type OidcPendingChecks = Record<string, OidcPendingCheck>;
+
+interface OidcSessionEntry {
+  pending?: Record<string, unknown>;
+  state?: unknown;
+  codeVerifier?: unknown;
+}
+
+interface OidcSessionLike {
+  oidc?: Record<string, OidcSessionEntry>;
+  rememberMe?: boolean;
+  cookie?: {
+    maxAge?: number | null;
+    expires?: boolean | Date;
+  };
+  reload?: (callback: (error?: unknown) => void) => void;
+  regenerate?: (callback: (error?: unknown) => void) => void;
+  save?: (callback: (error?: unknown) => void) => void;
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
 }
@@ -20,17 +50,22 @@ function isValidStateToken(value: unknown): value is string {
   return isNonEmptyString(value) && OIDC_STATE_PATTERN.test(value);
 }
 
-function createPendingChecksRecord() {
-  return Object.create(null) as Record<string, any>;
+function createPendingChecksRecord(): OidcPendingChecks {
+  return Object.create(null) as OidcPendingChecks;
 }
 
-function isValidCheckEntry(state: unknown, check: any): boolean {
-  return isValidStateToken(state) && !!check && isNonEmptyString(check.codeVerifier);
+function isValidCheckEntry(state: unknown, check: unknown): check is OidcPendingCheck {
+  return (
+    isValidStateToken(state) &&
+    !!check &&
+    typeof check === 'object' &&
+    isNonEmptyString((check as OidcPendingCheck).codeVerifier)
+  );
 }
 
-function collectValidChecks(pending: Record<string, any>, now: number) {
+function collectValidChecks(pending: Record<string, unknown>, now: number): OidcPendingChecks {
   const result = createPendingChecksRecord();
-  Object.entries(pending).forEach(([state, check]: any) => {
+  Object.entries(pending).forEach(([state, check]) => {
     if (!isValidCheckEntry(state, check)) {
       return;
     }
@@ -46,7 +81,7 @@ function collectValidChecks(pending: Record<string, any>, now: number) {
   return result;
 }
 
-function convertLegacyFormat(rawChecks: any, now: number) {
+function convertLegacyFormat(rawChecks: OidcSessionEntry, now: number): OidcPendingChecks {
   if (isValidStateToken(rawChecks.state) && isNonEmptyString(rawChecks.codeVerifier)) {
     return {
       [rawChecks.state]: {
@@ -59,9 +94,9 @@ function convertLegacyFormat(rawChecks: any, now: number) {
   return createPendingChecksRecord();
 }
 
-function limitToMostRecent(pendingChecks: Record<string, any>) {
+function limitToMostRecent(pendingChecks: OidcPendingChecks): OidcPendingChecks {
   const mostRecent = Object.entries(pendingChecks)
-    .sort(([, c1]: any, [, c2]: any) => c2.createdAt - c1.createdAt)
+    .sort(([, c1], [, c2]) => c2.createdAt - c1.createdAt)
     .slice(0, OIDC_MAX_PENDING_CHECKS);
   const limited = createPendingChecksRecord();
   mostRecent.forEach(([state, check]) => {
@@ -70,7 +105,7 @@ function limitToMostRecent(pendingChecks: Record<string, any>) {
   return limited;
 }
 
-function normalizePendingChecks(rawChecks) {
+function normalizePendingChecks(rawChecks: unknown): OidcPendingChecks {
   const now = Date.now();
 
   if (rawChecks === null || typeof rawChecks !== 'object') {
@@ -78,7 +113,7 @@ function normalizePendingChecks(rawChecks) {
   }
 
   let pendingChecks = createPendingChecksRecord();
-  const pendingFromSession = rawChecks.pending;
+  const pendingFromSession = (rawChecks as OidcSessionEntry).pending;
   if (pendingFromSession !== null && typeof pendingFromSession === 'object') {
     pendingChecks = collectValidChecks(pendingFromSession, now);
   }
@@ -91,9 +126,9 @@ function normalizePendingChecks(rawChecks) {
   return limitToMostRecent(pendingChecks);
 }
 
-async function withOidcSessionLock(sessionId: string, operation: any) {
+async function withOidcSessionLock<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
   const previousLock = oidcSessionLocks.get(sessionId) || Promise.resolve();
-  let releaseLock: any;
+  let releaseLock: (() => void) | undefined;
   const currentLock = new Promise<void>((resolve) => {
     releaseLock = resolve;
   });
@@ -103,14 +138,14 @@ async function withOidcSessionLock(sessionId: string, operation: any) {
   try {
     return await operation();
   } finally {
-    releaseLock();
+    releaseLock?.();
     if (oidcSessionLocks.get(sessionId) === nextLock) {
       oidcSessionLocks.delete(sessionId);
     }
   }
 }
 
-async function reloadSessionIfPossible(session: any) {
+async function reloadSessionIfPossible(session: OidcSessionLike | undefined) {
   if (!session || typeof session.reload !== 'function') {
     return;
   }
@@ -134,7 +169,7 @@ async function reloadSessionIfPossible(session: any) {
   }
 }
 
-async function saveSessionIfPossible(session: any) {
+async function saveSessionIfPossible(session: OidcSessionLike | undefined) {
   if (!session || typeof session.save !== 'function') {
     return;
   }
@@ -153,7 +188,9 @@ async function saveSessionIfPossible(session: any) {
  * Htpasswd authentication.
  */
 class Oidc extends Authentication {
-  openidClient = openidClientLibrary;
+  openidClient: typeof openidClientLibrary = openidClientLibrary;
+  client!: openidClientLibrary.Configuration;
+  logoutUrl?: string;
 
   getSessionKey() {
     return this.name || 'default';
@@ -216,7 +253,10 @@ class Oidc extends Authentication {
    * Return passport strategy.
    * @param app
    */
-  getStrategy(app) {
+  getStrategy(app?: OidcAppLike) {
+    if (!app) {
+      throw new Error('OIDC strategy requires an express app instance');
+    }
     const oidcLimiter = rateLimit({
       windowMs: 15 * 60 * 1000,
       max: 50,

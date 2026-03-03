@@ -71,14 +71,9 @@ export interface AgentDisconnectedEventPayload {
   reason?: string;
 }
 
-export interface ContainerLifecycleEventPayload {
-  id?: string;
-  name?: string;
-  image?: {
-    name?: string;
-  };
-  [key: string]: unknown;
-}
+export type ContainerLifecycleEventPayload = Partial<Omit<Container, 'image'>> & {
+  image?: Partial<Container['image']>;
+};
 
 const containerReportHandlers = new Map<number, OrderedEventHandler<ContainerReport>>();
 const containerReportsHandlers = new Map<number, OrderedEventHandler<ContainerReport[]>>();

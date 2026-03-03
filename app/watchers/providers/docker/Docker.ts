@@ -376,7 +376,7 @@ function mergeConfigWithImgset(
  */
 class Docker extends Watcher {
   public configuration: DockerWatcherConfiguration = {} as DockerWatcherConfiguration;
-  public dockerApi: Dockerode;
+  public declare dockerApi: Dockerode;
   public watchCron: any;
   public watchCronTimeout: any;
   public watchCronDebounced: any;

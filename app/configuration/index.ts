@@ -1,7 +1,7 @@
-// @ts-nocheck
 import fs from 'node:fs';
 import joi from 'joi';
 import setValue from 'set-value';
+import { logWarn } from '../log/warn.js';
 import { recordLegacyInput } from '../prometheus/compatibility.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 
@@ -20,8 +20,8 @@ export type SecuritySbomFormat = (typeof SECURITY_SBOM_FORMAT_VALUES)[number];
  * @param prop
  * @returns {{}}
  */
-export function get(prop, env = process.env) {
-  const object = {};
+export function get(prop: string, env: Record<string, string | undefined> = process.env) {
+  const object: Record<string, unknown> = {};
   const envVarPattern = prop.replaceAll('.', '_').toUpperCase();
   const matchingEnvVars = Object.keys(env).filter((envKey) => envKey.startsWith(envVarPattern));
   matchingEnvVars.forEach((matchingEnvVar) => {
@@ -37,7 +37,7 @@ export function get(prop, env = process.env) {
  * Lookup external secrets defined in files.
  * @param ddEnvVars
  */
-export function replaceSecrets(ddEnvVars) {
+export function replaceSecrets(ddEnvVars: Record<string, string | undefined>) {
   const secretFileEnvVars = Object.keys(ddEnvVars).filter((ddEnvVar) =>
     ddEnvVar.toUpperCase().endsWith(VAR_FILE_SUFFIX),
   );
@@ -53,7 +53,7 @@ export function replaceSecrets(ddEnvVars) {
 }
 
 // 1. Get a copy of all dd-related env vars (DD_ primary, WUD_ legacy fallback)
-export const ddEnvVars = {};
+export const ddEnvVars: Record<string, string | undefined> = {};
 const mappedLegacyEnvVars = new Set<string>();
 
 // First, collect legacy WUD_ vars and remap to DD_ keys
@@ -129,7 +129,9 @@ function parseWatcherMaintenanceEnvAlias(envKey: string) {
   return undefined;
 }
 
-function normalizeWatcherMaintenanceEnvAliases(watcherConfigurations: Record<string, any>) {
+function normalizeWatcherMaintenanceEnvAliases(
+  watcherConfigurations: Record<string, Record<string, unknown>>,
+) {
   Object.entries(ddEnvVars).forEach(([envKey, envValue]) => {
     const parsedEnvAlias = parseWatcherMaintenanceEnvAlias(envKey);
     if (!parsedEnvAlias || envValue === undefined) {
@@ -155,7 +157,10 @@ function normalizeWatcherMaintenanceEnvAliases(watcherConfigurations: Record<str
  * Get watcher configuration.
  */
 export function getWatcherConfigurations() {
-  const watcherConfigurations = get('dd.watcher', ddEnvVars);
+  const watcherConfigurations = get('dd.watcher', ddEnvVars) as Record<
+    string,
+    Record<string, unknown>
+  >;
   normalizeWatcherMaintenanceEnvAliases(watcherConfigurations);
   return watcherConfigurations;
 }
@@ -338,6 +343,16 @@ function parseSecuritySbomFormatList(rawValue: string | undefined): SecuritySbom
     (format) => format.toLowerCase(),
     (format): format is SecuritySbomFormat =>
       SECURITY_SBOM_FORMAT_VALUES.includes(format as SecuritySbomFormat),
+    {
+      onInvalidValues: ({ invalidValues, parsedValues, defaultValues }) => {
+        const warningBase = `Invalid DD_SECURITY_SBOM_FORMATS values: ${invalidValues.join(', ')}. Allowed values: ${SECURITY_SBOM_FORMAT_VALUES.join(', ')}.`;
+        if (parsedValues.length === 0) {
+          logWarn(`${warningBase} Falling back to defaults: ${defaultValues.join(', ')}.`);
+        } else {
+          logWarn(`${warningBase} Invalid values were ignored.`);
+        }
+      },
+    },
   );
 }
 

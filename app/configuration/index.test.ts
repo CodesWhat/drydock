@@ -1,6 +1,6 @@
-// @ts-nocheck
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import log from '../log/index.js';
 import * as configuration from './index.js';
 
 function getTestDirectory() {
@@ -467,15 +467,40 @@ describe('getSecurityConfiguration', () => {
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_TIMEOUT;
   });
 
-  test('should fallback to default sbom formats when configured list is invalid', () => {
+  test('should warn and fallback to default sbom formats when configured list is invalid', () => {
     configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
     configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS = 'foo,bar';
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
 
     const result = configuration.getSecurityConfiguration();
     expect(result.sbom.formats).toEqual(['spdx-json']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Invalid DD_SECURITY_SBOM_FORMATS values: foo, bar. Allowed values: spdx-json, cyclonedx-json. Falling back to defaults: spdx-json.',
+      ),
+    );
 
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS;
+    warnSpy.mockRestore();
+  });
+
+  test('should warn and ignore invalid sbom formats when valid values are present', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS = 'spdx-json,foo,SPDX-JSON,baz';
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+    const result = configuration.getSecurityConfiguration();
+    expect(result.sbom.formats).toEqual(['spdx-json']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Invalid DD_SECURITY_SBOM_FORMATS values: foo, baz. Allowed values: spdx-json, cyclonedx-json. Invalid values were ignored.',
+      ),
+    );
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS;
+    warnSpy.mockRestore();
   });
 
   test('should fallback to default sbom formats when list is empty after normalization', () => {

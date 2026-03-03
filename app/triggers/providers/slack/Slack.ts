@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { WebClient } from '@slack/web-api';
 import Trigger from '../Trigger.js';
 
@@ -6,6 +5,8 @@ import Trigger from '../Trigger.js';
  * Slack Trigger implementation
  */
 class Slack extends Trigger {
+  private client!: WebClient;
+
   /*
    * Get the Trigger configuration schema.
    * @returns {*}

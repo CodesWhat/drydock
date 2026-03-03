@@ -1,8 +1,8 @@
-// @ts-nocheck
 /**
  * Container store.
  */
 import { byString, byValues } from 'sort-es';
+import type { ContainerLifecycleEventPayload } from '../event/index.js';
 import * as container from '../model/container.js';
 
 const { validate: validateContainer } = container;
@@ -78,7 +78,7 @@ function cloneContainers(containersToClone) {
   }));
 }
 
-function shouldIncludeRuntimeEnvValues(options = {}) {
+function shouldIncludeRuntimeEnvValues(options: { includeRuntimeEnvValues?: boolean } = {}) {
   return options.includeRuntimeEnvValues === true;
 }
 
@@ -249,7 +249,8 @@ export function insertContainer(container) {
     data: containerToSave,
   });
   invalidateContainersCache();
-  emitContainerAdded(containerToSave);
+  const containerAddedEventPayload: ContainerLifecycleEventPayload = { ...containerToSave };
+  emitContainerAdded(containerAddedEventPayload);
   return containerToSave;
 }
 
@@ -296,7 +297,8 @@ export function updateContainer(container) {
     data: containerToReturn,
   });
   invalidateContainersCache();
-  emitContainerUpdated(containerToReturn);
+  const containerUpdatedEventPayload: ContainerLifecycleEventPayload = { ...containerToReturn };
+  emitContainerUpdated(containerUpdatedEventPayload);
   return containerToReturn;
 }
 
@@ -305,7 +307,10 @@ export function updateContainer(container) {
  * @param query
  * @returns {*}
  */
-export function getContainers(query = {}, options = {}) {
+export function getContainers(
+  query: Record<string, unknown> = {},
+  options: { includeRuntimeEnvValues?: boolean } = {},
+) {
   if (!containers) {
     return [];
   }
@@ -328,9 +333,9 @@ export function getContainers(query = {}, options = {}) {
   const containerList = containers.find(filter).map((item) => validateContainer(item.data));
   const containerListSorted = containerList.sort(
     byValues([
-      [(container) => container.watcher, byString()],
-      [(container) => container.name, byString()],
-      [(container) => container.image.tag.value, byString()],
+      [(containerItem: container.Container) => containerItem.watcher, byString()],
+      [(containerItem: container.Container) => containerItem.name, byString()],
+      [(containerItem: container.Container) => containerItem.image.tag.value, byString()],
     ]),
   );
   setContainersQueryCache(queryKey, containerListSorted);
@@ -343,7 +348,7 @@ export function getContainers(query = {}, options = {}) {
  * @param id
  * @returns {null|Image}
  */
-export function getContainer(id, options = {}) {
+export function getContainer(id: string, options: { includeRuntimeEnvValues?: boolean } = {}) {
   const includeRuntimeEnvValues = shouldIncludeRuntimeEnvValues(options);
   const container = containers.findOne({
     'data.id': id,

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import passJs from 'pass';
 import Authentication from '../Authentication.js';
 import BasicStrategy from './BasicStrategy.js';
@@ -32,7 +31,7 @@ class Basic extends Authentication {
   /**
    * Return passport strategy.
    */
-  getStrategy() {
+  getStrategy(_app?: unknown) {
     return new BasicStrategy((user, pass, done) => this.authenticate(user, pass, done));
   }
 

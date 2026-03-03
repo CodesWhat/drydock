@@ -1,9 +1,8 @@
-// @ts-nocheck
-
 import { execFile } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import yaml from 'yaml';
 import { emitContainerUpdateApplied, emitContainerUpdateFailed } from '../../../event/index.js';
 import { getState } from '../../../registry/index.js';
 import * as backupStore from '../../../store/backup.js';
@@ -21,6 +20,7 @@ vi.mock('../../../registry', () => ({
 vi.mock('../../../event/index.js', () => ({
   emitContainerUpdateApplied: vi.fn().mockResolvedValue(undefined),
   emitContainerUpdateFailed: vi.fn().mockResolvedValue(undefined),
+  emitSecurityAlert: vi.fn().mockResolvedValue(undefined),
   emitSelfUpdateStarting: vi.fn(),
 }));
 
@@ -2023,6 +2023,21 @@ describe('Dockercompose Trigger', () => {
     const updated = testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0');
 
     expect(updated).toContain('nginx: { image: "nginx:1.2.0", restart: always }');
+  });
+
+  test('updateComposeServiceImageInText should parse with maxAliasCount guard', () => {
+    const compose = ['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n');
+    const parseDocumentSpy = vi.spyOn(yaml, 'parseDocument');
+
+    testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0');
+
+    expect(parseDocumentSpy).toHaveBeenCalledWith(
+      compose,
+      expect.objectContaining({
+        keepSourceTokens: true,
+        maxAliasCount: 10000,
+      }),
+    );
   });
 
   test('updateComposeServiceImageInText should throw for flow-style services without image key', () => {

@@ -130,7 +130,7 @@ class Trigger extends Component {
   private unregisterSecurityAlert?: () => void;
   private unregisterAgentDisconnected?: () => void;
   private unregisterContainerUpdateAppliedForResolution?: () => void;
-  private readonly notificationResults: Map<string, any> = new Map();
+  private readonly notificationResults: Map<string, unknown> = new Map();
 
   static getSupportedThresholds() {
     return [...SUPPORTED_THRESHOLDS];
@@ -138,6 +138,13 @@ class Trigger extends Component {
 
   static parseThresholdWithDigestBehavior(threshold: string | undefined) {
     return parseThresholdWithDigestBehaviorHelper(threshold);
+  }
+
+  private static getErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+      return error.message;
+    }
+    return `${error}`;
   }
 
   /**
@@ -263,8 +270,8 @@ class Trigger extends Component {
       } else {
         await this.trigger(container);
       }
-    } catch (e: any) {
-      this.log.warn(`Error handling ${ruleId} event (${e.message})`);
+    } catch (e: unknown) {
+      this.log.warn(`Error handling ${ruleId} event (${Trigger.getErrorMessage(e)})`);
       this.log.debug(e);
     }
   }
@@ -355,8 +362,8 @@ class Trigger extends Component {
           }
         }
         status = 'success';
-      } catch (e: any) {
-        logContainer.warn(`Error (${e.message})`);
+      } catch (e: unknown) {
+        logContainer.warn(`Error (${Trigger.getErrorMessage(e)})`);
         logContainer.debug(e);
       } finally {
         getTriggerCounter()?.inc({
@@ -404,8 +411,8 @@ class Trigger extends Component {
         this.log.debug('Run batch');
         await this.triggerBatch(containersFiltered);
       }
-    } catch (e: any) {
-      this.log.warn(`Error (${e.message})`);
+    } catch (e: unknown) {
+      this.log.warn(`Error (${Trigger.getErrorMessage(e)})`);
       this.log.debug(e);
     }
   }
@@ -593,7 +600,7 @@ class Trigger extends Component {
    * Can be overridden in trigger implementation class.
    */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async preview(container: Container): Promise<Record<string, any>> {
+  async preview(container: Container): Promise<Record<string, unknown>> {
     return {};
   }
 
@@ -601,7 +608,7 @@ class Trigger extends Component {
    * Trigger method. Must be overridden in trigger implementation class.
    */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async trigger(containerWithResult: Container) {
+  async trigger(containerWithResult: Container): Promise<unknown> {
     // do nothing by default
     this.log.warn('Cannot trigger container result; this trigger does not implement "simple" mode');
     return containerWithResult;
@@ -612,7 +619,7 @@ class Trigger extends Component {
    * @param containersWithResult
    * @returns {*}
    */
-  async triggerBatch(containersWithResult: Container[]) {
+  async triggerBatch(containersWithResult: Container[]): Promise<unknown> {
     // do nothing by default
     this.log.warn('Cannot trigger container results; this trigger does not implement "batch" mode');
     return containersWithResult;
@@ -631,8 +638,10 @@ class Trigger extends Component {
     try {
       this.log.info(`Dismissing notification for container ${containerId}`);
       await this.dismiss(containerId, triggerResult);
-    } catch (e: any) {
-      this.log.warn(`Error dismissing notification for container ${containerId} (${e.message})`);
+    } catch (e: unknown) {
+      this.log.warn(
+        `Error dismissing notification for container ${containerId} (${Trigger.getErrorMessage(e)})`,
+      );
       this.log.debug(e);
     } finally {
       this.notificationResults.delete(containerId);
@@ -646,7 +655,7 @@ class Trigger extends Component {
    * @param triggerResult the result returned by trigger() when the notification was sent
    */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async dismiss(containerId: string, triggerResult: any): Promise<void> {
+  async dismiss(containerId: string, triggerResult: unknown): Promise<void> {
     // do nothing by default
   }
 
@@ -689,11 +698,12 @@ class Trigger extends Component {
    * For simple flat-field masking; providers with nested fields should
    * override maskConfiguration() directly.
    */
-  protected maskFields(fieldsToMask: string[]): Record<string, any> {
-    const masked: Record<string, any> = { ...this.configuration };
+  protected maskFields(fieldsToMask: string[]): Record<string, unknown> {
+    const masked: Record<string, unknown> = { ...this.configuration };
     for (const field of fieldsToMask) {
-      if (masked[field]) {
-        masked[field] = (this.constructor as typeof Trigger).mask(masked[field]);
+      const value = masked[field];
+      if (typeof value === 'string' && value.length > 0) {
+        masked[field] = (this.constructor as typeof Trigger).mask(value);
       }
     }
     return masked;

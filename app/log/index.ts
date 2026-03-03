@@ -1,10 +1,9 @@
-// @ts-nocheck
-
 import { Writable } from 'node:stream';
 import pino from 'pino';
 import pinoPretty from 'pino-pretty';
 import { getLogFormat, getLogLevel } from '../configuration/index.js';
 import { addEntry } from './buffer.js';
+import { setWarnLogger } from './warn.js';
 
 export function parseLogChunk(chunk: Buffer | string) {
   try {
@@ -41,5 +40,6 @@ const logger = pino(
   { name: 'drydock', level: getLogLevel() },
   pino.multistream([{ stream: createMainLogStream() }, { stream: bufferStream }]),
 );
+setWarnLogger(logger);
 
 export default logger;

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { getVersion } from '../../../configuration/index.js';
 import {
   registerContainerAdded,
@@ -15,6 +14,28 @@ const HASS_MANUFACTURER = 'drydock';
 const HASS_ENTITY_VALUE_TEMPLATE = '{{ value_json.image_tag_value }}';
 const HASS_LATEST_VERSION_TEMPLATE =
   '{% if value_json.update_kind_kind == "digest" %}{{ value_json.result_digest[:15] }}{% else %}{{ value_json.result_tag }}{% endif %}';
+
+interface HassClient {
+  publish: (
+    topic: string,
+    message: string,
+    options?: {
+      retain?: boolean;
+    },
+  ) => Promise<unknown> | unknown;
+}
+
+interface HassConfiguration {
+  topic: string;
+  hass: {
+    prefix: string;
+    discovery: boolean;
+  };
+}
+
+interface HassLogger {
+  info: (message: string) => void;
+}
 
 /**
  * Get hass entity unique id.
@@ -55,7 +76,21 @@ function sanitizeIcon(icon) {
 }
 
 class Hass {
-  constructor({ client, configuration, log }) {
+  client: HassClient;
+
+  configuration: HassConfiguration;
+
+  log: HassLogger;
+
+  constructor({
+    client,
+    configuration,
+    log,
+  }: {
+    client: HassClient;
+    configuration: HassConfiguration;
+    log: HassLogger;
+  }) {
     this.client = client;
     this.configuration = configuration;
     this.log = log;
@@ -323,7 +358,21 @@ class Hass {
    * @param options
    * @returns {Promise<*>}
    */
-  async publishDiscoveryMessage({ discoveryTopic, stateTopic, kind, name, icon, options = {} }) {
+  async publishDiscoveryMessage({
+    discoveryTopic,
+    stateTopic,
+    kind,
+    name,
+    icon,
+    options = {},
+  }: {
+    discoveryTopic: string;
+    stateTopic: string;
+    kind: string;
+    name: string;
+    icon?: string;
+    options?: Record<string, unknown>;
+  }) {
     const entityId = getHassEntityId(stateTopic);
     return this.client.publish(
       discoveryTopic,

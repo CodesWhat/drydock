@@ -1,5 +1,4 @@
-// @ts-nocheck
-import axios from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
 import {
   failClosedAuth,
   requireAuthString,
@@ -7,6 +6,13 @@ import {
 } from '../../../security/auth.js';
 
 import Trigger from '../Trigger.js';
+
+interface HttpRequestOptions extends Omit<AxiosRequestConfig, 'proxy'> {
+  proxy?: {
+    host: string;
+    port: number;
+  };
+}
 
 /**
  * HTTP Trigger implementation
@@ -55,7 +61,7 @@ class Http extends Trigger {
   }
 
   async sendHttpRequest(body) {
-    let options = {
+    let options: HttpRequestOptions = {
       method: this.configuration.method,
       url: this.configuration.url,
       timeout: 30000,
@@ -93,9 +99,11 @@ class Http extends Trigger {
     }
     if (this.configuration.proxy) {
       const proxyUrl = new URL(this.configuration.proxy);
+      const defaultProxyPort = proxyUrl.protocol === 'https:' ? 443 : 80;
+      const proxyPort = proxyUrl.port ? Number.parseInt(proxyUrl.port, 10) : defaultProxyPort;
       options.proxy = {
         host: proxyUrl.hostname,
-        port: proxyUrl.port,
+        port: proxyPort,
       };
     }
     const response = await axios(options);

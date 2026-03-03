@@ -1,11 +1,12 @@
-// @ts-nocheck
-import nodemailer from 'nodemailer';
+import nodemailer, { type Transporter } from 'nodemailer';
 import Trigger from '../Trigger.js';
 
 /**
  * SMTP Trigger implementation
  */
 class Smtp extends Trigger {
+  private transporter!: Transporter;
+
   normalizeFromAddress(value, allowCustomTld) {
     if (value.includes('\n') || value.includes('\r')) {
       return null;
