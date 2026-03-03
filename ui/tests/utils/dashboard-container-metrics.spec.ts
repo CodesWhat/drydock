@@ -98,6 +98,26 @@ describe('buildDashboardContainerMetrics', () => {
     expect(metrics.securityByImage.map((aggregate) => aggregate.key)).toEqual(['c1', 'c2']);
   });
 
+  it('falls back to container name when image and id are empty', () => {
+    const metrics = buildDashboardContainerMetrics([
+      makeContainer({ id: '', name: 'api-1', image: '' }),
+      makeContainer({ id: ' ', name: 'api-2', image: '   ' }),
+    ]);
+
+    expect(metrics.securityByImage.map((aggregate) => aggregate.key)).toEqual(['api-1', 'api-2']);
+  });
+
+  it('falls back to unknown when image, id, and name are empty', () => {
+    const metrics = buildDashboardContainerMetrics([
+      makeContainer({ id: '', name: '', image: '', bouncer: 'blocked' }),
+      makeContainer({ id: ' ', name: '   ', image: '  ', bouncer: 'unsafe' }),
+    ]);
+
+    expect(metrics.securityByImage).toHaveLength(1);
+    expect(metrics.securityByImage[0]).toMatchObject({ key: 'unknown', hasIssue: true });
+    expect(metrics.securityIssueImageCount).toBe(1);
+  });
+
   it('counts security issues by deterministic group when image is empty', () => {
     const metrics = buildDashboardContainerMetrics([
       makeContainer({ id: 'c1', image: '', bouncer: 'blocked' }),

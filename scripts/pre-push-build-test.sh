@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Parallel build + test for pre-push hook.
 # Runs app/ui builds and tests concurrently (~45s vs ~65s sequential).
+# Tests currently execute against source (Vitest), not compiled build output.
+# If tests begin importing compiled artifacts (for example dist/build paths),
+# revisit this script and run builds before tests to avoid race-based false negatives.
 # Exits non-zero if any subprocess fails.
 set -euo pipefail
 
