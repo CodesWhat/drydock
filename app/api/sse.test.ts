@@ -152,6 +152,7 @@ describe('SSE Router', () => {
     // Clear clients and connection tracking between tests
     sseRouter._clients.clear();
     sseRouter._activeSseClientsByToken.clear();
+    sseRouter._activeSseClientsByTokenHash.clear();
     sseRouter._activeSseClientsByResponse.clear();
     sseRouter._connectionsPerIp.clear();
     sseRouter._connectionsPerSession.clear();
@@ -621,6 +622,37 @@ describe('SSE Router', () => {
   });
 
   describe('acknowledgeSelfUpdate', () => {
+    test('should avoid hashing every connected client token during ACK lookup', () => {
+      const handler = getHandler();
+      const connectedClients = Array.from({ length: 25 }, (_, index) =>
+        connectSseClient(handler, `10.1.0.${index + 1}`),
+      );
+      const targetClient = connectedClients[connectedClients.length - 1];
+
+      sseRouter._pendingSelfUpdateAcks.set('op-efficient-lookup', {
+        operationId: 'op-efficient-lookup',
+        requiresAck: true,
+        ackTimeoutMs: 1000,
+        createdAtMs: Date.now(),
+        clientsAtEmit: connectedClients.length,
+        eligibleClientTokens: new Set<string>([targetClient.clientToken]),
+        ackedClientIds: new Set<string>(),
+        resolved: false,
+      });
+      const ackHandler = getAckHandler();
+      const req = {
+        params: { operationId: 'op-efficient-lookup' },
+        body: { clientId: targetClient.clientId, clientToken: targetClient.clientToken },
+      };
+      const jsonRes = createJsonResponse();
+
+      mockCreateHash.mockClear();
+      ackHandler(req, jsonRes);
+
+      expect(jsonRes.status).toHaveBeenCalledWith(202);
+      expect(mockCreateHash).toHaveBeenCalledTimes(3);
+    });
+
     test('should use timing-safe comparison for client tokens', () => {
       const handler = getHandler();
       const { clientId, clientToken } = connectSseClient(handler);

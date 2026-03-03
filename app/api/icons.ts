@@ -4,21 +4,21 @@ import rateLimit from 'express-rate-limit';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import * as settingsStore from '../store/settings.js';
-import { fetchAndCacheIconOnce } from './icons.fetch.js';
-import { normalizeSlug, providers } from './icons.providers.js';
-import { sendCachedIcon, sendMissingIconResponse } from './icons.response.js';
+import { fetchAndCacheIconOnce } from './icons/fetch.js';
+import { normalizeSlug, providers } from './icons/providers.js';
+import { sendCachedIcon, sendMissingIconResponse } from './icons/response.js';
 import {
   ICON_PROXY_RATE_LIMIT_MAX,
   ICON_PROXY_RATE_LIMIT_WINDOW_MS,
   MISSING_UPSTREAM_STATUS_CODES,
-} from './icons.settings.js';
+} from './icons/settings.js';
 import {
   clearIconCache,
   findBundledIconPath,
   getIconCachePath,
   isCachedIconUsable,
-} from './icons.storage.js';
-import { iconRequestSchema } from './icons.validation.js';
+} from './icons/storage.js';
+import { iconRequestSchema } from './icons/validation.js';
 
 const router = express.Router();
 const log = logger.child({ component: 'icons' });

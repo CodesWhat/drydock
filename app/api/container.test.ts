@@ -323,6 +323,36 @@ describe('Container Router', () => {
 
       expect(res.sendStatus).toHaveBeenCalledWith(404);
     });
+
+    test('should use first id when route param id is an array', () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      const handler = getHandler('get', '/:id');
+      const res = createResponse();
+      handler({ params: { id: ['c1', 'ignored'] } }, res);
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+    });
+
+    test('should default id to empty string when route param id array is empty', () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      const handler = getHandler('get', '/:id');
+      const res = createResponse();
+      handler({ params: { id: [] } }, res);
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('');
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+    });
+
+    test('should default id to empty string when route param id is missing', () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      const handler = getHandler('get', '/:id');
+      const res = createResponse();
+      handler({ params: {} }, res);
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('');
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+    });
   });
 
   describe('getContainerUpdateOperations', () => {
@@ -405,6 +435,36 @@ describe('Container Router', () => {
       handler({ params: { id: 'c1' } }, res);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(scan);
+    });
+
+    test('should use first id when vulnerabilities route param id is an array', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      const handler = getHandler('get', '/:id/vulnerabilities');
+      const res = createResponse();
+      handler({ params: { id: ['c1', 'ignored'] } }, res);
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+    });
+
+    test('should default vulnerability id to empty string when route param id array is empty', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      const handler = getHandler('get', '/:id/vulnerabilities');
+      const res = createResponse();
+      handler({ params: { id: [] } }, res);
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('');
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+    });
+
+    test('should default vulnerability id to empty string when route param id is missing', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      const handler = getHandler('get', '/:id/vulnerabilities');
+      const res = createResponse();
+      handler({ params: {} }, res);
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('');
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
     });
   });
 
@@ -1420,6 +1480,35 @@ describe('Container Router', () => {
       expect(mockTrigger.trigger).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
     });
+
+    test('should use first id when runTrigger route param id is an array', async () => {
+      storeContainer.getContainer.mockReturnValue({ id: 'c1' });
+      registry.getState.mockReturnValue({ watcher: {}, trigger: {} });
+      const res = await callRunTrigger({
+        id: ['c1', 'ignored'],
+        triggerType: 'slack',
+        triggerName: 'default',
+      });
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('c1', {
+        includeRuntimeEnvValues: true,
+      });
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
+
+    test('should default trigger id to empty string when route param id array is empty', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      const res = await callRunTrigger({
+        id: [],
+        triggerType: 'slack',
+        triggerName: 'default',
+      });
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('', {
+        includeRuntimeEnvValues: true,
+      });
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
   });
 
   describe('watchContainer', () => {
@@ -1633,6 +1722,106 @@ describe('Container Router', () => {
       });
     });
 
+    test('should parse array query params for tail and timestamps', async () => {
+      const mockLogs = dockerStreamBuffer('log');
+      const mockDockerContainer = { logs: vi.fn().mockResolvedValue(mockLogs) };
+      const mockWatcher = {
+        dockerApi: { getContainer: vi.fn().mockReturnValue(mockDockerContainer) },
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'my-container',
+        watcher: 'local',
+      });
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
+
+      await callGetContainerLogs('c1', { tail: ['42'], timestamps: ['true'] });
+
+      expect(mockDockerContainer.logs).toHaveBeenCalledWith({
+        stdout: true,
+        stderr: true,
+        tail: 42,
+        since: 0,
+        timestamps: true,
+        follow: false,
+      });
+    });
+
+    test('should fall back to default tail when query tail is invalid', async () => {
+      const mockLogs = dockerStreamBuffer('log');
+      const mockDockerContainer = { logs: vi.fn().mockResolvedValue(mockLogs) };
+      const mockWatcher = {
+        dockerApi: { getContainer: vi.fn().mockReturnValue(mockDockerContainer) },
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'my-container',
+        watcher: 'local',
+      });
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
+
+      await callGetContainerLogs('c1', { tail: 'not-a-number' });
+
+      expect(mockDockerContainer.logs).toHaveBeenCalledWith({
+        stdout: true,
+        stderr: true,
+        tail: 100,
+        since: 0,
+        timestamps: true,
+        follow: false,
+      });
+    });
+
+    test('should parse explicit timestamps=true query param', async () => {
+      const mockLogs = dockerStreamBuffer('log');
+      const mockDockerContainer = { logs: vi.fn().mockResolvedValue(mockLogs) };
+      const mockWatcher = {
+        dockerApi: { getContainer: vi.fn().mockReturnValue(mockDockerContainer) },
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'my-container',
+        watcher: 'local',
+      });
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
+
+      await callGetContainerLogs('c1', { timestamps: 'true' });
+
+      expect(mockDockerContainer.logs).toHaveBeenCalledWith({
+        stdout: true,
+        stderr: true,
+        tail: 100,
+        since: 0,
+        timestamps: true,
+        follow: false,
+      });
+    });
+
+    test('should fall back to default timestamps when value is not true/false', async () => {
+      const mockLogs = dockerStreamBuffer('log');
+      const mockDockerContainer = { logs: vi.fn().mockResolvedValue(mockLogs) };
+      const mockWatcher = {
+        dockerApi: { getContainer: vi.fn().mockReturnValue(mockDockerContainer) },
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'my-container',
+        watcher: 'local',
+      });
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
+
+      await callGetContainerLogs('c1', { timestamps: 'sometimes' });
+
+      expect(mockDockerContainer.logs).toHaveBeenCalledWith({
+        stdout: true,
+        stderr: true,
+        tail: 100,
+        since: 0,
+        timestamps: true,
+        follow: false,
+      });
+    });
+
     test('should proxy through agent for agent containers', async () => {
       const mockAgent = { getContainerLogs: vi.fn().mockResolvedValue({ logs: 'agent logs' }) };
       storeContainer.getContainer.mockReturnValue({
@@ -1732,6 +1921,36 @@ describe('Container Router', () => {
         }),
       );
     });
+
+    test('should use first id when logs route param id is an array', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      const handler = getHandler('get', '/:id/logs');
+      const res = createResponse();
+      await handler({ params: { id: ['c1', 'ignored'] }, query: {} }, res);
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+    });
+
+    test('should default logs id to empty string when route param id array is empty', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      const handler = getHandler('get', '/:id/logs');
+      const res = createResponse();
+      await handler({ params: { id: [] }, query: {} }, res);
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('');
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+    });
+
+    test('should default logs id to empty string when route param id is missing', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      const handler = getHandler('get', '/:id/logs');
+      const res = createResponse();
+      await handler({ params: {}, query: {} }, res);
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('');
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+    });
   });
 
   describe('patchContainerUpdatePolicy', () => {
@@ -1748,9 +1967,68 @@ describe('Container Router', () => {
       );
     });
 
+    test('should use first id when update-policy route param id is an array', () => {
+      containerRouter.init();
+      const route = mockRouter.patch.mock.calls.find((call) => call[0] === '/:id/update-policy');
+      const handler = route[1];
+      const res = createResponse();
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      handler({ params: { id: ['c1', 'ignored'] }, body: { action: 'clear' } }, res);
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('c1', {
+        includeRuntimeEnvValues: true,
+      });
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+    });
+
+    test('should default update-policy id to empty string when route param id array is empty', () => {
+      containerRouter.init();
+      const route = mockRouter.patch.mock.calls.find((call) => call[0] === '/:id/update-policy');
+      const handler = route[1];
+      const res = createResponse();
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      handler({ params: { id: [] }, body: { action: 'clear' } }, res);
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('', {
+        includeRuntimeEnvValues: true,
+      });
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+    });
+
+    test('should default update-policy id to empty string when route param id is missing', () => {
+      containerRouter.init();
+      const route = mockRouter.patch.mock.calls.find((call) => call[0] === '/:id/update-policy');
+      const handler = route[1];
+      const res = createResponse();
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      handler({ params: {}, body: { action: 'clear' } }, res);
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('', {
+        includeRuntimeEnvValues: true,
+      });
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+    });
+
     test('should handle missing body', () => {
       const res = callUpdatePolicy({ id: 'c1' }, undefined);
       expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    test('should treat function bodies as empty action payload objects', () => {
+      const body = Object.assign(() => undefined, { action: 'clear' });
+      const res = callUpdatePolicy(
+        {
+          id: 'c1',
+          updatePolicy: { skipTags: ['2.0.0'] },
+        },
+        body,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(getUpdatedPolicy()).toBeUndefined();
     });
 
     test('should return 400 for unknown action', () => {

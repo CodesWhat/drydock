@@ -1,11 +1,7 @@
 import axios from 'axios';
-import { providers } from './icons.providers.js';
-import { getIconInFlightTimeoutMs } from './icons.settings.js';
-import {
-  enforceIconCacheLimits,
-  isCachedIconUsable,
-  writeIconAtomically,
-} from './icons.storage.js';
+import { providers } from './providers.js';
+import { getIconInFlightTimeoutMs } from './settings.js';
+import { enforceIconCacheLimits, isCachedIconUsable, writeIconAtomically } from './storage.js';
 
 const inFlightIconFetches = new Map<string, Promise<void>>();
 

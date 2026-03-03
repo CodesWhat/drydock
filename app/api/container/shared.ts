@@ -1,6 +1,28 @@
-// @ts-nocheck
+import type { Container, ContainerImage } from '../../model/container.js';
 
 const REDACTED_RUNTIME_ENV_VALUE = '[REDACTED]';
+type RegistryAuth = { username?: string; password?: string };
+
+interface RegistryComponentLike {
+  getImageFullName?: (image: ContainerImage, tagOrDigest: string) => string;
+  getAuthPull?: () => Promise<RegistryAuth | undefined>;
+}
+
+interface ObjectWithDetails {
+  details?: unknown;
+  [key: string]: unknown;
+}
+
+interface ObjectWithEnv {
+  env?: unknown;
+  [key: string]: unknown;
+}
+
+function hasEnvKey(entry: unknown): entry is { key: string } {
+  return (
+    !!entry && typeof entry === 'object' && typeof (entry as { key?: unknown }).key === 'string'
+  );
+}
 
 export function getErrorMessage(error: unknown): string {
   if (error instanceof Error && typeof error.message === 'string' && error.message.trim() !== '') {
@@ -34,42 +56,56 @@ export function getErrorStatusCode(error: unknown): number | undefined {
   return typeof status === 'number' ? status : undefined;
 }
 
-function redactContainerRuntimeDetails(details) {
-  if (!details || typeof details !== 'object' || !Array.isArray(details.env)) {
+function redactContainerRuntimeDetails<T>(details: T): T {
+  if (!details || typeof details !== 'object') {
+    return details;
+  }
+
+  const detailsWithEnv = details as ObjectWithEnv;
+  if (!Array.isArray(detailsWithEnv.env)) {
     return details;
   }
 
   return {
-    ...details,
-    env: details.env
-      .filter((entry) => entry && typeof entry === 'object' && typeof entry.key === 'string')
+    ...detailsWithEnv,
+    env: detailsWithEnv.env
+      .filter((entry) => hasEnvKey(entry))
       .map((entry) => ({
         key: entry.key,
         value: REDACTED_RUNTIME_ENV_VALUE,
       })),
-  };
+  } as T;
 }
 
-export function redactContainerRuntimeEnv(container) {
-  if (!container || typeof container !== 'object' || !container.details) {
+export function redactContainerRuntimeEnv<T>(container: T): T {
+  if (!container || typeof container !== 'object') {
+    return container;
+  }
+
+  const containerWithDetails = container as ObjectWithDetails;
+  if (!containerWithDetails.details) {
     return container;
   }
 
   return {
-    ...container,
-    details: redactContainerRuntimeDetails(container.details),
-  };
+    ...containerWithDetails,
+    details: redactContainerRuntimeDetails(containerWithDetails.details),
+  } as T;
 }
 
-export function redactContainersRuntimeEnv(containers) {
+export function redactContainersRuntimeEnv<T>(containers: T): T {
   if (!Array.isArray(containers)) {
     return containers;
   }
 
-  return containers.map((container) => redactContainerRuntimeEnv(container));
+  return containers.map((container) => redactContainerRuntimeEnv(container)) as T;
 }
 
-export function resolveContainerImageFullName(container, registryState, tagOverride?: string) {
+export function resolveContainerImageFullName(
+  container: Container,
+  registryState: Record<string, RegistryComponentLike>,
+  tagOverride?: string,
+): string {
   const tag = tagOverride || container.image.tag.value;
   const containerRegistry = registryState[container.image.registry.name];
   if (containerRegistry && typeof containerRegistry.getImageFullName === 'function') {
@@ -79,8 +115,8 @@ export function resolveContainerImageFullName(container, registryState, tagOverr
 }
 
 export async function resolveContainerRegistryAuth(
-  container,
-  registryState,
+  container: Container,
+  registryState: Record<string, RegistryComponentLike>,
   {
     log,
     sanitizeLogParam,
@@ -88,7 +124,7 @@ export async function resolveContainerRegistryAuth(
     log: { warn: (message: string) => void };
     sanitizeLogParam: (value: unknown, maxLength?: number) => string;
   },
-) {
+): Promise<RegistryAuth | undefined> {
   try {
     const containerRegistry = registryState[container.image.registry.name];
     if (containerRegistry && typeof containerRegistry.getAuthPull === 'function') {

@@ -117,8 +117,23 @@ function authenticateLogin(req, res, next) {
       return;
     }
 
-    req.user = user;
-    next();
+    const continueWithUser = () => {
+      req.user = user;
+      next();
+    };
+
+    if (typeof req.login !== 'function') {
+      continueWithUser();
+      return;
+    }
+
+    req.login(user, { session: false }, (loginError) => {
+      if (loginError) {
+        next(loginError);
+        return;
+      }
+      continueWithUser();
+    });
   })(req, res, next);
 }
 

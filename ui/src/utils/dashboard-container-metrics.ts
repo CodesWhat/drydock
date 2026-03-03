@@ -21,6 +21,25 @@ export interface DashboardContainerMetrics {
   securityByImage: ImageSecurityAggregate[];
 }
 
+function getContainerSecurityGroup(container: Container): { mapKey: string; key: string } {
+  const image = container.image.trim();
+  if (image.length > 0) {
+    return { mapKey: `image:${image}`, key: image };
+  }
+
+  const id = container.id.trim();
+  if (id.length > 0) {
+    return { mapKey: `container:${id}`, key: id };
+  }
+
+  const name = container.name.trim();
+  if (name.length > 0) {
+    return { mapKey: `name:${name}`, key: name };
+  }
+
+  return { mapKey: 'unknown:container', key: 'unknown' };
+}
+
 export function buildDashboardContainerMetrics(
   containers: readonly Container[],
 ): DashboardContainerMetrics {
@@ -36,20 +55,21 @@ export function buildDashboardContainerMetrics(
     if (container.updateKind) {
       updatesAvailable += 1;
     }
+    const securityGroup = getContainerSecurityGroup(container);
+
     if (container.bouncer === 'blocked' || container.bouncer === 'unsafe') {
-      securityIssueImages.add(container.image);
+      securityIssueImages.add(securityGroup.mapKey);
     }
 
-    const key = container.image || container.name || container.id;
-    let aggregate = securityByImageMap.get(key);
+    let aggregate = securityByImageMap.get(securityGroup.mapKey);
     if (!aggregate) {
       aggregate = {
-        key,
+        key: securityGroup.key,
         scanned: false,
         hasIssue: false,
         summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
       };
-      securityByImageMap.set(key, aggregate);
+      securityByImageMap.set(securityGroup.mapKey, aggregate);
     }
 
     if (container.securityScanState !== 'not-scanned') {
@@ -66,7 +86,11 @@ export function buildDashboardContainerMetrics(
 
       const totalSummaryCount =
         summary.unknown + summary.low + summary.medium + summary.high + summary.critical;
-      if (totalSummaryCount > 0) {
+      if (
+        totalSummaryCount > 0 ||
+        container.bouncer === 'blocked' ||
+        container.bouncer === 'unsafe'
+      ) {
         aggregate.hasIssue = true;
       }
       continue;

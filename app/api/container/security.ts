@@ -1,5 +1,84 @@
-// @ts-nocheck
 import type { Request, Response } from 'express';
+import type { SecuritySbomFormat } from '../../configuration/index.js';
+import type { Container, ContainerSecurityState } from '../../model/container.js';
+import type {
+  ContainerSecuritySbom,
+  ContainerSecurityScan,
+  ContainerSignatureVerification,
+} from '../../security/scan.js';
+
+interface StoreContainerApi {
+  getContainer: (
+    id: string,
+    options?: {
+      includeRuntimeEnvValues?: boolean;
+    },
+  ) => Container | undefined;
+  updateContainer: (container: Container) => Container;
+}
+
+interface SecurityConfiguration {
+  enabled: boolean;
+  scanner: string;
+  signature: {
+    verify: boolean;
+  };
+  sbom: {
+    enabled: boolean;
+    formats: SecuritySbomFormat[];
+  };
+}
+
+interface RegistryAuth {
+  username?: string;
+  password?: string;
+}
+
+interface SecurityAlertPayload {
+  containerName: string;
+  details: string;
+  status?: string;
+  summary?: ContainerSecurityScan['summary'];
+  blockingCount?: number;
+  container?: Container;
+}
+
+export interface SecurityHandlerDependencies {
+  storeContainer: StoreContainerApi;
+  getSecurityConfiguration: () => SecurityConfiguration;
+  SECURITY_SBOM_FORMATS: readonly SecuritySbomFormat[];
+  generateImageSbom: (options: {
+    image: string;
+    auth?: RegistryAuth;
+    formats?: SecuritySbomFormat[];
+  }) => Promise<ContainerSecuritySbom>;
+  scanImageForVulnerabilities: (options: {
+    image: string;
+    auth?: RegistryAuth;
+  }) => Promise<ContainerSecurityScan>;
+  verifyImageSignature: (options: {
+    image: string;
+    auth?: RegistryAuth;
+  }) => Promise<ContainerSignatureVerification>;
+  emitSecurityAlert: (payload: SecurityAlertPayload) => Promise<void>;
+  fullName: (container: Container) => string;
+  broadcastScanStarted: (containerId: string) => void;
+  broadcastScanCompleted: (containerId: string, status: string) => void;
+  redactContainerRuntimeEnv: (container: Container) => Container;
+  getErrorMessage: (error: unknown) => string;
+  getContainerImageFullName: (container: Container, tagOverride?: string) => string;
+  getContainerRegistryAuth: (container: Container) => Promise<RegistryAuth | undefined>;
+  log: {
+    info: (message: string) => void;
+  };
+}
+
+function getPathParamValue(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) {
+    return value[0] || '';
+  }
+  return value || '';
+}
 
 export function createSecurityHandlers({
   storeContainer,
@@ -17,7 +96,7 @@ export function createSecurityHandlers({
   getContainerImageFullName,
   getContainerRegistryAuth,
   log,
-}) {
+}: SecurityHandlerDependencies) {
   function getEmptyVulnerabilityResponse() {
     return {
       scanner: undefined,
@@ -36,8 +115,8 @@ export function createSecurityHandlers({
     };
   }
 
-  function resolveSbomFormat(rawFormat: unknown) {
-    const format = `${rawFormat || 'spdx-json'}`.toLowerCase();
+  function resolveSbomFormat(rawFormat: unknown): SecuritySbomFormat | undefined {
+    const format = `${rawFormat || 'spdx-json'}`.toLowerCase() as SecuritySbomFormat;
     if (SECURITY_SBOM_FORMATS.includes(format)) {
       return format;
     }
@@ -50,7 +129,7 @@ export function createSecurityHandlers({
    * @param res
    */
   function getContainerVulnerabilities(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = getPathParamValue(req.params.id);
     const container = storeContainer.getContainer(id);
     if (!container) {
       res.sendStatus(404);
@@ -64,7 +143,7 @@ export function createSecurityHandlers({
   }
 
   async function getContainerSbom(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = getPathParamValue(req.params.id);
     const sbomFormat = resolveSbomFormat(req.query.format);
     if (!sbomFormat) {
       res.status(400).json({
@@ -144,7 +223,7 @@ export function createSecurityHandlers({
   }
 
   async function scanContainer(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = getPathParamValue(req.params.id);
     const container = storeContainer.getContainer(id, {
       includeRuntimeEnvValues: true,
     });
@@ -166,7 +245,7 @@ export function createSecurityHandlers({
       const image = getContainerImageFullName(container, updateTag);
       log.info(`Running on-demand security scan for ${image}`);
       const auth = await getContainerRegistryAuth(container);
-      const securityPatch: Record<string, any> = {};
+      const securityPatch: Partial<ContainerSecurityState> = {};
 
       // Run vulnerability scan
       const scanResult = await scanImageForVulnerabilities({ image, auth });

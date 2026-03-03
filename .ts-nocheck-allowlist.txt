@@ -25,13 +25,6 @@ app/api/component.ts
 app/api/container-actions.test.ts
 app/api/container.test.ts
 app/api/container.ts
-app/api/container/crud.ts
-app/api/container/logs.ts
-app/api/container/security.ts
-app/api/container/shared.test.ts
-app/api/container/shared.ts
-app/api/container/triggers.ts
-app/api/container/update-policy.ts
 app/api/health.test.ts
 app/api/health.ts
 app/api/index.test.ts

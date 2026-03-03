@@ -1,5 +1,52 @@
-// @ts-nocheck
 import type { Request, Response } from 'express';
+import type { AgentClient } from '../../agent/AgentClient.js';
+import type { Container, ContainerReport } from '../../model/container.js';
+
+interface StoreContainerApi {
+  getContainer: (
+    id: string,
+    options?: {
+      includeRuntimeEnvValues?: boolean;
+    },
+  ) => Container | undefined;
+  deleteContainer: (id: string) => void;
+}
+
+interface UpdateOperationStoreApi {
+  getOperationsByContainerName: (containerName: string) => unknown[];
+}
+
+interface ServerConfiguration {
+  feature: {
+    delete: boolean;
+  };
+}
+
+interface LocalContainerWatcher {
+  watch: () => Promise<unknown>;
+  getContainers?: () => Promise<Container[]>;
+  watchContainer: (container: Container) => Promise<ContainerReport>;
+}
+
+export interface CrudHandlerDependencies {
+  getContainersFromStore: (query: Request['query']) => Container[];
+  storeContainer: StoreContainerApi;
+  updateOperationStore: UpdateOperationStoreApi;
+  getServerConfiguration: () => ServerConfiguration;
+  getAgent: (name: string) => AgentClient | undefined;
+  getErrorMessage: (error: unknown) => string;
+  getErrorStatusCode: (error: unknown) => number | undefined;
+  getWatchers: () => Record<string, LocalContainerWatcher>;
+  redactContainerRuntimeEnv: (container: Container) => Container;
+  redactContainersRuntimeEnv: (containers: Container[]) => Container[];
+}
+
+function getPathParamValue(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) {
+    return value[0] || '';
+  }
+  return value || '';
+}
 
 export function createCrudHandlers({
   getContainersFromStore,
@@ -12,7 +59,7 @@ export function createCrudHandlers({
   getWatchers,
   redactContainerRuntimeEnv,
   redactContainersRuntimeEnv,
-}) {
+}: CrudHandlerDependencies) {
   /**
    * Get all (filtered) containers.
    * @param req
@@ -30,7 +77,7 @@ export function createCrudHandlers({
    * @param res
    */
   function getContainer(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = getPathParamValue(req.params.id);
     const container = storeContainer.getContainer(id);
     if (container) {
       res.status(200).json(redactContainerRuntimeEnv(container));
@@ -45,7 +92,7 @@ export function createCrudHandlers({
    * @param res
    */
   function getContainerUpdateOperations(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = getPathParamValue(req.params.id);
     const container = storeContainer.getContainer(id);
     if (!container) {
       res.sendStatus(404);
@@ -68,7 +115,7 @@ export function createCrudHandlers({
       return;
     }
 
-    const { id } = req.params;
+    const id = getPathParamValue(req.params.id);
     const container = storeContainer.getContainer(id);
     if (!container) {
       res.sendStatus(404);
@@ -129,7 +176,7 @@ export function createCrudHandlers({
    * @returns {Promise<void>}
    */
   async function watchContainer(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = getPathParamValue(req.params.id);
 
     const container = storeContainer.getContainer(id, {
       includeRuntimeEnvValues: true,

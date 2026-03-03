@@ -1,5 +1,54 @@
-// @ts-nocheck
 import type { Request, Response } from 'express';
+import type { Container } from '../../model/container.js';
+
+interface StoreContainerApi {
+  getContainer: (
+    id: string,
+    options?: {
+      includeRuntimeEnvValues?: boolean;
+    },
+  ) => Container | undefined;
+}
+
+interface ParsedTriggerReference {
+  id: string;
+  threshold: string;
+}
+
+interface TriggerComponent {
+  agent?: string;
+  type: string;
+  name: string;
+  configuration: {
+    threshold?: string;
+  };
+  trigger: (container: Container) => Promise<void>;
+}
+
+interface TriggerStaticApi {
+  parseIncludeOrIncludeTriggerString: (value: string) => ParsedTriggerReference;
+  doesReferenceMatchId: (triggerReference: string, triggerId: string) => boolean;
+}
+
+export interface TriggerHandlerDependencies {
+  storeContainer: StoreContainerApi;
+  mapComponentsToList: (components: Record<string, TriggerComponent>) => TriggerComponent[];
+  getTriggers: () => Record<string, TriggerComponent>;
+  Trigger: TriggerStaticApi;
+  sanitizeLogParam: (value: unknown, maxLength?: number) => string;
+  getErrorMessage: (error: unknown) => string;
+  log: {
+    info: (message: string) => void;
+    warn: (message: string) => void;
+  };
+}
+
+function getPathParamValue(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) {
+    return value[0] || '';
+  }
+  return value || '';
+}
 
 export function createTriggerHandlers({
   storeContainer,
@@ -9,8 +58,10 @@ export function createTriggerHandlers({
   sanitizeLogParam,
   getErrorMessage,
   log,
-}) {
-  function parseTriggerList(triggerString) {
+}: TriggerHandlerDependencies) {
+  function parseTriggerList(
+    triggerString: string | undefined,
+  ): ParsedTriggerReference[] | undefined {
     if (!triggerString) {
       return undefined;
     }
@@ -20,7 +71,7 @@ export function createTriggerHandlers({
       .map((entry) => Trigger.parseIncludeOrIncludeTriggerString(entry));
   }
 
-  function isTriggerAgentCompatible(trigger, container) {
+  function isTriggerAgentCompatible(trigger: TriggerComponent, container: Container): boolean {
     if (trigger.agent && trigger.agent !== container.agent) {
       return false;
     }
@@ -30,7 +81,11 @@ export function createTriggerHandlers({
     return true;
   }
 
-  function resolveTriggerAssociation(trigger, includedTriggers, excludedTriggers) {
+  function resolveTriggerAssociation(
+    trigger: TriggerComponent,
+    includedTriggers: ParsedTriggerReference[] | undefined,
+    excludedTriggers: ParsedTriggerReference[] | undefined,
+  ): TriggerComponent | undefined {
     const triggerId = `${trigger.type}.${trigger.name}`;
     const triggerToAssociate = { ...trigger };
 
@@ -56,7 +111,7 @@ export function createTriggerHandlers({
   }
 
   async function getContainerTriggers(req: Request, res: Response) {
-    const { id } = req.params;
+    const id = getPathParamValue(req.params.id);
 
     const container = storeContainer.getContainer(id);
     if (!container) {
@@ -82,7 +137,10 @@ export function createTriggerHandlers({
    * @param {*} res
    */
   async function runTrigger(req: Request, res: Response) {
-    const { id, triggerAgent, triggerType, triggerName } = req.params;
+    const id = getPathParamValue(req.params.id);
+    const triggerAgent = getPathParamValue(req.params.triggerAgent);
+    const triggerType = getPathParamValue(req.params.triggerType);
+    const triggerName = getPathParamValue(req.params.triggerName);
 
     const containerToTrigger = storeContainer.getContainer(id, {
       includeRuntimeEnvValues: true,

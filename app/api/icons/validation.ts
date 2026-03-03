@@ -1,5 +1,5 @@
 import joi from 'joi';
-import { providerNames } from './icons.providers.js';
+import { providerNames } from './providers.js';
 
 const iconRequestSchema = joi.object({
   provider: joi

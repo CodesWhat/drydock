@@ -1,13 +1,13 @@
 import path from 'node:path';
 import type { Request, Response } from 'express';
-import { providers } from './icons.providers.js';
+import { providers } from './providers.js';
 import {
   CACHE_CONTROL_HEADER,
   FALLBACK_ICON,
   FALLBACK_IMAGE_PROVIDER,
   FALLBACK_IMAGE_SLUG,
-} from './icons.settings.js';
-import { findBundledIconPath } from './icons.storage.js';
+} from './settings.js';
+import { findBundledIconPath } from './storage.js';
 
 function sendCachedIcon(res: Response, iconPath: string, contentType: string) {
   res.set('Cache-Control', CACHE_CONTROL_HEADER);

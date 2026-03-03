@@ -18,6 +18,8 @@ let initialized = false;
 interface ActiveSseClient {
   clientId: string;
   clientToken: string;
+  clientTokenHash: Buffer;
+  clientTokenHashHex: string;
   response: Response;
   connectedAtMs: number;
 }
@@ -37,6 +39,7 @@ interface PendingSelfUpdateAck {
 
 const clients = new Set<Response>();
 const activeSseClientsByToken = new Map<string, ActiveSseClient>();
+const activeSseClientsByTokenHash = new Map<string, ActiveSseClient>();
 const activeSseClientsByResponse = new Map<Response, ActiveSseClient>();
 const pendingSelfUpdateAcks = new Map<string, PendingSelfUpdateAck>();
 let staleSweepIntervalHandle: ReturnType<typeof globalThis.setInterval> | undefined;
@@ -73,17 +76,13 @@ function hashToken(token: string): Buffer {
 
 function findActiveClientByTokenConstantTime(clientToken: string): ActiveSseClient | undefined {
   const providedTokenHash = hashToken(clientToken);
-  let matchedClient: ActiveSseClient | undefined;
-  let hasMatch = false;
-  for (const [candidateToken, activeClient] of activeSseClientsByToken.entries()) {
-    const candidateTokenHash = hashToken(candidateToken);
-    const isMatch = timingSafeEqual(providedTokenHash, candidateTokenHash);
-    if (isMatch && !hasMatch) {
-      matchedClient = activeClient;
-      hasMatch = true;
-    }
+  const activeClient = activeSseClientsByTokenHash.get(providedTokenHash.toString('hex'));
+  if (!activeClient) {
+    return undefined;
   }
-  return matchedClient;
+  return timingSafeEqual(providedTokenHash, activeClient.clientTokenHash)
+    ? activeClient
+    : undefined;
 }
 
 function hasEligibleClientTokenConstantTime(
@@ -109,6 +108,7 @@ function isResponseClosed(response: Response): boolean {
 function dropActiveClient(client: ActiveSseClient): void {
   clients.delete(client.response);
   activeSseClientsByToken.delete(client.clientToken);
+  activeSseClientsByTokenHash.delete(client.clientTokenHashHex);
   activeSseClientsByResponse.delete(client.response);
 }
 
@@ -118,7 +118,13 @@ function sweepStaleSseState(nowMs = Date.now()): void {
     const missingClientSetEntry = !clients.has(response);
     const missingTokenEntry =
       activeSseClientsByToken.get(activeClient.clientToken) !== activeClient;
-    const shouldDrop = missingClientSetEntry || missingTokenEntry || isResponseClosed(response);
+    const missingTokenHashEntry =
+      activeSseClientsByTokenHash.get(activeClient.clientTokenHashHex) !== activeClient;
+    const shouldDrop =
+      missingClientSetEntry ||
+      missingTokenEntry ||
+      missingTokenHashEntry ||
+      isResponseClosed(response);
     if (shouldDrop && ageMs >= SSE_STALE_ENTRY_TTL_MS) {
       dropActiveClient(activeClient);
     }
@@ -127,12 +133,20 @@ function sweepStaleSseState(nowMs = Date.now()): void {
   for (const [token, activeClient] of activeSseClientsByToken) {
     const ageMs = nowMs - activeClient.connectedAtMs;
     const responseRef = activeSseClientsByResponse.get(activeClient.response);
+    const tokenHashRef = activeSseClientsByTokenHash.get(activeClient.clientTokenHashHex);
     const missingResponseEntry = responseRef !== activeClient;
+    const missingTokenHashEntry = tokenHashRef !== activeClient;
     const missingClientSetEntry = !clients.has(activeClient.response);
     const shouldDrop =
-      missingResponseEntry || missingClientSetEntry || isResponseClosed(activeClient.response);
+      missingResponseEntry ||
+      missingTokenHashEntry ||
+      missingClientSetEntry ||
+      isResponseClosed(activeClient.response);
     if (shouldDrop && ageMs >= SSE_STALE_ENTRY_TTL_MS) {
       activeSseClientsByToken.delete(token);
+      if (tokenHashRef === activeClient) {
+        activeSseClientsByTokenHash.delete(activeClient.clientTokenHashHex);
+      }
       if (responseRef === activeClient) {
         activeSseClientsByResponse.delete(activeClient.response);
       }
@@ -182,14 +196,19 @@ function eventsHandler(req: Request, res: Response): void {
   });
   res.flushHeaders?.();
 
+  const clientToken = issueServerClientId('sse-token');
+  const clientTokenHash = hashToken(clientToken);
   const activeClient: ActiveSseClient = {
     clientId: issueServerClientId('sse-client'),
-    clientToken: issueServerClientId('sse-token'),
+    clientToken,
+    clientTokenHash,
+    clientTokenHashHex: clientTokenHash.toString('hex'),
     response: res,
     connectedAtMs: Date.now(),
   };
   activeSseClientsByResponse.set(res, activeClient);
   activeSseClientsByToken.set(activeClient.clientToken, activeClient);
+  activeSseClientsByTokenHash.set(activeClient.clientTokenHashHex, activeClient);
 
   // Send initial connection event
   res.write(
@@ -218,8 +237,7 @@ function eventsHandler(req: Request, res: Response): void {
     clients.delete(res);
     const disconnectedClient = activeSseClientsByResponse.get(res);
     if (disconnectedClient) {
-      activeSseClientsByToken.delete(disconnectedClient.clientToken);
-      activeSseClientsByResponse.delete(res);
+      dropActiveClient(disconnectedClient);
     }
     const count = connectionsPerIp.get(ip);
     if (count === undefined || count <= 1) {
@@ -454,6 +472,7 @@ function resetInitializationStateForTests(): void {
 export {
   clients as _clients,
   activeSseClientsByToken as _activeSseClientsByToken,
+  activeSseClientsByTokenHash as _activeSseClientsByTokenHash,
   activeSseClientsByResponse as _activeSseClientsByResponse,
   connectionsPerIp as _connectionsPerIp,
   connectionsPerSession as _connectionsPerSession,

@@ -410,6 +410,24 @@ describe('getSecurityConfiguration', () => {
     warnSpy.mockRestore();
   });
 
+  test('should normalize and deduplicate invalid block severities in fallback warning', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = ' foo ,FOO, bar ';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Invalid DD_SECURITY_BLOCK_SEVERITY values: FOO, BAR. Allowed values: UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL. Falling back to defaults: CRITICAL, HIGH.',
+      ),
+    );
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+    warnSpy.mockRestore();
+  });
+
   test('should warn and ignore invalid block severities when valid values are present', () => {
     configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
     configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = 'critical,foo,medium,foo';

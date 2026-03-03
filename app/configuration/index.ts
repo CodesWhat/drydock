@@ -312,45 +312,23 @@ export function getWebhookConfiguration() {
 }
 
 function parseSecuritySeverityList(rawValue: string | undefined): SecuritySeverity[] {
-  const defaultValues = DEFAULT_SECURITY_BLOCK_SEVERITY.split(',')
-    .map((value) => value.trim())
-    .filter((value) => value !== '')
-    .filter((value): value is SecuritySeverity =>
-      SECURITY_SEVERITY_VALUES.includes(value as SecuritySeverity),
-    );
-  if (!rawValue) {
-    return defaultValues;
-  }
-
-  const configuredValues = rawValue
-    .split(',')
-    .map((value) => value.trim().toUpperCase())
-    .filter((value) => value !== '');
-  if (configuredValues.length === 0) {
-    return defaultValues;
-  }
-
-  const deduplicatedValues = Array.from(new Set(configuredValues));
-  const parsedValues = deduplicatedValues.filter((severity): severity is SecuritySeverity =>
-    SECURITY_SEVERITY_VALUES.includes(severity as SecuritySeverity),
+  return parseDelimitedEnumList(
+    rawValue,
+    DEFAULT_SECURITY_BLOCK_SEVERITY,
+    (value) => value.toUpperCase(),
+    (severity): severity is SecuritySeverity =>
+      SECURITY_SEVERITY_VALUES.includes(severity as SecuritySeverity),
+    {
+      onInvalidValues: ({ invalidValues, parsedValues, defaultValues }) => {
+        const warningBase = `Invalid DD_SECURITY_BLOCK_SEVERITY values: ${invalidValues.join(', ')}. Allowed values: ${SECURITY_SEVERITY_VALUES.join(', ')}.`;
+        if (parsedValues.length === 0) {
+          console.warn(`${warningBase} Falling back to defaults: ${defaultValues.join(', ')}.`);
+        } else {
+          console.warn(`${warningBase} Invalid values were ignored.`);
+        }
+      },
+    },
   );
-  const invalidValues = deduplicatedValues.filter(
-    (severity) => !SECURITY_SEVERITY_VALUES.includes(severity as SecuritySeverity),
-  );
-
-  if (invalidValues.length > 0) {
-    const warningBase = `Invalid DD_SECURITY_BLOCK_SEVERITY values: ${invalidValues.join(', ')}. Allowed values: ${SECURITY_SEVERITY_VALUES.join(', ')}.`;
-    if (parsedValues.length === 0) {
-      console.warn(`${warningBase} Falling back to defaults: ${defaultValues.join(', ')}.`);
-    } else {
-      console.warn(`${warningBase} Invalid values were ignored.`);
-    }
-  }
-
-  if (parsedValues.length === 0) {
-    return defaultValues;
-  }
-  return parsedValues;
 }
 
 function parseSecuritySbomFormatList(rawValue: string | undefined): SecuritySbomFormat[] {
@@ -368,6 +346,13 @@ function parseDelimitedEnumList<T extends string>(
   defaultRawValue: string,
   normalizeValue: (value: string) => string,
   isAllowedValue: (value: string) => value is T,
+  options?: {
+    onInvalidValues?: (context: {
+      defaultValues: T[];
+      parsedValues: T[];
+      invalidValues: string[];
+    }) => void;
+  },
 ): T[] {
   const defaultValues = defaultRawValue
     .split(',')
@@ -388,6 +373,14 @@ function parseDelimitedEnumList<T extends string>(
 
   const deduplicatedValues = Array.from(new Set(configuredValues));
   const parsedValues = deduplicatedValues.filter(isAllowedValue);
+  const invalidValues = deduplicatedValues.filter((value) => !isAllowedValue(value));
+  if (invalidValues.length > 0) {
+    options?.onInvalidValues?.({
+      defaultValues,
+      parsedValues,
+      invalidValues,
+    });
+  }
   if (parsedValues.length === 0) {
     return defaultValues;
   }

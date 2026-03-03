@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { describe, expect, test } from 'vitest';
 import {
   getErrorMessage,
   getErrorStatusCode,
@@ -36,6 +36,20 @@ describe('api/container/shared', () => {
   });
 
   describe('redactContainerRuntimeEnv', () => {
+    test('returns primitive container values unchanged', () => {
+      expect(redactContainerRuntimeEnv(undefined)).toBeUndefined();
+      expect(redactContainerRuntimeEnv('not-an-object')).toBe('not-an-object');
+    });
+
+    test('keeps primitive details unchanged', () => {
+      const container = {
+        id: 'c0',
+        details: 'raw-details',
+      };
+
+      expect(redactContainerRuntimeEnv(container)).toEqual(container);
+    });
+
     test('keeps details unchanged when env is not an array', () => {
       const container = {
         id: 'c1',

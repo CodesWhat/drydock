@@ -202,6 +202,36 @@ describe('Auth Router', () => {
         isAuthenticated: vi.fn(() => false),
         method: 'POST',
         path: '/login',
+        login: vi.fn((user, options, done) => {
+          req.user = user;
+          done();
+        }),
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      auth.requireAuthentication(req, res, next);
+
+      expect(req.login).toHaveBeenCalledWith(
+        { username: 'john' },
+        { session: false },
+        expect.any(Function),
+      );
+      expect(req.user).toEqual({ username: 'john' });
+      expect(next).toHaveBeenCalled();
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+      expect(res.sendStatus).not.toHaveBeenCalled();
+    });
+
+    test('should continue when login credentials are valid and req.login is unavailable', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, { username: 'john' }, undefined, 200);
+      });
+
+      const req = {
+        isAuthenticated: vi.fn(() => false),
+        method: 'POST',
+        path: '/login',
       };
       const res = createResponse();
       const next = vi.fn();
@@ -210,6 +240,28 @@ describe('Auth Router', () => {
 
       expect(req.user).toEqual({ username: 'john' });
       expect(next).toHaveBeenCalled();
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+      expect(res.sendStatus).not.toHaveBeenCalled();
+    });
+
+    test('should call next with req.login errors while validating login credentials', () => {
+      const loginError = new Error('login callback failed');
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, { username: 'john' }, undefined, 200);
+      });
+
+      const req = {
+        isAuthenticated: vi.fn(() => false),
+        method: 'POST',
+        path: '/login',
+        login: vi.fn((_user, _options, done) => done(loginError)),
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      auth.requireAuthentication(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(loginError);
       expect(mockRecordAuditEvent).not.toHaveBeenCalled();
       expect(res.sendStatus).not.toHaveBeenCalled();
     });

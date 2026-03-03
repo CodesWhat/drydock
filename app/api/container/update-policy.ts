@@ -1,14 +1,38 @@
-// @ts-nocheck
 import type { Request, Response } from 'express';
+import type { Container, ContainerUpdatePolicy } from '../../model/container.js';
+
+interface StoreContainerApi {
+  getContainer: (
+    id: string,
+    options?: {
+      includeRuntimeEnvValues?: boolean;
+    },
+  ) => Container | undefined;
+  updateContainer: (container: Container) => Container;
+}
+
+export interface UpdatePolicyHandlerDependencies {
+  storeContainer: StoreContainerApi;
+  uniqStrings: (values: string[]) => string[];
+  getErrorMessage: (error: unknown) => string;
+  redactContainerRuntimeEnv: (container: Container) => Container;
+}
+
+function getPathParamValue(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) {
+    return value[0] || '';
+  }
+  return value || '';
+}
 
 export function createUpdatePolicyHandlers({
   storeContainer,
   uniqStrings,
   getErrorMessage,
   redactContainerRuntimeEnv,
-}) {
-  function normalizeUpdatePolicy(updatePolicy = {}) {
-    const normalizedPolicy = {};
+}: UpdatePolicyHandlerDependencies) {
+  function normalizeUpdatePolicy(updatePolicy: ContainerUpdatePolicy = {}): ContainerUpdatePolicy {
+    const normalizedPolicy: ContainerUpdatePolicy = {};
 
     if (Array.isArray(updatePolicy.skipTags)) {
       const skipTags = uniqStrings(updatePolicy.skipTags);
@@ -34,7 +58,10 @@ export function createUpdatePolicyHandlers({
     return normalizedPolicy;
   }
 
-  function getCurrentUpdateValue(container, kind) {
+  function getCurrentUpdateValue(
+    container: Container,
+    kind: Container['updateKind']['kind'] | undefined,
+  ): string | undefined {
     if (kind === 'tag') {
       return container.updateKind?.remoteValue || container.result?.tag;
     }
@@ -44,9 +71,9 @@ export function createUpdatePolicyHandlers({
     return undefined;
   }
 
-  function getSnoozeUntilFromActionPayload(payload = {}) {
+  function getSnoozeUntilFromActionPayload(payload: Record<string, unknown> = {}): string {
     if (payload.snoozeUntil) {
-      const customDate = new Date(payload.snoozeUntil);
+      const customDate = new Date(`${payload.snoozeUntil}`);
       if (Number.isNaN(customDate.getTime())) {
         throw new TypeError('Invalid snoozeUntil date');
       }
@@ -65,10 +92,13 @@ export function createUpdatePolicyHandlers({
    * @param req
    * @param res
    */
-  function applySkipCurrentAction(container, updatePolicy) {
+  function applySkipCurrentAction(
+    container: Container,
+    updatePolicy: ContainerUpdatePolicy,
+  ): { policy: ContainerUpdatePolicy } | { error: string } {
     const updateKind = container.updateKind?.kind;
     const updateValue = getCurrentUpdateValue(container, updateKind);
-    if (!['tag', 'digest'].includes(updateKind)) {
+    if (updateKind !== 'tag' && updateKind !== 'digest') {
       return { error: 'No current update available to skip' };
     }
     if (!updateValue) {
@@ -82,11 +112,14 @@ export function createUpdatePolicyHandlers({
     return { policy: updatePolicy };
   }
 
-  function applyRemoveSkipAction(updatePolicy, body = {}) {
+  function applyRemoveSkipAction(
+    updatePolicy: ContainerUpdatePolicy,
+    body: Record<string, unknown> = {},
+  ): { policy: ContainerUpdatePolicy } | { error: string } {
     const kind = body.kind;
     const value = typeof body.value === 'string' ? body.value.trim() : '';
 
-    if (!['tag', 'digest'].includes(kind)) {
+    if (kind !== 'tag' && kind !== 'digest') {
       return { error: 'Invalid remove-skip kind; expected "tag" or "digest"' };
     }
     if (!value) {
@@ -112,7 +145,12 @@ export function createUpdatePolicyHandlers({
     return { policy: updatePolicy };
   }
 
-  function applyPolicyAction(action, container, updatePolicy, body = {}) {
+  function applyPolicyAction(
+    action: string,
+    container: Container,
+    updatePolicy: ContainerUpdatePolicy,
+    body: Record<string, unknown> = {},
+  ): { policy: ContainerUpdatePolicy } | { error: string } {
     switch (action) {
       case 'skip-current':
         return applySkipCurrentAction(container, updatePolicy);
@@ -136,8 +174,8 @@ export function createUpdatePolicyHandlers({
   }
 
   function patchContainerUpdatePolicy(req: Request, res: Response) {
-    const { id } = req.params;
-    const { action } = req.body || {};
+    const id = getPathParamValue(req.params.id);
+    const { action } = (req.body || {}) as { action?: string };
     const container = storeContainer.getContainer(id, {
       includeRuntimeEnvValues: true,
     });
@@ -154,9 +192,11 @@ export function createUpdatePolicyHandlers({
 
     try {
       let updatePolicy = normalizeUpdatePolicy(container.updatePolicy || {});
-      const result = applyPolicyAction(action, container, updatePolicy, req.body);
+      const actionBody =
+        req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>) : {};
+      const result = applyPolicyAction(action, container, updatePolicy, actionBody);
 
-      if (result.error) {
+      if ('error' in result) {
         res.status(400).json({ error: result.error });
         return;
       }

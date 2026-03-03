@@ -5,10 +5,15 @@ import {
   resolveConfiguredPath,
   resolveConfiguredPathWithinBase,
   resolveFromRuntimeRoot,
-} from '../runtime/paths.js';
-import * as store from '../store/index.js';
-import { BUNDLED_ICON_PROVIDERS } from './icons.providers.js';
-import { ICON_CACHE_MAX_BYTES, ICON_CACHE_MAX_FILES, ICON_CACHE_TTL_MS } from './icons.settings.js';
+} from '../../runtime/paths.js';
+import * as store from '../../store/index.js';
+import { BUNDLED_ICON_PROVIDERS } from './providers.js';
+import {
+  ICON_CACHE_ENFORCEMENT_INTERVAL_MS,
+  ICON_CACHE_MAX_BYTES,
+  ICON_CACHE_MAX_FILES,
+  ICON_CACHE_TTL_MS,
+} from './settings.js';
 
 function getIconCacheBaseDirectory() {
   const storeDirectory = resolveConfiguredPath(store.getConfiguration().path, {
@@ -88,6 +93,11 @@ type IconCacheEntry = {
   size: number;
 };
 
+const ICON_CACHE_STAT_BATCH_SIZE = 64;
+let lastIconCacheEnforcementMs = 0;
+let iconCacheEnforcementPromise: Promise<void> | null = null;
+const protectedCachePathsDuringEnforcement = new Set<string>();
+
 async function listIconCacheEntries() {
   const cacheBase = getIconCacheBaseDirectory();
   const providerEntries = await fs.readdir(cacheBase, { withFileTypes: true }).catch(() => []);
@@ -99,20 +109,32 @@ async function listIconCacheEntries() {
     }
     const providerDirectory = path.join(cacheBase, providerEntry.name);
     const iconEntries = await fs.readdir(providerDirectory).catch(() => []);
-    for (const iconEntry of iconEntries) {
-      const iconPath = path.join(providerDirectory, iconEntry);
-      try {
-        const iconStats = await fs.stat(iconPath);
-        if (!iconStats.isFile()) {
-          continue;
+    for (let index = 0; index < iconEntries.length; index += ICON_CACHE_STAT_BATCH_SIZE) {
+      const iconBatch = iconEntries.slice(index, index + ICON_CACHE_STAT_BATCH_SIZE);
+      const statResults = await Promise.all(
+        iconBatch.map(async (iconEntry): Promise<IconCacheEntry | null> => {
+          const iconPath = path.join(providerDirectory, iconEntry);
+          try {
+            const iconStats = await fs.stat(iconPath);
+            if (!iconStats.isFile()) {
+              return null;
+            }
+            return {
+              path: iconPath,
+              mtimeMs: iconStats.mtimeMs,
+              size: iconStats.size,
+            };
+          } catch {
+            // Ignore entries that disappear between directory scan and stat.
+            return null;
+          }
+        }),
+      );
+
+      for (const statResult of statResults) {
+        if (statResult) {
+          cacheEntries.push(statResult);
         }
-        cacheEntries.push({
-          path: iconPath,
-          mtimeMs: iconStats.mtimeMs,
-          size: iconStats.size,
-        });
-      } catch {
-        // Ignore entries that disappear between directory scan and stat.
       }
     }
   }
@@ -120,7 +142,7 @@ async function listIconCacheEntries() {
   return cacheEntries;
 }
 
-async function enforceIconCacheLimits(options: { protectedPath?: string } = {}) {
+async function runIconCacheEnforcement() {
   const nowMs = Date.now();
   const cacheEntries = await listIconCacheEntries();
   const activeEntries: IconCacheEntry[] = [];
@@ -138,7 +160,7 @@ async function enforceIconCacheLimits(options: { protectedPath?: string } = {}) 
   activeEntries.sort((left, right) => left.mtimeMs - right.mtimeMs);
   while (activeEntries.length > ICON_CACHE_MAX_FILES || totalBytes > ICON_CACHE_MAX_BYTES) {
     const indexToEvict = activeEntries.findIndex(
-      (cacheEntry) => cacheEntry.path !== options.protectedPath,
+      (cacheEntry) => !protectedCachePathsDuringEnforcement.has(cacheEntry.path),
     );
     if (indexToEvict === -1) {
       break;
@@ -148,6 +170,38 @@ async function enforceIconCacheLimits(options: { protectedPath?: string } = {}) 
     await fs.unlink(entryToEvict.path).catch(() => {});
     totalBytes = Math.max(0, totalBytes - entryToEvict.size);
   }
+}
+
+async function enforceIconCacheLimits(options: { protectedPath?: string } = {}) {
+  if (options.protectedPath) {
+    protectedCachePathsDuringEnforcement.add(options.protectedPath);
+  }
+
+  if (iconCacheEnforcementPromise) {
+    await iconCacheEnforcementPromise;
+    return;
+  }
+
+  if (Date.now() - lastIconCacheEnforcementMs < ICON_CACHE_ENFORCEMENT_INTERVAL_MS) {
+    if (options.protectedPath) {
+      protectedCachePathsDuringEnforcement.delete(options.protectedPath);
+    }
+    return;
+  }
+
+  iconCacheEnforcementPromise = runIconCacheEnforcement().finally(() => {
+    lastIconCacheEnforcementMs = Date.now();
+    iconCacheEnforcementPromise = null;
+    protectedCachePathsDuringEnforcement.clear();
+  });
+
+  await iconCacheEnforcementPromise;
+}
+
+function resetIconCacheEnforcementStateForTests() {
+  lastIconCacheEnforcementMs = 0;
+  iconCacheEnforcementPromise = null;
+  protectedCachePathsDuringEnforcement.clear();
 }
 
 async function writeIconAtomically(iconPath: string, data: Buffer) {
@@ -185,5 +239,6 @@ export {
   findBundledIconPath,
   getIconCachePath,
   isCachedIconUsable,
+  resetIconCacheEnforcementStateForTests,
   writeIconAtomically,
 };
