@@ -25,7 +25,7 @@ pre-push:
   piped: true
   commands:
     # ── Lint gate: fast checks that catch formatting/lint issues ──────
-    ts-nocheck-allowlist:
+    ts-nocheck:
       run: node scripts/check-ts-nocheck-allowlist.mjs
       priority: 1
     biome:
