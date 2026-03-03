@@ -1,4 +1,3 @@
-// @ts-nocheck
 import crypto from 'node:crypto';
 import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
@@ -87,6 +86,95 @@ function shouldKeepImage(imageNormalized, container) {
   return false;
 }
 
+type DockerTriggerCallback = (...args: unknown[]) => unknown;
+
+interface DockerTriggerOrchestrator {
+  recordHookAudit: DockerTriggerCallback;
+  pullImage: DockerTriggerCallback;
+  cloneContainer: DockerTriggerCallback;
+  createContainer: DockerTriggerCallback;
+  insertContainerImageBackup: DockerTriggerCallback;
+  stopContainer: DockerTriggerCallback;
+  waitContainerRemoved: DockerTriggerCallback;
+  removeContainer: DockerTriggerCallback;
+  startContainer: DockerTriggerCallback;
+  isContainerNotFoundError: DockerTriggerCallback;
+  recordRollbackTelemetry: DockerTriggerCallback;
+  hasHealthcheckConfigured: DockerTriggerCallback;
+  waitForContainerHealthy: DockerTriggerCallback;
+  getCurrentContainer: DockerTriggerCallback;
+  inspectContainer: DockerTriggerCallback;
+  createTriggerContext: DockerTriggerCallback;
+  maybeScanAndGateUpdate: DockerTriggerCallback;
+  buildHookConfig: DockerTriggerCallback;
+  recordHookConfigurationAudit: DockerTriggerCallback;
+  runPreUpdateHook: DockerTriggerCallback;
+  isSelfUpdate: DockerTriggerCallback;
+  maybeNotifySelfUpdate: DockerTriggerCallback;
+  executeSelfUpdate: DockerTriggerCallback;
+  runPreRuntimeUpdateLifecycle: DockerTriggerCallback;
+  performContainerUpdate: DockerTriggerCallback;
+  runPostUpdateHook: DockerTriggerCallback;
+  cleanupOldImages: DockerTriggerCallback;
+  getRollbackConfig: DockerTriggerCallback;
+  maybeStartAutoRollbackMonitor: DockerTriggerCallback;
+  recordSecurityAudit: DockerTriggerCallback;
+}
+
+const HOOK_EXECUTOR_ORCHESTRATOR_METHODS = ['recordHookAudit'] as const;
+const SELF_UPDATE_ORCHESTRATOR_METHODS = [
+  'pullImage',
+  'cloneContainer',
+  'createContainer',
+  'insertContainerImageBackup',
+] as const;
+const CONTAINER_UPDATE_ORCHESTRATOR_METHODS = [
+  'stopContainer',
+  'waitContainerRemoved',
+  'removeContainer',
+  'createContainer',
+  'startContainer',
+  'pullImage',
+  'cloneContainer',
+  'isContainerNotFoundError',
+  'recordRollbackTelemetry',
+  'hasHealthcheckConfigured',
+  'waitForContainerHealthy',
+] as const;
+const ROLLBACK_MONITOR_ORCHESTRATOR_METHODS = ['getCurrentContainer', 'inspectContainer'] as const;
+const UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS = [
+  'createTriggerContext',
+  'maybeScanAndGateUpdate',
+  'buildHookConfig',
+  'recordHookConfigurationAudit',
+  'runPreUpdateHook',
+  'isSelfUpdate',
+  'maybeNotifySelfUpdate',
+  'executeSelfUpdate',
+  'runPreRuntimeUpdateLifecycle',
+  'performContainerUpdate',
+  'runPostUpdateHook',
+  'cleanupOldImages',
+  'getRollbackConfig',
+  'maybeStartAutoRollbackMonitor',
+] as const;
+const SECURITY_GATE_ORCHESTRATOR_METHODS = ['recordSecurityAudit'] as const;
+
+function pickOrchestratorCallbacks<K extends keyof DockerTriggerOrchestrator>(
+  orchestrator: DockerTriggerOrchestrator,
+  callbackNames: readonly K[],
+): Pick<DockerTriggerOrchestrator, K> {
+  const callbacks = {} as Pick<DockerTriggerOrchestrator, K>;
+  for (const callbackName of callbackNames) {
+    callbacks[callbackName] = ((...args: unknown[]) =>
+      orchestrator[callbackName].apply(orchestrator, args)) as Pick<
+      DockerTriggerOrchestrator,
+      K
+    >[K];
+  }
+  return callbacks;
+}
+
 /**
  * Replace a Docker container with an updated one.
  */
@@ -113,75 +201,53 @@ class Docker extends Trigger {
 
   constructor() {
     super();
+
     this.registryResolver = new RegistryResolver();
     this.runtimeConfigManager = new ContainerRuntimeConfigManager({
       getPreferredLabelValue,
       getLogger: () => this.log,
     });
+    const getCloneRuntimeConfigOptions =
+      this.runtimeConfigManager.getCloneRuntimeConfigOptions.bind(this.runtimeConfigManager);
+    const buildRuntimeConfigCompatibilityError =
+      this.runtimeConfigManager.buildRuntimeConfigCompatibilityError.bind(
+        this.runtimeConfigManager,
+      );
     this.hookExecutor = new HookExecutor({
       runHook,
       getPreferredLabelValue,
       getLogger: () => this.log,
-      recordHookAudit: (...args) => this.recordHookAudit(...args),
+      ...pickOrchestratorCallbacks(this, HOOK_EXECUTOR_ORCHESTRATOR_METHODS),
     });
     this.selfUpdateOrchestrator = new SelfUpdateOrchestrator({
       getConfiguration: () => this.configuration,
       runtimeConfigManager: this.runtimeConfigManager,
-      pullImage: (...args) => this.pullImage(...args),
-      cloneContainer: (...args) => this.cloneContainer(...args),
-      createContainer: (...args) => this.createContainer(...args),
-      insertContainerImageBackup: (...args) => this.insertContainerImageBackup(...args),
-      emitSelfUpdateStarting: (...args) => emitSelfUpdateStarting(...args),
+      ...pickOrchestratorCallbacks(this, SELF_UPDATE_ORCHESTRATOR_METHODS),
+      emitSelfUpdateStarting,
     });
     // Backward-compatible alias retained for existing tests/extension points.
     this.selfUpdateExecutor = this.selfUpdateOrchestrator;
     this.containerUpdateExecutor = new ContainerUpdateExecutor({
       getConfiguration: () => this.configuration,
       getTriggerId: () => this.getId(),
-      stopContainer: (...args) => this.stopContainer(...args),
-      waitContainerRemoved: (...args) => this.waitContainerRemoved(...args),
-      removeContainer: (...args) => this.removeContainer(...args),
-      createContainer: (...args) => this.createContainer(...args),
-      startContainer: (...args) => this.startContainer(...args),
-      pullImage: (...args) => this.pullImage(...args),
-      cloneContainer: (...args) => this.cloneContainer(...args),
-      getCloneRuntimeConfigOptions: (...args) =>
-        this.runtimeConfigManager.getCloneRuntimeConfigOptions(...args),
-      isContainerNotFoundError: (...args) => this.isContainerNotFoundError(...args),
-      recordRollbackTelemetry: (...args) => this.recordRollbackTelemetry(...args),
-      buildRuntimeConfigCompatibilityError: (...args) =>
-        this.runtimeConfigManager.buildRuntimeConfigCompatibilityError(...args),
-      hasHealthcheckConfigured: (...args) => this.hasHealthcheckConfigured(...args),
-      waitForContainerHealthy: (...args) => this.waitForContainerHealthy(...args),
+      ...pickOrchestratorCallbacks(this, CONTAINER_UPDATE_ORCHESTRATOR_METHODS),
+      getCloneRuntimeConfigOptions,
+      buildRuntimeConfigCompatibilityError,
     });
     this.rollbackMonitor = new RollbackMonitor({
       getPreferredLabelValue,
       getLogger: () => this.log,
-      getCurrentContainer: (...args) => this.getCurrentContainer(...args),
-      inspectContainer: (...args) => this.inspectContainer(...args),
-      startHealthMonitor: (...args) => startHealthMonitor(...args),
+      ...pickOrchestratorCallbacks(this, ROLLBACK_MONITOR_ORCHESTRATOR_METHODS),
+      startHealthMonitor,
       getTriggerInstance: () => this,
     });
     this.updateLifecycleExecutor = new UpdateLifecycleExecutor({
       getLogger: () => this.log,
       getContainerFullName: (container) => fullName(container),
-      createTriggerContext: (...args) => this.createTriggerContext(...args),
-      maybeScanAndGateUpdate: (...args) => this.maybeScanAndGateUpdate(...args),
-      buildHookConfig: (...args) => this.buildHookConfig(...args),
-      recordHookConfigurationAudit: (...args) => this.recordHookConfigurationAudit(...args),
-      runPreUpdateHook: (...args) => this.runPreUpdateHook(...args),
-      isSelfUpdate: (...args) => this.isSelfUpdate(...args),
-      maybeNotifySelfUpdate: (...args) => this.maybeNotifySelfUpdate(...args),
-      executeSelfUpdate: (...args) => this.executeSelfUpdate(...args),
-      runPreRuntimeUpdateLifecycle: (...args) => this.runPreRuntimeUpdateLifecycle(...args),
-      performContainerUpdate: (...args) => this.performContainerUpdate(...args),
-      runPostUpdateHook: (...args) => this.runPostUpdateHook(...args),
-      cleanupOldImages: (...args) => this.cleanupOldImages(...args),
-      getRollbackConfig: (...args) => this.getRollbackConfig(...args),
-      maybeStartAutoRollbackMonitor: (...args) => this.maybeStartAutoRollbackMonitor(...args),
-      emitContainerUpdateApplied: (...args) => emitContainerUpdateApplied(...args),
-      emitContainerUpdateFailed: (...args) => emitContainerUpdateFailed(...args),
-      pruneOldBackups: (...args) => backupStore.pruneOldBackups(...args),
+      ...pickOrchestratorCallbacks(this, UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS),
+      emitContainerUpdateApplied,
+      emitContainerUpdateFailed,
+      pruneOldBackups: backupStore.pruneOldBackups,
       getBackupCount: () => this.configuration?.backupcount,
     });
   }
@@ -199,13 +265,13 @@ class Docker extends Trigger {
         },
         stateStore: {
           getContainer: (id) => storeContainer.getContainer(id, { includeRuntimeEnvValues: true }),
-          updateContainer: (...args) => storeContainer.updateContainer(...args),
+          updateContainer: storeContainer.updateContainer,
           cacheSecurityState,
         },
         telemetry: {
-          emitSecurityAlert: (...args) => emitSecurityAlert(...args),
+          emitSecurityAlert,
           fullName,
-          recordSecurityAudit: (...args) => this.recordSecurityAudit(...args),
+          ...pickOrchestratorCallbacks(this, SECURITY_GATE_ORCHESTRATOR_METHODS),
         },
       });
     }
@@ -608,7 +674,7 @@ class Docker extends Trigger {
     const containerName = currentContainer.Name.replace('/', '');
     const currentContainerNetworks = currentContainer.NetworkSettings?.Networks || {};
     const endpointsConfig = Object.entries(currentContainerNetworks).reduce(
-      (acc: Record<string, any>, [networkName, endpointConfig]) => {
+      (acc: Record<string, unknown>, [networkName, endpointConfig]) => {
         acc[networkName] = this.runtimeConfigManager.sanitizeEndpointConfig(
           endpointConfig,
           currentContainer.Id,
@@ -1046,7 +1112,7 @@ class Docker extends Trigger {
    * @param containers
    * @returns {Promise<unknown[]>}
    */
-  async triggerBatch(containers) {
+  async triggerBatch(containers): Promise<unknown[]> {
     const limit = pLimit(TRIGGER_BATCH_CONCURRENCY);
     return Promise.all(containers.map((container) => limit(() => this.trigger(container))));
   }
