@@ -663,20 +663,6 @@ const servers = computed(() => {
     });
   }
 
-  const webhookEnabled = serverInfo.value?.configuration?.webhook?.enabled;
-  if (typeof webhookEnabled === 'boolean') {
-    list.push({
-      name: 'Webhook API',
-      host: '/api/webhook',
-      status: webhookEnabled ? 'connected' : 'disconnected',
-      statusLabel: webhookEnabled ? 'Enabled' : 'Disabled',
-      containers: {
-        running: 0,
-        total: 0,
-      },
-    });
-  }
-
   return list;
 });
 
