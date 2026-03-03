@@ -37,10 +37,115 @@ interface PendingSelfUpdateAck {
   timeoutHandle?: ReturnType<typeof setTimeout>;
 }
 
+class ActiveSseClientRegistry {
+  private readonly byToken = new Map<string, ActiveSseClient>();
+  private readonly byTokenHash = new Map<string, ActiveSseClient>();
+  private readonly byResponse = new Map<Response, ActiveSseClient>();
+
+  add(client: ActiveSseClient): void {
+    this.byResponse.set(client.response, client);
+    this.byToken.set(client.clientToken, client);
+    this.byTokenHash.set(client.clientTokenHashHex, client);
+  }
+
+  remove(client: ActiveSseClient): void {
+    if (this.byToken.get(client.clientToken) === client) {
+      this.byToken.delete(client.clientToken);
+    }
+    if (this.byTokenHash.get(client.clientTokenHashHex) === client) {
+      this.byTokenHash.delete(client.clientTokenHashHex);
+    }
+    if (this.byResponse.get(client.response) === client) {
+      this.byResponse.delete(client.response);
+    }
+  }
+
+  clear(): void {
+    this.byToken.clear();
+    this.byTokenHash.clear();
+    this.byResponse.clear();
+  }
+
+  hasByResponse(response: Response): boolean {
+    return this.byResponse.has(response);
+  }
+
+  getByResponse(response: Response): ActiveSseClient | undefined {
+    return this.byResponse.get(response);
+  }
+
+  getByTokenHashHex(tokenHashHex: string): ActiveSseClient | undefined {
+    return this.byTokenHash.get(tokenHashHex);
+  }
+
+  listClientTokens(): Set<string> {
+    return new Set(this.byToken.keys());
+  }
+
+  sizeByToken(): number {
+    return this.byToken.size;
+  }
+
+  sizeByTokenHash(): number {
+    return this.byTokenHash.size;
+  }
+
+  sizeByResponse(): number {
+    return this.byResponse.size;
+  }
+
+  // Test helper used to validate stale-sweep behavior when indexes drift.
+  simulateTokenHashOnlyDrift(response: Response): void {
+    const client = this.byResponse.get(response);
+    if (!client) {
+      return;
+    }
+    if (this.byToken.get(client.clientToken) === client) {
+      this.byToken.delete(client.clientToken);
+    }
+    this.byResponse.delete(response);
+  }
+
+  hasConsistentReferences(client: ActiveSseClient): boolean {
+    return (
+      this.byResponse.get(client.response) === client &&
+      this.byToken.get(client.clientToken) === client &&
+      this.byTokenHash.get(client.clientTokenHashHex) === client
+    );
+  }
+
+  listClients(): IterableIterator<ActiveSseClient> {
+    return this.byResponse.values();
+  }
+}
+
 const clients = new Set<Response>();
-const activeSseClientsByToken = new Map<string, ActiveSseClient>();
-const activeSseClientsByTokenHash = new Map<string, ActiveSseClient>();
-const activeSseClientsByResponse = new Map<Response, ActiveSseClient>();
+const sseClientRegistry = new ActiveSseClientRegistry();
+// Invariant: each ActiveSseClient is either absent from all indexes or present
+// in all three maps with the same object reference.
+const activeSseClientRegistryTestAdapter = {
+  clear(): void {
+    sseClientRegistry.clear();
+  },
+  hasByResponse(response: Response): boolean {
+    return sseClientRegistry.hasByResponse(response);
+  },
+  getByResponse(response: Response): ActiveSseClient | undefined {
+    return sseClientRegistry.getByResponse(response);
+  },
+  sizeByToken(): number {
+    return sseClientRegistry.sizeByToken();
+  },
+  sizeByTokenHash(): number {
+    return sseClientRegistry.sizeByTokenHash();
+  },
+  sizeByResponse(): number {
+    return sseClientRegistry.sizeByResponse();
+  },
+  simulateTokenHashOnlyDrift(response: Response): void {
+    sseClientRegistry.simulateTokenHashOnlyDrift(response);
+  },
+};
 const pendingSelfUpdateAcks = new Map<string, PendingSelfUpdateAck>();
 let staleSweepIntervalHandle: ReturnType<typeof globalThis.setInterval> | undefined;
 
@@ -74,15 +179,14 @@ function hashToken(token: string): Buffer {
   return createHash('sha256').update(token, 'utf8').digest();
 }
 
+const DUMMY_CLIENT_TOKEN_HASH = hashToken('drydock-sse-dummy-client-token');
+
 function findActiveClientByTokenConstantTime(clientToken: string): ActiveSseClient | undefined {
   const providedTokenHash = hashToken(clientToken);
-  const activeClient = activeSseClientsByTokenHash.get(providedTokenHash.toString('hex'));
-  if (!activeClient) {
-    return undefined;
-  }
-  return timingSafeEqual(providedTokenHash, activeClient.clientTokenHash)
-    ? activeClient
-    : undefined;
+  const activeClient = sseClientRegistry.getByTokenHashHex(providedTokenHash.toString('hex'));
+  const comparisonHash = activeClient?.clientTokenHash ?? DUMMY_CLIENT_TOKEN_HASH;
+  const hashMatches = timingSafeEqual(providedTokenHash, comparisonHash);
+  return hashMatches && activeClient ? activeClient : undefined;
 }
 
 function hasEligibleClientTokenConstantTime(
@@ -107,50 +211,18 @@ function isResponseClosed(response: Response): boolean {
 
 function dropActiveClient(client: ActiveSseClient): void {
   clients.delete(client.response);
-  activeSseClientsByToken.delete(client.clientToken);
-  activeSseClientsByTokenHash.delete(client.clientTokenHashHex);
-  activeSseClientsByResponse.delete(client.response);
+  sseClientRegistry.remove(client);
 }
 
 function sweepStaleSseState(nowMs = Date.now()): void {
-  for (const [response, activeClient] of activeSseClientsByResponse) {
+  for (const activeClient of sseClientRegistry.listClients()) {
     const ageMs = nowMs - activeClient.connectedAtMs;
-    const missingClientSetEntry = !clients.has(response);
-    const missingTokenEntry =
-      activeSseClientsByToken.get(activeClient.clientToken) !== activeClient;
-    const missingTokenHashEntry =
-      activeSseClientsByTokenHash.get(activeClient.clientTokenHashHex) !== activeClient;
+    const missingClientSetEntry = !clients.has(activeClient.response);
+    const missingRegistryEntry = !sseClientRegistry.hasConsistentReferences(activeClient);
     const shouldDrop =
-      missingClientSetEntry ||
-      missingTokenEntry ||
-      missingTokenHashEntry ||
-      isResponseClosed(response);
+      missingClientSetEntry || missingRegistryEntry || isResponseClosed(activeClient.response);
     if (shouldDrop && ageMs >= SSE_STALE_ENTRY_TTL_MS) {
       dropActiveClient(activeClient);
-    }
-  }
-
-  for (const [token, activeClient] of activeSseClientsByToken) {
-    const ageMs = nowMs - activeClient.connectedAtMs;
-    const responseRef = activeSseClientsByResponse.get(activeClient.response);
-    const tokenHashRef = activeSseClientsByTokenHash.get(activeClient.clientTokenHashHex);
-    const missingResponseEntry = responseRef !== activeClient;
-    const missingTokenHashEntry = tokenHashRef !== activeClient;
-    const missingClientSetEntry = !clients.has(activeClient.response);
-    const shouldDrop =
-      missingResponseEntry ||
-      missingTokenHashEntry ||
-      missingClientSetEntry ||
-      isResponseClosed(activeClient.response);
-    if (shouldDrop && ageMs >= SSE_STALE_ENTRY_TTL_MS) {
-      activeSseClientsByToken.delete(token);
-      if (tokenHashRef === activeClient) {
-        activeSseClientsByTokenHash.delete(activeClient.clientTokenHashHex);
-      }
-      if (responseRef === activeClient) {
-        activeSseClientsByResponse.delete(activeClient.response);
-      }
-      clients.delete(activeClient.response);
     }
   }
 
@@ -206,9 +278,7 @@ function eventsHandler(req: Request, res: Response): void {
     response: res,
     connectedAtMs: Date.now(),
   };
-  activeSseClientsByResponse.set(res, activeClient);
-  activeSseClientsByToken.set(activeClient.clientToken, activeClient);
-  activeSseClientsByTokenHash.set(activeClient.clientTokenHashHex, activeClient);
+  sseClientRegistry.add(activeClient);
 
   // Send initial connection event
   res.write(
@@ -235,7 +305,7 @@ function eventsHandler(req: Request, res: Response): void {
     disconnected = true;
     globalThis.clearInterval(heartbeatInterval);
     clients.delete(res);
-    const disconnectedClient = activeSseClientsByResponse.get(res);
+    const disconnectedClient = sseClientRegistry.getByResponse(res);
     if (disconnectedClient) {
       dropActiveClient(disconnectedClient);
     }
@@ -300,7 +370,7 @@ async function broadcastSelfUpdate(payload: SelfUpdateStartingEventPayload): Pro
     startedAt,
   };
   const serializedPayload = JSON.stringify(eventPayload);
-  const eligibleClientTokens = new Set(activeSseClientsByToken.keys());
+  const eligibleClientTokens = sseClientRegistry.listClientTokens();
 
   for (const client of clients) {
     client.write(`event: dd:self-update\ndata: ${serializedPayload}\n\n`);
@@ -471,9 +541,7 @@ function resetInitializationStateForTests(): void {
 // For testing
 export {
   clients as _clients,
-  activeSseClientsByToken as _activeSseClientsByToken,
-  activeSseClientsByTokenHash as _activeSseClientsByTokenHash,
-  activeSseClientsByResponse as _activeSseClientsByResponse,
+  activeSseClientRegistryTestAdapter as _activeSseClientRegistry,
   connectionsPerIp as _connectionsPerIp,
   connectionsPerSession as _connectionsPerSession,
   MAX_CONNECTIONS_PER_IP as _MAX_CONNECTIONS_PER_IP,

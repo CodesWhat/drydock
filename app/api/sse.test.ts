@@ -151,9 +151,7 @@ describe('SSE Router', () => {
     sseRouter._resetInitializationStateForTests();
     // Clear clients and connection tracking between tests
     sseRouter._clients.clear();
-    sseRouter._activeSseClientsByToken.clear();
-    sseRouter._activeSseClientsByTokenHash.clear();
-    sseRouter._activeSseClientsByResponse.clear();
+    sseRouter._activeSseClientRegistry.clear();
     sseRouter._connectionsPerIp.clear();
     sseRouter._connectionsPerSession.clear();
     sseRouter._clearPendingSelfUpdateAcks();
@@ -284,16 +282,16 @@ describe('SSE Router', () => {
 
       handler(req, res);
       expect(sseRouter._clients.has(res)).toBe(true);
-      expect(sseRouter._activeSseClientsByResponse.has(res)).toBe(true);
-      expect(sseRouter._activeSseClientsByToken.size).toBe(1);
+      expect(sseRouter._activeSseClientRegistry.hasByResponse(res)).toBe(true);
+      expect(sseRouter._activeSseClientRegistry.sizeByToken()).toBe(1);
       expect(sseRouter._connectionsPerIp.get('127.0.0.1')).toBe(1);
 
       // Simulate abrupt client-side abort
       req._listeners.aborted();
 
       expect(sseRouter._clients.has(res)).toBe(false);
-      expect(sseRouter._activeSseClientsByResponse.has(res)).toBe(false);
-      expect(sseRouter._activeSseClientsByToken.size).toBe(0);
+      expect(sseRouter._activeSseClientRegistry.hasByResponse(res)).toBe(false);
+      expect(sseRouter._activeSseClientRegistry.sizeByToken()).toBe(0);
       expect(sseRouter._connectionsPerIp.has('127.0.0.1')).toBe(false);
     });
 
@@ -309,8 +307,8 @@ describe('SSE Router', () => {
       res._listeners.close();
 
       expect(sseRouter._clients.has(res)).toBe(false);
-      expect(sseRouter._activeSseClientsByResponse.has(res)).toBe(false);
-      expect(sseRouter._activeSseClientsByToken.size).toBe(0);
+      expect(sseRouter._activeSseClientRegistry.hasByResponse(res)).toBe(false);
+      expect(sseRouter._activeSseClientRegistry.sizeByToken()).toBe(0);
       expect(sseRouter._connectionsPerIp.has('127.0.0.1')).toBe(false);
     });
 
@@ -349,10 +347,10 @@ describe('SSE Router', () => {
     test('should periodically sweep stale client and pending ack map entries', () => {
       const handler = getHandler();
       const { res } = connectSseClient(handler);
-      const activeClient = sseRouter._activeSseClientsByResponse.get(res);
+      const activeClient = sseRouter._activeSseClientRegistry.getByResponse(res);
 
       expect(activeClient).toBeDefined();
-      expect(sseRouter._activeSseClientsByToken.size).toBe(1);
+      expect(sseRouter._activeSseClientRegistry.sizeByToken()).toBe(1);
 
       // Simulate orphaned entries that were not cleaned up by connection events.
       sseRouter._clients.delete(res);
@@ -370,9 +368,28 @@ describe('SSE Router', () => {
 
       vi.advanceTimersByTime(31 * 60 * 1000);
 
-      expect(sseRouter._activeSseClientsByResponse.size).toBe(0);
-      expect(sseRouter._activeSseClientsByToken.size).toBe(0);
+      expect(sseRouter._activeSseClientRegistry.sizeByResponse()).toBe(0);
+      expect(sseRouter._activeSseClientRegistry.sizeByToken()).toBe(0);
       expect(sseRouter._pendingSelfUpdateAcks.has('op-stale-sweep')).toBe(false);
+    });
+
+    test('should sweep stale entries by response index only', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const activeClient = sseRouter._activeSseClientRegistry.getByResponse(res);
+
+      expect(activeClient).toBeDefined();
+      expect(sseRouter._activeSseClientRegistry.sizeByTokenHash()).toBe(1);
+
+      // Simulate map drift where only the token-hash map retained the client.
+      // Sweep should only consider response-indexed clients.
+      sseRouter._clients.delete(res);
+      sseRouter._activeSseClientRegistry.simulateTokenHashOnlyDrift(res);
+      (activeClient as any).connectedAtMs = Date.now() - 60 * 60 * 1000;
+
+      sseRouter._sweepStaleSseState(Date.now());
+
+      expect(sseRouter._activeSseClientRegistry.sizeByTokenHash()).toBe(1);
     });
   });
 
@@ -762,6 +779,38 @@ describe('SSE Router', () => {
         }),
       );
       expect(sseRouter._pendingSelfUpdateAcks.has('op-unknown-client')).toBe(true);
+    });
+
+    test('should perform a timing-safe compare even when client token is unknown', () => {
+      const handler = getHandler();
+      const { clientId } = connectSseClient(handler);
+      sseRouter._pendingSelfUpdateAcks.set('op-constant-time', {
+        operationId: 'op-constant-time',
+        requiresAck: true,
+        ackTimeoutMs: 1000,
+        createdAtMs: Date.now(),
+        clientsAtEmit: 1,
+        eligibleClientTokens: new Set<string>(['known-token']),
+        ackedClientIds: new Set<string>(),
+        resolved: false,
+      });
+      const ackHandler = getAckHandler();
+      const req = {
+        params: { operationId: 'op-constant-time' },
+        body: { clientId, clientToken: 'unknown-token' },
+      };
+      const jsonRes = createJsonResponse();
+
+      ackHandler(req, jsonRes);
+
+      expect(mockTimingSafeEqual).toHaveBeenCalledTimes(1);
+      expect(jsonRes.status).toHaveBeenCalledWith(403);
+      expect(jsonRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'rejected',
+          reason: 'invalid-or-expired-client-token',
+        }),
+      );
     });
   });
 
