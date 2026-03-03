@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from 'node:fs/promises';
 import * as container from './container.js';
 

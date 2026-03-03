@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Hub from './Hub.js';
 
 // Mock axios

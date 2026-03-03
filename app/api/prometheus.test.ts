@@ -1,4 +1,3 @@
-// @ts-nocheck
 vi.mock('express', () => ({
   default: {
     Router: vi.fn(() => ({

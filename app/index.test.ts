@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Mock all dependencies
 vi.mock('./configuration', () => ({
   getVersion: vi.fn(() => '1.0.0'),

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import BaseRegistry from '../../BaseRegistry.js';
 import { getBasicAuthConfigurationSchema } from '../shared/basicAuthConfigurationSchema.js';
 

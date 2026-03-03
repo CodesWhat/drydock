@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Component from './Component.js';
 
 beforeEach(async () => {

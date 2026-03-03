@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Codeberg from './Codeberg.js';
 
 // Test fixture credentials - not real secrets

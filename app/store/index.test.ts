@@ -1,4 +1,3 @@
-// @ts-nocheck
 import fs from 'node:fs';
 import * as store from './index.js';
 

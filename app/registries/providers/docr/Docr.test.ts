@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Docr from './Docr.js';
 
 // Test fixture credentials - not real secrets

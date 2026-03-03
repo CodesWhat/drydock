@@ -1,4 +1,3 @@
-// @ts-nocheck
 import log from '../log/index.js';
 
 vi.mock('axios');

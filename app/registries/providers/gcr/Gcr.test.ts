@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Gcr from './Gcr.js';
 
 // Test fixture credentials - not real secrets

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import axios from 'axios';
 import Ghcr from './Ghcr.js';
 

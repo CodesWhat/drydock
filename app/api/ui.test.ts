@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { mockRouter } = vi.hoisted(() => ({
   mockRouter: {
     use: vi.fn(),

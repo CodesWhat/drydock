@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import express from 'express';
 import nocache from 'nocache';
 import { byString, byValues } from 'sort-es';

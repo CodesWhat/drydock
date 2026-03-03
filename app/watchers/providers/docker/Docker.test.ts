@@ -1,4 +1,3 @@
-// @ts-nocheck
 import type { Mocked } from 'vitest';
 import * as event from '../../../event/index.js';
 import { fullName } from '../../../model/container.js';

@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { mockRouter, mockLokiStore } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
   mockLokiStore: vi.fn(),

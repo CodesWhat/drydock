@@ -1,4 +1,3 @@
-// @ts-nocheck
 import express from 'express';
 import { ClientSecretPost, Configuration } from 'openid-client';
 import * as configuration from '../../../configuration/index.js';

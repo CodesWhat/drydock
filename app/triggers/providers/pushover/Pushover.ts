@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Push from 'pushover-notifications';
 import Trigger from '../Trigger.js';
 

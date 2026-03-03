@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Dhi from './Dhi.js';
 
 // Test fixture credentials - not real secrets

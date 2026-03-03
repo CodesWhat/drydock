@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Trueforge from './trueforge.js';
 
 vi.mock('axios');

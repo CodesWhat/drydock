@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Acr from './Acr.js';
 
 const acr = new Acr();

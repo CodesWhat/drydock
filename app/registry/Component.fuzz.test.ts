@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { fc, test as fcTest } from '@fast-check/vitest';
 import { describe, expect, test } from 'vitest';
 import Component from './Component.js';

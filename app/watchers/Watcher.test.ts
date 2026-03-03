@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import type { Container, ContainerReport } from '../model/container.js';
 import Watcher from './Watcher.js';
 

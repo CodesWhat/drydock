@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { fc, test as fcTest } from '@fast-check/vitest';
 import parse from 'parse-docker-image-name';
 import { describe, expect, it } from 'vitest';

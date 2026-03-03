@@ -1,4 +1,3 @@
-// @ts-nocheck
 vi.mock('../store/container');
 vi.mock('../log');
 

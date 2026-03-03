@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 vi.mock('axios');
 
 import Gotify from './Gotify.js';

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as app from './app.js';
 import * as migrate from './migrate.js';
 

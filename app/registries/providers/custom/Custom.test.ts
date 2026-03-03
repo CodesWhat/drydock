@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Custom from './Custom.js';
 
 // Test fixture credentials - not real secrets

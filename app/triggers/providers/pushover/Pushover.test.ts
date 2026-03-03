@@ -1,4 +1,3 @@
-// @ts-nocheck
 import joi from 'joi';
 
 vi.mock('pushover-notifications', () => ({

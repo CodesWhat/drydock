@@ -1,4 +1,3 @@
-// @ts-nocheck
 import express from 'express';
 import nocache from 'nocache';
 import * as storeApp from '../store/app.js';

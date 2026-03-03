@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Mock the configuration module
 vi.mock('../configuration', () => ({
   getServerConfiguration: vi.fn(() => ({

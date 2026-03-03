@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { beforeEach, describe, expect, test } from 'vitest';
 import * as event from '../../event/index.js';
 import * as eventApi from './event.js';

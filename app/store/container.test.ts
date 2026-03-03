@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import * as event from '../event/index.js';
 import { createContainerFixture } from '../test/helpers.js';
 import * as container from './container.js';

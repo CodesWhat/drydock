@@ -1,4 +1,3 @@
-// @ts-nocheck
 import joi from 'joi';
 import log from '../../../log/index.js';
 import * as registryStore from '../../../registry';

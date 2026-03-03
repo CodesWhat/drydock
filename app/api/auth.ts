@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import ConnectLoki from 'connect-loki';
 import { randomBytes } from 'crypto';
 import express from 'express';

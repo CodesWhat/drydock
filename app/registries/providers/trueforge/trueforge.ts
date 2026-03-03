@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Quay from '../quay/Quay.js';
 
 /**

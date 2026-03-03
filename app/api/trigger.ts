@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import * as agent from '../agent/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';

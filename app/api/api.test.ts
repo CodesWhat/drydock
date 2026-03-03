@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { mockInit } = vi.hoisted(() => ({
   mockInit: () => ({ init: vi.fn(() => ({ use: vi.fn(), get: vi.fn(), post: vi.fn() })) }),
 }));

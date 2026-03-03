@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Basic from './Basic.js';
 
 describe('Basic Authentication', () => {

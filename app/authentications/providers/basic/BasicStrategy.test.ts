@@ -1,4 +1,3 @@
-// @ts-nocheck
 import BasicStrategy from './BasicStrategy.js';
 
 const basicStrategy = new BasicStrategy({}, () => {});

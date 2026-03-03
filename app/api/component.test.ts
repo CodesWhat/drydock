@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { createMockResponse } from '../test/helpers.js';
 
 const { mockRouter } = vi.hoisted(() => ({

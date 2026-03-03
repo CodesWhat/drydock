@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { collectDefaultMetrics, register } from 'prom-client';
 
 import logger from '../log/index.js';

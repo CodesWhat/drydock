@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { register, Summary } from 'prom-client';
 
 let summaryGetTags;

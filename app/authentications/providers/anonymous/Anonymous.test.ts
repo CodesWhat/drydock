@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Anonymous from './Anonymous.js';
 
 describe('Anonymous Authentication', () => {

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, expect, test } from 'vitest';
 import Agent from './Agent.js';
 

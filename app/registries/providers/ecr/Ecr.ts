@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { ECRClient, GetAuthorizationTokenCommand } from '@aws-sdk/client-ecr';
 import axios from 'axios';
 import { requireAuthString, withAuthorizationHeader } from '../../../security/auth.js';

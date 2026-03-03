@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import { WebClient } from '@slack/web-api';
 import joi from 'joi';
 
