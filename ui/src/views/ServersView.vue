@@ -21,7 +21,6 @@ const serversViewMode = useViewMode('servers');
 const loading = ref(true);
 const error = ref<string | null>(null);
 const servers = ref<ServerEntry[]>([]);
-const webhookEnabled = ref<boolean | null>(null);
 
 const searchQuery = ref('');
 const showFilters = ref(false);
@@ -106,11 +105,6 @@ async function fetchServers() {
       getAgents(),
       getAllContainers(),
     ]);
-    webhookEnabled.value =
-      typeof serverData?.configuration?.webhook?.enabled === 'boolean'
-        ? serverData.configuration.webhook.enabled
-        : false;
-
     const safeContainers = containersData ?? [];
     const containerCounts = countContainersByWatcher(safeContainers);
     const imageCounts = countImagesByWatcher(safeContainers);
@@ -149,7 +143,6 @@ async function fetchServers() {
     servers.value = entries;
   } catch (e: unknown) {
     error.value = errorMessage(e, 'Failed to load server data');
-    webhookEnabled.value = null;
   } finally {
     loading.value = false;
   }
@@ -167,18 +160,6 @@ onMounted(fetchServers);
     </div>
 
     <div v-if="loading" class="text-[11px] dd-text-muted py-3 px-1">Loading server data...</div>
-
-    <div v-if="!loading && webhookEnabled !== null"
-         class="mb-3 flex items-center justify-end gap-2">
-      <span class="text-[10px] font-semibold uppercase tracking-wider dd-text-muted">Webhook API</span>
-      <span class="badge text-[9px] uppercase font-bold"
-            :style="{
-              backgroundColor: webhookEnabled ? 'var(--dd-success-muted)' : 'var(--dd-neutral-muted)',
-              color: webhookEnabled ? 'var(--dd-success)' : 'var(--dd-neutral)',
-            }">
-        {{ webhookEnabled ? 'Enabled' : 'Disabled' }}
-      </span>
-    </div>
 
     <!-- Filter bar -->
     <DataFilterBar
