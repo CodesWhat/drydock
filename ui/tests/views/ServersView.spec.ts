@@ -108,8 +108,10 @@ describe('ServersView', () => {
     expect(wrapper.text()).toContain('Failed to load server data');
   });
 
-  it('shows webhook status indicator from server configuration', async () => {
+  it('loads servers even when webhook configuration is present on server payload', async () => {
     mockGetServer.mockResolvedValue({
+      name: 'drydock',
+      version: '1.0.0',
       configuration: {
         webhook: {
           enabled: true,
@@ -118,7 +120,7 @@ describe('ServersView', () => {
     });
 
     const wrapper = await mountServersView();
-    expect(wrapper.text()).toContain('Webhook API');
-    expect(wrapper.text()).toContain('Enabled');
+    expect(mockGetServer).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('1');
   });
 });

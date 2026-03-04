@@ -6,13 +6,30 @@
  * collections).  The `iconify-icon` web component checks its local cache first;
  * registered icons never hit the CDN.
  *
+ * When internetless mode is enabled, the Iconify API module is replaced with a
+ * no-op so the web component never attempts CDN fetches.  Unregistered icons
+ * will render as an empty box instead of triggering CSP / network errors.
+ *
  * Regenerate after editing icons.ts:  node scripts/extract-icons.mjs
  */
-import { addIcon } from 'iconify-icon';
+import { _api, addIcon } from 'iconify-icon';
 import bundle from './icon-bundle.json';
 
 export function registerIcons() {
   for (const [name, data] of Object.entries(bundle)) {
     addIcon(name, data as { body: string; width: number; height: number });
   }
+}
+
+/**
+ * Disable Iconify CDN fetching (internetless mode).
+ * Replaces the default fetch-based API module with a no-op so the web
+ * component only uses pre-registered icons from the bundle.
+ */
+export function disableIconifyApi() {
+  _api.setAPIModule('', {
+    prepare: (_provider: string, _prefix: string, _icons: string[]) =>
+      [] as { provider: string; prefix: string; icons: string[] }[],
+    send: (_host: string, _params: unknown, _callback: unknown) => {},
+  });
 }

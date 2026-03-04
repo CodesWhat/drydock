@@ -37,9 +37,9 @@ export function actionIcon(action: string): string {
   if (action.includes('security-alert')) return 'security';
   if (action.includes('agent-disconnect')) return 'network';
   if (action.includes('rollback') || action === 'auto-rollback') return 'restart';
+  if (action.includes('restart')) return 'restart';
   if (action.includes('start')) return 'play';
   if (action.includes('stop')) return 'stop';
-  if (action.includes('restart')) return 'restart';
   if (action.includes('added')) return 'containers';
   if (action.includes('removed')) return 'trash';
   if (action.includes('webhook')) return 'bolt';

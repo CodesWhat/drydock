@@ -37,6 +37,7 @@ const transitionStub = {
   template: '<slot />',
   props: ['name'],
 };
+const mountedWrappers: ReturnType<typeof mount>[] = [];
 
 function findDropdown(wrapper: ReturnType<typeof mount>) {
   return wrapper.find('.notification-bell-wrapper div.absolute');
@@ -53,10 +54,19 @@ describe('NotificationBell', () => {
     localStorage.clear();
   });
 
+  afterEach(() => {
+    for (const wrapper of mountedWrappers.splice(0)) {
+      wrapper.unmount();
+    }
+    vi.useRealTimers();
+  });
+
   function factory() {
-    return mount(NotificationBell, {
+    const wrapper = mount(NotificationBell, {
       global: { stubs: { AppIcon: iconStub, Transition: transitionStub } },
     });
+    mountedWrappers.push(wrapper);
+    return wrapper;
   }
 
   async function openBell(wrapper: ReturnType<typeof mount>) {
@@ -109,6 +119,15 @@ describe('NotificationBell', () => {
     await flushPromises();
     await openBell(wrapper);
     expect(findDropdown(wrapper).exists()).toBe(true);
+  });
+
+  it('constrains dropdown width on narrow viewports', async () => {
+    const wrapper = factory();
+    await flushPromises();
+    await openBell(wrapper);
+    const className = findDropdown(wrapper).attributes('class');
+    expect(className).toContain('w-[calc(100vw-1rem)]');
+    expect(className).toContain('max-w-[380px]');
   });
 
   it('closes dropdown on second click', async () => {
@@ -253,20 +272,49 @@ describe('NotificationBell', () => {
     expect(mediumAfter.length).toBe(2);
   });
 
-  it('SSE container-changed event triggers refetch', async () => {
-    factory();
-    await flushPromises();
-    mockGetAuditLog.mockClear();
-    globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
-    expect(mockGetAuditLog).toHaveBeenCalled();
+  it('debounces burst SSE events into one refetch', async () => {
+    vi.useFakeTimers();
+    try {
+      factory();
+      await flushPromises();
+      mockGetAuditLog.mockClear();
+
+      globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
+      globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
+      globalThis.dispatchEvent(new Event('dd:sse-container-changed'));
+      await flushPromises();
+
+      expect(mockGetAuditLog).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(799);
+      await flushPromises();
+      expect(mockGetAuditLog).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      await flushPromises();
+      expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('SSE scan-completed event triggers refetch', async () => {
-    factory();
-    await flushPromises();
-    mockGetAuditLog.mockClear();
-    globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
-    expect(mockGetAuditLog).toHaveBeenCalled();
+  it('cancels pending SSE refetch on unmount', async () => {
+    vi.useFakeTimers();
+    try {
+      const wrapper = factory();
+      await flushPromises();
+      mockGetAuditLog.mockClear();
+
+      globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
+      await flushPromises();
+      wrapper.unmount();
+
+      vi.advanceTimersByTime(800);
+      await flushPromises();
+      expect(mockGetAuditLog).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('sets aria-expanded on toggle', async () => {

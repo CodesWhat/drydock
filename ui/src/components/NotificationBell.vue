@@ -58,8 +58,13 @@ function handleClickOutside(e: PointerEvent) {
   }
 }
 
+let sseDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+
 function handleSseEvent() {
-  fetchEntries();
+  clearTimeout(sseDebounceTimer);
+  sseDebounceTimer = setTimeout(() => {
+    fetchEntries();
+  }, 800);
 }
 
 onMounted(() => {
@@ -70,6 +75,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  clearTimeout(sseDebounceTimer);
   document.removeEventListener('pointerdown', handleClickOutside);
   globalThis.removeEventListener('dd:sse-container-changed', handleSseEvent);
   globalThis.removeEventListener('dd:sse-scan-completed', handleSseEvent);
@@ -102,7 +108,7 @@ function isUnread(entry: AuditEntry): boolean {
     </button>
     <Transition name="menu-fade">
       <div v-if="showBell"
-           class="absolute right-0 top-full mt-1 w-[380px] dd-rounded-lg shadow-lg z-50"
+           class="absolute right-0 top-full mt-1 w-[calc(100vw-1rem)] max-w-[380px] dd-rounded-lg shadow-lg z-50"
            :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-lg)' }">
         <!-- Header -->
         <div class="flex items-center justify-between px-3 py-2"

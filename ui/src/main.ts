@@ -1,6 +1,6 @@
 import { createApp } from 'vue';
 import App from './App.vue';
-import { registerIcons } from './boot/icons';
+import { disableIconifyApi, registerIcons } from './boot/icons';
 import AppIcon from './components/AppIcon.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import ContainerIcon from './components/ContainerIcon.vue';
@@ -16,11 +16,24 @@ import ToggleSwitch from './components/ToggleSwitch.vue';
 import { tooltip as Tooltip } from './directives/tooltip';
 import AppLayout from './layouts/AppLayout.vue';
 import router from './router';
+import { getSettings } from './services/settings';
 import './theme/tokens.css';
 import './style.css';
 
 // Pre-register only the icons we use so they render offline (no CDN fetch)
 registerIcons();
+
+// Disable Iconify CDN fetching when internetless mode is active.
+// Runs async — bundled icons are already registered above, so the UI renders
+// immediately while this check completes in the background.
+getSettings()
+  .then((s) => {
+    if (s.internetlessMode) disableIconifyApi();
+  })
+  .catch(() => {
+    // Settings unavailable (e.g. backend not ready yet) — leave CDN enabled;
+    // the CSP will block fetches anyway if the network is unreachable.
+  });
 
 const app = createApp(App);
 app.component('AppIcon', AppIcon);

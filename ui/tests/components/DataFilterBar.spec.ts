@@ -187,6 +187,11 @@ describe('DataFilterBar', () => {
       const w = factory({}, { left: '<span class="left-content">Left</span>' });
       expect(w.find('.left-content').exists()).toBe(true);
     });
+
+    it('renders center slot', () => {
+      const w = factory({}, { center: '<button class="center-content">Scan Now</button>' });
+      expect(w.find('.center-content').exists()).toBe(true);
+    });
   });
 
   describe('themed tooltips', () => {

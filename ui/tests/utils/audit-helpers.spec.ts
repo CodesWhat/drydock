@@ -61,7 +61,7 @@ describe('audit-helpers', () => {
       ['auto-rollback', 'restart'],
       ['container-start', 'play'],
       ['container-stop', 'stop'],
-      ['container-restart', 'play'],
+      ['container-restart', 'restart'],
       ['container-added', 'containers'],
       ['container-removed', 'trash'],
       ['webhook-watch', 'bolt'],

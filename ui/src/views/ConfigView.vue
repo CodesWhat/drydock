@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { disableIconifyApi } from '../boot/icons';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
 import {
@@ -395,6 +396,9 @@ async function toggleInternetlessMode() {
   try {
     const updated = await updateSettings({ internetlessMode: !internetlessMode.value });
     internetlessMode.value = updated.internetlessMode;
+    if (updated.internetlessMode) {
+      disableIconifyApi();
+    }
   } catch (e: unknown) {
     settingsError.value = errorMessage(e, 'Failed to update network settings');
   } finally {

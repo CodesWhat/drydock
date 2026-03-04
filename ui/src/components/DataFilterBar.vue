@@ -62,6 +62,9 @@ function viewModeLabel(id: string): string {
         <!-- Left slot (extra controls, after extra-buttons) -->
         <slot name="left" />
 
+        <!-- Center slot (primary actions like Scan Now) -->
+        <slot name="center" />
+
         <!-- Right side: count + view mode switcher -->
         <div class="flex items-center gap-2 ml-auto">
           <span class="text-[10px] font-semibold tabular-nums shrink-0 px-2 py-1 dd-rounded dd-text-muted dd-bg-card">

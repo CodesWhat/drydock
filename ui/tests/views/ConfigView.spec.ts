@@ -42,6 +42,11 @@ vi.mock('@/services/agent', () => ({
   getAgents: (...args: any[]) => mockGetAgents(...args),
 }));
 
+const mockDisableIconifyApi = vi.fn();
+vi.mock('@/boot/icons', () => ({
+  disableIconifyApi: (...args: any[]) => mockDisableIconifyApi(...args),
+}));
+
 const { mockScrollBlocked, mockAutoFetchInterval } = vi.hoisted(() => {
   // Create minimal ref-like objects with __v_isRef so Vue's template compiler unwraps them
   function fakeRef<T>(val: T) {
@@ -524,6 +529,25 @@ describe('ConfigView', () => {
 
       await vi.waitFor(() => {
         expect(mockUpdateSettings).toHaveBeenCalledWith({ internetlessMode: true });
+      });
+    });
+
+    it('disables Iconify API when internetless mode is enabled', async () => {
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+      mockUpdateSettings.mockResolvedValue({ internetlessMode: true });
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+      await nextTick();
+      await nextTick();
+
+      const allButtons = w.findAll('button');
+      const toggleBtn = allButtons.find((b) => b.classes().some((c) => c.includes('w-10')));
+      await toggleBtn?.trigger('click');
+
+      await vi.waitFor(() => {
+        expect(mockDisableIconifyApi).toHaveBeenCalled();
       });
     });
   });
