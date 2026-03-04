@@ -1,7 +1,12 @@
 import type { Request, Response } from 'express';
 import type { AgentClient } from '../../agent/AgentClient.js';
 import type { Container, ContainerReport } from '../../model/container.js';
-import { getPathParamValue } from './request-helpers.js';
+import {
+  getPathParamValue,
+  parseBooleanQueryParam,
+  parseIntegerQueryParam,
+} from './request-helpers.js';
+import { isSensitiveKey } from './shared.js';
 
 interface CrudStoreContainerApi {
   getContainer: (id: string) => Container | undefined;
@@ -24,6 +29,16 @@ interface LocalContainerWatcher {
   watchContainer: (container: Container) => Promise<ContainerReport>;
 }
 
+interface AuditStoreApi {
+  insertAudit: (entry: {
+    action: string;
+    containerName: string;
+    containerImage?: string;
+    status: string;
+    details?: string;
+  }) => unknown;
+}
+
 export interface CrudHandlerDependencies {
   getContainersFromStore: (query: Request['query']) => Container[];
   storeContainer: CrudStoreContainerApi;
@@ -35,6 +50,76 @@ export interface CrudHandlerDependencies {
   getWatchers: () => Record<string, LocalContainerWatcher>;
   redactContainerRuntimeEnv: (container: Container) => Container;
   redactContainersRuntimeEnv: (containers: Container[]) => Container[];
+  getContainerRaw?: (id: string) => Container | undefined;
+  auditStore?: AuditStoreApi;
+}
+
+const CONTAINER_LIST_MAX_LIMIT = 200;
+
+function removeContainerListControlParams(query: Request['query']): Request['query'] {
+  const filteredQuery: Record<string, unknown> = {};
+  Object.entries(query || {}).forEach(([key, value]) => {
+    if (key === 'includeVulnerabilities' || key === 'limit' || key === 'offset') {
+      return;
+    }
+    filteredQuery[key] = value;
+  });
+  return filteredQuery as Request['query'];
+}
+
+function normalizeContainerListPagination(query: Request['query']) {
+  const parsedLimit = parseIntegerQueryParam(query.limit, 0);
+  const parsedOffset = parseIntegerQueryParam(query.offset, 0);
+  return {
+    limit: Math.min(CONTAINER_LIST_MAX_LIMIT, Math.max(0, parsedLimit)),
+    offset: Math.max(0, parsedOffset),
+  };
+}
+
+function applyContainerListPagination(containers: Container[], query: Request['query']) {
+  const { limit, offset } = normalizeContainerListPagination(query);
+  if (limit === 0 && offset === 0) {
+    return containers;
+  }
+  if (limit === 0) {
+    return containers.slice(offset);
+  }
+  return containers.slice(offset, offset + limit);
+}
+
+function stripContainerVulnerabilityArrays(container: Container): Container {
+  if (!container.security) {
+    return container;
+  }
+  return {
+    ...container,
+    security: {
+      ...container.security,
+      scan: container.security.scan
+        ? {
+            ...container.security.scan,
+            vulnerabilities: [],
+          }
+        : container.security.scan,
+      updateScan: container.security.updateScan
+        ? {
+            ...container.security.updateScan,
+            vulnerabilities: [],
+          }
+        : container.security.updateScan,
+    },
+  };
+}
+
+function isContainerRunning(container: Container): boolean {
+  return String(container.status ?? '').toLowerCase() === 'running';
+}
+
+function getSecurityIssueCount(containers: Container[]): number {
+  return containers.filter((container) => {
+    const summary = container.security?.scan?.summary;
+    return Number(summary?.critical ?? 0) > 0 || Number(summary?.high ?? 0) > 0;
+  }).length;
 }
 
 export function createCrudHandlers({
@@ -48,6 +133,8 @@ export function createCrudHandlers({
   getWatchers,
   redactContainerRuntimeEnv,
   redactContainersRuntimeEnv,
+  getContainerRaw,
+  auditStore,
 }: CrudHandlerDependencies) {
   /**
    * Get all (filtered) containers.
@@ -56,8 +143,36 @@ export function createCrudHandlers({
    */
   function getContainers(req: Request, res: Response) {
     const { query } = req;
-    const containers = getContainersFromStore(query);
-    res.status(200).json(redactContainersRuntimeEnv(containers));
+    const includeVulnerabilities = parseBooleanQueryParam(query.includeVulnerabilities, false);
+    const filteredQuery = removeContainerListControlParams(query);
+    const containers = getContainersFromStore(filteredQuery);
+    const pagedContainers = applyContainerListPagination(containers, query);
+    const redactedContainers = redactContainersRuntimeEnv(pagedContainers);
+    const responsePayload = includeVulnerabilities
+      ? redactedContainers
+      : redactedContainers.map((container) => stripContainerVulnerabilityArrays(container));
+    res.status(200).json(responsePayload);
+  }
+
+  /**
+   * Get lightweight container/security badge summary for sidebar refreshes.
+   * @param _req
+   * @param res
+   */
+  function getContainerSummary(_req: Request, res: Response) {
+    const containers = getContainersFromStore({});
+    const running = containers.filter((container) => isContainerRunning(container)).length;
+    const total = containers.length;
+    res.status(200).json({
+      containers: {
+        total,
+        running,
+        stopped: Math.max(total - running, 0),
+      },
+      security: {
+        issues: getSecurityIssueCount(containers),
+      },
+    });
   }
 
   /**
@@ -208,12 +323,59 @@ export function createCrudHandlers({
     }
   }
 
+  /**
+   * Reveal unredacted environment variables for a container.
+   * @param req
+   * @param res
+   */
+  function revealContainerEnv(req: Request, res: Response) {
+    if (!getContainerRaw || !auditStore) {
+      res.sendStatus(501);
+      return;
+    }
+
+    const id = getPathParamValue(req.params.id);
+    const container = getContainerRaw(id);
+    if (!container) {
+      res.sendStatus(404);
+      return;
+    }
+
+    const details = container.details as { env?: unknown[] } | undefined;
+    const rawEnv = Array.isArray(details?.env) ? details.env : [];
+
+    const env = rawEnv
+      .filter(
+        (entry): entry is { key: string; value: string } =>
+          !!entry &&
+          typeof entry === 'object' &&
+          typeof (entry as { key?: unknown }).key === 'string',
+      )
+      .map((entry) => ({
+        key: entry.key,
+        value: entry.value,
+        sensitive: isSensitiveKey(entry.key),
+      }));
+
+    auditStore.insertAudit({
+      action: 'env-reveal',
+      containerName: container.name,
+      containerImage: container.image?.name,
+      status: 'info',
+      details: `Revealed ${env.filter((e) => e.sensitive).length} sensitive env var(s)`,
+    });
+
+    res.status(200).json({ env });
+  }
+
   return {
     getContainers,
+    getContainerSummary,
     getContainer,
     getContainerUpdateOperations,
     deleteContainer,
     watchContainers,
     watchContainer,
+    revealContainerEnv,
   };
 }

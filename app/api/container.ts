@@ -14,6 +14,7 @@ import {
   scanImageForVulnerabilities,
   verifyImageSignature,
 } from '../security/scan.js';
+import * as auditStore from '../store/audit.js';
 import * as storeContainer from '../store/container.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
@@ -85,6 +86,8 @@ const crudHandlers = createCrudHandlers({
   getWatchers,
   redactContainerRuntimeEnv,
   redactContainersRuntimeEnv,
+  getContainerRaw: storeContainer.getContainerRaw,
+  auditStore,
 });
 
 const triggerHandlers = createTriggerHandlers({
@@ -142,6 +145,7 @@ export function init() {
   router.use(nocache());
   router.get('/', crudHandlers.getContainers);
   router.post('/watch', crudHandlers.watchContainers);
+  router.get('/summary', crudHandlers.getContainerSummary);
   router.get('/:id', crudHandlers.getContainer);
   router.get('/:id/update-operations', crudHandlers.getContainerUpdateOperations);
   router.delete('/:id', crudHandlers.deleteContainer);
@@ -152,6 +156,17 @@ export function init() {
   router.post('/:id/watch', crudHandlers.watchContainer);
   router.get('/:id/vulnerabilities', securityHandlers.getContainerVulnerabilities);
   router.get('/:id/sbom', securityHandlers.getContainerSbom);
+  router.post(
+    '/:id/env/reveal',
+    rateLimit({
+      windowMs: 60_000,
+      max: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
+      validate: { xForwardedForHeader: false },
+    }),
+    crudHandlers.revealContainerEnv,
+  );
   router.post(
     '/:id/scan',
     rateLimit({
