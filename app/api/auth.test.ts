@@ -473,11 +473,12 @@ describe('Auth Router', () => {
       expect(app.use).toHaveBeenCalledWith('/auth', expect.anything());
     });
 
-    test('should register legacy public auth methods endpoint for compatibility', () => {
+    test('should register legacy public auth methods endpoint for compatibility with rate limiting', () => {
       const app = createApp();
       auth.init(app);
 
-      expect(app.get).toHaveBeenCalledWith('/api/auth/methods', expect.any(Function));
+      const authLimiter = mockRouter.use.mock.calls[0][0];
+      expect(app.get).toHaveBeenCalledWith('/api/auth/methods', authLimiter, expect.any(Function));
     });
 
     test('should configure serialize and deserialize user', () => {

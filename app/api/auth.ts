@@ -396,7 +396,7 @@ export function init(app) {
 
   // Compatibility alias for clients that still call the legacy API path.
   // This endpoint must stay unauthenticated so the login screen can render.
-  app.get('/api/auth/methods', getStrategies);
+  app.get('/api/auth/methods', authLimiter, getStrategies);
 
   // Store remember-me preference before auth flow starts
   router.post('/remember', setRememberMe);
