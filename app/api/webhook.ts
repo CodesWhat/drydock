@@ -57,7 +57,7 @@ function authenticateToken(req: Request, res: Response, next: NextFunction) {
  * Find a container by name from the store.
  */
 function findContainerByName(containerName: string) {
-  const containers = storeContainer.getContainers({}, { includeRuntimeEnvValues: true });
+  const containers = storeContainer.getContainers({});
   return containers.find((c) => c.name === containerName);
 }
 

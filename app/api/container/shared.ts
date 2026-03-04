@@ -1,6 +1,5 @@
 import type { Container, ContainerImage } from '../../model/container.js';
 
-const REDACTED_RUNTIME_ENV_VALUE = '[REDACTED]';
 type RegistryAuth = { username?: string; password?: string };
 
 interface RegistryComponentLike {
@@ -18,10 +17,28 @@ interface ObjectWithEnv {
   [key: string]: unknown;
 }
 
-function hasEnvKey(entry: unknown): entry is { key: string } {
+function hasEnvKey(entry: unknown): entry is { key: string; value: string } {
   return (
     !!entry && typeof entry === 'object' && typeof (entry as { key?: unknown }).key === 'string'
   );
+}
+
+const SENSITIVE_KEY_PATTERNS = [
+  'PASSWORD',
+  'PASSWD',
+  'SECRET',
+  'TOKEN',
+  'API_KEY',
+  'APIKEY',
+  'PRIVATE_KEY',
+  'CREDENTIAL',
+  'AUTH',
+  'ACCESS_KEY',
+];
+
+export function isSensitiveKey(key: string): boolean {
+  const upper = key.toUpperCase();
+  return SENSITIVE_KEY_PATTERNS.some((pattern) => upper.includes(pattern));
 }
 
 export function getErrorMessage(error: unknown): string {
@@ -56,7 +73,7 @@ export function getErrorStatusCode(error: unknown): number | undefined {
   return typeof status === 'number' ? status : undefined;
 }
 
-function redactContainerRuntimeDetails<T>(details: T): T {
+function classifyContainerRuntimeDetails<T>(details: T): T {
   if (!details || typeof details !== 'object') {
     return details;
   }
@@ -72,12 +89,13 @@ function redactContainerRuntimeDetails<T>(details: T): T {
       .filter((entry) => hasEnvKey(entry))
       .map((entry) => ({
         key: entry.key,
-        value: REDACTED_RUNTIME_ENV_VALUE,
+        value: entry.value,
+        sensitive: isSensitiveKey(entry.key),
       })),
   } as T;
 }
 
-export function redactContainerRuntimeEnv<T>(container: T): T {
+function classifyContainerRuntimeEnv<T>(container: T): T {
   if (!container || typeof container !== 'object') {
     return container;
   }
@@ -89,17 +107,20 @@ export function redactContainerRuntimeEnv<T>(container: T): T {
 
   return {
     ...containerWithDetails,
-    details: redactContainerRuntimeDetails(containerWithDetails.details),
+    details: classifyContainerRuntimeDetails(containerWithDetails.details),
   } as T;
 }
 
-export function redactContainersRuntimeEnv<T>(containers: T): T {
+function classifyContainersRuntimeEnv<T>(containers: T): T {
   if (!Array.isArray(containers)) {
     return containers;
   }
 
-  return containers.map((container) => redactContainerRuntimeEnv(container)) as T;
+  return containers.map((container) => classifyContainerRuntimeEnv(container)) as T;
 }
+
+export const redactContainerRuntimeEnv = classifyContainerRuntimeEnv;
+export const redactContainersRuntimeEnv = classifyContainersRuntimeEnv;
 
 export function resolveContainerImageFullName(
   container: Container,

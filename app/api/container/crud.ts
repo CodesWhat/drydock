@@ -4,12 +4,7 @@ import type { Container, ContainerReport } from '../../model/container.js';
 import { getPathParamValue } from './request-helpers.js';
 
 interface CrudStoreContainerApi {
-  getContainer: (
-    id: string,
-    options?: {
-      includeRuntimeEnvValues?: boolean;
-    },
-  ) => Container | undefined;
+  getContainer: (id: string) => Container | undefined;
   deleteContainer: (id: string) => void;
 }
 
@@ -172,9 +167,7 @@ export function createCrudHandlers({
   async function watchContainer(req: Request, res: Response) {
     const id = getPathParamValue(req.params.id);
 
-    const container = storeContainer.getContainer(id, {
-      includeRuntimeEnvValues: true,
-    });
+    const container = storeContainer.getContainer(id);
     if (!container) {
       res.sendStatus(404);
       return;

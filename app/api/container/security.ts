@@ -9,12 +9,7 @@ import type {
 import { getPathParamValue } from './request-helpers.js';
 
 interface SecurityStoreContainerApi {
-  getContainer: (
-    id: string,
-    options?: {
-      includeRuntimeEnvValues?: boolean;
-    },
-  ) => Container | undefined;
+  getContainer: (id: string) => Container | undefined;
   updateContainer: (container: Container) => Container;
 }
 
@@ -146,9 +141,7 @@ export function createSecurityHandlers({
       return;
     }
 
-    const container = storeContainer.getContainer(id, {
-      includeRuntimeEnvValues: true,
-    });
+    const container = storeContainer.getContainer(id);
     if (!container) {
       res.sendStatus(404);
       return;
@@ -218,9 +211,7 @@ export function createSecurityHandlers({
 
   async function scanContainer(req: Request, res: Response) {
     const id = getPathParamValue(req.params.id);
-    const container = storeContainer.getContainer(id, {
-      includeRuntimeEnvValues: true,
-    });
+    const container = storeContainer.getContainer(id);
     if (!container) {
       res.sendStatus(404);
       return;

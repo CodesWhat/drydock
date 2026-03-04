@@ -3,12 +3,7 @@ import type { Container, ContainerUpdatePolicy } from '../../model/container.js'
 import { getPathParamValue } from './request-helpers.js';
 
 interface UpdatePolicyStoreContainerApi {
-  getContainer: (
-    id: string,
-    options?: {
-      includeRuntimeEnvValues?: boolean;
-    },
-  ) => Container | undefined;
+  getContainer: (id: string) => Container | undefined;
   updateContainer: (container: Container) => Container;
 }
 
@@ -170,9 +165,7 @@ export function createUpdatePolicyHandlers({
   function patchContainerUpdatePolicy(req: Request, res: Response) {
     const id = getPathParamValue(req.params.id);
     const { action } = (req.body || {}) as { action?: string };
-    const container = storeContainer.getContainer(id, {
-      includeRuntimeEnvValues: true,
-    });
+    const container = storeContainer.getContainer(id);
 
     if (!container) {
       res.sendStatus(404);

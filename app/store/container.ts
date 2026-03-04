@@ -2,6 +2,7 @@
  * Container store.
  */
 import { byString, byValues } from 'sort-es';
+import { isSensitiveKey } from '../api/container/shared.js';
 import type { ContainerLifecycleEventPayload } from '../event/index.js';
 import * as container from '../model/container.js';
 
@@ -12,7 +13,6 @@ import { initCollection } from './util.js';
 
 let containers;
 const containersQueryCache = new Map();
-const REDACTED_RUNTIME_ENV_VALUE = '[REDACTED]';
 
 // Security state cache: keyed by "{watcher}_{name}" to survive container recreation
 const securityStateCache = new Map();
@@ -78,11 +78,7 @@ function cloneContainers(containersToClone) {
   }));
 }
 
-function shouldIncludeRuntimeEnvValues(options: { includeRuntimeEnvValues?: boolean } = {}) {
-  return options.includeRuntimeEnvValues === true;
-}
-
-function redactContainerRuntimeDetails(details) {
+function classifyContainerRuntimeDetails(details) {
   if (!details || typeof details !== 'object' || !Array.isArray(details.env)) {
     return details;
   }
@@ -93,31 +89,32 @@ function redactContainerRuntimeDetails(details) {
       .filter((entry) => entry && typeof entry === 'object' && typeof entry.key === 'string')
       .map((entry) => ({
         key: entry.key,
-        value: REDACTED_RUNTIME_ENV_VALUE,
+        value: entry.value,
+        sensitive: isSensitiveKey(entry.key),
       })),
   };
 }
 
-function redactContainerRuntimeEnv(container) {
+function classifyContainerRuntimeEnv(container) {
   if (!container || typeof container !== 'object' || !container.details) {
     return container;
   }
 
   return {
     ...container,
-    details: redactContainerRuntimeDetails(container.details),
+    details: classifyContainerRuntimeDetails(container.details),
   };
 }
 
-function redactContainersRuntimeEnv(containerList = []) {
+function classifyContainersRuntimeEnv(containerList = []) {
   if (!Array.isArray(containerList)) {
     return containerList;
   }
 
-  return containerList.map((container) => redactContainerRuntimeEnv(container));
+  return containerList.map((container) => classifyContainerRuntimeEnv(container));
 }
 
-function hasRedactedRuntimeEnvValues(details) {
+function hasClassifiedRuntimeEnvValues(details) {
   if (!details || typeof details !== 'object' || !Array.isArray(details.env)) {
     return false;
   }
@@ -131,7 +128,7 @@ function hasRedactedRuntimeEnvValues(details) {
       entry &&
       typeof entry === 'object' &&
       typeof entry.key === 'string' &&
-      entry.value === REDACTED_RUNTIME_ENV_VALUE,
+      typeof entry.sensitive === 'boolean',
   );
 }
 
@@ -270,7 +267,7 @@ export function updateContainer(container) {
     ? validateContainer(containerCurrentDoc.data)
     : undefined;
   const shouldRestoreCurrentDetails =
-    hasDetails && hasRedactedRuntimeEnvValues(container.details) && containerCurrent?.details;
+    hasDetails && hasClassifiedRuntimeEnvValues(container.details) && containerCurrent?.details;
   const containerMerged = {
     ...container,
     updatePolicy: hasUpdatePolicy ? container.updatePolicy : containerCurrent?.updatePolicy,
@@ -307,23 +304,16 @@ export function updateContainer(container) {
  * @param query
  * @returns {*}
  */
-export function getContainers(
-  query: Record<string, unknown> = {},
-  options: { includeRuntimeEnvValues?: boolean } = {},
-) {
+export function getContainers(query: Record<string, unknown> = {}) {
   if (!containers) {
     return [];
   }
-  const includeRuntimeEnvValues = shouldIncludeRuntimeEnvValues(options);
 
   const queryKey = getContainerQueryCacheKey(query);
   const cachedContainers = containersQueryCache.get(queryKey);
   if (cachedContainers) {
     setContainersQueryCache(queryKey, cachedContainers);
-    const containersCloned = cloneContainers(cachedContainers);
-    return includeRuntimeEnvValues
-      ? containersCloned
-      : redactContainersRuntimeEnv(containersCloned);
+    return classifyContainersRuntimeEnv(cloneContainers(cachedContainers));
   }
 
   const filter = {};
@@ -339,8 +329,7 @@ export function getContainers(
     ]),
   );
   setContainersQueryCache(queryKey, containerListSorted);
-  const containersCloned = cloneContainers(containerListSorted);
-  return includeRuntimeEnvValues ? containersCloned : redactContainersRuntimeEnv(containersCloned);
+  return classifyContainersRuntimeEnv(cloneContainers(containerListSorted));
 }
 
 /**
@@ -348,17 +337,13 @@ export function getContainers(
  * @param id
  * @returns {null|Image}
  */
-export function getContainer(id: string, options: { includeRuntimeEnvValues?: boolean } = {}) {
-  const includeRuntimeEnvValues = shouldIncludeRuntimeEnvValues(options);
+export function getContainer(id: string) {
   const container = containers.findOne({
     'data.id': id,
   });
 
   if (container !== null) {
-    const containerValidated = validateContainer(container.data);
-    return includeRuntimeEnvValues
-      ? containerValidated
-      : redactContainerRuntimeEnv(containerValidated);
+    return classifyContainerRuntimeEnv(validateContainer(container.data));
   }
   return undefined;
 }

@@ -56,9 +56,7 @@ async function executeAction(req: Request, res: Response, action: string, method
     const newStatus = inspectResult?.State?.Status;
     let updatedContainer = container;
     if (newStatus) {
-      const containerForUpdate = storeContainer.getContainer(id, {
-        includeRuntimeEnvValues: true,
-      });
+      const containerForUpdate = storeContainer.getContainer(id);
       if (containerForUpdate) {
         updatedContainer = storeContainer.updateContainer({
           ...containerForUpdate,
@@ -122,9 +120,7 @@ async function updateContainer(req: Request, res: Response) {
   }
 
   const id = req.params.id as string;
-  const container = storeContainer.getContainer(id, {
-    includeRuntimeEnvValues: true,
-  });
+  const container = storeContainer.getContainer(id);
   if (!container) {
     res.sendStatus(404);
     return;

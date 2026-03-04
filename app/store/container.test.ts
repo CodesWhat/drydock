@@ -226,10 +226,10 @@ test('updateContainer should clear security when explicitly set to undefined', a
   expect(updated.security).toBeUndefined();
 });
 
-test('updateContainer should preserve raw runtime env values when payload contains redacted values', async () => {
+test('updateContainer should preserve raw runtime env values when payload contains classified values', async () => {
   const existingContainer = {
     data: createContainerFixture({
-      id: 'container-runtime-redaction',
+      id: 'container-runtime-classification',
       details: {
         ports: [],
         volumes: [],
@@ -253,11 +253,11 @@ test('updateContainer should preserve raw runtime env values when payload contai
     addCollection: () => null,
   };
   const containerToSave = createContainerFixture({
-    id: 'container-runtime-redaction',
+    id: 'container-runtime-classification',
     details: {
       ports: [],
       volumes: [],
-      env: [{ key: 'DB_PASSWORD', value: '[REDACTED]' }],
+      env: [{ key: 'DB_PASSWORD', value: 'super-secret-password', sensitive: true }],
     },
   });
 
@@ -450,12 +450,15 @@ test('getContainers should sort by tag when watcher and name are equal', async (
   expect(results[1].image.tag.value).toEqual('2.0.0');
 });
 
-test('getContainers should redact runtime env values by default', async () => {
+test('getContainers should classify runtime env sensitivity by default', async () => {
   const containerExample = createContainerFixture({
     details: {
       ports: [],
       volumes: [],
-      env: [{ key: 'API_TOKEN', value: 'super-secret' }],
+      env: [
+        { key: 'API_TOKEN', value: 'super-secret' },
+        { key: 'PATH', value: '/usr/local/bin' },
+      ],
     },
   });
   const containers = [{ data: containerExample }];
@@ -475,17 +478,26 @@ test('getContainers should redact runtime env values by default', async () => {
 
   expect(result[0].details.env[0]).toEqual({
     key: 'API_TOKEN',
-    value: '[REDACTED]',
+    value: 'super-secret',
+    sensitive: true,
+  });
+  expect(result[0].details.env[1]).toEqual({
+    key: 'PATH',
+    value: '/usr/local/bin',
+    sensitive: false,
   });
   expect(containers[0].data.details.env[0].value).toBe('super-secret');
 });
 
-test('getContainers should return raw runtime env values when explicitly requested', async () => {
+test('getContainers should always classify env sensitivity', async () => {
   const containerExample = createContainerFixture({
     details: {
       ports: [],
       volumes: [],
-      env: [{ key: 'API_TOKEN', value: 'super-secret' }],
+      env: [
+        { key: 'API_TOKEN', value: 'super-secret' },
+        { key: 'NODE_ENV', value: 'production' },
+      ],
     },
   });
   const containers = [{ data: containerExample }];
@@ -501,11 +513,17 @@ test('getContainers should return raw runtime env values when explicitly request
   };
   container.createCollections(db);
 
-  const result = container.getContainers({}, { includeRuntimeEnvValues: true });
+  const result = container.getContainers({});
 
   expect(result[0].details.env[0]).toEqual({
     key: 'API_TOKEN',
     value: 'super-secret',
+    sensitive: true,
+  });
+  expect(result[0].details.env[1]).toEqual({
+    key: 'NODE_ENV',
+    value: 'production',
+    sensitive: false,
   });
 });
 
@@ -522,7 +540,7 @@ test('getContainer should return 1 container by id', async () => {
   expect(result.name).toEqual(containerExample.data.name);
 });
 
-test('getContainer should redact runtime env values by default', async () => {
+test('getContainer should classify runtime env sensitivity by default', async () => {
   const containerExample = {
     data: createContainerFixture({
       details: {
@@ -544,12 +562,13 @@ test('getContainer should redact runtime env values by default', async () => {
 
   expect(result.details.env[0]).toEqual({
     key: 'DB_PASSWORD',
-    value: '[REDACTED]',
+    value: 'raw-secret',
+    sensitive: true,
   });
   expect(containerExample.data.details.env[0].value).toBe('raw-secret');
 });
 
-test('getContainer should return raw runtime env values when explicitly requested', async () => {
+test('getContainer should always classify env sensitivity', async () => {
   const containerExample = {
     data: createContainerFixture({
       details: {
@@ -567,13 +586,12 @@ test('getContainer should return raw runtime env values when explicitly requeste
   };
   container.createCollections(db);
 
-  const result = container.getContainer('132456789', {
-    includeRuntimeEnvValues: true,
-  });
+  const result = container.getContainer('132456789');
 
   expect(result.details.env[0]).toEqual({
     key: 'DB_PASSWORD',
     value: 'raw-secret',
+    sensitive: true,
   });
 });
 

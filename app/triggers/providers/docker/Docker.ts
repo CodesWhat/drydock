@@ -264,7 +264,7 @@ class Docker extends Trigger {
           generateImageSbom,
         },
         stateStore: {
-          getContainer: (id) => storeContainer.getContainer(id, { includeRuntimeEnvValues: true }),
+          getContainer: (id) => storeContainer.getContainer(id),
           updateContainer: storeContainer.updateContainer,
           cacheSecurityState,
         },

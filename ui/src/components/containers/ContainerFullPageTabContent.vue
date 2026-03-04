@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { reactive } from 'vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+
+const revealedKeys = reactive(new Set<string>());
 
 const {
   selectedContainer,
@@ -522,7 +525,15 @@ const {
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <span class="font-semibold shrink-0 text-drydock-secondary">{{ e.key }}</span>
                   <span class="dd-text-muted">=</span>
-                  <span class="truncate dd-text">{{ e.value }}</span>
+                  <span v-if="!e.sensitive" class="truncate dd-text">{{ e.value }}</span>
+                  <template v-else>
+                    <span v-if="revealedKeys.has(e.key)" class="truncate dd-text">{{ e.value }}</span>
+                    <span v-else class="truncate dd-text-muted">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
+                    <button class="shrink-0 p-0.5 dd-text-muted hover:dd-text transition-colors"
+                            @click="revealedKeys.has(e.key) ? revealedKeys.delete(e.key) : revealedKeys.add(e.key)">
+                      <AppIcon :name="revealedKeys.has(e.key) ? 'eye-slash' : 'eye'" :size="11" />
+                    </button>
+                  </template>
                 </div>
               </div>
               <p v-else class="text-[12px] dd-text-muted italic">No environment variables configured</p>

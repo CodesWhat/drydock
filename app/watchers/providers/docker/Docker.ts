@@ -1033,8 +1033,7 @@ class Docker extends Watcher {
         const container = await this.dockerApi.getContainer(containerId);
         return container.inspect();
       },
-      getContainerFromStore: (containerId: string) =>
-        storeContainer.getContainer(containerId, { includeRuntimeEnvValues: true }),
+      getContainerFromStore: (containerId: string) => storeContainer.getContainer(containerId),
       updateContainerFromInspect: (containerFound: Container, containerInspect: any) =>
         this.updateContainerFromInspect(containerFound, containerInspect),
       debug: (message: string) => this.log.debug(message),
@@ -1485,9 +1484,7 @@ class Docker extends Watcher {
     const runtimeDetailsFromSummary = getRuntimeDetailsFromContainerSummary(container);
 
     // Is container already in store? Refresh volatile image fields, then return it
-    const containerInStore = storeContainer.getContainer(containerId, {
-      includeRuntimeEnvValues: true,
-    });
+    const containerInStore = storeContainer.getContainer(containerId);
     if (containerInStore !== undefined && containerInStore.error === undefined) {
       this.ensureLogger();
       this.log.debug(`Container ${containerInStore.id} already in store`);

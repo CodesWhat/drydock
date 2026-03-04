@@ -3,7 +3,7 @@
 export interface ContainerDetails {
   ports: string[];
   volumes: string[];
-  env: { key: string; value: string }[];
+  env: { key: string; value: string; sensitive?: boolean }[];
   labels: string[];
 }
 

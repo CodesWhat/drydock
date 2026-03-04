@@ -4,12 +4,7 @@ import type { ApiComponent } from '../component.js';
 import { getPathParamValue } from './request-helpers.js';
 
 interface TriggerStoreContainerApi {
-  getContainer: (
-    id: string,
-    options?: {
-      includeRuntimeEnvValues?: boolean;
-    },
-  ) => Container | undefined;
+  getContainer: (id: string) => Container | undefined;
 }
 
 interface ParsedTriggerReference {
@@ -140,9 +135,7 @@ export function createTriggerHandlers({
     const triggerType = getPathParamValue(req.params.triggerType);
     const triggerName = getPathParamValue(req.params.triggerName);
 
-    const containerToTrigger = storeContainer.getContainer(id, {
-      includeRuntimeEnvValues: true,
-    });
+    const containerToTrigger = storeContainer.getContainer(id);
     const triggerId = triggerAgent
       ? `${triggerAgent}.${triggerType}.${triggerName}`
       : `${triggerType}.${triggerName}`;
