@@ -63,6 +63,10 @@ vi.mock('../security/scan', () => ({
   scanImageForVulnerabilities: (...args: unknown[]) => mockScanImageForVulnerabilities(...args),
   verifyImageSignature: (...args: unknown[]) => mockVerifyImageSignature(...args),
   SECURITY_SBOM_FORMATS: ['spdx-json', 'cyclonedx-json'],
+  clearDigestScanCache: vi.fn(),
+  getDigestScanCacheSize: vi.fn().mockReturnValue(0),
+  updateDigestScanCache: vi.fn(),
+  scanImageWithDedup: vi.fn(),
 }));
 
 vi.mock('../triggers/providers/Trigger', () => ({

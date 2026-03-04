@@ -64,6 +64,11 @@ export interface SecurityHandlerDependencies {
   getErrorMessage: (error: unknown) => string;
   getContainerImageFullName: (container: Container, tagOverride?: string) => string;
   getContainerRegistryAuth: (container: Container) => Promise<RegistryAuth | undefined>;
+  updateDigestScanCache?: (
+    digest: string,
+    scanResult: ContainerSecurityScan,
+    trivyDbUpdatedAt: string,
+  ) => void;
   log: {
     info: (message: string) => void;
   };
@@ -84,6 +89,7 @@ export function createSecurityHandlers({
   getErrorMessage,
   getContainerImageFullName,
   getContainerRegistryAuth,
+  updateDigestScanCache,
   log,
 }: SecurityHandlerDependencies) {
   function getEmptyVulnerabilityResponse() {
@@ -234,6 +240,12 @@ export function createSecurityHandlers({
       // Run vulnerability scan
       const scanResult = await scanImageForVulnerabilities({ image, auth });
       securityPatch.scan = scanResult;
+
+      // Populate the digest scan cache so scheduled scans can benefit
+      const containerDigest = container.image?.digest?.value;
+      if (updateDigestScanCache && containerDigest && scanResult.status !== 'error') {
+        updateDigestScanCache(containerDigest, scanResult, '');
+      }
 
       const summary = scanResult.summary;
       if (summary && (summary.critical > 0 || summary.high > 0)) {

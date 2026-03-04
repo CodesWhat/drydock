@@ -107,6 +107,7 @@ function createHarness(
         : `my-registry/${targetContainer.image.name}:${targetContainer.image.tag.value}`,
     ),
     getContainerRegistryAuth: vi.fn(async () => AUTH),
+    updateDigestScanCache: vi.fn(),
     log: { info: vi.fn() },
   };
 
@@ -126,6 +127,105 @@ async function callScanContainer(handlers: ReturnType<typeof createSecurityHandl
 describe('api/container/security', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('scanContainer edge paths', () => {
+    test('returns 404 when container does not exist', async () => {
+      const harness = createHarness();
+      harness.storeContainer.getContainer.mockReturnValue(undefined);
+
+      const res = await callScanContainer(harness.handlers);
+
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(harness.deps.broadcastScanStarted).not.toHaveBeenCalled();
+      expect(harness.deps.scanImageForVulnerabilities).not.toHaveBeenCalled();
+    });
+
+    test('returns 400 when security scanning is disabled', async () => {
+      const harness = createHarness({
+        securityConfiguration: {
+          enabled: false,
+          scanner: 'trivy',
+          signature: { verify: false },
+          sbom: { enabled: false, formats: [] },
+        },
+      });
+
+      const res = await callScanContainer(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Security scanner is not configured' });
+      expect(harness.deps.broadcastScanStarted).not.toHaveBeenCalled();
+      expect(harness.deps.scanImageForVulnerabilities).not.toHaveBeenCalled();
+    });
+
+    test('runs only current-image scan and clears stale update fields when no update is available', async () => {
+      const staleUpdateScan = createScanResult({ image: UPDATE_IMAGE });
+      const staleUpdateSignature = createSignatureResult(UPDATE_IMAGE);
+      const staleUpdateSbom = createSbomResult(UPDATE_IMAGE);
+      const harness = createHarness({
+        container: createContainer({
+          updateAvailable: false,
+          result: undefined,
+          security: {
+            updateScan: staleUpdateScan,
+            updateSignature: staleUpdateSignature,
+            updateSbom: staleUpdateSbom,
+          },
+        }),
+        securityConfiguration: {
+          enabled: true,
+          scanner: 'trivy',
+          signature: { verify: true },
+          sbom: { enabled: true, formats: ['spdx-json'] },
+        },
+      });
+      const currentScan = createScanResult({ image: CURRENT_IMAGE });
+      const currentSignature = createSignatureResult(CURRENT_IMAGE);
+      const currentSbom = createSbomResult(CURRENT_IMAGE);
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(currentScan);
+      harness.deps.verifyImageSignature.mockResolvedValueOnce(currentSignature);
+      harness.deps.generateImageSbom.mockResolvedValueOnce(currentSbom);
+
+      const res = await callScanContainer(harness.handlers);
+
+      expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledTimes(1);
+      expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledWith({
+        image: CURRENT_IMAGE,
+        auth: AUTH,
+      });
+      expect(harness.deps.verifyImageSignature).toHaveBeenCalledTimes(1);
+      expect(harness.deps.generateImageSbom).toHaveBeenCalledTimes(1);
+      expect(harness.storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            scan: currentScan,
+            signature: currentSignature,
+            sbom: currentSbom,
+            updateScan: undefined,
+            updateSignature: undefined,
+            updateSbom: undefined,
+          }),
+        }),
+      );
+      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c1', 'passed');
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('returns 500 and marks completion as error when current-image scan fails', async () => {
+      const harness = createHarness();
+      harness.deps.scanImageForVulnerabilities.mockRejectedValueOnce(new Error('scan failed'));
+
+      const res = await callScanContainer(harness.handlers);
+
+      expect(harness.deps.broadcastScanStarted).toHaveBeenCalledWith('c1');
+      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c1', 'error');
+      expect(harness.storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Security scan failed (scan failed)',
+      });
+    });
   });
 
   describe('scanContainer update-image path', () => {
@@ -262,6 +362,68 @@ describe('api/container/security', () => {
       );
       expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c1', 'passed');
       expect(res.status).toHaveBeenCalledWith(200);
+    });
+  });
+
+  describe('digest scan cache population', () => {
+    test('populates digest scan cache after successful on-demand scan', async () => {
+      const harness = createHarness({
+        container: createContainer({
+          image: {
+            registry: { name: 'hub', url: 'my-registry' },
+            name: 'test/app',
+            tag: { value: '1.2.3' },
+            digest: { watch: true, value: 'sha256:abc123' },
+          },
+        }),
+      });
+      const scanResult = createScanResult();
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(scanResult);
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.updateDigestScanCache).toHaveBeenCalledWith(
+        'sha256:abc123',
+        scanResult,
+        '',
+      );
+    });
+
+    test('does not populate digest scan cache when container has no digest', async () => {
+      const harness = createHarness({
+        container: createContainer({
+          image: {
+            registry: { name: 'hub', url: 'my-registry' },
+            name: 'test/app',
+            tag: { value: '1.2.3' },
+          },
+        }),
+      });
+      const scanResult = createScanResult();
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(scanResult);
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.updateDigestScanCache).not.toHaveBeenCalled();
+    });
+
+    test('does not populate digest scan cache when scan result is error', async () => {
+      const harness = createHarness({
+        container: createContainer({
+          image: {
+            registry: { name: 'hub', url: 'my-registry' },
+            name: 'test/app',
+            tag: { value: '1.2.3' },
+            digest: { watch: true, value: 'sha256:abc123' },
+          },
+        }),
+      });
+      const scanResult = createScanResult({ status: 'error', error: 'scan failed' });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(scanResult);
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.updateDigestScanCache).not.toHaveBeenCalled();
     });
   });
 });

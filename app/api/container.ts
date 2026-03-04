@@ -12,6 +12,7 @@ import {
   generateImageSbom,
   SECURITY_SBOM_FORMATS,
   scanImageForVulnerabilities,
+  updateDigestScanCache,
   verifyImageSignature,
 } from '../security/scan.js';
 import * as auditStore from '../store/audit.js';
@@ -122,6 +123,7 @@ const securityHandlers = createSecurityHandlers({
   getErrorMessage,
   getContainerImageFullName,
   getContainerRegistryAuth,
+  updateDigestScanCache,
   log,
 });
 
