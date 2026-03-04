@@ -281,11 +281,16 @@ async function fetchVulnerabilities() {
   }
 }
 
+let scanCompletedDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+
 function handleSseScanCompleted() {
-  // During a batch scan, skip SSE-triggered refreshes — the final
-  // fetchVulnerabilities() at the end of scanAllContainers covers it.
-  if (scanning.value) return;
-  fetchVulnerabilities();
+  // Debounce so rapid-fire SSE events (batch scan) don't flood the API.
+  // Each scan-completed event resets the timer — the fetch fires 800ms
+  // after the last event, letting results accumulate before we refresh.
+  clearTimeout(scanCompletedDebounceTimer);
+  scanCompletedDebounceTimer = setTimeout(() => {
+    fetchVulnerabilities();
+  }, 800);
 }
 
 async function scanAllContainers() {
@@ -293,7 +298,9 @@ async function scanAllContainers() {
     scannerReady: scannerReady.value,
     runtimeLoading: runtimeLoading.value,
   });
-  // Brief delay so the backend persists the last scan result before we fetch
+  // The debounced SSE handler picks up results as they come in, but fire
+  // one final refresh after the batch finishes in case the last SSE event
+  // arrived before the store persisted.
   await new Promise((r) => setTimeout(r, 1500));
   await fetchVulnerabilities();
 }
@@ -588,6 +595,7 @@ onMounted(() => {
   globalThis.addEventListener('dd:sse-scan-completed', sseScanCompletedListener);
 });
 onUnmounted(() => {
+  clearTimeout(scanCompletedDebounceTimer);
   document.removeEventListener('click', handleGlobalClick);
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
 });
