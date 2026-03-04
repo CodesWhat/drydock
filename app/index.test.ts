@@ -32,6 +32,11 @@ vi.mock('./prometheus', () => ({
   init: vi.fn(),
 }));
 
+vi.mock('./security/scheduler', () => ({
+  init: vi.fn(),
+  shutdown: vi.fn(),
+}));
+
 describe('Main Application', () => {
   const originalArgv = process.argv;
 
@@ -79,6 +84,8 @@ describe('Main Application', () => {
     expect(agentManager.init).toHaveBeenCalled();
     expect(api.init).toHaveBeenCalled();
     expect(agentServer.init).not.toHaveBeenCalled();
+    const securityScheduler = await import('./security/scheduler.js');
+    expect(securityScheduler.init).toHaveBeenCalled();
   });
 
   test('should initialize agent mode with --agent flag', async () => {
@@ -106,6 +113,8 @@ describe('Main Application', () => {
     expect(agentServer.init).toHaveBeenCalled();
     expect(agentManager.init).not.toHaveBeenCalled();
     expect(api.init).not.toHaveBeenCalled();
+    const securityScheduler = await import('./security/scheduler.js');
+    expect(securityScheduler.init).not.toHaveBeenCalled();
   });
 
   test('should run config migrate command and skip application bootstrap', async () => {

@@ -6,6 +6,7 @@ import { runConfigMigrateCommandIfRequested } from './configuration/migrate-cli.
 import log from './log/index.js';
 import * as prometheus from './prometheus/index.js';
 import * as registry from './registry/index.js';
+import * as securityScheduler from './security/scheduler.js';
 import * as store from './store/index.js';
 
 const commandExitCode = runConfigMigrateCommandIfRequested(process.argv.slice(2));
@@ -55,5 +56,8 @@ if (commandExitCode !== null) {
 
     // Init api
     await api.init();
+
+    // Init scheduled security scanning
+    securityScheduler.init();
   }
 }
