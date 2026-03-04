@@ -559,6 +559,20 @@ const tableColumns = computed(() => {
   ];
 });
 
+function fixablePercent(fixable: number, total: number): string {
+  if (total <= 0) return '0';
+  const pct = (fixable / total) * 100;
+  return pct === 100 || pct === 0 ? String(pct) : pct.toFixed(1).replace(/\.0$/, '');
+}
+
+function fixableColor(fixable: number, total: number): string {
+  if (total <= 0) return 'var(--dd-neutral)';
+  const pct = (fixable / total) * 100;
+  if (pct >= 90) return 'var(--dd-success)';
+  if (pct >= 60) return 'var(--dd-caution)';
+  return 'var(--dd-warning)';
+}
+
 // Highest severity for an image (used for compact mode indicator)
 function highestSeverity(summary: ImageSummary): string {
   if (summary.critical > 0) return 'CRITICAL';
@@ -747,10 +761,11 @@ onUnmounted(() => {
           <span v-else class="text-[10px] dd-text-muted">&mdash;</span>
         </template>
         <template #cell-fixable="{ row }">
-          <span v-if="row.fixable > 0" class="text-[10px] font-medium" style="color: var(--dd-success);">
-            {{ row.fixable }}<span class="dd-text-muted">/{{ row.total }}</span>
+          <span v-if="row.fixable > 0" class="text-[10px] font-medium"
+                :style="{ color: fixableColor(row.fixable, row.total) }">
+            {{ fixablePercent(row.fixable, row.total) }}%
           </span>
-          <span v-else class="text-[10px] dd-text-muted">0</span>
+          <span v-else class="text-[10px] dd-text-muted">0%</span>
         </template>
         <template #cell-total="{ row }">
           <div class="flex items-center gap-1.5">
@@ -872,9 +887,9 @@ onUnmounted(() => {
           <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
                :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
             <span v-if="summary.fixable > 0" class="text-[11px] font-medium flex items-center gap-1"
-                  style="color: var(--dd-success);">
+                  :style="{ color: fixableColor(summary.fixable, summary.total) }">
               <AppIcon name="check" :size="11" />
-              {{ summary.fixable }} fixable
+              {{ fixablePercent(summary.fixable, summary.total) }}% fixable
             </span>
             <span v-else class="text-[11px] dd-text-muted">No fixes available</span>
             <span class="text-[10px] dd-text-muted">{{ summary.total }} total</span>
