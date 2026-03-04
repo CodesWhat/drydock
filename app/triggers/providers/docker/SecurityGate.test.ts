@@ -754,4 +754,105 @@ describe('SecurityGate', () => {
 
     expect(scanImageForVulnerabilities).toHaveBeenCalledTimes(1);
   });
+
+  test('persistSecurityState should map scan to updateScan when slot is update', async () => {
+    const { gate, updateContainer, cacheSecurityState } = createGateHarness();
+    const log = createLog();
+
+    await gate.persistSecurityState(
+      createContainer(),
+      { scan: { status: 'passed' } },
+      log,
+      'update',
+    );
+
+    expect(updateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        security: expect.objectContaining({
+          persisted: true,
+          updateScan: { status: 'passed' },
+        }),
+      }),
+    );
+    // Should NOT have a top-level 'scan' key from this call
+    const securityArg = updateContainer.mock.calls[0][0].security;
+    expect(securityArg).not.toHaveProperty('scan');
+  });
+
+  test('persistSecurityState with update slot preserves existing scan field', async () => {
+    const getContainer = vi.fn(() => ({
+      id: 'container-id',
+      watcher: 'docker.local',
+      name: 'web',
+      security: {
+        scan: { status: 'passed', summary: {} },
+      },
+    }));
+    const updateContainer = vi.fn();
+    const cacheSecurityState = vi.fn();
+    const gate = new SecurityGate({
+      getSecurityConfiguration: vi.fn(),
+      verifyImageSignature: vi.fn(),
+      scanImageForVulnerabilities: vi.fn(),
+      generateImageSbom: vi.fn(),
+      emitSecurityAlert: vi.fn(),
+      getContainer,
+      updateContainer,
+      cacheSecurityState,
+      fullName: vi.fn(),
+      recordSecurityAudit: vi.fn(),
+    });
+
+    await gate.persistSecurityState(
+      createContainer(),
+      { scan: { status: 'blocked' } },
+      createLog(),
+      'update',
+    );
+
+    const securityArg = updateContainer.mock.calls[0][0].security;
+    expect(securityArg.scan).toEqual({ status: 'passed', summary: {} });
+    expect(securityArg.updateScan).toEqual({ status: 'blocked' });
+  });
+
+  test('maybeScanAndGateUpdate should persist all security state to update slot', async () => {
+    const updateContainer = vi.fn();
+    const cacheSecurityState = vi.fn();
+    const harness = createGateHarness({
+      securityConfiguration: {
+        signature: { verify: true },
+        sbom: { enabled: true, formats: ['spdx-json'] },
+      },
+      updateContainer,
+      cacheSecurityState,
+      verifyImageSignature: vi.fn().mockResolvedValue({
+        status: 'verified',
+        signatures: 1,
+      }),
+      scanImageForVulnerabilities: vi.fn().mockResolvedValue({
+        status: 'passed',
+        summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+        blockingCount: 0,
+        blockSeverities: [],
+      }),
+      generateImageSbom: vi.fn().mockResolvedValue({
+        status: 'generated',
+        formats: ['spdx-json'],
+      }),
+    });
+
+    await harness.gate.maybeScanAndGateUpdate(
+      { newImage: 'ghcr.io/acme/web:2.0.0', auth: {} },
+      createContainer(),
+      createLog(),
+    );
+
+    // All 3 calls should have mapped to update* fields
+    for (const call of updateContainer.mock.calls) {
+      const security = call[0].security;
+      const hasUpdateField =
+        'updateScan' in security || 'updateSignature' in security || 'updateSbom' in security;
+      expect(hasUpdateField).toBe(true);
+    }
+  });
 });

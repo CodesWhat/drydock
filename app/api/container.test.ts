@@ -256,8 +256,8 @@ describe('Container Router', () => {
             ports: ['8080:8080'],
             volumes: ['/tmp:/tmp'],
             env: [
-              { key: 'DB_PASSWORD', value: '[REDACTED]' },
-              { key: 'API_TOKEN', value: '[REDACTED]' },
+              { key: 'DB_PASSWORD', value: 'super-secret-password', sensitive: true },
+              { key: 'API_TOKEN', value: 'abcdef', sensitive: true },
             ],
           },
         },
@@ -308,7 +308,7 @@ describe('Container Router', () => {
         details: {
           ports: ['8080:8080'],
           volumes: ['/tmp:/tmp'],
-          env: [{ key: 'AWS_SECRET_ACCESS_KEY', value: '[REDACTED]' }],
+          env: [{ key: 'AWS_SECRET_ACCESS_KEY', value: 'top-secret', sensitive: true }],
         },
       });
       expect(container.details.env[0].value).toBe('top-secret');
@@ -908,7 +908,7 @@ describe('Container Router', () => {
           details: {
             ports: [],
             volumes: [],
-            env: [{ key: 'DD_API_KEY', value: '[REDACTED]' }],
+            env: [{ key: 'DD_API_KEY', value: 'keep-secret', sensitive: true }],
           },
         }),
       );
@@ -1201,6 +1201,159 @@ describe('Container Router', () => {
         }),
       );
     });
+
+    test('should scan both current and update images when update is available', async () => {
+      const currentScanResult = {
+        status: 'scanned',
+        vulnerabilities: [],
+        blockingCount: 0,
+        summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+      };
+      const updateScanResult = {
+        status: 'scanned',
+        vulnerabilities: [],
+        blockingCount: 0,
+        summary: { unknown: 0, low: 1, medium: 0, high: 0, critical: 0 },
+      };
+      mockScanImageForVulnerabilities
+        .mockResolvedValueOnce(currentScanResult)
+        .mockResolvedValueOnce(updateScanResult);
+      registry.getState.mockReturnValue({
+        watcher: {},
+        trigger: {},
+        registry: {
+          hub: {
+            getImageFullName: vi.fn((image, tag) => `my-registry/${image.name}:${tag}`),
+            getAuthPull: vi.fn(async () => ({ username: 'user', password: 'token' })),
+          },
+        },
+      });
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/app',
+          tag: { value: '1.2.3' },
+        },
+        updateAvailable: true,
+        result: { tag: '2.0.0' },
+        security: {},
+      });
+      getSecurityConfiguration.mockReturnValue({
+        enabled: true,
+        scanner: 'trivy',
+        signature: { verify: false },
+        sbom: { enabled: false, formats: [] },
+      });
+
+      const res = await callScanContainer();
+
+      expect(mockScanImageForVulnerabilities).toHaveBeenCalledTimes(2);
+      expect(mockScanImageForVulnerabilities).toHaveBeenCalledWith(
+        expect.objectContaining({ image: 'my-registry/test/app:1.2.3' }),
+      );
+      expect(mockScanImageForVulnerabilities).toHaveBeenCalledWith(
+        expect.objectContaining({ image: 'my-registry/test/app:2.0.0' }),
+      );
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            scan: currentScanResult,
+            updateScan: updateScanResult,
+          }),
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should clear stale update scan data when no update is available', async () => {
+      const scanResult = {
+        status: 'scanned',
+        vulnerabilities: [],
+        blockingCount: 0,
+        summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+      };
+      mockScanImageForVulnerabilities.mockResolvedValue(scanResult);
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/app',
+          tag: { value: '1.2.3' },
+        },
+        updateAvailable: false,
+        security: { updateScan: { status: 'old' } },
+      });
+      getSecurityConfiguration.mockReturnValue({
+        enabled: true,
+        scanner: 'trivy',
+        signature: { verify: false },
+        sbom: { enabled: false, formats: [] },
+      });
+
+      const res = await callScanContainer();
+
+      expect(mockScanImageForVulnerabilities).toHaveBeenCalledTimes(1);
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            scan: scanResult,
+            updateScan: undefined,
+            updateSignature: undefined,
+            updateSbom: undefined,
+          }),
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should persist current scan even when update scan fails', async () => {
+      const currentScanResult = {
+        status: 'scanned',
+        vulnerabilities: [],
+        blockingCount: 0,
+        summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+      };
+      mockScanImageForVulnerabilities
+        .mockResolvedValueOnce(currentScanResult)
+        .mockRejectedValueOnce(new Error('update scan failed'));
+      registry.getState.mockReturnValue({
+        watcher: {},
+        trigger: {},
+        registry: {
+          hub: {
+            getImageFullName: vi.fn((image, tag) => `my-registry/${image.name}:${tag}`),
+            getAuthPull: vi.fn(async () => undefined),
+          },
+        },
+      });
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/app',
+          tag: { value: '1.2.3' },
+        },
+        updateAvailable: true,
+        result: { tag: '2.0.0' },
+        security: {},
+      });
+      getSecurityConfiguration.mockReturnValue({
+        enabled: true,
+        scanner: 'trivy',
+        signature: { verify: false },
+        sbom: { enabled: false, formats: [] },
+      });
+
+      const res = await callScanContainer();
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({ scan: currentScanResult }),
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
   });
 
   describe('deleteContainer', () => {
@@ -1489,9 +1642,7 @@ describe('Container Router', () => {
         triggerName: 'default',
       });
 
-      expect(storeContainer.getContainer).toHaveBeenCalledWith('c1', {
-        includeRuntimeEnvValues: true,
-      });
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
       expect(res.status).toHaveBeenCalledWith(404);
     });
 
@@ -1503,9 +1654,7 @@ describe('Container Router', () => {
         triggerName: 'default',
       });
 
-      expect(storeContainer.getContainer).toHaveBeenCalledWith('', {
-        includeRuntimeEnvValues: true,
-      });
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('');
       expect(res.status).toHaveBeenCalledWith(404);
     });
   });
@@ -1561,7 +1710,7 @@ describe('Container Router', () => {
         details: {
           ports: [],
           volumes: [],
-          env: [{ key: 'API_TOKEN', value: '[REDACTED]' }],
+          env: [{ key: 'API_TOKEN', value: 'token-value', sensitive: true }],
         },
       });
     });
@@ -1975,9 +2124,7 @@ describe('Container Router', () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       handler({ params: { id: ['c1', 'ignored'] }, body: { action: 'clear' } }, res);
 
-      expect(storeContainer.getContainer).toHaveBeenCalledWith('c1', {
-        includeRuntimeEnvValues: true,
-      });
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
       expect(res.sendStatus).toHaveBeenCalledWith(404);
     });
 
@@ -1990,9 +2137,7 @@ describe('Container Router', () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       handler({ params: { id: [] }, body: { action: 'clear' } }, res);
 
-      expect(storeContainer.getContainer).toHaveBeenCalledWith('', {
-        includeRuntimeEnvValues: true,
-      });
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('');
       expect(res.sendStatus).toHaveBeenCalledWith(404);
     });
 
@@ -2005,9 +2150,7 @@ describe('Container Router', () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       handler({ params: {}, body: { action: 'clear' } }, res);
 
-      expect(storeContainer.getContainer).toHaveBeenCalledWith('', {
-        includeRuntimeEnvValues: true,
-      });
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('');
       expect(res.sendStatus).toHaveBeenCalledWith(404);
     });
 
@@ -2068,7 +2211,7 @@ describe('Container Router', () => {
           details: {
             ports: ['8080:8080'],
             volumes: ['/tmp:/tmp'],
-            env: [{ key: 'DB_PASSWORD', value: '[REDACTED]' }],
+            env: [{ key: 'DB_PASSWORD', value: 'super-secret', sensitive: true }],
           },
         }),
       );

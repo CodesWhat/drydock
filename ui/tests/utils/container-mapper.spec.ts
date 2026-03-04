@@ -2,7 +2,7 @@ vi.mock('@/services/image-icon', () => ({
   getEffectiveDisplayIcon: vi.fn((_display: string, image: string) => `icon-${image}`),
 }));
 
-import { mapApiContainer, mapApiContainers } from '@/utils/container-mapper';
+import { computeSecurityDelta, mapApiContainer, mapApiContainers } from '@/utils/container-mapper';
 
 function makeApiContainer(overrides: Record<string, any> = {}) {
   return {
@@ -508,6 +508,174 @@ describe('container-mapper', () => {
 
     it('returns empty array for empty input', () => {
       expect(mapApiContainers([])).toEqual([]);
+    });
+  });
+
+  describe('deriveUpdateBouncer', () => {
+    it('returns undefined when no updateScan exists', () => {
+      const c = mapApiContainer(makeApiContainer({ security: { scan: null, updateScan: null } }));
+      expect(c.updateBouncer).toBeUndefined();
+    });
+
+    it('returns blocked when updateScan status is blocked', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          security: {
+            scan: null,
+            updateScan: {
+              status: 'blocked',
+              summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+            },
+          },
+        }),
+      );
+      expect(c.updateBouncer).toBe('blocked');
+    });
+
+    it('returns unsafe when updateScan has high vulnerabilities', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          security: {
+            scan: null,
+            updateScan: {
+              status: 'passed',
+              summary: { critical: 0, high: 3, medium: 0, low: 0, unknown: 0 },
+            },
+          },
+        }),
+      );
+      expect(c.updateBouncer).toBe('unsafe');
+    });
+
+    it('returns safe when updateScan is clean', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          security: {
+            scan: null,
+            updateScan: {
+              status: 'passed',
+              summary: { critical: 0, high: 0, medium: 2, low: 1, unknown: 0 },
+            },
+          },
+        }),
+      );
+      expect(c.updateBouncer).toBe('safe');
+    });
+  });
+
+  describe('computeSecurityDelta', () => {
+    it('returns undefined when current summary is missing', () => {
+      expect(
+        computeSecurityDelta(undefined, { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 }),
+      ).toBeUndefined();
+    });
+
+    it('returns undefined when update summary is missing', () => {
+      expect(
+        computeSecurityDelta({ unknown: 0, low: 0, medium: 0, high: 0, critical: 0 }, undefined),
+      ).toBeUndefined();
+    });
+
+    it('computes correct delta when update fixes vulnerabilities', () => {
+      const delta = computeSecurityDelta(
+        { unknown: 0, low: 2, medium: 3, high: 1, critical: 1 },
+        { unknown: 0, low: 1, medium: 1, high: 0, critical: 0 },
+      );
+      expect(delta).toEqual({
+        fixed: 5,
+        new: 0,
+        unchanged: 0,
+        fixedCritical: 1,
+        fixedHigh: 1,
+        newCritical: 0,
+        newHigh: 0,
+      });
+    });
+
+    it('computes correct delta when update introduces new vulnerabilities', () => {
+      const delta = computeSecurityDelta(
+        { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+        { unknown: 0, low: 0, medium: 1, high: 2, critical: 1 },
+      );
+      expect(delta).toEqual({
+        fixed: 0,
+        new: 4,
+        unchanged: 0,
+        fixedCritical: 0,
+        fixedHigh: 0,
+        newCritical: 1,
+        newHigh: 2,
+      });
+    });
+
+    it('computes mixed delta correctly', () => {
+      const delta = computeSecurityDelta(
+        { unknown: 0, low: 5, medium: 3, high: 2, critical: 1 },
+        { unknown: 1, low: 3, medium: 4, high: 0, critical: 2 },
+      );
+      expect(delta).toEqual({
+        fixed: 4,
+        new: 3,
+        unchanged: 0,
+        fixedCritical: 0,
+        fixedHigh: 2,
+        newCritical: 1,
+        newHigh: 0,
+      });
+    });
+  });
+
+  describe('mapApiContainer with update security fields', () => {
+    it('populates update fields when updateScan is present', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          security: {
+            scan: {
+              status: 'passed',
+              summary: { critical: 2, high: 1, medium: 0, low: 0, unknown: 0 },
+            },
+            updateScan: {
+              status: 'passed',
+              summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+            },
+          },
+        }),
+      );
+      expect(c.updateBouncer).toBe('safe');
+      expect(c.updateSecurityScanState).toBe('scanned');
+      expect(c.updateSecuritySummary).toEqual({
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        unknown: 0,
+      });
+      expect(c.securityDelta).toEqual({
+        fixed: 3,
+        new: 0,
+        unchanged: 0,
+        fixedCritical: 2,
+        fixedHigh: 1,
+        newCritical: 0,
+        newHigh: 0,
+      });
+    });
+
+    it('does not populate delta when only current scan exists', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          security: {
+            scan: {
+              status: 'passed',
+              summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+            },
+          },
+        }),
+      );
+      expect(c.updateBouncer).toBeUndefined();
+      expect(c.updateSecurityScanState).toBeUndefined();
+      expect(c.updateSecuritySummary).toBeUndefined();
+      expect(c.securityDelta).toBeUndefined();
     });
   });
 });
