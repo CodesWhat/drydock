@@ -449,6 +449,28 @@ describe('Webhook Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
+    test('should allow watch when labels exist but webhook label is not set', async () => {
+      const container = {
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        labels: { 'com.example.service': 'nginx' },
+      };
+      mockGetContainers.mockReturnValue([container]);
+      const mockWatchContainer = vi.fn().mockResolvedValue(undefined);
+      mockGetState.mockReturnValue({
+        watcher: { 'docker.local': { watchContainer: mockWatchContainer } },
+        trigger: {},
+      });
+
+      const handler = getHandler('post', '/watch/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockWatchContainer).toHaveBeenCalledWith(container);
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
     test('should trigger watch on specific container', async () => {
       const container = { name: 'my-nginx', image: { name: 'nginx' } };
       mockGetContainers.mockReturnValue([container]);
