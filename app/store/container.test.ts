@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import * as event from '../event/index.js';
 import { createContainerFixture } from '../test/helpers.js';
 import * as container from './container.js';
@@ -274,6 +276,83 @@ test('updateContainer should preserve raw runtime env values when payload contai
   });
 });
 
+test('insertContainer should redact sensitive env values in SSE event payload', async () => {
+  const collection = {
+    findOne: () => {},
+    insert: () => {},
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const containerToSave = createContainerFixture({
+    details: {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'API_TOKEN', value: 'super-secret' },
+        { key: 'PATH', value: '/usr/local/bin' },
+      ],
+    },
+  });
+  const spyEvent = vi.spyOn(event, 'emitContainerAdded');
+  container.createCollections(db);
+  container.insertContainer(containerToSave);
+
+  const emittedPayload = spyEvent.mock.calls[0][0];
+  expect(emittedPayload.details.env[0]).toEqual({
+    key: 'API_TOKEN',
+    value: '[REDACTED]',
+    sensitive: true,
+  });
+  expect(emittedPayload.details.env[1]).toEqual({
+    key: 'PATH',
+    value: '/usr/local/bin',
+    sensitive: false,
+  });
+});
+
+test('updateContainer should redact sensitive env values in SSE event payload', async () => {
+  const collection = {
+    insert: () => {},
+    findOne: () => undefined,
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const containerToSave = createContainerFixture({
+    details: {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'DB_PASSWORD', value: 'secret-pass' },
+        { key: 'NODE_ENV', value: 'production' },
+      ],
+    },
+  });
+  const spyEvent = vi.spyOn(event, 'emitContainerUpdated');
+  container.createCollections(db);
+  container.updateContainer(containerToSave);
+
+  const emittedPayload = spyEvent.mock.calls[0][0];
+  expect(emittedPayload.details.env[0]).toEqual({
+    key: 'DB_PASSWORD',
+    value: '[REDACTED]',
+    sensitive: true,
+  });
+  expect(emittedPayload.details.env[1]).toEqual({
+    key: 'NODE_ENV',
+    value: 'production',
+    sensitive: false,
+  });
+});
+
 test('insertContainer should stamp updateDetectedAt when update is available', async () => {
   const collection = {
     findOne: () => {},
@@ -450,7 +529,7 @@ test('getContainers should sort by tag when watcher and name are equal', async (
   expect(results[1].image.tag.value).toEqual('2.0.0');
 });
 
-test('getContainers should classify runtime env sensitivity by default', async () => {
+test('getContainers should redact sensitive env values by default', async () => {
   const containerExample = createContainerFixture({
     details: {
       ports: [],
@@ -478,7 +557,7 @@ test('getContainers should classify runtime env sensitivity by default', async (
 
   expect(result[0].details.env[0]).toEqual({
     key: 'API_TOKEN',
-    value: 'super-secret',
+    value: '[REDACTED]',
     sensitive: true,
   });
   expect(result[0].details.env[1]).toEqual({
@@ -489,7 +568,13 @@ test('getContainers should classify runtime env sensitivity by default', async (
   expect(containers[0].data.details.env[0].value).toBe('super-secret');
 });
 
-test('getContainers should always classify env sensitivity', async () => {
+test('store/container should not define duplicate runtime env classification logic', () => {
+  const source = fs.readFileSync(path.resolve(__dirname, './container.ts'), 'utf8');
+
+  expect(source).not.toContain('function classifyContainerRuntimeDetails(');
+});
+
+test('getContainers should always redact sensitive env values', async () => {
   const containerExample = createContainerFixture({
     details: {
       ports: [],
@@ -517,7 +602,7 @@ test('getContainers should always classify env sensitivity', async () => {
 
   expect(result[0].details.env[0]).toEqual({
     key: 'API_TOKEN',
-    value: 'super-secret',
+    value: '[REDACTED]',
     sensitive: true,
   });
   expect(result[0].details.env[1]).toEqual({
@@ -540,7 +625,7 @@ test('getContainer should return 1 container by id', async () => {
   expect(result.name).toEqual(containerExample.data.name);
 });
 
-test('getContainer should classify runtime env sensitivity by default', async () => {
+test('getContainer should redact sensitive env values by default', async () => {
   const containerExample = {
     data: createContainerFixture({
       details: {
@@ -562,13 +647,13 @@ test('getContainer should classify runtime env sensitivity by default', async ()
 
   expect(result.details.env[0]).toEqual({
     key: 'DB_PASSWORD',
-    value: 'raw-secret',
+    value: '[REDACTED]',
     sensitive: true,
   });
   expect(containerExample.data.details.env[0].value).toBe('raw-secret');
 });
 
-test('getContainer should always classify env sensitivity', async () => {
+test('getContainer should always redact sensitive env values', async () => {
   const containerExample = {
     data: createContainerFixture({
       details: {
@@ -590,9 +675,47 @@ test('getContainer should always classify env sensitivity', async () => {
 
   expect(result.details.env[0]).toEqual({
     key: 'DB_PASSWORD',
-    value: 'raw-secret',
+    value: '[REDACTED]',
     sensitive: true,
   });
+});
+
+test('getContainerRaw should return unredacted env values', async () => {
+  const containerExample = {
+    data: createContainerFixture({
+      details: {
+        ports: [],
+        volumes: [],
+        env: [{ key: 'DB_PASSWORD', value: 'raw-secret' }],
+      },
+    }),
+  };
+  const collection = {
+    findOne: () => containerExample,
+  };
+  const db = {
+    getCollection: () => collection,
+  };
+  container.createCollections(db);
+
+  const result = container.getContainerRaw('132456789');
+
+  expect(result.details.env[0]).toEqual({
+    key: 'DB_PASSWORD',
+    value: 'raw-secret',
+  });
+});
+
+test('getContainerRaw should return undefined when not found', async () => {
+  const collection = {
+    findOne: () => null,
+  };
+  const db = {
+    getCollection: () => collection,
+  };
+  container.createCollections(db);
+  const result = container.getContainerRaw('nonexistent');
+  expect(result).toBeUndefined();
 });
 
 test('getContainer should return undefined when not found', async () => {

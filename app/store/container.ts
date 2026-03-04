@@ -2,7 +2,7 @@
  * Container store.
  */
 import { byString, byValues } from 'sort-es';
-import { isSensitiveKey } from '../api/container/shared.js';
+import { redactContainerRuntimeEnv, redactContainersRuntimeEnv } from '../api/container/shared.js';
 import type { ContainerLifecycleEventPayload } from '../event/index.js';
 import * as container from '../model/container.js';
 
@@ -76,42 +76,6 @@ function cloneContainers(containersToClone) {
   return containersToClone.map((container) => ({
     ...container,
   }));
-}
-
-function classifyContainerRuntimeDetails(details) {
-  if (!details || typeof details !== 'object' || !Array.isArray(details.env)) {
-    return details;
-  }
-
-  return {
-    ...details,
-    env: details.env
-      .filter((entry) => entry && typeof entry === 'object' && typeof entry.key === 'string')
-      .map((entry) => ({
-        key: entry.key,
-        value: entry.value,
-        sensitive: isSensitiveKey(entry.key),
-      })),
-  };
-}
-
-function classifyContainerRuntimeEnv(container) {
-  if (!container || typeof container !== 'object' || !container.details) {
-    return container;
-  }
-
-  return {
-    ...container,
-    details: classifyContainerRuntimeDetails(container.details),
-  };
-}
-
-function classifyContainersRuntimeEnv(containerList = []) {
-  if (!Array.isArray(containerList)) {
-    return containerList;
-  }
-
-  return containerList.map((container) => classifyContainerRuntimeEnv(container));
 }
 
 function hasClassifiedRuntimeEnvValues(details) {
@@ -246,7 +210,9 @@ export function insertContainer(container) {
     data: containerToSave,
   });
   invalidateContainersCache();
-  const containerAddedEventPayload: ContainerLifecycleEventPayload = { ...containerToSave };
+  const containerAddedEventPayload: ContainerLifecycleEventPayload = redactContainerRuntimeEnv({
+    ...containerToSave,
+  });
   emitContainerAdded(containerAddedEventPayload);
   return containerToSave;
 }
@@ -294,7 +260,9 @@ export function updateContainer(container) {
     data: containerToReturn,
   });
   invalidateContainersCache();
-  const containerUpdatedEventPayload: ContainerLifecycleEventPayload = { ...containerToReturn };
+  const containerUpdatedEventPayload: ContainerLifecycleEventPayload = redactContainerRuntimeEnv({
+    ...containerToReturn,
+  });
   emitContainerUpdated(containerUpdatedEventPayload);
   return containerToReturn;
 }
@@ -313,7 +281,7 @@ export function getContainers(query: Record<string, unknown> = {}) {
   const cachedContainers = containersQueryCache.get(queryKey);
   if (cachedContainers) {
     setContainersQueryCache(queryKey, cachedContainers);
-    return classifyContainersRuntimeEnv(cloneContainers(cachedContainers));
+    return redactContainersRuntimeEnv(cloneContainers(cachedContainers));
   }
 
   const filter = {};
@@ -329,7 +297,7 @@ export function getContainers(query: Record<string, unknown> = {}) {
     ]),
   );
   setContainersQueryCache(queryKey, containerListSorted);
-  return classifyContainersRuntimeEnv(cloneContainers(containerListSorted));
+  return redactContainersRuntimeEnv(cloneContainers(containerListSorted));
 }
 
 /**
@@ -343,7 +311,23 @@ export function getContainer(id: string) {
   });
 
   if (container !== null) {
-    return classifyContainerRuntimeEnv(validateContainer(container.data));
+    return redactContainerRuntimeEnv(validateContainer(container.data));
+  }
+  return undefined;
+}
+
+/**
+ * Get container by id without redacting sensitive env values.
+ * Only used by the env reveal endpoint.
+ * @param id
+ */
+export function getContainerRaw(id: string) {
+  const container = containers.findOne({
+    'data.id': id,
+  });
+
+  if (container !== null) {
+    return validateContainer(container.data);
   }
   return undefined;
 }

@@ -22,8 +22,13 @@ vi.mock('express-rate-limit', () => ({ default: vi.fn(() => 'rate-limit-middlewa
 vi.mock('../store/container', () => ({
   getContainers: vi.fn(() => []),
   getContainer: vi.fn(),
+  getContainerRaw: vi.fn(),
   updateContainer: vi.fn((container) => container),
   deleteContainer: vi.fn(),
+}));
+
+vi.mock('../store/audit', () => ({
+  insertAudit: vi.fn(),
 }));
 
 vi.mock('../store/update-operation', () => ({
@@ -186,6 +191,7 @@ describe('Container Router', () => {
       const router = containerRouter.init();
       expect(router.use).toHaveBeenCalledWith('nocache-middleware');
       expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/summary', expect.any(Function));
       expect(router.post).toHaveBeenCalledWith('/watch', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id', expect.any(Function));
       expect(router.delete).toHaveBeenCalledWith('/:id', expect.any(Function));
@@ -203,6 +209,11 @@ describe('Container Router', () => {
       expect(router.get).toHaveBeenCalledWith('/:id/vulnerabilities', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id/sbom', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id/update-operations', expect.any(Function));
+      expect(router.post).toHaveBeenCalledWith(
+        '/:id/env/reveal',
+        'rate-limit-middleware',
+        expect.any(Function),
+      );
       expect(router.post).toHaveBeenCalledWith(
         '/:id/scan',
         'rate-limit-middleware',
@@ -228,6 +239,100 @@ describe('Container Router', () => {
       expect(storeContainer.getContainers).toHaveBeenCalledWith({});
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith([{ id: 'c1' }]);
+    });
+
+    test('should exclude vulnerability arrays from list payload by default', () => {
+      storeContainer.getContainers.mockReturnValue([
+        {
+          id: 'c1',
+          security: {
+            scan: {
+              scanner: 'trivy',
+              image: 'docker.io/library/nginx:1.0.0',
+              scannedAt: '2026-02-01T00:00:00.000Z',
+              status: 'blocked',
+              blockSeverities: ['HIGH'],
+              blockingCount: 1,
+              summary: { unknown: 0, low: 0, medium: 0, high: 1, critical: 0 },
+              vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH' }],
+            },
+            updateScan: {
+              scanner: 'trivy',
+              image: 'docker.io/library/nginx:1.0.1',
+              scannedAt: '2026-02-01T00:10:00.000Z',
+              status: 'passed',
+              blockSeverities: ['HIGH'],
+              blockingCount: 0,
+              summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+              vulnerabilities: [{ id: 'CVE-2', severity: 'LOW' }],
+            },
+          },
+        },
+      ]);
+
+      const handler = getHandler('get', '/');
+      const res = createResponse();
+      handler({ query: {} }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith([
+        expect.objectContaining({
+          id: 'c1',
+          security: expect.objectContaining({
+            scan: expect.objectContaining({ vulnerabilities: [] }),
+            updateScan: expect.objectContaining({ vulnerabilities: [] }),
+          }),
+        }),
+      ]);
+    });
+
+    test('should keep vulnerability arrays when includeVulnerabilities=true', () => {
+      const container = {
+        id: 'c1',
+        security: {
+          scan: {
+            scanner: 'trivy',
+            image: 'docker.io/library/nginx:1.0.0',
+            scannedAt: '2026-02-01T00:00:00.000Z',
+            status: 'blocked',
+            blockSeverities: ['HIGH'],
+            blockingCount: 1,
+            summary: { unknown: 0, low: 0, medium: 0, high: 1, critical: 0 },
+            vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH' }],
+          },
+        },
+      };
+      storeContainer.getContainers.mockReturnValue([container]);
+
+      const handler = getHandler('get', '/');
+      const res = createResponse();
+      handler({ query: { includeVulnerabilities: 'true' } }, res);
+
+      expect(storeContainer.getContainers).toHaveBeenCalledWith({});
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith([container]);
+    });
+
+    test('should apply limit and offset pagination and ignore control params in store query', () => {
+      storeContainer.getContainers.mockReturnValue([{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }]);
+
+      const handler = getHandler('get', '/');
+      const res = createResponse();
+      handler(
+        {
+          query: {
+            watcher: 'docker',
+            includeVulnerabilities: 'false',
+            limit: '1',
+            offset: '1',
+          },
+        },
+        res,
+      );
+
+      expect(storeContainer.getContainers).toHaveBeenCalledWith({ watcher: 'docker' });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith([{ id: 'c2' }]);
     });
 
     test('should redact container runtime environment variable values', () => {
@@ -256,13 +361,68 @@ describe('Container Router', () => {
             ports: ['8080:8080'],
             volumes: ['/tmp:/tmp'],
             env: [
-              { key: 'DB_PASSWORD', value: 'super-secret-password', sensitive: true },
-              { key: 'API_TOKEN', value: 'abcdef', sensitive: true },
+              { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
+              { key: 'API_TOKEN', value: '[REDACTED]', sensitive: true },
             ],
           },
         },
       ]);
       expect(container.details.env[0].value).toBe('super-secret-password');
+    });
+  });
+
+  describe('getContainerSummary', () => {
+    test('should return lightweight sidebar badge summary without vulnerability arrays', () => {
+      storeContainer.getContainers.mockReturnValue([
+        {
+          id: 'c1',
+          status: 'running',
+          security: {
+            scan: {
+              summary: { critical: 1, high: 0 },
+              vulnerabilities: [{ id: 'CVE-2026-0001' }],
+            },
+          },
+        },
+        {
+          id: 'c2',
+          status: 'exited',
+          security: {
+            scan: {
+              summary: { critical: 0, high: 2 },
+              vulnerabilities: [{ id: 'CVE-2026-0002' }],
+            },
+          },
+        },
+        {
+          id: 'c3',
+          status: 'paused',
+          security: {
+            scan: {
+              summary: { critical: 0, high: 0 },
+              vulnerabilities: [{ id: 'CVE-2026-0003' }],
+            },
+          },
+        },
+      ]);
+
+      const handler = getHandler('get', '/summary');
+      const res = createResponse();
+      handler({ query: {} }, res);
+
+      expect(storeContainer.getContainers).toHaveBeenCalledWith({});
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        containers: {
+          total: 3,
+          running: 1,
+          stopped: 2,
+        },
+        security: {
+          issues: 2,
+        },
+      });
+      expect(res.json.mock.calls[0][0]).not.toHaveProperty('vulnerabilities');
     });
   });
 
@@ -308,7 +468,7 @@ describe('Container Router', () => {
         details: {
           ports: ['8080:8080'],
           volumes: ['/tmp:/tmp'],
-          env: [{ key: 'AWS_SECRET_ACCESS_KEY', value: 'top-secret', sensitive: true }],
+          env: [{ key: 'AWS_SECRET_ACCESS_KEY', value: '[REDACTED]', sensitive: true }],
         },
       });
       expect(container.details.env[0].value).toBe('top-secret');
@@ -762,6 +922,63 @@ describe('Container Router', () => {
     });
   });
 
+  describe('revealContainerEnv', () => {
+    function callRevealContainerEnv(id = 'c1') {
+      const handler = getHandler('post', '/:id/env/reveal');
+      const res = createResponse();
+      handler({ params: { id } }, res);
+      return res;
+    }
+
+    test('should return unredacted env vars for a valid container', () => {
+      storeContainer.getContainerRaw.mockReturnValue({
+        id: 'c1',
+        name: 'test-container',
+        image: { name: 'nginx' },
+        details: {
+          ports: [],
+          volumes: [],
+          env: [
+            { key: 'DB_PASSWORD', value: 'super-secret' },
+            { key: 'PATH', value: '/usr/local/bin' },
+          ],
+        },
+      });
+
+      const res = callRevealContainerEnv();
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        env: [
+          { key: 'DB_PASSWORD', value: 'super-secret', sensitive: true },
+          { key: 'PATH', value: '/usr/local/bin', sensitive: false },
+        ],
+      });
+    });
+
+    test('should return 404 when container is not found', () => {
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+
+      const res = callRevealContainerEnv('nonexistent');
+
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+    });
+
+    test('should return empty env array when container has no env', () => {
+      storeContainer.getContainerRaw.mockReturnValue({
+        id: 'c1',
+        name: 'test-container',
+        image: { name: 'nginx' },
+        details: { ports: [], volumes: [] },
+      });
+
+      const res = callRevealContainerEnv();
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ env: [] });
+    });
+  });
+
   describe('scanContainer', () => {
     /** Helper: invoke scanContainer handler */
     async function callScanContainer(id = 'c1') {
@@ -908,7 +1125,7 @@ describe('Container Router', () => {
           details: {
             ports: [],
             volumes: [],
-            env: [{ key: 'DD_API_KEY', value: 'keep-secret', sensitive: true }],
+            env: [{ key: 'DD_API_KEY', value: '[REDACTED]', sensitive: true }],
           },
         }),
       );
@@ -1710,7 +1927,7 @@ describe('Container Router', () => {
         details: {
           ports: [],
           volumes: [],
-          env: [{ key: 'API_TOKEN', value: 'token-value', sensitive: true }],
+          env: [{ key: 'API_TOKEN', value: '[REDACTED]', sensitive: true }],
         },
       });
     });
@@ -2211,7 +2428,7 @@ describe('Container Router', () => {
           details: {
             ports: ['8080:8080'],
             volumes: ['/tmp:/tmp'],
-            env: [{ key: 'DB_PASSWORD', value: 'super-secret', sensitive: true }],
+            env: [{ key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true }],
           },
         }),
       );

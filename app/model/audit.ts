@@ -24,7 +24,8 @@ export interface AuditEntry {
     | 'hook-post-success'
     | 'hook-post-failed'
     | 'auto-rollback'
-    | 'auth-login';
+    | 'auth-login'
+    | 'env-reveal';
   containerName: string;
   containerImage?: string;
   fromVersion?: string;

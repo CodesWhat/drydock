@@ -114,7 +114,7 @@ describe('api/container/shared', () => {
       expect(redactContainerRuntimeEnv(container)).toEqual(container);
     });
 
-    test('classifies env entries with sensitive flag and preserves values', () => {
+    test('redacts sensitive env values and preserves non-sensitive values', () => {
       const container = {
         id: 'c2',
         details: {
@@ -129,7 +129,7 @@ describe('api/container/shared', () => {
         id: 'c2',
         details: {
           env: [
-            { key: 'TOKEN', value: 'secret', sensitive: true },
+            { key: 'TOKEN', value: '[REDACTED]', sensitive: true },
             { key: 'PATH', value: '/usr/local/bin', sensitive: false },
           ],
         },
@@ -147,7 +147,7 @@ describe('api/container/shared', () => {
       expect(redactContainerRuntimeEnv(container)).toEqual({
         id: 'c3',
         details: {
-          env: [{ key: 'TOKEN', value: 'secret', sensitive: true }],
+          env: [{ key: 'TOKEN', value: '[REDACTED]', sensitive: true }],
         },
       });
     });

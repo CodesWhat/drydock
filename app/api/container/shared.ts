@@ -1,4 +1,5 @@
 import type { Container, ContainerImage } from '../../model/container.js';
+import { getErrorMessage } from '../../util/error.js';
 
 type RegistryAuth = { username?: string; password?: string };
 
@@ -40,24 +41,7 @@ export function isSensitiveKey(key: string): boolean {
   const upper = key.toUpperCase();
   return SENSITIVE_KEY_PATTERNS.some((pattern) => upper.includes(pattern));
 }
-
-export function getErrorMessage(error: unknown): string {
-  if (error instanceof Error && typeof error.message === 'string' && error.message.trim() !== '') {
-    return error.message;
-  }
-  if (typeof error === 'string' && error.trim() !== '') {
-    return error;
-  }
-  if (
-    error &&
-    typeof error === 'object' &&
-    typeof (error as { message?: unknown }).message === 'string' &&
-    ((error as { message: string }).message || '').trim() !== ''
-  ) {
-    return (error as { message: string }).message;
-  }
-  return 'unknown error';
-}
+export { getErrorMessage };
 
 export function getErrorStatusCode(error: unknown): number | undefined {
   if (!error || typeof error !== 'object') {
@@ -87,11 +71,14 @@ function classifyContainerRuntimeDetails<T>(details: T): T {
     ...detailsWithEnv,
     env: detailsWithEnv.env
       .filter((entry) => hasEnvKey(entry))
-      .map((entry) => ({
-        key: entry.key,
-        value: entry.value,
-        sensitive: isSensitiveKey(entry.key),
-      })),
+      .map((entry) => {
+        const sensitive = isSensitiveKey(entry.key);
+        return {
+          key: entry.key,
+          value: sensitive ? '[REDACTED]' : entry.value,
+          sensitive,
+        };
+      }),
   } as T;
 }
 
