@@ -493,6 +493,27 @@ describe('container-mapper', () => {
         { key: 'EMPTY', value: '' },
       ]);
     });
+
+    it('preserves sensitive flag on env entries when present', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          details: {
+            ports: [],
+            volumes: [],
+            env: [
+              { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
+              { key: 'PATH', value: '/usr/local/bin', sensitive: false },
+              { key: 'PLAIN', value: 'no-flag' },
+            ],
+          },
+        }),
+      );
+      expect(c.details.env).toEqual([
+        { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
+        { key: 'PATH', value: '/usr/local/bin', sensitive: false },
+        { key: 'PLAIN', value: 'no-flag' },
+      ]);
+    });
   });
 
   describe('mapApiContainers', () => {

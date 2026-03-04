@@ -1,4 +1,4 @@
-import { errorMessage } from '../utils/error';
+import { ApiError, errorMessage } from '../utils/error';
 
 function getContainerIcon() {
   return 'sh-docker';
@@ -18,8 +18,59 @@ interface ContainerGroup {
   updatesAvailable: number;
 }
 
-async function getAllContainers() {
-  const response = await fetch('/api/containers', { credentials: 'include' });
+interface GetAllContainersOptions {
+  includeVulnerabilities?: boolean;
+  limit?: number;
+  offset?: number;
+  signal?: AbortSignal;
+}
+
+function isAbortSignal(value: unknown): value is AbortSignal {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'aborted' in value &&
+    typeof (value as AbortSignal).addEventListener === 'function'
+  );
+}
+
+function toPositiveInteger(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+  return Math.floor(value);
+}
+
+function toNonNegativeInteger(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+  return Math.floor(value);
+}
+
+function buildContainerQueryString(options: GetAllContainersOptions): string {
+  const query = new URLSearchParams();
+  if (options.includeVulnerabilities) {
+    query.set('includeVulnerabilities', 'true');
+  }
+  const limit = toPositiveInteger(options.limit);
+  if (limit !== undefined) {
+    query.set('limit', `${limit}`);
+  }
+  const offset = toNonNegativeInteger(options.offset);
+  if (offset !== undefined) {
+    query.set('offset', `${offset}`);
+  }
+  const queryString = query.toString();
+  return queryString.length > 0 ? `?${queryString}` : '';
+}
+
+async function getAllContainers(optionsOrSignal: GetAllContainersOptions | AbortSignal = {}) {
+  const options = isAbortSignal(optionsOrSignal) ? { signal: optionsOrSignal } : optionsOrSignal;
+  const response = await fetch(`/api/containers${buildContainerQueryString(options)}`, {
+    credentials: 'include',
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
   if (!response.ok) {
     throw new Error(`Failed to get containers: ${response.statusText}`);
   }
@@ -168,10 +219,11 @@ async function getContainerGroups(): Promise<ContainerGroup[]> {
   return response.json();
 }
 
-async function scanContainer(containerId) {
+async function scanContainer(containerId: string, signal?: AbortSignal) {
   const response = await fetch(`/api/containers/${containerId}/scan`, {
     method: 'POST',
     credentials: 'include',
+    ...(signal ? { signal } : {}),
   });
   if (!response.ok) {
     let details = '';
@@ -181,7 +233,21 @@ async function scanContainer(containerId) {
     } catch (e: unknown) {
       console.debug(`Unable to parse scan response payload: ${errorMessage(e)}`);
     }
-    throw new Error(`Failed to scan container: ${response.statusText}${details}`);
+    throw new ApiError(
+      `Failed to scan container: ${response.statusText}${details}`,
+      response.status,
+    );
+  }
+  return response.json();
+}
+
+async function revealContainerEnv(containerId: string) {
+  const response = await fetch(`/api/containers/${containerId}/env/reveal`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to reveal env vars: ${response.statusText}`);
   }
   return response.json();
 }
@@ -198,6 +264,7 @@ export {
   getContainerUpdateOperations,
   getContainerVulnerabilities,
   getContainerSbom,
+  revealContainerEnv,
   runTrigger,
   scanContainer,
   updateContainerPolicy,

@@ -1,8 +1,51 @@
 <script setup lang="ts">
-import { reactive } from 'vue';
+import { reactive, ref } from 'vue';
+import { revealContainerEnv } from '../../services/container';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
+const revealedEnvCache = reactive(new Map<string, Map<string, string>>());
 const revealedKeys = reactive(new Set<string>());
+const envRevealLoading = ref(false);
+
+function revealCacheKey(containerId: string, key: string) {
+  return `${containerId}:${key}`;
+}
+
+async function toggleReveal(containerId: string, key: string) {
+  const cacheKey = revealCacheKey(containerId, key);
+
+  if (revealedKeys.has(cacheKey)) {
+    revealedKeys.delete(cacheKey);
+    return;
+  }
+
+  const cached = revealedEnvCache.get(containerId);
+  if (cached?.has(key)) {
+    revealedKeys.add(cacheKey);
+    return;
+  }
+
+  envRevealLoading.value = true;
+  try {
+    const result = await revealContainerEnv(containerId);
+    const envMap = new Map<string, string>();
+    for (const entry of result.env || []) {
+      envMap.set(entry.key, entry.value);
+    }
+    revealedEnvCache.set(containerId, envMap);
+    revealedKeys.add(cacheKey);
+  } catch {
+    // silently fail — user can retry
+  } finally {
+    envRevealLoading.value = false;
+  }
+}
+
+function getRevealedValue(containerId: string, key: string): string | undefined {
+  const cacheKey = revealCacheKey(containerId, key);
+  if (!revealedKeys.has(cacheKey)) return undefined;
+  return revealedEnvCache.get(containerId)?.get(key);
+}
 
 const {
   selectedContainer,
@@ -500,11 +543,12 @@ const {
                   <span class="dd-text-muted">=</span>
                   <span v-if="!e.sensitive" class="truncate dd-text">{{ e.value }}</span>
                   <template v-else>
-                    <span v-if="revealedKeys.has(e.key)" class="truncate dd-text">{{ e.value }}</span>
+                    <span v-if="getRevealedValue(selectedContainer.id, e.key)" class="truncate dd-text">{{ getRevealedValue(selectedContainer.id, e.key) }}</span>
                     <span v-else class="truncate dd-text-muted">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
                     <button class="shrink-0 p-0.5 dd-text-muted hover:dd-text transition-colors"
-                            @click="revealedKeys.has(e.key) ? revealedKeys.delete(e.key) : revealedKeys.add(e.key)">
-                      <AppIcon :name="revealedKeys.has(e.key) ? 'eye-slash' : 'eye'" :size="11" />
+                            :disabled="envRevealLoading"
+                            @click="toggleReveal(selectedContainer.id, e.key)">
+                      <AppIcon :name="getRevealedValue(selectedContainer.id, e.key) ? 'eye-slash' : 'eye'" :size="11" />
                     </button>
                   </template>
                 </div>

@@ -1,7 +1,13 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 import ContainerSideTabContent from '@/components/containers/ContainerSideTabContent.vue';
+
+const mockRevealContainerEnv = vi.fn();
+
+vi.mock('@/services/container', () => ({
+  revealContainerEnv: (...args: unknown[]) => mockRevealContainerEnv(...args),
+}));
 
 const selectedContainer = ref({
   id: 'container-1',
@@ -16,7 +22,7 @@ const selectedContainer = ref({
     volumes: [],
     env: [
       { key: 'PATH', value: '/usr/local/bin:/usr/bin', sensitive: false },
-      { key: 'DB_PASSWORD', value: 'super-secret', sensitive: true },
+      { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
       { key: 'NODE_ENV', value: 'production', sensitive: false },
     ],
     labels: [],
@@ -138,12 +144,13 @@ describe('ContainerSideTabContent - Environment Variables', () => {
         volumes: [],
         env: [
           { key: 'PATH', value: '/usr/local/bin:/usr/bin', sensitive: false },
-          { key: 'DB_PASSWORD', value: 'super-secret', sensitive: true },
+          { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
           { key: 'NODE_ENV', value: 'production', sensitive: false },
         ],
         labels: [],
       },
     };
+    mockRevealContainerEnv.mockReset();
   });
 
   it('displays non-sensitive env var values directly', () => {
@@ -163,7 +170,15 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(passwordRow?.text()).toContain('\u2022\u2022\u2022\u2022\u2022');
   });
 
-  it('reveals sensitive value on eye button click', async () => {
+  it('reveals sensitive value on eye button click via async fetch', async () => {
+    mockRevealContainerEnv.mockResolvedValueOnce({
+      env: [
+        { key: 'PATH', value: '/usr/local/bin:/usr/bin', sensitive: false },
+        { key: 'DB_PASSWORD', value: 'super-secret', sensitive: true },
+        { key: 'NODE_ENV', value: 'production', sensitive: false },
+      ],
+    });
+
     const wrapper = mountComponent();
     const envRows = wrapper.findAll('[data-test="container-side-tab-content"] .font-mono');
     const passwordRow = envRows.find((row) => row.text().includes('DB_PASSWORD'));
@@ -173,14 +188,20 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(eyeButton).toBeDefined();
 
     await eyeButton?.trigger('click');
+    await flushPromises();
     await nextTick();
 
     const updatedRows = wrapper.findAll('[data-test="container-side-tab-content"] .font-mono');
     const updatedPasswordRow = updatedRows.find((row) => row.text().includes('DB_PASSWORD'));
     expect(updatedPasswordRow?.text()).toContain('super-secret');
+    expect(mockRevealContainerEnv).toHaveBeenCalledWith('container-1');
   });
 
   it('re-masks sensitive value on second eye button click', async () => {
+    mockRevealContainerEnv.mockResolvedValueOnce({
+      env: [{ key: 'DB_PASSWORD', value: 'super-secret', sensitive: true }],
+    });
+
     const wrapper = mountComponent();
     const envRows = wrapper.findAll('[data-test="container-side-tab-content"] .font-mono');
     const passwordRow = envRows.find((row) => row.text().includes('DB_PASSWORD'));
@@ -189,6 +210,7 @@ describe('ContainerSideTabContent - Environment Variables', () => {
 
     // Reveal
     await eyeButton?.trigger('click');
+    await flushPromises();
     await nextTick();
 
     // Re-mask

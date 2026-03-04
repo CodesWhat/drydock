@@ -172,7 +172,7 @@ function deriveSecurityScanState(apiContainer: ApiContainerInput): 'scanned' | '
   return 'scanned';
 }
 
-function normalizeSeverityCount(value: unknown): number {
+export function normalizeSeverityCount(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
     return 0;
   }
@@ -416,16 +416,21 @@ function normalizeStringArray(values: unknown): string[] {
     .filter((value) => value.length > 0);
 }
 
-function normalizeEnv(values: unknown): { key: string; value: string }[] {
+function normalizeEnv(values: unknown): { key: string; value: string; sensitive?: boolean }[] {
   if (!Array.isArray(values)) return [];
   return values
     .filter(
-      (value): value is { key: unknown; value: unknown } => !!value && typeof value === 'object',
+      (value): value is { key: unknown; value: unknown; sensitive?: unknown } =>
+        !!value && typeof value === 'object',
     )
     .map((value) => {
       const key = typeof value.key === 'string' ? value.key.trim() : '';
       const envValue = typeof value.value === 'string' ? value.value : `${value.value ?? ''}`;
-      return { key, value: envValue };
+      return {
+        key,
+        value: envValue,
+        ...(typeof value.sensitive === 'boolean' ? { sensitive: value.sensitive } : {}),
+      };
     })
     .filter((value) => value.key.length > 0);
 }

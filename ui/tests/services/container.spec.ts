@@ -9,10 +9,12 @@ import {
   getContainerVulnerabilities,
   refreshAllContainers,
   refreshContainer,
+  revealContainerEnv,
   runTrigger,
   scanContainer,
   updateContainerPolicy,
 } from '@/services/container';
+import { ApiError } from '@/utils/error';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -43,6 +45,53 @@ describe('Container Service', () => {
 
       expect(fetch).toHaveBeenCalledWith('/api/containers', {
         credentials: 'include',
+      });
+      expect(containers).toEqual(mockContainers);
+    });
+
+    it('includes vulnerability details when requested', async () => {
+      const mockContainers = [{ id: '1', name: 'container1' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockContainers,
+      } as any);
+
+      const containers = await getAllContainers({ includeVulnerabilities: true });
+
+      expect(fetch).toHaveBeenCalledWith('/api/containers?includeVulnerabilities=true', {
+        credentials: 'include',
+      });
+      expect(containers).toEqual(mockContainers);
+    });
+
+    it('supports limit/offset query params', async () => {
+      const mockContainers = [{ id: '2', name: 'container2' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockContainers,
+      } as any);
+
+      const containers = await getAllContainers({ limit: 10, offset: 20 });
+
+      expect(fetch).toHaveBeenCalledWith('/api/containers?limit=10&offset=20', {
+        credentials: 'include',
+      });
+      expect(containers).toEqual(mockContainers);
+    });
+
+    it('accepts AbortSignal as the first argument for backward compatibility', async () => {
+      const controller = new AbortController();
+      const mockContainers = [{ id: '1', name: 'container1' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockContainers,
+      } as any);
+
+      const containers = await getAllContainers(controller.signal);
+
+      expect(fetch).toHaveBeenCalledWith('/api/containers', {
+        credentials: 'include',
+        signal: controller.signal,
       });
       expect(containers).toEqual(mockContainers);
     });
@@ -346,6 +395,40 @@ describe('Container Service', () => {
     });
   });
 
+  describe('revealContainerEnv', () => {
+    it('reveals env vars successfully', async () => {
+      const mockResult = {
+        env: [
+          { key: 'DB_PASSWORD', value: 'secret', sensitive: true },
+          { key: 'PATH', value: '/usr/local/bin', sensitive: false },
+        ],
+      };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResult,
+      } as any);
+
+      const result = await revealContainerEnv('c1');
+
+      expect(fetch).toHaveBeenCalledWith('/api/containers/c1/env/reveal', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockResult);
+    });
+
+    it('throws when response is not ok', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Not Found',
+      } as any);
+
+      await expect(revealContainerEnv('missing')).rejects.toThrow(
+        'Failed to reveal env vars: Not Found',
+      );
+    });
+  });
+
   describe('scanContainer', () => {
     it('scans container successfully', async () => {
       const mockResult = { id: 'c1', security: { scan: { status: 'passed' } } };
@@ -366,6 +449,7 @@ describe('Container Service', () => {
     it('throws with error detail when response body has error', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 400,
         statusText: 'Bad Request',
         json: async () => ({ error: 'Image not found' }),
       } as any);
@@ -378,6 +462,7 @@ describe('Container Service', () => {
     it('throws without detail when response body has no error field', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 400,
         statusText: 'Bad Request',
         json: async () => ({}),
       } as any);
@@ -389,6 +474,7 @@ describe('Container Service', () => {
       const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 500,
         statusText: 'Internal Server Error',
         json: async () => {
           throw new Error('parse error');
@@ -409,6 +495,7 @@ describe('Container Service', () => {
       const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 500,
         statusText: 'Internal Server Error',
         json: async () => {
           throw 'scan-parse-failed';
@@ -425,6 +512,26 @@ describe('Container Service', () => {
       } finally {
         debugSpy.mockRestore();
       }
+    });
+
+    it('throws ApiError with HTTP status', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+        json: async () => ({}),
+      } as any);
+
+      const thrown = await scanContainer('c1').catch((error) => error);
+
+      expect(thrown).toBeInstanceOf(ApiError);
+      expect(thrown).toEqual(
+        expect.objectContaining({
+          name: 'ApiError',
+          status: 429,
+          message: 'Failed to scan container: Too Many Requests',
+        }),
+      );
     });
   });
 
