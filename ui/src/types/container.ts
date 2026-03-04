@@ -15,6 +15,16 @@ export interface ContainerSecuritySummary {
   critical: number;
 }
 
+export interface ContainerSecurityDelta {
+  fixed: number;
+  new: number;
+  unchanged: number;
+  fixedCritical: number;
+  fixedHigh: number;
+  newCritical: number;
+  newHigh: number;
+}
+
 export interface Container {
   id: string;
   name: string;
@@ -40,6 +50,10 @@ export interface Container {
   bouncer: 'safe' | 'unsafe' | 'blocked';
   securityScanState?: 'scanned' | 'not-scanned';
   securitySummary?: ContainerSecuritySummary;
+  updateBouncer?: 'safe' | 'unsafe' | 'blocked';
+  updateSecurityScanState?: 'scanned' | 'not-scanned';
+  updateSecuritySummary?: ContainerSecuritySummary;
+  securityDelta?: ContainerSecurityDelta;
   server: string;
   includeTags?: string;
   excludeTags?: string;

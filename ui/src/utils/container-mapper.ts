@@ -15,7 +15,11 @@
  */
 
 import { getEffectiveDisplayIcon } from '../services/image-icon';
-import type { Container, ContainerSecuritySummary } from '../types/container';
+import type {
+  Container,
+  ContainerSecurityDelta,
+  ContainerSecuritySummary,
+} from '../types/container';
 
 interface ApiContainerImage {
   name?: unknown;
@@ -82,7 +86,10 @@ interface ApiContainerInput {
   result?: ApiContainerResult | null;
   updateAvailable?: unknown;
   updateKind?: ApiContainerUpdateKind | null;
-  security?: { scan?: ApiContainerSecurityScan | null } | null;
+  security?: {
+    scan?: ApiContainerSecurityScan | null;
+    updateScan?: ApiContainerSecurityScan | null;
+  } | null;
   labels?: Record<string, unknown> | null;
   displayIcon?: unknown;
   updateDetectedAt?: unknown;
@@ -185,6 +192,76 @@ function deriveSecuritySummary(
     medium: normalizeSeverityCount(summary.medium),
     high: normalizeSeverityCount(summary.high),
     critical: normalizeSeverityCount(summary.critical),
+  };
+}
+
+/** Derive bouncer status from update scan data. */
+function deriveUpdateBouncer(
+  apiContainer: ApiContainerInput,
+): 'safe' | 'unsafe' | 'blocked' | undefined {
+  const scan = apiContainer.security?.updateScan;
+  if (!scan) return undefined;
+  if (scan.status === 'blocked') return 'blocked';
+  const summary = scan.summary;
+  if (
+    summary &&
+    (normalizeSeverityCount(summary.critical) > 0 || normalizeSeverityCount(summary.high) > 0)
+  ) {
+    return 'unsafe';
+  }
+  return 'safe';
+}
+
+/** Derive whether a container has any persisted update security scan result. */
+function deriveUpdateSecurityScanState(
+  apiContainer: ApiContainerInput,
+): 'scanned' | 'not-scanned' | undefined {
+  const scan = apiContainer.security?.updateScan;
+  if (!scan) return undefined;
+  if (scan.status === 'not-scanned') return 'not-scanned';
+  return 'scanned';
+}
+
+function deriveUpdateSecuritySummary(
+  apiContainer: ApiContainerInput,
+): ContainerSecuritySummary | undefined {
+  const summary = apiContainer.security?.updateScan?.summary;
+  if (!summary || typeof summary !== 'object') {
+    return undefined;
+  }
+  return {
+    unknown: normalizeSeverityCount(summary.unknown),
+    low: normalizeSeverityCount(summary.low),
+    medium: normalizeSeverityCount(summary.medium),
+    high: normalizeSeverityCount(summary.high),
+    critical: normalizeSeverityCount(summary.critical),
+  };
+}
+
+/** Compute the delta between current and update security summaries. */
+export function computeSecurityDelta(
+  current: ContainerSecuritySummary | undefined,
+  update: ContainerSecuritySummary | undefined,
+): ContainerSecurityDelta | undefined {
+  if (!current || !update) return undefined;
+  const severities = ['unknown', 'low', 'medium', 'high', 'critical'] as const;
+  let fixed = 0;
+  let newVulns = 0;
+  let unchanged = 0;
+  for (const sev of severities) {
+    const diff = current[sev] - update[sev];
+    if (diff > 0) fixed += diff;
+    else if (diff < 0) newVulns += -diff;
+    else unchanged += current[sev];
+  }
+  return {
+    fixed,
+    new: newVulns,
+    unchanged,
+    fixedCritical: Math.max(0, current.critical - update.critical),
+    fixedHigh: Math.max(0, current.high - update.high),
+    newCritical: Math.max(0, update.critical - current.critical),
+    newHigh: Math.max(0, update.high - current.high),
   };
 }
 
@@ -377,6 +454,8 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
   const imageName = asNonEmptyString(apiContainer.image?.name) ?? '';
   const displayIcon = asNonEmptyString(apiContainer.displayIcon) ?? '';
   const currentTag = asNonEmptyString(apiContainer.image?.tag?.value) ?? 'latest';
+  const currentSummary = deriveSecuritySummary(apiContainer);
+  const updateSummary = deriveUpdateSecuritySummary(apiContainer);
 
   return {
     id,
@@ -402,7 +481,11 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     noUpdateReason: deriveNoUpdateReason(apiContainer),
     bouncer: deriveBouncer(apiContainer),
     securityScanState: deriveSecurityScanState(apiContainer),
-    securitySummary: deriveSecuritySummary(apiContainer),
+    securitySummary: currentSummary,
+    updateBouncer: deriveUpdateBouncer(apiContainer),
+    updateSecurityScanState: deriveUpdateSecurityScanState(apiContainer),
+    updateSecuritySummary: updateSummary,
+    securityDelta: computeSecurityDelta(currentSummary, updateSummary),
     server: deriveServer(apiContainer),
     includeTags: asNonEmptyString(apiContainer.includeTags),
     excludeTags: asNonEmptyString(apiContainer.excludeTags),

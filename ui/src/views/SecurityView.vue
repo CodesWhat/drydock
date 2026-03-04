@@ -24,6 +24,15 @@ interface Vulnerability {
   publishedDate: string;
 }
 
+interface SecurityDelta {
+  fixed: number;
+  new: number;
+  fixedCritical: number;
+  fixedHigh: number;
+  newCritical: number;
+  newHigh: number;
+}
+
 interface ImageSummary {
   image: string;
   critical: number;
@@ -33,6 +42,7 @@ interface ImageSummary {
   total: number;
   fixable: number;
   vulns: Vulnerability[];
+  delta?: SecurityDelta;
 }
 
 type SbomFormat = 'spdx-json' | 'cyclonedx-json';
@@ -167,6 +177,42 @@ async function fetchSecurityRuntimeStatus() {
   }
 }
 
+interface UpdateScanSummary {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+const updateScanSummaries = ref<Record<string, UpdateScanSummary>>({});
+
+function computeDelta(
+  current: { critical: number; high: number; medium: number; low: number },
+  update: UpdateScanSummary,
+): SecurityDelta {
+  return {
+    fixed:
+      Math.max(0, current.critical - update.critical) +
+      Math.max(0, current.high - update.high) +
+      Math.max(0, current.medium - update.medium) +
+      Math.max(0, current.low - update.low),
+    new:
+      Math.max(0, update.critical - current.critical) +
+      Math.max(0, update.high - current.high) +
+      Math.max(0, update.medium - current.medium) +
+      Math.max(0, update.low - current.low),
+    fixedCritical: Math.max(0, current.critical - update.critical),
+    fixedHigh: Math.max(0, current.high - update.high),
+    newCritical: Math.max(0, update.critical - current.critical),
+    newHigh: Math.max(0, update.high - current.high),
+  };
+}
+
+function normalizeSeverityCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;
+  return Math.floor(value);
+}
+
 async function fetchVulnerabilities() {
   // Only show full loading state on initial load (no data yet)
   if (securityVulnerabilities.value.length === 0) {
@@ -177,6 +223,7 @@ async function fetchVulnerabilities() {
     const containers = await getAllContainers();
     const vulns: Vulnerability[] = [];
     const imageContainerMap: Record<string, string[]> = {};
+    const updateSummaryMap: Record<string, UpdateScanSummary> = {};
     let latestScanAt: string | null = null;
 
     for (const container of containers) {
@@ -192,6 +239,18 @@ async function fetchVulnerabilities() {
           imageContainerMap[imageName] = mappedContainerIds;
         }
       }
+
+      // Capture update scan summary for delta computation
+      const updateScan = container.security?.updateScan;
+      if (updateScan?.summary) {
+        updateSummaryMap[imageName] = {
+          critical: normalizeSeverityCount(updateScan.summary.critical),
+          high: normalizeSeverityCount(updateScan.summary.high),
+          medium: normalizeSeverityCount(updateScan.summary.medium),
+          low: normalizeSeverityCount(updateScan.summary.low),
+        };
+      }
+
       for (const v of scan.vulnerabilities) {
         vulns.push({
           id: v.id ?? 'unknown',
@@ -210,10 +269,12 @@ async function fetchVulnerabilities() {
 
     securityVulnerabilities.value = vulns;
     containerIdsByImage.value = imageContainerMap;
+    updateScanSummaries.value = updateSummaryMap;
     latestSecurityScanAt.value = latestScanAt;
   } catch (e: unknown) {
     error.value = errorMessage(e, 'Failed to load vulnerability data');
     containerIdsByImage.value = {};
+    updateScanSummaries.value = {};
     latestSecurityScanAt.value = null;
   } finally {
     loading.value = false;
@@ -298,9 +359,13 @@ const imageSummaries = computed<ImageSummary[]>(() => {
     summary.vulns.push(v);
   }
 
-  // Sort vulns within each image by severity
+  // Sort vulns within each image by severity and attach delta
   for (const s of map.values()) {
     s.vulns.sort((a, b) => (severityOrder[a.severity] ?? 99) - (severityOrder[b.severity] ?? 99));
+    const updateSummary = updateScanSummaries.value[s.image];
+    if (updateSummary) {
+      s.delta = computeDelta(s, updateSummary);
+    }
   }
 
   return [...map.values()];
@@ -625,6 +690,24 @@ onUnmounted(() => {
             <AppIcon :name="severityIcon(highestSeverity(row))" :size="13" class="shrink-0 md:!hidden"
                      :style="{ color: severityColor(highestSeverity(row)).text }" />
             <span class="font-medium dd-text truncate">{{ row.image }}</span>
+            <span v-if="row.delta && row.delta.fixed > 0 && row.delta.new === 0"
+                  class="badge text-[8px] font-bold px-1.5 py-0 shrink-0"
+                  :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }"
+                  v-tooltip.top="`Update fixes ${row.delta.fixed} vulnerability${row.delta.fixed !== 1 ? 'ies' : 'y'}`">
+              <AppIcon name="trending-down" :size="9" class="mr-0.5" />{{ row.delta.fixed }} fixed
+            </span>
+            <span v-else-if="row.delta && row.delta.new > 0 && row.delta.fixed === 0"
+                  class="badge text-[8px] font-bold px-1.5 py-0 shrink-0"
+                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+                  v-tooltip.top="`Update introduces ${row.delta.new} new vulnerability${row.delta.new !== 1 ? 'ies' : 'y'}`">
+              <AppIcon name="trending-up" :size="9" class="mr-0.5" />{{ row.delta.new }} new
+            </span>
+            <span v-else-if="row.delta && (row.delta.fixed > 0 || row.delta.new > 0)"
+                  class="badge text-[8px] font-bold px-1.5 py-0 shrink-0"
+                  :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution)' }"
+                  v-tooltip.top="`Update: ${row.delta.fixed} fixed, ${row.delta.new} new`">
+              {{ row.delta.fixed }} fixed, {{ row.delta.new }} new
+            </span>
           </div>
         </template>
         <template #cell-critical="{ row }">
@@ -763,6 +846,21 @@ onUnmounted(() => {
               </span>
             </div>
           </div>
+          <div v-if="summary.delta && (summary.delta.fixed > 0 || summary.delta.new > 0)"
+               class="px-4 py-2 flex items-center gap-1.5"
+               :style="{ borderTop: '1px solid var(--dd-border)' }">
+            <span v-if="summary.delta.fixed > 0"
+                  class="badge text-[8px] font-bold px-1.5 py-0"
+                  :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }">
+              {{ summary.delta.fixed }} fixed
+            </span>
+            <span v-if="summary.delta.new > 0"
+                  class="badge text-[8px] font-bold px-1.5 py-0"
+                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+              {{ summary.delta.new }} new
+            </span>
+            <span class="text-[9px] dd-text-muted ml-auto">vs update</span>
+          </div>
           <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
                :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
             <span v-if="summary.fixable > 0" class="text-[11px] font-medium flex items-center gap-1"
@@ -843,6 +941,16 @@ onUnmounted(() => {
             <span v-if="summary.fixable > 0" class="badge text-[8px] font-bold px-1.5 py-0"
                   :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }">
               {{ summary.fixable }} fix
+            </span>
+            <span v-if="summary.delta && summary.delta.fixed > 0 && summary.delta.new === 0"
+                  class="badge text-[8px] font-bold px-1.5 py-0"
+                  :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }">
+              {{ summary.delta.fixed }} fixed
+            </span>
+            <span v-else-if="summary.delta && summary.delta.new > 0"
+                  class="badge text-[8px] font-bold px-1.5 py-0"
+                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+              {{ summary.delta.new }} new
             </span>
           </div>
         </template>
