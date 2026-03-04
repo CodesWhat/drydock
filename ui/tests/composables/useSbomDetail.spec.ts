@@ -7,9 +7,9 @@ vi.mock('@/services/container', () => ({
 }));
 
 import { useSbomDetail } from '@/composables/useSbomDetail';
-import type { ImageSummary } from '@/composables/useVulnerabilities';
+import type { ImageSummaryWithVulns } from '@/composables/useVulnerabilities';
 
-function makeSummary(overrides: Partial<ImageSummary> = {}): ImageSummary {
+function makeSummary(overrides: Partial<ImageSummaryWithVulns> = {}): ImageSummaryWithVulns {
   return {
     image: 'nginx',
     critical: 1,
@@ -71,6 +71,29 @@ describe('useSbomDetail', () => {
     expect(state.detailSbomComponentCount.value).toBe(1);
   });
 
+  it('counts CycloneDX components from the sbom document', async () => {
+    mockGetContainerSbom.mockResolvedValue({
+      generatedAt: '2026-03-01T00:00:00.000Z',
+      document: { bomFormat: 'CycloneDX', components: [{}, {}, {}] },
+    });
+
+    const state = useSbomDetail({
+      containerIdsByImage: ref({ nginx: ['container-1'] }),
+    });
+
+    state.openDetail(makeSummary());
+
+    await vi.waitFor(() => {
+      expect(mockGetContainerSbom).toHaveBeenCalledWith('container-1', 'spdx-json');
+    });
+
+    expect(state.detailSbomDocument.value).toEqual({
+      bomFormat: 'CycloneDX',
+      components: [{}, {}, {}],
+    });
+    expect(state.detailSbomComponentCount.value).toBe(3);
+  });
+
   it('sets a helpful error when no container id can be resolved', async () => {
     const state = useSbomDetail({
       containerIdsByImage: ref({}),
@@ -93,6 +116,39 @@ describe('useSbomDetail', () => {
     state.selectedImage.value = makeSummary();
 
     expect(state.selectedImageVulns.value.map((v) => v.id)).toEqual(['CVE-CRIT', 'CVE-LOW']);
+  });
+
+  it('reloads sbom using the currently selected format', async () => {
+    mockGetContainerSbom
+      .mockResolvedValueOnce({
+        generatedAt: '2026-03-01T00:00:00.000Z',
+        document: { spdxVersion: 'SPDX-2.3', packages: [{}] },
+      })
+      .mockResolvedValueOnce({
+        generatedAt: '2026-03-01T00:00:00.000Z',
+        document: { bomFormat: 'CycloneDX', components: [{}, {}] },
+      });
+
+    const state = useSbomDetail({
+      containerIdsByImage: ref({ nginx: ['container-1'] }),
+    });
+
+    state.openDetail(makeSummary());
+
+    await vi.waitFor(() => {
+      expect(mockGetContainerSbom).toHaveBeenNthCalledWith(1, 'container-1', 'spdx-json');
+    });
+    expect(state.detailSbomComponentCount.value).toBe(1);
+
+    state.selectedSbomFormat.value = 'cyclonedx-json';
+    await state.loadDetailSbom();
+
+    expect(mockGetContainerSbom).toHaveBeenNthCalledWith(2, 'container-1', 'cyclonedx-json');
+    expect(state.detailSbomDocument.value).toEqual({
+      bomFormat: 'CycloneDX',
+      components: [{}, {}],
+    });
+    expect(state.detailSbomComponentCount.value).toBe(2);
   });
 
   it('clears selected detail state when panel closes', () => {

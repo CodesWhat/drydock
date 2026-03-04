@@ -446,6 +446,24 @@ describe('Container Service', () => {
       expect(result).toEqual(mockResult);
     });
 
+    it('passes abort signal when provided', async () => {
+      const mockResult = { id: 'c1', security: { scan: { status: 'passed' } } };
+      const controller = new AbortController();
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResult,
+      } as any);
+
+      const result = await scanContainer('c1', controller.signal);
+
+      expect(fetch).toHaveBeenCalledWith('/api/containers/c1/scan', {
+        method: 'POST',
+        credentials: 'include',
+        signal: controller.signal,
+      });
+      expect(result).toEqual(mockResult);
+    });
+
     it('throws with error detail when response body has error', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
