@@ -232,7 +232,8 @@ async function scanAllContainers() {
     scannerReady: scannerReady.value,
     runtimeLoading: runtimeLoading.value,
   });
-  // Refresh once after the entire batch finishes
+  // Brief delay so the backend persists the last scan result before we fetch
+  await new Promise((r) => setTimeout(r, 1500));
   await fetchVulnerabilities();
 }
 
