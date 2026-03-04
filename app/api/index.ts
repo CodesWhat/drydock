@@ -52,7 +52,24 @@ function configureCors(app) {
 }
 
 function configureSecurityHeaders(app) {
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          'default-src': ["'self'"],
+          'script-src': ["'self'"],
+          'style-src': ["'self'", "'unsafe-inline'"],
+          'img-src': ["'self'", 'data:'],
+          'connect-src': [
+            "'self'",
+            'https://api.iconify.design',
+            'https://api.simplesvg.com',
+            'https://api.unisvg.com',
+          ],
+        },
+      },
+    }),
+  );
 }
 
 function registerRoutes(app) {

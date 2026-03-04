@@ -166,7 +166,7 @@ describe('API Index', () => {
     expect(mockApp.use).toHaveBeenCalledWith('/', 'ui-router');
   });
 
-  test('should enable helmet security headers', async () => {
+  test('should enable helmet security headers with CSP allowing Iconify CDN', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
       port: 3000,
@@ -178,7 +178,22 @@ describe('API Index', () => {
     const indexRouter = await import('./index.js');
     await indexRouter.init();
 
-    expect(mockHelmet).toHaveBeenCalledWith();
+    expect(mockHelmet).toHaveBeenCalledWith({
+      contentSecurityPolicy: {
+        directives: {
+          'default-src': ["'self'"],
+          'script-src': ["'self'"],
+          'style-src': ["'self'", "'unsafe-inline'"],
+          'img-src': ["'self'", 'data:'],
+          'connect-src': [
+            "'self'",
+            'https://api.iconify.design',
+            'https://api.simplesvg.com',
+            'https://api.unisvg.com',
+          ],
+        },
+      },
+    });
     expect(mockApp.use).toHaveBeenCalledWith('helmet-middleware');
   });
 
