@@ -308,11 +308,11 @@ const sortedAgents = computed(() => {
 // -- Column visibility --
 const agentAllColumns = [
   { key: 'name', label: 'Agent', align: 'text-left', width: '99%', sortable: true, required: true },
-  { key: 'status', label: 'Status', align: 'text-center', sortable: true, required: false },
-  { key: 'containers', label: 'Containers', align: 'text-center', sortable: true, required: false },
-  { key: 'docker', label: 'Docker', align: 'text-center', sortable: true, required: false },
-  { key: 'os', label: 'OS', align: 'text-center', sortable: true, required: false },
-  { key: 'version', label: 'Version', align: 'text-center', sortable: true, required: false },
+  { key: 'status', label: 'Status', sortable: true, required: false },
+  { key: 'containers', label: 'Containers', sortable: true, required: false },
+  { key: 'docker', label: 'Docker', sortable: true, required: false },
+  { key: 'os', label: 'OS', sortable: true, required: false },
+  { key: 'version', label: 'Version', sortable: true, required: false },
   { key: 'lastSeen', label: 'Last Seen', align: 'text-right', sortable: true, required: false },
 ];
 

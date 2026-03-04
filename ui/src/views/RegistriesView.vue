@@ -137,8 +137,8 @@ const filteredRegistries = computed(() => {
 
 const tableColumns = [
   { key: 'name', label: 'Registry', sortable: false, width: '99%' },
-  { key: 'type', label: 'Type', align: 'text-center', sortable: false },
-  { key: 'status', label: 'Status', align: 'text-center', sortable: false },
+  { key: 'type', label: 'Type', sortable: false },
+  { key: 'status', label: 'Status', sortable: false },
   { key: 'url', label: 'URL', align: 'text-right', sortable: false },
 ];
 

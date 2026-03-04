@@ -51,9 +51,9 @@ const filteredWatchers = computed(() => {
 
 const tableColumns = [
   { key: 'name', label: 'Watcher', width: '35%', sortable: false },
-  { key: 'status', label: 'Status', width: '15%', align: 'text-center', sortable: false },
-  { key: 'containers', label: 'Containers', width: '15%', align: 'text-center', sortable: false },
-  { key: 'cron', label: 'Schedule', width: '20%', align: 'text-center', sortable: false },
+  { key: 'status', label: 'Status', width: '15%', sortable: false },
+  { key: 'containers', label: 'Containers', width: '15%', sortable: false },
+  { key: 'cron', label: 'Schedule', width: '20%', sortable: false },
   { key: 'lastRun', label: 'Last Run', width: '15%', align: 'text-right', sortable: false },
 ];
 

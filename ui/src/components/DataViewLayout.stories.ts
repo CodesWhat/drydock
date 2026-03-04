@@ -139,8 +139,8 @@ export const IntegratedWorkspace: Story = {
 
       const columns = [
         { key: 'name', label: 'Container', width: '45%' },
-        { key: 'status', label: 'Status', align: 'text-center' },
-        { key: 'server', label: 'Server', align: 'text-center' },
+        { key: 'status', label: 'Status' },
+        { key: 'server', label: 'Server' },
       ];
 
       function openDetails(row: WorkspaceRow) {

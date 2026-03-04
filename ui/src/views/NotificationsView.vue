@@ -134,7 +134,7 @@ const filteredNotifications = computed(() => {
 });
 
 const tableColumns = [
-  { key: 'enabled', label: 'On', align: 'text-center', sortable: false, width: '48px' },
+  { key: 'enabled', label: 'On', sortable: false, width: '48px' },
   { key: 'name', label: 'Rule', sortable: false, width: '99%' },
   { key: 'triggers', label: 'Triggers', align: 'text-right', sortable: false },
 ];
@@ -322,11 +322,11 @@ onMounted(async () => {
       :active-row="selectedRule?.id"
       @row-click="openDetail($event)">
       <template #cell-enabled="{ row }">
-        <button class="w-8 h-4 rounded-full relative shrink-0 transition-colors mx-auto disabled:opacity-40"
+        <button class="w-8 h-4 dd-rounded-lg relative shrink-0 transition-colors mx-auto disabled:opacity-40"
                 :style="{ backgroundColor: row.enabled ? 'var(--dd-success)' : 'var(--dd-border-strong)' }"
                 :disabled="savingRuleId === row.id"
                 @click.stop="toggleNotification(row.id)">
-          <div class="absolute top-0.5 w-3 h-3 rounded-full shadow-sm transition-transform"
+          <div class="absolute top-0.5 w-3 h-3 dd-rounded shadow-sm transition-transform"
                :style="{ backgroundColor: 'var(--dd-text)', left: row.enabled ? '17px' : '2px' }" />
         </button>
       </template>
@@ -364,11 +364,11 @@ onMounted(async () => {
             <div class="text-[15px] font-semibold truncate dd-text">{{ notif.name }}</div>
             <div class="text-[11px] mt-0.5 dd-text-muted">{{ notif.description }}</div>
           </div>
-          <button class="w-8 h-4 rounded-full relative shrink-0 transition-colors disabled:opacity-40"
+          <button class="w-8 h-4 dd-rounded-lg relative shrink-0 transition-colors disabled:opacity-40"
                   :style="{ backgroundColor: notif.enabled ? 'var(--dd-success)' : 'var(--dd-border-strong)' }"
                   :disabled="savingRuleId === notif.id"
                   @click.stop="toggleNotification(notif.id)">
-            <div class="absolute top-0.5 w-3 h-3 rounded-full shadow-sm transition-transform"
+            <div class="absolute top-0.5 w-3 h-3 dd-rounded shadow-sm transition-transform"
                  :style="{ backgroundColor: 'var(--dd-text)', left: notif.enabled ? '17px' : '2px' }" />
           </button>
         </div>
@@ -393,11 +393,11 @@ onMounted(async () => {
       :selected-key="selectedRule?.id"
       @item-click="openDetail($event)">
       <template #header="{ item: notif }">
-        <button class="w-8 h-4 rounded-full relative shrink-0 transition-colors disabled:opacity-40"
+        <button class="w-8 h-4 dd-rounded-lg relative shrink-0 transition-colors disabled:opacity-40"
                 :style="{ backgroundColor: notif.enabled ? 'var(--dd-success)' : 'var(--dd-border-strong)' }"
                 :disabled="savingRuleId === notif.id"
                 @click.stop="toggleNotification(notif.id)">
-          <div class="absolute top-0.5 w-3 h-3 rounded-full shadow-sm transition-transform"
+          <div class="absolute top-0.5 w-3 h-3 dd-rounded shadow-sm transition-transform"
                :style="{ backgroundColor: 'var(--dd-text)', left: notif.enabled ? '17px' : '2px' }" />
         </button>
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ notif.name }}</span>
@@ -454,11 +454,11 @@ onMounted(async () => {
 
             <div>
               <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Rule status</div>
-              <button class="w-10 h-5 rounded-full relative transition-colors"
+              <button class="w-10 h-5 dd-rounded-lg relative transition-colors"
                       :style="{ backgroundColor: detailEnabled ? 'var(--dd-success)' : 'var(--dd-border-strong)' }"
                       :disabled="detailSaving"
                       @click="detailEnabled = !detailEnabled">
-                <div class="absolute top-0.5 w-4 h-4 rounded-full shadow-sm transition-transform"
+                <div class="absolute top-0.5 w-4 h-4 dd-rounded shadow-sm transition-transform"
                      :style="{ backgroundColor: 'var(--dd-text)', left: detailEnabled ? '20px' : '2px' }" />
               </button>
               <div class="text-[10px] mt-1 dd-text-muted">

@@ -12,8 +12,8 @@ interface SampleRow {
 
 const columns = [
   { key: 'name', label: 'Container', width: '44%' },
-  { key: 'status', label: 'Status', align: 'text-center' },
-  { key: 'server', label: 'Server', align: 'text-center' },
+  { key: 'status', label: 'Status' },
+  { key: 'server', label: 'Server' },
   { key: 'updates', label: 'Updates', align: 'text-right' },
 ];
 

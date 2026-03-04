@@ -51,8 +51,8 @@ const filteredAuth = computed(() => {
 
 const tableColumns = [
   { key: 'name', label: 'Provider', width: '99%' },
-  { key: 'type', label: 'Type', align: 'text-center' },
-  { key: 'status', label: 'Status', align: 'text-center' },
+  { key: 'type', label: 'Type' },
+  { key: 'status', label: 'Status' },
 ];
 
 function mapAuthentication(authentication: ApiComponent, status = 'active') {

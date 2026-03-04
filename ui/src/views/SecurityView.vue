@@ -6,6 +6,8 @@ import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllContainers, getContainerSbom, scanContainer } from '../services/container';
 import { getSecurityRuntime } from '../services/server';
+import ScanProgressBanner from '../components/ScanProgressBanner.vue';
+import ScanProgressText from '../components/ScanProgressText.vue';
 import { errorMessage } from '../utils/error';
 
 interface Vulnerability {
@@ -87,6 +89,10 @@ const scannerReady = computed(() => {
     return true;
   }
   return runtimeStatus.value.scanner.status === 'ready';
+});
+
+const scannerSetupNeeded = computed(() => {
+  return !runtimeLoading.value && !runtimeError.value && runtimeStatus.value && !scannerReady.value;
 });
 
 const scanDisabledReason = computed(() => {
@@ -222,6 +228,25 @@ function handleSseScanCompleted() {
 const scanning = ref(false);
 const scanProgress = ref({ done: 0, total: 0 });
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function scanContainerWithRetry(containerId: string, maxRetries = 3) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await scanContainer(containerId);
+    } catch (e: unknown) {
+      const is429 = e instanceof Error && e.message.includes('Too Many Requests');
+      if (is429 && attempt < maxRetries) {
+        await sleep(12_000);
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
 async function scanAllContainers() {
   if (runtimeLoading.value || !scannerReady.value) {
     return;
@@ -233,7 +258,7 @@ async function scanAllContainers() {
     scanProgress.value.total = containers.length;
     for (const container of containers) {
       try {
-        await scanContainer(container.id);
+        await scanContainerWithRetry(container.id);
       } catch {
         // Individual scan failures shouldn't stop the batch
       }
@@ -482,17 +507,17 @@ const tableColumns = computed(() => {
   if (isCompact.value) {
     return [
       { key: 'image', label: 'Image', align: 'text-left', width: '99%' },
-      { key: 'total', label: 'Total', align: 'text-center', sortable: true },
+      { key: 'total', label: 'Total', sortable: true },
     ];
   }
   return [
     { key: 'image', label: 'Image', align: 'text-left', width: '99%' },
-    { key: 'critical', label: 'Critical', align: 'text-center', sortable: true },
-    { key: 'high', label: 'High', align: 'text-center', sortable: true },
-    { key: 'medium', label: 'Medium', align: 'text-center', sortable: true },
-    { key: 'low', label: 'Low', align: 'text-center', sortable: true },
-    { key: 'fixable', label: 'Fixable', align: 'text-center', sortable: true },
-    { key: 'total', label: 'Total', align: 'text-center', sortable: true },
+    { key: 'critical', label: 'Critical', sortable: true },
+    { key: 'high', label: 'High', sortable: true },
+    { key: 'medium', label: 'Medium', sortable: true },
+    { key: 'low', label: 'Low', sortable: true },
+    { key: 'fixable', label: 'Fixable', sortable: true },
+    { key: 'total', label: 'Total', sortable: true },
   ];
 });
 
@@ -577,17 +602,6 @@ onUnmounted(() => {
           </button>
         </template>
         <template #left>
-          <span class="inline-flex" v-tooltip.top="scanDisabledReason">
-            <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[11px] transition-colors border"
-                    :class="scanning || runtimeLoading || !scannerReady
-                      ? 'dd-text-muted cursor-not-allowed'
-                      : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
-                    :style="{ borderColor: 'var(--dd-border-strong)' }"
-                    :disabled="scanning || runtimeLoading || !scannerReady"
-                    @click="scanAllContainers">
-              <AppIcon name="restart" :size="11" :class="{ 'animate-spin': scanning }" />
-            </button>
-          </span>
           <template v-if="runtimeStatus">
             <span class="badge text-[9px] font-bold uppercase cursor-default"
                   :style="{ backgroundColor: statusBadgeTone(runtimeStatus.scanner.status).bg, color: statusBadgeTone(runtimeStatus.scanner.status).text }"
@@ -609,21 +623,27 @@ onUnmounted(() => {
             </span>
           </template>
         </template>
+        <template #center>
+          <span class="inline-flex" v-tooltip.top="scanDisabledReason">
+            <button class="h-7 dd-rounded flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-colors border"
+                    :class="[
+                      scanning || runtimeLoading || !scannerReady
+                        ? 'dd-text-muted cursor-not-allowed'
+                        : 'dd-text-muted hover:dd-text hover:dd-bg-elevated',
+                      isCompact ? 'w-7' : 'px-3',
+                    ]"
+                    :style="{ borderColor: 'var(--dd-border-strong)' }"
+                    :disabled="scanning || runtimeLoading || !scannerReady"
+                    @click="scanAllContainers">
+              <AppIcon name="restart" :size="11" :class="{ 'animate-spin': scanning }" />
+              <span v-if="!isCompact">Scan Now</span>
+            </button>
+          </span>
+        </template>
       </DataFilterBar>
 
       <!-- Scan progress banner -->
-      <div v-if="scanning"
-           class="mb-2 px-3 py-2 dd-rounded flex items-center gap-2.5"
-           :style="{ backgroundColor: 'var(--dd-info-muted)', border: '1px solid var(--dd-info)' }">
-        <AppIcon name="restart" :size="12" class="animate-spin shrink-0" :style="{ color: 'var(--dd-info)' }" />
-        <span class="text-[11px] font-semibold" :style="{ color: 'var(--dd-info)' }">
-          Scanning {{ scanProgress.done }}/{{ scanProgress.total }} containers...
-        </span>
-        <div class="flex-1 h-1 dd-rounded overflow-hidden" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-          <div class="h-full dd-rounded transition-all duration-300"
-               :style="{ width: scanProgress.total > 0 ? `${(scanProgress.done / scanProgress.total) * 100}%` : '0%', backgroundColor: 'var(--dd-info)' }" />
-        </div>
-      </div>
+      <ScanProgressBanner v-if="scanning" :progress="scanProgress" />
 
       <!-- Table view — grouped by image -->
       <DataTable v-if="securityViewMode === 'table' && !loading"
@@ -705,8 +725,11 @@ onUnmounted(() => {
             <p class="text-sm font-medium mb-1 dd-text-secondary">
               {{ securityVulnerabilities.length === 0 ? 'No vulnerability data yet' : 'No images match your filters' }}
             </p>
-            <p v-if="securityVulnerabilities.length === 0" class="text-xs dd-text-muted mb-3">
+            <p v-if="securityVulnerabilities.length === 0 && !scannerSetupNeeded" class="text-xs dd-text-muted mb-3">
               Run a scan to check your containers for known vulnerabilities
+            </p>
+            <p v-if="securityVulnerabilities.length === 0 && scannerSetupNeeded" class="text-xs dd-text-muted mb-3 text-center max-w-sm">
+              {{ runtimeStatus?.scanner.message }}
             </p>
             <div class="flex items-center gap-2 mt-2">
               <button v-if="activeSecFilterCount > 0"
@@ -714,7 +737,15 @@ onUnmounted(() => {
                       @click="clearSecFilters">
                 Clear all filters
               </button>
-              <span v-if="securityVulnerabilities.length === 0" class="inline-flex" v-tooltip.top="scanDisabledReason">
+              <a v-if="securityVulnerabilities.length === 0 && scannerSetupNeeded"
+                 href="https://drydock.codeswhat.com/docs/configuration/security"
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5 no-underline text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20">
+                <AppIcon name="expand" :size="12" />
+                Setup Guide
+              </a>
+              <span v-if="securityVulnerabilities.length === 0 && !scannerSetupNeeded" class="inline-flex" v-tooltip.top="scanDisabledReason">
                 <button class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
                         :class="scanning || runtimeLoading || !scannerReady
                           ? 'dd-text-muted cursor-not-allowed dd-bg-elevated'
@@ -722,7 +753,7 @@ onUnmounted(() => {
                         :disabled="scanning || runtimeLoading || !scannerReady"
                         @click="scanAllContainers">
                   <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
-                  {{ scanning ? `Scanning ${scanProgress.done}/${scanProgress.total}...` : 'Scan Now' }}
+                  <template v-if="scanning"><ScanProgressText :progress="scanProgress" /></template><template v-else>Scan Now</template>
                 </button>
               </span>
             </div>
@@ -787,8 +818,11 @@ onUnmounted(() => {
         <p class="text-sm font-medium mb-1 dd-text-secondary">
           {{ securityVulnerabilities.length === 0 ? 'No vulnerability data yet' : 'No images match your filters' }}
         </p>
-        <p v-if="securityVulnerabilities.length === 0" class="text-xs dd-text-muted mb-3">
+        <p v-if="securityVulnerabilities.length === 0 && !scannerSetupNeeded" class="text-xs dd-text-muted mb-3">
           Run a scan to check your containers for known vulnerabilities
+        </p>
+        <p v-if="securityVulnerabilities.length === 0 && scannerSetupNeeded" class="text-xs dd-text-muted mb-3 text-center max-w-sm">
+          {{ runtimeStatus?.scanner.message }}
         </p>
         <div class="flex items-center gap-2 mt-2">
           <button v-if="activeSecFilterCount > 0"
@@ -796,7 +830,15 @@ onUnmounted(() => {
                   @click="clearSecFilters">
             Clear all filters
           </button>
-          <span v-if="securityVulnerabilities.length === 0" class="inline-flex" v-tooltip.top="scanDisabledReason">
+          <a v-if="securityVulnerabilities.length === 0 && scannerSetupNeeded"
+             href="https://drydock.codeswhat.com/docs/configuration/security"
+             target="_blank"
+             rel="noopener noreferrer"
+             class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5 no-underline text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20">
+            <AppIcon name="expand" :size="12" />
+            Setup Guide
+          </a>
+          <span v-if="securityVulnerabilities.length === 0 && !scannerSetupNeeded" class="inline-flex" v-tooltip.top="scanDisabledReason">
             <button class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
                     :class="scanning || runtimeLoading || !scannerReady
                       ? 'dd-text-muted cursor-not-allowed dd-bg-elevated'
@@ -804,7 +846,7 @@ onUnmounted(() => {
                     :disabled="scanning || runtimeLoading || !scannerReady"
                     @click="scanAllContainers">
               <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
-              {{ scanning ? `Scanning ${scanProgress.done}/${scanProgress.total}...` : 'Scan Now' }}
+              <template v-if="scanning"><ScanProgressText :progress="scanProgress" /></template><template v-else>Scan Now</template>
             </button>
           </span>
         </div>
@@ -848,8 +890,11 @@ onUnmounted(() => {
         <p class="text-sm font-medium mb-1 dd-text-secondary">
           {{ securityVulnerabilities.length === 0 ? 'No vulnerability data yet' : 'No images match your filters' }}
         </p>
-        <p v-if="securityVulnerabilities.length === 0" class="text-xs dd-text-muted mb-3">
+        <p v-if="securityVulnerabilities.length === 0 && !scannerSetupNeeded" class="text-xs dd-text-muted mb-3">
           Run a scan to check your containers for known vulnerabilities
+        </p>
+        <p v-if="securityVulnerabilities.length === 0 && scannerSetupNeeded" class="text-xs dd-text-muted mb-3 text-center max-w-sm">
+          {{ runtimeStatus?.scanner.message }}
         </p>
         <div class="flex items-center gap-2 mt-2">
           <button v-if="activeSecFilterCount > 0"
@@ -857,7 +902,15 @@ onUnmounted(() => {
                   @click="clearSecFilters">
             Clear all filters
           </button>
-          <span v-if="securityVulnerabilities.length === 0" class="inline-flex" v-tooltip.top="scanDisabledReason">
+          <a v-if="securityVulnerabilities.length === 0 && scannerSetupNeeded"
+             href="https://drydock.codeswhat.com/docs/configuration/security"
+             target="_blank"
+             rel="noopener noreferrer"
+             class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5 no-underline text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20">
+            <AppIcon name="expand" :size="12" />
+            Setup Guide
+          </a>
+          <span v-if="securityVulnerabilities.length === 0 && !scannerSetupNeeded" class="inline-flex" v-tooltip.top="scanDisabledReason">
             <button class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
                     :class="scanning || runtimeLoading || !scannerReady
                       ? 'dd-text-muted cursor-not-allowed dd-bg-elevated'
@@ -865,7 +918,7 @@ onUnmounted(() => {
                     :disabled="scanning || runtimeLoading || !scannerReady"
                     @click="scanAllContainers">
               <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
-              {{ scanning ? `Scanning ${scanProgress.done}/${scanProgress.total}...` : 'Scan Now' }}
+              <template v-if="scanning"><ScanProgressText :progress="scanProgress" /></template><template v-else>Scan Now</template>
             </button>
           </span>
         </div>
@@ -876,7 +929,7 @@ onUnmounted(() => {
       <DetailPanel
         :open="detailOpen"
         :is-mobile="isMobile"
-        :show-size-controls="true"
+        :show-size-controls="false"
         :show-full-page="false"
         @update:open="handleDetailOpenChange"
       >

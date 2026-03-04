@@ -200,7 +200,7 @@ const tableColumns = [
   { key: 'timestamp', label: 'Time', width: '15%', sortable: false },
   { key: 'action', label: 'Event', width: '20%', sortable: false },
   { key: 'containerName', label: 'Target', width: '99%', sortable: false },
-  { key: 'status', label: 'Status', align: 'text-center', sortable: false },
+  { key: 'status', label: 'Status', sortable: false },
   { key: 'details', label: 'Details', align: 'text-right', sortable: false },
 ];
 

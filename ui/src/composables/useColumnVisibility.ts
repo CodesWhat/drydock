@@ -4,7 +4,7 @@ import { preferences } from '../preferences/store';
 export interface ColumnDef {
   key: string;
   label: string;
-  align: string;
+  align?: string;
   px: string;
   style: string;
   required: boolean;
@@ -14,7 +14,6 @@ const allColumns: ColumnDef[] = [
   {
     key: 'icon',
     label: '',
-    align: 'text-center',
     px: 'px-0',
     style: 'width: 40px;',
     required: true,
@@ -30,26 +29,23 @@ const allColumns: ColumnDef[] = [
   {
     key: 'version',
     label: 'Version',
-    align: 'text-center',
     px: 'px-5',
     style: '',
     required: false,
   },
-  { key: 'kind', label: 'Kind', align: 'text-center', px: 'px-3', style: '', required: false },
-  { key: 'status', label: 'Status', align: 'text-center', px: 'px-3', style: '', required: false },
+  { key: 'kind', label: 'Kind', px: 'px-3', style: '', required: false },
+  { key: 'status', label: 'Status', px: 'px-3', style: '', required: false },
   {
     key: 'bouncer',
     label: 'Bouncer',
-    align: 'text-center',
     px: 'px-3',
     style: '',
     required: false,
   },
-  { key: 'server', label: 'Host', align: 'text-center', px: 'px-3', style: '', required: false },
+  { key: 'server', label: 'Host', px: 'px-3', style: '', required: false },
   {
     key: 'registry',
     label: 'Registry',
-    align: 'text-center',
     px: 'px-3',
     style: '',
     required: false,

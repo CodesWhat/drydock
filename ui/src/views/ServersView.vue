@@ -58,8 +58,8 @@ function statusBg(status: string) {
 const tableColumns = [
   { key: 'name', label: 'Host', width: '30%', sortable: false },
   { key: 'host', label: 'Address', width: '30%', sortable: false },
-  { key: 'status', label: 'Status', align: 'text-center', sortable: false },
-  { key: 'containers', label: 'Containers', align: 'text-center', sortable: false },
+  { key: 'status', label: 'Status', sortable: false },
+  { key: 'containers', label: 'Containers', sortable: false },
   { key: 'lastSeen', label: 'Last Seen', align: 'text-right', sortable: false },
 ];
 

@@ -111,8 +111,8 @@ const filteredTriggers = computed(() => {
 
 const tableColumns = [
   { key: 'name', label: 'Trigger', sortable: false, width: '99%' },
-  { key: 'type', label: 'Type', align: 'text-center', sortable: false },
-  { key: 'status', label: 'Status', align: 'text-center', sortable: false },
+  { key: 'type', label: 'Type', sortable: false },
+  { key: 'status', label: 'Status', sortable: false },
 ];
 
 function clearFilters() {
