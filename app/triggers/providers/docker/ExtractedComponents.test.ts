@@ -106,24 +106,16 @@ test('HookExecutor should run pre-update hooks and record success audit', async 
 test('SecurityGate should no-op when security scanning is disabled', async () => {
   const scanImageForVulnerabilities = vi.fn();
   const gate = new SecurityGate({
-    securityConfig: {
-      getSecurityConfiguration: () => ({ enabled: false, scanner: 'trivy' }),
-    },
-    scanners: {
-      verifyImageSignature: vi.fn(),
-      scanImageForVulnerabilities,
-      generateImageSbom: vi.fn(),
-    },
-    stateStore: {
-      getContainer: vi.fn(),
-      updateContainer: vi.fn(),
-      cacheSecurityState: vi.fn(),
-    },
-    telemetry: {
-      emitSecurityAlert: vi.fn(),
-      fullName: vi.fn((container) => container.name),
-      recordSecurityAudit: vi.fn(),
-    },
+    getSecurityConfiguration: () => ({ enabled: false, scanner: 'trivy' }),
+    verifyImageSignature: vi.fn(),
+    scanImageForVulnerabilities,
+    generateImageSbom: vi.fn(),
+    getContainer: vi.fn(),
+    updateContainer: vi.fn(),
+    cacheSecurityState: vi.fn(),
+    emitSecurityAlert: vi.fn(),
+    fullName: vi.fn((container) => container.name),
+    recordSecurityAudit: vi.fn(),
   });
 
   await gate.maybeScanAndGateUpdate(

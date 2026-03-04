@@ -86,52 +86,44 @@ type SecurityGateDependencies = {
   ) => void;
 };
 
-type SecurityGateConstructorOptions = Partial<SecurityGateDependencies> & {
-  securityConfig?: Pick<Partial<SecurityGateDependencies>, 'getSecurityConfiguration'>;
-  scanners?: Pick<
-    Partial<SecurityGateDependencies>,
-    'verifyImageSignature' | 'scanImageForVulnerabilities' | 'generateImageSbom'
-  >;
-  stateStore?: Pick<
-    Partial<SecurityGateDependencies>,
-    'getContainer' | 'updateContainer' | 'cacheSecurityState'
-  >;
-  telemetry?: Pick<
-    Partial<SecurityGateDependencies>,
-    'emitSecurityAlert' | 'fullName' | 'recordSecurityAudit'
-  >;
-};
+type SecurityGateConstructorGroup<K extends keyof SecurityGateDependencies> = Pick<
+  Partial<SecurityGateDependencies>,
+  K
+>;
+
+type SecurityGateConstructorOptions = Partial<SecurityGateDependencies>;
 
 class SecurityGate {
-  securityConfig: SecurityGateConstructorOptions['securityConfig'];
+  securityConfig: SecurityGateConstructorGroup<'getSecurityConfiguration'>;
 
-  scanners: SecurityGateConstructorOptions['scanners'];
+  scanners: SecurityGateConstructorGroup<
+    'verifyImageSignature' | 'scanImageForVulnerabilities' | 'generateImageSbom'
+  >;
 
-  stateStore: SecurityGateConstructorOptions['stateStore'];
+  stateStore: SecurityGateConstructorGroup<
+    'getContainer' | 'updateContainer' | 'cacheSecurityState'
+  >;
 
-  telemetry: SecurityGateConstructorOptions['telemetry'];
+  telemetry: SecurityGateConstructorGroup<'emitSecurityAlert' | 'fullName' | 'recordSecurityAudit'>;
 
   constructor(options: SecurityGateConstructorOptions = {}) {
     this.securityConfig = {
-      getSecurityConfiguration:
-        options.securityConfig?.getSecurityConfiguration || options.getSecurityConfiguration,
+      getSecurityConfiguration: options.getSecurityConfiguration,
     };
     this.scanners = {
-      verifyImageSignature: options.scanners?.verifyImageSignature || options.verifyImageSignature,
-      scanImageForVulnerabilities:
-        options.scanners?.scanImageForVulnerabilities || options.scanImageForVulnerabilities,
-      generateImageSbom: options.scanners?.generateImageSbom || options.generateImageSbom,
+      verifyImageSignature: options.verifyImageSignature,
+      scanImageForVulnerabilities: options.scanImageForVulnerabilities,
+      generateImageSbom: options.generateImageSbom,
     };
     this.stateStore = {
-      getContainer: options.stateStore?.getContainer || options.getContainer,
-      updateContainer: options.stateStore?.updateContainer || options.updateContainer,
-      cacheSecurityState: options.stateStore?.cacheSecurityState || options.cacheSecurityState,
+      getContainer: options.getContainer,
+      updateContainer: options.updateContainer,
+      cacheSecurityState: options.cacheSecurityState,
     };
     this.telemetry = {
-      emitSecurityAlert: options.telemetry?.emitSecurityAlert || options.emitSecurityAlert,
-      fullName: options.telemetry?.fullName || options.fullName,
-      recordSecurityAudit:
-        options.telemetry?.recordSecurityAudit || options.recordSecurityAudit || (() => undefined),
+      emitSecurityAlert: options.emitSecurityAlert,
+      fullName: options.fullName,
+      recordSecurityAudit: options.recordSecurityAudit || (() => undefined),
     };
   }
 

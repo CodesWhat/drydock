@@ -30,22 +30,9 @@ const baseDependencies: NonNullable<ConstructorParameters<typeof SecurityGate>[0
 
 new SecurityGate(baseDependencies);
 new SecurityGate({
+  // @ts-expect-error grouped dependencies are not accepted
   securityConfig: {
     getSecurityConfiguration: baseDependencies.getSecurityConfiguration,
-  },
-  scanners: {
-    verifyImageSignature: baseDependencies.verifyImageSignature,
-    scanImageForVulnerabilities: baseDependencies.scanImageForVulnerabilities,
-    generateImageSbom: baseDependencies.generateImageSbom,
-  },
-  stateStore: {
-    getContainer: baseDependencies.getContainer,
-    updateContainer: baseDependencies.updateContainer,
-    cacheSecurityState: baseDependencies.cacheSecurityState,
-  },
-  telemetry: {
-    emitSecurityAlert: baseDependencies.emitSecurityAlert,
-    fullName: baseDependencies.fullName,
   },
 });
 

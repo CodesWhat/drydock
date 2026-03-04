@@ -256,6 +256,30 @@ describe('SecurityGate', () => {
     expect(log.warn).toHaveBeenCalledWith('Unable to persist security state (db unavailable)');
   });
 
+  test('persistSecurityState should extract message from unknown thrown values', async () => {
+    const updateContainer = vi.fn(() => {
+      throw 'db unavailable';
+    });
+    const { gate } = createGateHarness({
+      updateContainer,
+    });
+    const log = createLog();
+
+    await expect(
+      gate.persistSecurityState(
+        createContainer(),
+        {
+          scan: {
+            status: 'error',
+          },
+        },
+        log,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(log.warn).toHaveBeenCalledWith('Unable to persist security state (db unavailable)');
+  });
+
   test('persistSecurityState should fallback to incoming container when current container is unavailable', async () => {
     const updateContainer = vi.fn();
     const cacheSecurityState = vi.fn();
@@ -709,7 +733,7 @@ describe('SecurityGate', () => {
     );
   });
 
-  test('constructor should support grouped dependency modules', async () => {
+  test('constructor should support flat dependency modules', async () => {
     const scanImageForVulnerabilities = vi.fn().mockResolvedValue({
       status: 'passed',
       summary: {
@@ -723,31 +747,21 @@ describe('SecurityGate', () => {
       blockSeverities: [],
     });
     const gate = new SecurityGate({
-      securityConfig: {
-        getSecurityConfiguration: vi.fn(() => ({
-          enabled: true,
-          scanner: 'trivy',
-          signature: { verify: false },
-          sbom: { enabled: false, formats: ['spdx-json'] },
-        })),
-      },
-      scanners: {
-        verifyImageSignature: vi.fn().mockResolvedValue({ status: 'verified', signatures: 1 }),
-        scanImageForVulnerabilities,
-        generateImageSbom: vi
-          .fn()
-          .mockResolvedValue({ status: 'generated', formats: ['spdx-json'] }),
-      },
-      stateStore: {
-        getContainer: vi.fn(() => createContainer()),
-        updateContainer: vi.fn(),
-        cacheSecurityState: vi.fn(),
-      },
-      telemetry: {
-        emitSecurityAlert: vi.fn().mockResolvedValue(undefined),
-        fullName: vi.fn((container) => `${container.watcher}/${container.name}`),
-        recordSecurityAudit: vi.fn(),
-      },
+      getSecurityConfiguration: vi.fn(() => ({
+        enabled: true,
+        scanner: 'trivy',
+        signature: { verify: false },
+        sbom: { enabled: false, formats: ['spdx-json'] },
+      })),
+      verifyImageSignature: vi.fn().mockResolvedValue({ status: 'verified', signatures: 1 }),
+      scanImageForVulnerabilities,
+      generateImageSbom: vi.fn().mockResolvedValue({ status: 'generated', formats: ['spdx-json'] }),
+      getContainer: vi.fn(() => createContainer()),
+      updateContainer: vi.fn(),
+      cacheSecurityState: vi.fn(),
+      emitSecurityAlert: vi.fn().mockResolvedValue(undefined),
+      fullName: vi.fn((container) => `${container.watcher}/${container.name}`),
+      recordSecurityAudit: vi.fn(),
     });
 
     await gate.maybeScanAndGateUpdate(createContext(), createContainer(), createLog());

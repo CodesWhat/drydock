@@ -255,24 +255,16 @@ class Docker extends Trigger {
   getSecurityGate() {
     if (!this.securityGate) {
       this.securityGate = new SecurityGate({
-        securityConfig: {
-          getSecurityConfiguration,
-        },
-        scanners: {
-          verifyImageSignature,
-          scanImageForVulnerabilities,
-          generateImageSbom,
-        },
-        stateStore: {
-          getContainer: (id) => storeContainer.getContainer(id),
-          updateContainer: storeContainer.updateContainer,
-          cacheSecurityState,
-        },
-        telemetry: {
-          emitSecurityAlert,
-          fullName,
-          ...pickOrchestratorCallbacks(this, SECURITY_GATE_ORCHESTRATOR_METHODS),
-        },
+        getSecurityConfiguration,
+        verifyImageSignature,
+        scanImageForVulnerabilities,
+        generateImageSbom,
+        getContainer: (id) => storeContainer.getContainer(id),
+        updateContainer: storeContainer.updateContainer,
+        cacheSecurityState,
+        emitSecurityAlert,
+        fullName,
+        ...pickOrchestratorCallbacks(this, SECURITY_GATE_ORCHESTRATOR_METHODS),
       });
     }
     return this.securityGate;
