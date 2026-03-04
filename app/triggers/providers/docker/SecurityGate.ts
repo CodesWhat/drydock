@@ -57,14 +57,30 @@ class SecurityGate {
     this.telemetry.recordSecurityAudit(action, container, 'error', error.message);
   }
 
-  async persistSecurityState(container, securityPatch, logContainer) {
+  async persistSecurityState(
+    container,
+    securityPatch,
+    logContainer,
+    slot: 'current' | 'update' = 'current',
+  ) {
     try {
+      const mappedPatch =
+        slot === 'update'
+          ? Object.fromEntries(
+              Object.entries(securityPatch).map(([key, value]) => {
+                if (key === 'scan') return ['updateScan', value];
+                if (key === 'signature') return ['updateSignature', value];
+                if (key === 'sbom') return ['updateSbom', value];
+                return [key, value];
+              }),
+            )
+          : securityPatch;
       const containerCurrent = this.stateStore.getContainer(container.id);
       const containerWithSecurity = {
         ...(containerCurrent || container),
         security: {
           ...((containerCurrent || container).security || {}),
-          ...securityPatch,
+          ...mappedPatch,
         },
       };
       this.stateStore.updateContainer(containerWithSecurity);
@@ -91,7 +107,12 @@ class SecurityGate {
           image: context.newImage,
           auth: context.auth,
         });
-        await this.persistSecurityState(container, { signature: signatureResult }, logContainer);
+        await this.persistSecurityState(
+          container,
+          { signature: signatureResult },
+          logContainer,
+          'update',
+        );
 
         if (signatureResult.status !== 'verified') {
           const details = `Image signature verification failed: ${
@@ -118,7 +139,7 @@ class SecurityGate {
         image: context.newImage,
         auth: context.auth,
       });
-      await this.persistSecurityState(container, { scan: scanResult }, logContainer);
+      await this.persistSecurityState(container, { scan: scanResult }, logContainer, 'update');
 
       if (securityConfiguration.sbom.enabled) {
         logContainer.info(`Generating SBOM for candidate image ${context.newImage}`);
@@ -127,7 +148,7 @@ class SecurityGate {
           auth: context.auth,
           formats: securityConfiguration.sbom.formats,
         });
-        await this.persistSecurityState(container, { sbom: sbomResult }, logContainer);
+        await this.persistSecurityState(container, { sbom: sbomResult }, logContainer, 'update');
 
         if (sbomResult.status === 'error') {
           this.telemetry.recordSecurityAudit(

@@ -59,6 +59,9 @@ export interface ContainerSecurityState {
   scan?: ContainerSecurityScan;
   signature?: ContainerSignatureVerification;
   sbom?: ContainerSecuritySbom;
+  updateScan?: ContainerSecurityScan;
+  updateSignature?: ContainerSignatureVerification;
+  updateSbom?: ContainerSecuritySbom;
 }
 
 export interface ContainerRuntimeEnv {
@@ -177,6 +180,60 @@ const schema = joi.object({
       error: joi.string(),
     }),
     sbom: joi.object({
+      generator: joi.string().valid('trivy').required(),
+      image: joi.string().required(),
+      generatedAt: joi.string().isoDate().required(),
+      status: joi.string().valid('generated', 'error').required(),
+      formats: joi.array().items(joi.string().valid('spdx-json', 'cyclonedx-json')).required(),
+      documents: joi.object().required(),
+      error: joi.string(),
+    }),
+    updateScan: joi.object({
+      scanner: joi.string().valid('trivy').required(),
+      image: joi.string().required(),
+      scannedAt: joi.string().isoDate().required(),
+      status: joi.string().valid('passed', 'blocked', 'error').required(),
+      blockSeverities: joi
+        .array()
+        .items(joi.string().valid('UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'))
+        .required(),
+      blockingCount: joi.number().integer().min(0).required(),
+      summary: joi
+        .object({
+          unknown: joi.number().integer().min(0).required(),
+          low: joi.number().integer().min(0).required(),
+          medium: joi.number().integer().min(0).required(),
+          high: joi.number().integer().min(0).required(),
+          critical: joi.number().integer().min(0).required(),
+        })
+        .required(),
+      vulnerabilities: joi
+        .array()
+        .items(
+          joi.object({
+            id: joi.string().required(),
+            target: joi.string(),
+            packageName: joi.string(),
+            installedVersion: joi.string(),
+            fixedVersion: joi.string(),
+            severity: joi.string().valid('UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'),
+            title: joi.string(),
+            primaryUrl: joi.string(),
+          }),
+        )
+        .required(),
+      error: joi.string(),
+    }),
+    updateSignature: joi.object({
+      verifier: joi.string().valid('cosign').required(),
+      image: joi.string().required(),
+      verifiedAt: joi.string().isoDate().required(),
+      status: joi.string().valid('verified', 'unverified', 'error').required(),
+      keyless: joi.boolean().required(),
+      signatures: joi.number().integer().min(0).required(),
+      error: joi.string(),
+    }),
+    updateSbom: joi.object({
       generator: joi.string().valid('trivy').required(),
       image: joi.string().required(),
       generatedAt: joi.string().isoDate().required(),

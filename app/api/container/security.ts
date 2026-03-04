@@ -264,6 +264,45 @@ export function createSecurityHandlers({
         securityPatch.sbom = sbomResult;
       }
 
+      // Scan update image when an update is available
+      if (container.updateAvailable && container.result?.tag) {
+        try {
+          const updateImage = getContainerImageFullName(container, container.result.tag);
+          log.info(`Running on-demand security scan for update image ${updateImage}`);
+          const updateScanResult = await scanImageForVulnerabilities({
+            image: updateImage,
+            auth,
+          });
+          securityPatch.updateScan = updateScanResult;
+
+          if (securityConfiguration.signature.verify) {
+            const updateSignatureResult = await verifyImageSignature({
+              image: updateImage,
+              auth,
+            });
+            securityPatch.updateSignature = updateSignatureResult;
+          }
+
+          if (securityConfiguration.sbom.enabled) {
+            const updateSbomResult = await generateImageSbom({
+              image: updateImage,
+              auth,
+              formats: securityConfiguration.sbom.formats,
+            });
+            securityPatch.updateSbom = updateSbomResult;
+          }
+        } catch (updateError: unknown) {
+          log.info(
+            `Update image scan failed (${getErrorMessage(updateError)}), current scan preserved`,
+          );
+        }
+      } else {
+        // Clear stale update data when no update is available
+        securityPatch.updateScan = undefined;
+        securityPatch.updateSignature = undefined;
+        securityPatch.updateSbom = undefined;
+      }
+
       // Persist results
       const containerToStore = {
         ...container,
