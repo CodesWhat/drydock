@@ -80,17 +80,6 @@ See the [Quick Start guide](https://drydock.codeswhat.com/docs/quickstart) for D
 
 <!-- TODO: Capture fresh v1.4 screenshots before release (login, dashboard, containers, container detail — light/dark + mobile) -->
 
-<h3 align="center" id="ui-workflow">🖥️ UI Workflow (v1.4 Finish-Off)</h3>
-
-- **Global command palette (`Cmd/Ctrl+K`)** — Search pages, containers, agents, triggers, watchers, registries, auth, and notification rules from one place.
-- **Prefix scopes** — Use `/` for pages, `@` for runtime resources, and `#` for config/settings search.
-- **Recent-first navigation** — Empty query shows recent results to speed up repeat actions.
-- **Container-aware visuals** — Container search rows render resolved image icons instead of generic placeholders.
-- **Notifications as active control plane** — `/notifications` now edits per-event rules and trigger assignments that directly gate runtime dispatch.
-- **Dashboard layout persistence** — Drag/drop dashboard widgets to reorder; layout persists locally with a reset option.
-- **Profile/runtime status clarity** — Config profile/server/settings panels include explicit loading, error, and refresh flows.
-- **Keyboard flow polish** — Confirm dialogs support `Enter`/`Escape`; detail panels close with `Escape`.
-
 <hr>
 
 <h2 align="center" id="features">✨ Features</h2>
