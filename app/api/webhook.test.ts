@@ -376,6 +376,79 @@ describe('Webhook Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
+    test('should return 403 when container has dd.webhook.enabled=false', async () => {
+      const container = {
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        labels: { 'dd.webhook.enabled': 'false' },
+      };
+      mockGetContainers.mockReturnValue([container]);
+
+      const handler = getHandler('post', '/watch/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Webhooks are disabled for this container',
+      });
+    });
+
+    test('should return 403 when container has wud.webhook.enabled=false (legacy)', async () => {
+      const container = {
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        labels: { 'wud.webhook.enabled': 'false' },
+      };
+      mockGetContainers.mockReturnValue([container]);
+
+      const handler = getHandler('post', '/watch/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    test('should allow watch when dd.webhook.enabled=true', async () => {
+      const container = {
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        labels: { 'dd.webhook.enabled': 'true' },
+      };
+      mockGetContainers.mockReturnValue([container]);
+      const mockWatchContainer = vi.fn().mockResolvedValue(undefined);
+      mockGetState.mockReturnValue({
+        watcher: { 'docker.local': { watchContainer: mockWatchContainer } },
+        trigger: {},
+      });
+
+      const handler = getHandler('post', '/watch/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should allow watch when container has no labels', async () => {
+      const container = { name: 'my-nginx', image: { name: 'nginx' } };
+      mockGetContainers.mockReturnValue([container]);
+      const mockWatchContainer = vi.fn().mockResolvedValue(undefined);
+      mockGetState.mockReturnValue({
+        watcher: { 'docker.local': { watchContainer: mockWatchContainer } },
+        trigger: {},
+      });
+
+      const handler = getHandler('post', '/watch/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
     test('should trigger watch on specific container', async () => {
       const container = { name: 'my-nginx', image: { name: 'nginx' } };
       mockGetContainers.mockReturnValue([container]);
@@ -516,6 +589,41 @@ describe('Webhook Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+    });
+
+    test('should return 403 when container has dd.webhook.enabled=false', async () => {
+      const container = {
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        labels: { 'dd.webhook.enabled': 'false' },
+      };
+      mockGetContainers.mockReturnValue([container]);
+
+      const handler = getHandler('post', '/update/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Webhooks are disabled for this container',
+      });
+    });
+
+    test('should return 403 when container has wud.webhook.enabled=false (legacy)', async () => {
+      const container = {
+        name: 'my-nginx',
+        image: { name: 'nginx' },
+        labels: { 'wud.webhook.enabled': 'false' },
+      };
+      mockGetContainers.mockReturnValue([container]);
+
+      const handler = getHandler('post', '/update/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
     });
 
     test('should return 404 when no docker trigger found', async () => {
