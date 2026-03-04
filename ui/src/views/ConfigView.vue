@@ -446,8 +446,8 @@ async function handleClearIconCache() {
             class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90 disabled:opacity-50"
             :disabled="loading"
             @click="loadGeneralSettingsData">
-            <AppIcon name="refresh" :size="12" />
-            Refresh
+            <AppIcon name="refresh" :size="12" :class="{ 'animate-spin': loading }" />
+            {{ loading ? 'Loading' : 'Refresh' }}
           </button>
         </div>
 
@@ -520,7 +520,10 @@ async function handleClearIconCache() {
             <h2 class="text-sm font-semibold dd-text">Application</h2>
           </div>
           <div class="p-5 space-y-4">
-            <div v-if="loading" class="text-[12px] dd-text-muted text-center py-4">Loading...</div>
+            <div v-if="loading" class="flex items-center justify-center gap-2 text-[12px] dd-text-muted py-4">
+              <AppIcon name="refresh" :size="12" class="animate-spin" />
+              Loading server info
+            </div>
             <template v-else>
               <div v-for="field in serverFields" :key="field.label"
                    class="flex items-center justify-between py-2"
@@ -1019,14 +1022,18 @@ async function handleClearIconCache() {
             </div>
             <button
               data-testid="profile-refresh"
-              class="px-2.5 py-1 dd-rounded text-[10px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90 disabled:opacity-50"
+              class="inline-flex items-center gap-1.5 px-2.5 py-1 dd-rounded text-[10px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90 disabled:opacity-50"
               :disabled="profileLoading"
               @click="loadProfileData">
-              Refresh
+              <AppIcon name="refresh" :size="10" :class="{ 'animate-spin': profileLoading }" />
+              {{ profileLoading ? 'Loading' : 'Refresh' }}
             </button>
           </div>
           <div class="p-5 space-y-4">
-            <div v-if="profileLoading" class="text-[12px] dd-text-muted text-center py-4">Loading...</div>
+            <div v-if="profileLoading" class="flex items-center justify-center gap-2 text-[12px] dd-text-muted py-4">
+              <AppIcon name="refresh" :size="12" class="animate-spin" />
+              Loading profile
+            </div>
             <div v-else-if="profileError"
                  class="text-[11px] px-3 py-2 dd-rounded"
                  :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
