@@ -99,6 +99,7 @@ import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { mapComponentsToList } from './component.js';
+import { createCrudHandlers } from './container/crud.js';
 import * as containerRouter from './container.js';
 
 function createResponse() {
@@ -245,6 +246,17 @@ describe('Container Router', () => {
       expect(res.json).toHaveBeenCalledWith([{ id: 'c1' }]);
     });
 
+    test('should tolerate non-object query payloads', () => {
+      storeContainer.getContainers.mockReturnValue([{ id: 'c1' }]);
+      const handler = getHandler('get', '/');
+      const res = createResponse();
+      handler({ query: '' }, res);
+
+      expect(storeContainer.getContainers).toHaveBeenCalledWith({});
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith([{ id: 'c1' }]);
+    });
+
     test('should exclude vulnerability arrays from list payload by default', () => {
       storeContainer.getContainers.mockReturnValue([
         {
@@ -317,6 +329,30 @@ describe('Container Router', () => {
       expect(res.json).toHaveBeenCalledWith([container]);
     });
 
+    test('should preserve missing scan/updateScan fields when vulnerability arrays are stripped', () => {
+      storeContainer.getContainers.mockReturnValue([
+        {
+          id: 'c1',
+          security: {},
+        },
+      ]);
+
+      const handler = getHandler('get', '/');
+      const res = createResponse();
+      handler({ query: {} }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith([
+        expect.objectContaining({
+          id: 'c1',
+          security: expect.objectContaining({
+            scan: undefined,
+            updateScan: undefined,
+          }),
+        }),
+      ]);
+    });
+
     test('should apply limit and offset pagination and ignore control params in store query', () => {
       storeContainer.getContainers.mockReturnValue([{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }]);
 
@@ -337,6 +373,32 @@ describe('Container Router', () => {
       expect(storeContainer.getContainers).toHaveBeenCalledWith({ watcher: 'docker' });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith([{ id: 'c2' }]);
+    });
+
+    test('should apply offset when limit is zero', () => {
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'c1' },
+        { id: 'c2' },
+        { id: 'c3' },
+        { id: 'c4' },
+      ]);
+
+      const handler = getHandler('get', '/');
+      const res = createResponse();
+      handler(
+        {
+          query: {
+            watcher: 'docker',
+            limit: '0',
+            offset: '2',
+          },
+        },
+        res,
+      );
+
+      expect(storeContainer.getContainers).toHaveBeenCalledWith({ watcher: 'docker' });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith([{ id: 'c3' }, { id: 'c4' }]);
     });
 
     test('should redact container runtime environment variable values', () => {
@@ -427,6 +489,39 @@ describe('Container Router', () => {
         },
       });
       expect(res.json.mock.calls[0][0]).not.toHaveProperty('vulnerabilities');
+    });
+
+    test('should treat missing status and missing scan summary as zero values', () => {
+      storeContainer.getContainers.mockReturnValue([
+        {
+          id: 'c1',
+        },
+        {
+          id: 'c2',
+          status: 'running',
+          security: {
+            scan: {
+              summary: { critical: 0, high: 1 },
+            },
+          },
+        },
+      ]);
+
+      const handler = getHandler('get', '/summary');
+      const res = createResponse();
+      handler({ query: {} }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        containers: {
+          total: 2,
+          running: 1,
+          stopped: 1,
+        },
+        security: {
+          issues: 1,
+        },
+      });
     });
   });
 
@@ -980,6 +1075,33 @@ describe('Container Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ env: [] });
+    });
+  });
+
+  describe('createCrudHandlers', () => {
+    test('revealContainerEnv should return 501 when raw-env dependencies are unavailable', () => {
+      const handlers = createCrudHandlers({
+        getContainersFromStore: vi.fn(() => []),
+        storeContainer: {
+          getContainer: vi.fn(),
+          deleteContainer: vi.fn(),
+        },
+        updateOperationStore: {
+          getOperationsByContainerName: vi.fn(() => []),
+        },
+        getServerConfiguration: vi.fn(() => ({ feature: { delete: true } })),
+        getAgent: vi.fn(),
+        getErrorMessage: vi.fn(() => 'error'),
+        getErrorStatusCode: vi.fn(() => undefined),
+        getWatchers: vi.fn(() => ({})),
+        redactContainerRuntimeEnv: vi.fn((container) => container),
+        redactContainersRuntimeEnv: vi.fn((containers) => containers),
+      });
+
+      const res = createResponse();
+      handlers.revealContainerEnv({ params: { id: 'c1' } }, res);
+
+      expect(res.sendStatus).toHaveBeenCalledWith(501);
     });
   });
 
