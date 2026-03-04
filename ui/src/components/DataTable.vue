@@ -176,7 +176,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
             <th v-for="(col, colIdx) in columns" :key="col.key"
                 :data-col-key="col.key"
                 :class="[
-                  col.icon ? 'text-center pl-5 pr-0' : ['text-center', 'px-5'],
+                  col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-center', 'px-5'],
                   'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-[10px] select-none transition-colors relative',
                   isSortableColumn(col) ? 'cursor-pointer' : '',
                   sortKey === col.key ? 'dd-text-secondary' : 'dd-text-muted hover:dd-text-secondary',
@@ -226,7 +226,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               @click="emit('row-click', row)">
             <td v-for="col in columns" :key="col.key"
                 class="py-3 align-middle overflow-hidden text-ellipsis"
-                :class="col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-left', 'px-5']">
+                :class="col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-center', 'px-5']">
               <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
                 {{ row[col.key] }}
               </slot>
