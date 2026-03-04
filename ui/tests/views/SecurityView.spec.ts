@@ -4,6 +4,9 @@ const mockGetAllContainers = vi.fn();
 const mockScanContainer = vi.fn();
 const mockGetContainerSbom = vi.fn();
 const mockGetSecurityRuntime = vi.fn();
+const { mockComputeSecurityDelta } = vi.hoisted(() => ({
+  mockComputeSecurityDelta: vi.fn(),
+}));
 
 vi.mock('@/services/container', () => ({
   getAllContainers: (...args: any[]) => mockGetAllContainers(...args),
@@ -18,6 +21,17 @@ vi.mock('@/services/server', () => ({
 vi.mock('@/composables/useBreakpoints', () => ({
   useBreakpoints: () => ({ isMobile: { value: false }, windowNarrow: { value: false } }),
 }));
+
+vi.mock('@/utils/container-mapper', async () => {
+  const actual = await vi.importActual<typeof import('@/utils/container-mapper')>(
+    '@/utils/container-mapper',
+  );
+  mockComputeSecurityDelta.mockImplementation(actual.computeSecurityDelta);
+  return {
+    ...actual,
+    computeSecurityDelta: mockComputeSecurityDelta,
+  };
+});
 
 import { mount } from '@vue/test-utils';
 import { clearIconCache, updateSettings } from '@/services/settings';
@@ -86,6 +100,22 @@ const stubs: Record<string, any> = {
     props: ['icon', 'message', 'showClear'],
     emits: ['clear'],
     template: '<div class="empty" />',
+  }),
+  SecurityEmptyState: defineComponent({
+    props: [
+      'hasVulnerabilityData',
+      'scannerSetupNeeded',
+      'scannerMessage',
+      'activeFilterCount',
+      'scanDisabledReason',
+      'scanning',
+      'runtimeLoading',
+      'scannerReady',
+      'scanProgress',
+      'boxed',
+    ],
+    emits: ['clear-filters', 'scan-now'],
+    template: '<div class="security-empty-state-stub" />',
   }),
   AppIcon: defineComponent({
     props: ['name', 'size'],
@@ -227,6 +257,37 @@ describe('SecurityView', () => {
       expect(vm.filteredSummaries[0].critical).toBe(1);
     });
 
+    it('keeps vulnerability lists out of image summaries and uses grouped detail data', async () => {
+      mockGetAllContainers.mockResolvedValue([
+        makeContainer({
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [
+                { id: 'CVE-1', severity: 'HIGH', packageName: 'openssl' },
+                { id: 'CVE-2', severity: 'LOW', packageName: 'zlib' },
+              ],
+            },
+          },
+        }),
+      ]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalledOnce());
+      await nextTick();
+
+      const vm = w.vm as any;
+      const summary = vm.filteredSummaries[0];
+      expect(summary.vulns).toBeUndefined();
+
+      vm.openDetail(summary);
+      await nextTick();
+
+      const grouped = vm.vulnerabilitiesByImage[summary.image];
+      expect(vm.selectedImageVulns).toBe(grouped);
+    });
+
     it('uses fallback package name from package field', async () => {
       mockGetAllContainers.mockResolvedValue([
         makeContainer({
@@ -241,8 +302,8 @@ describe('SecurityView', () => {
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
       await nextTick();
       const vm = w.vm as any;
-      // The vulnerability within the image summary should have the package name
-      expect(vm.filteredSummaries[0].vulns[0].package).toBe('curl');
+      const image = vm.filteredSummaries[0].image;
+      expect(vm.vulnerabilitiesByImage[image][0].package).toBe('curl');
     });
 
     it('renders vulnerability title, target, and reference URL in detail view', async () => {
@@ -299,6 +360,51 @@ describe('SecurityView', () => {
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
       await nextTick();
       expect(w.find('.dt').attributes('data-rows')).toBe('2');
+    });
+
+    it('uses shared computeSecurityDelta helper when update scan summary exists', async () => {
+      mockGetAllContainers.mockResolvedValue([
+        makeContainer({
+          displayName: 'nginx-web',
+          security: {
+            scan: {
+              vulnerabilities: [
+                { id: 'CVE-1', severity: 'CRITICAL', packageName: 'openssl' },
+                { id: 'CVE-2', severity: 'HIGH', packageName: 'curl' },
+                { id: 'CVE-3', severity: 'LOW', packageName: 'zlib' },
+              ],
+            },
+            updateScan: {
+              summary: {
+                critical: 0,
+                high: 1,
+                medium: 0,
+                low: 1,
+                unknown: 2,
+              },
+            },
+          },
+        }),
+      ]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalledOnce());
+      await nextTick();
+
+      const vm = w.vm as any;
+      expect(vm.filteredSummaries[0].delta).toEqual({
+        fixed: 1,
+        new: 2,
+        unchanged: 2,
+        fixedCritical: 1,
+        fixedHigh: 0,
+        newCritical: 0,
+        newHigh: 0,
+      });
+      expect(mockComputeSecurityDelta).toHaveBeenCalledWith(
+        { critical: 1, high: 1, medium: 0, low: 1, unknown: 0 },
+        { critical: 0, high: 1, medium: 0, low: 1, unknown: 2 },
+      );
     });
 
     it('loads sbom and shows view/download controls for the selected image', async () => {
@@ -454,6 +560,39 @@ describe('SecurityView', () => {
 
       // Ascending: nginx (0 critical) first, redis (1 critical) second
       expect(vm.filteredSummaries[0].image).toBe('nginx');
+    });
+
+    it('falls back to critical sort when sort key is invalid', async () => {
+      mockGetAllContainers.mockResolvedValue([
+        makeContainer({
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [{ id: 'CVE-1', severity: 'LOW', packageName: 'a' }],
+            },
+          },
+        }),
+        makeContainer({
+          name: 'redis',
+          displayName: 'redis',
+          security: {
+            scan: {
+              vulnerabilities: [{ id: 'CVE-2', severity: 'CRITICAL', packageName: 'b' }],
+            },
+          },
+        }),
+      ]);
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
+      await nextTick();
+
+      const vm = w.vm as any;
+      vm.securitySortField = 'not-a-real-column';
+      await nextTick();
+
+      expect(vm.filteredSummaries[0].image).toBe('redis');
+      expect(vm.filteredSummaries[1].image).toBe('nginx');
     });
   });
 

@@ -1,97 +1,31 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import ScanProgressBanner from '../components/ScanProgressBanner.vue';
-import ScanProgressText from '../components/ScanProgressText.vue';
+import SecurityEmptyState from '../components/SecurityEmptyState.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useSbomDetail } from '../composables/useSbomDetail';
 import { useScanProgress } from '../composables/useScanProgress';
+import { useVulnerabilities, type ImageSummary } from '../composables/useVulnerabilities';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
-import { getAllContainers, getContainerSbom } from '../services/container';
 import { getSecurityRuntime } from '../services/server';
 import { errorMessage } from '../utils/error';
-
-interface Vulnerability {
-  id: string;
-  severity: string;
-  package: string;
-  version: string;
-  fixedIn: string | null;
-  title?: string;
-  target?: string;
-  primaryUrl?: string;
-  image: string;
-  publishedDate: string;
-}
-
-interface SecurityDelta {
-  fixed: number;
-  new: number;
-  fixedCritical: number;
-  fixedHigh: number;
-  newCritical: number;
-  newHigh: number;
-}
-
-interface ImageSummary {
-  image: string;
-  critical: number;
-  high: number;
-  medium: number;
-  low: number;
-  total: number;
-  fixable: number;
-  vulns: Vulnerability[];
-  delta?: SecurityDelta;
-}
-
-type SbomFormat = 'spdx-json' | 'cyclonedx-json';
-
-interface SecurityRuntimeToolStatus {
-  enabled: boolean;
-  command: string;
-  commandAvailable: boolean | null;
-  status: 'ready' | 'missing' | 'disabled';
-  message: string;
-}
-
-interface SecurityRuntimeStatus {
-  checkedAt: string;
-  ready: boolean;
-  scanner: SecurityRuntimeToolStatus & {
-    scanner: string;
-    server: string;
-  };
-  signature: SecurityRuntimeToolStatus;
-  sbom: {
-    enabled: boolean;
-    formats: string[];
-  };
-  requirements: string[];
-}
-
-function severityColor(sev: string) {
-  if (sev === 'CRITICAL') return { bg: 'var(--dd-danger-muted)', text: 'var(--dd-danger)' };
-  if (sev === 'HIGH') return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' };
-  if (sev === 'MEDIUM') return { bg: 'var(--dd-caution-muted)', text: 'var(--dd-caution)' };
-  return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)' };
-}
-
-function severityIcon(sev: string): string {
-  if (sev === 'CRITICAL') return 'warning';
-  if (sev === 'HIGH') return 'chevrons-up';
-  if (sev === 'MEDIUM') return 'neutral';
-  return 'chevron-down';
-}
+import type { SecurityRuntimeStatus } from './security/securityViewTypes';
+import {
+  fixableColor,
+  fixablePercent,
+  formatTimestamp,
+  highestSeverity,
+  severityColor,
+  severityIcon,
+  severityOrder,
+  statusBadgeTone,
+} from './security/securityViewUtils';
 
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
-const { scanning, scanProgress, scanAllContainers: runScanAll } = useScanProgress();
+const { scanning, scanProgress, scanAllContainers: runScanAll, cancelScan } = useScanProgress();
 
-const loading = ref(true);
-const error = ref<string | null>(null);
-const securityVulnerabilities = ref<Vulnerability[]>([]);
-const containerIdsByImage = ref<Record<string, string[]>>({});
-const latestSecurityScanAt = ref<string | null>(null);
 const runtimeLoading = ref(true);
 const runtimeError = ref<string | null>(null);
 const runtimeStatus = ref<SecurityRuntimeStatus | null>(null);
@@ -104,7 +38,12 @@ const scannerReady = computed(() => {
 });
 
 const scannerSetupNeeded = computed(() => {
-  return !runtimeLoading.value && !runtimeError.value && runtimeStatus.value && !scannerReady.value;
+  return (
+    !runtimeLoading.value &&
+    !runtimeError.value &&
+    Boolean(runtimeStatus.value) &&
+    !scannerReady.value
+  );
 });
 
 const scanDisabledReason = computed(() => {
@@ -123,173 +62,121 @@ const scanDisabledReason = computed(() => {
   return 'Scan all containers for vulnerabilities';
 });
 
-function statusBadgeTone(status: SecurityRuntimeToolStatus['status']) {
-  if (status === 'ready') {
-    return { bg: 'var(--dd-success-muted)', text: 'var(--dd-success)' };
-  }
-  if (status === 'missing') {
-    return { bg: 'var(--dd-danger-muted)', text: 'var(--dd-danger)' };
-  }
-  return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)' };
-}
-
-function chooseLatestTimestamp(current: string | null, candidate: unknown): string | null {
-  if (typeof candidate !== 'string' || candidate.length === 0) {
-    return current;
-  }
-
-  if (!current) {
-    return candidate;
-  }
-
-  const currentDate = new Date(current);
-  const candidateDate = new Date(candidate);
-  if (Number.isNaN(candidateDate.getTime())) {
-    return current;
-  }
-  if (Number.isNaN(currentDate.getTime())) {
-    return candidate;
-  }
-  return candidateDate.getTime() > currentDate.getTime() ? candidate : current;
-}
-
-function formatTimestamp(value: string | null | undefined): string {
-  if (!value) {
-    return 'unknown';
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toISOString();
-}
-
 async function fetchSecurityRuntimeStatus() {
   runtimeLoading.value = true;
   runtimeError.value = null;
   try {
     runtimeStatus.value = await getSecurityRuntime();
-  } catch (e: unknown) {
-    runtimeError.value = errorMessage(e, 'Failed to load security runtime status');
+  } catch (caught: unknown) {
+    runtimeError.value = errorMessage(caught, 'Failed to load security runtime status');
     runtimeStatus.value = null;
   } finally {
     runtimeLoading.value = false;
   }
 }
 
-interface UpdateScanSummary {
-  critical: number;
-  high: number;
-  medium: number;
-  low: number;
-}
+const securityViewMode = useViewMode('security');
 
-const updateScanSummaries = ref<Record<string, UpdateScanSummary>>({});
+const securitySortField = usePreference(
+  () => preferences.views.security.sortField,
+  (value) => {
+    preferences.views.security.sortField = value;
+  },
+);
+const securitySortAsc = usePreference(
+  () => preferences.views.security.sortAsc,
+  (value) => {
+    preferences.views.security.sortAsc = value;
+  },
+);
 
-function computeDelta(
-  current: { critical: number; high: number; medium: number; low: number },
-  update: UpdateScanSummary,
-): SecurityDelta {
-  return {
-    fixed:
-      Math.max(0, current.critical - update.critical) +
-      Math.max(0, current.high - update.high) +
-      Math.max(0, current.medium - update.medium) +
-      Math.max(0, current.low - update.low),
-    new:
-      Math.max(0, update.critical - current.critical) +
-      Math.max(0, update.high - current.high) +
-      Math.max(0, update.medium - current.medium) +
-      Math.max(0, update.low - current.low),
-    fixedCritical: Math.max(0, current.critical - update.critical),
-    fixedHigh: Math.max(0, current.high - update.high),
-    newCritical: Math.max(0, update.critical - current.critical),
-    newHigh: Math.max(0, update.high - current.high),
-  };
-}
+const {
+  loading,
+  error,
+  securityVulnerabilities,
+  containerIdsByImage,
+  latestSecurityScanAt,
+  showSecFilters,
+  secFilterSeverity,
+  secFilterFix,
+  activeSecFilterCount,
+  imageSummaries: imageSummariesWithVulns,
+  filteredSummaries: filteredSummariesWithVulns,
+  clearSecFilters,
+  fetchVulnerabilities,
+} = useVulnerabilities({
+  securitySortField,
+  securitySortAsc,
+});
 
-function normalizeSeverityCount(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;
-  return Math.floor(value);
-}
+const {
+  detailOpen,
+  detailSbomComponentCount,
+  detailSbomDocument,
+  detailSbomDocumentJson,
+  detailSbomError,
+  detailSbomGeneratedAt,
+  detailSbomLoading,
+  downloadDetailSbom,
+  handleDetailOpenChange,
+  loadDetailSbom,
+  openDetail: openSbomDetail,
+  selectedImage,
+  selectedSbomFormat,
+  showSbomDocument,
+} = useSbomDetail({
+  containerIdsByImage,
+});
 
-async function fetchVulnerabilities() {
-  // Only show full loading state on initial load (no data yet)
-  if (securityVulnerabilities.value.length === 0) {
-    loading.value = true;
-  }
-  error.value = null;
-  try {
-    const containers = await getAllContainers();
-    const vulns: Vulnerability[] = [];
-    const imageContainerMap: Record<string, string[]> = {};
-    const updateSummaryMap: Record<string, UpdateScanSummary> = {};
-    let latestScanAt: string | null = null;
-
-    for (const container of containers) {
-      const scan = container.security?.scan;
-      if (!scan || !Array.isArray(scan.vulnerabilities)) continue;
-      latestScanAt = chooseLatestTimestamp(latestScanAt, scan.scannedAt);
-
-      const imageName = container.displayName || container.name || 'unknown';
-      if (typeof container.id === 'string' && container.id.length > 0) {
-        const mappedContainerIds = imageContainerMap[imageName] || [];
-        if (!mappedContainerIds.includes(container.id)) {
-          mappedContainerIds.push(container.id);
-          imageContainerMap[imageName] = mappedContainerIds;
-        }
-      }
-
-      // Capture update scan summary for delta computation
-      const updateScan = container.security?.updateScan;
-      if (updateScan?.summary) {
-        updateSummaryMap[imageName] = {
-          critical: normalizeSeverityCount(updateScan.summary.critical),
-          high: normalizeSeverityCount(updateScan.summary.high),
-          medium: normalizeSeverityCount(updateScan.summary.medium),
-          low: normalizeSeverityCount(updateScan.summary.low),
-        };
-      }
-
-      for (const v of scan.vulnerabilities) {
-        vulns.push({
-          id: v.id ?? 'unknown',
-          severity: (v.severity ?? 'UNKNOWN').toUpperCase(),
-          package: v.packageName ?? v.package ?? 'unknown',
-          version: v.installedVersion ?? v.version ?? '',
-          fixedIn: v.fixedVersion ?? v.fixedIn ?? null,
-          title: v.title ?? v.Title ?? '',
-          target: v.target ?? v.Target ?? '',
-          primaryUrl: v.primaryUrl ?? v.PrimaryURL ?? '',
-          image: imageName,
-          publishedDate: v.publishedDate ?? '',
-        });
+const vulnerabilitiesByImage = computed<Record<string, typeof securityVulnerabilities.value>>(
+  () => {
+    const grouped: Record<string, typeof securityVulnerabilities.value> = {};
+    for (const vulnerability of securityVulnerabilities.value) {
+      const existing = grouped[vulnerability.image];
+      if (existing) {
+        existing.push(vulnerability);
+      } else {
+        grouped[vulnerability.image] = [vulnerability];
       }
     }
+    for (const vulnerabilities of Object.values(grouped)) {
+      vulnerabilities.sort(
+        (a, b) => (severityOrder[a.severity] ?? 99) - (severityOrder[b.severity] ?? 99),
+      );
+    }
+    return grouped;
+  },
+);
 
-    securityVulnerabilities.value = vulns;
-    containerIdsByImage.value = imageContainerMap;
-    updateScanSummaries.value = updateSummaryMap;
-    latestSecurityScanAt.value = latestScanAt;
-  } catch (e: unknown) {
-    error.value = errorMessage(e, 'Failed to load vulnerability data');
-    containerIdsByImage.value = {};
-    updateScanSummaries.value = {};
-    latestSecurityScanAt.value = null;
-  } finally {
-    loading.value = false;
-  }
+type ImageSummaryListItem = Omit<ImageSummary, 'vulns'>;
+
+const imageSummaries = computed(() => {
+  return imageSummariesWithVulns.value.map(({ vulns, ...summary }) => summary);
+});
+
+const filteredSummaries = computed(() => {
+  return filteredSummariesWithVulns.value.map(({ vulns, ...summary }) => summary);
+});
+
+const selectedImageVulns = computed(() => {
+  if (!selectedImage.value) return [];
+  return vulnerabilitiesByImage.value[selectedImage.value.image] || [];
+});
+
+function openDetail(summary: ImageSummaryListItem) {
+  const vulnerabilities = vulnerabilitiesByImage.value[summary.image] || [];
+  openSbomDetail({
+    ...summary,
+    vulns: vulnerabilities,
+  });
 }
 
 let scanCompletedDebounceTimer: ReturnType<typeof setTimeout> | undefined;
 
 function handleSseScanCompleted() {
-  // Debounce so rapid-fire SSE events (batch scan) don't flood the API.
-  // Each scan-completed event resets the timer — the fetch fires 800ms
-  // after the last event, letting results accumulate before we refresh.
   clearTimeout(scanCompletedDebounceTimer);
   scanCompletedDebounceTimer = setTimeout(() => {
-    fetchVulnerabilities();
+    void fetchVulnerabilities();
   }, 800);
 }
 
@@ -298,249 +185,10 @@ async function scanAllContainers() {
     scannerReady: scannerReady.value,
     runtimeLoading: runtimeLoading.value,
   });
-  // The debounced SSE handler picks up results as they come in, but fire
-  // one final refresh after the batch finishes in case the last SSE event
-  // arrived before the store persisted.
-  await new Promise((r) => setTimeout(r, 1500));
+  await new Promise((resolve) => setTimeout(resolve, 1500));
   await fetchVulnerabilities();
 }
 
-// -- View mode --
-const securityViewMode = useViewMode('security');
-
-// -- Filters --
-const showSecFilters = ref(false);
-const secFilterSeverity = ref('all');
-const secFilterFix = ref('all');
-
-const activeSecFilterCount = computed(
-  () => [secFilterSeverity, secFilterFix].filter((f) => f.value !== 'all').length,
-);
-
-function clearSecFilters() {
-  secFilterSeverity.value = 'all';
-  secFilterFix.value = 'all';
-}
-
-// -- Sorting --
-const securitySortField = usePreference(
-  () => preferences.views.security.sortField,
-  (v) => {
-    preferences.views.security.sortField = v;
-  },
-);
-const securitySortAsc = usePreference(
-  () => preferences.views.security.sortAsc,
-  (v) => {
-    preferences.views.security.sortAsc = v;
-  },
-);
-
-const severityOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
-
-// -- Group vulnerabilities by image --
-const imageSummaries = computed<ImageSummary[]>(() => {
-  const map = new Map<string, ImageSummary>();
-
-  for (const v of securityVulnerabilities.value) {
-    let summary = map.get(v.image);
-    if (!summary) {
-      summary = {
-        image: v.image,
-        critical: 0,
-        high: 0,
-        medium: 0,
-        low: 0,
-        total: 0,
-        fixable: 0,
-        vulns: [],
-      };
-      map.set(v.image, summary);
-    }
-    if (v.severity === 'CRITICAL') summary.critical++;
-    else if (v.severity === 'HIGH') summary.high++;
-    else if (v.severity === 'MEDIUM') summary.medium++;
-    else summary.low++;
-    if (v.fixedIn) summary.fixable++;
-    summary.total++;
-    summary.vulns.push(v);
-  }
-
-  // Sort vulns within each image by severity and attach delta
-  for (const s of map.values()) {
-    s.vulns.sort((a, b) => (severityOrder[a.severity] ?? 99) - (severityOrder[b.severity] ?? 99));
-    const updateSummary = updateScanSummaries.value[s.image];
-    if (updateSummary) {
-      s.delta = computeDelta(s, updateSummary);
-    }
-  }
-
-  return [...map.values()];
-});
-
-const filteredSummaries = computed(() => {
-  let list = [...imageSummaries.value];
-
-  // Filter: only include images that have vulns matching the severity filter
-  if (secFilterSeverity.value !== 'all') {
-    const sev = secFilterSeverity.value;
-    list = list.filter((s) => {
-      if (sev === 'CRITICAL') return s.critical > 0;
-      if (sev === 'HIGH') return s.high > 0;
-      if (sev === 'MEDIUM') return s.medium > 0;
-      return s.low > 0;
-    });
-  }
-  if (secFilterFix.value !== 'all') {
-    list = list.filter((s) => (secFilterFix.value === 'yes' ? s.fixable > 0 : s.fixable < s.total));
-  }
-
-  const field = securitySortField.value;
-  const asc = securitySortAsc.value;
-  list.sort((a, b) => {
-    let cmp = 0;
-    if (field === 'image') {
-      cmp = a.image.localeCompare(b.image);
-    } else {
-      const av = ((a as Record<string, unknown>)[field] as number) ?? 0;
-      const bv = ((b as Record<string, unknown>)[field] as number) ?? 0;
-      cmp = av - bv;
-    }
-    return asc ? cmp : -cmp;
-  });
-
-  return list;
-});
-
-// -- Detail panel --
-const selectedImage = ref<ImageSummary | null>(null);
-const detailOpen = ref(false);
-const selectedSbomFormat = ref<SbomFormat>('spdx-json');
-const detailSbomResult = ref<Record<string, unknown> | null>(null);
-const detailSbomLoading = ref(false);
-const detailSbomError = ref<string | null>(null);
-const showSbomDocument = ref(false);
-
-const selectedImageContainerId = computed(() => {
-  if (!selectedImage.value) {
-    return undefined;
-  }
-  const containerIds = containerIdsByImage.value[selectedImage.value.image];
-  if (!Array.isArray(containerIds) || containerIds.length === 0) {
-    return undefined;
-  }
-  return containerIds[0];
-});
-
-const detailSbomDocument = computed(() => detailSbomResult.value?.document);
-const detailSbomGeneratedAt = computed(() => detailSbomResult.value?.generatedAt);
-const detailSbomComponentCount = computed(() => {
-  const document = detailSbomDocument.value;
-  if (Array.isArray(document?.packages)) {
-    return document.packages.length;
-  }
-  if (Array.isArray(document?.components)) {
-    return document.components.length;
-  }
-  return undefined;
-});
-const detailSbomDocumentJson = computed(() => {
-  if (!detailSbomDocument.value) {
-    return '';
-  }
-  try {
-    return JSON.stringify(detailSbomDocument.value, null, 2);
-  } catch {
-    return '';
-  }
-});
-
-function toSafeFileName(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, '-');
-}
-
-async function loadDetailSbom() {
-  const containerId = selectedImageContainerId.value;
-  if (!containerId) {
-    detailSbomResult.value = null;
-    detailSbomError.value = 'No container identifier is available for this image.';
-    return;
-  }
-  detailSbomLoading.value = true;
-  detailSbomError.value = null;
-  try {
-    detailSbomResult.value = await getContainerSbom(containerId, selectedSbomFormat.value);
-  } catch (e: unknown) {
-    detailSbomResult.value = null;
-    detailSbomError.value = errorMessage(e, 'Failed to load SBOM');
-  } finally {
-    detailSbomLoading.value = false;
-  }
-}
-
-function downloadDetailSbom() {
-  if (!detailSbomDocument.value || !selectedImage.value) {
-    return;
-  }
-  const payload = detailSbomDocumentJson.value;
-  if (!payload) {
-    return;
-  }
-  const blob = new Blob([payload], { type: 'application/json' });
-  const objectUrl = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = objectUrl;
-  link.download = `${toSafeFileName(selectedImage.value.image)}.${selectedSbomFormat.value}.sbom.json`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(objectUrl);
-}
-
-function openDetail(summary: ImageSummary) {
-  selectedImage.value = summary;
-  detailOpen.value = true;
-  showSbomDocument.value = false;
-  detailSbomResult.value = null;
-  detailSbomError.value = null;
-  void loadDetailSbom();
-}
-
-function handleDetailOpenChange(open: boolean) {
-  detailOpen.value = open;
-  if (!open) {
-    selectedImage.value = null;
-    showSbomDocument.value = false;
-    detailSbomResult.value = null;
-    detailSbomError.value = null;
-  }
-}
-
-// Detail panel vuln sort
-const detailSortField = ref('severity');
-const detailSortAsc = ref(true);
-
-const selectedImageVulns = computed(() => {
-  if (!selectedImage.value) return [];
-  let list = [...selectedImage.value.vulns];
-
-  const field = detailSortField.value;
-  const asc = detailSortAsc.value;
-  list.sort((a, b) => {
-    let cmp = 0;
-    if (field === 'severity') {
-      cmp = (severityOrder[a.severity] ?? 99) - (severityOrder[b.severity] ?? 99);
-    } else {
-      const av = String((a as Record<string, unknown>)[field] ?? '');
-      const bv = String((b as Record<string, unknown>)[field] ?? '');
-      cmp = av.localeCompare(bv);
-    }
-    return asc ? cmp : -cmp;
-  });
-  return list;
-});
-
-// -- Table columns --
 const tableColumns = computed(() => {
   if (isCompact.value) {
     return [
@@ -559,58 +207,17 @@ const tableColumns = computed(() => {
   ];
 });
 
-function fixablePercent(fixable: number, total: number): string {
-  if (total <= 0) return '0';
-  const pct = (fixable / total) * 100;
-  return pct === 100 || pct === 0 ? String(pct) : pct.toFixed(1).replace(/\.0$/, '');
-}
-
-function fixableColor(fixable: number, total: number): string {
-  if (total <= 0) return 'var(--dd-neutral)';
-  const pct = (fixable / total) * 100;
-  if (pct >= 90) return 'var(--dd-success)';
-  if (pct >= 60) return 'var(--dd-caution)';
-  return 'var(--dd-warning)';
-}
-
-// Highest severity for an image (used for compact mode indicator)
-function highestSeverity(summary: ImageSummary): string {
-  if (summary.critical > 0) return 'CRITICAL';
-  if (summary.high > 0) return 'HIGH';
-  if (summary.medium > 0) return 'MEDIUM';
-  return 'LOW';
-}
-
-// -- Column picker (kept for non-compact table) --
-const showSecColumnPicker = ref(false);
-const secColumnPickerStyle = ref<Record<string, string>>({});
-
-function toggleSecColumnPicker(event: MouseEvent) {
-  showSecColumnPicker.value = !showSecColumnPicker.value;
-  if (showSecColumnPicker.value) {
-    const btn = event.currentTarget as HTMLElement;
-    const rect = btn.getBoundingClientRect();
-    secColumnPickerStyle.value = {
-      position: 'fixed',
-      top: `${rect.bottom + 4}px`,
-      left: `${rect.left}px`,
-    };
-  }
-}
-
-function handleGlobalClick() {
-  showSecColumnPicker.value = false;
-}
 const sseScanCompletedListener = handleSseScanCompleted as EventListener;
+
 onMounted(() => {
-  fetchSecurityRuntimeStatus();
-  fetchVulnerabilities();
-  document.addEventListener('click', handleGlobalClick);
+  void fetchSecurityRuntimeStatus();
+  void fetchVulnerabilities();
   globalThis.addEventListener('dd:sse-scan-completed', sseScanCompletedListener);
 });
+
 onUnmounted(() => {
+  cancelScan();
   clearTimeout(scanCompletedDebounceTimer);
-  document.removeEventListener('click', handleGlobalClick);
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
 });
 </script>
@@ -656,24 +263,36 @@ onUnmounted(() => {
         </template>
         <template #left>
           <template v-if="runtimeStatus">
-            <span class="badge text-[9px] font-bold uppercase cursor-default"
+            <!-- Compact: single combined badge -->
+            <span v-if="isCompact"
+                  class="badge text-[9px] font-bold uppercase cursor-default flex items-center gap-1"
                   :style="{ backgroundColor: statusBadgeTone(runtimeStatus.scanner.status).bg, color: statusBadgeTone(runtimeStatus.scanner.status).text }"
-                  v-tooltip.top="runtimeStatus.scanner.message + (runtimeStatus.scanner.server ? ' · server: ' + runtimeStatus.scanner.server : '')">
-              trivy
+                  v-tooltip.top="`Trivy: ${runtimeStatus.scanner.message} · Cosign: ${runtimeStatus.signature.message} · SBOM: ${runtimeStatus.sbom.enabled ? 'enabled' : 'disabled'}`">
+              <span class="w-1.5 h-1.5 rounded-full" :style="{ backgroundColor: statusBadgeTone(runtimeStatus.scanner.status).text }" />
+              <span class="w-1.5 h-1.5 rounded-full" :style="{ backgroundColor: statusBadgeTone(runtimeStatus.signature.status).text }" />
+              <span class="w-1.5 h-1.5 rounded-full" :style="{ backgroundColor: runtimeStatus.sbom.enabled ? 'var(--dd-info)' : 'var(--dd-neutral)' }" />
             </span>
-            <span class="badge text-[9px] font-bold uppercase cursor-default"
-                  :style="{ backgroundColor: statusBadgeTone(runtimeStatus.signature.status).bg, color: statusBadgeTone(runtimeStatus.signature.status).text }"
-                  v-tooltip.top="runtimeStatus.signature.message">
-              cosign
-            </span>
-            <span class="badge text-[9px] font-bold uppercase cursor-default"
-                  :style="{
-                    backgroundColor: runtimeStatus.sbom.enabled ? 'var(--dd-info-muted)' : 'var(--dd-neutral-muted)',
-                    color: runtimeStatus.sbom.enabled ? 'var(--dd-info)' : 'var(--dd-neutral)',
-                  }"
-                  v-tooltip.top="runtimeStatus.sbom.enabled ? 'SBOM generation enabled (' + runtimeStatus.sbom.formats.join(', ') + ')' : 'SBOM generation disabled'">
-              sbom
-            </span>
+            <!-- Full: individual badges -->
+            <template v-else>
+              <span class="badge text-[9px] font-bold uppercase cursor-default"
+                    :style="{ backgroundColor: statusBadgeTone(runtimeStatus.scanner.status).bg, color: statusBadgeTone(runtimeStatus.scanner.status).text }"
+                    v-tooltip.top="runtimeStatus.scanner.message + (runtimeStatus.scanner.server ? ' · server: ' + runtimeStatus.scanner.server : '')">
+                trivy
+              </span>
+              <span class="badge text-[9px] font-bold uppercase cursor-default"
+                    :style="{ backgroundColor: statusBadgeTone(runtimeStatus.signature.status).bg, color: statusBadgeTone(runtimeStatus.signature.status).text }"
+                    v-tooltip.top="runtimeStatus.signature.message">
+                cosign
+              </span>
+              <span class="badge text-[9px] font-bold uppercase cursor-default"
+                    :style="{
+                      backgroundColor: runtimeStatus.sbom.enabled ? 'var(--dd-info-muted)' : 'var(--dd-neutral-muted)',
+                      color: runtimeStatus.sbom.enabled ? 'var(--dd-info)' : 'var(--dd-neutral)',
+                    }"
+                    v-tooltip.top="runtimeStatus.sbom.enabled ? 'SBOM generation enabled (' + runtimeStatus.sbom.formats.join(', ') + ')' : 'SBOM generation disabled'">
+                sbom
+              </span>
+            </template>
           </template>
         </template>
         <template #center>
@@ -792,44 +411,20 @@ onUnmounted(() => {
           </div>
         </template>
         <template #empty>
-          <div class="flex flex-col items-center justify-center py-16">
-            <AppIcon name="security" :size="24" class="mb-3 dd-text-muted" />
-            <p class="text-sm font-medium mb-1 dd-text-secondary">
-              {{ securityVulnerabilities.length === 0 ? 'No vulnerability data yet' : 'No images match your filters' }}
-            </p>
-            <p v-if="securityVulnerabilities.length === 0 && !scannerSetupNeeded" class="text-xs dd-text-muted mb-3">
-              Run a scan to check your containers for known vulnerabilities
-            </p>
-            <p v-if="securityVulnerabilities.length === 0 && scannerSetupNeeded" class="text-xs dd-text-muted mb-3 text-center max-w-sm">
-              {{ runtimeStatus?.scanner.message }}
-            </p>
-            <div class="flex items-center gap-2 mt-2">
-              <button v-if="activeSecFilterCount > 0"
-                      class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20"
-                      @click="clearSecFilters">
-                Clear all filters
-              </button>
-              <a v-if="securityVulnerabilities.length === 0 && scannerSetupNeeded"
-                 href="https://drydock.codeswhat.com/docs/configuration/security"
-                 target="_blank"
-                 rel="noopener noreferrer"
-                 class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5 no-underline text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20">
-                <AppIcon name="expand" :size="12" />
-                Setup Guide
-              </a>
-              <span v-if="securityVulnerabilities.length === 0 && !scannerSetupNeeded" class="inline-flex" v-tooltip.top="scanDisabledReason">
-                <button class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
-                        :class="scanning || runtimeLoading || !scannerReady
-                          ? 'dd-text-muted cursor-not-allowed dd-bg-elevated'
-                          : 'text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20'"
-                        :disabled="scanning || runtimeLoading || !scannerReady"
-                        @click="scanAllContainers">
-                  <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
-                  <template v-if="scanning"><ScanProgressText :progress="scanProgress" /></template><template v-else>Scan Now</template>
-                </button>
-              </span>
-            </div>
-          </div>
+          <SecurityEmptyState
+            :has-vulnerability-data="securityVulnerabilities.length > 0"
+            :scanner-setup-needed="scannerSetupNeeded"
+            :scanner-message="runtimeStatus?.scanner.message"
+            :active-filter-count="activeSecFilterCount"
+            :scan-disabled-reason="scanDisabledReason"
+            :scanning="scanning"
+            :runtime-loading="runtimeLoading"
+            :scanner-ready="scannerReady"
+            :scan-progress="scanProgress"
+            :boxed="false"
+            @clear-filters="clearSecFilters"
+            @scan-now="scanAllContainers"
+          />
         </template>
       </DataTable>
 
@@ -898,46 +493,21 @@ onUnmounted(() => {
       </DataCardGrid>
 
       <!-- Empty state for cards -->
-      <div v-if="securityViewMode === 'cards' && filteredSummaries.length === 0 && !loading"
-           class="flex flex-col items-center justify-center py-16 dd-rounded"
-           :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-        <AppIcon name="security" :size="24" class="mb-3 dd-text-muted" />
-        <p class="text-sm font-medium mb-1 dd-text-secondary">
-          {{ securityVulnerabilities.length === 0 ? 'No vulnerability data yet' : 'No images match your filters' }}
-        </p>
-        <p v-if="securityVulnerabilities.length === 0 && !scannerSetupNeeded" class="text-xs dd-text-muted mb-3">
-          Run a scan to check your containers for known vulnerabilities
-        </p>
-        <p v-if="securityVulnerabilities.length === 0 && scannerSetupNeeded" class="text-xs dd-text-muted mb-3 text-center max-w-sm">
-          {{ runtimeStatus?.scanner.message }}
-        </p>
-        <div class="flex items-center gap-2 mt-2">
-          <button v-if="activeSecFilterCount > 0"
-                  class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20"
-                  @click="clearSecFilters">
-            Clear all filters
-          </button>
-          <a v-if="securityVulnerabilities.length === 0 && scannerSetupNeeded"
-             href="https://drydock.codeswhat.com/docs/configuration/security"
-             target="_blank"
-             rel="noopener noreferrer"
-             class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5 no-underline text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20">
-            <AppIcon name="expand" :size="12" />
-            Setup Guide
-          </a>
-          <span v-if="securityVulnerabilities.length === 0 && !scannerSetupNeeded" class="inline-flex" v-tooltip.top="scanDisabledReason">
-            <button class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
-                    :class="scanning || runtimeLoading || !scannerReady
-                      ? 'dd-text-muted cursor-not-allowed dd-bg-elevated'
-                      : 'text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20'"
-                    :disabled="scanning || runtimeLoading || !scannerReady"
-                    @click="scanAllContainers">
-              <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
-              <template v-if="scanning"><ScanProgressText :progress="scanProgress" /></template><template v-else>Scan Now</template>
-            </button>
-          </span>
-        </div>
-      </div>
+      <SecurityEmptyState
+        v-if="securityViewMode === 'cards' && filteredSummaries.length === 0 && !loading"
+        :has-vulnerability-data="securityVulnerabilities.length > 0"
+        :scanner-setup-needed="scannerSetupNeeded"
+        :scanner-message="runtimeStatus?.scanner.message"
+        :active-filter-count="activeSecFilterCount"
+        :scan-disabled-reason="scanDisabledReason"
+        :scanning="scanning"
+        :runtime-loading="runtimeLoading"
+        :scanner-ready="scannerReady"
+        :scan-progress="scanProgress"
+        :boxed="true"
+        @clear-filters="clearSecFilters"
+        @scan-now="scanAllContainers"
+      />
 
       <!-- List view — one row per image, expandable -->
       <DataListAccordion v-if="securityViewMode === 'list' && !loading"
@@ -980,46 +550,21 @@ onUnmounted(() => {
       </DataListAccordion>
 
       <!-- Empty state for list -->
-      <div v-if="securityViewMode === 'list' && filteredSummaries.length === 0 && !loading"
-           class="flex flex-col items-center justify-center py-16 dd-rounded"
-           :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-        <AppIcon name="security" :size="24" class="mb-3 dd-text-muted" />
-        <p class="text-sm font-medium mb-1 dd-text-secondary">
-          {{ securityVulnerabilities.length === 0 ? 'No vulnerability data yet' : 'No images match your filters' }}
-        </p>
-        <p v-if="securityVulnerabilities.length === 0 && !scannerSetupNeeded" class="text-xs dd-text-muted mb-3">
-          Run a scan to check your containers for known vulnerabilities
-        </p>
-        <p v-if="securityVulnerabilities.length === 0 && scannerSetupNeeded" class="text-xs dd-text-muted mb-3 text-center max-w-sm">
-          {{ runtimeStatus?.scanner.message }}
-        </p>
-        <div class="flex items-center gap-2 mt-2">
-          <button v-if="activeSecFilterCount > 0"
-                  class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20"
-                  @click="clearSecFilters">
-            Clear all filters
-          </button>
-          <a v-if="securityVulnerabilities.length === 0 && scannerSetupNeeded"
-             href="https://drydock.codeswhat.com/docs/configuration/security"
-             target="_blank"
-             rel="noopener noreferrer"
-             class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5 no-underline text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20">
-            <AppIcon name="expand" :size="12" />
-            Setup Guide
-          </a>
-          <span v-if="securityVulnerabilities.length === 0 && !scannerSetupNeeded" class="inline-flex" v-tooltip.top="scanDisabledReason">
-            <button class="text-xs font-medium px-3 py-1.5 dd-rounded transition-colors flex items-center gap-1.5"
-                    :class="scanning || runtimeLoading || !scannerReady
-                      ? 'dd-text-muted cursor-not-allowed dd-bg-elevated'
-                      : 'text-drydock-secondary bg-drydock-secondary/10 hover:bg-drydock-secondary/20'"
-                    :disabled="scanning || runtimeLoading || !scannerReady"
-                    @click="scanAllContainers">
-              <AppIcon name="restart" :size="12" :class="{ 'animate-spin': scanning }" />
-              <template v-if="scanning"><ScanProgressText :progress="scanProgress" /></template><template v-else>Scan Now</template>
-            </button>
-          </span>
-        </div>
-      </div>
+      <SecurityEmptyState
+        v-if="securityViewMode === 'list' && filteredSummaries.length === 0 && !loading"
+        :has-vulnerability-data="securityVulnerabilities.length > 0"
+        :scanner-setup-needed="scannerSetupNeeded"
+        :scanner-message="runtimeStatus?.scanner.message"
+        :active-filter-count="activeSecFilterCount"
+        :scan-disabled-reason="scanDisabledReason"
+        :scanning="scanning"
+        :runtime-loading="runtimeLoading"
+        :scanner-ready="scannerReady"
+        :scan-progress="scanProgress"
+        :boxed="true"
+        @clear-filters="clearSecFilters"
+        @scan-now="scanAllContainers"
+      />
 
     <!-- Detail panel — full vulnerability report for selected image -->
     <template #panel>
