@@ -835,6 +835,7 @@ const connectionLost = ref(false);
 const selfUpdateInProgress = ref(false);
 const selfUpdateOperationId = ref<string | undefined>(undefined);
 let connectivityTimer: ReturnType<typeof setInterval> | undefined;
+let sidebarRefreshDebounceTimer: ReturnType<typeof setTimeout> | undefined;
 const sidebarDataLoading = ref(false);
 
 async function checkConnectivity() {
@@ -913,6 +914,13 @@ async function refreshSidebarData() {
   }
 }
 
+function scheduleSidebarDataRefresh() {
+  clearTimeout(sidebarRefreshDebounceTimer);
+  sidebarRefreshDebounceTimer = setTimeout(() => {
+    void refreshSidebarData();
+  }, 800);
+}
+
 function emitUiSseEvent(name: string) {
   globalThis.dispatchEvent(new CustomEvent(name));
 }
@@ -941,12 +949,12 @@ function handleSseEvent(event: string, payload?: unknown) {
   }
   if (event === 'scan-completed') {
     emitUiSseEvent('dd:sse-scan-completed');
-    refreshSidebarData();
+    scheduleSidebarDataRefresh();
     return;
   }
   if (event === 'container-changed') {
     emitUiSseEvent('dd:sse-container-changed');
-    void refreshSidebarData();
+    scheduleSidebarDataRefresh();
     return;
   }
   if (event === 'agent-status-changed') {
@@ -978,6 +986,7 @@ onMounted(async () => {
   }
 });
 onUnmounted(() => {
+  clearTimeout(sidebarRefreshDebounceTimer);
   globalThis.removeEventListener('keydown', handleKeydown);
   if (connectivityTimer) clearInterval(connectivityTimer);
   sseService.disconnect();
@@ -1144,10 +1153,11 @@ onUnmounted(() => {
           </nav>
         </div>
 
-        <!-- Center: scan progress (visible from any page) -->
-        <div class="flex justify-center">
+        <!-- Center: scan progress (desktop only — mobile uses fixed toast below) -->
+        <div v-if="!isMobile" class="flex justify-center">
           <ScanProgressBanner v-if="globalScanning" :progress="globalScanProgress" class="max-w-sm w-full" />
         </div>
+        <div v-else /><!-- empty grid cell on mobile -->
 
         <!-- Right: theme, notifications, avatar -->
         <div class="flex items-center gap-2 justify-end">
@@ -1197,6 +1207,14 @@ onUnmounted(() => {
             :style="{ backgroundColor: 'var(--dd-bg)' }">
         <router-view />
       </main>
+
+      <!-- Mobile scan progress toast (fixed bottom center) -->
+      <Transition name="menu-fade">
+        <div v-if="isMobile && globalScanning"
+             class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-sm">
+          <ScanProgressBanner :progress="globalScanProgress" />
+        </div>
+      </Transition>
     </div>
 
     <!-- About Modal -->
@@ -1211,8 +1229,13 @@ onUnmounted(() => {
                aria-labelledby="about-dialog-title"
                class="relative w-full max-w-[340px] dd-rounded-lg overflow-hidden shadow-2xl"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+            <button aria-label="Close"
+                    class="absolute top-3 right-3 w-6 h-6 flex items-center justify-center dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                    @click="showAbout = false">
+              <AppIcon name="xmark" :size="12" />
+            </button>
             <div class="flex flex-col items-center pt-6 pb-4 px-6">
-              <img :src="whaleLogo" alt="Drydock" class="h-12 w-auto mb-3" :style="{ filter: 'invert(1)' }" />
+              <img :src="whaleLogo" alt="Drydock" class="h-12 w-auto mb-3" :style="isDark ? { filter: 'invert(1)' } : {}" />
               <h2 id="about-dialog-title" class="text-base font-bold dd-text">Drydock</h2>
               <span class="text-[11px] dd-text-muted mt-0.5">Docker Container Update Manager</span>
               <span class="badge text-[10px] font-semibold mt-2 dd-bg-elevated dd-text-secondary">v1.4.0</span>
