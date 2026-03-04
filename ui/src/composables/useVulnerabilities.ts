@@ -1,8 +1,13 @@
 import { computed, type Ref, ref } from 'vue';
-import { getAllContainers } from '../services/container';
+import { getAllContainers, getContainerVulnerabilities } from '../services/container';
 import type { ContainerSecurityDelta, ContainerSecuritySummary } from '../types/container';
 import { computeSecurityDelta } from '../utils/container-mapper';
 import { errorMessage } from '../utils/error';
+import {
+  chooseLatestTimestamp,
+  normalizeSeverityCount,
+  severityOrder,
+} from '../views/security/securityViewUtils';
 
 export interface Vulnerability {
   id: string;
@@ -26,8 +31,11 @@ export interface ImageSummary {
   unknown: number;
   total: number;
   fixable: number;
-  vulns: Vulnerability[];
   delta?: ContainerSecurityDelta;
+}
+
+export interface ImageSummaryWithVulns extends ImageSummary {
+  vulns: Vulnerability[];
 }
 
 export const securitySortFields = [
@@ -75,39 +83,6 @@ interface UseVulnerabilitiesOptions {
 
 interface UpdateScanSummary extends ContainerSecuritySummary {}
 
-const severityOrder: Record<string, number> = {
-  CRITICAL: 0,
-  HIGH: 1,
-  MEDIUM: 2,
-  LOW: 3,
-  UNKNOWN: 4,
-};
-
-function normalizeSeverityCount(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;
-  return Math.floor(value);
-}
-
-function chooseLatestTimestamp(current: string | null, candidate: unknown): string | null {
-  if (typeof candidate !== 'string' || candidate.length === 0) {
-    return current;
-  }
-
-  if (!current) {
-    return candidate;
-  }
-
-  const currentDate = new Date(current);
-  const candidateDate = new Date(candidate);
-  if (Number.isNaN(candidateDate.getTime())) {
-    return current;
-  }
-  if (Number.isNaN(currentDate.getTime())) {
-    return candidate;
-  }
-  return candidateDate.getTime() > currentDate.getTime() ? candidate : current;
-}
-
 function normalizeSeverity(value: unknown): string {
   if (typeof value !== 'string') {
     return 'UNKNOWN';
@@ -148,6 +123,27 @@ export function useVulnerabilities({
     secFilterFix.value = 'all';
   }
 
+  const vulnerabilitiesByImage = computed<Record<string, Vulnerability[]>>(() => {
+    const grouped: Record<string, Vulnerability[]> = {};
+
+    for (const vulnerability of securityVulnerabilities.value) {
+      const existing = grouped[vulnerability.image];
+      if (existing) {
+        existing.push(vulnerability);
+      } else {
+        grouped[vulnerability.image] = [vulnerability];
+      }
+    }
+
+    for (const vulnerabilities of Object.values(grouped)) {
+      vulnerabilities.sort(
+        (a, b) => (severityOrder[a.severity] ?? 99) - (severityOrder[b.severity] ?? 99),
+      );
+    }
+
+    return grouped;
+  });
+
   const imageSummaries = computed<ImageSummary[]>(() => {
     const map = new Map<string, ImageSummary>();
 
@@ -163,7 +159,6 @@ export function useVulnerabilities({
           unknown: 0,
           total: 0,
           fixable: 0,
-          vulns: [],
         };
         map.set(vuln.image, summary);
       }
@@ -176,14 +171,9 @@ export function useVulnerabilities({
 
       if (vuln.fixedIn) summary.fixable += 1;
       summary.total += 1;
-      summary.vulns.push(vuln);
     }
 
     for (const summary of map.values()) {
-      summary.vulns.sort(
-        (a, b) => (severityOrder[a.severity] ?? 99) - (severityOrder[b.severity] ?? 99),
-      );
-
       const currentSummary: ContainerSecuritySummary = {
         critical: summary.critical,
         high: summary.high,
@@ -249,14 +239,20 @@ export function useVulnerabilities({
       const updateSummaryMap: Record<string, UpdateScanSummary> = {};
       let latestScanAt: string | null = null;
 
+      // Identify scanned containers and collect metadata
+      const scannedContainers: Array<{
+        id: string;
+        imageName: string;
+        scan: { scannedAt?: string };
+        updateScan?: { summary?: Record<string, unknown> };
+      }> = [];
+
       for (const container of containers) {
         const scan = container.security?.scan;
-        if (!scan || !Array.isArray(scan.vulnerabilities)) {
-          continue;
-        }
+        if (!scan) continue;
 
-        latestScanAt = chooseLatestTimestamp(latestScanAt, scan.scannedAt);
         const imageName = container.displayName || container.name || 'unknown';
+        latestScanAt = chooseLatestTimestamp(latestScanAt, scan.scannedAt);
 
         if (typeof container.id === 'string' && container.id.length > 0) {
           const containerIds = imageContainerMap[imageName] || [];
@@ -277,7 +273,30 @@ export function useVulnerabilities({
           };
         }
 
-        for (const vulnerability of scan.vulnerabilities) {
+        if (typeof container.id === 'string' && container.id.length > 0) {
+          scannedContainers.push({
+            id: container.id,
+            imageName,
+            scan,
+            updateScan,
+          });
+        }
+      }
+
+      // Fetch detailed vulnerability data per container in parallel
+      const vulnResults = await Promise.allSettled(
+        scannedContainers.map(async (entry) => {
+          const data = await getContainerVulnerabilities(entry.id);
+          return { imageName: entry.imageName, data };
+        }),
+      );
+
+      for (const result of vulnResults) {
+        if (result.status !== 'fulfilled') continue;
+        const { imageName, data } = result.value;
+        const vulnList = Array.isArray(data?.vulnerabilities) ? data.vulnerabilities : [];
+
+        for (const vulnerability of vulnList) {
           vulnerabilities.push({
             id: vulnerability.id ?? 'unknown',
             severity: normalizeSeverity(vulnerability.severity),
@@ -317,6 +336,7 @@ export function useVulnerabilities({
     secFilterSeverity,
     secFilterFix,
     activeSecFilterCount,
+    vulnerabilitiesByImage,
     imageSummaries,
     filteredSummaries,
     clearSecFilters,

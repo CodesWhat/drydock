@@ -1,6 +1,8 @@
+import { flushPromises } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
 
 const mockGetAllContainers = vi.fn();
+const mockGetContainerVulnerabilities = vi.fn();
 const mockScanContainer = vi.fn();
 const mockGetContainerSbom = vi.fn();
 const mockGetSecurityRuntime = vi.fn();
@@ -10,6 +12,7 @@ const { mockComputeSecurityDelta } = vi.hoisted(() => ({
 
 vi.mock('@/services/container', () => ({
   getAllContainers: (...args: any[]) => mockGetAllContainers(...args),
+  getContainerVulnerabilities: (...args: any[]) => mockGetContainerVulnerabilities(...args),
   scanContainer: (...args: any[]) => mockScanContainer(...args),
   getContainerSbom: (...args: any[]) => mockGetContainerSbom(...args),
 }));
@@ -37,8 +40,11 @@ import { mount } from '@vue/test-utils';
 import { clearIconCache, updateSettings } from '@/services/settings';
 import SecurityView from '@/views/SecurityView.vue';
 
+let containerIdCounter = 0;
 function makeContainer(overrides: Record<string, any> = {}) {
+  containerIdCounter += 1;
   return {
+    id: overrides.id ?? `container-${containerIdCounter}`,
     name: 'nginx',
     displayName: 'nginx-web',
     security: {
@@ -159,15 +165,28 @@ function readyRuntimeStatus() {
   };
 }
 
+/** Track containers passed to mockGetAllContainers so vuln mock can look them up. */
+let lastContainerList: any[] = [];
+function mockContainers(containers: any[]) {
+  lastContainerList = containers;
+  mockGetAllContainers.mockResolvedValue(containers);
+}
+
 describe('SecurityView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    containerIdCounter = 0;
+    lastContainerList = [];
+    mockGetContainerVulnerabilities.mockImplementation((id: string) => {
+      const match = lastContainerList.find((c: any) => c.id === id);
+      return Promise.resolve(match?.security?.scan ?? { vulnerabilities: [] });
+    });
     mockGetSecurityRuntime.mockResolvedValue(readyRuntimeStatus());
   });
 
   describe('data loading', () => {
     it('loads security runtime status on mount', async () => {
-      mockGetAllContainers.mockResolvedValue([makeContainer()]);
+      mockContainers([makeContainer()]);
       const w = factory();
       await vi.waitFor(() => {
         expect(mockGetSecurityRuntime).toHaveBeenCalledOnce();
@@ -179,7 +198,7 @@ describe('SecurityView', () => {
     });
 
     it('shows runtime checkedAt and latest scannedAt timestamps', async () => {
-      mockGetAllContainers.mockResolvedValue([
+      mockContainers([
         makeContainer({
           name: 'nginx',
           displayName: 'nginx',
@@ -208,7 +227,7 @@ describe('SecurityView', () => {
       const w = factory();
       await vi.waitFor(() => expect(mockGetSecurityRuntime).toHaveBeenCalledOnce());
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalledOnce());
-      await nextTick();
+      await flushPromises();
 
       const vm = w.vm as any;
       expect(vm.runtimeStatus?.checkedAt).toBe('2026-02-23T00:00:00.000Z');
@@ -216,31 +235,31 @@ describe('SecurityView', () => {
     });
 
     it('fetches containers on mount and groups vulnerabilities by image', async () => {
-      mockGetAllContainers.mockResolvedValue([makeContainer()]);
+      mockContainers([makeContainer()]);
       const w = factory();
       await vi.waitFor(() => {
         expect(mockGetAllContainers).toHaveBeenCalledOnce();
       });
-      await nextTick();
+      await flushPromises();
       // One image with vulnerabilities = one row in the table
       const dt = w.find('.dt');
       expect(dt.attributes('data-rows')).toBe('1');
     });
 
     it('skips containers without security scan data', async () => {
-      mockGetAllContainers.mockResolvedValue([
+      mockContainers([
         makeContainer(),
         makeContainer({ name: 'redis', displayName: 'redis', security: null }),
       ]);
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
-      await nextTick();
+      await flushPromises();
       // Only one image has vulns
       expect(w.find('.dt').attributes('data-rows')).toBe('1');
     });
 
     it('normalizes severity to uppercase', async () => {
-      mockGetAllContainers.mockResolvedValue([
+      mockContainers([
         makeContainer({
           security: {
             scan: {
@@ -251,14 +270,14 @@ describe('SecurityView', () => {
       ]);
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
-      await nextTick();
+      await flushPromises();
       const vm = w.vm as any;
       // Image summaries should have the critical count
       expect(vm.filteredSummaries[0].critical).toBe(1);
     });
 
     it('keeps vulnerability lists out of image summaries and uses grouped detail data', async () => {
-      mockGetAllContainers.mockResolvedValue([
+      mockContainers([
         makeContainer({
           name: 'nginx',
           displayName: 'nginx',
@@ -275,7 +294,7 @@ describe('SecurityView', () => {
 
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalledOnce());
-      await nextTick();
+      await flushPromises();
 
       const vm = w.vm as any;
       const summary = vm.filteredSummaries[0];
@@ -289,7 +308,7 @@ describe('SecurityView', () => {
     });
 
     it('uses fallback package name from package field', async () => {
-      mockGetAllContainers.mockResolvedValue([
+      mockContainers([
         makeContainer({
           security: {
             scan: {
@@ -300,14 +319,14 @@ describe('SecurityView', () => {
       ]);
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
-      await nextTick();
+      await flushPromises();
       const vm = w.vm as any;
       const image = vm.filteredSummaries[0].image;
       expect(vm.vulnerabilitiesByImage[image][0].package).toBe('curl');
     });
 
     it('renders vulnerability title, target, and reference URL in detail view', async () => {
-      mockGetAllContainers.mockResolvedValue([
+      mockContainers([
         makeContainer({
           id: 'container-1',
           displayName: 'nginx',
@@ -332,7 +351,7 @@ describe('SecurityView', () => {
 
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalledOnce());
-      await nextTick();
+      await flushPromises();
 
       const vm = w.vm as any;
       vm.openDetail(vm.filteredSummaries[0]);
@@ -344,7 +363,7 @@ describe('SecurityView', () => {
     });
 
     it('groups multiple containers into separate image summaries', async () => {
-      mockGetAllContainers.mockResolvedValue([
+      mockContainers([
         makeContainer({ name: 'nginx', displayName: 'nginx' }),
         makeContainer({
           name: 'redis',
@@ -358,12 +377,12 @@ describe('SecurityView', () => {
       ]);
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
-      await nextTick();
+      await flushPromises();
       expect(w.find('.dt').attributes('data-rows')).toBe('2');
     });
 
     it('uses shared computeSecurityDelta helper when update scan summary exists', async () => {
-      mockGetAllContainers.mockResolvedValue([
+      mockContainers([
         makeContainer({
           displayName: 'nginx-web',
           security: {
@@ -389,7 +408,7 @@ describe('SecurityView', () => {
 
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalledOnce());
-      await nextTick();
+      await flushPromises();
 
       const vm = w.vm as any;
       expect(vm.filteredSummaries[0].delta).toEqual({
@@ -408,9 +427,7 @@ describe('SecurityView', () => {
     });
 
     it('loads sbom and shows view/download controls for the selected image', async () => {
-      mockGetAllContainers.mockResolvedValue([
-        makeContainer({ id: 'container-1', displayName: 'nginx' }),
-      ]);
+      mockContainers([makeContainer({ id: 'container-1', displayName: 'nginx' })]);
       mockGetContainerSbom.mockResolvedValue({
         format: 'spdx-json',
         generatedAt: '2026-02-28T09:00:00.000Z',
@@ -419,7 +436,7 @@ describe('SecurityView', () => {
 
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalledOnce());
-      await nextTick();
+      await flushPromises();
 
       const vm = w.vm as any;
       vm.openDetail(vm.filteredSummaries[0]);
@@ -460,10 +477,10 @@ describe('SecurityView', () => {
     ];
 
     it('filters by severity', async () => {
-      mockGetAllContainers.mockResolvedValue(twoImageContainers);
+      mockContainers(twoImageContainers);
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
-      await nextTick();
+      await flushPromises();
 
       // Both images visible initially
       expect(w.find('.dt').attributes('data-rows')).toBe('2');
@@ -476,10 +493,10 @@ describe('SecurityView', () => {
     });
 
     it('filters by fix available', async () => {
-      mockGetAllContainers.mockResolvedValue(twoImageContainers);
+      mockContainers(twoImageContainers);
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
-      await nextTick();
+      await flushPromises();
 
       const vm = w.vm as any;
       vm.secFilterFix = 'yes';
@@ -496,7 +513,7 @@ describe('SecurityView', () => {
 
   describe('sorting', () => {
     it('sorts image summaries by sort field', async () => {
-      mockGetAllContainers.mockResolvedValue([
+      mockContainers([
         makeContainer({
           name: 'nginx',
           displayName: 'nginx',
@@ -521,7 +538,7 @@ describe('SecurityView', () => {
       ]);
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
-      await nextTick();
+      await flushPromises();
 
       const vm = w.vm as any;
       // Default sort is by critical count descending
@@ -530,7 +547,7 @@ describe('SecurityView', () => {
     });
 
     it('reverses sort when sortAsc is toggled', async () => {
-      mockGetAllContainers.mockResolvedValue([
+      mockContainers([
         makeContainer({
           name: 'nginx',
           displayName: 'nginx',
@@ -552,7 +569,7 @@ describe('SecurityView', () => {
       ]);
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
-      await nextTick();
+      await flushPromises();
 
       const vm = w.vm as any;
       vm.securitySortAsc = true;
@@ -563,7 +580,7 @@ describe('SecurityView', () => {
     });
 
     it('falls back to critical sort when sort key is invalid', async () => {
-      mockGetAllContainers.mockResolvedValue([
+      mockContainers([
         makeContainer({
           name: 'nginx',
           displayName: 'nginx',
@@ -585,7 +602,7 @@ describe('SecurityView', () => {
       ]);
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
-      await nextTick();
+      await flushPromises();
 
       const vm = w.vm as any;
       vm.securitySortField = 'not-a-real-column';
@@ -598,7 +615,7 @@ describe('SecurityView', () => {
 
   describe('image summary counts', () => {
     it('counts severity levels per image', async () => {
-      mockGetAllContainers.mockResolvedValue([
+      mockContainers([
         makeContainer({
           security: {
             scan: {
@@ -614,7 +631,7 @@ describe('SecurityView', () => {
       ]);
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
-      await nextTick();
+      await flushPromises();
 
       const vm = w.vm as any;
       const summary = vm.filteredSummaries[0];
@@ -626,7 +643,7 @@ describe('SecurityView', () => {
     });
 
     it('counts fixable vulnerabilities', async () => {
-      mockGetAllContainers.mockResolvedValue([
+      mockContainers([
         makeContainer({
           security: {
             scan: {
@@ -640,7 +657,7 @@ describe('SecurityView', () => {
       ]);
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
-      await nextTick();
+      await flushPromises();
 
       const vm = w.vm as any;
       expect(vm.filteredSummaries[0].fixable).toBe(1);
@@ -649,10 +666,10 @@ describe('SecurityView', () => {
 
   describe('empty state', () => {
     it('shows DataTable empty slot when no vulns match filters', async () => {
-      mockGetAllContainers.mockResolvedValue([]);
+      mockContainers([]);
       const w = factory();
       await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
-      await nextTick();
+      await flushPromises();
 
       expect(w.find('.dt').attributes('data-rows')).toBe('0');
     });

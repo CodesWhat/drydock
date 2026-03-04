@@ -1,12 +1,15 @@
 import { ref } from 'vue';
 
-const { mockGetAllContainers, mockComputeSecurityDelta } = vi.hoisted(() => ({
-  mockGetAllContainers: vi.fn(),
-  mockComputeSecurityDelta: vi.fn(),
-}));
+const { mockGetAllContainers, mockGetContainerVulnerabilities, mockComputeSecurityDelta } =
+  vi.hoisted(() => ({
+    mockGetAllContainers: vi.fn(),
+    mockGetContainerVulnerabilities: vi.fn(),
+    mockComputeSecurityDelta: vi.fn(),
+  }));
 
 vi.mock('@/services/container', () => ({
   getAllContainers: (...args: any[]) => mockGetAllContainers(...args),
+  getContainerVulnerabilities: (...args: any[]) => mockGetContainerVulnerabilities(...args),
 }));
 
 vi.mock('@/utils/container-mapper', async () => {
@@ -22,13 +25,27 @@ vi.mock('@/utils/container-mapper', async () => {
 
 import { useVulnerabilities } from '@/composables/useVulnerabilities';
 
+/** Set up mockGetContainerVulnerabilities to return scan data matching the container list. */
+function setupVulnMocks(containers: any[]) {
+  const scanByContainerId = new Map<string, any>();
+  for (const c of containers) {
+    if (c.id && c.security?.scan) {
+      scanByContainerId.set(c.id, c.security.scan);
+    }
+  }
+  mockGetContainerVulnerabilities.mockImplementation((id: string) => {
+    const scan = scanByContainerId.get(id);
+    return Promise.resolve(scan ?? { vulnerabilities: [] });
+  });
+}
+
 describe('useVulnerabilities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('fetches vulnerabilities, groups by image, and computes image delta', async () => {
-    mockGetAllContainers.mockResolvedValue([
+    const containers = [
       {
         id: 'container-1',
         name: 'nginx',
@@ -63,7 +80,9 @@ describe('useVulnerabilities', () => {
           },
         },
       },
-    ]);
+    ];
+    mockGetAllContainers.mockResolvedValue(containers);
+    setupVulnMocks(containers);
 
     const securitySortField = ref('critical');
     const securitySortAsc = ref(false);
@@ -87,7 +106,7 @@ describe('useVulnerabilities', () => {
   });
 
   it('filters by severity and fix availability and can clear filters', async () => {
-    mockGetAllContainers.mockResolvedValue([
+    const containers = [
       {
         id: 'container-1',
         name: 'nginx',
@@ -112,7 +131,9 @@ describe('useVulnerabilities', () => {
           },
         },
       },
-    ]);
+    ];
+    mockGetAllContainers.mockResolvedValue(containers);
+    setupVulnMocks(containers);
 
     const state = useVulnerabilities({
       securitySortField: ref('critical'),
@@ -134,6 +155,118 @@ describe('useVulnerabilities', () => {
     expect(state.secFilterSeverity.value).toBe('all');
     expect(state.secFilterFix.value).toBe('all');
     expect(state.activeSecFilterCount.value).toBe(0);
+  });
+
+  it('separates image counts from grouped vulnerability lists', async () => {
+    const containers = [
+      {
+        id: 'container-1',
+        name: 'nginx',
+        displayName: 'nginx',
+        security: {
+          scan: {
+            vulnerabilities: [
+              {
+                id: 'CVE-1',
+                severity: 'CRITICAL',
+                packageName: 'openssl',
+                fixedVersion: '3.0.1',
+              },
+              {
+                id: 'CVE-2',
+                severity: 'LOW',
+                packageName: 'zlib',
+                fixedVersion: null,
+              },
+            ],
+          },
+        },
+      },
+    ];
+    mockGetAllContainers.mockResolvedValue(containers);
+    setupVulnMocks(containers);
+
+    const state = useVulnerabilities({
+      securitySortField: ref('critical'),
+      securitySortAsc: ref(false),
+    });
+    await state.fetchVulnerabilities();
+
+    const summary = state.imageSummaries.value[0] as Record<string, unknown>;
+    expect(summary.vulns).toBeUndefined();
+    expect(state.vulnerabilitiesByImage.value.nginx).toHaveLength(2);
+    expect(state.vulnerabilitiesByImage.value.nginx.map((v) => v.id)).toEqual(['CVE-1', 'CVE-2']);
+  });
+
+  it('sorts image summaries by configured field and direction', async () => {
+    const containers = [
+      {
+        id: 'container-1',
+        name: 'nginx',
+        displayName: 'nginx',
+        security: {
+          scan: {
+            vulnerabilities: [
+              { id: 'CVE-1', severity: 'CRITICAL', packageName: 'openssl', fixedVersion: '3.0.1' },
+              { id: 'CVE-2', severity: 'HIGH', packageName: 'libssl', fixedVersion: null },
+            ],
+          },
+        },
+      },
+      {
+        id: 'container-2',
+        name: 'redis',
+        displayName: 'redis',
+        security: {
+          scan: {
+            vulnerabilities: [
+              { id: 'CVE-3', severity: 'CRITICAL', packageName: 'redis', fixedVersion: null },
+              { id: 'CVE-4', severity: 'CRITICAL', packageName: 'redis', fixedVersion: null },
+              { id: 'CVE-5', severity: 'LOW', packageName: 'jemalloc', fixedVersion: '1.2.3' },
+            ],
+          },
+        },
+      },
+      {
+        id: 'container-3',
+        name: 'alpine',
+        displayName: 'alpine',
+        security: {
+          scan: {
+            vulnerabilities: [
+              { id: 'CVE-6', severity: 'LOW', packageName: 'busybox', fixedVersion: null },
+            ],
+          },
+        },
+      },
+    ];
+    mockGetAllContainers.mockResolvedValue(containers);
+    setupVulnMocks(containers);
+
+    const securitySortField = ref('critical');
+    const securitySortAsc = ref(false);
+    const state = useVulnerabilities({ securitySortField, securitySortAsc });
+    await state.fetchVulnerabilities();
+
+    expect(state.filteredSummaries.value.map((summary) => summary.image)).toEqual([
+      'redis',
+      'nginx',
+      'alpine',
+    ]);
+
+    securitySortAsc.value = true;
+    expect(state.filteredSummaries.value.map((summary) => summary.image)).toEqual([
+      'alpine',
+      'nginx',
+      'redis',
+    ]);
+
+    securitySortField.value = 'image';
+    expect(state.filteredSummaries.value.map((summary) => summary.image)).toEqual([
+      'alpine',
+      'nginx',
+      'redis',
+    ]);
   });
 
   it('sets an error and clears derived state when loading fails', async () => {
