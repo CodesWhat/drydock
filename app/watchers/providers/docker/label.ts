@@ -116,6 +116,13 @@ export const ddHookTimeout = 'dd.hook.timeout';
 export const wudHookTimeout = 'wud.hook.timeout';
 
 /**
+ * Per-container opt-out for webhook API calls (default: true).
+ * Set to 'false' to return 403 when the webhook API targets this container.
+ */
+export const ddWebhookEnabled = 'dd.webhook.enabled';
+export const wudWebhookEnabled = 'wud.webhook.enabled';
+
+/**
  * Whether to automatically rollback on health check failure (default: false).
  */
 export const ddRollbackAuto = 'dd.rollback.auto';

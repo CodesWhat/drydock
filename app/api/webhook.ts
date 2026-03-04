@@ -8,6 +8,7 @@ import { sanitizeLogParam } from '../log/sanitize.js';
 import { getWebhookCounter } from '../prometheus/webhook.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import { ddWebhookEnabled, wudWebhookEnabled } from '../watchers/providers/docker/label.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
 
@@ -71,6 +72,21 @@ function getErrorMessage(error: unknown): string {
 }
 
 const CONTAINER_NOT_FOUND_ERROR = 'Container not found';
+const CONTAINER_WEBHOOK_DISABLED_ERROR = 'Webhooks are disabled for this container';
+
+/**
+ * Check whether webhooks are enabled for the given container.
+ * Returns true unless the container has dd.webhook.enabled (or wud.webhook.enabled) set to 'false'.
+ */
+function isWebhookEnabledForContainer(
+  container: NonNullable<ReturnType<typeof findContainerByName>>,
+): boolean {
+  const labels = container.labels;
+  if (!labels) return true;
+  const value = labels[ddWebhookEnabled] ?? labels[wudWebhookEnabled];
+  if (value === undefined) return true;
+  return value.toLowerCase() !== 'false';
+}
 
 function handleContainerActionError(
   error: unknown,
@@ -145,6 +161,11 @@ async function watchContainer(req: Request, res: Response) {
     return;
   }
 
+  if (!isWebhookEnabledForContainer(container)) {
+    res.status(403).json({ error: CONTAINER_WEBHOOK_DISABLED_ERROR });
+    return;
+  }
+
   const watchers = registry.getState().watcher;
 
   try {
@@ -179,6 +200,11 @@ async function updateContainer(req: Request, res: Response) {
 
   if (!container) {
     res.status(404).json({ error: CONTAINER_NOT_FOUND_ERROR });
+    return;
+  }
+
+  if (!isWebhookEnabledForContainer(container)) {
+    res.status(403).json({ error: CONTAINER_WEBHOOK_DISABLED_ERROR });
     return;
   }
 
