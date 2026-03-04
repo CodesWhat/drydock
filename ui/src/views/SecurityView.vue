@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import ScanProgressBanner from '../components/ScanProgressBanner.vue';
+import ScanProgressText from '../components/ScanProgressText.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useScanProgress } from '../composables/useScanProgress';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
-import { getAllContainers, getContainerSbom, scanContainer } from '../services/container';
+import { getAllContainers, getContainerSbom } from '../services/container';
 import { getSecurityRuntime } from '../services/server';
-import ScanProgressBanner from '../components/ScanProgressBanner.vue';
-import ScanProgressText from '../components/ScanProgressText.vue';
 import { errorMessage } from '../utils/error';
 
 interface Vulnerability {
@@ -74,6 +75,7 @@ function severityIcon(sev: string): string {
 }
 
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
+const { scanning, scanProgress, scanAllContainers: runScanAll } = useScanProgress();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -225,50 +227,12 @@ function handleSseScanCompleted() {
   fetchVulnerabilities();
 }
 
-const scanning = ref(false);
-const scanProgress = ref({ done: 0, total: 0 });
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function scanContainerWithRetry(containerId: string, maxRetries = 3) {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await scanContainer(containerId);
-    } catch (e: unknown) {
-      const is429 = e instanceof Error && e.message.includes('Too Many Requests');
-      if (is429 && attempt < maxRetries) {
-        await sleep(12_000);
-        continue;
-      }
-      throw e;
-    }
-  }
-}
-
-async function scanAllContainers() {
-  if (runtimeLoading.value || !scannerReady.value) {
-    return;
-  }
-  scanning.value = true;
-  scanProgress.value = { done: 0, total: 0 };
-  try {
-    const containers = await getAllContainers();
-    scanProgress.value.total = containers.length;
-    for (const container of containers) {
-      try {
-        await scanContainerWithRetry(container.id);
-      } catch {
-        // Individual scan failures shouldn't stop the batch
-      }
-      scanProgress.value.done++;
-      // Incrementally refresh findings so results build up as scans complete
-      await fetchVulnerabilities();
-    }
-  } finally {
-    scanning.value = false;
-  }
+function scanAllContainers() {
+  runScanAll({
+    scannerReady: scannerReady.value,
+    runtimeLoading: runtimeLoading.value,
+    onProgress: fetchVulnerabilities,
+  });
 }
 
 // -- View mode --

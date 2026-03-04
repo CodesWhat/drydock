@@ -2,8 +2,10 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import whaleLogo from '@/assets/whale-logo.png';
+import ScanProgressBanner from '@/components/ScanProgressBanner.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import { useIcons } from '@/composables/useIcons';
+import { useScanProgress } from '@/composables/useScanProgress';
 import { loadRecentItems, saveRecentItems } from '@/layouts/recentStorage';
 import { preferences } from '@/preferences/store';
 import { usePreference } from '@/preferences/usePreference';
@@ -24,6 +26,7 @@ const route = useRoute();
 const { icon } = useIcons();
 const { isDark } = useTheme();
 const { isMobile, windowNarrow } = useBreakpoints();
+const { scanning: globalScanning, scanProgress: globalScanProgress } = useScanProgress();
 
 const sidebarCollapsed = usePreference(
   () => preferences.layout.sidebarCollapsed,
@@ -1140,8 +1143,10 @@ onUnmounted(() => {
           </nav>
         </div>
 
-        <!-- Center spacer (search moved to sidebar) -->
-        <div />
+        <!-- Center: scan progress (visible from any page) -->
+        <div class="flex justify-center">
+          <ScanProgressBanner v-if="globalScanning" :progress="globalScanProgress" class="max-w-sm w-full" />
+        </div>
 
         <!-- Right: theme, notifications, avatar -->
         <div class="flex items-center gap-2 justify-end">
