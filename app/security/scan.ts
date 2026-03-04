@@ -8,6 +8,7 @@ import {
 } from '../configuration/index.js';
 import log from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
+import { getTrivyDatabaseStatus } from './runtime.js';
 
 export {
   SECURITY_SEVERITIES,
@@ -644,4 +645,65 @@ export async function generateImageSbom(
   }
 
   return sbomResult;
+}
+
+// --- Digest-based scan dedup cache ---
+
+export interface DigestScanCacheEntry {
+  digest: string;
+  scanResult: ContainerSecurityScan;
+  trivyDbUpdatedAt: string;
+  cachedAt: number;
+}
+
+const digestScanCache = new Map<string, DigestScanCacheEntry>();
+
+export function clearDigestScanCache(): void {
+  digestScanCache.clear();
+}
+
+export function getDigestScanCacheSize(): number {
+  return digestScanCache.size;
+}
+
+export function updateDigestScanCache(
+  digest: string,
+  scanResult: ContainerSecurityScan,
+  trivyDbUpdatedAt: string,
+): void {
+  digestScanCache.set(digest, {
+    digest,
+    scanResult,
+    trivyDbUpdatedAt,
+    cachedAt: Date.now(),
+  });
+}
+
+export async function scanImageWithDedup(
+  options: ScanImageOptions & { digest: string },
+  scanIntervalMs: number,
+): Promise<{ scanResult: ContainerSecurityScan; fromCache: boolean }> {
+  const cached = digestScanCache.get(options.digest);
+  const dbStatus = await getTrivyDatabaseStatus();
+  const dbUpdatedAt = dbStatus?.updatedAt;
+
+  if (
+    cached &&
+    dbUpdatedAt &&
+    cached.trivyDbUpdatedAt === dbUpdatedAt &&
+    Date.now() - cached.cachedAt < scanIntervalMs
+  ) {
+    return { scanResult: cached.scanResult, fromCache: true };
+  }
+
+  const scanResult = await scanImageForVulnerabilities(options);
+
+  digestScanCache.set(options.digest, {
+    digest: options.digest,
+    scanResult,
+    trivyDbUpdatedAt: dbUpdatedAt || '',
+    cachedAt: Date.now(),
+  });
+
+  return { scanResult, fromCache: false };
 }

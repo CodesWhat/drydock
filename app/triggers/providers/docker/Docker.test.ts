@@ -43,6 +43,10 @@ vi.mock('../../../security/scan.js', () => ({
   scanImageForVulnerabilities: mockScanImageForVulnerabilities,
   verifyImageSignature: mockVerifyImageSignature,
   generateImageSbom: mockGenerateImageSbom,
+  clearDigestScanCache: vi.fn(),
+  getDigestScanCacheSize: vi.fn().mockReturnValue(0),
+  updateDigestScanCache: vi.fn(),
+  scanImageWithDedup: vi.fn(),
 }));
 
 vi.mock('../../../store/container.js', () => ({
