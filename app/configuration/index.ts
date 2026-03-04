@@ -442,6 +442,12 @@ export function getSecurityConfiguration() {
         formats: joi.string().allow('').default(DEFAULT_SECURITY_SBOM_FORMATS),
       })
       .default({}),
+    scan: joi
+      .object({
+        cron: joi.string().allow('').default(''),
+        jitter: joi.number().integer().min(0).default(60000),
+      })
+      .default({}),
   });
 
   const configurationToValidate = configurationSchema.validate(configurationFromEnv, {
@@ -479,6 +485,10 @@ export function getSecurityConfiguration() {
     sbom: {
       enabled: Boolean(configuration.sbom?.enabled),
       formats: sbomFormats,
+    },
+    scan: {
+      cron: configuration.scan?.cron || '',
+      jitter: configuration.scan?.jitter ?? 60000,
     },
   };
 }

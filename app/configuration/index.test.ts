@@ -332,6 +332,10 @@ describe('getSecurityConfiguration', () => {
         enabled: false,
         formats: ['spdx-json'],
       },
+      scan: {
+        cron: '',
+        jitter: 60000,
+      },
     });
   });
 
@@ -374,6 +378,10 @@ describe('getSecurityConfiguration', () => {
       sbom: {
         enabled: true,
         formats: ['cyclonedx-json', 'spdx-json'],
+      },
+      scan: {
+        cron: '',
+        jitter: 60000,
       },
     });
 
