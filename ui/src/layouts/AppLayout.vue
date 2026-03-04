@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import whaleLogo from '@/assets/whale-logo.png';
+import NotificationBell from '@/components/NotificationBell.vue';
 import ScanProgressBanner from '@/components/ScanProgressBanner.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import { useIcons } from '@/composables/useIcons';
@@ -1152,13 +1153,7 @@ onUnmounted(() => {
         <div class="flex items-center gap-2 justify-end">
           <ThemeToggle />
 
-          <button aria-label="Notifications"
-                  class="relative flex items-center justify-center w-8 h-8 dd-rounded transition-colors dd-text-secondary hover:dd-bg-elevated hover:dd-text"
-                  @click="router.push('/notifications')">
-            <AppIcon name="notifications" :size="18" />
-            <span v-if="securityIssueCount" class="badge-pulse absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white"
-                  style="background:var(--dd-danger);">{{ securityIssueCount }}</span>
-          </button>
+          <NotificationBell />
 
           <div class="relative user-menu-wrapper">
             <button aria-label="User menu"

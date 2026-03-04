@@ -4,20 +4,15 @@ import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAuditLog } from '../services/audit';
+import type { AuditEntry } from '../utils/audit-helpers';
+import {
+  actionIcon,
+  actionLabel,
+  statusBg,
+  statusColor,
+  targetLabel,
+} from '../utils/audit-helpers';
 import { resolveAuditViewModeFromQuery } from './auditViewMode';
-
-interface AuditEntry {
-  id: string;
-  timestamp: string;
-  action: string;
-  containerName: string;
-  containerImage?: string;
-  fromVersion?: string;
-  toVersion?: string;
-  triggerName?: string;
-  status: 'success' | 'error' | 'info';
-  details?: string;
-}
 
 const actionTypes = [
   'update-available',
@@ -140,25 +135,6 @@ const filteredEntries = computed(() => {
   return result;
 });
 
-function statusColor(status: string) {
-  if (status === 'success') return 'var(--dd-success)';
-  if (status === 'error') return 'var(--dd-danger)';
-  return 'var(--dd-info)';
-}
-
-function statusBg(status: string) {
-  if (status === 'success') return 'var(--dd-success-muted)';
-  if (status === 'error') return 'var(--dd-danger-muted)';
-  return 'var(--dd-info-muted)';
-}
-
-function actionLabel(action: string) {
-  return action
-    .split('-')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
-}
-
 function formatTimestamp(ts: string) {
   try {
     const d = new Date(ts);
@@ -172,28 +148,6 @@ function formatTimestamp(ts: string) {
   } catch {
     return ts;
   }
-}
-
-function actionIcon(action: string) {
-  if (action.includes('update-available')) return 'updates';
-  if (action.includes('update-applied')) return 'check';
-  if (action.includes('update-failed')) return 'xmark';
-  if (action.includes('security-alert')) return 'security';
-  if (action.includes('agent-disconnect')) return 'network';
-  if (action.includes('rollback') || action === 'auto-rollback') return 'restart';
-  if (action.includes('start')) return 'play';
-  if (action.includes('stop')) return 'stop';
-  if (action.includes('restart')) return 'restart';
-  if (action.includes('added')) return 'containers';
-  if (action.includes('removed')) return 'trash';
-  if (action.includes('webhook')) return 'bolt';
-  if (action.includes('hook')) return 'triggers';
-  if (action === 'preview') return 'search';
-  return 'info';
-}
-
-function targetLabel(action: string) {
-  return action.includes('agent-disconnect') ? 'Agent' : 'Container';
 }
 
 const tableColumns = [
