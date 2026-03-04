@@ -26,7 +26,6 @@ async function scanContainerWithRetry(containerId: string, maxRetries = 3) {
 export interface ScanAllContainersOptions {
   scannerReady: boolean;
   runtimeLoading: boolean;
-  onProgress?: () => void | Promise<void>;
 }
 
 async function scanAllContainers(opts: ScanAllContainersOptions) {
@@ -45,9 +44,6 @@ async function scanAllContainers(opts: ScanAllContainersOptions) {
         // Individual scan failures shouldn't stop the batch
       }
       scanProgress.value.done++;
-      if (opts.onProgress) {
-        await opts.onProgress();
-      }
     }
   } finally {
     scanning.value = false;

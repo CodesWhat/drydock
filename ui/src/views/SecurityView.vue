@@ -227,12 +227,13 @@ function handleSseScanCompleted() {
   fetchVulnerabilities();
 }
 
-function scanAllContainers() {
-  runScanAll({
+async function scanAllContainers() {
+  await runScanAll({
     scannerReady: scannerReady.value,
     runtimeLoading: runtimeLoading.value,
-    onProgress: fetchVulnerabilities,
   });
+  // Refresh once after the entire batch finishes
+  await fetchVulnerabilities();
 }
 
 // -- View mode --

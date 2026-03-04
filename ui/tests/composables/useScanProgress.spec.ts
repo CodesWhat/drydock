@@ -36,31 +36,21 @@ describe('useScanProgress', () => {
     mockScanContainer.mockResolvedValue({});
 
     const { scanning, scanProgress, scanAllContainers } = await loadComposable();
-    const progressValues: { done: number; total: number }[] = [];
-    const onProgress = vi.fn(() => {
-      progressValues.push({ ...scanProgress.value });
-    });
 
     const promise = scanAllContainers({
       scannerReady: true,
       runtimeLoading: false,
-      onProgress,
     });
 
     expect(scanning.value).toBe(true);
     await promise;
 
     expect(scanning.value).toBe(false);
+    expect(scanProgress.value).toEqual({ done: 3, total: 3 });
     expect(mockScanContainer).toHaveBeenCalledTimes(3);
     expect(mockScanContainer).toHaveBeenCalledWith('c1');
     expect(mockScanContainer).toHaveBeenCalledWith('c2');
     expect(mockScanContainer).toHaveBeenCalledWith('c3');
-    expect(onProgress).toHaveBeenCalledTimes(3);
-    expect(progressValues).toEqual([
-      { done: 1, total: 3 },
-      { done: 2, total: 3 },
-      { done: 3, total: 3 },
-    ]);
   });
 
   it('bails out when runtimeLoading is true', async () => {
@@ -182,7 +172,7 @@ describe('useScanProgress', () => {
     expect(first.scanProgress).toBe(second.scanProgress);
   });
 
-  it('works without onProgress callback', async () => {
+  it('resolves when scan completes successfully', async () => {
     mockGetAllContainers.mockResolvedValue([{ id: 'c1' }]);
     mockScanContainer.mockResolvedValue({});
 
