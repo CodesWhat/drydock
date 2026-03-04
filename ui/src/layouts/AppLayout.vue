@@ -3,10 +3,8 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import whaleLogo from '@/assets/whale-logo.png';
 import NotificationBell from '@/components/NotificationBell.vue';
-import ScanProgressBanner from '@/components/ScanProgressBanner.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import { useIcons } from '@/composables/useIcons';
-import { useScanProgress } from '@/composables/useScanProgress';
 import { loadRecentItems, saveRecentItems } from '@/layouts/recentStorage';
 import { preferences } from '@/preferences/store';
 import { usePreference } from '@/preferences/usePreference';
@@ -27,7 +25,6 @@ const route = useRoute();
 const { icon } = useIcons();
 const { isDark } = useTheme();
 const { isMobile, windowNarrow } = useBreakpoints();
-const { scanning: globalScanning, scanProgress: globalScanProgress } = useScanProgress();
 
 const sidebarCollapsed = usePreference(
   () => preferences.layout.sidebarCollapsed,
@@ -1153,11 +1150,7 @@ onUnmounted(() => {
           </nav>
         </div>
 
-        <!-- Center: scan progress (desktop only — mobile uses fixed toast below) -->
-        <div v-if="!isMobile" class="flex justify-center">
-          <ScanProgressBanner v-if="globalScanning" :progress="globalScanProgress" class="max-w-sm w-full" />
-        </div>
-        <div v-else /><!-- empty grid cell on mobile -->
+        <div /><!-- empty center grid cell -->
 
         <!-- Right: theme, notifications, avatar -->
         <div class="flex items-center gap-2 justify-end">
@@ -1208,13 +1201,6 @@ onUnmounted(() => {
         <router-view />
       </main>
 
-      <!-- Mobile scan progress toast (fixed bottom center) -->
-      <Transition name="menu-fade">
-        <div v-if="isMobile && globalScanning"
-             class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-sm">
-          <ScanProgressBanner :progress="globalScanProgress" />
-        </div>
-      </Transition>
     </div>
 
     <!-- About Modal -->

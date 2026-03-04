@@ -56,13 +56,6 @@ vi.mock('@/composables/useIcons', () => ({
   }),
 }));
 
-vi.mock('@/composables/useScanProgress', () => ({
-  useScanProgress: () => ({
-    scanning: { value: false },
-    scanProgress: { value: null },
-  }),
-}));
-
 vi.mock('@/theme/useTheme', () => ({
   useTheme: () => ({
     isDark: { value: false },
@@ -126,7 +119,6 @@ function mountLayout() {
         RouterLink: true,
         RouterView: true,
         NotificationBell: true,
-        ScanProgressBanner: true,
         ThemeToggle: true,
       },
     },
