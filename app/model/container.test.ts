@@ -29,6 +29,32 @@ function createContainerWithError(errorMessage) {
   };
 }
 
+function createContainerWithSecurity(security: Record<string, unknown>) {
+  return {
+    id: 'container-security-123456789',
+    name: 'security-test',
+    watcher: 'test',
+    image: {
+      id: 'image-security-123456789',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+    security,
+  };
+}
+
 test('model should be validated when compliant', async () => {
   const containerValidated = container.validate({
     id: 'container-123456789',
@@ -520,6 +546,14 @@ test('casing dependency should use non-deprecated change-case package', async ()
 
   expect(packageJson.dependencies?.['change-case']).toBeDefined();
   expect(packageJson.dependencies?.['snake-case']).toBeUndefined();
+});
+
+test('security update schemas should reuse base schema definitions', async () => {
+  const source = await fs.readFile(new URL('./container.ts', import.meta.url), 'utf8');
+
+  expect(source).not.toContain('updateScan: joi.object({');
+  expect(source).not.toContain('updateSignature: joi.object({');
+  expect(source).not.toContain('updateSbom: joi.object({');
 });
 
 test('fullName should build an id with watcher name & container name when called', async () => {
@@ -1338,4 +1372,116 @@ test('addLinkProperty should skip result link definition when container.result i
   container.testable_addLinkProperty(containerObject);
   expect(containerObject.link).toBe('https://release/1.0.0');
   expect(containerObject.result).toBeUndefined();
+});
+
+test('model should validate security update schemas', async () => {
+  const containerValidated = container.validate(
+    createContainerWithSecurity({
+      updateScan: {
+        scanner: 'trivy',
+        image: 'organization/image:1.0.1',
+        scannedAt: '2026-03-04T12:00:00.000Z',
+        status: 'blocked',
+        blockSeverities: ['CRITICAL', 'HIGH'],
+        blockingCount: 2,
+        summary: {
+          unknown: 1,
+          low: 2,
+          medium: 3,
+          high: 4,
+          critical: 5,
+        },
+        vulnerabilities: [{ id: 'CVE-2026-0001', severity: 'CRITICAL' }],
+      },
+      updateSignature: {
+        verifier: 'cosign',
+        image: 'organization/image:1.0.1',
+        verifiedAt: '2026-03-04T12:05:00.000Z',
+        status: 'verified',
+        keyless: true,
+        signatures: 1,
+      },
+      updateSbom: {
+        generator: 'trivy',
+        image: 'organization/image:1.0.1',
+        generatedAt: '2026-03-04T12:10:00.000Z',
+        status: 'generated',
+        formats: ['spdx-json', 'cyclonedx-json'],
+        documents: {
+          'spdx-json': { spdxVersion: 'SPDX-2.3' },
+        },
+      },
+    }),
+  );
+
+  expect(containerValidated.security?.updateScan?.summary).toEqual({
+    unknown: 1,
+    low: 2,
+    medium: 3,
+    high: 4,
+    critical: 5,
+  });
+  expect(containerValidated.security?.updateSignature?.status).toBe('verified');
+  expect(containerValidated.security?.updateSbom?.formats).toEqual(['spdx-json', 'cyclonedx-json']);
+});
+
+test('model should reject invalid updateScan schema payloads', async () => {
+  expect(() => {
+    container.validate(
+      createContainerWithSecurity({
+        updateScan: {
+          scanner: 'trivy',
+          image: 'organization/image:1.0.1',
+          scannedAt: '2026-03-04T12:00:00.000Z',
+          status: 'blocked',
+          blockSeverities: ['CRITICAL'],
+          blockingCount: -1,
+          summary: {
+            unknown: 0,
+            low: 0,
+            medium: 0,
+            high: 1,
+            critical: 1,
+          },
+          vulnerabilities: [{ id: 'CVE-2026-0001', severity: 'CRITICAL' }],
+        },
+      }),
+    );
+  }).toThrow('security.updateScan.blockingCount');
+});
+
+test('model should reject invalid updateSignature schema payloads', async () => {
+  expect(() => {
+    container.validate(
+      createContainerWithSecurity({
+        updateSignature: {
+          verifier: 'cosign',
+          image: 'organization/image:1.0.1',
+          verifiedAt: '2026-03-04T12:05:00.000Z',
+          status: 'pending',
+          keyless: true,
+          signatures: 1,
+        },
+      }),
+    );
+  }).toThrow('security.updateSignature.status');
+});
+
+test('model should reject invalid updateSbom schema payloads', async () => {
+  expect(() => {
+    container.validate(
+      createContainerWithSecurity({
+        updateSbom: {
+          generator: 'trivy',
+          image: 'organization/image:1.0.1',
+          generatedAt: '2026-03-04T12:10:00.000Z',
+          status: 'generated',
+          formats: ['spdx-json', 'cyclonedx-xml'],
+          documents: {
+            'spdx-json': { spdxVersion: 'SPDX-2.3' },
+          },
+        },
+      }),
+    );
+  }).toThrow('security.updateSbom.formats');
 });
