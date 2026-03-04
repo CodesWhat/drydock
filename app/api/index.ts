@@ -11,6 +11,7 @@ import { getErrorMessage } from '../util/error.js';
 const log = logger.child({ component: 'api' });
 
 import { getServerConfiguration } from '../configuration/index.js';
+import * as settingsStore from '../store/settings.js';
 import * as apiRouter from './api.js';
 import * as auth from './auth.js';
 import * as healthRouter from './health.js';
@@ -52,6 +53,15 @@ function configureCors(app) {
 }
 
 function configureSecurityHeaders(app) {
+  const connectSources = ["'self'"];
+  if (!settingsStore.isInternetlessModeEnabled()) {
+    connectSources.push(
+      'https://api.iconify.design',
+      'https://api.simplesvg.com',
+      'https://api.unisvg.com',
+    );
+  }
+
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -60,12 +70,7 @@ function configureSecurityHeaders(app) {
           'script-src': ["'self'"],
           'style-src': ["'self'", "'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
-          'connect-src': [
-            "'self'",
-            'https://api.iconify.design',
-            'https://api.simplesvg.com',
-            'https://api.unisvg.com',
-          ],
+          'connect-src': connectSources,
         },
       },
     }),

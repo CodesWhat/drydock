@@ -21,6 +21,7 @@ const { mockApp, mockFs, mockHttps, mockGetServerConfiguration } = vi.hoisted(()
   })),
 }));
 const mockHelmet = vi.hoisted(() => vi.fn(() => 'helmet-middleware'));
+const mockIsInternetlessModeEnabled = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('node:fs', () => ({
   default: mockFs,
@@ -83,6 +84,10 @@ vi.mock('../configuration', () => ({
   getServerConfiguration: mockGetServerConfiguration,
 }));
 
+vi.mock('../store/settings', () => ({
+  isInternetlessModeEnabled: mockIsInternetlessModeEnabled,
+}));
+
 // The index module reads configuration at module level, so we must
 // re-import after setting the desired mock return value.
 describe('API Index', () => {
@@ -93,6 +98,7 @@ describe('API Index', () => {
     mockApp.use.mockClear();
     mockApp.listen.mockClear();
     mockHelmet.mockClear();
+    mockIsInternetlessModeEnabled.mockReturnValue(false);
   });
 
   test('should not start server when disabled', async () => {
@@ -195,6 +201,32 @@ describe('API Index', () => {
       },
     });
     expect(mockApp.use).toHaveBeenCalledWith('helmet-middleware');
+  });
+
+  test('should not allow Iconify CDN in CSP connect-src when internetless mode is enabled', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockIsInternetlessModeEnabled.mockReturnValue(true);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockHelmet).toHaveBeenCalledWith({
+      contentSecurityPolicy: {
+        directives: {
+          'default-src': ["'self'"],
+          'script-src': ["'self'"],
+          'style-src': ["'self'", "'unsafe-inline'"],
+          'img-src': ["'self'", 'data:'],
+          'connect-src': ["'self'"],
+        },
+      },
+    });
   });
 
   test('should enable compression by default', async () => {
