@@ -450,6 +450,90 @@ describe('SecurityView', () => {
     });
   });
 
+  describe('scan coverage display', () => {
+    it('shows 0/N scanned when no containers have been scanned', async () => {
+      mockContainers([makeContainer({ security: null }), makeContainer({ security: null })]);
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      expect(vm.displayFilteredCount).toBe(0);
+      expect(vm.displayTotalCount).toBe(2);
+      expect(vm.displayCountLabel).toBe('scanned');
+    });
+
+    it('shows scannedCount/totalCount scanned with no active filters', async () => {
+      mockContainers([
+        makeContainer({ name: 'nginx', displayName: 'nginx' }),
+        makeContainer({ name: 'redis', displayName: 'redis', security: null }),
+        makeContainer({
+          name: 'postgres',
+          displayName: 'postgres',
+          security: {
+            scan: {
+              vulnerabilities: [
+                { id: 'CVE-2', severity: 'LOW', packageName: 'zlib', fixedVersion: null },
+              ],
+            },
+          },
+        }),
+      ]);
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      expect(vm.displayFilteredCount).toBe(2);
+      expect(vm.displayTotalCount).toBe(3);
+      expect(vm.displayCountLabel).toBe('scanned');
+    });
+
+    it('switches to filtered/total images when filters are active', async () => {
+      mockContainers([
+        makeContainer({
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [
+                {
+                  id: 'CVE-1',
+                  severity: 'CRITICAL',
+                  packageName: 'openssl',
+                  fixedVersion: '3.0.1',
+                },
+              ],
+            },
+          },
+        }),
+        makeContainer({
+          name: 'redis',
+          displayName: 'redis',
+          security: {
+            scan: {
+              vulnerabilities: [
+                { id: 'CVE-2', severity: 'LOW', packageName: 'zlib', fixedVersion: null },
+              ],
+            },
+          },
+        }),
+        makeContainer({ name: 'alpine', displayName: 'alpine', security: null }),
+      ]);
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalled());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      vm.secFilterSeverity = 'CRITICAL';
+      await nextTick();
+
+      expect(vm.displayFilteredCount).toBe(1);
+      expect(vm.displayTotalCount).toBe(2);
+      expect(vm.displayCountLabel).toBe('images');
+    });
+  });
+
   describe('filtering', () => {
     const twoImageContainers = [
       makeContainer({

@@ -109,6 +109,8 @@ export function useVulnerabilities({
   const containerIdsByImage = ref<Record<string, string[]>>({});
   const latestSecurityScanAt = ref<string | null>(null);
   const updateScanSummaries = ref<Record<string, UpdateScanSummary>>({});
+  const totalContainerCount = ref(0);
+  const scannedContainerCount = ref(0);
 
   const showSecFilters = ref(false);
   const secFilterSeverity = ref('all');
@@ -234,10 +236,12 @@ export function useVulnerabilities({
 
     try {
       const containers = await getAllContainers();
+      totalContainerCount.value = containers.length;
       const vulnerabilities: Vulnerability[] = [];
       const imageContainerMap: Record<string, string[]> = {};
       const updateSummaryMap: Record<string, UpdateScanSummary> = {};
       let latestScanAt: string | null = null;
+      let scannedCount = 0;
 
       // Identify scanned containers and collect metadata
       const scannedContainers: Array<{
@@ -250,6 +254,7 @@ export function useVulnerabilities({
       for (const container of containers) {
         const scan = container.security?.scan;
         if (!scan) continue;
+        scannedCount += 1;
 
         const imageName = container.displayName || container.name || 'unknown';
         latestScanAt = chooseLatestTimestamp(latestScanAt, scan.scannedAt);
@@ -282,6 +287,8 @@ export function useVulnerabilities({
           });
         }
       }
+
+      scannedContainerCount.value = scannedCount;
 
       // Fetch detailed vulnerability data per container in parallel
       const vulnResults = await Promise.allSettled(
@@ -321,6 +328,8 @@ export function useVulnerabilities({
       containerIdsByImage.value = {};
       updateScanSummaries.value = {};
       latestSecurityScanAt.value = null;
+      totalContainerCount.value = 0;
+      scannedContainerCount.value = 0;
     } finally {
       loading.value = false;
     }
@@ -332,6 +341,8 @@ export function useVulnerabilities({
     securityVulnerabilities,
     containerIdsByImage,
     latestSecurityScanAt,
+    totalContainerCount,
+    scannedContainerCount,
     showSecFilters,
     secFilterSeverity,
     secFilterFix,

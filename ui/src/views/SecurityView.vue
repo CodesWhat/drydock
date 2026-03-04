@@ -19,7 +19,6 @@ import {
   highestSeverity,
   severityColor,
   severityIcon,
-  severityOrder,
   statusBadgeTone,
 } from './security/securityViewUtils';
 
@@ -94,20 +93,31 @@ const {
   loading,
   error,
   securityVulnerabilities,
+  vulnerabilitiesByImage,
   containerIdsByImage,
   latestSecurityScanAt,
+  totalContainerCount,
+  scannedContainerCount,
   showSecFilters,
   secFilterSeverity,
   secFilterFix,
   activeSecFilterCount,
-  imageSummaries: imageSummariesWithVulns,
-  filteredSummaries: filteredSummariesWithVulns,
+  imageSummaries,
+  filteredSummaries,
   clearSecFilters,
   fetchVulnerabilities,
 } = useVulnerabilities({
   securitySortField,
   securitySortAsc,
 });
+
+const displayFilteredCount = computed(() =>
+  activeSecFilterCount.value > 0 ? filteredSummaries.value.length : scannedContainerCount.value,
+);
+const displayTotalCount = computed(() =>
+  activeSecFilterCount.value > 0 ? imageSummaries.value.length : totalContainerCount.value,
+);
+const displayCountLabel = computed(() => (activeSecFilterCount.value > 0 ? 'images' : 'scanned'));
 
 const {
   detailOpen,
@@ -128,42 +138,12 @@ const {
   containerIdsByImage,
 });
 
-const vulnerabilitiesByImage = computed<Record<string, typeof securityVulnerabilities.value>>(
-  () => {
-    const grouped: Record<string, typeof securityVulnerabilities.value> = {};
-    for (const vulnerability of securityVulnerabilities.value) {
-      const existing = grouped[vulnerability.image];
-      if (existing) {
-        existing.push(vulnerability);
-      } else {
-        grouped[vulnerability.image] = [vulnerability];
-      }
-    }
-    for (const vulnerabilities of Object.values(grouped)) {
-      vulnerabilities.sort(
-        (a, b) => (severityOrder[a.severity] ?? 99) - (severityOrder[b.severity] ?? 99),
-      );
-    }
-    return grouped;
-  },
-);
-
-type ImageSummaryListItem = Omit<ImageSummary, 'vulns'>;
-
-const imageSummaries = computed(() => {
-  return imageSummariesWithVulns.value.map(({ vulns, ...summary }) => summary);
-});
-
-const filteredSummaries = computed(() => {
-  return filteredSummariesWithVulns.value.map(({ vulns, ...summary }) => summary);
-});
-
 const selectedImageVulns = computed(() => {
   if (!selectedImage.value) return [];
   return vulnerabilitiesByImage.value[selectedImage.value.image] || [];
 });
 
-function openDetail(summary: ImageSummaryListItem) {
+function openDetail(summary: ImageSummary) {
   const vulnerabilities = vulnerabilitiesByImage.value[summary.image] || [];
   openSbomDetail({
     ...summary,
@@ -236,10 +216,10 @@ onUnmounted(() => {
       <DataFilterBar
         v-model="securityViewMode"
         v-model:showFilters="showSecFilters"
-        :filtered-count="filteredSummaries.length"
-        :total-count="imageSummaries.length"
+        :filtered-count="displayFilteredCount"
+        :total-count="displayTotalCount"
         :active-filter-count="activeSecFilterCount"
-        count-label="images">
+        :count-label="displayCountLabel">
         <template #filters>
           <select v-model="secFilterSeverity"
                   class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">

@@ -95,6 +95,8 @@ describe('useVulnerabilities', () => {
     expect(state.latestSecurityScanAt.value).toBe('2026-03-02T12:15:00.000Z');
     expect(state.securityVulnerabilities.value).toHaveLength(2);
     expect(state.containerIdsByImage.value.nginx).toEqual(['container-1', 'container-2']);
+    expect(state.totalContainerCount.value).toBe(2);
+    expect(state.scannedContainerCount.value).toBe(2);
     expect(state.filteredSummaries.value).toHaveLength(1);
     expect(state.filteredSummaries.value[0].critical).toBe(1);
     expect(state.filteredSummaries.value[0].low).toBe(1);
@@ -269,6 +271,46 @@ describe('useVulnerabilities', () => {
     ]);
   });
 
+  it('counts total and scanned containers separately', async () => {
+    const containers = [
+      {
+        id: 'container-1',
+        name: 'nginx',
+        displayName: 'nginx',
+        security: {
+          scan: {
+            vulnerabilities: [
+              { id: 'CVE-1', severity: 'HIGH', packageName: 'openssl', fixedVersion: '3.0.1' },
+            ],
+          },
+        },
+      },
+      {
+        id: 'container-2',
+        name: 'redis',
+        displayName: 'redis',
+        security: null,
+      },
+      {
+        id: 'container-3',
+        name: 'postgres',
+        displayName: 'postgres',
+        security: { scan: null },
+      },
+    ];
+    mockGetAllContainers.mockResolvedValue(containers);
+    setupVulnMocks(containers);
+
+    const state = useVulnerabilities({
+      securitySortField: ref('critical'),
+      securitySortAsc: ref(false),
+    });
+    await state.fetchVulnerabilities();
+
+    expect(state.totalContainerCount.value).toBe(3);
+    expect(state.scannedContainerCount.value).toBe(1);
+  });
+
   it('sets an error and clears derived state when loading fails', async () => {
     mockGetAllContainers.mockRejectedValue({ bad: true });
 
@@ -282,5 +324,7 @@ describe('useVulnerabilities', () => {
     expect(state.error.value).toBe('Failed to load vulnerability data');
     expect(state.containerIdsByImage.value).toEqual({});
     expect(state.latestSecurityScanAt.value).toBeNull();
+    expect(state.totalContainerCount.value).toBe(0);
+    expect(state.scannedContainerCount.value).toBe(0);
   });
 });
