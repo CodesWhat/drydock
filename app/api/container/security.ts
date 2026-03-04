@@ -235,8 +235,7 @@ export function createSecurityHandlers({
     broadcastScanStarted(id);
 
     try {
-      const updateTag = container.updateKind?.remoteValue;
-      const image = getContainerImageFullName(container, updateTag);
+      const image = getContainerImageFullName(container);
       log.info(`Running on-demand security scan for ${image}`);
       const auth = await getContainerRegistryAuth(container);
       const securityPatch: Partial<ContainerSecurityState> = {};

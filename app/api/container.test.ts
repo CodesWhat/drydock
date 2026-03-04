@@ -847,7 +847,7 @@ describe('Container Router', () => {
       expect(mockBroadcastScanStarted).toHaveBeenCalledWith('c1');
       expect(mockScanImageForVulnerabilities).toHaveBeenCalledWith(
         expect.objectContaining({
-          image: 'my-registry/test/app:2.0.0',
+          image: 'my-registry/test/app:1.2.3',
           auth: { username: 'user', password: 'token' },
         }),
       );
@@ -963,7 +963,7 @@ describe('Container Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
-    test('should fall back to current tag when no update candidate', async () => {
+    test('should scan current local tag even when no update candidate exists', async () => {
       const scanResult = { status: 'scanned', vulnerabilities: [] };
       mockScanImageForVulnerabilities.mockResolvedValue(scanResult);
       registry.getState.mockReturnValue({
