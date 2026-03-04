@@ -793,6 +793,24 @@ describe('SecurityGate', () => {
     expect(securityArg).not.toHaveProperty('scan');
   });
 
+  test('persistSecurityState should preserve unmapped keys when slot is update', async () => {
+    const { gate, updateContainer } = createGateHarness();
+
+    await gate.persistSecurityState(
+      createContainer(),
+      {
+        scan: { status: 'passed' },
+        customState: { source: 'manual' },
+      },
+      createLog(),
+      'update',
+    );
+
+    const securityArg = updateContainer.mock.calls[0][0].security;
+    expect(securityArg.updateScan).toEqual({ status: 'passed' });
+    expect(securityArg.customState).toEqual({ source: 'manual' });
+  });
+
   test('persistSecurityState with update slot preserves existing scan field', async () => {
     const getContainer = vi.fn(() => ({
       id: 'container-id',
