@@ -30,9 +30,19 @@ interface CommandAvailabilityResult {
   invalidPath: boolean;
 }
 
+export interface TrivyDatabaseStatus {
+  updatedAt: string;
+  downloadedAt?: string;
+}
+
 const COMMAND_CHECK_TIMEOUT_MS = 4_000;
 const COMMAND_CHECK_BUFFER_BYTES = 256 * 1024;
+const TRIVY_DB_STATUS_CACHE_TTL_MS = 5 * 60 * 1000;
+const TRIVY_DB_STATUS_TIMEOUT_MS = 10_000;
+const TRIVY_DB_STATUS_MAX_BUFFER = 512 * 1024;
 const DISALLOWED_COMMAND_CHARACTERS_PATTERN = /[;|$]/;
+
+let trivyDbStatusCache: { status: TrivyDatabaseStatus; expiresAt: number } | undefined;
 
 function hasValidCommandPath(command: string): boolean {
   if (command.includes('\0') || DISALLOWED_COMMAND_CHARACTERS_PATTERN.test(command)) {
@@ -98,6 +108,59 @@ function buildDisabledToolStatus(message: string): SecurityRuntimeToolStatus {
     status: 'disabled',
     message,
   };
+}
+
+export function clearTrivyDatabaseStatusCache(): void {
+  trivyDbStatusCache = undefined;
+}
+
+export async function getTrivyDatabaseStatus(): Promise<TrivyDatabaseStatus | undefined> {
+  const now = Date.now();
+  if (trivyDbStatusCache && trivyDbStatusCache.expiresAt > now) {
+    return trivyDbStatusCache.status;
+  }
+
+  const configuration = getSecurityConfiguration();
+  const trivyCommand = configuration.trivy.command || 'trivy';
+
+  try {
+    const output = await new Promise<string>((resolve, reject) => {
+      execFile(
+        trivyCommand,
+        ['version', '--format', 'json'],
+        {
+          timeout: TRIVY_DB_STATUS_TIMEOUT_MS,
+          maxBuffer: TRIVY_DB_STATUS_MAX_BUFFER,
+          env: process.env,
+        },
+        (error, stdout) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(`${stdout || ''}`);
+        },
+      );
+    });
+
+    const parsed = JSON.parse(output);
+    const updatedAt = parsed?.VulnerabilityDB?.UpdatedAt;
+    if (typeof updatedAt !== 'string' || updatedAt === '') {
+      return undefined;
+    }
+
+    const status: TrivyDatabaseStatus = {
+      updatedAt,
+      downloadedAt:
+        typeof parsed?.VulnerabilityDB?.DownloadedAt === 'string'
+          ? parsed.VulnerabilityDB.DownloadedAt
+          : undefined,
+    };
+    trivyDbStatusCache = { status, expiresAt: now + TRIVY_DB_STATUS_CACHE_TTL_MS };
+    return status;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus> {

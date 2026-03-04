@@ -29,7 +29,11 @@ vi.mock('node:child_process', async () => {
   };
 });
 
-import { getSecurityRuntimeStatus } from './runtime.js';
+import {
+  clearTrivyDatabaseStatusCache,
+  getSecurityRuntimeStatus,
+  getTrivyDatabaseStatus,
+} from './runtime.js';
 
 function createEnabledConfiguration() {
   return {
@@ -62,6 +66,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   childProcessControl.execFileImpl = null;
   mockGetSecurityConfiguration.mockReturnValue(createEnabledConfiguration());
+  clearTrivyDatabaseStatusCache();
 });
 
 test('getSecurityRuntimeStatus should report ready when trivy is available', async () => {
@@ -261,4 +266,192 @@ test('getSecurityRuntimeStatus should reject signature commands with shell metac
   expect(status.signature.status).toBe('missing');
   expect(status.signature.commandAvailable).toBe(false);
   expect(status.signature.message).toContain('invalid');
+});
+
+describe('getTrivyDatabaseStatus', () => {
+  const validTrivyVersionOutput = JSON.stringify({
+    Version: '0.50.0',
+    VulnerabilityDB: {
+      UpdatedAt: '2025-06-01T00:00:00Z',
+      DownloadedAt: '2025-06-02T12:00:00Z',
+    },
+  });
+
+  function mockExecFileSuccess(stdout: string) {
+    const mock = vi.fn(
+      (_command: unknown, _args: unknown, _options: unknown, callback: Function) => {
+        callback(null, stdout, '');
+        return { exitCode: 0 };
+      },
+    );
+    childProcessControl.execFileImpl = mock;
+    return mock;
+  }
+
+  function mockExecFileError() {
+    const mock = vi.fn(
+      (_command: unknown, _args: unknown, _options: unknown, callback: Function) => {
+        const error = new Error('command failed') as NodeJS.ErrnoException;
+        error.code = 'ENOENT';
+        callback(error, '', '');
+        return { exitCode: 1 };
+      },
+    );
+    childProcessControl.execFileImpl = mock;
+    return mock;
+  }
+
+  test('should return TrivyDatabaseStatus when execFile returns valid JSON', async () => {
+    const execFileMock = mockExecFileSuccess(validTrivyVersionOutput);
+
+    const result = await getTrivyDatabaseStatus();
+
+    expect(result).toEqual({
+      updatedAt: '2025-06-01T00:00:00Z',
+      downloadedAt: '2025-06-02T12:00:00Z',
+    });
+    expect(execFileMock).toHaveBeenCalledWith(
+      'trivy',
+      ['version', '--format', 'json'],
+      expect.objectContaining({ timeout: 10_000, maxBuffer: 512 * 1024 }),
+      expect.any(Function),
+    );
+  });
+
+  test('should return cached result on second call without invoking execFile again', async () => {
+    const execFileMock = mockExecFileSuccess(validTrivyVersionOutput);
+
+    const first = await getTrivyDatabaseStatus();
+    const second = await getTrivyDatabaseStatus();
+
+    expect(first).toEqual(second);
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('should invoke execFile again after cache is cleared', async () => {
+    const execFileMock = mockExecFileSuccess(validTrivyVersionOutput);
+
+    await getTrivyDatabaseStatus();
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+
+    clearTrivyDatabaseStatusCache();
+
+    await getTrivyDatabaseStatus();
+    expect(execFileMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('should return undefined when execFile errors', async () => {
+    mockExecFileError();
+
+    const result = await getTrivyDatabaseStatus();
+
+    expect(result).toBeUndefined();
+  });
+
+  test('should return undefined when execFile returns non-JSON output', async () => {
+    mockExecFileSuccess('this is not json');
+
+    const result = await getTrivyDatabaseStatus();
+
+    expect(result).toBeUndefined();
+  });
+
+  test('should return undefined when JSON lacks VulnerabilityDB key', async () => {
+    mockExecFileSuccess(JSON.stringify({ Version: '0.50.0' }));
+
+    const result = await getTrivyDatabaseStatus();
+
+    expect(result).toBeUndefined();
+  });
+
+  test('should return undefined when UpdatedAt is an empty string', async () => {
+    mockExecFileSuccess(
+      JSON.stringify({
+        VulnerabilityDB: { UpdatedAt: '', DownloadedAt: '2025-06-02T12:00:00Z' },
+      }),
+    );
+
+    const result = await getTrivyDatabaseStatus();
+
+    expect(result).toBeUndefined();
+  });
+
+  test('should return undefined when UpdatedAt is not a string', async () => {
+    mockExecFileSuccess(
+      JSON.stringify({
+        VulnerabilityDB: { UpdatedAt: 12345, DownloadedAt: '2025-06-02T12:00:00Z' },
+      }),
+    );
+
+    const result = await getTrivyDatabaseStatus();
+
+    expect(result).toBeUndefined();
+  });
+
+  test('should include downloadedAt when present as a string', async () => {
+    mockExecFileSuccess(
+      JSON.stringify({
+        VulnerabilityDB: {
+          UpdatedAt: '2025-06-01T00:00:00Z',
+          DownloadedAt: '2025-06-02T12:00:00Z',
+        },
+      }),
+    );
+
+    const result = await getTrivyDatabaseStatus();
+
+    expect(result).toEqual({
+      updatedAt: '2025-06-01T00:00:00Z',
+      downloadedAt: '2025-06-02T12:00:00Z',
+    });
+  });
+
+  test('should exclude downloadedAt when it is not a string', async () => {
+    mockExecFileSuccess(
+      JSON.stringify({
+        VulnerabilityDB: {
+          UpdatedAt: '2025-06-01T00:00:00Z',
+          DownloadedAt: 999,
+        },
+      }),
+    );
+
+    const result = await getTrivyDatabaseStatus();
+
+    expect(result).toEqual({
+      updatedAt: '2025-06-01T00:00:00Z',
+      downloadedAt: undefined,
+    });
+  });
+
+  test('should use fallback trivy command when config command is empty', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      trivy: { ...createEnabledConfiguration().trivy, command: '' },
+    });
+    const execFileMock = mockExecFileSuccess(validTrivyVersionOutput);
+
+    await getTrivyDatabaseStatus();
+
+    expect(execFileMock).toHaveBeenCalledWith(
+      'trivy',
+      ['version', '--format', 'json'],
+      expect.any(Object),
+      expect.any(Function),
+    );
+  });
+
+  test('should make a fresh execFile call after cache TTL expires', async () => {
+    const execFileMock = mockExecFileSuccess(validTrivyVersionOutput);
+
+    vi.spyOn(Date, 'now')
+      .mockReturnValueOnce(1000) // first call — cache miss
+      .mockReturnValueOnce(1000 + 5 * 60 * 1000 + 1); // second call — past TTL
+
+    await getTrivyDatabaseStatus();
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+
+    await getTrivyDatabaseStatus();
+    expect(execFileMock).toHaveBeenCalledTimes(2);
+  });
 });
