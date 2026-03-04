@@ -6,7 +6,7 @@ import express from 'express';
 import helmet from 'helmet';
 import logger from '../log/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
-import { toErrorMessage } from '../util/error.js';
+import { getErrorMessage } from '../util/error.js';
 
 const log = logger.child({ component: 'api' });
 
@@ -83,7 +83,7 @@ function registerRoutes(app) {
 function registerErrorHandler(app) {
   // Global JSON error handler — ensures unhandled exceptions return JSON instead of HTML
   app.use((err, _req, res, _next) => {
-    log.error(`Unhandled error: ${toErrorMessage(err)}`);
+    log.error(`Unhandled error: ${getErrorMessage(err)}`);
     res.status(err.status || 500).json({ error: 'Internal server error' });
   });
 }
@@ -92,7 +92,7 @@ function readTlsFile(path, label) {
   try {
     return fs.readFileSync(path);
   } catch (error) {
-    log.error(`Unable to read the ${label} file under ${path} (${toErrorMessage(error)})`);
+    log.error(`Unable to read the ${label} file under ${path} (${getErrorMessage(error)})`);
     throw error;
   }
 }

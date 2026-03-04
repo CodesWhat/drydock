@@ -1,5 +1,6 @@
 import type { SecuritySbomFormat } from '../../../configuration/index.js';
 import type { Container } from '../../../model/container.js';
+import { getErrorMessage } from '../../../util/error.js';
 import TriggerPipelineError from './TriggerPipelineError.js';
 
 type SecurityContainer = Container;
@@ -190,8 +191,8 @@ class SecurityGate {
         container.name,
         containerWithSecurity.security,
       );
-    } catch (e: any) {
-      logContainer.warn(`Unable to persist security state (${e.message})`);
+    } catch (e: unknown) {
+      logContainer.warn(`Unable to persist security state (${getErrorMessage(e)})`);
     }
   }
 

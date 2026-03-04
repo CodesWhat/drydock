@@ -1,7 +1,7 @@
 import { getAuditCounter } from '../../../prometheus/audit.js';
 import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
-import { toErrorMessage } from '../../../util/error.js';
+import { getErrorMessage } from '../../../util/error.js';
 
 export interface HealthMonitorOptions {
   dockerApi: any;
@@ -128,7 +128,7 @@ async function performRollback(context: RollbackContext): Promise<void> {
     recordRollbackSuccess(containerName, backupImageTag, latestBackup.imageTag);
     log.info(`Auto-rollback of container ${containerName} completed successfully`);
   } catch (error) {
-    const message = toErrorMessage(error);
+    const message = getErrorMessage(error);
     log.error(`Auto-rollback failed for container ${containerName}: ${message}`);
     recordRollbackError(containerName, message);
   }
@@ -165,7 +165,7 @@ function createPollHandler(context: HealthPollContext): () => Promise<void> {
     try {
       await inspectHealthAndHandle(context);
     } catch (error) {
-      const message = toErrorMessage(error);
+      const message = getErrorMessage(error);
       context.log.warn(
         `Error inspecting container ${context.containerName} during health monitoring: ${message}`,
       );

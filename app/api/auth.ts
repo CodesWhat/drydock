@@ -12,7 +12,7 @@ import { getServerConfiguration } from '../configuration/index.js';
 import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as store from '../store/index.js';
-import { toErrorMessage } from '../util/error.js';
+import { getErrorMessage } from '../util/error.js';
 import { recordAuditEvent } from './audit-events.js';
 
 const router = express.Router();
@@ -190,7 +190,9 @@ function useStrategy(authentication, app) {
     passport.use(authentication.getId(), strategy);
     STRATEGY_IDS.push(authentication.getId());
   } catch (error: unknown) {
-    log.warn(`Unable to apply authentication ${authentication.getId()} (${toErrorMessage(error)})`);
+    log.warn(
+      `Unable to apply authentication ${authentication.getId()} (${getErrorMessage(error)})`,
+    );
   }
 }
 
@@ -284,7 +286,7 @@ function login(req, res) {
 
   req.session.regenerate((regenerateError) => {
     if (regenerateError) {
-      const errorMessage = `Unable to regenerate session during login (${toErrorMessage(regenerateError)})`;
+      const errorMessage = `Unable to regenerate session during login (${getErrorMessage(regenerateError)})`;
       log.warn(errorMessage);
       recordLoginAuditEvent(req, 'error', errorMessage);
       res.status(500).json({ error: 'Unable to establish session' });
@@ -302,7 +304,7 @@ function login(req, res) {
 
     req.login(req.user, (loginError) => {
       if (loginError) {
-        const errorMessage = `Unable to persist login session (${toErrorMessage(loginError)})`;
+        const errorMessage = `Unable to persist login session (${getErrorMessage(loginError)})`;
         log.warn(errorMessage);
         recordLoginAuditEvent(req, 'error', errorMessage);
         res.status(500).json({ error: 'Unable to establish session' });
@@ -375,7 +377,7 @@ export function init(app) {
     try {
       done(null, deserializeSessionUser(user));
     } catch (error: unknown) {
-      log.warn(`Unable to deserialize session user (${toErrorMessage(error)})`);
+      log.warn(`Unable to deserialize session user (${getErrorMessage(error)})`);
       done(null, false);
     }
   });

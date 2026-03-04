@@ -1,18 +1,13 @@
 import { describe, expect, test } from 'vitest';
-import { getErrorMessage, toErrorMessage } from './error.js';
+import * as errorUtils from './error.js';
 
-describe('toErrorMessage', () => {
-  test('returns error.message for Error instances', () => {
-    expect(toErrorMessage(new Error('boom'))).toBe('boom');
-  });
-
-  test('stringifies non-Error values', () => {
-    expect(toErrorMessage('plain')).toBe('plain');
-    expect(toErrorMessage(42)).toBe('42');
-  });
-});
+const { getErrorMessage } = errorUtils;
 
 describe('getErrorMessage', () => {
+  test('does not expose the removed toErrorMessage helper', () => {
+    expect('toErrorMessage' in errorUtils).toBe(false);
+  });
+
   test('returns a non-empty message from Error and plain object payloads', () => {
     expect(getErrorMessage(new Error('boom'))).toBe('boom');
     expect(getErrorMessage({ message: 'request failed' })).toBe('request failed');

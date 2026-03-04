@@ -23,7 +23,3 @@ export function getErrorMessage(error: unknown, fallback = DEFAULT_ERROR_MESSAGE
 
   return fallback;
 }
-
-export function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
