@@ -8,6 +8,7 @@ import { sanitizeLogParam } from '../log/sanitize.js';
 import { getWebhookCounter } from '../prometheus/webhook.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import { toErrorMessage } from '../util/error.js';
 import { ddWebhookEnabled, wudWebhookEnabled } from '../watchers/providers/docker/label.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
@@ -67,10 +68,6 @@ type ContainerWebhookErrorContext = {
   actionVerb: 'watching' | 'updating';
 };
 
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 const CONTAINER_NOT_FOUND_ERROR = 'Container not found';
 const CONTAINER_WEBHOOK_DISABLED_ERROR = 'Webhooks are disabled for this container';
 
@@ -95,7 +92,7 @@ function handleContainerActionError(
   res: Response,
   context: ContainerWebhookErrorContext,
 ) {
-  const message = getErrorMessage(error);
+  const message = toErrorMessage(error);
   log.warn(
     `Error ${context.actionVerb} container ${sanitizeLogParam(containerName)} (${sanitizeLogParam(message)})`,
   );
@@ -134,7 +131,7 @@ async function watchAll(req: Request, res: Response) {
       watchers: watcherEntries.length,
     });
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = toErrorMessage(e);
     log.warn(`Error triggering watch cycle (${message})`);
 
     recordAuditEvent({

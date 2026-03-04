@@ -68,6 +68,7 @@ import * as auth from './auth.js';
 function createApp() {
   return {
     use: vi.fn(),
+    get: vi.fn(),
     set: vi.fn(),
   };
 }
@@ -470,6 +471,13 @@ describe('Auth Router', () => {
       auth.init(app);
 
       expect(app.use).toHaveBeenCalledWith('/auth', expect.anything());
+    });
+
+    test('should register legacy public auth methods endpoint for compatibility', () => {
+      const app = createApp();
+      auth.init(app);
+
+      expect(app.get).toHaveBeenCalledWith('/api/auth/methods', expect.any(Function));
     });
 
     test('should configure serialize and deserialize user', () => {

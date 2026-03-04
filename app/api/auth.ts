@@ -12,6 +12,7 @@ import { getServerConfiguration } from '../configuration/index.js';
 import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as store from '../store/index.js';
+import { toErrorMessage } from '../util/error.js';
 import { recordAuditEvent } from './audit-events.js';
 
 const router = express.Router();
@@ -165,10 +166,6 @@ function getSessionSecretKey() {
   return generatedSessionSecret;
 }
 
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : `${error}`;
-}
-
 function getAuditUsername(req): string {
   return typeof req.user?.username === 'string' ? req.user.username : 'unknown';
 }
@@ -193,9 +190,7 @@ function useStrategy(authentication, app) {
     passport.use(authentication.getId(), strategy);
     STRATEGY_IDS.push(authentication.getId());
   } catch (error: unknown) {
-    log.warn(
-      `Unable to apply authentication ${authentication.getId()} (${getErrorMessage(error)})`,
-    );
+    log.warn(`Unable to apply authentication ${authentication.getId()} (${toErrorMessage(error)})`);
   }
 }
 
@@ -289,7 +284,7 @@ function login(req, res) {
 
   req.session.regenerate((regenerateError) => {
     if (regenerateError) {
-      const errorMessage = `Unable to regenerate session during login (${getErrorMessage(regenerateError)})`;
+      const errorMessage = `Unable to regenerate session during login (${toErrorMessage(regenerateError)})`;
       log.warn(errorMessage);
       recordLoginAuditEvent(req, 'error', errorMessage);
       res.status(500).json({ error: 'Unable to establish session' });
@@ -307,7 +302,7 @@ function login(req, res) {
 
     req.login(req.user, (loginError) => {
       if (loginError) {
-        const errorMessage = `Unable to persist login session (${getErrorMessage(loginError)})`;
+        const errorMessage = `Unable to persist login session (${toErrorMessage(loginError)})`;
         log.warn(errorMessage);
         recordLoginAuditEvent(req, 'error', errorMessage);
         res.status(500).json({ error: 'Unable to establish session' });
@@ -380,7 +375,7 @@ export function init(app) {
     try {
       done(null, deserializeSessionUser(user));
     } catch (error: unknown) {
-      log.warn(`Unable to deserialize session user (${getErrorMessage(error)})`);
+      log.warn(`Unable to deserialize session user (${toErrorMessage(error)})`);
       done(null, false);
     }
   });
@@ -396,6 +391,10 @@ export function init(app) {
 
   // Return strategies
   router.get('/strategies', getStrategies);
+
+  // Compatibility alias for clients that still call the legacy API path.
+  // This endpoint must stay unauthenticated so the login screen can render.
+  app.get('/api/auth/methods', getStrategies);
 
   // Store remember-me preference before auth flow starts
   router.post('/remember', setRememberMe);

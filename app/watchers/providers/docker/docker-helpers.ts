@@ -3,6 +3,7 @@ import parse from 'parse-docker-image-name';
 import log from '../../../log/index.js';
 import type { Container, ContainerImage } from '../../../model/container.js';
 import { parse as parseSemver, transform as transformTag } from '../../../tag/index.js';
+import { getErrorMessage as getSharedErrorMessage } from '../../../util/error.js';
 
 const UNKNOWN_CONTAINER_PROCESSING_ERROR = 'Unexpected container processing error';
 
@@ -23,14 +24,8 @@ export interface ResolvedImgset {
   inspectTagPath?: string;
 }
 
-export function getErrorMessage(error: any, fallback = UNKNOWN_CONTAINER_PROCESSING_ERROR) {
-  if (typeof error?.message === 'string' && error.message.trim() !== '') {
-    return error.message;
-  }
-  if (typeof error === 'string' && error.trim() !== '') {
-    return error;
-  }
-  return fallback;
+export function getErrorMessage(error: unknown, fallback = UNKNOWN_CONTAINER_PROCESSING_ERROR) {
+  return getSharedErrorMessage(error, fallback);
 }
 
 export function buildFallbackContainerReport(container: Container, message: string) {
