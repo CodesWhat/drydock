@@ -666,6 +666,10 @@ const servers = computed(() => {
   return list;
 });
 
+const webhookApiEnabled = computed(
+  () => serverInfo.value?.configuration?.webhook?.enabled === true,
+);
+
 // Computed: security donut chart data
 const DONUT_CIRCUMFERENCE = 301.6;
 const securityCleanArcLength = computed(() =>
@@ -996,7 +1000,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
             <div class="text-[10px] font-semibold uppercase tracking-wider mb-3 dd-text-muted">
               Top Vulnerabilities
             </div>
-            <div class="space-y-2.5">
+            <div class="space-y-2.5 overflow-y-auto max-h-[200px]">
               <div v-for="vuln in vulnerabilities" :key="vuln.id"
                    class="flex items-start gap-3 p-2.5 dd-rounded"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
@@ -1068,6 +1072,28 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
           </div>
 
           <div class="p-4 space-y-3">
+            <div
+                 class="flex items-center gap-3 p-3 dd-rounded"
+                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+              <span class="badge px-1.5 py-0 text-[9px] max-md:!hidden"
+                    :style="{
+                      backgroundColor: webhookApiEnabled ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
+                      color: webhookApiEnabled ? 'var(--dd-success)' : 'var(--dd-danger)',
+                    }">
+                <AppIcon :name="webhookApiEnabled ? 'check' : 'xmark'" :size="12" />
+              </span>
+              <div class="flex-1 min-w-0">
+                <div class="text-[12px] font-semibold truncate dd-text">Webhook API</div>
+                <div class="text-[10px] dd-text-muted">Server configuration</div>
+              </div>
+              <span class="badge text-[9px] uppercase font-bold"
+                    :style="{
+                      backgroundColor: webhookApiEnabled ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
+                      color: webhookApiEnabled ? 'var(--dd-success)' : 'var(--dd-danger)',
+                    }">
+                {{ webhookApiEnabled ? 'Enabled' : 'Disabled' }}
+              </span>
+            </div>
             <div v-for="server in servers" :key="server.name"
                  class="flex items-center gap-3 p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated"
                  :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
