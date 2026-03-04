@@ -1,7 +1,8 @@
 import { computed, type Ref, ref } from 'vue';
 import { getContainerSbom } from '../services/container';
 import { errorMessage } from '../utils/error';
-import type { ImageSummary } from './useVulnerabilities';
+import { severityOrder, toSafeFileName } from '../views/security/securityViewUtils';
+import type { ImageSummaryWithVulns } from './useVulnerabilities';
 
 export type SbomFormat = 'spdx-json' | 'cyclonedx-json';
 
@@ -9,20 +10,8 @@ interface UseSbomDetailOptions {
   containerIdsByImage: Ref<Record<string, string[]>>;
 }
 
-const severityOrder: Record<string, number> = {
-  CRITICAL: 0,
-  HIGH: 1,
-  MEDIUM: 2,
-  LOW: 3,
-  UNKNOWN: 4,
-};
-
-function toSafeFileName(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, '-');
-}
-
 export function useSbomDetail({ containerIdsByImage }: UseSbomDetailOptions) {
-  const selectedImage = ref<ImageSummary | null>(null);
+  const selectedImage = ref<ImageSummaryWithVulns | null>(null);
   const detailOpen = ref(false);
   const selectedSbomFormat = ref<SbomFormat>('spdx-json');
   const detailSbomResult = ref<Record<string, unknown> | null>(null);
@@ -110,7 +99,7 @@ export function useSbomDetail({ containerIdsByImage }: UseSbomDetailOptions) {
     URL.revokeObjectURL(objectUrl);
   }
 
-  function openDetail(summary: ImageSummary) {
+  function openDetail(summary: ImageSummaryWithVulns) {
     selectedImage.value = summary;
     detailOpen.value = true;
     showSbomDocument.value = false;

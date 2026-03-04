@@ -1,10 +1,8 @@
 import type {
-  SecurityDelta,
   SecurityEmptyState,
   SecurityRuntimeToolStatus,
   SecurityViewEmptyStateInput,
   SeveritySummaryCounts,
-  UpdateScanSummary,
 } from './securityViewTypes';
 
 export const severityOrder: Record<string, number> = {
@@ -12,6 +10,7 @@ export const severityOrder: Record<string, number> = {
   HIGH: 1,
   MEDIUM: 2,
   LOW: 3,
+  UNKNOWN: 4,
 };
 
 export function severityColor(sev: string) {
@@ -67,28 +66,6 @@ export function formatTimestamp(value: string | null | undefined): string {
     return value;
   }
   return date.toISOString();
-}
-
-export function computeDelta(
-  current: SeveritySummaryCounts,
-  update: UpdateScanSummary,
-): SecurityDelta {
-  return {
-    fixed:
-      Math.max(0, current.critical - update.critical) +
-      Math.max(0, current.high - update.high) +
-      Math.max(0, current.medium - update.medium) +
-      Math.max(0, current.low - update.low),
-    new:
-      Math.max(0, update.critical - current.critical) +
-      Math.max(0, update.high - current.high) +
-      Math.max(0, update.medium - current.medium) +
-      Math.max(0, update.low - current.low),
-    fixedCritical: Math.max(0, current.critical - update.critical),
-    fixedHigh: Math.max(0, current.high - update.high),
-    newCritical: Math.max(0, update.critical - current.critical),
-    newHigh: Math.max(0, update.high - current.high),
-  };
 }
 
 export function normalizeSeverityCount(value: unknown): number {

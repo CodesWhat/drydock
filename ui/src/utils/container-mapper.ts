@@ -20,6 +20,7 @@ import type {
   ContainerSecurityDelta,
   ContainerSecuritySummary,
 } from '../types/container';
+import { normalizeSeverityCount } from '../views/security/securityViewUtils';
 
 interface ApiContainerImage {
   name?: unknown;
@@ -172,12 +173,7 @@ function deriveSecurityScanState(apiContainer: ApiContainerInput): 'scanned' | '
   return 'scanned';
 }
 
-export function normalizeSeverityCount(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-    return 0;
-  }
-  return Math.floor(value);
-}
+export { normalizeSeverityCount };
 
 function deriveSecuritySummary(
   apiContainer: ApiContainerInput,

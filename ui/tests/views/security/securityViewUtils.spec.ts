@@ -1,7 +1,6 @@
 import {
   buildSecurityEmptyState,
   chooseLatestTimestamp,
-  computeDelta,
   formatTimestamp,
   highestSeverity,
   normalizeSeverityCount,
@@ -26,24 +25,6 @@ describe('securityViewUtils', () => {
       expect(chooseLatestTimestamp('2026-03-01T10:00:00.000Z', '2026-03-02T10:00:00.000Z')).toBe(
         '2026-03-02T10:00:00.000Z',
       );
-    });
-  });
-
-  describe('computeDelta', () => {
-    it('computes fixed/new counters across severities', () => {
-      expect(
-        computeDelta(
-          { critical: 3, high: 2, medium: 4, low: 1 },
-          { critical: 1, high: 3, medium: 2, low: 1, unknown: 0 },
-        ),
-      ).toEqual({
-        fixed: 4,
-        new: 1,
-        fixedCritical: 2,
-        fixedHigh: 0,
-        newCritical: 0,
-        newHigh: 1,
-      });
     });
   });
 
