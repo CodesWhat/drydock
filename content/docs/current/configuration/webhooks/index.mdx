@@ -39,6 +39,23 @@ Authorization: Bearer your-token-here
 
 Webhook endpoints are rate-limited to **30 requests per 15-minute window** per client IP.
 
+## Per-container opt-out
+
+Individual containers can be excluded from webhook API calls using the `dd.webhook.enabled` label. When set to `false`, the `/api/webhook/watch/:containerName` and `/api/webhook/update/:containerName` endpoints return **403 Forbidden** for that container.
+
+```yaml
+services:
+  myapp:
+    image: myapp:latest
+    labels:
+      - dd.watch=true
+      - dd.webhook.enabled=false  # blocks webhook watch/update for this container
+```
+
+<Callout type="info">The `dd.webhook.enabled` label only affects per-container webhook endpoints. The global `POST /api/webhook/watch` endpoint (which triggers all watchers) is not affected.</Callout>
+
+<Callout type="info">Containers without this label default to `dd.webhook.enabled=true` — webhooks are allowed unless explicitly disabled.</Callout>
+
 ## Audit logging
 
 All webhook calls are recorded in the [audit trail](/docs/monitoring) with action types `webhook-watch`, `webhook-watch-container`, and `webhook-update`, including success/error status and container details. A `dd_webhook_total` Prometheus counter tracks invocations by action type.
