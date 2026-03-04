@@ -331,6 +331,62 @@ curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec
   -d '{"backupId": "abc123"}'
 ```
 
+## Get update/rollback history
+
+Returns the persisted update and rollback operation history for a container, sorted by most recent first. Each entry tracks the full lifecycle of an update (phases, status, versions, rollback reason if applicable).
+
+```bash
+curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-operations
+
+[
+  {
+    "id": "a1b2c3d4-...",
+    "containerName": "homeassistant",
+    "status": "succeeded",
+    "phase": "succeeded",
+    "createdAt": "2024-12-01T10:00:00.000Z",
+    "updatedAt": "2024-12-01T10:01:30.000Z",
+    "containerId": "31a61a8305ef...",
+    "triggerName": "docker.local",
+    "fromVersion": "2024.11.3",
+    "toVersion": "2024.12.0",
+    "targetImage": "homeassistant/home-assistant:2024.12.0"
+  },
+  {
+    "id": "e5f6a7b8-...",
+    "containerName": "homeassistant",
+    "status": "rolled-back",
+    "phase": "rolled-back",
+    "createdAt": "2024-11-20T08:00:00.000Z",
+    "updatedAt": "2024-11-20T08:02:00.000Z",
+    "containerId": "31a61a8305ef...",
+    "fromVersion": "2024.11.2",
+    "toVersion": "2024.11.3",
+    "rollbackReason": "Health check failed"
+  }
+]
+```
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Unique operation ID |
+| `containerName` | string | Container name |
+| `status` | string | `in-progress`, `succeeded`, `rolled-back`, or `failed` |
+| `phase` | string | Current phase: `prepare`, `renamed`, `new-created`, `old-stopped`, `new-started`, `health-gate`, `health-gate-passed`, `succeeded`, `rollback-started`, `rolled-back`, `rollback-failed` |
+| `createdAt` | string | ISO 8601 timestamp when the operation started |
+| `updatedAt` | string | ISO 8601 timestamp of the last phase transition |
+| `containerId` | string | Container ID |
+| `triggerName` | string | Trigger that initiated the update |
+| `fromVersion` | string | Previous image tag or digest |
+| `toVersion` | string | Target image tag or digest |
+| `targetImage` | string | Full target image reference |
+| `rollbackReason` | string | Reason for rollback (only present on rolled-back operations) |
+| `lastError` | string | Error message (only present on failed operations) |
+
+Returns 200 with the operations array on success, or 404 if the container is not found.
+
 ## Delete a Container
 
 This operation lets you delete a container by id. Requires `DD_SERVER_FEATURE_DELETE` to be enabled.

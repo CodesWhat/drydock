@@ -10,15 +10,25 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 The `docker` trigger lets you replace existing containers with their updated versions.
 
-The trigger will:
+The trigger uses a **rename-first** strategy that keeps the original container name available as briefly as possible and supports automatic rollback on failure:
 
-- Clone the existing container specification
-- Pull the new image
-- Stop the existing container
-- Remove the existing container
-- Create the new container
-- Start the new container (if the previous one was running)
-- Remove the previous image (optionally)
+1. Pull the new image
+2. Rename the current container to a temporary name (`{name}-old-{timestamp}`)
+3. Create a new container with the **original name** and the new image
+4. Stop the old (renamed) container (if it was running)
+5. Start the new container (if the old one was running)
+6. Wait for the new container to become healthy (if a `HEALTHCHECK` is configured)
+7. Remove the old container
+
+If **any step fails**, the trigger automatically rolls back:
+
+1. Stop and remove the new container (best-effort)
+2. Rename the old container back to the original name
+3. Restart the old container (if it was previously running)
+
+<Callout type="info">If Drydock restarts while an update is in progress, it automatically reconciles the interrupted operation on startup -- restoring the old container or cleaning up stale temporaries as needed.</Callout>
+
+<Callout type="info">When [Update Bouncer](/docs/configuration/security) is configured, candidate images are scanned for vulnerabilities before the update proceeds. If the scan finds blocking issues, the update is aborted and a `security-alert` notification is sent.</Callout>
 
 ## Variables
 

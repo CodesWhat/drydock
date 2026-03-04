@@ -42,6 +42,10 @@ The trigger will:
 
 <Callout type="warn">Do not forget to mount the docker-compose.yml file in the drydock container.</Callout>
 
+## Tag vs digest updates
+
+For **tag-based updates**, the trigger patches the compose file with the new tag and then recreates the container. For **digest-only updates** (same tag, new digest), the compose file is left unchanged and only the container runtime is refreshed via `docker compose pull` + `docker compose up -d`.
+
 ## Compose file patch behavior
 
 When a tag-based update requires a compose file change, Drydock patches Compose content in a service-scoped way:

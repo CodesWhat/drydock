@@ -22,7 +22,7 @@ Drydock detects when its own container image has an update available, just like 
 
 ## Update sequence
 
-1. **Notify UI** — An SSE event is sent to all connected browsers, displaying an animated full-screen overlay
+1. **Notify UI** — A `dd:self-update` SSE event is broadcast to all connected browsers, displaying an animated full-screen overlay. The server waits for at least one browser to acknowledge receipt before proceeding (see [SSE acknowledgment](#sse-acknowledgment) below)
 2. **Backup current image** — The running image is backed up before proceeding
 3. **Pull new image** — The updated image is pulled while the current container is still running
 4. **Rename old container** — The current container is renamed to `drydock-old-{timestamp}` to free the original name
@@ -41,6 +41,17 @@ If any step fails, drydock attempts to restore the previous state:
 - If new container creation fails, the old container is renamed back to its original name
 - If the helper container fails to spawn, the new container is removed and the old container is renamed back
 - If the new container fails to start, the helper restarts the old container
+
+## SSE acknowledgment
+
+When the self-update begins, the server needs to ensure that connected browsers have received the update notification and displayed the overlay before the container is replaced. This is handled by an ack flow:
+
+1. Each SSE client receives a `clientId` and `clientToken` when it connects to the `/api/sse` endpoint (via a `dd:connected` event).
+2. When the `dd:self-update` event is broadcast, the server records which client tokens were connected at that moment.
+3. Browsers acknowledge the event by sending `POST /api/sse/self-update/:operationId/ack` with their `clientId` and `clientToken`.
+4. Once at least one acknowledgment is received (or the timeout expires), the update proceeds.
+
+The ack timeout defaults to 3 seconds. If no browsers are connected, the update proceeds immediately without waiting.
 
 ## Dry-run mode
 

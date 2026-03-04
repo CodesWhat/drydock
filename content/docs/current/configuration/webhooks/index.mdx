@@ -39,6 +39,10 @@ Authorization: Bearer your-token-here
 
 Webhook endpoints are rate-limited to **30 requests per 15-minute window** per client IP.
 
+## Audit logging
+
+All webhook calls are recorded in the [audit trail](/docs/monitoring) with action types `webhook-watch`, `webhook-watch-container`, and `webhook-update`, including success/error status and container details. A `dd_webhook_total` Prometheus counter tracks invocations by action type.
+
 ## Examples
 
 ### Watch all containers

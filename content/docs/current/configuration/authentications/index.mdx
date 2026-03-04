@@ -17,3 +17,21 @@ Currently, the following strategies are supported:
 <Callout type="info">[**Basic**](/docs/configuration/authentications/basic)</Callout>
 
 <Callout type="info">[**Openid Connect**](/docs/configuration/authentications/oidc)</Callout>
+
+## Fail-closed auth enforcement
+
+<Callout type="warn">Since v1.4.0, drydock enforces **fail-closed** authentication across registries, triggers, and the Docker entrypoint. If auth is configured and fails, drydock raises an error instead of silently falling back to anonymous or unauthenticated access.</Callout>
+
+This affects three areas:
+
+- **Registry bearer-token flows** — When a token exchange endpoint returns an error (network failure, invalid credentials, expired token), the registry call fails immediately. In older versions (and upstream WUD), this would silently fall through to anonymous access, which could cause missed updates on private images or confusing inconsistencies between authenticated and unauthenticated results.
+- **HTTP trigger auth** — If an HTTP trigger specifies an unsupported auth type, the trigger errors instead of sending an unauthenticated request.
+- **Docker entrypoint root mode** — Running as root requires both `DD_RUN_AS_ROOT=true` **and** `DD_ALLOW_INSECURE_ROOT=true`. Setting only one flag fails closed at startup. See [Docker Socket Security](/docs/configuration/watchers#docker-socket-security).
+
+If you are upgrading from WUD or an earlier drydock version and see new auth errors, verify that your credentials are valid and that outbound HTTPS to the token endpoint is not blocked. The errors are intentional — they surface problems that were previously hidden.
+
+## Remember me
+
+The login form includes a **Remember me** checkbox. When checked, the session cookie is extended to **30 days** so the browser stays logged in across restarts. When unchecked, the cookie expires when the browser is closed (default session lifetime is 7 days).
+
+Remember-me works with both Basic and OIDC authentication strategies. The preference is stored server-side in the session via `POST /auth/remember` before the auth flow begins.

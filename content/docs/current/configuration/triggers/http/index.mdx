@@ -22,6 +22,8 @@ The `http` trigger lets you send container update notifications via HTTP.
 
 <Callout type="warn">HTTP trigger auth now fails closed. If `AUTH_TYPE=BASIC`, both `AUTH_USER` and `AUTH_PASSWORD` are required. If `AUTH_TYPE=BEARER`, `AUTH_BEARER` is required.</Callout>
 
+<Callout type="info">HTTP requests have a 30-second timeout. If the remote server does not respond within 30 seconds, the trigger will fail.</Callout>
+
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 
 ### Examples

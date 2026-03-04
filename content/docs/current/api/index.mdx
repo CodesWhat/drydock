@@ -20,7 +20,7 @@ The [webhook endpoints](/docs/configuration/webhooks) use a separate Bearer toke
 
 | Category | Endpoints | Description |
 | --- | --- | --- |
-| [App](/docs/api/app) | `GET /api/app` | Application info (version, build) |
+| [App](/docs/api/app) | `GET /api/app`, `GET /api/server` | Application info, server configuration, security runtime |
 | [Containers](/docs/api/container) | `GET /api/containers`, `POST`, `PATCH`, `DELETE` | Container state, actions, update policy, security |
 | [Agents](/docs/api/agent) | `GET /api/agents` | Remote agent status and logs |
 | [Logs](/docs/api/log) | `GET /api/log` | Application log entries |
@@ -35,14 +35,248 @@ The [webhook endpoints](/docs/configuration/webhooks) use a separate Bearer toke
 | --- | --- | --- |
 | `/health` | `GET` | Health check (returns 200 when healthy) |
 | `/metrics` | `GET` | Prometheus metrics (optional auth via `DD_SERVER_METRICS_AUTH`) |
-| `/api/events/ui` | `GET` | Server-Sent Events for real-time UI updates |
-| `/api/audit` | `GET` | Audit trail entries (paginated, filterable by action/container/date) |
-| `/api/notifications` | `GET`, `PATCH` | Notification rules (per-event enable/disable and trigger assignments) |
-| `/api/settings` | `GET`, `PUT` | UI settings (internetless mode) |
-| `/api/server` | `GET` | Server configuration and compatibility info |
-| `/api/containers/groups` | `GET` | Container groups (by stack/compose project) |
+| `/api/events/ui` | `GET` | [Server-Sent Events](#server-sent-events-sse) for real-time UI updates |
+| `/api/audit` | `GET` | [Audit trail](#audit-trail) (paginated, filterable by action/container/date) |
+| `/api/notifications` | `GET`, `PATCH /:id` | [Notification rules](#notification-rules) (per-event enable/disable and trigger assignments) |
+| `/api/settings` | `GET`, `PUT` | [UI settings](#settings) (internetless mode) |
+| `/api/server` | `GET` | Server configuration and compatibility info (see [App API](/docs/api/app)) |
+| `/api/server/security/runtime` | `GET` | Security tools availability (see [App API](/docs/api/app)) |
+| `/api/containers/groups` | `GET` | [Container groups](#container-groups) (by stack/compose project) |
 | `/api/webhook/watch` | `POST` | [Webhook](/docs/configuration/webhooks) — trigger watch on all containers |
 | `/api/webhook/watch/:name` | `POST` | [Webhook](/docs/configuration/webhooks) — watch specific container |
 | `/api/webhook/update/:name` | `POST` | [Webhook](/docs/configuration/webhooks) — update specific container |
 
 <Callout type="info">See each sub-page for detailed request/response examples.</Callout>
+
+## Notification rules
+
+Notification rules control which events trigger notifications and which triggers receive them. Five default rules are created automatically.
+
+### Get all notification rules
+
+```bash
+curl http://drydock:3000/api/notifications
+
+[
+  {
+    "id": "update-available",
+    "name": "Update Available",
+    "description": "When a container has a new version",
+    "enabled": true,
+    "triggers": []
+  },
+  {
+    "id": "update-applied",
+    "name": "Update Applied",
+    "description": "After a container is successfully updated",
+    "enabled": true,
+    "triggers": []
+  },
+  {
+    "id": "update-failed",
+    "name": "Update Failed",
+    "description": "When an update fails or is rolled back",
+    "enabled": true,
+    "triggers": []
+  },
+  {
+    "id": "security-alert",
+    "name": "Security Alert",
+    "description": "Critical/High vulnerability detected",
+    "enabled": true,
+    "triggers": []
+  },
+  {
+    "id": "agent-disconnect",
+    "name": "Agent Disconnected",
+    "description": "When a remote agent loses connection",
+    "enabled": false,
+    "triggers": []
+  }
+]
+```
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Rule identifier (e.g. `update-available`, `security-alert`) |
+| `name` | string | Human-readable rule name |
+| `description` | string | What this rule covers |
+| `enabled` | boolean | Whether the rule is active |
+| `triggers` | string[] | Trigger IDs that receive this notification (empty = all triggers) |
+
+### Update a notification rule
+
+Update the `enabled` status and/or `triggers` list for a rule. Only the fields you include are changed.
+
+```bash
+curl -X PATCH http://drydock:3000/api/notifications/update-available \
+  -H 'Content-Type: application/json' \
+  -d '{"enabled": true, "triggers": ["slack.alerts", "ntfy.one"]}'
+```
+
+Returns 200 with the updated rule, 400 if the body is invalid or a trigger ID is not recognized, or 404 if the rule ID does not exist.
+
+## Audit trail
+
+Returns paginated audit log entries for container lifecycle events, updates, rollbacks, webhooks, and more.
+
+### Get audit entries
+
+```bash
+curl "http://drydock:3000/api/audit?page=1&limit=25&action=update-applied&container=homeassistant"
+
+{
+  "entries": [
+    {
+      "id": "a1b2c3d4-...",
+      "timestamp": "2024-12-01T10:01:30.000Z",
+      "action": "update-applied",
+      "containerName": "homeassistant",
+      "containerImage": "homeassistant/home-assistant",
+      "fromVersion": "2024.11.3",
+      "toVersion": "2024.12.0",
+      "triggerName": "docker.local",
+      "status": "success",
+      "details": ""
+    }
+  ],
+  "total": 42,
+  "page": 1,
+  "limit": 25
+}
+```
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `page` | integer | `1` | Page number (1-indexed) |
+| `limit` | integer | `50` | Results per page (max 200) |
+| `action` | string | | Filter by action type |
+| `container` | string | | Filter by container name |
+| `from` | string | | ISO 8601 date -- only entries on or after this timestamp |
+| `to` | string | | ISO 8601 date -- only entries on or before this timestamp |
+
+### Action types
+
+`update-available`, `update-applied`, `update-failed`, `container-update`, `security-alert`, `agent-disconnect`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `auto-rollback`, `auth-login`
+
+## Server-Sent Events (SSE)
+
+The `/api/events/ui` endpoint provides real-time push notifications to the UI via Server-Sent Events.
+
+### Connect
+
+```bash
+curl -N -H "Accept: text/event-stream" http://drydock:3000/api/events/ui
+```
+
+Connection limits: max 10 per IP, max 10 per session. Returns 429 when exceeded.
+
+### Event types
+
+| Event | Payload | Description |
+| --- | --- | --- |
+| `dd:connected` | `{ "clientId": "...", "clientToken": "..." }` | Sent immediately on connection. The `clientToken` is used for self-update acknowledgment. |
+| `dd:heartbeat` | `{}` | Sent every 15 seconds to keep the connection alive |
+| `dd:container-added` | Container object | A new container was discovered by a watcher |
+| `dd:container-updated` | Container object | An existing container's state changed (new tag, status, scan result) |
+| `dd:container-removed` | Container object | A container was removed |
+| `dd:scan-started` | `{ "containerId": "..." }` | A security scan started for a container |
+| `dd:scan-completed` | `{ "containerId": "...", "status": "..." }` | A security scan finished |
+| `dd:self-update` | `{ "opId": "...", "requiresAck": bool, "ackTimeoutMs": int, "startedAt": "..." }` | Drydock is updating its own container. If `requiresAck` is true, the UI should POST an acknowledgment before the timeout. |
+| `dd:agent-connected` | Agent payload | A remote agent connected to the controller |
+| `dd:agent-disconnected` | Agent payload | A remote agent disconnected |
+
+### SSE message format
+
+```
+event: dd:container-updated
+data: { "id": "31a61a...", "name": "homeassistant", ... }
+```
+
+## Settings
+
+Persistent UI preferences stored in the drydock database.
+
+### Get settings
+
+```bash
+curl http://drydock:3000/api/settings
+
+{
+  "internetlessMode": false
+}
+```
+
+### Update settings
+
+```bash
+curl -X PUT http://drydock:3000/api/settings \
+  -H 'Content-Type: application/json' \
+  -d '{"internetlessMode": true}'
+
+{
+  "internetlessMode": true
+}
+```
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `internetlessMode` | boolean | `false` | When enabled, disables registry icon lookups and other external requests |
+
+Returns 200 with the updated settings, or 400 if the body is invalid.
+
+## Container groups
+
+Returns containers grouped by stack or group label. Group priority: `dd.group` > `wud.group` > `com.docker.compose.project` > ungrouped.
+
+```bash
+curl http://drydock:3000/api/containers/groups
+
+[
+  {
+    "name": "monitoring",
+    "containers": [
+      {
+        "id": "31a61a...",
+        "name": "prometheus",
+        "displayName": "Prometheus",
+        "updateAvailable": false
+      },
+      {
+        "id": "e5f6a7...",
+        "name": "grafana",
+        "displayName": "Grafana",
+        "updateAvailable": true
+      }
+    ],
+    "containerCount": 2,
+    "updatesAvailable": 1
+  },
+  {
+    "name": null,
+    "containers": [
+      {
+        "id": "abc123...",
+        "name": "standalone-app",
+        "displayName": "standalone-app",
+        "updateAvailable": false
+      }
+    ],
+    "containerCount": 1,
+    "updatesAvailable": 0
+  }
+]
+```
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | string \| null | Group name (`null` for ungrouped containers) |
+| `containers` | array | List of containers with `id`, `name`, `displayName`, `updateAvailable` |
+| `containerCount` | integer | Number of containers in the group |
+| `updatesAvailable` | integer | Number of containers with a pending update |

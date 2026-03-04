@@ -29,12 +29,16 @@ Rollback is available in two ways:
 - **UI** -- on the container detail page, select a previous backup and click **Rollback**.
 - **API** -- send a `POST` request to `/api/backup/:id/rollback`, where `:id` is the container ID.
 
-When a rollback is triggered, drydock will:
+When a rollback is triggered, drydock uses a rename-first strategy that is crash-recoverable:
 
-1. Pull the backup image
-2. Stop the current container
-3. Recreate the container using the backup image
-4. Start the new container
+1. Pull the backup image while the current container is still running
+2. Rename the current container to `{name}-old-{timestamp}` to free the original name
+3. Create a new container with the original name using the backup image
+4. Stop the old (renamed) container
+5. Start the new container
+6. Remove the old container on success
+
+If any step fails, drydock restores the previous state: the new container is removed, the old container is renamed back to its original name, and restarted if it was running. On startup, drydock also reconciles any interrupted update operations left behind by a crash.
 
 You can optionally pass a `backupId` in the request body to target a specific backup. If omitted, the most recent backup is used.
 

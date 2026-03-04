@@ -37,7 +37,7 @@ All implemented triggers, in addition to their specific configuration, also supp
 
 <Callout type="info">`RESOLVENOTIFICATIONS` is currently implemented for Gotify (auto-deletes the notification message after a successful update). Other providers can be extended to support it.</Callout>
 
-<Callout type="info">Some messaging triggers (Slack, Discord, Telegram, Teams, Matrix, Mattermost, Rocket.Chat, Google Chat) also support `DD_TRIGGER_{trigger_type}_{trigger_name}_DISABLETITLE` (default `false`) to send only the body without a title line.</Callout>
+<Callout type="info">Some messaging triggers (Slack, Telegram, Teams, Matrix, Mattermost, Rocket.Chat, Google Chat) also support `DD_TRIGGER_{trigger_type}_{trigger_name}_DISABLETITLE` (default `false`) to send only the body without a title line.</Callout>
 
 <Callout type="info">You can set `DD_TRIGGER_{trigger_type}_THRESHOLD` to define a default threshold for all triggers of the same type, for example `DD_TRIGGER_NTFY_THRESHOLD=minor`.</Callout>
 
@@ -49,17 +49,95 @@ All implemented triggers, in addition to their specific configuration, also supp
 
 <Callout type="info">Threshold `major-only` means that the trigger will run only if this is a `major` semver change</Callout>
 
-<Callout type="info">Threshold `minor` means that the trigger will run only if this is a `minor` or `patch` semver change</Callout>
+<Callout type="info">Threshold `minor` means that the trigger will run for any semver change that is not `major` (includes `minor`, `patch`, and `prerelease`)</Callout>
 
 <Callout type="info">Threshold `minor-only` means that the trigger will run only if this is a `minor` semver change</Callout>
 
-<Callout type="info">Threshold `patch` means that the trigger will run only if this is a `patch` semver change</Callout>
+<Callout type="info">Threshold `patch` means that the trigger will run for any semver change that is not `major` or `minor` (includes `patch` and `prerelease`)</Callout>
 
 <Callout type="info">Threshold `digest` means that the trigger will run only on digest updates</Callout>
 
 <Callout type="info">Any threshold ending with `-no-digest` excludes digest updates for that threshold</Callout>
 
+<Callout type="info">Updates with an `unknown` update kind are always filtered out regardless of the threshold setting.</Callout>
+
 <Callout type="info">`DD_TRIGGER_{trigger_type}_{trigger_name}_ONCE=false` can be useful when `DD_TRIGGER_{trigger_type}_{trigger_name}_MODE=batch` to get a report with all pending updates.</Callout>
+
+## Notification Rules
+
+Notification rules control which events fire which triggers. Each rule corresponds to an event type and has an `enabled` flag and an optional list of trigger IDs.
+
+| Rule ID | Default enabled | Description |
+| --- | :---: | --- |
+| `update-available` | Yes | A container has a newer version available |
+| `update-applied` | Yes | A container was successfully updated |
+| `update-failed` | Yes | An update failed or was rolled back |
+| `security-alert` | Yes | Critical/high vulnerability detected during pre-update scan |
+| `agent-disconnect` | No | A remote agent lost its connection |
+
+**Dispatch behavior:**
+
+- **`update-available`** -- for backward compatibility, when its trigger list is empty all triggers fire (existing behavior is preserved). Once you assign specific triggers, only those fire.
+- **`update-applied`**, **`update-failed`**, **`security-alert`** -- these require explicit trigger assignments. They are enabled by default but will not fire any trigger until you add trigger IDs to their rules.
+- **`agent-disconnect`** -- disabled by default. Enable it and assign triggers to receive disconnect alerts. This event always fires regardless of the threshold setting.
+
+Rules are managed via `GET /api/notifications` and `PATCH /api/notifications/:id` (update `enabled` and/or `triggers` fields), or through the **Notifications** view in the UI.
+
+## Event Types
+
+Beyond the classic `update-available` event, triggers can fire on additional events:
+
+- **`update-applied`** -- fires after a container is successfully updated by a Docker or Docker Compose trigger. Useful for audit or confirmation notifications.
+- **`update-failed`** -- fires when an update fails or is rolled back. Carries the container name and error message.
+- **`security-alert`** -- fires when the [Update Bouncer](/docs/configuration/security) detects critical or high vulnerabilities during a pre-update scan. Includes a vulnerability summary.
+- **`agent-disconnect`** -- fires when a remote agent loses its connection. This event **skips threshold checks** (always fires).
+
+<Callout type="info">To receive notifications for these events, add the desired trigger IDs to the corresponding notification rule via the API or UI.</Callout>
+
+## Template Variable Reference
+
+Template strings use `${expression}` placeholders. Drydock provides two sets of variables depending on the trigger mode.
+
+### Simple mode variables
+
+| Variable | Description |
+| --- | --- |
+| `container` | The full container object |
+| `container.name` | Container name |
+| `container.displayName` | Display name |
+| `container.displayIcon` | Display icon |
+| `container.watcher` | Watcher name |
+| `container.image.registry.name` | Registry provider name |
+| `container.image.tag.value` | Current image tag |
+| `container.updateKind.kind` | `tag`, `digest`, or `unknown` |
+| `container.updateKind.localValue` | Current version |
+| `container.updateKind.remoteValue` | New version |
+| `container.updateKind.semverDiff` | `major`, `minor`, `patch`, `prerelease`, or `unknown` |
+| `container.result.link` | Link to the release (when a link template is configured) |
+
+Legacy aliases (deprecated): `id`, `name`, `watcher`, `kind`, `semver`, `local`, `remote`, `link`.
+
+### Batch mode variables
+
+| Variable | Description |
+| --- | --- |
+| `containers` | Array of container objects |
+| `containers.length` | Number of containers in the batch |
+
+Legacy alias (deprecated): `count` (same as `containers.length`).
+
+### Expression syntax
+
+Inside `${...}` you can use:
+
+- **Property paths** -- `container.updateKind.kind`
+- **Method calls** -- `local.substring(0, 15)` (see allowed methods below)
+- **Ternary** -- `container.result.link ? container.result.link : "no link"`
+- **Logical AND** -- `container.result && container.result.link`
+- **String concatenation** -- `"Version: " + container.updateKind.remoteValue`
+- **String and number literals** -- `"hello"`, `42`
+
+**Allowed string methods:** `substring`, `slice`, `toLowerCase`, `toUpperCase`, `trim`, `trimStart`, `trimEnd`, `replace`, `split`, `indexOf`, `lastIndexOf`, `startsWith`, `endsWith`, `includes`, `charAt`, `padStart`, `padEnd`, `repeat`, `toString`.
 
 ## Examples
 

@@ -138,6 +138,15 @@ services:
 
 <Callout type="info">SBOM documents are retrievable per-container via `GET /api/containers/:id/sbom?format=\{format\}` where `format` is one of `spdx-json` or `cyclonedx-json`.</Callout>
 
+## On-demand scanning
+
+You can trigger a security scan for any individual container without waiting for the next watch cycle.
+
+- **UI:** Click the shield button on a container row to start a scan.
+- **API:** `POST /api/containers/:id/scan` runs vulnerability scanning, signature verification (if configured), and SBOM generation (if configured) on demand.
+
+The endpoint is rate-limited to 30 requests per minute. Real-time progress is broadcast via SSE events `dd:scan-started` and `dd:scan-completed` so the UI updates automatically.
+
 ## Full example (scanning + signatures + SBOM)
 
 ```yaml
