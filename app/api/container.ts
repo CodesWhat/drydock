@@ -156,7 +156,7 @@ export function init() {
     '/:id/scan',
     rateLimit({
       windowMs: 60_000,
-      max: 5,
+      max: 100,
       standardHeaders: true,
       legacyHeaders: false,
       validate: { xForwardedForHeader: false },
