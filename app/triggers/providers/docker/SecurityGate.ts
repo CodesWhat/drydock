@@ -1,15 +1,116 @@
+import type { SecuritySbomFormat } from '../../../configuration/index.js';
+import type { Container } from '../../../model/container.js';
 import TriggerPipelineError from './TriggerPipelineError.js';
 
+type SecurityContainer = Container;
+type SecurityState = SecurityContainer['security'];
+
+type SecurityConfiguration = {
+  enabled: boolean;
+  scanner: string;
+  signature: {
+    verify: boolean;
+  };
+  sbom: {
+    enabled: boolean;
+    formats: SecuritySbomFormat[];
+  };
+};
+
+type SecurityScannerRequest = {
+  image: string;
+  auth: unknown;
+};
+
+type SignatureScanResult = {
+  status: string;
+  signatures?: number;
+  error?: string;
+};
+
+type VulnerabilitySummary = {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  unknown: number;
+};
+
+type VulnerabilityScanResult = {
+  status: string;
+  summary: VulnerabilitySummary;
+  blockingCount: number;
+  blockSeverities: string[];
+  error?: string;
+};
+
+type SbomResult = {
+  status: string;
+  formats: SecuritySbomFormat[];
+  error?: string;
+};
+
+type SecurityAlertPayload = {
+  containerName: string;
+  details: string;
+  status: string;
+  summary: VulnerabilitySummary;
+  blockingCount: number;
+  container: SecurityContainer;
+};
+
+type SecurityGateDependencies = {
+  getSecurityConfiguration: () => SecurityConfiguration;
+  verifyImageSignature: (request: SecurityScannerRequest) => Promise<SignatureScanResult>;
+  scanImageForVulnerabilities: (
+    request: SecurityScannerRequest,
+  ) => Promise<VulnerabilityScanResult>;
+  generateImageSbom: (
+    request: SecurityScannerRequest & { formats: SecuritySbomFormat[] },
+  ) => Promise<SbomResult>;
+  getContainer: (containerId: string) => SecurityContainer | undefined;
+  updateContainer: (container: SecurityContainer) => void;
+  cacheSecurityState: (
+    watcher: string,
+    containerName: string,
+    securityState: SecurityState,
+  ) => void;
+  emitSecurityAlert: (payload: SecurityAlertPayload) => Promise<void>;
+  fullName: (container: SecurityContainer) => string;
+  recordSecurityAudit: (
+    action: string,
+    container: SecurityContainer,
+    status: 'success' | 'error',
+    details: string,
+  ) => void;
+};
+
+type SecurityGateConstructorOptions = Partial<SecurityGateDependencies> & {
+  securityConfig?: Pick<Partial<SecurityGateDependencies>, 'getSecurityConfiguration'>;
+  scanners?: Pick<
+    Partial<SecurityGateDependencies>,
+    'verifyImageSignature' | 'scanImageForVulnerabilities' | 'generateImageSbom'
+  >;
+  stateStore?: Pick<
+    Partial<SecurityGateDependencies>,
+    'getContainer' | 'updateContainer' | 'cacheSecurityState'
+  >;
+  telemetry?: Pick<
+    Partial<SecurityGateDependencies>,
+    'emitSecurityAlert' | 'fullName' | 'recordSecurityAudit'
+  >;
+};
+
 class SecurityGate {
-  securityConfig;
+  securityConfig: SecurityGateConstructorOptions['securityConfig'];
 
-  scanners;
+  scanners: SecurityGateConstructorOptions['scanners'];
 
-  stateStore;
+  stateStore: SecurityGateConstructorOptions['stateStore'];
 
-  telemetry;
+  telemetry: SecurityGateConstructorOptions['telemetry'];
 
-  constructor(options: Record<string, any> = {}) {
+  constructor(options: SecurityGateConstructorOptions = {}) {
     this.securityConfig = {
       getSecurityConfiguration:
         options.securityConfig?.getSecurityConfiguration || options.getSecurityConfiguration,
