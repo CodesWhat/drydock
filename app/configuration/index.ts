@@ -100,6 +100,10 @@ export function getLogFormat() {
   return ddEnvVars.DD_LOG_FORMAT?.toLowerCase() === 'json' ? 'json' : 'text';
 }
 
+export function getLogBufferEnabled() {
+  return ddEnvVars.DD_LOG_BUFFER_ENABLED?.trim().toLowerCase() !== 'false';
+}
+
 function parseWatcherMaintenanceEnvAlias(envKey: string) {
   const envKeyUpper = envKey.toUpperCase();
   const prefix = 'DD_WATCHER_';

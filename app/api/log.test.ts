@@ -1,8 +1,10 @@
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
 
-const { mockRouter, mockGetEntries } = vi.hoisted(() => ({
+const { mockRouter, mockGetEntries, mockGetLogLevel, mockGetLogBufferEnabled } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn() },
   mockGetEntries: vi.fn(),
+  mockGetLogLevel: vi.fn(() => 'info'),
+  mockGetLogBufferEnabled: vi.fn(() => true),
 }));
 
 vi.mock('express', () => ({
@@ -12,7 +14,8 @@ vi.mock('express', () => ({
 vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
 vi.mock('../configuration', () => ({
-  getLogLevel: vi.fn(() => 'info'),
+  getLogLevel: mockGetLogLevel,
+  getLogBufferEnabled: mockGetLogBufferEnabled,
 }));
 
 vi.mock('../log/buffer', () => ({
@@ -29,6 +32,8 @@ function createResponse() {
 describe('Log Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetLogLevel.mockReturnValue('info');
+    mockGetLogBufferEnabled.mockReturnValue(true);
   });
 
   test('should initialize router with nocache and route', () => {
@@ -53,6 +58,8 @@ describe('Log Router', () => {
 describe('Log Entries Route', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetLogLevel.mockReturnValue('info');
+    mockGetLogBufferEnabled.mockReturnValue(true);
   });
 
   test('should register /entries route', () => {
@@ -179,5 +186,21 @@ describe('Log Entries Route', () => {
       tail: 0,
       since: undefined,
     });
+  });
+
+  test('should return empty array when log buffer is disabled', () => {
+    mockGetLogBufferEnabled.mockReturnValue(false);
+    logRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];
+
+    const req = createMockRequest({ query: { level: 'info', tail: '10' } });
+    const res = createResponse();
+
+    handler(req, res);
+
+    expect(mockGetLogBufferEnabled).toHaveBeenCalled();
+    expect(mockGetEntries).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith([]);
   });
 });

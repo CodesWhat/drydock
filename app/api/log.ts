@@ -1,6 +1,6 @@
 import express from 'express';
 import nocache from 'nocache';
-import { getLogLevel } from '../configuration/index.js';
+import { getLogBufferEnabled, getLogLevel } from '../configuration/index.js';
 import { getEntries } from '../log/buffer.js';
 
 const router = express.Router();
@@ -22,6 +22,11 @@ function getLog(req, res) {
  * @param res
  */
 function getLogEntries(req, res) {
+  if (!getLogBufferEnabled()) {
+    res.status(200).json([]);
+    return;
+  }
+
   const level = req.query.level as string | undefined;
   const component = req.query.component as string | undefined;
   const tail = req.query.tail ? Number.parseInt(req.query.tail as string, 10) : undefined;

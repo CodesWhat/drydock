@@ -50,6 +50,17 @@ test('getLogFormat should fallback to text for unsupported values', async () => 
   delete configuration.ddEnvVars.DD_LOG_FORMAT;
 });
 
+test('getLogBufferEnabled should default to true', async () => {
+  delete configuration.ddEnvVars.DD_LOG_BUFFER_ENABLED;
+  expect(configuration.getLogBufferEnabled()).toStrictEqual(true);
+});
+
+test('getLogBufferEnabled should return false when disabled via env', async () => {
+  configuration.ddEnvVars.DD_LOG_BUFFER_ENABLED = 'false';
+  expect(configuration.getLogBufferEnabled()).toStrictEqual(false);
+  delete configuration.ddEnvVars.DD_LOG_BUFFER_ENABLED;
+});
+
 test('getWatcherConfiguration should return empty object by default', async () => {
   delete configuration.ddEnvVars.DD_WATCHER_WATCHER1_X;
   delete configuration.ddEnvVars.DD_WATCHER_WATCHER1_Y;

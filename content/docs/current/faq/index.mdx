@@ -84,14 +84,17 @@ See [Docker Watchers](/docs/configuration/watchers#labels) for the full label re
 
 ## Log output format (JSON vs pretty)
 
-Drydock supports two log formats controlled by environment variables:
+Drydock log behavior is controlled by environment variables:
 
 | Variable | Values | Default |
 | --- | --- | --- |
 | `DD_LOG_LEVEL` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` | `info` |
-| `DD_LOG_FORMAT` | `text`, `json` | `text` |
+| `DD_LOG_FORMAT` | `text`, `json` | `json` |
+| `DD_LOG_BUFFER_ENABLED` | `true`, `false` | `true` |
 
-Set `DD_LOG_FORMAT=json` for structured output suitable for log aggregators like Elasticsearch or Loki. See [Logs](/docs/configuration/logs) for examples.
+The official image defaults to `DD_LOG_FORMAT=json` for structured output suitable for log aggregators like Elasticsearch or Loki. Set `DD_LOG_FORMAT=text` if you prefer pretty logs.
+Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory application log ring buffer used by `/api/log/entries` and the UI log viewer.
+See [Logs](/docs/configuration/logs) for examples.
 
 ## Trivy or Cosign not found errors
 

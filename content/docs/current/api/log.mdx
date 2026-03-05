@@ -18,6 +18,7 @@ curl http://drydock:3000/api/log
 ## Get application log entries
 
 Returns log entries from the in-memory ring buffer (last 1,000 entries).
+If `DD_LOG_BUFFER_ENABLED=false`, this endpoint returns an empty array.
 
 ```bash
 curl http://drydock:3000/api/log/entries

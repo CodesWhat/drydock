@@ -4,6 +4,7 @@ import log from './index.js';
 vi.mock('../configuration', () => ({
   getLogLevel: vi.fn(() => 'info'),
   getLogFormat: vi.fn(() => 'json'),
+  getLogBufferEnabled: vi.fn(() => true),
 }));
 
 describe('Logger', () => {

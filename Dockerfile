@@ -60,6 +60,7 @@ RUN npm run build
 
 # Release stage
 FROM base AS release
+ENV DD_LOG_FORMAT=json
 
 # Default entrypoint
 COPY --chmod=755 Docker.entrypoint.sh /usr/bin/entrypoint.sh

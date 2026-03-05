@@ -11,10 +11,14 @@ Control drydock's own log output with environment variables.
 
 ### Variables
 
-| Env var | Required | Description | Supported values | Default value when missing |
+| Env var | Required | Description | Supported values | Default in official Docker image |
 | ---------------- | :--------------: | ----------- | --------------------------- | --------------------------- |
 | `DD_LOG_LEVEL` | ⚪ | Log level | `fatal`, `error`, `warn`, `info`, `debug`, `trace` | `info` |
-| `DD_LOG_FORMAT` | ⚪ | Log format | text json | `text` |
+| `DD_LOG_FORMAT` | ⚪ | Log format | text json | `json` |
+| `DD_LOG_BUFFER_ENABLED` | ⚪ | Enable in-memory log ring buffer used by UI/API log viewer | `true`, `false` | `true` |
+
+The official image sets `DD_LOG_FORMAT=json` by default for structured production logs. Override with `DD_LOG_FORMAT=text` for pretty logs.
+Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory ring buffer (reduces per-log processing overhead).
 
 ### Examples
 
@@ -66,7 +70,8 @@ services:
 
 The **Configuration > Logs** page provides a terminal-style viewer for drydock's own runtime logs — startup events, polling cycles, registry checks, trigger executions, and errors.
 
-Logs are stored in an in-memory ring buffer (last 1,000 entries). They are not persisted to disk.
+When enabled, logs are stored in an in-memory ring buffer (last 1,000 entries). They are not persisted to disk.
+If `DD_LOG_BUFFER_ENABLED=false`, the viewer returns no application log entries.
 
 ### Toolbar controls
 

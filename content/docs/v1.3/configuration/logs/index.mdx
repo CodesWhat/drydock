@@ -11,10 +11,12 @@ Control drydock's own log output with environment variables.
 
 ### Variables
 
-| Env var | Required | Description | Supported values | Default value when missing |
+| Env var | Required | Description | Supported values | Default in official Docker image |
 | ---------------- | :--------------: | ----------- | --------------------------- | --------------------------- |
 | `DD_LOG_LEVEL` | ⚪ | Log level | error info debug trace | `info` |
-| `DD_LOG_FORMAT` | ⚪ | Log format | text json | `text` |
+| `DD_LOG_FORMAT` | ⚪ | Log format | text json | `json` |
+
+The official image sets `DD_LOG_FORMAT=json` by default for structured production logs. Override with `DD_LOG_FORMAT=text` for pretty logs.
 
 ### Examples
 

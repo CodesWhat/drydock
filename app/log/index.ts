@@ -1,7 +1,7 @@
 import { Writable } from 'node:stream';
 import pino from 'pino';
 import pinoPretty from 'pino-pretty';
-import { getLogFormat, getLogLevel } from '../configuration/index.js';
+import { getLogBufferEnabled, getLogFormat, getLogLevel } from '../configuration/index.js';
 import { addEntry } from './buffer.js';
 import { setWarnLogger } from './warn.js';
 
@@ -36,9 +36,17 @@ function createMainLogStream() {
   });
 }
 
+function createLogStreams() {
+  const streams = [{ stream: createMainLogStream() }];
+  if (getLogBufferEnabled()) {
+    streams.push({ stream: bufferStream });
+  }
+  return streams;
+}
+
 const logger = pino(
   { name: 'drydock', level: getLogLevel() },
-  pino.multistream([{ stream: createMainLogStream() }, { stream: bufferStream }]),
+  pino.multistream(createLogStreams()),
 );
 setWarnLogger(logger);
 
