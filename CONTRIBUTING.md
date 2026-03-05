@@ -17,7 +17,7 @@ Questions or ideas? Start a [GitHub Discussion](https://github.com/CodesWhat/dry
 
 3. **Create a branch** from the appropriate base:
    - Bug fixes for the current release: branch from `main`
-   - New features targeting the next release: branch from the active feature branch (e.g. `feature/v1.4-dashboard`)
+   - New features targeting the next release: branch from the active feature branch (check open branches for the current one)
 
 ## Development setup
 
@@ -115,12 +115,11 @@ Scope is optional. Subject line should be imperative, lowercase, no trailing per
 
 |Step|What it does|
 |---|---|
-|`qlty`|Lint all files (`qlty check --all`)|
-|`build-app`|Compile backend TypeScript|
-|`build-ui`|Vite production build|
-|`test-app`|Backend test suite with coverage|
-|`test-ui`|Frontend test suite with coverage|
-|`e2e`|Cucumber E2E tests|
+|`ts-nocheck`|Rejects any `@ts-nocheck` directives|
+|`biome`|Biome lint and format check|
+|`qlty`|Full qlty lint pass (`qlty check --all`)|
+|`build-and-test`|Parallel build + test for both `app/` and `ui/`|
+|`e2e`|Cucumber E2E tests against a fresh Drydock instance|
 |`zizmor`|GitHub Actions workflow linting (advisory, skipped if not installed)|
 |`snyk-deps`|Dependency vulnerability scan (skipped if Snyk not installed)|
 |`snyk-code`|Static analysis security scan (skipped if Snyk not installed)|
@@ -129,13 +128,9 @@ If lefthook passes locally, CI will pass. Fix any issues **before** pushing.
 
 ## Documentation
 
-Documentation lives in `content/docs/current/` (MDX format) and is published to [drydock.codeswhat.com](https://drydock.codeswhat.com). When your code change affects user-facing behavior, include the corresponding documentation update in the same PR.
+Documentation lives in `content/docs/` (MDX format, versioned by release) and is published to [drydock.codeswhat.com](https://drydock.codeswhat.com). When your code change affects user-facing behavior, include the corresponding documentation update in the same PR.
 
 CHANGELOG and README updates should accompany each logical change — don't batch them separately.
-
-## Load testing
-
-The project includes Artillery-based load testing with multiple profiles (smoke, behavior, stress, rate-limit). See [`test/README.md`](test/README.md) for profile details, commands, and artifact handling.
 
 ## Pull requests
 
