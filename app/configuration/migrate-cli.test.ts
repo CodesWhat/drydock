@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, test, vi } from 'vitest';
+import { afterAll, describe, expect, test, vi } from 'vitest';
 
 import { migrateLegacyConfigContent, runConfigMigrateCommandIfRequested } from './migrate-cli.js';
 
@@ -18,14 +18,19 @@ function createIoCollector() {
   };
 }
 
+const tempDirsToCleanup: string[] = [];
+
 function withTempDir(run: (tempDir: string) => void) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-migrate-'));
-  try {
-    run(tempDir);
-  } finally {
+  tempDirsToCleanup.push(tempDir);
+  run(tempDir);
+}
+
+afterAll(() => {
+  for (const tempDir of tempDirsToCleanup) {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
-}
+});
 
 describe('migrateLegacyConfigContent', () => {
   test('migrates known WUD env vars and labels to drydock prefixes', () => {
