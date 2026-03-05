@@ -311,6 +311,40 @@ describe('useVulnerabilities', () => {
     expect(state.scannedContainerCount.value).toBe(1);
   });
 
+  it('loads vulnerabilities from the container list payload without per-container calls', async () => {
+    const containers = Array.from({ length: 50 }, (_, index) => ({
+      id: `container-${index + 1}`,
+      name: `service-${index + 1}`,
+      displayName: `service-${index + 1}`,
+      security: {
+        scan: {
+          scannedAt: `2026-03-01T10:${String(index).padStart(2, '0')}:00.000Z`,
+          vulnerabilities: [
+            {
+              id: `CVE-${index + 1}`,
+              severity: 'HIGH',
+              packageName: 'openssl',
+              fixedVersion: null,
+            },
+          ],
+        },
+      },
+    }));
+
+    mockGetAllContainers.mockResolvedValue(containers);
+    setupVulnMocks(containers);
+
+    const state = useVulnerabilities({
+      securitySortField: ref('critical'),
+      securitySortAsc: ref(false),
+    });
+    await state.fetchVulnerabilities();
+
+    expect(mockGetAllContainers).toHaveBeenCalledWith({ includeVulnerabilities: true });
+    expect(mockGetContainerVulnerabilities).not.toHaveBeenCalled();
+    expect(state.securityVulnerabilities.value).toHaveLength(50);
+  });
+
   it('sets an error and clears derived state when loading fails', async () => {
     mockGetAllContainers.mockRejectedValue({ bad: true });
 

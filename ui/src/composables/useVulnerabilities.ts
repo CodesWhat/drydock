@@ -1,5 +1,5 @@
 import { computed, type Ref, ref } from 'vue';
-import { getAllContainers, getContainerVulnerabilities } from '../services/container';
+import { getAllContainers } from '../services/container';
 import type { ContainerSecurityDelta, ContainerSecuritySummary } from '../types/container';
 import { computeSecurityDelta } from '../utils/container-mapper';
 import { errorMessage } from '../utils/error';
@@ -235,21 +235,13 @@ export function useVulnerabilities({
     error.value = null;
 
     try {
-      const containers = await getAllContainers();
+      const containers = await getAllContainers({ includeVulnerabilities: true });
       totalContainerCount.value = containers.length;
       const vulnerabilities: Vulnerability[] = [];
       const imageContainerMap: Record<string, string[]> = {};
       const updateSummaryMap: Record<string, UpdateScanSummary> = {};
       let latestScanAt: string | null = null;
       let scannedCount = 0;
-
-      // Identify scanned containers and collect metadata
-      const scannedContainers: Array<{
-        id: string;
-        imageName: string;
-        scan: { scannedAt?: string };
-        updateScan?: { summary?: Record<string, unknown> };
-      }> = [];
 
       for (const container of containers) {
         const scan = container.security?.scan;
@@ -278,31 +270,7 @@ export function useVulnerabilities({
           };
         }
 
-        if (typeof container.id === 'string' && container.id.length > 0) {
-          scannedContainers.push({
-            id: container.id,
-            imageName,
-            scan,
-            updateScan,
-          });
-        }
-      }
-
-      scannedContainerCount.value = scannedCount;
-
-      // Fetch detailed vulnerability data per container in parallel
-      const vulnResults = await Promise.allSettled(
-        scannedContainers.map(async (entry) => {
-          const data = await getContainerVulnerabilities(entry.id);
-          return { imageName: entry.imageName, data };
-        }),
-      );
-
-      for (const result of vulnResults) {
-        if (result.status !== 'fulfilled') continue;
-        const { imageName, data } = result.value;
-        const vulnList = Array.isArray(data?.vulnerabilities) ? data.vulnerabilities : [];
-
+        const vulnList = Array.isArray(scan.vulnerabilities) ? scan.vulnerabilities : [];
         for (const vulnerability of vulnList) {
           vulnerabilities.push({
             id: vulnerability.id ?? 'unknown',
@@ -318,6 +286,8 @@ export function useVulnerabilities({
           });
         }
       }
+
+      scannedContainerCount.value = scannedCount;
 
       securityVulnerabilities.value = vulnerabilities;
       containerIdsByImage.value = imageContainerMap;

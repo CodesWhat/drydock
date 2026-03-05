@@ -1,9 +1,14 @@
 import {
   buildSecurityEmptyState,
   chooseLatestTimestamp,
+  fixableColor,
+  fixablePercent,
   formatTimestamp,
   highestSeverity,
   normalizeSeverityCount,
+  severityColor,
+  severityIcon,
+  statusBadgeTone,
   toSafeFileName,
 } from '@/views/security/securityViewUtils';
 
@@ -72,6 +77,66 @@ describe('securityViewUtils', () => {
         showSetupGuide: false,
         showScanButton: false,
       });
+    });
+  });
+
+  describe('severity helpers', () => {
+    it('maps severities to badge colors', () => {
+      expect(severityColor('CRITICAL')).toEqual({
+        bg: 'var(--dd-danger-muted)',
+        text: 'var(--dd-danger)',
+      });
+      expect(severityColor('HIGH')).toEqual({
+        bg: 'var(--dd-warning-muted)',
+        text: 'var(--dd-warning)',
+      });
+      expect(severityColor('MEDIUM')).toEqual({
+        bg: 'var(--dd-caution-muted)',
+        text: 'var(--dd-caution)',
+      });
+      expect(severityColor('LOW')).toEqual({
+        bg: 'var(--dd-info-muted)',
+        text: 'var(--dd-info)',
+      });
+    });
+
+    it('maps severities to icon names', () => {
+      expect(severityIcon('CRITICAL')).toBe('warning');
+      expect(severityIcon('HIGH')).toBe('chevrons-up');
+      expect(severityIcon('MEDIUM')).toBe('neutral');
+      expect(severityIcon('LOW')).toBe('chevron-down');
+    });
+
+    it('maps runtime tool status to badge tone', () => {
+      expect(statusBadgeTone('ready')).toEqual({
+        bg: 'var(--dd-success-muted)',
+        text: 'var(--dd-success)',
+      });
+      expect(statusBadgeTone('missing')).toEqual({
+        bg: 'var(--dd-danger-muted)',
+        text: 'var(--dd-danger)',
+      });
+      expect(statusBadgeTone('disabled')).toEqual({
+        bg: 'var(--dd-neutral-muted)',
+        text: 'var(--dd-neutral)',
+      });
+    });
+  });
+
+  describe('fixable helpers', () => {
+    it('formats fixable percentages with zero/whole/decimal behavior', () => {
+      expect(fixablePercent(0, 0)).toBe('0');
+      expect(fixablePercent(0, 20)).toBe('0');
+      expect(fixablePercent(20, 20)).toBe('100');
+      expect(fixablePercent(6, 8)).toBe('75');
+      expect(fixablePercent(1, 3)).toBe('33.3');
+    });
+
+    it('selects fixable ratio color by thresholds', () => {
+      expect(fixableColor(0, 0)).toBe('var(--dd-neutral)');
+      expect(fixableColor(90, 100)).toBe('var(--dd-success)');
+      expect(fixableColor(60, 100)).toBe('var(--dd-caution)');
+      expect(fixableColor(59, 100)).toBe('var(--dd-warning)');
     });
   });
 
