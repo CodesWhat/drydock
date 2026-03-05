@@ -40,7 +40,12 @@ class Acr extends BaseRegistry {
   }
 
   async authenticate(image, requestOptions) {
-    const requestOptionsWithAuth = requestOptions;
+    const requestOptionsWithAuth = {
+      ...requestOptions,
+      headers: {
+        ...(requestOptions?.headers || {}),
+      },
+    };
     requestOptionsWithAuth.headers.Authorization = `Basic ${Acr.base64Encode(this.configuration.clientid, this.configuration.clientsecret)}`;
     return requestOptionsWithAuth;
   }

@@ -125,6 +125,24 @@ test('normalizeImage should keep already-https urls unchanged', async () => {
   });
 });
 
+test('normalizeImage should not mutate the input image object', async () => {
+  const image = {
+    name: 'test/image',
+    registry: {
+      url: '123456789.dkr.ecr.eu-west-1.amazonaws.com/test/image',
+    },
+  };
+
+  const normalized = ecr.normalizeImage(image);
+
+  expect(normalized).not.toBe(image);
+  expect(normalized.registry).not.toBe(image.registry);
+  expect(image.registry.url).toBe('123456789.dkr.ecr.eu-west-1.amazonaws.com/test/image');
+  expect(normalized.registry.url).toBe(
+    'https://123456789.dkr.ecr.eu-west-1.amazonaws.com/test/image/v2',
+  );
+});
+
 test('authenticate should call ecr auth endpoint', async () => {
   await expect(ecr.authenticate(undefined, { headers: {} })).resolves.toEqual({
     headers: {

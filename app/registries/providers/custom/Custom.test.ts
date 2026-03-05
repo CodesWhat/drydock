@@ -126,6 +126,22 @@ test('normalizeImage should return the proper registry v2 endpoint', async () =>
   });
 });
 
+test('normalizeImage should not mutate the input image object', async () => {
+  const image = {
+    name: 'test/image',
+    registry: {
+      url: 'localhost:5000/test/image',
+    },
+  };
+
+  const normalized = custom.normalizeImage(image);
+
+  expect(normalized).not.toBe(image);
+  expect(normalized.registry).not.toBe(image.registry);
+  expect(image.registry.url).toBe('localhost:5000/test/image');
+  expect(normalized.registry.url).toBe('http://localhost:5000/v2');
+});
+
 test('authenticate should add basic auth', async () => {
   await expect(custom.authenticate(undefined, { headers: {} })).resolves.toEqual({
     headers: {

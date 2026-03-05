@@ -190,6 +190,64 @@ describe('Update Operation Store', () => {
     }
   });
 
+  test('retention pruning should be amortized instead of pruning on every write', async () => {
+    vi.resetModules();
+    const previousMaxEntries = process.env.DD_UPDATE_OPERATION_MAX_ENTRIES;
+    const previousRetentionDays = process.env.DD_UPDATE_OPERATION_RETENTION_DAYS;
+    process.env.DD_UPDATE_OPERATION_MAX_ENTRIES = '2';
+    process.env.DD_UPDATE_OPERATION_RETENTION_DAYS = '365';
+    vi.useFakeTimers();
+
+    try {
+      const fresh = await import('./update-operation.js');
+      fresh.createCollections(createDb());
+      const insertedIds: string[] = [];
+
+      for (let i = 0; i < 3; i += 1) {
+        vi.setSystemTime(new Date(2026, 1, 1, 0, 0, i));
+        const inserted = fresh.insertOperation({
+          containerName: 'web',
+          status: 'succeeded',
+          phase: 'succeeded',
+        });
+        insertedIds.push(inserted.id);
+      }
+
+      // Pruning is amortized, so the first few writes should not prune yet.
+      expect(fresh.getOperationsByContainerName('web')).toHaveLength(3);
+
+      // Mutation #100 should trigger retention pruning.
+      for (let i = 3; i < 100; i += 1) {
+        vi.setSystemTime(new Date(2026, 1, 1, 0, 0, i));
+        const inserted = fresh.insertOperation({
+          containerName: 'web',
+          status: 'succeeded',
+          phase: 'succeeded',
+        });
+        insertedIds.push(inserted.id);
+      }
+
+      const operations = fresh.getOperationsByContainerName('web');
+      expect(operations).toHaveLength(2);
+      expect(operations.map((operation) => operation.id)).toEqual([
+        insertedIds[insertedIds.length - 1]!,
+        insertedIds[insertedIds.length - 2]!,
+      ]);
+    } finally {
+      vi.useRealTimers();
+      if (previousMaxEntries === undefined) {
+        delete process.env.DD_UPDATE_OPERATION_MAX_ENTRIES;
+      } else {
+        process.env.DD_UPDATE_OPERATION_MAX_ENTRIES = previousMaxEntries;
+      }
+      if (previousRetentionDays === undefined) {
+        delete process.env.DD_UPDATE_OPERATION_RETENTION_DAYS;
+      } else {
+        process.env.DD_UPDATE_OPERATION_RETENTION_DAYS = previousRetentionDays;
+      }
+    }
+  });
+
   test('retention should keep only the newest terminal operations when max entries is exceeded', async () => {
     vi.resetModules();
     const previousMaxEntries = process.env.DD_UPDATE_OPERATION_MAX_ENTRIES;
@@ -222,6 +280,13 @@ describe('Update Operation Store', () => {
         status: 'failed',
         phase: 'rollback-failed',
       });
+
+      for (let i = 0; i < 97; i += 1) {
+        vi.setSystemTime(new Date(2026, 1, 1, 0, 1, i));
+        fresh.updateOperation(third.id, {
+          lastError: `error-${i}`,
+        });
+      }
 
       const operations = fresh.getOperationsByContainerName('web');
       expect(operations).toHaveLength(2);
@@ -272,6 +337,13 @@ describe('Update Operation Store', () => {
         status: 'failed',
         phase: 'rollback-failed',
       });
+
+      for (let i = 0; i < 97; i += 1) {
+        vi.setSystemTime(new Date(2026, 1, 1, 0, 1, i));
+        fresh.updateOperation(inProgress.id, {
+          phase: i % 2 === 0 ? 'prepare' : 'health-gate',
+        });
+      }
 
       const operations = fresh.getOperationsByContainerName('web');
       expect(operations).toHaveLength(2);

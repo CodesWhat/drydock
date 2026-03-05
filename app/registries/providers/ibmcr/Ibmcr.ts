@@ -39,18 +39,6 @@ class Ibmcr extends BaseRegistry {
     return this.maskSensitiveFields(['password', 'auth', 'apikey']);
   }
 
-  private getRegistryHostname(value: string): string {
-    const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-    try {
-      return new URL(withProtocol).hostname.toLowerCase();
-    } catch {
-      return value
-        .replace(/^https?:\/\//i, '')
-        .split('/')[0]
-        .toLowerCase();
-    }
-  }
-
   match(image) {
     const registryHostname = this.getRegistryHostname(image.registry.url);
     return /^(?:[a-z0-9-]+\.)*icr\.io$/i.test(registryHostname);

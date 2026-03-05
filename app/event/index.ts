@@ -15,8 +15,8 @@ import {
  *    registration returns an unsubscribe function.
  *
  * 2) Node.js EventEmitter (legacy): used by container lifecycle and watcher
- *    events below. Dispatch is synchronous, ordering is implicit registration
- *    order, and registrations currently do not return an unsubscribe callback.
+ *    events below. Dispatch is synchronous and ordering is implicit
+ *    registration order.
  *
  * Current split:
  * - Ordered handlers: reports, update lifecycle, security alerts, agent
@@ -315,8 +315,11 @@ export function emitContainerAdded(containerAdded: ContainerLifecycleEventPayloa
  */
 export function registerContainerAdded(
   handler: (payload: ContainerLifecycleEventPayload) => void,
-): void {
+): () => void {
   eventEmitter.on(DD_CONTAINER_ADDED, handler as (payload: unknown) => void);
+  return () => {
+    eventEmitter.off(DD_CONTAINER_ADDED, handler as (payload: unknown) => void);
+  };
 }
 
 /**
@@ -333,8 +336,11 @@ export function emitContainerUpdated(containerUpdated: ContainerLifecycleEventPa
  */
 export function registerContainerUpdated(
   handler: (payload: ContainerLifecycleEventPayload) => void,
-): void {
+): () => void {
   eventEmitter.on(DD_CONTAINER_UPDATED, handler as (payload: unknown) => void);
+  return () => {
+    eventEmitter.off(DD_CONTAINER_UPDATED, handler as (payload: unknown) => void);
+  };
 }
 
 /**
@@ -351,24 +357,33 @@ export function emitContainerRemoved(containerRemoved: ContainerLifecycleEventPa
  */
 export function registerContainerRemoved(
   handler: (payload: ContainerLifecycleEventPayload) => void,
-): void {
+): () => void {
   eventEmitter.on(DD_CONTAINER_REMOVED, handler as (payload: unknown) => void);
+  return () => {
+    eventEmitter.off(DD_CONTAINER_REMOVED, handler as (payload: unknown) => void);
+  };
 }
 
 export function emitWatcherStart(watcher: unknown): void {
   eventEmitter.emit(DD_WATCHER_START, watcher);
 }
 
-export function registerWatcherStart(handler: (watcher: unknown) => void): void {
+export function registerWatcherStart(handler: (watcher: unknown) => void): () => void {
   eventEmitter.on(DD_WATCHER_START, handler);
+  return () => {
+    eventEmitter.off(DD_WATCHER_START, handler);
+  };
 }
 
 export function emitWatcherStop(watcher: unknown): void {
   eventEmitter.emit(DD_WATCHER_STOP, watcher);
 }
 
-export function registerWatcherStop(handler: (watcher: unknown) => void): void {
+export function registerWatcherStop(handler: (watcher: unknown) => void): () => void {
   eventEmitter.on(DD_WATCHER_STOP, handler);
+  return () => {
+    eventEmitter.off(DD_WATCHER_STOP, handler);
+  };
 }
 
 export async function emitSelfUpdateStarting(

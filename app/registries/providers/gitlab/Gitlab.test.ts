@@ -92,6 +92,30 @@ test('authenticate should perform authenticate request', async () => {
   ).resolves.toEqual({ headers: { Authorization: 'Bearer token' } });
 });
 
+test('authenticate should encode scope query parameter', async () => {
+  axios.mockImplementation(() => ({
+    data: {
+      token: 'token',
+    },
+  }));
+
+  await gitlab.authenticate(
+    { name: 'group/project' },
+    {
+      headers: {},
+    },
+  );
+
+  expect(axios).toHaveBeenCalledWith({
+    method: 'GET',
+    url: 'https://gitlab.com/jwt/auth?service=container_registry&scope=repository%3Agroup%2Fproject%3Apull',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Basic ${Buffer.from(`:${TEST_TOKEN}`).toString('base64')}`,
+    },
+  });
+});
+
 test('authenticate should throw when token response is missing token', async () => {
   axios.mockImplementation(() => ({
     data: {},

@@ -179,3 +179,15 @@ test('match should gracefully handle missing registry URL', async () => {
     }),
   ).toBeFalsy();
 });
+
+test('authenticate should throw a URL error when registry URL is missing', async () => {
+  await expect(
+    gar.authenticate(
+      {
+        name: 'project/repository/image',
+        registry: {},
+      },
+      { headers: {} },
+    ),
+  ).rejects.toThrow('Invalid URL');
+});

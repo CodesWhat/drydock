@@ -52,6 +52,56 @@ test.each(
   expect(handlerMock).toHaveBeenCalledTimes(1);
 });
 
+test('deregistration of container added handler should work', () => {
+  const handler = vi.fn();
+  const deregister = event.registerContainerAdded(handler);
+  deregister();
+
+  event.emitContainerAdded({ id: 'container-added-1' });
+
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test('deregistration of container updated handler should work', () => {
+  const handler = vi.fn();
+  const deregister = event.registerContainerUpdated(handler);
+  deregister();
+
+  event.emitContainerUpdated({ id: 'container-updated-1' });
+
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test('deregistration of container removed handler should work', () => {
+  const handler = vi.fn();
+  const deregister = event.registerContainerRemoved(handler);
+  deregister();
+
+  event.emitContainerRemoved({ id: 'container-removed-1' });
+
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test('deregistration of watcher start handler should work', () => {
+  const handler = vi.fn();
+  const deregister = event.registerWatcherStart(handler);
+  deregister();
+
+  event.emitWatcherStart({ name: 'watcher-start-1' });
+
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test('deregistration of watcher stop handler should work', () => {
+  const handler = vi.fn();
+  const deregister = event.registerWatcherStop(handler);
+  deregister();
+
+  event.emitWatcherStop({ name: 'watcher-stop-1' });
+
+  expect(handler).not.toHaveBeenCalled();
+});
+
 test('container report handlers should run in order', async () => {
   const calls: string[] = [];
   event.registerContainerReport(

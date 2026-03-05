@@ -61,7 +61,12 @@ class SelfHostedBasic extends BaseRegistry {
   }
 
   normalizeImage(image) {
-    const imageNormalized = image;
+    const imageNormalized = {
+      ...image,
+      registry: {
+        ...image.registry,
+      },
+    };
     imageNormalized.registry.url = `${this.configuration.url}/v2`;
     return imageNormalized;
   }

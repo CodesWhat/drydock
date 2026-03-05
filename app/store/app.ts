@@ -8,7 +8,23 @@ const { migrate: migrateData } = migrate;
 import { getVersion } from '../configuration/index.js';
 import { initCollection } from './util.js';
 
-let app;
+interface AppInfos {
+  name: string;
+  version: string;
+}
+
+interface AppCollection {
+  findOne(query: Record<string, unknown>): AppInfos | null;
+  insert(document: AppInfos): void;
+  remove(document: AppInfos): void;
+}
+
+interface AppStoreDb {
+  getCollection(name: string): AppCollection | null;
+  addCollection(name: string): AppCollection;
+}
+
+let app: AppCollection;
 
 function saveAppInfosAndMigrate() {
   const appInfosCurrent = {
@@ -27,8 +43,8 @@ function saveAppInfosAndMigrate() {
   app.insert(appInfosCurrent);
 }
 
-export function createCollections(db) {
-  app = initCollection(db, 'app');
+export function createCollections(db: AppStoreDb) {
+  app = initCollection(db, 'app') as AppCollection;
   saveAppInfosAndMigrate();
 }
 

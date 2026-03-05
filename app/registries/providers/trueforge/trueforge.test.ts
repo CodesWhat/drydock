@@ -111,6 +111,22 @@ test('normalizeImage should preserve already-https registry urls', async () => {
   });
 });
 
+test('normalizeImage should not mutate the input image object', async () => {
+  const image = {
+    name: 'test/image',
+    registry: {
+      url: 'oci.trueforge.org/test/image',
+    },
+  };
+
+  const normalized = trueforge.normalizeImage(image);
+
+  expect(normalized).not.toBe(image);
+  expect(normalized.registry).not.toBe(image.registry);
+  expect(image.registry.url).toBe('oci.trueforge.org/test/image');
+  expect(normalized.registry.url).toBe('https://oci.trueforge.org/test/image/v2');
+});
+
 test('getAuthPull should return quay-compatible pull credentials', async () => {
   await expect(trueforge.getAuthPull()).resolves.toStrictEqual({
     username: 'namespace+account',

@@ -107,7 +107,7 @@ describe('Docker Hub Registry', () => {
 
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
-      url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/nginx:pull&grant_type=password',
+      url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Alibrary%2Fnginx%3Apull&grant_type=password',
       headers: {
         Accept: 'application/json',
         Authorization: 'Basic base64credentials',
@@ -129,7 +129,7 @@ describe('Docker Hub Registry', () => {
 
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
-      url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/nginx:pull&grant_type=password',
+      url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Alibrary%2Fnginx%3Apull&grant_type=password',
       headers: {
         Accept: 'application/json',
       },

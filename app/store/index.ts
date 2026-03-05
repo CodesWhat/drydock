@@ -31,7 +31,8 @@ if (configurationToValidate.error) {
 const configuration = configurationToValidate.value;
 
 // Loki DB
-let db;
+type LokiDatabase = InstanceType<typeof Loki>;
+let db: LokiDatabase | undefined;
 let isMemoryMode = false;
 
 function createCollections() {

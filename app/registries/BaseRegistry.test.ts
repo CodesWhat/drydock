@@ -9,8 +9,14 @@ vi.mock('axios', () => ({
 
 let baseRegistry;
 
+class TestBaseRegistry extends BaseRegistry {
+  exposeGetRegistryHostname(value) {
+    return this.getRegistryHostname(value);
+  }
+}
+
 beforeEach(() => {
-  baseRegistry = new BaseRegistry();
+  baseRegistry = new TestBaseRegistry();
   vi.clearAllMocks();
 });
 
@@ -36,6 +42,33 @@ test('normalizeImageUrl should use registryUrl param when provided', () => {
   };
   const result = baseRegistry.normalizeImageUrl(image, 'custom.io');
   expect(result.registry.url).toBe('https://custom.io/v2');
+});
+
+test('normalizeImageUrl should not mutate input image object', () => {
+  const image = {
+    name: 'library/nginx',
+    registry: { url: 'registry.example.com' },
+  };
+
+  const result = baseRegistry.normalizeImageUrl(image);
+
+  expect(result).not.toBe(image);
+  expect(result.registry).not.toBe(image.registry);
+  expect(image.registry.url).toBe('registry.example.com');
+  expect(result.registry.url).toBe('https://registry.example.com/v2');
+});
+
+test('getRegistryHostname should normalize host from url-like values', () => {
+  expect(baseRegistry.exposeGetRegistryHostname('registry.cn-hangzhou.aliyuncs.com')).toBe(
+    'registry.cn-hangzhou.aliyuncs.com',
+  );
+  expect(baseRegistry.exposeGetRegistryHostname('https://US.ICR.IO/v2/library/alpine:latest')).toBe(
+    'us.icr.io',
+  );
+});
+
+test('getRegistryHostname should gracefully handle malformed values', () => {
+  expect(baseRegistry.exposeGetRegistryHostname('%')).toBe('%');
 });
 
 test('authenticateBasic should add Basic auth header when credentials provided', async () => {
@@ -185,6 +218,62 @@ test('authenticateBearerFromAuthUrl should set bearer token using default extrac
   expect(result.headers.Authorization).toBe('Bearer abc123');
 });
 
+test('authenticateBearerFromAuthUrl should add basic auth header when credentials are provided without headers', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+
+  const result = await baseRegistry.authenticateBearerFromAuthUrl(
+    {},
+    'https://auth.example.com/token',
+    'dXNlcjpwYXNz',
+  );
+
+  expect(axios).toHaveBeenCalledWith(
+    expect.objectContaining({
+      headers: {
+        Accept: 'application/json',
+        Authorization: 'Basic dXNlcjpwYXNz',
+      },
+    }),
+  );
+  expect(result.headers.Authorization).toBe('Bearer abc123');
+});
+
+test('authenticateBearerFromAuthUrl should create headers object when token request headers are absent', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  const withTlsSpy = vi
+    .spyOn(baseRegistry, 'withTlsRequestOptions')
+    .mockImplementation((requestOptions: Record<string, unknown>) => {
+      if (requestOptions.url === 'https://auth.example.com/no-headers') {
+        return {
+          method: 'GET',
+          url: 'https://auth.example.com/no-headers',
+        };
+      }
+      return requestOptions;
+    });
+
+  try {
+    const result = await baseRegistry.authenticateBearerFromAuthUrl(
+      {},
+      'https://auth.example.com/no-headers',
+      'dXNlcjpwYXNz',
+    );
+
+    expect(axios).toHaveBeenCalledWith({
+      method: 'GET',
+      url: 'https://auth.example.com/no-headers',
+      headers: {
+        Authorization: 'Basic dXNlcjpwYXNz',
+      },
+    });
+    expect(result.headers.Authorization).toBe('Bearer abc123');
+  } finally {
+    withTlsSpy.mockRestore();
+  }
+});
+
 test('authenticateBearerFromAuthUrl should set bearer token when request headers are not provided', async () => {
   const { default: axios } = await import('axios');
   axios.mockResolvedValue({ data: { token: 'abc123' } });
@@ -210,6 +299,20 @@ test('authenticateBearerFromAuthUrl should throw when token is missing', async (
       (response) => response.data.accessToken,
     ),
   ).rejects.toThrow('token endpoint response does not contain token');
+});
+
+test('authenticateBearerFromAuthUrl should set bearer token using custom tokenExtractor', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { access_token: 'custom-token-123' } });
+
+  const result = await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {} },
+    'https://auth.example.com/token',
+    undefined,
+    (response) => response.data.access_token,
+  );
+
+  expect(result.headers.Authorization).toBe('Bearer custom-token-123');
 });
 
 test('authenticateBearerFromAuthUrl should throw when token request fails', async () => {
@@ -246,4 +349,56 @@ test('authenticateBearerFromAuthUrl should apply tls options to token request', 
   expect(result.headers.Authorization).toBe('Bearer abc123');
   expect(result.httpsAgent).toBeDefined();
   expect(result.httpsAgent.options.rejectUnauthorized).toBe(false);
+});
+
+test('authenticateBearerFromAuthUrl should reuse cached token within five minutes', async () => {
+  const { default: axios } = await import('axios');
+  vi.useFakeTimers();
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+
+  vi.setSystemTime(new Date('2026-03-05T10:00:00.000Z'));
+  const firstResult = await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {} },
+    'https://auth.example.com/token',
+    'dXNlcjpwYXNz',
+  );
+
+  vi.setSystemTime(new Date('2026-03-05T10:04:59.999Z'));
+  const secondResult = await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {} },
+    'https://auth.example.com/token',
+    'dXNlcjpwYXNz',
+  );
+
+  expect(axios).toHaveBeenCalledTimes(1);
+  expect(firstResult.headers.Authorization).toBe('Bearer abc123');
+  expect(secondResult.headers.Authorization).toBe('Bearer abc123');
+  vi.useRealTimers();
+});
+
+test('authenticateBearerFromAuthUrl should refresh cached token after five minutes', async () => {
+  const { default: axios } = await import('axios');
+  vi.useFakeTimers();
+  axios
+    .mockResolvedValueOnce({ data: { token: 'abc123' } })
+    .mockResolvedValueOnce({ data: { token: 'def456' } });
+
+  vi.setSystemTime(new Date('2026-03-05T10:00:00.000Z'));
+  const firstResult = await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {} },
+    'https://auth.example.com/token',
+    'dXNlcjpwYXNz',
+  );
+
+  vi.setSystemTime(new Date('2026-03-05T10:05:00.001Z'));
+  const secondResult = await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {} },
+    'https://auth.example.com/token',
+    'dXNlcjpwYXNz',
+  );
+
+  expect(axios).toHaveBeenCalledTimes(2);
+  expect(firstResult.headers.Authorization).toBe('Bearer abc123');
+  expect(secondResult.headers.Authorization).toBe('Bearer def456');
+  vi.useRealTimers();
 });

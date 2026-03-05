@@ -4,7 +4,7 @@ import log from '../log/index.js';
 export type AppLogger = typeof log;
 
 export interface ComponentConfiguration {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**

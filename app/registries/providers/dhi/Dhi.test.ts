@@ -61,7 +61,7 @@ describe('DHI Registry', () => {
 
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
-      url: 'https://dhi.io/token?service=registry.docker.io&scope=repository:python:pull&grant_type=password',
+      url: 'https://dhi.io/token?service=registry.docker.io&scope=repository%3Apython%3Apull&grant_type=password',
       headers: {
         Accept: 'application/json',
         Authorization: 'Basic base64credentials',
@@ -83,7 +83,7 @@ describe('DHI Registry', () => {
 
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
-      url: 'https://dhi.io/token?service=registry.docker.io&scope=repository:python:pull&grant_type=password',
+      url: 'https://dhi.io/token?service=registry.docker.io&scope=repository%3Apython%3Apull&grant_type=password',
       headers: {
         Accept: 'application/json',
       },

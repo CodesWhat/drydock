@@ -22,17 +22,13 @@ class Trueforge extends Quay {
   }
 
   /**
-   * Normalize image according to Github Container Registry characteristics.
+   * Normalize image according to Trueforge registry characteristics.
    * @param image
    * @returns {*}
    */
 
   normalizeImage(image) {
-    const imageNormalized = image;
-    if (!imageNormalized.registry.url.startsWith('https://')) {
-      imageNormalized.registry.url = `https://${imageNormalized.registry.url}/v2`;
-    }
-    return imageNormalized;
+    return this.normalizeImageUrl(image);
   }
 }
 

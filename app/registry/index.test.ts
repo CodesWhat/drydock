@@ -139,6 +139,10 @@ test('registerComponent should execute module fallback branch when module has no
   }
 });
 
+test('applySharedTriggerConfigurationByName should return undefined when configurations are missing', () => {
+  expect(registry.testable_applySharedTriggerConfigurationByName(undefined as any)).toBeUndefined();
+});
+
 test('registerRegistries should register all registries', async () => {
   registries = {
     hub: {
@@ -674,9 +678,31 @@ test('registerAuthentications should warn when registration errors occur', async
   );
 });
 
-test('registerAuthentications should register anonymous auth by default', async () => {
+test('registerAuthentications should not register anonymous auth by default without confirmation', async () => {
+  const spyLog = vi.spyOn(registry.testable_log, 'warn');
+
   await registry.testable_registerAuthentications();
-  expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
+
+  expect(Object.keys(registry.getState().authentication)).toEqual([]);
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining('Anonymous authentication requires DD_AUTH_ANONYMOUS_CONFIRM=true'),
+  );
+});
+
+test('registerAuthentications should register anonymous auth when confirmation is enabled', async () => {
+  const previousAnonymousConfirmation = process.env.DD_AUTH_ANONYMOUS_CONFIRM;
+  process.env.DD_AUTH_ANONYMOUS_CONFIRM = 'true';
+
+  try {
+    await registry.testable_registerAuthentications();
+    expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
+  } finally {
+    if (previousAnonymousConfirmation === undefined) {
+      delete process.env.DD_AUTH_ANONYMOUS_CONFIRM;
+    } else {
+      process.env.DD_AUTH_ANONYMOUS_CONFIRM = previousAnonymousConfirmation;
+    }
+  }
 });
 
 test('init should register all components', async () => {

@@ -53,7 +53,12 @@ class Ecr extends Registry {
    */
 
   normalizeImage(image) {
-    const imageNormalized = image;
+    const imageNormalized = {
+      ...image,
+      registry: {
+        ...image.registry,
+      },
+    };
     if (!imageNormalized.registry.url.startsWith('https://')) {
       imageNormalized.registry.url = `https://${imageNormalized.registry.url}/v2`;
     }

@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import * as app from './app.js';
 import * as migrate from './migrate.js';
 
@@ -87,4 +89,10 @@ test('getAppInfos should return collection content', async () => {
     name: 'drydock',
     version: '1.0.0',
   });
+});
+
+test('store/app should type the app collection variable', () => {
+  const source = fs.readFileSync(path.resolve(__dirname, './app.ts'), 'utf8');
+
+  expect(source).not.toContain('let app;');
 });

@@ -1,3 +1,5 @@
+import http from 'node:http';
+import https from 'node:https';
 import axios, { type AxiosRequestConfig, type AxiosResponse, type Method } from 'axios';
 import log from '../log/index.js';
 import type { ContainerImage } from '../model/container.js';
@@ -107,6 +109,10 @@ function handleSchemaV1(response: RegistryManifestResponse): RegistryManifest {
     version: 1,
   };
 }
+
+// Shared keep-alive agents for default registry traffic.
+const DEFAULT_HTTP_KEEP_ALIVE_AGENT = new http.Agent({ keepAlive: true });
+const DEFAULT_HTTPS_KEEP_ALIVE_AGENT = new https.Agent({ keepAlive: true });
 
 /**
  * Docker Registry Abstract class.
@@ -354,9 +360,14 @@ class Registry extends Component {
     };
 
     const axiosOptionsWithAuth = await this.authenticate(image, axiosOptions);
+    const axiosOptionsWithConnectionReuse: AxiosRequestConfig = {
+      ...axiosOptionsWithAuth,
+      httpAgent: axiosOptionsWithAuth.httpAgent ?? DEFAULT_HTTP_KEEP_ALIVE_AGENT,
+      httpsAgent: axiosOptionsWithAuth.httpsAgent ?? DEFAULT_HTTPS_KEEP_ALIVE_AGENT,
+    };
 
     try {
-      const response = await axios<T>(axiosOptionsWithAuth);
+      const response = await axios<T>(axiosOptionsWithConnectionReuse);
       const end = Date.now();
       getSummaryTags()?.observe({ type: this.type, name: this.name }, (end - start) / 1000);
       return resolveWithFullResponse ? response : response.data;

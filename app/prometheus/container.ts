@@ -1,9 +1,17 @@
 import { Gauge, register } from 'prom-client';
+import {
+  registerContainerAdded,
+  registerContainerRemoved,
+  registerContainerUpdated,
+} from '../event/index.js';
 import log from '../log/index.js';
 import { flatten } from '../model/container.js';
 import * as storeContainer from '../store/container.js';
 
 let gaugeContainer;
+let shouldRebuildGaugeOnCollect = true;
+const gaugeContainerLabelsById = new Map();
+const containerEventDeregistrations: Array<() => void> = [];
 
 const containerLabelNames = [
   'agent',
@@ -49,11 +57,116 @@ const containerLabelNames = [
 
 const containerLabelSet = new Set(containerLabelNames);
 
+function clearContainerEventRegistrations() {
+  while (containerEventDeregistrations.length > 0) {
+    const deregister = containerEventDeregistrations.pop();
+    deregister?.();
+  }
+}
+
+function getContainerMetricLabels(container) {
+  const flatContainer = flatten(container);
+  return Object.keys(flatContainer)
+    .filter((key) => containerLabelSet.has(key))
+    .reduce((obj, key) => {
+      obj[key] = flatContainer[key];
+      return obj;
+    }, {});
+}
+
+function upsertContainerMetric(container) {
+  if (!gaugeContainer) {
+    return;
+  }
+
+  try {
+    const gaugeLabels = getContainerMetricLabels(container);
+    const containerId = typeof container?.id === 'string' ? container.id : undefined;
+    if (containerId) {
+      const previousGaugeLabels = gaugeContainerLabelsById.get(containerId);
+      if (previousGaugeLabels) {
+        gaugeContainer.remove(previousGaugeLabels);
+      }
+      gaugeContainerLabelsById.set(containerId, gaugeLabels);
+    }
+    gaugeContainer.set(gaugeLabels, 1);
+  } catch (e) {
+    shouldRebuildGaugeOnCollect = true;
+    log.warn(`${container?.id} - Error when adding container to the metrics (${e.message})`);
+    log.debug(e);
+  }
+}
+
+function removeContainerMetric(container) {
+  if (!gaugeContainer) {
+    return;
+  }
+
+  const containerId = typeof container?.id === 'string' ? container.id : undefined;
+  if (!containerId) {
+    shouldRebuildGaugeOnCollect = true;
+    return;
+  }
+
+  const previousGaugeLabels = gaugeContainerLabelsById.get(containerId);
+  if (!previousGaugeLabels) {
+    shouldRebuildGaugeOnCollect = true;
+    return;
+  }
+
+  gaugeContainer.remove(previousGaugeLabels);
+  gaugeContainerLabelsById.delete(containerId);
+}
+
+function rebuildContainerGaugeFromStore() {
+  if (!gaugeContainer) {
+    return;
+  }
+
+  gaugeContainer.reset();
+  gaugeContainerLabelsById.clear();
+  shouldRebuildGaugeOnCollect = false;
+  storeContainer.getContainers().forEach((container) => {
+    upsertContainerMetric(container);
+  });
+}
+
+function registerContainerMetricEventHandlers() {
+  containerEventDeregistrations.push(
+    registerContainerAdded((container) => {
+      if (shouldRebuildGaugeOnCollect) {
+        return;
+      }
+      upsertContainerMetric(container);
+    }),
+  );
+  containerEventDeregistrations.push(
+    registerContainerUpdated((container) => {
+      if (shouldRebuildGaugeOnCollect) {
+        return;
+      }
+      upsertContainerMetric(container);
+    }),
+  );
+  containerEventDeregistrations.push(
+    registerContainerRemoved((container) => {
+      if (shouldRebuildGaugeOnCollect) {
+        return;
+      }
+      removeContainerMetric(container);
+    }),
+  );
+}
+
 /**
  * Init Container prometheus gauge.
  * @returns {Gauge<string>}
  */
 export function init() {
+  clearContainerEventRegistrations();
+  gaugeContainerLabelsById.clear();
+  shouldRebuildGaugeOnCollect = true;
+
   // Replace gauge if init is called more than once
   if (gaugeContainer) {
     register.removeSingleMetric(gaugeContainer.name);
@@ -63,23 +176,34 @@ export function init() {
     help: 'The watched containers',
     labelNames: containerLabelNames,
     collect() {
-      this.reset();
-      storeContainer.getContainers().forEach((container) => {
-        try {
-          const flatContainer = flatten(container);
-          const gaugeLabels = Object.keys(flatContainer)
-            .filter((key) => containerLabelSet.has(key))
-            .reduce((obj, key) => {
-              obj[key] = flatContainer[key];
-              return obj;
-            }, {});
-          this.set(gaugeLabels, 1);
-        } catch (e) {
-          log.warn(`${container.id} - Error when adding container to the metrics (${e.message})`);
-          log.debug(e);
-        }
-      });
+      if (!shouldRebuildGaugeOnCollect) {
+        return;
+      }
+      rebuildContainerGaugeFromStore();
     },
   });
+  registerContainerMetricEventHandlers();
   return gaugeContainer;
+}
+
+export function _resetPrometheusContainerStateForTests() {
+  clearContainerEventRegistrations();
+  gaugeContainerLabelsById.clear();
+  if (gaugeContainer) {
+    register.removeSingleMetric(gaugeContainer.name);
+  }
+  gaugeContainer = undefined;
+  shouldRebuildGaugeOnCollect = true;
+}
+
+export function _upsertContainerMetricForTests(container) {
+  upsertContainerMetric(container);
+}
+
+export function _removeContainerMetricForTests(container) {
+  removeContainerMetric(container);
+}
+
+export function _rebuildContainerGaugeFromStoreForTests() {
+  rebuildContainerGaugeFromStore();
 }

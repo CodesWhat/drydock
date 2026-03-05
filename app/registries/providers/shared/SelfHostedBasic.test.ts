@@ -111,6 +111,27 @@ test('normalizeImage should point to configured v2 endpoint', async () => {
   });
 });
 
+test('normalizeImage should not mutate the input image object', async () => {
+  const registry = new SelfHostedBasic();
+  registry.configuration = {
+    url: 'https://registry.acme.com',
+  };
+
+  const image = {
+    name: 'library/nginx',
+    registry: {
+      url: 'ignored.local',
+    },
+  };
+
+  const normalized = registry.normalizeImage(image);
+
+  expect(normalized).not.toBe(image);
+  expect(normalized.registry).not.toBe(image.registry);
+  expect(image.registry.url).toBe('ignored.local');
+  expect(normalized.registry.url).toBe('https://registry.acme.com/v2');
+});
+
 test('maskConfiguration should mask password and auth', async () => {
   const registry = new SelfHostedBasic();
   registry.configuration = {

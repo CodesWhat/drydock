@@ -53,9 +53,10 @@ class Dhi extends Custom {
    * @returns {Promise<*>}
    */
   async authenticate(image, requestOptions) {
+    const scope = encodeURIComponent(`repository:${image.name}:pull`);
     const axiosConfig = {
       method: 'GET',
-      url: `https://dhi.io/token?service=registry.docker.io&scope=repository:${image.name}:pull&grant_type=password`,
+      url: `https://dhi.io/token?service=registry.docker.io&scope=${scope}&grant_type=password`,
       headers: {
         Accept: 'application/json',
       } as Record<string, string>,

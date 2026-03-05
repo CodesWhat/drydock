@@ -87,6 +87,8 @@ let updateOperationCollection: UpdateOperationCollection | undefined;
 const UPDATE_OPERATION_COLLECTION_INDICES = ['data.id', 'data.containerName', 'data.status'];
 const DEFAULT_UPDATE_OPERATION_MAX_ENTRIES = 500;
 const DEFAULT_UPDATE_OPERATION_RETENTION_DAYS = 30;
+const UPDATE_OPERATION_PRUNE_MUTATION_INTERVAL = 100;
+let updateOperationMutationsSincePrune = 0;
 
 export const UPDATE_OPERATION_MAX_ENTRIES = toPositiveInteger(
   process.env.DD_UPDATE_OPERATION_MAX_ENTRIES,
@@ -107,7 +109,7 @@ function pruneOperationsForRetention(
   nowMs = Date.now(),
 ): number {
   const documents = collection.find();
-  if (documents.length === 0) {
+  if (!Array.isArray(documents) || documents.length === 0) {
     return 0;
   }
 
@@ -137,6 +139,14 @@ function pruneOperationsForRetention(
   return toRemove.length;
 }
 
+function maybePruneOperationsForRetention(collection: UpdateOperationCollection): void {
+  updateOperationMutationsSincePrune += 1;
+  if (updateOperationMutationsSincePrune >= UPDATE_OPERATION_PRUNE_MUTATION_INTERVAL) {
+    pruneOperationsForRetention(collection);
+    updateOperationMutationsSincePrune = 0;
+  }
+}
+
 /**
  * Create update operation collection.
  * @param db
@@ -145,6 +155,8 @@ export function createCollections(db: UpdateOperationStoreDb): void {
   updateOperationCollection = initCollection(db, 'updateOperations', {
     indices: UPDATE_OPERATION_COLLECTION_INDICES,
   }) as UpdateOperationCollection;
+  updateOperationMutationsSincePrune = 0;
+  pruneOperationsForRetention(updateOperationCollection);
 }
 
 /**
@@ -163,7 +175,7 @@ export function insertOperation(operation: InsertUpdateOperationInput): UpdateOp
 
   if (updateOperationCollection) {
     updateOperationCollection.insert({ data: operationToSave });
-    pruneOperationsForRetention(updateOperationCollection);
+    maybePruneOperationsForRetention(updateOperationCollection);
   }
 
   return operationToSave;
@@ -194,7 +206,7 @@ export function updateOperation(
 
   updateOperationCollection.remove(existingDoc);
   updateOperationCollection.insert({ data: updated });
-  pruneOperationsForRetention(updateOperationCollection);
+  maybePruneOperationsForRetention(updateOperationCollection);
 
   return updated;
 }

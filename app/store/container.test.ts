@@ -9,7 +9,41 @@ vi.mock('../event');
 
 beforeEach(async () => {
   vi.resetAllMocks();
+  container._resetContainerStoreStateForTests();
 });
+
+function createFilterableCollection(initialDocs) {
+  let docs = [...initialDocs];
+
+  const matchesFilter = (doc, filter = {}) =>
+    Object.entries(filter).every(([key, value]) => {
+      const path = key.split('.');
+      let current: Record<string, unknown> | unknown = doc;
+      for (const segment of path) {
+        if (!current || typeof current !== 'object') {
+          return false;
+        }
+        current = (current as Record<string, unknown>)[segment];
+      }
+      return current === value;
+    });
+
+  return {
+    find: vi.fn((filter = {}) => docs.filter((doc) => matchesFilter(doc, filter))),
+    findOne: vi.fn((filter = {}) => docs.find((doc) => matchesFilter(doc, filter)) ?? null),
+    insert: vi.fn((doc) => {
+      docs.push(doc);
+    }),
+    chain: vi.fn(() => ({
+      find: (filter = {}) => ({
+        remove: () => {
+          docs = docs.filter((doc) => !matchesFilter(doc, filter));
+          return {};
+        },
+      }),
+    })),
+  };
+}
 
 test('createCollections should create collection containers when not exist', async () => {
   const collection = {
@@ -86,6 +120,40 @@ test('updateContainer should update doc and emit an event', async () => {
   container.createCollections(db);
   container.updateContainer(containerToSave);
   expect(spyInsert).toHaveBeenCalled();
+  expect(spyEvent).toHaveBeenCalled();
+});
+
+test('updateContainer should use collection update when available for existing containers', async () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      id: 'container-update-with-update-method',
+    }),
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    update: vi.fn(),
+    insert: vi.fn(),
+    chain: vi.fn(() => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    })),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const containerToSave = createContainerFixture({
+    id: 'container-update-with-update-method',
+  });
+  const spyEvent = vi.spyOn(event, 'emitContainerUpdated');
+  container.createCollections(db);
+
+  container.updateContainer(containerToSave);
+
+  expect(collection.update).toHaveBeenCalledTimes(1);
+  expect(collection.insert).not.toHaveBeenCalled();
+  expect(collection.chain).not.toHaveBeenCalled();
   expect(spyEvent).toHaveBeenCalled();
 });
 
@@ -740,6 +808,57 @@ test('getContainers should sort by tag when watcher and name are equal', async (
   expect(results[1].image.tag.value).toEqual('2.0.0');
 });
 
+test('getContainers should apply pagination options', async () => {
+  const containerExample = createContainerFixture();
+  const containers = [
+    { data: { ...containerExample, name: 'container3' } },
+    { data: { ...containerExample, name: 'container2' } },
+    { data: { ...containerExample, name: 'container1' } },
+  ];
+  const collection = {
+    find: () => containers,
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({
+      findOne: () => {},
+      insert: () => {},
+    }),
+  };
+  container.createCollections(db);
+
+  const results = container.getContainers({}, { limit: 1, offset: 1 });
+
+  expect(results).toHaveLength(1);
+  expect(results[0].name).toEqual('container2');
+});
+
+test('getContainers should support offset-only pagination when limit is zero', async () => {
+  const containerExample = createContainerFixture();
+  const containers = [
+    { data: { ...containerExample, name: 'container3' } },
+    { data: { ...containerExample, name: 'container2' } },
+    { data: { ...containerExample, name: 'container1' } },
+  ];
+  const collection = {
+    find: () => containers,
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({
+      findOne: () => {},
+      insert: () => {},
+    }),
+  };
+  container.createCollections(db);
+
+  const results = container.getContainers({}, { limit: 0, offset: 1 });
+
+  expect(results).toHaveLength(2);
+  expect(results[0].name).toEqual('container2');
+  expect(results[1].name).toEqual('container3');
+});
+
 test('getContainers should redact sensitive env values by default', async () => {
   const containerExample = createContainerFixture({
     details: {
@@ -821,6 +940,74 @@ test('getContainers should always redact sensitive env values', async () => {
     value: 'production',
     sensitive: false,
   });
+});
+
+test('getContainersRaw should return unredacted env values', async () => {
+  const containerExample = createContainerFixture({
+    details: {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'API_TOKEN', value: 'super-secret' },
+        { key: 'NODE_ENV', value: 'production' },
+      ],
+    },
+  });
+  const containers = [{ data: containerExample }];
+  const collection = {
+    find: () => containers,
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({
+      findOne: () => {},
+      insert: () => {},
+    }),
+  };
+  container.createCollections(db);
+
+  const result = container.getContainersRaw({});
+
+  expect(result[0].details.env[0]).toEqual({
+    key: 'API_TOKEN',
+    value: 'super-secret',
+  });
+  expect(result[0].details.env[1]).toEqual({
+    key: 'NODE_ENV',
+    value: 'production',
+  });
+});
+
+test('getContainersRaw should preserve Date and RegExp values when cloning', async () => {
+  const buildDate = new Date('2026-03-05T09:00:00.000Z');
+  const namePattern = /^drydock-container$/i;
+  const containerExample = createContainerFixture();
+  containerExample.labels = {
+    buildDate,
+    namePattern,
+  } as unknown as Record<string, string>;
+  const containers = [{ data: containerExample }];
+  const collection = {
+    find: () => containers,
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({
+      findOne: () => {},
+      insert: () => {},
+    }),
+  };
+  container.createCollections(db);
+
+  const result = container.getContainersRaw({});
+
+  expect(result[0].labels.buildDate).toBeInstanceOf(Date);
+  expect((result[0].labels.buildDate as unknown as Date).toISOString()).toBe(
+    '2026-03-05T09:00:00.000Z',
+  );
+  expect(result[0].labels.namePattern).toBeInstanceOf(RegExp);
+  expect((result[0].labels.namePattern as unknown as RegExp).source).toBe('^drydock-container$');
+  expect((result[0].labels.namePattern as unknown as RegExp).flags).toBe('i');
 });
 
 test('getContainer should return 1 container by id', async () => {
@@ -962,6 +1149,77 @@ test('getContainers should filter by query parameters', async () => {
   expect(collection.find).toHaveBeenCalledWith({ 'data.watcher': 'test' });
 });
 
+test('getContainers should ignore unsafe prototype-related query keys', async () => {
+  const containerExample = createContainerFixture();
+  const collection = {
+    find: vi.fn(() => [{ data: containerExample }]),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+
+  container.getContainers({
+    watcher: 'safe-watcher',
+    '__proto__.polluted': 'x',
+    'constructor.prototype.bad': 'x',
+    prototype: 'x',
+  } as Record<string, unknown>);
+
+  expect(collection.find).toHaveBeenCalledWith({ 'data.watcher': 'safe-watcher' });
+});
+
+test('getContainers should reuse cache for equivalent queries with different key order', async () => {
+  const containerExample = createContainerFixture();
+  const collection = {
+    find: vi.fn(() => [{ data: containerExample }]),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+  collection.find.mockClear();
+
+  container.getContainers({ watcher: 'watcher-1', status: 'running' });
+  container.getContainers({ status: 'running', watcher: 'watcher-1' });
+
+  expect(collection.find).toHaveBeenCalledTimes(1);
+});
+
+test('getContainers cache invalidation should safely handle query paths that traverse non-objects', async () => {
+  const collection = createFilterableCollection([
+    {
+      data: createContainerFixture({
+        id: 'container-path-traversal',
+        name: 'container-path-traversal',
+      }),
+    },
+  ]);
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+
+  container.getContainers({ 'name.value': 'never-matches' });
+  const readCountAfterWarm = collection.find.mock.calls.length;
+  container.getContainers({ 'name.value': 'never-matches' });
+  expect(collection.find.mock.calls.length).toBe(readCountAfterWarm);
+
+  container.updateContainer(
+    createContainerFixture({
+      id: 'container-path-traversal',
+      name: 'container-path-traversal',
+      status: 'running',
+    }),
+  );
+
+  container.getContainers({ 'name.value': 'never-matches' });
+  expect(collection.find.mock.calls.length).toBe(readCountAfterWarm);
+});
+
 test('deleteContainer should do nothing when container is not found', async () => {
   const collection = {
     findOne: () => null,
@@ -1082,6 +1340,23 @@ test('cacheSecurityState should refresh existing cache entries', async () => {
 
   expect(container.getCachedSecurityState('refresh', 'entry')).toEqual({ status: 'new' });
   container.clearCachedSecurityState('refresh', 'entry');
+});
+
+test('cacheSecurityState should avoid full-map prune on each write', async () => {
+  container.clearAllCachedSecurityState();
+  const entriesSpy = vi.spyOn(Map.prototype, 'entries');
+  const callsBeforeWrites = entriesSpy.mock.calls.length;
+
+  try {
+    for (let index = 0; index < 5; index += 1) {
+      container.cacheSecurityState('counter-prune', `entry-${index}`, { status: 'ok', index });
+    }
+
+    expect(entriesSpy.mock.calls.length - callsBeforeWrites).toBe(0);
+  } finally {
+    entriesSpy.mockRestore();
+    container.clearAllCachedSecurityState();
+  }
 });
 
 test('cacheSecurityState should prune expired entries before adding fresh entries', async () => {
@@ -1209,6 +1484,136 @@ test('getContainers should evict oldest query cache entries when size cap is exc
   expect(collection.find.mock.calls.length).toBe(readCountAfterUniqueQueries + 1);
 });
 
+test('getContainers should retain unaffected query caches across inserts', async () => {
+  const collection = createFilterableCollection([
+    {
+      data: createContainerFixture({
+        id: 'watcher-a-1',
+        name: 'watcher-a-1',
+        watcher: 'watcher-a',
+      }),
+    },
+    {
+      data: createContainerFixture({
+        id: 'watcher-b-1',
+        name: 'watcher-b-1',
+        watcher: 'watcher-b',
+      }),
+    },
+  ]);
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+
+  container.getContainers({ watcher: 'watcher-a' });
+  container.getContainers({ watcher: 'watcher-b' });
+  const readCountAfterWarm = collection.find.mock.calls.length;
+  container.getContainers({ watcher: 'watcher-b' });
+  expect(collection.find.mock.calls.length).toBe(readCountAfterWarm);
+
+  container.insertContainer(
+    createContainerFixture({
+      id: 'watcher-a-2',
+      name: 'watcher-a-2',
+      watcher: 'watcher-a',
+    }),
+  );
+  const readCountBeforeAffectedAndUnaffectedReads = collection.find.mock.calls.length;
+
+  container.getContainers({ watcher: 'watcher-b' });
+  expect(collection.find.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads);
+
+  container.getContainers({ watcher: 'watcher-a' });
+  expect(collection.find.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads + 1);
+});
+
+test('getContainers should retain unaffected query caches across updates', async () => {
+  const collection = createFilterableCollection([
+    {
+      data: createContainerFixture({
+        id: 'watcher-a-1',
+        name: 'watcher-a-1',
+        watcher: 'watcher-a',
+      }),
+    },
+    {
+      data: createContainerFixture({
+        id: 'watcher-b-1',
+        name: 'watcher-b-1',
+        watcher: 'watcher-b',
+      }),
+    },
+  ]);
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+
+  container.getContainers({ watcher: 'watcher-a' });
+  container.getContainers({ watcher: 'watcher-b' });
+  const readCountAfterWarm = collection.find.mock.calls.length;
+  container.getContainers({ watcher: 'watcher-b' });
+  expect(collection.find.mock.calls.length).toBe(readCountAfterWarm);
+
+  container.updateContainer(
+    createContainerFixture({
+      id: 'watcher-a-1',
+      name: 'watcher-a-1',
+      watcher: 'watcher-a',
+      status: 'running',
+    }),
+  );
+  const readCountBeforeAffectedAndUnaffectedReads = collection.find.mock.calls.length;
+
+  container.getContainers({ watcher: 'watcher-b' });
+  expect(collection.find.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads);
+
+  container.getContainers({ watcher: 'watcher-a' });
+  expect(collection.find.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads + 1);
+});
+
+test('getContainers should retain unaffected query caches across deletes', async () => {
+  const collection = createFilterableCollection([
+    {
+      data: createContainerFixture({
+        id: 'watcher-a-1',
+        name: 'watcher-a-1',
+        watcher: 'watcher-a',
+      }),
+    },
+    {
+      data: createContainerFixture({
+        id: 'watcher-b-1',
+        name: 'watcher-b-1',
+        watcher: 'watcher-b',
+      }),
+    },
+  ]);
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+
+  container.getContainers({ watcher: 'watcher-a' });
+  container.getContainers({ watcher: 'watcher-b' });
+  const readCountAfterWarm = collection.find.mock.calls.length;
+  container.getContainers({ watcher: 'watcher-b' });
+  expect(collection.find.mock.calls.length).toBe(readCountAfterWarm);
+
+  container.deleteContainer('watcher-a-1');
+  const readCountBeforeAffectedAndUnaffectedReads = collection.find.mock.calls.length;
+
+  container.getContainers({ watcher: 'watcher-b' });
+  expect(collection.find.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads);
+
+  container.getContainers({ watcher: 'watcher-a' });
+  expect(collection.find.mock.calls.length).toBe(readCountBeforeAffectedAndUnaffectedReads + 1);
+});
+
 test('getContainers should cache validated results and invalidate cache after writes', async () => {
   const containerExample = createContainerFixture();
   const docs = [{ data: containerExample }];
@@ -1245,4 +1650,93 @@ test('getContainers should cache validated results and invalidate cache after wr
   const readCountBeforeGetAfterWrite = collection.find.mock.calls.length;
   container.getContainers();
   expect(collection.find.mock.calls.length).toBe(readCountBeforeGetAfterWrite + 1);
+});
+
+test('getContainers should isolate nested objects from cached query results', async () => {
+  const containerExample = createContainerFixture();
+  const collection = {
+    find: vi.fn(() => [{ data: containerExample }]),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+
+  const firstRead = container.getContainers();
+  firstRead[0].image.tag.value = 'tampered';
+
+  const secondRead = container.getContainers();
+
+  expect(collection.find).toHaveBeenCalledTimes(1);
+  expect(secondRead[0].image.tag.value).toBe('version');
+});
+
+test('security state prune should remove expired entries and trim oldest active entries', () => {
+  const nowMs = Date.now();
+  const maxEntries = container.SECURITY_STATE_CACHE_MAX_ENTRIES;
+  container._setSecurityStateCacheEntryForTests('expired_entry', {
+    security: { stale: true },
+    expiresAt: nowMs - 1,
+  });
+  for (let index = 0; index <= maxEntries; index += 1) {
+    container._setSecurityStateCacheEntryForTests(`active_${index}`, {
+      security: { index },
+      expiresAt: nowMs + 60_000,
+    });
+  }
+
+  container._pruneSecurityStateCacheForTests(nowMs);
+
+  expect(container.getCachedSecurityState('expired', 'entry')).toBeUndefined();
+  expect(container.getCachedSecurityState('active', '0')).toBeUndefined();
+  expect(container.getCachedSecurityState('active', `${maxEntries}`)).toEqual({
+    index: maxEntries,
+  });
+});
+
+test('security state size enforcement should stop when iterator returns undefined keys', () => {
+  const maxEntries = container.SECURITY_STATE_CACHE_MAX_ENTRIES;
+  for (let index = 0; index <= maxEntries; index += 1) {
+    container._setSecurityStateCacheEntryForTests(`edge_${index}`, {
+      security: { index },
+      expiresAt: Date.now() + 60_000,
+    });
+  }
+
+  const securityCache = container._getSecurityStateCacheForTests();
+  const keysSpy = vi.spyOn(securityCache, 'keys').mockImplementation(
+    () =>
+      ({
+        next: () => ({ done: false, value: undefined }),
+        [Symbol.iterator]() {
+          return this;
+        },
+      }) as IterableIterator<string>,
+  );
+
+  try {
+    container._enforceSecurityStateCacheSizeLimitForTests();
+    expect(securityCache.size).toBe(maxEntries + 1);
+  } finally {
+    keysSpy.mockRestore();
+  }
+});
+
+test('container query cache invalidation should tolerate malformed cache keys', () => {
+  container._setContainersQueryCacheEntriesForTests([
+    ['{"invalid":"shape"}', []],
+    ['[["watcher","test"],["broken-entry"]]', []],
+    ['{invalid-json', []],
+  ]);
+
+  expect(() => container._invalidateContainersCacheForMutationForTests({}, {})).not.toThrow();
+  expect(container._getContainersQueryCacheForTests().size).toBe(0);
+});
+
+test('getValueByPath helper should reject unsafe and invalid traversal paths', () => {
+  expect(
+    container._getValueByPathForTests({ safe: { value: 'ok' } }, '__proto__.polluted'),
+  ).toBeUndefined();
+  expect(container._getValueByPathForTests({ name: 'plain-string' }, 'name.value')).toBeUndefined();
 });

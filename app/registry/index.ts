@@ -37,6 +37,11 @@ import {
   applyTriggerGroupDefaults as applyTriggerGroupDefaultsHelper,
 } from './trigger-shared-config.js';
 
+type SharedTriggerConfigurationInput = Parameters<
+  typeof applySharedTriggerConfigurationByNameHelper
+>[0];
+type TriggerGroupConfigurationInput = Parameters<typeof applyTriggerGroupDefaultsHelper>[0];
+
 export interface RegistryState {
   trigger: { [key: string]: Trigger };
   watcher: { [key: string]: Watcher };
@@ -57,6 +62,18 @@ export interface RegisterComponentOptions {
   componentPath: string;
   agent?: string;
 }
+
+export interface ProviderConfiguration {
+  [configurationName: string]:
+    | ComponentConfiguration
+    | string
+    | number
+    | boolean
+    | null
+    | undefined;
+}
+
+type ProviderConfigurationsByProvider = Record<string, ProviderConfiguration>;
 
 type ComponentKind = keyof RegistryState;
 
@@ -141,7 +158,7 @@ export async function registerComponent(options: RegisterComponentOptions): Prom
  */
 async function registerComponents(
   kind: ComponentKind,
-  configurations: Record<string, any> | null | undefined,
+  configurations: ProviderConfigurationsByProvider | null | undefined,
   path: string,
 ) {
   if (configurations) {
@@ -154,7 +171,7 @@ async function registerComponents(
           kind,
           provider,
           name: configurationName,
-          configuration: providerConfigurations[configurationName],
+          configuration: providerConfigurations[configurationName] as ComponentConfiguration,
           componentPath: path,
         }),
       );
@@ -176,16 +193,16 @@ async function registerComponents(
   return [];
 }
 
-function toNamedConfigurationMap(configuration: unknown): Record<string, any> {
+function toNamedConfigurationMap(configuration: unknown): ProviderConfiguration {
   if (configuration && typeof configuration === 'object' && !Array.isArray(configuration)) {
-    return configuration as Record<string, any>;
+    return configuration as ProviderConfiguration;
   }
   return {};
 }
 
 function mergeProviderConfigurations(
-  defaultConfiguration: Record<string, any>,
-  configuredConfiguration: Record<string, any>,
+  defaultConfiguration: ProviderConfiguration,
+  configuredConfiguration: ProviderConfiguration,
 ) {
   // Preserve user-defined component ordering first (for precedence), then fallback defaults.
   const mergedConfiguration = { ...configuredConfiguration };
@@ -265,7 +282,7 @@ function getConfiguredCredentialKeys(configuration: Record<string, unknown>): st
 }
 
 function sanitizeLegacyPublicTokenAuthConfigurations(
-  configurations: Record<string, any> | null | undefined,
+  configurations: ProviderConfigurationsByProvider | null | undefined,
 ) {
   if (!configurations || typeof configurations !== 'object' || Array.isArray(configurations)) {
     return configurations;
@@ -301,8 +318,15 @@ function sanitizeLegacyPublicTokenAuthConfigurations(
   return sanitizedConfigurations;
 }
 
-function applySharedTriggerConfigurationByName(configurations: Record<string, any>) {
-  return applySharedTriggerConfigurationByNameHelper(configurations);
+function applySharedTriggerConfigurationByName(
+  configurations: ProviderConfigurationsByProvider | null | undefined,
+) {
+  if (!configurations) {
+    return configurations;
+  }
+  return applySharedTriggerConfigurationByNameHelper(
+    configurations as SharedTriggerConfigurationInput,
+  ) as ProviderConfigurationsByProvider;
 }
 
 function getKnownProviderSet(providerPath: string): Set<string> {
@@ -314,15 +338,19 @@ function getKnownProviderSet(providerPath: string): Set<string> {
 }
 
 function applyTriggerGroupDefaults(
-  configurations: Record<string, any> | null | undefined,
+  configurations: ProviderConfigurationsByProvider | null | undefined,
   providerPath: string,
-): Record<string, any> | null | undefined {
+) {
   const knownProviderSet = getKnownProviderSet(providerPath);
-  return applyTriggerGroupDefaultsHelper(configurations, knownProviderSet, (groupName, value) => {
-    log.info(
-      `Detected trigger group '${groupName}' with shared configuration: ${JSON.stringify(value)}`,
-    );
-  });
+  return applyTriggerGroupDefaultsHelper(
+    configurations as TriggerGroupConfigurationInput,
+    knownProviderSet,
+    (groupName, value) => {
+      log.info(
+        `Detected trigger group '${groupName}' with shared configuration: ${JSON.stringify(value)}`,
+      );
+    },
+  ) as ProviderConfigurationsByProvider | null | undefined;
 }
 
 /**
@@ -375,7 +403,10 @@ async function registerWatchers(options: RegistrationOptions = {}) {
  * @param options
  */
 async function registerTriggers(options: RegistrationOptions = {}) {
-  const rawConfigurations = getTriggerConfigurations();
+  const rawConfigurations = getTriggerConfigurations() as
+    | ProviderConfigurationsByProvider
+    | null
+    | undefined;
   const configurationsWithGroupDefaults = applyTriggerGroupDefaults(
     rawConfigurations,
     'triggers/providers',
@@ -384,7 +415,7 @@ async function registerTriggers(options: RegistrationOptions = {}) {
   const allowedTriggers = new Set(['docker', 'dockercompose']);
 
   if (options.agent && configurations) {
-    const filteredConfigurations: Record<string, any> = {};
+    const filteredConfigurations: ProviderConfigurationsByProvider = {};
     Object.keys(configurations).forEach((provider) => {
       if (allowedTriggers.has(provider.toLowerCase())) {
         filteredConfigurations[provider] = configurations[provider];
@@ -432,29 +463,26 @@ async function registerRegistries() {
     trueforge: { public: '' },
   };
   const configuredRegistries = sanitizeLegacyPublicTokenAuthConfigurations(
-    getRegistryConfigurations(),
+    getRegistryConfigurations() as ProviderConfigurationsByProvider | null | undefined,
   );
   const providers = new Set([
     ...Object.keys(defaultRegistries),
     ...Object.keys(configuredRegistries || {}),
   ]);
   const registriesToRegister = {
-    ...Array.from(providers).reduce(
-      (mergedRegistries, provider) => {
-        const defaultProviderConfiguration = toNamedConfigurationMap(
-          (defaultRegistries as Record<string, unknown>)[provider],
-        );
-        const configuredProviderConfiguration = toNamedConfigurationMap(
-          (configuredRegistries as Record<string, unknown>)?.[provider],
-        );
-        mergedRegistries[provider] = mergeProviderConfigurations(
-          defaultProviderConfiguration,
-          configuredProviderConfiguration,
-        );
-        return mergedRegistries;
-      },
-      {} as Record<string, any>,
-    ),
+    ...Array.from(providers).reduce((mergedRegistries, provider) => {
+      const defaultProviderConfiguration = toNamedConfigurationMap(
+        (defaultRegistries as Record<string, unknown>)[provider],
+      );
+      const configuredProviderConfiguration = toNamedConfigurationMap(
+        (configuredRegistries as Record<string, unknown>)?.[provider],
+      );
+      mergedRegistries[provider] = mergeProviderConfigurations(
+        defaultProviderConfiguration,
+        configuredProviderConfiguration,
+      );
+      return mergedRegistries;
+    }, {} as ProviderConfigurationsByProvider),
   };
 
   try {
@@ -469,9 +497,12 @@ async function registerRegistries() {
  * Register authentications.
  */
 async function registerAuthentications() {
-  const configurations = getAuthenticationConfigurations();
+  const configurations = getAuthenticationConfigurations() as
+    | ProviderConfigurationsByProvider
+    | null
+    | undefined;
   try {
-    if (Object.keys(configurations).length === 0) {
+    if (!configurations || Object.keys(configurations).length === 0) {
       log.info('No authentication configured => Allow anonymous access');
       await registerComponent({
         kind: 'authentication',

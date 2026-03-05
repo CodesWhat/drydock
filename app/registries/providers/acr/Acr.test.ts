@@ -75,6 +75,37 @@ test('authenticate should add basic auth', async () => {
   });
 });
 
+test('authenticate should create headers object when request options are missing', async () => {
+  await expect(acr.authenticate(undefined, undefined)).resolves.toEqual({
+    headers: {
+      Authorization: 'Basic Y2xpZW50aWQ6Y2xpZW50c2VjcmV0',
+    },
+  });
+});
+
+test('authenticate should not mutate input request options', async () => {
+  const requestOptions = {
+    headers: {
+      Accept: 'application/json',
+    },
+  };
+
+  const result = await acr.authenticate(undefined, requestOptions);
+
+  expect(result).not.toBe(requestOptions);
+  expect(requestOptions).toEqual({
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+  expect(result).toEqual({
+    headers: {
+      Accept: 'application/json',
+      Authorization: 'Basic Y2xpZW50aWQ6Y2xpZW50c2VjcmV0',
+    },
+  });
+});
+
 test('getAuthPull should return clientid and clientsecret', async () => {
   const result = await acr.getAuthPull();
   expect(result).toEqual({

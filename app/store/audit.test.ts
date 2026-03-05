@@ -108,6 +108,71 @@ function createChainDb(initialDocs = []) {
   };
 }
 
+function createPruneChainDb(initialDocs = []) {
+  const docs = initialDocs.map((doc, index) => ({
+    ...doc,
+    $loki: index,
+  }));
+
+  const find = vi.fn((query = {}) => {
+    if (!query || Object.keys(query).length === 0) {
+      return [...docs];
+    }
+    return [];
+  });
+
+  const collection = {
+    insert: vi.fn((doc) => {
+      doc.$loki = docs.length;
+      docs.push(doc);
+    }),
+    find,
+    remove: vi.fn((doc) => {
+      const idx = docs.indexOf(doc);
+      if (idx >= 0) docs.splice(idx, 1);
+    }),
+    update: vi.fn(),
+    chain: () => {
+      let current = [...docs];
+      const chainApi = {
+        find: (query = {}) => {
+          if (
+            query &&
+            typeof query === 'object' &&
+            'timestampMs' in query &&
+            typeof query.timestampMs === 'object'
+          ) {
+            const range = query.timestampMs as { $lt?: number };
+            current = current.filter((entry) => {
+              const timestampMs = entry.timestampMs;
+              if (typeof timestampMs !== 'number') return false;
+              if (range.$lt !== undefined && timestampMs >= range.$lt) return false;
+              return true;
+            });
+          }
+          return chainApi;
+        },
+        data: () => [...current],
+        remove: () => {
+          current.forEach((entry) => {
+            const idx = docs.indexOf(entry);
+            if (idx >= 0) docs.splice(idx, 1);
+          });
+          return chainApi;
+        },
+      };
+      return chainApi;
+    },
+  };
+
+  return {
+    collection,
+    docs,
+    getCollection: (name) => (name === 'audit' ? collection : null),
+    addCollection: vi.fn(() => collection),
+  };
+}
+
 describe('Audit Store', () => {
   let db;
 
@@ -522,6 +587,60 @@ describe('Audit Store', () => {
     var result = audit.getAuditEntries();
     expect(result.total).toBe(1);
     expect(result.entries[0].containerName).toBe('recent');
+  });
+
+  test('pruneOldEntries should use indexed chain removal when available', () => {
+    const oldTimestamp = Date.now() - 100 * 24 * 60 * 60 * 1000;
+    const recentTimestamp = Date.now();
+    const dbWithChainPrune = createPruneChainDb();
+    audit.createCollections(dbWithChainPrune as any);
+    audit.insertAudit({
+      action: 'update-available',
+      containerName: 'old',
+      status: 'info',
+      timestamp: new Date(oldTimestamp).toISOString(),
+    });
+    audit.insertAudit({
+      action: 'update-applied',
+      containerName: 'recent',
+      status: 'success',
+      timestamp: new Date(recentTimestamp).toISOString(),
+    });
+    dbWithChainPrune.collection.find.mockClear();
+
+    const pruned = audit.pruneOldEntries(30);
+
+    expect(pruned).toBe(1);
+    expect(dbWithChainPrune.collection.find).not.toHaveBeenCalledWith();
+    expect(dbWithChainPrune.collection.remove).not.toHaveBeenCalled();
+    expect(
+      dbWithChainPrune.docs
+        .map((entry) => entry.data.containerName)
+        .sort((a, b) => a.localeCompare(b)),
+    ).toEqual(['recent']);
+  });
+
+  test('pruneOldEntries should return 0 when chain data payload is not an array', () => {
+    const collection = {
+      find: vi.fn(() => []),
+      remove: vi.fn(),
+      chain: () => ({
+        find: () => ({
+          data: () => ({ unexpected: true }),
+          remove: vi.fn(),
+        }),
+      }),
+    };
+    const db = {
+      getCollection: () => collection,
+      addCollection: () => collection,
+    };
+    audit.createCollections(db as any);
+
+    const pruned = audit.pruneOldEntries(30);
+
+    expect(pruned).toBe(0);
+    expect(collection.remove).not.toHaveBeenCalled();
   });
 
   test('pruneOldEntries should return 0 when collection not initialized', async () => {

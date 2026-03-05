@@ -191,6 +191,21 @@ export function pruneOldEntries(days: number): number {
   }
 
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  if (typeof auditCollection.chain === 'function') {
+    const chained = auditCollection.chain().find({
+      timestampMs: { $lt: cutoff },
+    });
+
+    if (typeof chained?.data === 'function' && typeof chained?.remove === 'function') {
+      const toRemove = chained.data() as AuditCollectionEntry[];
+      const count = Array.isArray(toRemove) ? toRemove.length : 0;
+      if (count > 0) {
+        chained.remove();
+      }
+      return count;
+    }
+  }
+
   const entries = auditCollection.find();
   if (!Array.isArray(entries)) {
     return 0;

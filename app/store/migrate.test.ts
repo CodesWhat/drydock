@@ -12,12 +12,12 @@ beforeEach(async () => {
   vi.clearAllMocks();
 });
 
-test('migrate should delete all containers when from is lower than 8 and to is grater than 8', async () => {
+test('migrate should not delete containers for legacy 7.x to 8.x version bumps', async () => {
   migrate.migrate('7.0.0', '8.0.0');
-  expect(container.deleteContainer).toHaveBeenCalledTimes(2);
+  expect(container.deleteContainer).not.toHaveBeenCalled();
 });
 
-test('migrate should not delete all containers when from is from and to are 8 versions', async () => {
+test('migrate should not delete containers when from and to are 8.x versions', async () => {
   migrate.migrate('8.1.0', '8.2.0');
   expect(container.deleteContainer).not.toHaveBeenCalled();
 });
