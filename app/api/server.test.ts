@@ -92,6 +92,37 @@ describe('Server Router', () => {
     });
   });
 
+  test('should strip tls key and cert paths from server configuration response', async () => {
+    const { getServerConfiguration } = await import('../configuration/index.js');
+    vi.mocked(getServerConfiguration).mockReturnValueOnce({
+      port: 3000,
+      cors: {},
+      enabled: true,
+      feature: { delete: true },
+      tls: {
+        enabled: true,
+        key: '/etc/certs/tls.key',
+        cert: '/etc/certs/tls.cert',
+      },
+    });
+    const router = serverRouter.init();
+
+    const routeHandler = router.get.mock.calls[0][1];
+    const mockRes = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    };
+
+    routeHandler({}, mockRes);
+
+    const payload = mockRes.json.mock.calls[0][0];
+    expect(payload.configuration.tls).toEqual({
+      enabled: true,
+    });
+    expect(payload.configuration.tls).not.toHaveProperty('key');
+    expect(payload.configuration.tls).not.toHaveProperty('cert');
+  });
+
   test('should return security runtime status on runtime route', async () => {
     const { getSecurityRuntimeStatus } = await import('../security/runtime.js');
     const router = serverRouter.init();

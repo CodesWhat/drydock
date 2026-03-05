@@ -18,9 +18,16 @@ const log = logger.child({ component: 'server' });
 function getServer(req, res) {
   const serverConfig = getServerConfiguration();
   const webhookConfig = getWebhookConfiguration();
+  const { tls, ...serverConfigWithoutTls } = serverConfig;
+  const sanitizedTlsConfig =
+    tls && typeof tls === 'object'
+      ? (({ key, cert, ...safeTlsConfig }) => safeTlsConfig)(tls)
+      : tls;
+
   res.status(200).json({
     configuration: {
-      ...serverConfig,
+      ...serverConfigWithoutTls,
+      tls: sanitizedTlsConfig,
       webhook: {
         enabled: webhookConfig.enabled,
       },
