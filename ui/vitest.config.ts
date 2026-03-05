@@ -24,12 +24,14 @@ export default mergeConfig(
       coverage: {
         provider: 'v8',
         reporter: ['text', 'lcov', 'html'],
-        // Gate coverage on unit-tested runtime logic (services + core composables).
+        // Gate coverage on unit-tested runtime logic.
         include: [
           'src/services/**/*.ts',
-          'src/composables/useTheme.ts',
-          'src/composables/useFont.ts',
-          'src/composables/useIcons.ts',
+          'src/composables/**/*.ts',
+          'src/views/dashboard/useDashboardData.ts',
+          'src/views/dashboard/useDashboardWidgetOrder.ts',
+          'src/utils/**/*.ts',
+          'src/theme/useTheme.ts',
         ],
         exclude: [
           'src/main.ts',

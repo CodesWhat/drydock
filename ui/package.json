@@ -1,6 +1,10 @@
 {
   "name": "drydock-ui",
   "version": "1.4.0",
+  "description": "Drydock dashboard — Vue 3 + Tailwind CSS 4 SPA",
+  "repository": "CodesWhat/drydock",
+  "license": "AGPL-3.0-only",
+  "author": "CodesWhat",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -17,7 +21,7 @@
     "test:storybook": "COMPONENTS_DTS=false storybook build --test --quiet",
     "storybook": "COMPONENTS_DTS=false storybook dev -p 6006",
     "build-storybook": "COMPONENTS_DTS=false storybook build",
-    "chromatic": "npx chromatic --project-token=chpt_fbb4947d8dfbaa8",
+    "chromatic": "npx chromatic",
     "knip": "knip"
   },
   "dependencies": {
