@@ -7,6 +7,7 @@ import {
 } from '../notifications/trigger-policy.js';
 import * as registry from '../registry/index.js';
 import * as notificationStore from '../store/notification.js';
+import { getErrorMessage } from '../util/error.js';
 
 const router = express.Router();
 
@@ -87,9 +88,9 @@ function updateNotificationRule(req, res) {
     }
 
     res.status(200).json(sanitizeRuleForResponse(notificationRuleUpdated, allowedTriggerIds));
-  } catch (e: any) {
+  } catch (e: unknown) {
     res.status(400).json({
-      error: e.message,
+      error: getErrorMessage(e),
     });
   }
 }

@@ -1,6 +1,8 @@
 import type { Response } from 'express';
 import type { Logger } from 'pino';
 import { sanitizeLogParam } from '../log/sanitize.js';
+import type { AuditEntry } from '../model/audit.js';
+import type { Container } from '../model/container.js';
 import { recordAuditEvent } from './audit-events.js';
 
 /**
@@ -16,11 +18,10 @@ export function handleContainerActionError({
   res,
 }: {
   error: unknown;
-  action: string;
+  action: AuditEntry['action'];
   actionLabel: string;
   id: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  container: any;
+  container: Container;
   log: Logger;
   res: Response;
 }): string {

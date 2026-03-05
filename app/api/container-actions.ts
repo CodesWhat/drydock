@@ -2,6 +2,7 @@ import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
+import type { AuditEntry } from '../model/audit.js';
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
@@ -23,8 +24,17 @@ const ACTION_MESSAGES = {
 };
 
 type ContainerAction = keyof typeof ACTION_MESSAGES;
+type ContainerAuditAction = Extract<
+  AuditEntry['action'],
+  'container-start' | 'container-stop' | 'container-restart'
+>;
 
-async function executeAction(req: Request, res: Response, action: string, method: ContainerAction) {
+async function executeAction(
+  req: Request,
+  res: Response,
+  action: ContainerAuditAction,
+  method: ContainerAction,
+) {
   const serverConfiguration = getServerConfiguration();
   if (!serverConfiguration.feature.containeractions) {
     res.sendStatus(403);

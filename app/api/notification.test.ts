@@ -239,4 +239,26 @@ describe('Notification Router', () => {
       error: 'update failure',
     });
   });
+
+  test('should return 400 when store update throws a string', () => {
+    mockUpdateNotificationRule.mockImplementationOnce(() => {
+      throw 'update failure';
+    });
+    notificationRouter.init();
+    const handler = mockRouter.patch.mock.calls.find((call) => call[0] === '/:id')[1];
+    const res = createMockResponse();
+
+    handler(
+      {
+        params: { id: 'update-available' },
+        body: { enabled: true },
+      },
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'update failure',
+    });
+  });
 });
