@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 
 import { executeSelfUpdateTransition, findDockerSocketBind } from './SelfUpdateTransitionShared.js';
@@ -70,6 +72,15 @@ function createDependencies(overrides = {}) {
 }
 
 describe('SelfUpdateTransitionShared', () => {
+  test('SelfUpdateTransitionShared should avoid Record<string, any> contracts', () => {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, './SelfUpdateTransitionShared.ts'),
+      'utf8',
+    );
+
+    expect(source).not.toContain('Record<string, any>');
+  });
+
   test('findDockerSocketBind returns the host socket path', () => {
     expect(
       findDockerSocketBind({

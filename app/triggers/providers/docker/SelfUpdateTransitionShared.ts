@@ -3,41 +3,60 @@ import {
   SELF_UPDATE_POLL_INTERVAL_MS,
   SELF_UPDATE_START_TIMEOUT_MS,
 } from './self-update-timeouts.js';
+import type {
+  SelfUpdateConfiguration,
+  SelfUpdateContainerRef,
+  SelfUpdateContainerSpec,
+  SelfUpdateCreatedContainer,
+  SelfUpdateDockerApi,
+  SelfUpdateExecutionContext,
+  SelfUpdateLogger,
+} from './self-update-types.js';
+
+type SelfUpdateRuntimeConfigOptions = Record<string, unknown>;
+type SelfUpdateContainerCreateSpec = Record<string, unknown>;
 
 interface SelfUpdateTransitionDependencies {
-  getConfiguration: () => { dryrun?: boolean } | undefined;
-  findDockerSocketBind: (spec: Record<string, any> | undefined) => string | undefined;
+  getConfiguration: () => SelfUpdateConfiguration | undefined;
+  findDockerSocketBind: (spec: SelfUpdateContainerSpec | undefined) => string | undefined;
   insertContainerImageBackup: (
-    context: Record<string, any>,
-    container: Record<string, any>,
+    context: SelfUpdateExecutionContext,
+    container: SelfUpdateContainerRef,
   ) => void;
   pullImage: (
-    dockerApi: Record<string, any>,
-    auth: Record<string, any>,
+    dockerApi: SelfUpdateDockerApi,
+    auth: unknown,
     newImage: string,
-    logContainer: Record<string, any>,
+    logContainer: SelfUpdateLogger,
   ) => Promise<void>;
   getCloneRuntimeConfigOptions: (
-    dockerApi: Record<string, any>,
-    currentContainerSpec: Record<string, any>,
+    dockerApi: SelfUpdateDockerApi,
+    currentContainerSpec: SelfUpdateContainerSpec,
     newImage: string,
-    logContainer: Record<string, any>,
-  ) => Promise<Record<string, any>>;
+    logContainer: SelfUpdateLogger,
+  ) => Promise<SelfUpdateRuntimeConfigOptions>;
   cloneContainer: (
-    currentContainerSpec: Record<string, any>,
+    currentContainerSpec: SelfUpdateContainerSpec,
     newImage: string,
-    cloneRuntimeConfigOptions: Record<string, any>,
-  ) => Record<string, any>;
+    cloneRuntimeConfigOptions: SelfUpdateRuntimeConfigOptions,
+  ) => SelfUpdateContainerCreateSpec;
   createContainer: (
-    dockerApi: Record<string, any>,
-    containerToCreateInspect: Record<string, any>,
+    dockerApi: SelfUpdateDockerApi,
+    containerToCreateInspect: SelfUpdateContainerCreateSpec,
     oldContainerName: string,
-    logContainer: Record<string, any>,
-  ) => Promise<Record<string, any>>;
+    logContainer: SelfUpdateLogger,
+  ) => Promise<SelfUpdateCreatedContainer>;
   createOperationId: () => string;
 }
 
-function findDockerSocketBind(spec: Record<string, any> | undefined): string | undefined {
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return `${error}`;
+}
+
+function findDockerSocketBind(spec: SelfUpdateContainerSpec | undefined): string | undefined {
   const binds = spec?.HostConfig?.Binds;
   if (!Array.isArray(binds)) return undefined;
   for (const bind of binds) {
@@ -51,9 +70,9 @@ function findDockerSocketBind(spec: Record<string, any> | undefined): string | u
 
 async function executeSelfUpdateTransition(
   dependencies: SelfUpdateTransitionDependencies,
-  context: Record<string, any>,
-  container: Record<string, any>,
-  logContainer: Record<string, any>,
+  context: SelfUpdateExecutionContext,
+  container: SelfUpdateContainerRef,
+  logContainer: SelfUpdateLogger,
   operationId?: string,
 ) {
   const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
@@ -99,8 +118,8 @@ async function executeSelfUpdateTransition(
       oldName,
       logContainer,
     );
-  } catch (e) {
-    logContainer.warn(`Failed to create new container, rolling back rename: ${e.message}`);
+  } catch (e: unknown) {
+    logContainer.warn(`Failed to create new container, rolling back rename: ${getErrorMessage(e)}`);
     await currentContainer.rename({ name: oldName });
     throw e;
   }
@@ -108,8 +127,8 @@ async function executeSelfUpdateTransition(
   let newContainerId;
   try {
     newContainerId = (await newContainer.inspect()).Id;
-  } catch (e) {
-    logContainer.warn(`Failed to inspect new container, rolling back: ${e.message}`);
+  } catch (e: unknown) {
+    logContainer.warn(`Failed to inspect new container, rolling back: ${getErrorMessage(e)}`);
     try {
       await newContainer.remove({ force: true });
     } catch {
@@ -149,8 +168,8 @@ async function executeSelfUpdateTransition(
         name: `drydock-self-update-${Date.now()}`,
       })
       .then((helperContainer) => helperContainer.start());
-  } catch (e) {
-    logContainer.warn(`Failed to spawn helper container, rolling back: ${e.message}`);
+  } catch (e: unknown) {
+    logContainer.warn(`Failed to spawn helper container, rolling back: ${getErrorMessage(e)}`);
     try {
       await newContainer.remove({ force: true });
     } catch {

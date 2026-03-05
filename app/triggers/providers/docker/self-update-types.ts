@@ -18,6 +18,10 @@ export interface SelfUpdateContainerRef {
 export interface SelfUpdateContainerSpec {
   Name: string;
   Id: string;
+  Config?: {
+    Image?: string;
+  };
+  Image?: string;
   HostConfig?: {
     Binds?: string[];
   };
@@ -52,6 +56,11 @@ export interface SelfUpdateDockerApi {
   createContainer: (
     options: SelfUpdateHelperContainerCreateOptions,
   ) => Promise<SelfUpdateHelperContainer>;
+  getImage?: (imageRef: string) =>
+    | {
+        inspect?: () => Promise<{ Config?: Record<string, unknown> }>;
+      }
+    | undefined;
 }
 
 export interface SelfUpdateExecutionContext {
