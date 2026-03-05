@@ -25,7 +25,12 @@ export function useLogViewport() {
   return { logContainer, scrollBlocked, scrollToBottom, handleLogScroll, resumeAutoScroll };
 }
 
-export const LOG_AUTO_FETCH_INTERVALS = [
+export interface LogAutoFetchIntervalOption {
+  label: string;
+  value: number;
+}
+
+export const LOG_AUTO_FETCH_INTERVALS: LogAutoFetchIntervalOption[] = [
   { label: 'Off', value: 0 },
   { label: '2s', value: 2000 },
   { label: '5s', value: 5000 },

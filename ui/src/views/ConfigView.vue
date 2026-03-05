@@ -9,6 +9,10 @@ import {
   useAutoFetchLogs,
   useLogViewport,
 } from '../composables/useLogViewerBehavior';
+import ConfigAppearanceTab from '../components/config/ConfigAppearanceTab.vue';
+import ConfigGeneralTab from '../components/config/ConfigGeneralTab.vue';
+import ConfigLogsTab from '../components/config/ConfigLogsTab.vue';
+import ConfigProfileTab from '../components/config/ConfigProfileTab.vue';
 import { type IconLibrary, iconMap, libraryLabels } from '../icons';
 import { themeFamilies } from '../theme/palettes';
 import { getAppInfos } from '../services/app';
@@ -61,6 +65,7 @@ const settingsTabs = [
   { id: 'logs' as const, label: 'Logs', icon: 'logs' },
   { id: 'profile' as const, label: 'Profile', icon: 'user' },
 ];
+const availableThemeFamilies = themeFamilies;
 
 const loading = ref(true);
 const serverFields = ref<Array<{ label: string; value: string }>>([]);
@@ -422,660 +427,123 @@ async function handleClearIconCache() {
     cacheClearing.value = false;
   }
 }
+
+function setAppLogContainer(element: HTMLElement | null) {
+  logContainer.value = element;
+}
+
+function handleSelectThemeFamily(familyId: string, event: Event) {
+  transitionTheme(
+    () => setThemeFamily(familyId as (typeof availableThemeFamilies)[number]['id']),
+    event,
+  );
+}
+
+function handleSelectFont(fontId: string) {
+  setFont(fontId as FontId);
+}
+
+function handleSelectIconLibrary(library: string) {
+  setIconLibrary(library as IconLibrary);
+}
 </script>
 
 <template>
   <DataViewLayout>
-      <!-- Tabs -->
-      <div class="flex gap-1 mb-6"
-           :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-        <button v-for="tab in settingsTabs" :key="tab.id"
-                class="px-4 py-2.5 text-[12px] font-semibold transition-colors relative"
-                :class="activeSettingsTab === tab.id
-                  ? 'text-drydock-secondary'
-                  : 'dd-text-muted hover:dd-text'"
-                @click="activeSettingsTab = tab.id">
-          <AppIcon :name="tab.icon" :size="12" class="mr-1.5" />
-          {{ tab.label }}
-          <div v-if="activeSettingsTab === tab.id"
-               class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full" />
-        </button>
-      </div>
+    <div class="flex gap-1 mb-6" :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+      <button
+        v-for="tab in settingsTabs"
+        :key="tab.id"
+        class="px-4 py-2.5 text-[12px] font-semibold transition-colors relative"
+        :class="activeSettingsTab === tab.id ? 'text-drydock-secondary' : 'dd-text-muted hover:dd-text'"
+        @click="activeSettingsTab = tab.id"
+      >
+        <AppIcon :name="tab.icon" :size="12" class="mr-1.5" />
+        {{ tab.label }}
+        <div
+          v-if="activeSettingsTab === tab.id"
+          class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full"
+        />
+      </button>
+    </div>
 
-      <!-- GENERAL TAB -->
-      <div v-if="activeSettingsTab === 'general'" class="space-y-6">
-        <div class="flex items-center justify-end">
-          <button
-            data-testid="general-refresh"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90 disabled:opacity-50"
-            :disabled="loading"
-            @click="loadGeneralSettingsData">
-            <AppIcon name="refresh" :size="12" :class="{ 'animate-spin': loading }" />
-            {{ loading ? 'Loading' : 'Refresh' }}
-          </button>
-        </div>
+    <ConfigGeneralTab
+      v-if="activeSettingsTab === 'general'"
+      :loading="loading"
+      :server-error="serverError"
+      :settings-error="settingsError"
+      :has-legacy-compatibility-inputs="hasLegacyCompatibilityInputs"
+      :legacy-input-summary="legacyInputSummary"
+      :legacy-env-keys-preview="legacyEnvKeysPreview"
+      :legacy-label-keys-preview="legacyLabelKeysPreview"
+      :server-fields="serverFields"
+      :store-fields="storeFields"
+      :webhook-enabled="webhookEnabled"
+      :webhook-endpoints="webhookEndpoints"
+      :webhook-example="webhookExample"
+      :internetless-mode="internetlessMode"
+      :settings-loading="settingsLoading"
+      :cache-clearing="cacheClearing"
+      :cache-cleared="cacheCleared"
+      @toggle-internetless-mode="toggleInternetlessMode"
+      @clear-icon-cache="handleClearIconCache"
+    />
 
-        <div v-if="serverError"
-             class="px-3 py-2 text-[11px] dd-rounded"
-             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
-          {{ serverError }}
-        </div>
+    <ConfigAppearanceTab
+      v-if="activeSettingsTab === 'appearance'"
+      :theme-families="availableThemeFamilies"
+      :theme-family="themeFamily.value"
+      :is-dark="isDark.value"
+      :theme-variant="themeVariant.value"
+      :active-font="activeFont.value"
+      :font-loading="fontLoading.value"
+      :font-options="fontOptions"
+      :is-font-loaded="isFontLoaded"
+      :icon-library="iconLibrary.value"
+      :library-labels="libraryLabels"
+      :icon-map="iconMap"
+      :icon-scale="iconScale.value"
+      :on-select-theme-family="handleSelectThemeFamily"
+      :on-select-font="handleSelectFont"
+      :on-select-icon-library="handleSelectIconLibrary"
+      :on-change-icon-scale="setIconScale"
+    />
 
-        <div v-if="settingsError"
-             class="px-3 py-2 text-[11px] dd-rounded"
-             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
-          {{ settingsError }}
-        </div>
+    <ConfigLogsTab
+      v-if="activeSettingsTab === 'logs'"
+      :log-level="appLogLevel"
+      :entries="appLogEntries"
+      :loading="appLogsLoading"
+      :error="appLogsError"
+      :log-level-filter="appLogLevelFilter"
+      :tail="appLogTail"
+      :auto-fetch-interval="autoFetchInterval"
+      :component-filter="appLogComponent"
+      :auto-fetch-options="LOG_AUTO_FETCH_INTERVALS"
+      :scroll-blocked="scrollBlocked"
+      :last-fetched-iso="appLogsLastFetched"
+      :format-last-fetched="formatLastFetched"
+      :format-timestamp="formatLogTimestamp"
+      :message-for-entry="logMessage"
+      :level-color="getLevelColor"
+      @update:log-level-filter="appLogLevelFilter = $event"
+      @update:tail="appLogTail = $event"
+      @update:auto-fetch-interval="autoFetchInterval = $event"
+      @update:component-filter="appLogComponent = $event"
+      @refresh="refreshAppLogs"
+      @reset="resetLogFilters"
+      @resume-auto-scroll="resumeAutoScroll"
+      @log-scroll="handleLogScroll"
+      @set-log-container="setAppLogContainer"
+    />
 
-        <div v-if="hasLegacyCompatibilityInputs"
-             data-testid="legacy-input-banner"
-             class="px-4 py-3 dd-rounded"
-             :style="{
-               backgroundColor: 'var(--dd-warning-muted)',
-               border: '1px solid var(--dd-warning)',
-             }">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <div class="text-[12px] font-semibold" :style="{ color: 'var(--dd-warning)' }">
-                Legacy compatibility inputs detected
-              </div>
-              <p class="text-[11px] dd-text-secondary mt-1">
-                Deprecated <code class="font-mono">WUD_*</code> environment variables and
-                <code class="font-mono">wud.*</code> labels are still in use.
-              </p>
-            </div>
-            <span class="px-2 py-1 text-[10px] font-semibold dd-rounded"
-                  :style="{
-                    backgroundColor: 'var(--dd-bg-card)',
-                    border: '1px solid var(--dd-warning)',
-                    color: 'var(--dd-warning)',
-                  }">
-              {{ legacyInputSummary?.total }} events
-            </span>
-          </div>
-          <div class="mt-2 space-y-1.5 text-[10px] dd-text-secondary">
-            <div v-if="legacyInputSummary?.env.total">
-              Env keys ({{ legacyInputSummary?.env.total }}): {{ legacyEnvKeysPreview }}
-            </div>
-            <div v-if="legacyInputSummary?.label.total">
-              Label keys ({{ legacyInputSummary?.label.total }}): {{ legacyLabelKeysPreview }}
-            </div>
-          </div>
-          <p class="mt-2 text-[10px] dd-text-secondary">
-            Run <code class="font-mono">node dist/index.js config migrate --dry-run</code> then
-            <code class="font-mono">node dist/index.js config migrate --file &lt;path&gt;</code>.
-            <a href="https://drydock.codeswhat.com/docs/quickstart"
-               target="_blank"
-               rel="noopener noreferrer"
-               class="underline ml-1"
-               :style="{ color: 'var(--dd-warning)' }">Migration CLI docs</a>
-          </p>
-        </div>
-
-        <!-- Application Info -->
-        <div class="dd-rounded overflow-hidden"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }">
-          <div class="px-5 py-3.5 flex items-center gap-2"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
-            <h2 class="text-sm font-semibold dd-text">Application</h2>
-          </div>
-          <div class="p-5 space-y-4">
-            <div v-if="loading" class="flex items-center justify-center gap-2 text-[12px] dd-text-muted py-4">
-              <AppIcon name="refresh" :size="12" class="animate-spin" />
-              Loading server info
-            </div>
-            <template v-else>
-              <div v-for="field in serverFields" :key="field.label"
-                   class="flex items-center justify-between py-2"
-                   :style="{ borderBottom: '1px solid var(--dd-border)' }">
-                <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">{{ field.label }}</span>
-                <span class="text-[12px] font-medium font-mono dd-text">{{ field.value }}</span>
-              </div>
-            </template>
-          </div>
-        </div>
-
-        <!-- Store -->
-        <div class="dd-rounded overflow-hidden"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }">
-          <div class="px-5 py-3.5 flex items-center gap-2"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <AppIcon name="server" :size="14" class="text-drydock-secondary" />
-            <h2 class="text-sm font-semibold dd-text">Store</h2>
-          </div>
-          <div class="p-5 space-y-4">
-            <div v-for="field in storeFields" :key="field.label"
-                 class="flex items-center justify-between py-2"
-                 :style="{ borderBottom: '1px solid var(--dd-border)' }">
-              <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">{{ field.label }}</span>
-              <span class="text-[12px] font-medium font-mono dd-text">{{ field.value }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Webhook API -->
-        <div class="dd-rounded overflow-hidden"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }">
-          <div class="px-5 py-3.5 flex items-center justify-between gap-3"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <div class="flex items-center gap-2">
-              <AppIcon name="bolt" :size="14" class="text-drydock-secondary" />
-              <h2 class="text-sm font-semibold dd-text">Webhook API</h2>
-            </div>
-            <span class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider dd-rounded"
-                  :style="{
-                    backgroundColor: webhookEnabled ? 'var(--dd-success-muted)' : 'var(--dd-bg-inset)',
-                    color: webhookEnabled ? 'var(--dd-success)' : 'var(--dd-text-muted)',
-                    border: webhookEnabled
-                      ? '1px solid var(--dd-success)'
-                      : '1px solid var(--dd-border-strong)',
-                  }">
-              {{ webhookEnabled ? 'Enabled' : 'Disabled' }}
-            </span>
-          </div>
-          <div class="p-5 space-y-4">
-            <p class="text-[11px] dd-text-muted">
-              Use these endpoints to trigger watch cycles and updates via HTTP.
-              All requests require a Bearer token in the Authorization header.
-            </p>
-            <p v-if="!webhookEnabled" class="text-[11px] dd-text-muted">
-              Webhook API is disabled. Set <code class="font-mono">DD_SERVER_WEBHOOK_ENABLED=true</code> and
-              <code class="font-mono">DD_SERVER_WEBHOOK_TOKEN</code> to enable it.
-            </p>
-            <div class="overflow-x-auto dd-rounded"
-                 :style="{ border: '1px solid var(--dd-border-strong)' }">
-              <table class="w-full text-left text-[11px]">
-                <thead :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <tr>
-                    <th class="px-3 py-2 font-semibold uppercase tracking-wider dd-text-muted">Endpoint</th>
-                    <th class="px-3 py-2 font-semibold uppercase tracking-wider dd-text-muted">Description</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="entry in webhookEndpoints" :key="entry.endpoint"
-                      :style="{ borderTop: '1px solid var(--dd-border)' }">
-                    <td class="px-3 py-2">
-                      <code class="text-[11px] font-mono dd-text">{{ entry.endpoint }}</code>
-                    </td>
-                    <td class="px-3 py-2 dd-text-secondary">{{ entry.description }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div>
-              <div class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted mb-1.5">Example</div>
-              <pre class="px-3 py-2 text-[11px] font-mono dd-rounded overflow-x-auto"
-                   :style="{
-                     backgroundColor: 'var(--dd-bg-inset)',
-                     border: '1px solid var(--dd-border-strong)',
-                     color: 'var(--dd-text)',
-                   }">{{ webhookExample }}</pre>
-            </div>
-          </div>
-        </div>
-
-        <!-- Internetless Mode -->
-        <div class="dd-rounded overflow-hidden"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }">
-          <div class="px-5 py-3.5 flex items-center gap-2"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <AppIcon name="globe" :size="14" class="text-drydock-secondary" />
-            <h2 class="text-sm font-semibold dd-text">Network</h2>
-          </div>
-          <div class="p-5">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-[12px] font-semibold dd-text">Internetless Mode</div>
-                <div class="text-[10px] dd-text-muted mt-0.5">
-                  Block all outbound requests (container icons, external fetches)
-                </div>
-              </div>
-              <ToggleSwitch
-                :model-value="internetlessMode"
-                :disabled="settingsLoading"
-                @update:model-value="toggleInternetlessMode"
-              />
-            </div>
-          </div>
-        </div>
-        <!-- Icon Cache -->
-        <div class="dd-rounded overflow-hidden"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }">
-          <div class="px-5 py-3.5 flex items-center gap-2"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <AppIcon name="containers" :size="14" class="text-drydock-secondary" />
-            <h2 class="text-sm font-semibold dd-text">Container Icon Cache</h2>
-          </div>
-          <div class="p-5">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-[12px] font-semibold dd-text">Cached Icons</div>
-                <div class="text-[10px] dd-text-muted mt-0.5">
-                  Common icons are bundled; other icons are cached to disk on first fetch
-                </div>
-              </div>
-              <div class="flex items-center gap-2">
-                <span v-if="cacheCleared !== null" class="text-[10px] dd-text-success">
-                  {{ cacheCleared }} cleared
-                </span>
-                <button
-                  class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
-                  :class="cacheClearing ? 'opacity-50 pointer-events-none' : ''"
-                  :style="{
-                    backgroundColor: 'var(--dd-danger-muted)',
-                    color: 'var(--dd-danger)',
-                    border: '1px solid var(--dd-danger)',
-                  }"
-                  @click="handleClearIconCache">
-                  <AppIcon name="trash" :size="10" class="mr-1" />
-                  Clear Cache
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- APPEARANCE TAB -->
-      <div v-if="activeSettingsTab === 'appearance'" class="space-y-6">
-
-        <!-- Color Theme -->
-        <div class="dd-rounded overflow-hidden"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }">
-          <div class="flex items-center gap-2 px-5 py-3"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
-            <h2 class="text-sm font-semibold dd-text">Color Theme</h2>
-          </div>
-          <div class="p-4">
-            <div class="grid grid-cols-2 gap-3">
-              <button v-for="fam in themeFamilies" :key="fam.id"
-                      class="dd-rounded p-3 text-left transition-[color,background-color,border-color,opacity,transform,box-shadow] border"
-                      :class="themeFamily === fam.id ? 'ring-2 ring-drydock-secondary' : ''"
-                      :style="{
-                        backgroundColor: themeFamily === fam.id
-                          ? 'var(--dd-primary-muted)'
-                          : 'var(--dd-bg-inset)',
-                        border: themeFamily === fam.id
-                          ? '1px solid var(--dd-primary)'
-                          : '1px solid var(--dd-border-strong)',
-                      }"
-                      @click="transitionTheme(() => setThemeFamily(fam.id), $event)">
-                <div class="flex items-center gap-2 mb-1.5">
-                  <span class="w-4 h-4 rounded-full border-2"
-                        :style="{ backgroundColor: isDark ? fam.swatchDark : fam.swatchLight, borderColor: fam.accent }" />
-                  <span class="text-[12px] font-semibold"
-                        :class="themeFamily === fam.id ? 'text-drydock-secondary' : 'dd-text'">
-                    {{ fam.label }}
-                  </span>
-                </div>
-                <div class="text-[10px] dd-text-muted">
-                  {{ fam.description }}
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Theme Variant -->
-        <div class="dd-rounded overflow-hidden"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }">
-          <div class="px-5 py-3.5 flex items-center gap-2"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <AppIcon :name="themeVariant === 'system' ? 'monitor' : isDark ? 'moon' : 'sun'" :size="14" class="text-drydock-secondary" />
-            <h2 class="text-sm font-semibold dd-text">Theme</h2>
-          </div>
-          <div class="p-5 flex items-center gap-4">
-            <ThemeToggle size="md" />
-            <span class="text-[12px] font-semibold dd-text-secondary capitalize">{{ themeVariant }}</span>
-          </div>
-        </div>
-
-        <!-- Font Family -->
-        <div class="dd-rounded overflow-hidden"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }">
-          <div class="px-5 py-3.5 flex items-center gap-2"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <AppIcon name="terminal" :size="14" class="text-drydock-secondary" />
-            <h2 class="text-sm font-semibold dd-text">Font Family</h2>
-          </div>
-          <div class="p-5">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button v-for="f in fontOptions" :key="f.id"
-                      class="flex items-center gap-3 px-4 py-3 dd-rounded text-left transition-colors"
-                      :class="[
-                        activeFont === f.id ? 'ring-2 ring-drydock-secondary' : '',
-                        fontLoading ? 'pointer-events-none' : '',
-                      ]"
-                      :style="{
-                        backgroundColor: activeFont === f.id
-                          ? 'var(--dd-primary-muted)'
-                          : 'var(--dd-bg-inset)',
-                        border: activeFont === f.id
-                          ? '1.5px solid var(--dd-primary)'
-                          : '1px solid var(--dd-border-strong)',
-                      }"
-                      @click="setFont(f.id as FontId)">
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-1.5">
-                    <span class="text-[13px] font-semibold truncate"
-                         :style="isFontLoaded(f.id) ? { fontFamily: f.family } : {}"
-                         :class="activeFont === f.id ? 'text-drydock-secondary' : 'dd-text'">
-                      {{ f.label }}
-                    </span>
-                    <span v-if="f.bundled" class="text-[8px] font-bold uppercase tracking-wider dd-text-muted px-1 py-0.5 dd-rounded-sm"
-                          :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
-                      default
-                    </span>
-                  </div>
-                  <div class="text-[10px] mt-0.5 truncate dd-text-muted"
-                       :style="isFontLoaded(f.id) ? { fontFamily: f.family } : {}">
-                    The quick brown fox jumps over the lazy dog
-                  </div>
-                </div>
-                <AppIcon v-if="activeFont === f.id" name="check" :size="14" class="text-drydock-secondary shrink-0" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Icon Library -->
-        <div class="dd-rounded overflow-hidden"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }">
-          <div class="px-5 py-3.5 flex items-center gap-2"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <AppIcon name="dashboard" :size="14" class="text-drydock-secondary" />
-            <h2 class="text-sm font-semibold dd-text">Icon Library</h2>
-          </div>
-          <div class="p-5">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              <button v-for="(label, lib) in libraryLabels" :key="lib"
-                      class="flex items-center gap-3 px-4 py-3 dd-rounded text-left transition-colors"
-                      :class="iconLibrary === lib ? 'ring-2 ring-drydock-secondary' : ''"
-                      :style="{
-                        backgroundColor: iconLibrary === lib
-                          ? 'var(--dd-primary-muted)'
-                          : 'var(--dd-bg-inset)',
-                        border: iconLibrary === lib
-                          ? '1.5px solid var(--dd-primary)'
-                          : '1px solid var(--dd-border-strong)',
-                      }"
-                      @click="setIconLibrary(lib as IconLibrary)">
-                <div class="w-8 h-8 dd-rounded flex items-center justify-center"
-                     :style="{
-                       backgroundColor: iconLibrary === lib ? 'var(--dd-primary-muted)' : 'var(--dd-bg-elevated)',
-                     }">
-                  <iconify-icon :icon="iconMap['dashboard']?.[lib as IconLibrary]" width="18" height="18"
-                                :class="iconLibrary === lib ? 'text-drydock-secondary' : 'dd-text-secondary'" />
-                </div>
-                <div class="min-w-0">
-                  <div class="text-[12px] font-semibold" :class="iconLibrary === lib ? 'text-drydock-secondary' : 'dd-text'">
-                    {{ label }}
-                  </div>
-                  <div class="text-[10px] dd-text-muted">
-                    {{ lib }}
-                  </div>
-                </div>
-                <div v-if="iconLibrary === lib" class="ml-auto shrink-0">
-                  <AppIcon name="check" :size="14" class="text-drydock-secondary" />
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Icon Size -->
-        <div class="dd-rounded overflow-hidden"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }">
-          <div class="px-5 py-3.5 flex items-center gap-2"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <AppIcon name="containers" :size="14" class="text-drydock-secondary" />
-            <h2 class="text-sm font-semibold dd-text">Icon Size</h2>
-          </div>
-          <div class="p-5">
-            <div class="flex items-center gap-4">
-              <AppIcon name="dashboard" :size="10" class="dd-text-muted" />
-              <input type="range" min="0.8" max="1.5" step="0.05"
-                     :value="iconScale"
-                     @input="setIconScale(parseFloat(($event.target as HTMLInputElement).value))"
-                     class="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
-                     :style="{ background: 'var(--dd-border-strong)', accentColor: 'var(--dd-primary)' }" />
-              <AppIcon name="dashboard" :size="20" class="dd-text-muted" />
-            </div>
-            <div class="text-center mt-2 text-[11px] dd-text-muted">
-              {{ Math.round(iconScale * 100) }}%
-            </div>
-          </div>
-        </div>
-
-      </div><!-- end appearance tab -->
-
-      <!-- LOGS TAB -->
-      <div v-if="activeSettingsTab === 'logs'" class="space-y-6">
-        <div class="dd-rounded overflow-hidden"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }">
-          <div class="px-5 py-3.5 flex items-center justify-between gap-3"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <div class="flex items-center gap-2">
-              <AppIcon name="logs" :size="14" class="text-drydock-secondary" />
-              <h2 class="text-sm font-semibold dd-text">Application Logs</h2>
-            </div>
-            <div class="text-[10px] dd-text-muted">
-              Server Level: <span class="font-semibold dd-text capitalize">{{ appLogLevel }}</span>
-            </div>
-          </div>
-
-          <div class="p-5 space-y-4">
-            <div class="flex flex-wrap items-center gap-2">
-              <select v-model="appLogLevelFilter"
-                      class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
-                <option value="all">All Levels</option>
-                <option value="debug">Debug</option>
-                <option value="info">Info</option>
-                <option value="warn">Warn</option>
-                <option value="error">Error</option>
-              </select>
-
-              <select v-model.number="appLogTail"
-                      class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
-                <option :value="50">Tail 50</option>
-                <option :value="100">Tail 100</option>
-                <option :value="500">Tail 500</option>
-                <option :value="1000">Tail 1000</option>
-              </select>
-
-              <select v-model.number="autoFetchInterval"
-                      class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
-                <option v-for="opt in LOG_AUTO_FETCH_INTERVALS" :key="opt.value" :value="opt.value">
-                  {{ opt.label }}
-                </option>
-              </select>
-
-              <input v-model="appLogComponent"
-                     type="text"
-                     placeholder="Filter by component..."
-                     class="flex-1 min-w-[180px] max-w-[280px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-placeholder dd-border-strong"
-                     @keyup.enter="refreshAppLogs" />
-
-              <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
-                      :class="appLogsLoading ? 'opacity-50 pointer-events-none' : ''"
-                      @click="refreshAppLogs">
-                Apply
-              </button>
-              <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text"
-                      :class="appLogsLoading ? 'opacity-50 pointer-events-none' : ''"
-                      @click="resetLogFilters">
-                Reset
-              </button>
-              <button class="p-1.5 dd-rounded transition-colors dd-text-muted hover:dd-text"
-                      :class="appLogsLoading ? 'opacity-50 pointer-events-none' : ''"
-                      v-tooltip.top="'Refresh'"
-                      @click="refreshAppLogs">
-                <AppIcon name="refresh" :size="12" />
-              </button>
-            </div>
-
-            <div class="text-[10px] dd-text-muted">
-              Last fetched: {{ formatLastFetched(appLogsLastFetched) }}
-            </div>
-
-            <div v-if="appLogsLoading" class="text-[12px] dd-text-muted text-center py-6">
-              Loading logs...
-            </div>
-            <div v-else-if="appLogsError"
-                 class="text-[11px] px-3 py-2 dd-rounded"
-                 :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
-              {{ appLogsError }}
-            </div>
-            <div v-else ref="logContainer"
-                 class="dd-rounded overflow-auto max-h-[420px] font-mono text-[11px]"
-                 :style="{
-                   backgroundColor: 'var(--dd-bg-inset)',
-                   border: '1px solid var(--dd-border-strong)',
-                 }"
-                 @scroll="handleLogScroll">
-              <div v-if="appLogEntries.length === 0"
-                   class="px-3 py-4 dd-text-muted text-center">
-                No log entries found for current filters.
-              </div>
-              <div v-else>
-                <div v-for="(entry, index) in appLogEntries" :key="index"
-                     class="px-3 py-2 flex gap-3 items-start"
-                     :style="{ borderBottom: index < appLogEntries.length - 1 ? '1px solid var(--dd-border)' : 'none' }">
-                  <span class="shrink-0 tabular-nums dd-text-muted">{{ formatLogTimestamp(entry.timestamp) }}</span>
-                  <span class="shrink-0 uppercase font-semibold"
-                        :style="{ color: getLevelColor(entry.level) }">
-                    {{ entry.level || 'info' }}
-                  </span>
-                  <span class="shrink-0 dd-text-secondary">{{ entry.component || '-' }}</span>
-                  <span class="dd-text break-all">{{ logMessage(entry) }}</span>
-                </div>
-              </div>
-            </div>
-            <div v-if="scrollBlocked && autoFetchInterval > 0"
-                 class="flex items-center justify-between px-3 py-2 text-[10px]"
-                 :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-warning-muted)' }">
-              <span class="font-semibold" :style="{ color: 'var(--dd-warning)' }">Auto-scroll paused</span>
-              <button class="px-2 py-0.5 dd-rounded text-[10px] font-semibold transition-colors"
-                      :style="{ backgroundColor: 'var(--dd-warning)', color: 'var(--dd-bg)' }"
-                      @click="resumeAutoScroll">
-                Resume
-              </button>
-            </div>
-          </div>
-        </div>
-      </div><!-- end logs tab -->
-
-      <!-- PROFILE TAB -->
-      <div v-if="activeSettingsTab === 'profile'" class="space-y-6">
-        <!-- Profile Card -->
-        <div class="dd-rounded overflow-hidden"
-             :style="{
-               backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
-             }">
-          <div class="px-5 py-5 flex items-center justify-between gap-4"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-            <div class="flex items-center gap-4 min-w-0">
-              <div class="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold text-white shrink-0"
-                   style="background: linear-gradient(135deg, var(--dd-primary), var(--dd-success));">
-                {{ profileInitials }}
-              </div>
-              <div class="min-w-0">
-                <div class="text-sm font-bold dd-text truncate">{{ profileDisplayName }}</div>
-                <div class="text-[11px] dd-text-muted truncate">{{ profileData.email || profileData.username || '—' }}</div>
-                <span v-if="profileData.role" class="badge text-[9px] font-semibold mt-1 inline-flex"
-                      :style="{ backgroundColor: 'var(--dd-primary-muted)', color: 'var(--dd-primary)' }">
-                  {{ profileData.role }}
-                </span>
-              </div>
-            </div>
-            <button
-              data-testid="profile-refresh"
-              class="inline-flex items-center gap-1.5 px-2.5 py-1 dd-rounded text-[10px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90 disabled:opacity-50"
-              :disabled="profileLoading"
-              @click="loadProfileData">
-              <AppIcon name="refresh" :size="10" :class="{ 'animate-spin': profileLoading }" />
-              {{ profileLoading ? 'Loading' : 'Refresh' }}
-            </button>
-          </div>
-          <div class="p-5 space-y-4">
-            <div v-if="profileLoading" class="flex items-center justify-center gap-2 text-[12px] dd-text-muted py-4">
-              <AppIcon name="refresh" :size="12" class="animate-spin" />
-              Loading profile
-            </div>
-            <div v-else-if="profileError"
-                 class="text-[11px] px-3 py-2 dd-rounded"
-                 :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
-              {{ profileError }}
-            </div>
-            <template v-else>
-              <div class="flex items-center justify-between py-2"
-                   :style="{ borderBottom: '1px solid var(--dd-border)' }">
-                <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Username</span>
-                <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.username || '—' }}</span>
-              </div>
-              <div class="flex items-center justify-between py-2"
-                   :style="{ borderBottom: '1px solid var(--dd-border)' }">
-                <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Email</span>
-                <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.email || '—' }}</span>
-              </div>
-              <div class="flex items-center justify-between py-2"
-                   :style="{ borderBottom: '1px solid var(--dd-border)' }">
-                <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Role</span>
-                <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.role || '—' }}</span>
-              </div>
-              <div class="flex items-center justify-between py-2"
-                   :style="{ borderBottom: '1px solid var(--dd-border)' }">
-                <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Provider</span>
-                <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.provider || '—' }}</span>
-              </div>
-              <div class="flex items-center justify-between py-2"
-                   :style="{ borderBottom: '1px solid var(--dd-border)' }">
-                <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Last Login</span>
-                <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.lastLogin || '—' }}</span>
-              </div>
-              <div class="flex items-center justify-between py-2">
-                <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Active Sessions</span>
-                <span class="text-[12px] font-medium font-mono dd-text">{{ profileData.sessions }}</span>
-              </div>
-            </template>
-          </div>
-        </div>
-      </div><!-- end profile tab -->
+    <ConfigProfileTab
+      v-if="activeSettingsTab === 'profile'"
+      :profile-initials="profileInitials"
+      :profile-display-name="profileDisplayName"
+      :profile-data="profileData"
+      :profile-loading="profileLoading"
+      :profile-error="profileError"
+    />
   </DataViewLayout>
 </template>

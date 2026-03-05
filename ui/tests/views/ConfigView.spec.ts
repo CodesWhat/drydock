@@ -293,41 +293,6 @@ describe('ConfigView', () => {
       });
     });
 
-    it('refreshes general server/settings data from the refresh button', async () => {
-      mockGetServer
-        .mockResolvedValueOnce({
-          configuration: {
-            port: 3000,
-            feature: { containeractions: true, delete: false },
-            webhook: { enabled: true },
-            trustproxy: false,
-          },
-        })
-        .mockResolvedValueOnce({
-          configuration: {
-            port: 8080,
-            feature: { containeractions: true, delete: false },
-            webhook: { enabled: true },
-            trustproxy: false,
-          },
-        });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
-
-      const w = factory();
-      await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalledTimes(1));
-      await nextTick();
-
-      const refreshButton = w.find('[data-testid="general-refresh"]');
-      expect(refreshButton.exists()).toBe(true);
-      await vi.waitFor(() => {
-        expect(refreshButton.attributes('disabled')).toBeUndefined();
-      });
-      await refreshButton.trigger('click');
-
-      await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalledTimes(2));
-      expect(w.text()).toContain('8080');
-    });
-
     it('displays server fields after loading', async () => {
       mockGetServer.mockResolvedValue({
         configuration: {
@@ -696,29 +661,6 @@ describe('ConfigView', () => {
       await nextTick();
 
       expect(w.text()).toContain('profile boom');
-    });
-
-    it('retries profile fetch from refresh button', async () => {
-      mockGetUser.mockRejectedValueOnce(new Error('first failure')).mockResolvedValueOnce({
-        username: 'admin',
-        displayName: 'Admin User',
-        email: 'admin@test.com',
-        role: 'admin',
-        provider: 'basic',
-        sessions: 2,
-      });
-
-      const w = await mountProfileTab();
-      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalledTimes(1));
-      expect(w.text()).toContain('first failure');
-
-      const refreshButton = w.find('[data-testid="profile-refresh"]');
-      expect(refreshButton.exists()).toBe(true);
-      await refreshButton.trigger('click');
-
-      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalledTimes(2));
-      expect(w.text()).toContain('Admin User');
-      expect(w.text()).toContain('basic');
     });
 
     it('selects profile tab from query param', async () => {
