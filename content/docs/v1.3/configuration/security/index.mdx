@@ -29,6 +29,7 @@ DD_SECURITY_SCANNER=trivy
 | `DD_SECURITY_TRIVY_SERVER` | ⚪ | Trivy server URL (enables client/server mode) | URL | empty (local CLI mode) |
 | `DD_SECURITY_TRIVY_COMMAND` | ⚪ | Trivy command path for local CLI mode | executable path | `trivy` |
 | `DD_SECURITY_TRIVY_TIMEOUT` | ⚪ | Trivy command timeout in milliseconds | integer (`>=1000`) | `120000` |
+| `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES` | ⚪ | Max in-memory digest scan cache entries (oldest entries are evicted first) | integer (`>0`) | `500` |
 
 ## Trivy modes
 

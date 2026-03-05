@@ -10,6 +10,8 @@ import { sanitizeLogParam } from '../log/sanitize.js';
 import type { Container } from '../model/container.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import { getErrorMessage } from '../util/error.js';
+import { getTrivyDatabaseStatus } from './runtime.js';
 import { clearDigestScanCache, scanImageWithDedup } from './scan.js';
 
 const logScheduler = log.child({ component: 'security.scheduler' });
@@ -105,6 +107,8 @@ export async function runScheduledScans(): Promise<void> {
     }
 
     const scanIntervalMs = getCronIntervalMs(securityConfig.scan.cron);
+    const trivyDbStatus = await getTrivyDatabaseStatus();
+    const trivyDbUpdatedAt = trivyDbStatus?.updatedAt;
     let cachedCount = 0;
     let scannedCount = 0;
     let errorCount = 0;
@@ -125,7 +129,7 @@ export async function runScheduledScans(): Promise<void> {
         }
 
         const { scanResult, fromCache } = await scanImageWithDedup(
-          { image, auth, digest },
+          { image, auth, digest, trivyDbUpdatedAt },
           scanIntervalMs,
         );
 
@@ -150,7 +154,7 @@ export async function runScheduledScans(): Promise<void> {
         }
       } catch (error: unknown) {
         errorCount += 1;
-        const errorMessage = error instanceof Error ? error.message : 'unknown error';
+        const errorMessage = getErrorMessage(error);
         logScheduler.warn(
           `Scheduled scan failed for digest ${digest.slice(0, 12)}: ${errorMessage}`,
         );
@@ -194,7 +198,7 @@ export function init(): void {
     cronExpression,
     () => {
       runScheduledScans().catch((error: unknown) => {
-        const msg = error instanceof Error ? error.message : 'unknown error';
+        const msg = getErrorMessage(error);
         logScheduler.warn(`Scheduled scan run failed: ${msg}`);
       });
     },

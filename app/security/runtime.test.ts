@@ -328,6 +328,27 @@ describe('getTrivyDatabaseStatus', () => {
     expect(execFileMock).toHaveBeenCalledTimes(1);
   });
 
+  test('should deduplicate concurrent status lookups while request is in flight', async () => {
+    const execFileMock = vi.fn(
+      (_command: unknown, _args: unknown, _options: unknown, callback: Function) => {
+        setTimeout(() => {
+          callback(null, validTrivyVersionOutput, '');
+        }, 5);
+        return { exitCode: 0 };
+      },
+    );
+    childProcessControl.execFileImpl = execFileMock;
+
+    const [first, second] = await Promise.all([getTrivyDatabaseStatus(), getTrivyDatabaseStatus()]);
+
+    expect(first).toEqual({
+      updatedAt: '2025-06-01T00:00:00Z',
+      downloadedAt: '2025-06-02T12:00:00Z',
+    });
+    expect(second).toEqual(first);
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+  });
+
   test('should invoke execFile again after cache is cleared', async () => {
     const execFileMock = mockExecFileSuccess(validTrivyVersionOutput);
 

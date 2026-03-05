@@ -5,6 +5,7 @@ const mockGetContainers = vi.hoisted(() => vi.fn());
 const mockUpdateContainer = vi.hoisted(() => vi.fn());
 const mockScanImageWithDedup = vi.hoisted(() => vi.fn());
 const mockClearDigestScanCache = vi.hoisted(() => vi.fn());
+const mockGetTrivyDatabaseStatus = vi.hoisted(() => vi.fn());
 const mockBroadcastScanStarted = vi.hoisted(() => vi.fn());
 const mockBroadcastScanCompleted = vi.hoisted(() => vi.fn());
 const mockResolveContainerImageFullName = vi.hoisted(() => vi.fn());
@@ -12,13 +13,24 @@ const mockResolveContainerRegistryAuth = vi.hoisted(() => vi.fn());
 const mockGetState = vi.hoisted(() => vi.fn());
 const mockCronSchedule = vi.hoisted(() => vi.fn());
 const mockCronValidate = vi.hoisted(() => vi.fn());
+const mockLogInfo = vi.hoisted(() => vi.fn());
+const mockLogWarn = vi.hoisted(() => vi.fn());
+const mockLogError = vi.hoisted(() => vi.fn());
+const mockLogDebug = vi.hoisted(() => vi.fn());
 
 vi.mock('../configuration/index.js', () => ({
   getSecurityConfiguration: mockGetSecurityConfiguration,
 }));
 
 vi.mock('../log/index.js', () => ({
-  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
+  default: {
+    child: () => ({
+      info: mockLogInfo,
+      warn: mockLogWarn,
+      error: mockLogError,
+      debug: mockLogDebug,
+    }),
+  },
 }));
 
 vi.mock('../log/sanitize.js', () => ({
@@ -54,6 +66,10 @@ vi.mock('../store/container.js', () => ({
 vi.mock('./scan.js', () => ({
   scanImageWithDedup: (...args: unknown[]) => mockScanImageWithDedup(...args),
   clearDigestScanCache: (...args: unknown[]) => mockClearDigestScanCache(...args),
+}));
+
+vi.mock('./runtime.js', () => ({
+  getTrivyDatabaseStatus: (...args: unknown[]) => mockGetTrivyDatabaseStatus(...args),
 }));
 
 import {
@@ -122,6 +138,7 @@ beforeEach(() => {
   mockResolveContainerImageFullName.mockReturnValue('docker.io/library/nginx:1.25');
   mockResolveContainerRegistryAuth.mockResolvedValue(undefined);
   mockGetSecurityConfiguration.mockReturnValue(createEnabledConfiguration());
+  mockGetTrivyDatabaseStatus.mockResolvedValue({ updatedAt: '2026-03-04T02:55:00.000Z' });
 });
 
 describe('init', () => {
@@ -254,6 +271,30 @@ describe('init', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 10));
   });
+
+  test('should include message from object-like errors thrown by runScheduledScans in the cron callback', async () => {
+    mockCronValidate.mockReturnValue(true);
+    let cronCallback: () => void;
+    mockCronSchedule.mockImplementation((_expr: string, cb: () => void) => {
+      cronCallback = cb;
+      return { stop: vi.fn() };
+    });
+    let callCount = 0;
+    mockGetSecurityConfiguration.mockImplementation(() => {
+      callCount += 1;
+      if (callCount > 1) {
+        throw { message: 'config exploded' };
+      }
+      return createEnabledConfiguration();
+    });
+
+    init();
+    cronCallback!();
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(mockLogWarn).toHaveBeenCalledWith('Scheduled scan run failed: config exploded');
+  });
 });
 
 describe('runScheduledScans', () => {
@@ -289,6 +330,41 @@ describe('runScheduledScans', () => {
     expect(mockBroadcastScanCompleted).toHaveBeenCalledTimes(3);
     // All three containers should be updated
     expect(mockUpdateContainer).toHaveBeenCalledTimes(3);
+  });
+
+  test('should query trivy db status once and pass it to each digest scan', async () => {
+    const container1 = createContainer({ id: 'c1' });
+    const container2 = createContainer({
+      id: 'c2',
+      name: 'redis',
+      image: {
+        ...createContainer().image,
+        name: 'library/redis',
+        digest: { watch: true, value: 'sha256:def456' },
+      },
+    });
+    mockGetContainers.mockReturnValue([container1, container2]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockGetTrivyDatabaseStatus).toHaveBeenCalledTimes(1);
+    expect(mockScanImageWithDedup).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        digest: 'sha256:abc123',
+        trivyDbUpdatedAt: '2026-03-04T02:55:00.000Z',
+      }),
+      86400000,
+    );
+    expect(mockScanImageWithDedup).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        digest: 'sha256:def456',
+        trivyDbUpdatedAt: '2026-03-04T02:55:00.000Z',
+      }),
+      86400000,
+    );
   });
 
   test('should return cached result when scanImageWithDedup returns fromCache', async () => {
@@ -347,6 +423,16 @@ describe('runScheduledScans', () => {
     await runScheduledScans();
 
     expect(mockBroadcastScanCompleted).toHaveBeenCalledWith('c1', 'error');
+  });
+
+  test('should log object-like scan errors using their message property', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockRejectedValue({ message: 'trivy timeout' });
+
+    await runScheduledScans();
+
+    expect(mockLogWarn).toHaveBeenCalledWith(expect.stringContaining('trivy timeout'));
   });
 
   test('should broadcast scan-started and scan-completed for each container', async () => {
@@ -662,11 +748,12 @@ describe('runScheduledScans', () => {
     await runScheduledScans();
 
     expect(mockScanImageWithDedup).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         image: 'docker.io/library/nginx:1.25',
         auth: { username: 'user', password: 'pass' },
         digest: 'sha256:abc123',
-      },
+        trivyDbUpdatedAt: '2026-03-04T02:55:00.000Z',
+      }),
       86400000,
     );
   });

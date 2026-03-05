@@ -8,7 +8,7 @@ import {
 } from '../configuration/index.js';
 import log from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
-import { getTrivyDatabaseStatus } from './runtime.js';
+import { hasValidCommandPath } from './runtime.js';
 
 export {
   SECURITY_SEVERITIES,
@@ -105,12 +105,26 @@ interface TrivyRawOutput {
 const MAX_TRIVY_OUTPUT_BYTES = 50 * 1024 * 1024; // 50 MB
 const MAX_COSIGN_OUTPUT_BYTES = 2 * 1024 * 1024; // 2 MB
 const MAX_STORED_VULNERABILITIES = 500;
+const DEFAULT_DIGEST_SCAN_CACHE_MAX_ENTRIES = 500;
 const COSIGN_UNVERIFIED_PATTERNS = [
   'no matching signatures',
   'no signatures found',
   'signature verification failed',
   'invalid signature',
 ];
+
+function toPositiveInteger(rawValue: string | undefined, fallbackValue: number): number {
+  const parsedValue = Number.parseInt(String(rawValue ?? ''), 10);
+  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+    return fallbackValue;
+  }
+  return parsedValue;
+}
+
+export const DIGEST_SCAN_CACHE_MAX_ENTRIES = toPositiveInteger(
+  process.env.DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES,
+  DEFAULT_DIGEST_SCAN_CACHE_MAX_ENTRIES,
+);
 
 let trivyQueue: Promise<void> = Promise.resolve();
 
@@ -294,7 +308,12 @@ function runTrivyVulnerabilityCommand(
   configuration: ReturnType<typeof getSecurityConfiguration>,
 ): Promise<string> {
   return enqueueTrivy(() => {
-    const trivyCommand = configuration.trivy.command || 'trivy';
+    const trivyCommand = `${configuration.trivy.command || 'trivy'}`.trim() || 'trivy';
+    if (!hasValidCommandPath(trivyCommand)) {
+      throw new Error(
+        `Trivy command "${sanitizeLogParam(trivyCommand)}" is invalid; use a command name or absolute path`,
+      );
+    }
     const args = [...buildTrivyArgs(configuration, 'json'), options.image];
 
     return runCommand({
@@ -314,7 +333,12 @@ function runTrivySbomCommand(
   format: SecuritySbomFormat,
 ): Promise<string> {
   return enqueueTrivy(() => {
-    const trivyCommand = configuration.trivy.command || 'trivy';
+    const trivyCommand = `${configuration.trivy.command || 'trivy'}`.trim() || 'trivy';
+    if (!hasValidCommandPath(trivyCommand)) {
+      throw new Error(
+        `Trivy command "${sanitizeLogParam(trivyCommand)}" is invalid; use a command name or absolute path`,
+      );
+    }
     const args = [...buildTrivyArgs(configuration, format), options.image];
 
     return runCommand({
@@ -658,6 +682,35 @@ export interface DigestScanCacheEntry {
 
 const digestScanCache = new Map<string, DigestScanCacheEntry>();
 
+function setDigestScanCacheEntry(
+  digest: string,
+  scanResult: ContainerSecurityScan,
+  trivyDbUpdatedAt: string,
+): void {
+  if (digestScanCache.has(digest)) {
+    digestScanCache.delete(digest);
+  }
+  digestScanCache.set(digest, {
+    digest,
+    scanResult,
+    trivyDbUpdatedAt,
+    cachedAt: Date.now(),
+  });
+
+  while (digestScanCache.size > DIGEST_SCAN_CACHE_MAX_ENTRIES) {
+    const oldestDigest = digestScanCache.keys().next().value;
+    if (typeof oldestDigest !== 'string') {
+      break;
+    }
+    digestScanCache.delete(oldestDigest);
+  }
+}
+
+function markDigestScanCacheEntryAsRecentlyUsed(digest: string, entry: DigestScanCacheEntry): void {
+  digestScanCache.delete(digest);
+  digestScanCache.set(digest, entry);
+}
+
 export function clearDigestScanCache(): void {
   digestScanCache.clear();
 }
@@ -671,21 +724,15 @@ export function updateDigestScanCache(
   scanResult: ContainerSecurityScan,
   trivyDbUpdatedAt: string,
 ): void {
-  digestScanCache.set(digest, {
-    digest,
-    scanResult,
-    trivyDbUpdatedAt,
-    cachedAt: Date.now(),
-  });
+  setDigestScanCacheEntry(digest, scanResult, trivyDbUpdatedAt);
 }
 
 export async function scanImageWithDedup(
-  options: ScanImageOptions & { digest: string },
+  options: ScanImageOptions & { digest: string; trivyDbUpdatedAt?: string },
   scanIntervalMs: number,
 ): Promise<{ scanResult: ContainerSecurityScan; fromCache: boolean }> {
   const cached = digestScanCache.get(options.digest);
-  const dbStatus = await getTrivyDatabaseStatus();
-  const dbUpdatedAt = dbStatus?.updatedAt;
+  const dbUpdatedAt = options.trivyDbUpdatedAt;
 
   if (
     cached &&
@@ -693,17 +740,13 @@ export async function scanImageWithDedup(
     cached.trivyDbUpdatedAt === dbUpdatedAt &&
     Date.now() - cached.cachedAt < scanIntervalMs
   ) {
+    markDigestScanCacheEntryAsRecentlyUsed(options.digest, cached);
     return { scanResult: cached.scanResult, fromCache: true };
   }
 
   const scanResult = await scanImageForVulnerabilities(options);
 
-  digestScanCache.set(options.digest, {
-    digest: options.digest,
-    scanResult,
-    trivyDbUpdatedAt: dbUpdatedAt || '',
-    cachedAt: Date.now(),
-  });
+  setDigestScanCacheEntry(options.digest, scanResult, dbUpdatedAt || '');
 
   return { scanResult, fromCache: false };
 }
