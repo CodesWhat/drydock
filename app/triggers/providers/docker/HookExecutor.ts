@@ -1,22 +1,98 @@
 import TriggerPipelineError from './TriggerPipelineError.js';
 
+type HookExecutorLogger = {
+  child?: (bindings?: Record<string, unknown>) => unknown;
+  warn?: (message: string) => void;
+};
+
+type HookContainer = {
+  name: string;
+  id: string;
+  image: {
+    name: string;
+    tag: { value: string };
+  };
+  updateKind: {
+    kind: string;
+    localValue?: string | null;
+    remoteValue?: string | null;
+  };
+  labels?: Record<string, string>;
+};
+
+type HookResult = {
+  exitCode: number;
+  timedOut: boolean;
+  stdout: string;
+  stderr: string;
+};
+
+type HookConfig = {
+  hookPre?: string;
+  hookPost?: string;
+  hookPreAbort: boolean;
+  hookTimeout: number;
+  hookEnv: Record<string, string>;
+};
+
+type HookExecutorDependencies = {
+  runHook: (
+    command: string,
+    options: { timeout: number; env: Record<string, string>; label: string },
+  ) => Promise<HookResult>;
+  getPreferredLabelValue: (
+    labels: Record<string, string> | undefined,
+    ddKey: string,
+    wudKey: string,
+    logger?: unknown,
+  ) => string | undefined;
+  getLogger: () => HookExecutorLogger | undefined;
+  recordHookAudit: (
+    action: string,
+    container: HookContainer,
+    status: 'success' | 'error',
+    details: string,
+  ) => void;
+};
+
+type HookExecutorConstructorOptions = Omit<
+  HookExecutorDependencies,
+  'getLogger' | 'recordHookAudit'
+> & {
+  getLogger?: HookExecutorDependencies['getLogger'];
+  recordHookAudit?: HookExecutorDependencies['recordHookAudit'];
+};
+
+const REQUIRED_HOOK_EXECUTOR_DEPENDENCY_KEYS = ['runHook', 'getPreferredLabelValue'] as const;
+
+function assertRequiredDependencies(
+  options: Partial<HookExecutorDependencies>,
+): asserts options is HookExecutorConstructorOptions {
+  for (const key of REQUIRED_HOOK_EXECUTOR_DEPENDENCY_KEYS) {
+    if (typeof options[key] !== 'function') {
+      throw new TypeError(`HookExecutor requires dependency "${key}"`);
+    }
+  }
+}
+
 class HookExecutor {
-  runHook;
+  runHook: HookExecutorDependencies['runHook'];
 
-  getPreferredLabelValue;
+  getPreferredLabelValue: HookExecutorDependencies['getPreferredLabelValue'];
 
-  getLogger;
+  getLogger: HookExecutorDependencies['getLogger'];
 
-  recordHookAudit;
+  recordHookAudit: HookExecutorDependencies['recordHookAudit'];
 
-  constructor(options: Record<string, any> = {}) {
+  constructor(options: HookExecutorConstructorOptions) {
+    assertRequiredDependencies(options);
     this.runHook = options.runHook;
     this.getPreferredLabelValue = options.getPreferredLabelValue;
     this.getLogger = options.getLogger || (() => undefined);
     this.recordHookAudit = options.recordHookAudit || (() => undefined);
   }
 
-  buildHookConfig(container) {
+  buildHookConfig(container: HookContainer): HookConfig {
     const logger = this.getLogger()?.child?.({});
     return {
       hookPre: this.getPreferredLabelValue(container.labels, 'dd.hook.pre', 'wud.hook.pre', logger),
@@ -56,18 +132,18 @@ class HookExecutor {
     };
   }
 
-  isHookFailure(hookResult) {
+  isHookFailure(hookResult: HookResult): boolean {
     return hookResult.exitCode !== 0 || hookResult.timedOut;
   }
 
-  getHookFailureDetails(prefix, hookResult, hookTimeout) {
+  getHookFailureDetails(prefix: string, hookResult: HookResult, hookTimeout: number): string {
     if (hookResult.timedOut) {
       return `${prefix} hook timed out after ${hookTimeout}ms`;
     }
     return `${prefix} hook exited with code ${hookResult.exitCode}: ${hookResult.stderr}`;
   }
 
-  createHookFailureError(prefix, hookResult, hookTimeout) {
+  createHookFailureError(prefix: string, hookResult: HookResult, hookTimeout: number) {
     return new TriggerPipelineError(
       'hook-execution-failed',
       this.getHookFailureDetails(prefix, hookResult, hookTimeout),
@@ -77,7 +153,7 @@ class HookExecutor {
     );
   }
 
-  async executeHook(command, hookConfig, label, prefix) {
+  async executeHook(command: string, hookConfig: HookConfig, label: string, prefix: string) {
     const hookResult = await this.runHook(command, {
       timeout: hookConfig.hookTimeout,
       env: hookConfig.hookEnv,
@@ -91,7 +167,11 @@ class HookExecutor {
     return hookResult;
   }
 
-  async runPreUpdateHook(container, hookConfig, logContainer) {
+  async runPreUpdateHook(
+    container: HookContainer,
+    hookConfig: HookConfig,
+    logContainer: { warn: (message: string) => void },
+  ) {
     if (!hookConfig.hookPre) {
       return;
     }
@@ -124,7 +204,11 @@ class HookExecutor {
     );
   }
 
-  async runPostUpdateHook(container, hookConfig, logContainer) {
+  async runPostUpdateHook(
+    container: HookContainer,
+    hookConfig: HookConfig,
+    logContainer: { warn: (message: string) => void },
+  ) {
     if (!hookConfig.hookPost) {
       return;
     }

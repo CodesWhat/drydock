@@ -1,55 +1,138 @@
 import crypto from 'node:crypto';
+import {
+  executeSelfUpdateTransition,
+  findDockerSocketBind as findDockerSocketBindFromSpec,
+} from './SelfUpdateTransitionShared.js';
+import type {
+  SelfUpdateConfiguration,
+  SelfUpdateContainerRef,
+  SelfUpdateContainerSpec,
+  SelfUpdateCreatedContainer,
+  SelfUpdateDockerApi,
+  SelfUpdateExecutionContext,
+  SelfUpdateLogger,
+  SelfUpdateRuntimeConfigManager,
+} from './self-update-types.js';
 
-const SELF_UPDATE_START_TIMEOUT_MS = 30_000;
-const SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
-const SELF_UPDATE_POLL_INTERVAL_MS = 1_000;
 const SELF_UPDATE_ACK_TIMEOUT_MS = 3_000;
 
+interface SelfUpdateStartingPayload {
+  opId: string;
+  requiresAck: boolean;
+  ackTimeoutMs: number;
+  startedAt: string;
+}
+
+interface SelfUpdateOrchestratorDependencies {
+  getConfiguration: () => SelfUpdateConfiguration;
+  runtimeConfigManager: SelfUpdateRuntimeConfigManager;
+  pullImage: (
+    dockerApi: SelfUpdateDockerApi,
+    auth: unknown,
+    newImage: string,
+    logContainer: SelfUpdateLogger,
+  ) => Promise<void>;
+  cloneContainer: (
+    currentContainerSpec: SelfUpdateContainerSpec,
+    newImage: string,
+    cloneRuntimeConfigOptions: Record<string, unknown>,
+  ) => Record<string, unknown>;
+  createContainer: (
+    dockerApi: SelfUpdateDockerApi,
+    containerToCreateInspect: Record<string, unknown>,
+    oldContainerName: string,
+    logContainer: SelfUpdateLogger,
+  ) => Promise<SelfUpdateCreatedContainer>;
+  insertContainerImageBackup: (
+    context: SelfUpdateExecutionContext,
+    container: SelfUpdateContainerRef,
+  ) => void;
+  emitSelfUpdateStarting: (payload: SelfUpdateStartingPayload) => Promise<void>;
+  createOperationId: () => string;
+}
+
+interface SelfUpdateOrchestratorConstructorOptions {
+  getConfiguration?: SelfUpdateOrchestratorDependencies['getConfiguration'];
+  runtimeConfigManager?: SelfUpdateOrchestratorDependencies['runtimeConfigManager'];
+  pullImage?: (
+    dockerApi: SelfUpdateDockerApi,
+    auth: unknown,
+    newImage: string,
+    logContainer: SelfUpdateLogger,
+  ) => unknown;
+  cloneContainer?: (
+    currentContainerSpec: SelfUpdateContainerSpec,
+    newImage: string,
+    cloneRuntimeConfigOptions: Record<string, unknown>,
+  ) => unknown;
+  createContainer?: (
+    dockerApi: SelfUpdateDockerApi,
+    containerToCreateInspect: Record<string, unknown>,
+    oldContainerName: string,
+    logContainer: SelfUpdateLogger,
+  ) => unknown;
+  insertContainerImageBackup?: SelfUpdateOrchestratorDependencies['insertContainerImageBackup'];
+  emitSelfUpdateStarting?: SelfUpdateOrchestratorDependencies['emitSelfUpdateStarting'];
+  createOperationId?: SelfUpdateOrchestratorDependencies['createOperationId'];
+}
+
+function missingDependency(dependencyName: string): never {
+  throw new TypeError(`SelfUpdateOrchestrator requires dependency "${dependencyName}"`);
+}
+
 class SelfUpdateOrchestrator {
-  getConfiguration;
+  getConfiguration: SelfUpdateOrchestratorDependencies['getConfiguration'];
 
-  runtimeConfigManager;
+  runtimeConfigManager: SelfUpdateOrchestratorDependencies['runtimeConfigManager'];
 
-  pullImage;
+  pullImage: SelfUpdateOrchestratorDependencies['pullImage'];
 
-  cloneContainer;
+  cloneContainer: SelfUpdateOrchestratorDependencies['cloneContainer'];
 
-  createContainer;
+  createContainer: SelfUpdateOrchestratorDependencies['createContainer'];
 
-  insertContainerImageBackup;
+  insertContainerImageBackup: SelfUpdateOrchestratorDependencies['insertContainerImageBackup'];
 
-  emitSelfUpdateStarting;
+  emitSelfUpdateStarting: SelfUpdateOrchestratorDependencies['emitSelfUpdateStarting'];
 
-  createOperationId;
+  createOperationId: SelfUpdateOrchestratorDependencies['createOperationId'];
 
-  constructor(options: Record<string, any> = {}) {
+  constructor(options: SelfUpdateOrchestratorConstructorOptions = {}) {
     this.getConfiguration = options.getConfiguration || (() => ({}));
-    this.runtimeConfigManager = options.runtimeConfigManager;
-    this.pullImage = options.pullImage;
-    this.cloneContainer = options.cloneContainer;
-    this.createContainer = options.createContainer;
+    this.runtimeConfigManager = options.runtimeConfigManager || {
+      getCloneRuntimeConfigOptions: async () =>
+        missingDependency('runtimeConfigManager.getCloneRuntimeConfigOptions'),
+    };
+    this.pullImage =
+      (options.pullImage as SelfUpdateOrchestratorDependencies['pullImage']) ||
+      (async (..._args: Parameters<SelfUpdateOrchestratorDependencies['pullImage']>) =>
+        missingDependency('pullImage'));
+    this.cloneContainer =
+      (options.cloneContainer as SelfUpdateOrchestratorDependencies['cloneContainer']) ||
+      ((..._args: Parameters<SelfUpdateOrchestratorDependencies['cloneContainer']>) =>
+        missingDependency('cloneContainer'));
+    this.createContainer =
+      (options.createContainer as SelfUpdateOrchestratorDependencies['createContainer']) ||
+      (async (..._args: Parameters<SelfUpdateOrchestratorDependencies['createContainer']>) =>
+        missingDependency('createContainer'));
     this.insertContainerImageBackup = options.insertContainerImageBackup || (() => undefined);
     this.emitSelfUpdateStarting = options.emitSelfUpdateStarting || (() => Promise.resolve());
     this.createOperationId = options.createOperationId || (() => crypto.randomUUID());
   }
 
-  isSelfUpdate(container) {
+  isSelfUpdate(container: SelfUpdateContainerRef): boolean {
     return container.image.name === 'drydock' || container.image.name.endsWith('/drydock');
   }
 
-  findDockerSocketBind(spec) {
-    const binds = spec?.HostConfig?.Binds;
-    if (!Array.isArray(binds)) return undefined;
-    for (const bind of binds) {
-      const parts = bind.split(':');
-      if (parts.length >= 2 && parts[1] === '/var/run/docker.sock') {
-        return parts[0];
-      }
-    }
-    return undefined;
+  findDockerSocketBind(spec: SelfUpdateContainerSpec | undefined): string | undefined {
+    return findDockerSocketBindFromSpec(spec);
   }
 
-  async maybeNotify(container, logContainer, operationId?: string) {
+  async maybeNotify(
+    container: SelfUpdateContainerRef,
+    logContainer: SelfUpdateLogger,
+    operationId?: string,
+  ): Promise<void> {
     if (!this.isSelfUpdate(container)) {
       return;
     }
@@ -63,119 +146,30 @@ class SelfUpdateOrchestrator {
     });
   }
 
-  async execute(context, container, logContainer, operationId?: string) {
-    const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
-
-    if (this.getConfiguration()?.dryrun) {
-      logContainer.info('Do not replace the existing container because dry-run mode is enabled');
-      return false;
-    }
-
-    const socketPath = this.findDockerSocketBind(currentContainerSpec);
-    if (!socketPath) {
-      throw new Error(
-        'Self-update requires the Docker socket to be bind-mounted (e.g. /var/run/docker.sock:/var/run/docker.sock)',
-      );
-    }
-
-    // Insert backup before starting the update.
-    this.insertContainerImageBackup(context, container);
-
-    // Pull the new image while we're still alive
-    await this.pullImage(dockerApi, auth, newImage, logContainer);
-    const cloneRuntimeConfigOptions = await this.runtimeConfigManager.getCloneRuntimeConfigOptions(
-      dockerApi,
-      currentContainerSpec,
-      newImage,
+  async execute(
+    context: SelfUpdateExecutionContext,
+    container: SelfUpdateContainerRef,
+    logContainer: SelfUpdateLogger,
+    operationId?: string,
+  ): Promise<boolean> {
+    return executeSelfUpdateTransition(
+      {
+        getConfiguration: this.getConfiguration,
+        findDockerSocketBind: this.findDockerSocketBind.bind(this),
+        insertContainerImageBackup: this.insertContainerImageBackup,
+        pullImage: this.pullImage,
+        getCloneRuntimeConfigOptions: this.runtimeConfigManager.getCloneRuntimeConfigOptions.bind(
+          this.runtimeConfigManager,
+        ),
+        cloneContainer: this.cloneContainer,
+        createContainer: this.createContainer,
+        createOperationId: this.createOperationId,
+      },
+      context,
+      container,
       logContainer,
+      operationId,
     );
-
-    const oldName = currentContainerSpec.Name.replace(/^\//, '');
-    const tempName = `drydock-old-${Date.now()}`;
-
-    // Rename old container to free the name
-    logContainer.info(`Rename container ${oldName} to ${tempName}`);
-    await currentContainer.rename({ name: tempName });
-
-    let newContainer;
-    try {
-      // Create new container with original name (don't start — port conflict)
-      const containerToCreateInspect = this.cloneContainer(
-        currentContainerSpec,
-        newImage,
-        cloneRuntimeConfigOptions,
-      );
-      newContainer = await this.createContainer(
-        dockerApi,
-        containerToCreateInspect,
-        oldName,
-        logContainer,
-      );
-    } catch (e) {
-      // Rollback: rename old container back to original name
-      logContainer.warn(`Failed to create new container, rolling back rename: ${e.message}`);
-      await currentContainer.rename({ name: oldName });
-      throw e;
-    }
-
-    // Spawn a helper container to orchestrate the stop/start/cleanup
-    let newContainerId;
-    try {
-      newContainerId = (await newContainer.inspect()).Id;
-    } catch (e) {
-      logContainer.warn(`Failed to inspect new container, rolling back: ${e.message}`);
-      try {
-        await newContainer.remove({ force: true });
-      } catch {
-        /* best effort */
-      }
-      await currentContainer.rename({ name: oldName });
-      throw e;
-    }
-    const oldContainerId = currentContainerSpec.Id;
-    const socketMount = `${socketPath}:/var/run/docker.sock`;
-    const selfUpdateOperationId = operationId || this.createOperationId();
-
-    logContainer.info('Spawning helper container for self-update transition');
-    try {
-      await dockerApi
-        .createContainer({
-          Image: newImage,
-          Cmd: ['node', 'dist/triggers/providers/docker/self-update-controller-entrypoint.js'],
-          Env: [
-            `DD_SELF_UPDATE_OP_ID=${selfUpdateOperationId}`,
-            `DD_SELF_UPDATE_OLD_CONTAINER_ID=${oldContainerId}`,
-            `DD_SELF_UPDATE_NEW_CONTAINER_ID=${newContainerId}`,
-            `DD_SELF_UPDATE_OLD_CONTAINER_NAME=${oldName}`,
-            `DD_SELF_UPDATE_START_TIMEOUT_MS=${SELF_UPDATE_START_TIMEOUT_MS}`,
-            `DD_SELF_UPDATE_HEALTH_TIMEOUT_MS=${SELF_UPDATE_HEALTH_TIMEOUT_MS}`,
-            `DD_SELF_UPDATE_POLL_INTERVAL_MS=${SELF_UPDATE_POLL_INTERVAL_MS}`,
-          ],
-          Labels: {
-            'dd.self-update.helper': 'true',
-            'dd.self-update.operation-id': selfUpdateOperationId,
-          },
-          HostConfig: {
-            AutoRemove: true,
-            Binds: [socketMount],
-          },
-          name: `drydock-self-update-${Date.now()}`,
-        })
-        .then((helperContainer) => helperContainer.start());
-    } catch (e) {
-      // Rollback: remove new container, rename old back
-      logContainer.warn(`Failed to spawn helper container, rolling back: ${e.message}`);
-      try {
-        await newContainer.remove({ force: true });
-      } catch {
-        /* best effort */
-      }
-      await currentContainer.rename({ name: oldName });
-      throw e;
-    }
-
-    logContainer.info('Helper container started — process will terminate when old container stops');
-    return true;
   }
 }
 

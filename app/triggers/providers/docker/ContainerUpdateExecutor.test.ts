@@ -107,8 +107,29 @@ describe('ContainerUpdateExecutor', () => {
   });
 
   test('constructor provides default configuration fallback', () => {
-    const executor = new ContainerUpdateExecutor({});
+    const executor = new ContainerUpdateExecutor({
+      getTriggerId: vi.fn(() => 'docker.update'),
+      stopContainer: vi.fn(),
+      waitContainerRemoved: vi.fn(),
+      removeContainer: vi.fn(),
+      createContainer: vi.fn(),
+      startContainer: vi.fn(),
+      pullImage: vi.fn(),
+      cloneContainer: vi.fn(),
+      getCloneRuntimeConfigOptions: vi.fn(),
+      isContainerNotFoundError: vi.fn(() => false),
+      recordRollbackTelemetry: vi.fn(),
+      buildRuntimeConfigCompatibilityError: vi.fn(() => undefined),
+      hasHealthcheckConfigured: vi.fn(() => false),
+      waitForContainerHealthy: vi.fn(),
+    });
     expect(executor.getConfiguration()).toEqual({});
+  });
+
+  test('constructor should throw when required dependencies are missing', () => {
+    expect(() => new ContainerUpdateExecutor({} as never)).toThrow(
+      'ContainerUpdateExecutor requires dependency "getTriggerId"',
+    );
   });
 
   test('inspectContainerByIdentifier returns inspection result or undefined when missing/failing', async () => {

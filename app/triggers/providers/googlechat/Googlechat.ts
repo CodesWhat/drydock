@@ -63,6 +63,7 @@ class Googlechat extends Trigger {
       headers: {
         'content-type': 'application/json',
       },
+      timeout: 30000,
     });
   }
 }

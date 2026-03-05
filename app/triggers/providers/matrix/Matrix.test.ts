@@ -131,6 +131,7 @@ test('postMessage should call Matrix message endpoint', async () => {
         Authorization: 'Bearer matrix_token_abcdefghijklmnopqrstuvwxyz',
         'content-type': 'application/json',
       },
+      timeout: 30000,
     },
   );
 });

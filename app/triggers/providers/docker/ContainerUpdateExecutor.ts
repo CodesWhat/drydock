@@ -1,37 +1,217 @@
 import * as updateOperationStore from '../../../store/update-operation.js';
 
+type ContainerUpdateLogger = {
+  info: (message: string) => void;
+  warn: (message: string) => void;
+};
+
+type ContainerInspection = {
+  Id?: string;
+  State?: {
+    Running?: boolean;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+type DockerContainerHandle = {
+  inspect: () => Promise<ContainerInspection>;
+  stop: () => Promise<void>;
+  remove: (options?: { force?: boolean }) => Promise<void>;
+  rename: (options: { name: string }) => Promise<void>;
+  start: () => Promise<void>;
+};
+
+type DockerApiLike = {
+  getContainer: (identifier: string) => DockerContainerHandle;
+};
+
+type ContainerSpecLike = {
+  Name: string;
+  Id: string;
+  State: {
+    Running: boolean;
+    [key: string]: unknown;
+  };
+  HostConfig?: {
+    AutoRemove?: boolean;
+    [key: string]: unknown;
+  };
+  Config?: {
+    Image?: string;
+    [key: string]: unknown;
+  };
+  Image?: string;
+  [key: string]: unknown;
+};
+
+type ContainerForUpdate = {
+  id: string;
+  name: string;
+  image: {
+    tag: {
+      value: string;
+    };
+  };
+  updateKind: {
+    localValue?: string | null;
+    remoteValue?: string | null;
+  };
+  [key: string]: unknown;
+};
+
+type ContainerUpdateContext = {
+  dockerApi: DockerApiLike;
+  auth: unknown;
+  newImage: string;
+  currentContainer: DockerContainerHandle;
+  currentContainerSpec: ContainerSpecLike;
+};
+
+type ContainerUpdateExecutorDependencies = {
+  getConfiguration: () => { dryrun?: boolean };
+  getTriggerId: () => string;
+  stopContainer: (
+    container: DockerContainerHandle,
+    containerName: string,
+    containerId: string,
+    logContainer: ContainerUpdateLogger,
+  ) => Promise<void>;
+  waitContainerRemoved: (
+    container: DockerContainerHandle,
+    containerName: string,
+    containerId: string,
+    logContainer: ContainerUpdateLogger,
+  ) => Promise<void>;
+  removeContainer: (
+    container: DockerContainerHandle,
+    containerName: string,
+    containerId: string,
+    logContainer: ContainerUpdateLogger,
+  ) => Promise<void>;
+  createContainer: (
+    dockerApi: DockerApiLike,
+    containerToCreateInspect: unknown,
+    containerName: string,
+    logContainer: ContainerUpdateLogger,
+  ) => Promise<DockerContainerHandle>;
+  startContainer: (
+    container: DockerContainerHandle,
+    containerName: string,
+    logContainer: ContainerUpdateLogger,
+  ) => Promise<void>;
+  pullImage: (
+    dockerApi: DockerApiLike,
+    auth: unknown,
+    newImage: string,
+    logContainer: ContainerUpdateLogger,
+  ) => Promise<void>;
+  cloneContainer: (
+    currentContainerSpec: ContainerSpecLike,
+    newImage: string,
+    cloneRuntimeConfigOptions: unknown,
+  ) => unknown;
+  getCloneRuntimeConfigOptions: (
+    dockerApi: DockerApiLike,
+    currentContainerSpec: ContainerSpecLike,
+    newImage: string,
+    logContainer: ContainerUpdateLogger,
+  ) => Promise<unknown>;
+  isContainerNotFoundError: (error: unknown) => boolean;
+  recordRollbackTelemetry: (
+    container: ContainerForUpdate,
+    status: 'success' | 'error' | 'info',
+    reason: string,
+    message: string,
+    fromVersion: string,
+    toVersion: string,
+  ) => void;
+  buildRuntimeConfigCompatibilityError: (
+    error: unknown,
+    containerName: string,
+    currentContainerSpec: ContainerSpecLike,
+    targetImage: string,
+    rollbackSucceeded: boolean,
+  ) => Error | undefined;
+  hasHealthcheckConfigured: (currentContainerSpec: ContainerSpecLike) => boolean;
+  waitForContainerHealthy: (
+    container: DockerContainerHandle,
+    containerName: string,
+    logContainer: ContainerUpdateLogger,
+  ) => Promise<void>;
+};
+
+type ContainerUpdateExecutorConstructorOptions = Omit<
+  ContainerUpdateExecutorDependencies,
+  'getConfiguration'
+> & {
+  getConfiguration?: ContainerUpdateExecutorDependencies['getConfiguration'];
+};
+
+const REQUIRED_CONTAINER_UPDATE_EXECUTOR_DEPENDENCY_KEYS = [
+  'getTriggerId',
+  'stopContainer',
+  'waitContainerRemoved',
+  'removeContainer',
+  'createContainer',
+  'startContainer',
+  'pullImage',
+  'cloneContainer',
+  'getCloneRuntimeConfigOptions',
+  'isContainerNotFoundError',
+  'recordRollbackTelemetry',
+  'buildRuntimeConfigCompatibilityError',
+  'hasHealthcheckConfigured',
+  'waitForContainerHealthy',
+] as const;
+
+function assertRequiredDependencies(
+  options: Partial<ContainerUpdateExecutorDependencies>,
+): asserts options is ContainerUpdateExecutorConstructorOptions {
+  for (const key of REQUIRED_CONTAINER_UPDATE_EXECUTOR_DEPENDENCY_KEYS) {
+    if (typeof options[key] !== 'function') {
+      throw new TypeError(`ContainerUpdateExecutor requires dependency "${key}"`);
+    }
+  }
+}
+
+function getErrorMessage(error: unknown): string {
+  return String((error as Error)?.message ?? error);
+}
+
 class ContainerUpdateExecutor {
-  getConfiguration;
+  getConfiguration: ContainerUpdateExecutorDependencies['getConfiguration'];
 
-  getTriggerId;
+  getTriggerId: ContainerUpdateExecutorDependencies['getTriggerId'];
 
-  stopContainer;
+  stopContainer: ContainerUpdateExecutorDependencies['stopContainer'];
 
-  waitContainerRemoved;
+  waitContainerRemoved: ContainerUpdateExecutorDependencies['waitContainerRemoved'];
 
-  removeContainer;
+  removeContainer: ContainerUpdateExecutorDependencies['removeContainer'];
 
-  createContainer;
+  createContainer: ContainerUpdateExecutorDependencies['createContainer'];
 
-  startContainer;
+  startContainer: ContainerUpdateExecutorDependencies['startContainer'];
 
-  pullImage;
+  pullImage: ContainerUpdateExecutorDependencies['pullImage'];
 
-  cloneContainer;
+  cloneContainer: ContainerUpdateExecutorDependencies['cloneContainer'];
 
-  getCloneRuntimeConfigOptions;
+  getCloneRuntimeConfigOptions: ContainerUpdateExecutorDependencies['getCloneRuntimeConfigOptions'];
 
-  isContainerNotFoundError;
+  isContainerNotFoundError: ContainerUpdateExecutorDependencies['isContainerNotFoundError'];
 
-  recordRollbackTelemetry;
+  recordRollbackTelemetry: ContainerUpdateExecutorDependencies['recordRollbackTelemetry'];
 
-  buildRuntimeConfigCompatibilityError;
+  buildRuntimeConfigCompatibilityError: ContainerUpdateExecutorDependencies['buildRuntimeConfigCompatibilityError'];
 
-  hasHealthcheckConfigured;
+  hasHealthcheckConfigured: ContainerUpdateExecutorDependencies['hasHealthcheckConfigured'];
 
-  waitForContainerHealthy;
+  waitForContainerHealthy: ContainerUpdateExecutorDependencies['waitForContainerHealthy'];
 
-  constructor(options: Record<string, any> = {}) {
+  constructor(options: ContainerUpdateExecutorConstructorOptions) {
+    assertRequiredDependencies(options);
     this.getConfiguration = options.getConfiguration || (() => ({}));
     this.getTriggerId = options.getTriggerId;
     this.stopContainer = options.stopContainer;
@@ -49,7 +229,7 @@ class ContainerUpdateExecutor {
     this.waitForContainerHealthy = options.waitForContainerHealthy;
   }
 
-  async inspectContainerByIdentifier(dockerApi, identifier) {
+  async inspectContainerByIdentifier(dockerApi: DockerApiLike, identifier: string | undefined) {
     if (!identifier) {
       return undefined;
     }
@@ -62,7 +242,11 @@ class ContainerUpdateExecutor {
     }
   }
 
-  async stopAndRemoveContainerBestEffort(dockerApi, identifier, logContainer) {
+  async stopAndRemoveContainerBestEffort(
+    dockerApi: DockerApiLike,
+    identifier: string,
+    logContainer: ContainerUpdateLogger,
+  ) {
     const inspected = await this.inspectContainerByIdentifier(dockerApi, identifier);
     if (!inspected) {
       return false;
@@ -71,23 +255,27 @@ class ContainerUpdateExecutor {
       if (inspected.inspection?.State?.Running) {
         await inspected.container.stop();
       }
-    } catch (e) {
+    } catch (e: unknown) {
       logContainer.warn(
-        `Failed to stop stale container ${identifier} during recovery (${e.message})`,
+        `Failed to stop stale container ${identifier} during recovery (${getErrorMessage(e)})`,
       );
     }
     try {
       await inspected.container.remove({ force: true });
       return true;
-    } catch (e) {
+    } catch (e: unknown) {
       logContainer.warn(
-        `Failed to remove stale container ${identifier} during recovery (${e.message})`,
+        `Failed to remove stale container ${identifier} during recovery (${getErrorMessage(e)})`,
       );
       return false;
     }
   }
 
-  async reconcileInProgressContainerUpdateOperation(dockerApi, container, logContainer) {
+  async reconcileInProgressContainerUpdateOperation(
+    dockerApi: DockerApiLike,
+    container: ContainerForUpdate,
+    logContainer: ContainerUpdateLogger,
+  ) {
     const pending = updateOperationStore.getInProgressOperationByContainerName(container.name);
     if (!pending) {
       return;
@@ -128,14 +316,14 @@ class ContainerUpdateExecutor {
     }
 
     if (!activeByOriginalName && tempByRenamedName) {
-      let recoveryError;
+      let recoveryError: unknown;
       try {
         await tempByRenamedName.container.rename({ name: pending.oldName });
         if (pending.oldContainerWasRunning && pending.oldContainerStopped) {
           const restored = dockerApi.getContainer(pending.oldName);
           await restored.start();
         }
-      } catch (e) {
+      } catch (e: unknown) {
         recoveryError = e;
       }
 
@@ -143,7 +331,7 @@ class ContainerUpdateExecutor {
       updateOperationStore.updateOperation(pending.id, {
         status: recovered ? 'rolled-back' : 'failed',
         phase: recovered ? 'recovered-rollback' : 'recovery-failed',
-        lastError: recoveryError ? String(recoveryError?.message || recoveryError) : undefined,
+        lastError: recoveryError ? getErrorMessage(recoveryError) : undefined,
         recoveredAt: new Date().toISOString(),
       });
       this.recordRollbackTelemetry(
@@ -152,7 +340,7 @@ class ContainerUpdateExecutor {
         recovered ? 'startup_reconcile_restore_old' : 'startup_reconcile_restore_failed',
         recovered
           ? `Recovered interrupted update by restoring container name ${pending.oldName}`
-          : `Failed to recover interrupted update: ${String(recoveryError?.message || recoveryError)}`,
+          : `Failed to recover interrupted update: ${getErrorMessage(recoveryError)}`,
         pending.fromVersion,
         pending.toVersion,
       );
@@ -192,7 +380,11 @@ class ContainerUpdateExecutor {
     );
   }
 
-  async execute(context, container, logContainer) {
+  async execute(
+    context: ContainerUpdateContext,
+    container: ContainerForUpdate,
+    logContainer: ContainerUpdateLogger,
+  ) {
     const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
     const configuration = this.getConfiguration();
 
@@ -236,7 +428,7 @@ class ContainerUpdateExecutor {
     await currentContainer.rename({ name: tempName });
     updateOperationStore.updateOperation(operation.id, { phase: 'renamed' });
 
-    let newContainer;
+    let newContainer: DockerContainerHandle | undefined;
     let oldContainerStopped = false;
     let failureReason = 'update_runtime_failed';
 
@@ -254,7 +446,7 @@ class ContainerUpdateExecutor {
         logContainer,
       );
 
-      let newContainerId;
+      let newContainerId: string | undefined;
       try {
         newContainerId = (await newContainer.inspect())?.Id;
       } catch {
@@ -303,7 +495,7 @@ class ContainerUpdateExecutor {
             logContainer,
           );
         }
-      } catch (cleanupError) {
+      } catch (cleanupError: unknown) {
         if (!this.isContainerNotFoundError(cleanupError)) {
           throw cleanupError;
         }
@@ -317,13 +509,13 @@ class ContainerUpdateExecutor {
         phase: 'succeeded',
       });
       return true;
-    } catch (e) {
+    } catch (e: unknown) {
       logContainer.warn(
-        `Container update failed for ${oldName}, attempting rollback (${e.message})`,
+        `Container update failed for ${oldName}, attempting rollback (${getErrorMessage(e)})`,
       );
       updateOperationStore.updateOperation(operation.id, {
         phase: 'rollback-started',
-        lastError: e.message,
+        lastError: getErrorMessage(e),
       });
 
       if (newContainer) {
@@ -345,20 +537,20 @@ class ContainerUpdateExecutor {
       try {
         await currentContainer.rename({ name: oldName });
         restoreName = oldName;
-      } catch (renameError) {
+      } catch (renameError: unknown) {
         rollbackSucceeded = false;
         logContainer.warn(
-          `Rollback failed to restore container name from ${tempName} to ${oldName} (${renameError.message})`,
+          `Rollback failed to restore container name from ${tempName} to ${oldName} (${getErrorMessage(renameError)})`,
         );
       }
 
       if (wasRunning && oldContainerStopped) {
         try {
           await this.startContainer(currentContainer, restoreName, logContainer);
-        } catch (restartError) {
+        } catch (restartError: unknown) {
           rollbackSucceeded = false;
           logContainer.warn(
-            `Rollback failed to restart previous container ${restoreName} (${restartError.message})`,
+            `Rollback failed to restart previous container ${restoreName} (${getErrorMessage(restartError)})`,
           );
         }
       }
@@ -368,7 +560,7 @@ class ContainerUpdateExecutor {
         phase: rollbackSucceeded ? 'rolled-back' : 'rollback-failed',
         oldContainerStopped,
         rollbackReason: failureReason,
-        lastError: e.message,
+        lastError: getErrorMessage(e),
       });
 
       this.recordRollbackTelemetry(
@@ -377,7 +569,7 @@ class ContainerUpdateExecutor {
         rollbackSucceeded ? failureReason : `${failureReason}_rollback_failed`,
         rollbackSucceeded
           ? `Rollback completed after ${failureReason} during container update`
-          : `Rollback failed after ${failureReason}: ${e.message}`,
+          : `Rollback failed after ${failureReason}: ${getErrorMessage(e)}`,
         container.updateKind.remoteValue ?? container.image.tag.value,
         container.updateKind.localValue ?? container.image.tag.value,
       );

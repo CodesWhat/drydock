@@ -86,41 +86,6 @@ function shouldKeepImage(imageNormalized, container) {
   return false;
 }
 
-type DockerTriggerCallback = (...args: unknown[]) => unknown;
-
-interface DockerTriggerOrchestrator {
-  recordHookAudit: DockerTriggerCallback;
-  pullImage: DockerTriggerCallback;
-  cloneContainer: DockerTriggerCallback;
-  createContainer: DockerTriggerCallback;
-  insertContainerImageBackup: DockerTriggerCallback;
-  stopContainer: DockerTriggerCallback;
-  waitContainerRemoved: DockerTriggerCallback;
-  removeContainer: DockerTriggerCallback;
-  startContainer: DockerTriggerCallback;
-  isContainerNotFoundError: DockerTriggerCallback;
-  recordRollbackTelemetry: DockerTriggerCallback;
-  hasHealthcheckConfigured: DockerTriggerCallback;
-  waitForContainerHealthy: DockerTriggerCallback;
-  getCurrentContainer: DockerTriggerCallback;
-  inspectContainer: DockerTriggerCallback;
-  createTriggerContext: DockerTriggerCallback;
-  maybeScanAndGateUpdate: DockerTriggerCallback;
-  buildHookConfig: DockerTriggerCallback;
-  recordHookConfigurationAudit: DockerTriggerCallback;
-  runPreUpdateHook: DockerTriggerCallback;
-  isSelfUpdate: DockerTriggerCallback;
-  maybeNotifySelfUpdate: DockerTriggerCallback;
-  executeSelfUpdate: DockerTriggerCallback;
-  runPreRuntimeUpdateLifecycle: DockerTriggerCallback;
-  performContainerUpdate: DockerTriggerCallback;
-  runPostUpdateHook: DockerTriggerCallback;
-  cleanupOldImages: DockerTriggerCallback;
-  getRollbackConfig: DockerTriggerCallback;
-  maybeStartAutoRollbackMonitor: DockerTriggerCallback;
-  recordSecurityAudit: DockerTriggerCallback;
-}
-
 const HOOK_EXECUTOR_ORCHESTRATOR_METHODS = ['recordHookAudit'] as const;
 const SELF_UPDATE_ORCHESTRATOR_METHODS = [
   'pullImage',
@@ -160,17 +125,35 @@ const UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS = [
 ] as const;
 const SECURITY_GATE_ORCHESTRATOR_METHODS = ['recordSecurityAudit'] as const;
 
+type DockerTriggerCallbackName =
+  | (typeof HOOK_EXECUTOR_ORCHESTRATOR_METHODS)[number]
+  | (typeof SELF_UPDATE_ORCHESTRATOR_METHODS)[number]
+  | (typeof CONTAINER_UPDATE_ORCHESTRATOR_METHODS)[number]
+  | (typeof ROLLBACK_MONITOR_ORCHESTRATOR_METHODS)[number]
+  | (typeof UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS)[number]
+  | (typeof SECURITY_GATE_ORCHESTRATOR_METHODS)[number];
+
+type DockerTriggerOrchestrator = Pick<Docker, DockerTriggerCallbackName>;
+
+function buildOrchestratorCallback<K extends keyof DockerTriggerOrchestrator>(
+  orchestrator: DockerTriggerOrchestrator,
+  callbackName: K,
+): DockerTriggerOrchestrator[K] {
+  return ((...args: Parameters<DockerTriggerOrchestrator[K]>) =>
+    (
+      orchestrator[callbackName] as (
+        ...callbackArgs: Parameters<DockerTriggerOrchestrator[K]>
+      ) => ReturnType<DockerTriggerOrchestrator[K]>
+    ).apply(orchestrator, args)) as DockerTriggerOrchestrator[K];
+}
+
 function pickOrchestratorCallbacks<K extends keyof DockerTriggerOrchestrator>(
   orchestrator: DockerTriggerOrchestrator,
   callbackNames: readonly K[],
 ): Pick<DockerTriggerOrchestrator, K> {
   const callbacks = {} as Pick<DockerTriggerOrchestrator, K>;
   for (const callbackName of callbackNames) {
-    callbacks[callbackName] = ((...args: unknown[]) =>
-      orchestrator[callbackName].apply(orchestrator, args)) as Pick<
-      DockerTriggerOrchestrator,
-      K
-    >[K];
+    callbacks[callbackName] = buildOrchestratorCallback(orchestrator, callbackName);
   }
   return callbacks;
 }
@@ -190,8 +173,6 @@ class Docker extends Trigger {
   hookExecutor: HookExecutor;
 
   selfUpdateOrchestrator: SelfUpdateOrchestrator;
-
-  selfUpdateExecutor: SelfUpdateOrchestrator;
 
   containerUpdateExecutor: ContainerUpdateExecutor;
 
@@ -225,8 +206,6 @@ class Docker extends Trigger {
       ...pickOrchestratorCallbacks(this, SELF_UPDATE_ORCHESTRATOR_METHODS),
       emitSelfUpdateStarting,
     });
-    // Backward-compatible alias retained for existing tests/extension points.
-    this.selfUpdateExecutor = this.selfUpdateOrchestrator;
     this.containerUpdateExecutor = new ContainerUpdateExecutor({
       getConfiguration: () => this.configuration,
       getTriggerId: () => this.getId(),

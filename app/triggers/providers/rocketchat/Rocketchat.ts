@@ -119,6 +119,7 @@ class Rocketchat extends Trigger {
         'content-type': 'application/json',
         accept: 'application/json',
       },
+      timeout: 30000,
     };
   }
 }

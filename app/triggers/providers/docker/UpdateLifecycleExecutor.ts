@@ -1,47 +1,180 @@
 import crypto from 'node:crypto';
 
+type UpdateLifecycleLogContainer = {
+  info?: (message: string) => void;
+  warn?: (message: string) => void;
+  debug?: (message: string) => void;
+};
+
+type UpdateLifecycleLogger = {
+  child?: (bindings: Record<string, unknown>) => UpdateLifecycleLogContainer;
+};
+
+type UpdateLifecycleContainer = {
+  name: string;
+  [key: string]: unknown;
+};
+
+type UpdateLifecycleContext = {
+  dockerApi: unknown;
+  registry: unknown;
+  [key: string]: unknown;
+};
+
+type UpdateLifecycleExecutorDependencies = {
+  getLogger: () => UpdateLifecycleLogger | undefined;
+  getContainerFullName: (container: UpdateLifecycleContainer) => string;
+  createTriggerContext: (
+    container: UpdateLifecycleContainer,
+    logContainer: UpdateLifecycleLogContainer,
+    runtimeContext?: unknown,
+  ) => Promise<UpdateLifecycleContext | undefined>;
+  maybeScanAndGateUpdate: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logContainer: UpdateLifecycleLogContainer,
+  ) => Promise<void>;
+  buildHookConfig: (container: UpdateLifecycleContainer) => Record<string, unknown>;
+  recordHookConfigurationAudit: (
+    container: UpdateLifecycleContainer,
+    hookConfig: Record<string, unknown>,
+  ) => void;
+  runPreUpdateHook: (
+    container: UpdateLifecycleContainer,
+    hookConfig: Record<string, unknown>,
+    logContainer: UpdateLifecycleLogContainer,
+  ) => Promise<void>;
+  isSelfUpdate: (container: UpdateLifecycleContainer) => boolean;
+  maybeNotifySelfUpdate: (
+    container: UpdateLifecycleContainer,
+    logContainer: UpdateLifecycleLogContainer,
+    operationId: string,
+  ) => Promise<void>;
+  executeSelfUpdate: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logContainer: UpdateLifecycleLogContainer,
+    operationId: string,
+    runtimeContext?: unknown,
+  ) => Promise<boolean>;
+  runPreRuntimeUpdateLifecycle: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logContainer: UpdateLifecycleLogContainer,
+    runtimeContext?: unknown,
+  ) => Promise<void>;
+  performContainerUpdate: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logContainer: UpdateLifecycleLogContainer,
+    runtimeContext?: unknown,
+  ) => Promise<boolean>;
+  runPostUpdateHook: (
+    container: UpdateLifecycleContainer,
+    hookConfig: Record<string, unknown>,
+    logContainer: UpdateLifecycleLogContainer,
+  ) => Promise<void>;
+  cleanupOldImages: (
+    dockerApi: unknown,
+    registry: unknown,
+    container: UpdateLifecycleContainer,
+    logContainer: UpdateLifecycleLogContainer,
+  ) => Promise<void>;
+  getRollbackConfig: (container: UpdateLifecycleContainer) => Record<string, unknown>;
+  maybeStartAutoRollbackMonitor: (
+    dockerApi: unknown,
+    container: UpdateLifecycleContainer,
+    rollbackConfig: Record<string, unknown>,
+    logContainer: UpdateLifecycleLogContainer,
+  ) => Promise<void>;
+  emitContainerUpdateApplied: (containerName: string) => Promise<void>;
+  emitContainerUpdateFailed: (payload: { containerName: string; error: string }) => Promise<void>;
+  pruneOldBackups: (containerName: string, backupCount: number | undefined) => void;
+  getBackupCount: () => number | undefined;
+};
+
+type UpdateLifecycleExecutorConstructorOptions = Omit<
+  UpdateLifecycleExecutorDependencies,
+  'getLogger' | 'pruneOldBackups' | 'getBackupCount'
+> & {
+  getLogger?: UpdateLifecycleExecutorDependencies['getLogger'];
+  pruneOldBackups?: UpdateLifecycleExecutorDependencies['pruneOldBackups'];
+  getBackupCount?: UpdateLifecycleExecutorDependencies['getBackupCount'];
+};
+
+const REQUIRED_UPDATE_LIFECYCLE_EXECUTOR_DEPENDENCY_KEYS = [
+  'getContainerFullName',
+  'createTriggerContext',
+  'maybeScanAndGateUpdate',
+  'buildHookConfig',
+  'recordHookConfigurationAudit',
+  'runPreUpdateHook',
+  'isSelfUpdate',
+  'maybeNotifySelfUpdate',
+  'executeSelfUpdate',
+  'runPreRuntimeUpdateLifecycle',
+  'performContainerUpdate',
+  'runPostUpdateHook',
+  'cleanupOldImages',
+  'getRollbackConfig',
+  'maybeStartAutoRollbackMonitor',
+  'emitContainerUpdateApplied',
+  'emitContainerUpdateFailed',
+] as const;
+
+function assertRequiredDependencies(
+  options: Partial<UpdateLifecycleExecutorDependencies>,
+): asserts options is UpdateLifecycleExecutorConstructorOptions {
+  for (const key of REQUIRED_UPDATE_LIFECYCLE_EXECUTOR_DEPENDENCY_KEYS) {
+    if (typeof options[key] !== 'function') {
+      throw new TypeError(`UpdateLifecycleExecutor requires dependency "${key}"`);
+    }
+  }
+}
+
 class UpdateLifecycleExecutor {
-  getLogger;
+  getLogger: UpdateLifecycleExecutorDependencies['getLogger'];
 
-  getContainerFullName;
+  getContainerFullName: UpdateLifecycleExecutorDependencies['getContainerFullName'];
 
-  createTriggerContext;
+  createTriggerContext: UpdateLifecycleExecutorDependencies['createTriggerContext'];
 
-  maybeScanAndGateUpdate;
+  maybeScanAndGateUpdate: UpdateLifecycleExecutorDependencies['maybeScanAndGateUpdate'];
 
-  buildHookConfig;
+  buildHookConfig: UpdateLifecycleExecutorDependencies['buildHookConfig'];
 
-  recordHookConfigurationAudit;
+  recordHookConfigurationAudit: UpdateLifecycleExecutorDependencies['recordHookConfigurationAudit'];
 
-  runPreUpdateHook;
+  runPreUpdateHook: UpdateLifecycleExecutorDependencies['runPreUpdateHook'];
 
-  isSelfUpdate;
+  isSelfUpdate: UpdateLifecycleExecutorDependencies['isSelfUpdate'];
 
-  maybeNotifySelfUpdate;
+  maybeNotifySelfUpdate: UpdateLifecycleExecutorDependencies['maybeNotifySelfUpdate'];
 
-  executeSelfUpdate;
+  executeSelfUpdate: UpdateLifecycleExecutorDependencies['executeSelfUpdate'];
 
-  runPreRuntimeUpdateLifecycle;
+  runPreRuntimeUpdateLifecycle: UpdateLifecycleExecutorDependencies['runPreRuntimeUpdateLifecycle'];
 
-  performContainerUpdate;
+  performContainerUpdate: UpdateLifecycleExecutorDependencies['performContainerUpdate'];
 
-  runPostUpdateHook;
+  runPostUpdateHook: UpdateLifecycleExecutorDependencies['runPostUpdateHook'];
 
-  cleanupOldImages;
+  cleanupOldImages: UpdateLifecycleExecutorDependencies['cleanupOldImages'];
 
-  getRollbackConfig;
+  getRollbackConfig: UpdateLifecycleExecutorDependencies['getRollbackConfig'];
 
-  maybeStartAutoRollbackMonitor;
+  maybeStartAutoRollbackMonitor: UpdateLifecycleExecutorDependencies['maybeStartAutoRollbackMonitor'];
 
-  emitContainerUpdateApplied;
+  emitContainerUpdateApplied: UpdateLifecycleExecutorDependencies['emitContainerUpdateApplied'];
 
-  emitContainerUpdateFailed;
+  emitContainerUpdateFailed: UpdateLifecycleExecutorDependencies['emitContainerUpdateFailed'];
 
-  pruneOldBackups;
+  pruneOldBackups: UpdateLifecycleExecutorDependencies['pruneOldBackups'];
 
-  getBackupCount;
+  getBackupCount: UpdateLifecycleExecutorDependencies['getBackupCount'];
 
-  constructor(options: Record<string, any> = {}) {
+  constructor(options: UpdateLifecycleExecutorConstructorOptions) {
+    assertRequiredDependencies(options);
     this.getLogger = options.getLogger || (() => undefined);
     this.getContainerFullName = options.getContainerFullName;
     this.createTriggerContext = options.createTriggerContext;
@@ -64,9 +197,9 @@ class UpdateLifecycleExecutor {
     this.getBackupCount = options.getBackupCount || (() => undefined);
   }
 
-  async run(container, runtimeContext?: unknown) {
+  async run(container: UpdateLifecycleContainer, runtimeContext?: unknown) {
     const log = this.getLogger();
-    const logContainer = log.child({ container: this.getContainerFullName(container) });
+    const logContainer = log?.child?.({ container: this.getContainerFullName(container) }) ?? {};
 
     try {
       const context = await this.createTriggerContext(container, logContainer, runtimeContext);
@@ -119,10 +252,11 @@ class UpdateLifecycleExecutor {
 
       await this.emitContainerUpdateApplied(this.getContainerFullName(container));
       this.pruneOldBackups(container.name, this.getBackupCount());
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const errorMessage = String((e as Error)?.message ?? e);
       await this.emitContainerUpdateFailed({
         containerName: this.getContainerFullName(container),
-        error: e.message,
+        error: errorMessage,
       });
       throw e;
     }

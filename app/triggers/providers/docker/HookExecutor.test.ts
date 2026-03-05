@@ -50,6 +50,12 @@ describe('HookExecutor', () => {
     expect(() => executor.recordHookAudit('event', {}, 'success', 'ok')).not.toThrow();
   });
 
+  test('constructor should throw when required dependencies are missing', () => {
+    expect(() => new HookExecutor({} as never)).toThrow(
+      'HookExecutor requires dependency "runHook"',
+    );
+  });
+
   test('buildHookConfig should read labels and apply defaults', () => {
     const executor = createExecutor();
 

@@ -82,16 +82,30 @@ class Apprise extends Trigger {
    * @returns {Promise<*>}
    */
   async triggerBatch(containers) {
+    let uri = `${this.configuration.url}/notify`;
+    const body: AppriseNotifyBody = {
+      title: this.renderBatchTitle(containers),
+      body: this.renderBatchBody(containers),
+      format: 'text',
+      type: 'info',
+    };
+
+    // Persistent storage usage (target apprise yml config file and tags)
+    if (this.configuration.config) {
+      uri += `/${this.configuration.config}`;
+      if (this.configuration.tag) {
+        body.tag = this.configuration.tag;
+      }
+
+      // Standard usage
+    } else {
+      body.urls = this.configuration.urls;
+    }
+
     const options = {
       method: 'POST',
-      url: `${this.configuration.url}/notify`,
-      data: {
-        urls: this.configuration.urls,
-        title: this.renderBatchTitle(containers),
-        body: this.renderBatchBody(containers),
-        format: 'text',
-        type: 'info',
-      },
+      url: uri,
+      data: body,
       timeout: 30000,
     };
     const response = await axios(options);

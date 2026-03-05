@@ -1,17 +1,94 @@
+type RollbackMonitorLogger = {
+  info: (message: string) => void;
+  warn: (message: string) => void;
+};
+
+type RollbackMonitorRootLogger = {
+  child?: (bindings?: Record<string, unknown>) => { warn?: (message: string) => void } | undefined;
+};
+
+type RollbackContainer = {
+  name: string;
+  labels?: Record<string, string>;
+  image: {
+    tag: { value: string };
+    digest?: { repo?: string };
+  };
+};
+
+type RollbackConfig = {
+  autoRollback: boolean;
+  rollbackWindow: number;
+  rollbackInterval: number;
+};
+
+type RollbackMonitorDependencies = {
+  getPreferredLabelValue: (
+    labels: Record<string, string> | undefined,
+    ddKey: string,
+    wudKey: string,
+    logger?: unknown,
+  ) => string | undefined;
+  getLogger: () => RollbackMonitorRootLogger | undefined;
+  getCurrentContainer: (dockerApi: unknown, query: { id: string }) => Promise<unknown>;
+  inspectContainer: (
+    container: unknown,
+    logContainer: RollbackMonitorLogger,
+  ) => Promise<{ Id: string; State?: { Health?: unknown } } | undefined>;
+  startHealthMonitor: (options: {
+    dockerApi: unknown;
+    containerId: string;
+    containerName: string;
+    backupImageTag: string;
+    backupImageDigest?: string;
+    window: number;
+    interval: number;
+    triggerInstance: unknown;
+    log: RollbackMonitorLogger;
+  }) => void;
+  getTriggerInstance: () => unknown;
+};
+
+type RollbackMonitorConstructorOptions = Omit<
+  RollbackMonitorDependencies,
+  'getLogger' | 'getTriggerInstance'
+> & {
+  getLogger?: RollbackMonitorDependencies['getLogger'];
+  getTriggerInstance?: RollbackMonitorDependencies['getTriggerInstance'];
+};
+
+const REQUIRED_ROLLBACK_MONITOR_DEPENDENCY_KEYS = [
+  'getPreferredLabelValue',
+  'getCurrentContainer',
+  'inspectContainer',
+  'startHealthMonitor',
+] as const;
+
+function assertRequiredDependencies(
+  options: Partial<RollbackMonitorDependencies>,
+): asserts options is RollbackMonitorConstructorOptions {
+  for (const key of REQUIRED_ROLLBACK_MONITOR_DEPENDENCY_KEYS) {
+    if (typeof options[key] !== 'function') {
+      throw new TypeError(`RollbackMonitor requires dependency "${key}"`);
+    }
+  }
+}
+
 class RollbackMonitor {
-  getPreferredLabelValue;
+  getPreferredLabelValue: RollbackMonitorDependencies['getPreferredLabelValue'];
 
-  getLogger;
+  getLogger: RollbackMonitorDependencies['getLogger'];
 
-  getCurrentContainer;
+  getCurrentContainer: RollbackMonitorDependencies['getCurrentContainer'];
 
-  inspectContainer;
+  inspectContainer: RollbackMonitorDependencies['inspectContainer'];
 
-  startHealthMonitor;
+  startHealthMonitor: RollbackMonitorDependencies['startHealthMonitor'];
 
-  getTriggerInstance;
+  getTriggerInstance: RollbackMonitorDependencies['getTriggerInstance'];
 
-  constructor(options: Record<string, any> = {}) {
+  constructor(options: RollbackMonitorConstructorOptions) {
+    assertRequiredDependencies(options);
     this.getPreferredLabelValue = options.getPreferredLabelValue;
     this.getLogger = options.getLogger || (() => undefined);
     this.getCurrentContainer = options.getCurrentContainer;
@@ -20,7 +97,7 @@ class RollbackMonitor {
     this.getTriggerInstance = options.getTriggerInstance || (() => undefined);
   }
 
-  getConfig(container) {
+  getConfig(container: RollbackContainer): RollbackConfig {
     const DEFAULT_ROLLBACK_WINDOW = 300000;
     const DEFAULT_ROLLBACK_INTERVAL = 10000;
     const logger = this.getLogger()?.child?.({});
@@ -81,7 +158,12 @@ class RollbackMonitor {
     };
   }
 
-  async start(dockerApi, container, rollbackConfig, logContainer) {
+  async start(
+    dockerApi: unknown,
+    container: RollbackContainer,
+    rollbackConfig: RollbackConfig,
+    logContainer: RollbackMonitorLogger,
+  ) {
     if (!rollbackConfig.autoRollback) {
       return;
     }

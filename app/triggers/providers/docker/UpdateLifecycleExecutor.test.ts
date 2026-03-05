@@ -86,6 +86,32 @@ describe('UpdateLifecycleExecutor', () => {
     expect(executor.getLogger()).toBeUndefined();
   });
 
+  test('run should tolerate missing logger child factory', async () => {
+    const emitContainerUpdateApplied = vi.fn().mockResolvedValue(undefined);
+    const executor = new UpdateLifecycleExecutor({
+      getContainerFullName: vi.fn(() => 'name'),
+      createTriggerContext: vi.fn().mockResolvedValue(createContext()),
+      maybeScanAndGateUpdate: vi.fn().mockResolvedValue(undefined),
+      buildHookConfig: vi.fn(() => ({})),
+      recordHookConfigurationAudit: vi.fn(),
+      runPreUpdateHook: vi.fn().mockResolvedValue(undefined),
+      isSelfUpdate: vi.fn(() => false),
+      maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
+      executeSelfUpdate: vi.fn().mockResolvedValue(true),
+      runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
+      performContainerUpdate: vi.fn().mockResolvedValue(true),
+      runPostUpdateHook: vi.fn().mockResolvedValue(undefined),
+      cleanupOldImages: vi.fn().mockResolvedValue(undefined),
+      getRollbackConfig: vi.fn(() => ({})),
+      maybeStartAutoRollbackMonitor: vi.fn().mockResolvedValue(undefined),
+      emitContainerUpdateApplied,
+      emitContainerUpdateFailed: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await expect(executor.run(createContainer())).resolves.toBeUndefined();
+    expect(emitContainerUpdateApplied).toHaveBeenCalledWith('name');
+  });
+
   test('constructor provides prune/getBackup defaults when omitted', async () => {
     const emitContainerUpdateApplied = vi.fn().mockResolvedValue(undefined);
     const executor = new UpdateLifecycleExecutor({
@@ -111,6 +137,12 @@ describe('UpdateLifecycleExecutor', () => {
 
     await expect(executor.run(createContainer())).resolves.toBeUndefined();
     expect(emitContainerUpdateApplied).toHaveBeenCalledWith('name');
+  });
+
+  test('constructor should throw when required dependencies are missing', () => {
+    expect(() => new UpdateLifecycleExecutor({} as never)).toThrow(
+      'UpdateLifecycleExecutor requires dependency "getContainerFullName"',
+    );
   });
 
   test('returns early when trigger context is not created', async () => {
@@ -235,6 +267,18 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.emitContainerUpdateFailed).toHaveBeenCalledWith({
       containerName: 'docker.local_web',
       error: 'scan failed hard',
+    });
+  });
+
+  test('stringifies non-Error failures when emitting update-failed events', async () => {
+    const harness = createHarness({
+      maybeScanAndGateUpdate: vi.fn().mockRejectedValue(503),
+    });
+
+    await expect(harness.executor.run(createContainer(), { runtime: true })).rejects.toBe(503);
+    expect(harness.emitContainerUpdateFailed).toHaveBeenCalledWith({
+      containerName: 'docker.local_web',
+      error: '503',
     });
   });
 });

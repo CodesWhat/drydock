@@ -1031,6 +1031,46 @@ describe('Dockercompose Trigger', () => {
     expect(resolveContextSpy).toHaveBeenCalledWith(container, 'nginx:1.0.0');
   });
 
+  test('recreateContainer integration should update compose image and run force-recreate without pull', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({
+      name: 'nginx',
+      labels: {
+        'dd.compose.file': '/opt/drydock/test/stack.yml',
+        'com.docker.compose.service': 'nginx',
+      },
+    });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n');
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    const runComposeCommandSpy = vi.spyOn(trigger, 'runComposeCommand').mockResolvedValue();
+
+    await trigger.recreateContainer(
+      mockDockerApi,
+      {
+        State: { Running: true },
+        Config: { Image: 'nginx:1.1.0' },
+      },
+      'nginx:1.0.0',
+      container,
+      mockLog,
+    );
+
+    expect(writeComposeFileSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      expect.stringContaining('nginx:1.0.0'),
+    );
+    expect(runComposeCommandSpy).toHaveBeenCalledTimes(1);
+    expect(runComposeCommandSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      ['up', '-d', '--no-deps', '--force-recreate', 'nginx'],
+      mockLog,
+    );
+  });
+
   test('executeSelfUpdate should run compose-native self-update strategy', async () => {
     trigger.configuration.dryrun = false;
     const container = makeContainer({
@@ -1693,6 +1733,22 @@ describe('Dockercompose Trigger', () => {
       '/opt/drydock/test/compose.yml',
     );
     expect(fs.unlink).toHaveBeenCalledWith('/opt/drydock/test/compose.yml.drydock.lock');
+  });
+
+  test('writeComposeFileAtomic should remove temp file and rethrow when rename fails', async () => {
+    const renameError = new Error('rename failed');
+    fs.rename.mockRejectedValueOnce(renameError);
+
+    await expect(
+      trigger.writeComposeFileAtomic('/opt/drydock/test/compose.yml', 'data'),
+    ).rejects.toThrow('rename failed');
+
+    const temporaryFilePath = fs.writeFile.mock.calls[0][0];
+    expect(temporaryFilePath).toEqual(
+      expect.stringContaining('/opt/drydock/test/.compose.yml.tmp-'),
+    );
+    expect(fs.rename).toHaveBeenCalledWith(temporaryFilePath, '/opt/drydock/test/compose.yml');
+    expect(fs.unlink).toHaveBeenCalledWith(temporaryFilePath);
   });
 
   test('withComposeFileLock should wait and retry when lock exists but is not stale', async () => {

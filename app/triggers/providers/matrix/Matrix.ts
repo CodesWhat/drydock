@@ -65,6 +65,7 @@ class Matrix extends Trigger {
           Authorization: `Bearer ${this.configuration.accesstoken}`,
           'content-type': 'application/json',
         },
+        timeout: 30000,
       },
     );
   }

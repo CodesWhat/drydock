@@ -83,6 +83,8 @@ Notification rules control which events fire which triggers. Each rule correspon
 
 Rules are managed via `GET /api/notifications` and `PATCH /api/notifications/:id` (update `enabled` and/or `triggers` fields), or through the **Notifications** view in the UI.
 
+<Callout type="warn">Docker and Docker Compose triggers cannot be assigned to notification rules. These are update-action triggers (they perform container updates), not notification triggers. Only messaging/alerting triggers (Slack, SMTP, Discord, ntfy, etc.) can be assigned to rules.</Callout>
+
 ## Event Types
 
 Beyond the classic `update-available` event, triggers can fire on additional events:

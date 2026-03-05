@@ -181,6 +181,68 @@ test('triggerBatch should send batch notification', async () => {
   });
 });
 
+test('triggerBatch should use config and tag when configured', async () => {
+  apprise.configuration = {
+    url: 'http://xxx.com',
+    config: 'myconfig',
+    tag: 'mytag',
+  };
+
+  const containers = [
+    {
+      name: 'test1',
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    },
+  ];
+
+  axios.mockResolvedValue({ data: {} });
+  await apprise.triggerBatch(containers);
+
+  expect(axios).toHaveBeenCalledWith({
+    data: {
+      title: expect.any(String),
+      body: expect.any(String),
+      format: 'text',
+      type: 'info',
+      tag: 'mytag',
+    },
+
+    method: 'POST',
+    url: 'http://xxx.com/notify/myconfig',
+    timeout: 30000,
+  });
+});
+
+test('triggerBatch should use config without tag', async () => {
+  apprise.configuration = {
+    url: 'http://xxx.com',
+    config: 'myconfig',
+  };
+
+  const containers = [
+    {
+      name: 'test1',
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    },
+  ];
+
+  axios.mockResolvedValue({ data: {} });
+  await apprise.triggerBatch(containers);
+
+  expect(axios).toHaveBeenCalledWith({
+    data: {
+      title: expect.any(String),
+      body: expect.any(String),
+      format: 'text',
+      type: 'info',
+    },
+
+    method: 'POST',
+    url: 'http://xxx.com/notify/myconfig',
+    timeout: 30000,
+  });
+});
+
 test('maskConfiguration should mask urls', async () => {
   apprise.configuration = {
     url: 'http://xxx.com',

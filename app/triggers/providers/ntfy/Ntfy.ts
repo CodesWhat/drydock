@@ -86,6 +86,7 @@ class Ntfy extends Trigger {
         'Content-Type': 'application/json',
       },
       data: body,
+      timeout: 30000,
     };
     if (auth?.user && auth?.password) {
       options.auth = {

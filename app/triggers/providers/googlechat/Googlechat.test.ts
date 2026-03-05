@@ -124,6 +124,7 @@ test('postMessage should call Google Chat webhook endpoint', async () => {
       headers: {
         'content-type': 'application/json',
       },
+      timeout: 30000,
     },
   );
 });

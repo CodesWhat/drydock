@@ -540,3 +540,36 @@ test('constructor should register event callbacks that invoke methods', async ()
   await watcherStopCb(testWatcher);
   expect(watcherSpy).toHaveBeenCalledWith({ watcher: testWatcher, isRunning: false });
 });
+
+test('deregister should invoke event unregister callbacks', async () => {
+  const unregisterContainerAdded = vi.fn();
+  const unregisterContainerUpdated = vi.fn();
+  const unregisterContainerRemoved = vi.fn();
+  const unregisterWatcherStart = vi.fn();
+  const unregisterWatcherStop = vi.fn();
+  registerContainerAdded.mockReturnValue(unregisterContainerAdded);
+  registerContainerUpdated.mockReturnValue(unregisterContainerUpdated);
+  registerContainerRemoved.mockReturnValue(unregisterContainerRemoved);
+  registerWatcherStart.mockReturnValue(unregisterWatcherStart);
+  registerWatcherStop.mockReturnValue(unregisterWatcherStop);
+
+  const hassWithUnregisterCallbacks = new Hass({
+    client: mqttClientMock,
+    configuration: {
+      topic: 'topic',
+      hass: {
+        discovery: true,
+        prefix: 'homeassistant',
+      },
+    },
+    log,
+  });
+
+  hassWithUnregisterCallbacks.deregister();
+
+  expect(unregisterContainerAdded).toHaveBeenCalledTimes(1);
+  expect(unregisterContainerUpdated).toHaveBeenCalledTimes(1);
+  expect(unregisterContainerRemoved).toHaveBeenCalledTimes(1);
+  expect(unregisterWatcherStart).toHaveBeenCalledTimes(1);
+  expect(unregisterWatcherStop).toHaveBeenCalledTimes(1);
+});

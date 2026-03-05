@@ -1,7 +1,74 @@
-const RUNTIME_PROCESS_FIELDS = ['Entrypoint', 'Cmd'];
+const RUNTIME_PROCESS_FIELDS = ['Entrypoint', 'Cmd'] as const;
 const RUNTIME_ORIGIN_EXPLICIT = 'explicit';
 const RUNTIME_ORIGIN_INHERITED = 'inherited';
 const RUNTIME_ORIGIN_UNKNOWN = 'unknown';
+type RuntimeProcessField = (typeof RUNTIME_PROCESS_FIELDS)[number];
+type RuntimeFieldOrigin =
+  | typeof RUNTIME_ORIGIN_EXPLICIT
+  | typeof RUNTIME_ORIGIN_INHERITED
+  | typeof RUNTIME_ORIGIN_UNKNOWN;
+type RuntimeFieldOrigins = Partial<Record<RuntimeProcessField, RuntimeFieldOrigin>>;
+
+type RuntimeConfigLogger = {
+  info?: (message: string) => void;
+  warn?: (message: string) => void;
+  debug?: (message: string) => void;
+  child?: (bindings?: Record<string, unknown>) => RuntimeConfigLogger | undefined;
+};
+
+type RuntimeConfigObject = {
+  Entrypoint?: unknown;
+  Cmd?: unknown;
+  Image?: string;
+  Labels?: Record<string, string>;
+  [key: string]: unknown;
+};
+
+type RuntimeConfigOptions = {
+  sourceImageConfig?: RuntimeConfigObject;
+  targetImageConfig?: RuntimeConfigObject;
+  runtimeFieldOrigins?: RuntimeFieldOrigins;
+  logContainer?: RuntimeConfigLogger;
+};
+
+type RuntimeConfigManagerDependencies = {
+  getPreferredLabelValue: (
+    labels: Record<string, string> | undefined,
+    ddKey: string,
+    wudKey: string,
+    logger?: RuntimeConfigLogger,
+  ) => string | undefined;
+  getLogger: () => RuntimeConfigLogger | undefined;
+};
+
+type RuntimeConfigManagerConstructorOptions = Omit<
+  RuntimeConfigManagerDependencies,
+  'getLogger'
+> & {
+  getLogger?: RuntimeConfigManagerDependencies['getLogger'];
+};
+
+const REQUIRED_RUNTIME_CONFIG_MANAGER_DEPENDENCY_KEYS = ['getPreferredLabelValue'] as const;
+
+function assertRequiredDependencies(
+  options: Partial<RuntimeConfigManagerDependencies>,
+): asserts options is RuntimeConfigManagerConstructorOptions {
+  for (const key of REQUIRED_RUNTIME_CONFIG_MANAGER_DEPENDENCY_KEYS) {
+    if (typeof options[key] !== 'function') {
+      throw new TypeError(`ContainerRuntimeConfigManager requires dependency "${key}"`);
+    }
+  }
+}
+
+type EndpointConfig = {
+  IPAMConfig?: unknown;
+  Links?: unknown;
+  DriverOpts?: unknown;
+  MacAddress?: unknown;
+  Aliases?: string[];
+  [key: string]: unknown;
+};
+
 const RUNTIME_FIELD_ORIGIN_LABELS = {
   Entrypoint: {
     dd: 'dd.runtime.entrypoint.origin',
@@ -14,21 +81,25 @@ const RUNTIME_FIELD_ORIGIN_LABELS = {
 };
 
 class ContainerRuntimeConfigManager {
-  getPreferredLabelValue;
+  getPreferredLabelValue: RuntimeConfigManagerDependencies['getPreferredLabelValue'];
 
-  getLogger;
+  getLogger: RuntimeConfigManagerDependencies['getLogger'];
 
-  constructor(options: Record<string, any> = {}) {
+  constructor(options: RuntimeConfigManagerConstructorOptions) {
+    assertRequiredDependencies(options);
     this.getPreferredLabelValue = options.getPreferredLabelValue;
     this.getLogger = options.getLogger || (() => undefined);
   }
 
-  sanitizeEndpointConfig(endpointConfig, currentContainerId) {
+  sanitizeEndpointConfig(
+    endpointConfig: EndpointConfig | null | undefined,
+    currentContainerId: string,
+  ) {
     if (!endpointConfig) {
       return {};
     }
 
-    const sanitizedEndpointConfig: Record<string, any> = {};
+    const sanitizedEndpointConfig: EndpointConfig = {};
 
     if (endpointConfig.IPAMConfig) {
       sanitizedEndpointConfig.IPAMConfig = endpointConfig.IPAMConfig;
@@ -51,7 +122,10 @@ class ContainerRuntimeConfigManager {
     return sanitizedEndpointConfig;
   }
 
-  getPrimaryNetworkName(containerToCreate, networkNames) {
+  getPrimaryNetworkName(
+    containerToCreate: { HostConfig?: { NetworkMode?: string } } | undefined,
+    networkNames: string[],
+  ) {
     const networkMode = containerToCreate?.HostConfig?.NetworkMode;
     if (networkMode && networkNames.includes(networkMode)) {
       return networkMode;
@@ -59,7 +133,7 @@ class ContainerRuntimeConfigManager {
     return networkNames[0];
   }
 
-  normalizeContainerProcessArgs(processArgs) {
+  normalizeContainerProcessArgs(processArgs: unknown) {
     if (processArgs === undefined || processArgs === null) {
       return undefined;
     }
@@ -69,7 +143,7 @@ class ContainerRuntimeConfigManager {
     return [String(processArgs)];
   }
 
-  areContainerProcessArgsEqual(left, right) {
+  areContainerProcessArgsEqual(left: unknown, right: unknown) {
     const leftNormalized = this.normalizeContainerProcessArgs(left);
     const rightNormalized = this.normalizeContainerProcessArgs(right);
 
@@ -85,7 +159,7 @@ class ContainerRuntimeConfigManager {
     return leftNormalized.every((value, index) => value === rightNormalized[index]);
   }
 
-  normalizeRuntimeFieldOrigin(origin) {
+  normalizeRuntimeFieldOrigin(origin: unknown): RuntimeFieldOrigin {
     const normalizedOrigin = String(origin || '').toLowerCase();
     if (
       normalizedOrigin === RUNTIME_ORIGIN_EXPLICIT ||
@@ -96,7 +170,10 @@ class ContainerRuntimeConfigManager {
     return RUNTIME_ORIGIN_UNKNOWN;
   }
 
-  getRuntimeFieldOrigin(containerConfig, runtimeField) {
+  getRuntimeFieldOrigin(
+    containerConfig: RuntimeConfigObject | undefined,
+    runtimeField: RuntimeProcessField,
+  ) {
     const runtimeOriginLabels = RUNTIME_FIELD_ORIGIN_LABELS[runtimeField];
     const originFromLabel = this.getPreferredLabelValue(
       containerConfig?.Labels,
@@ -115,14 +192,24 @@ class ContainerRuntimeConfigManager {
     return RUNTIME_ORIGIN_UNKNOWN;
   }
 
-  getRuntimeFieldOrigins(containerConfig) {
-    return RUNTIME_PROCESS_FIELDS.reduce((runtimeFieldOrigins, runtimeField) => {
-      runtimeFieldOrigins[runtimeField] = this.getRuntimeFieldOrigin(containerConfig, runtimeField);
-      return runtimeFieldOrigins;
-    }, {});
+  getRuntimeFieldOrigins(containerConfig: RuntimeConfigObject | undefined): RuntimeFieldOrigins {
+    return RUNTIME_PROCESS_FIELDS.reduce<RuntimeFieldOrigins>(
+      (runtimeFieldOrigins, runtimeField) => {
+        runtimeFieldOrigins[runtimeField] = this.getRuntimeFieldOrigin(
+          containerConfig,
+          runtimeField,
+        );
+        return runtimeFieldOrigins;
+      },
+      {},
+    );
   }
 
-  annotateClonedRuntimeFieldOrigins(containerConfig, runtimeFieldOrigins, targetImageConfig) {
+  annotateClonedRuntimeFieldOrigins(
+    containerConfig: RuntimeConfigObject | undefined,
+    runtimeFieldOrigins: RuntimeFieldOrigins | undefined,
+    targetImageConfig: RuntimeConfigObject | undefined,
+  ) {
     const labels = { ...(containerConfig?.Labels || {}) };
 
     for (const runtimeField of RUNTIME_PROCESS_FIELDS) {
@@ -154,7 +241,9 @@ class ContainerRuntimeConfigManager {
     };
   }
 
-  buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer) {
+  buildCloneRuntimeConfigOptions(
+    runtimeOptionsOrLogContainer: RuntimeConfigOptions | RuntimeConfigLogger | undefined,
+  ): RuntimeConfigOptions {
     if (!runtimeOptionsOrLogContainer) {
       return {};
     }
@@ -174,11 +263,11 @@ class ContainerRuntimeConfigManager {
   }
 
   sanitizeClonedRuntimeConfig(
-    containerConfig,
-    sourceImageConfig,
-    targetImageConfig,
-    runtimeFieldOrigins,
-    logContainer,
+    containerConfig: RuntimeConfigObject | undefined,
+    sourceImageConfig: RuntimeConfigObject | undefined,
+    targetImageConfig: RuntimeConfigObject | undefined,
+    runtimeFieldOrigins: RuntimeFieldOrigins | undefined,
+    logContainer: RuntimeConfigLogger | undefined,
   ) {
     const sanitizedConfig = { ...(containerConfig || {}) };
 
@@ -223,7 +312,19 @@ class ContainerRuntimeConfigManager {
     return sanitizedConfig;
   }
 
-  async inspectImageConfig(dockerApi, imageRef, logContainer) {
+  async inspectImageConfig(
+    dockerApi:
+      | {
+          getImage?: (imageRef: string) =>
+            | {
+                inspect?: () => Promise<{ Config?: RuntimeConfigObject }>;
+              }
+            | undefined;
+        }
+      | undefined,
+    imageRef: string | undefined,
+    logContainer: RuntimeConfigLogger | undefined,
+  ) {
     if (!dockerApi?.getImage || !imageRef) {
       return undefined;
     }
@@ -235,15 +336,30 @@ class ContainerRuntimeConfigManager {
       }
       const imageSpec = await image.inspect();
       return imageSpec?.Config;
-    } catch (e) {
+    } catch (e: unknown) {
       logContainer?.debug?.(
-        `Unable to inspect image ${imageRef} for runtime defaults (${e.message})`,
+        `Unable to inspect image ${imageRef} for runtime defaults (${String(
+          (e as Error)?.message ?? e,
+        )})`,
       );
       return undefined;
     }
   }
 
-  async getCloneRuntimeConfigOptions(dockerApi, currentContainerSpec, newImage, logContainer) {
+  async getCloneRuntimeConfigOptions(
+    dockerApi:
+      | {
+          getImage?: (imageRef: string) =>
+            | {
+                inspect?: () => Promise<{ Config?: RuntimeConfigObject }>;
+              }
+            | undefined;
+        }
+      | undefined,
+    currentContainerSpec: { Config?: { Image?: string }; Image?: string } | undefined,
+    newImage: string,
+    logContainer: RuntimeConfigLogger | undefined,
+  ): Promise<RuntimeConfigOptions> {
     const sourceImageRef = currentContainerSpec?.Config?.Image ?? currentContainerSpec?.Image;
     const [sourceImageConfig, targetImageConfig] = await Promise.all([
       this.inspectImageConfig(dockerApi, sourceImageRef, logContainer),
@@ -258,7 +374,7 @@ class ContainerRuntimeConfigManager {
     };
   }
 
-  isRuntimeConfigCompatibilityError(errorMessage) {
+  isRuntimeConfigCompatibilityError(errorMessage: unknown): boolean {
     if (typeof errorMessage !== 'string') {
       return false;
     }
@@ -273,13 +389,13 @@ class ContainerRuntimeConfigManager {
   }
 
   buildRuntimeConfigCompatibilityError(
-    error,
-    containerName,
-    currentContainerSpec,
-    targetImage,
-    rollbackSucceeded,
+    error: unknown,
+    containerName: string,
+    currentContainerSpec: { Config?: { Image?: string }; Image?: string } | undefined,
+    targetImage: string,
+    rollbackSucceeded: boolean,
   ) {
-    const originalMessage = error?.message ?? String(error);
+    const originalMessage = String((error as Error)?.message ?? error);
     if (!this.isRuntimeConfigCompatibilityError(originalMessage)) {
       return undefined;
     }

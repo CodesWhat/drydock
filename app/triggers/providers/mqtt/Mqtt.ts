@@ -63,6 +63,16 @@ class Mqtt extends Trigger {
   };
   private client!: MqttClient;
   private hass?: Hass;
+  private unregisterContainerAdded?: () => void;
+  private unregisterContainerUpdated?: () => void;
+
+  private clearContainerEventSubscriptions() {
+    this.unregisterContainerAdded?.();
+    this.unregisterContainerAdded = undefined;
+
+    this.unregisterContainerUpdated?.();
+    this.unregisterContainerUpdated = undefined;
+  }
 
   handleContainerEvent(container) {
     void this.trigger(container).catch((error) => {
@@ -123,6 +133,10 @@ class Mqtt extends Trigger {
   }
 
   async initTrigger() {
+    this.clearContainerEventSubscriptions();
+    this.hass?.deregister();
+    this.hass = undefined;
+
     // Enforce simple mode
     this.configuration.mode = 'simple';
 
@@ -169,8 +183,19 @@ class Mqtt extends Trigger {
         log: this.log,
       });
     }
-    registerContainerAdded((container) => this.handleContainerEvent(container));
-    registerContainerUpdated((container) => this.handleContainerEvent(container));
+    this.unregisterContainerAdded = registerContainerAdded((container) =>
+      this.handleContainerEvent(container),
+    );
+    this.unregisterContainerUpdated = registerContainerUpdated((container) =>
+      this.handleContainerEvent(container),
+    );
+  }
+
+  async deregisterComponent(): Promise<void> {
+    this.clearContainerEventSubscriptions();
+    this.hass?.deregister();
+    this.hass = undefined;
+    await super.deregisterComponent();
   }
 
   /**

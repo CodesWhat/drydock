@@ -145,6 +145,7 @@ test('postMessage should call Mattermost webhook endpoint', async () => {
       headers: {
         'content-type': 'application/json',
       },
+      timeout: 30000,
     },
   );
 });

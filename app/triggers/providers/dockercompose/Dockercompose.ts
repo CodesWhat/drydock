@@ -5,6 +5,7 @@ import yaml, { type Pair, type ParsedNode } from 'yaml';
 import { getState } from '../../../registry/index.js';
 import { buildComposeCommandEnvironment } from '../../../runtime/child-process-env.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
+import { sleep } from '../../../util/sleep.js';
 import Docker from '../docker/Docker.js';
 
 const COMPOSE_COMMAND_TIMEOUT_MS = 60_000;
@@ -135,12 +136,6 @@ function normalizePostStartEnvironment(environment) {
   return Object.entries(environment).map(
     ([key, value]) => `${key}=${normalizePostStartEnvironmentValue(value)}`,
   );
-}
-
-function sleep(durationMs) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, durationMs);
-  });
 }
 
 /**

@@ -1,4 +1,4 @@
-import { Kafka as KafkaClient, type KafkaConfig, type SASLOptions } from 'kafkajs';
+import { Kafka as KafkaClient, type KafkaConfig, type Producer, type SASLOptions } from 'kafkajs';
 import Trigger from '../Trigger.js';
 
 type UserPasswordSaslMechanism = 'plain' | 'scram-sha-256' | 'scram-sha-512';
@@ -21,6 +21,7 @@ function toSaslMechanism(authType: string): UserPasswordSaslMechanism {
  */
 class Kafka extends Trigger {
   private kafka!: KafkaClient;
+  private producer?: Producer;
 
   /**
    * Get the Trigger configuration schema.
@@ -69,7 +70,7 @@ class Kafka extends Trigger {
   /**
    * Init trigger.
    */
-  initTrigger() {
+  async initTrigger() {
     const brokers = this.configuration.brokers.split(',').map((broker) => broker.trim());
     const clientConfiguration: KafkaConfig = {
       clientId: this.configuration.clientId,
@@ -85,6 +86,24 @@ class Kafka extends Trigger {
       clientConfiguration.sasl = sasl;
     }
     this.kafka = new KafkaClient(clientConfiguration);
+    this.producer = this.kafka.producer();
+    await this.producer.connect();
+  }
+
+  async deregisterComponent(): Promise<void> {
+    await super.deregisterComponent();
+    if (!this.producer) {
+      return;
+    }
+    await this.producer.disconnect();
+    this.producer = undefined;
+  }
+
+  private getProducer(): Producer {
+    if (!this.producer) {
+      throw new Error('Kafka producer is not initialized');
+    }
+    return this.producer;
   }
 
   /**
@@ -94,16 +113,10 @@ class Kafka extends Trigger {
    * @returns {Promise<void>}
    */
   async trigger(container) {
-    const producer = this.kafka.producer();
-    try {
-      await producer.connect();
-      return await producer.send({
-        topic: this.configuration.topic,
-        messages: [{ value: JSON.stringify(container) }],
-      });
-    } finally {
-      await producer.disconnect();
-    }
+    return await this.getProducer().send({
+      topic: this.configuration.topic,
+      messages: [{ value: JSON.stringify(container) }],
+    });
   }
 
   /**
@@ -112,18 +125,12 @@ class Kafka extends Trigger {
    * @returns {Promise<RecordMetadata[]>}
    */
   async triggerBatch(containers) {
-    const producer = this.kafka.producer();
-    try {
-      await producer.connect();
-      return await producer.send({
-        topic: this.configuration.topic,
-        messages: containers.map((container) => ({
-          value: JSON.stringify(container),
-        })),
-      });
-    } finally {
-      await producer.disconnect();
-    }
+    return await this.getProducer().send({
+      topic: this.configuration.topic,
+      messages: containers.map((container) => ({
+        value: JSON.stringify(container),
+      })),
+    });
   }
 }
 

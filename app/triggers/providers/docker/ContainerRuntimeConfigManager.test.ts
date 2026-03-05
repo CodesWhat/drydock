@@ -25,6 +25,12 @@ describe('ContainerRuntimeConfigManager', () => {
     expect(manager.getLogger()).toBeUndefined();
   });
 
+  test('constructor should throw when required dependencies are missing', () => {
+    expect(() => new ContainerRuntimeConfigManager({} as never)).toThrow(
+      'ContainerRuntimeConfigManager requires dependency "getPreferredLabelValue"',
+    );
+  });
+
   test('sanitizeEndpointConfig should return empty object when endpoint config is missing', () => {
     const manager = createManager();
 
@@ -351,6 +357,14 @@ describe('ContainerRuntimeConfigManager', () => {
     expect(log.debug).toHaveBeenCalledWith(
       expect.stringContaining('Unable to inspect image nginx:latest for runtime defaults'),
     );
+
+    const nonErrorFailingDockerApi = {
+      getImage: vi.fn().mockRejectedValue('raw failure'),
+    };
+    await expect(
+      manager.inspectImageConfig(nonErrorFailingDockerApi, 'nginx:latest', log),
+    ).resolves.toBeUndefined();
+    expect(log.debug).toHaveBeenCalledWith(expect.stringContaining('(raw failure)'));
   });
 
   test('getCloneRuntimeConfigOptions should inspect source and target images and include runtime origins', async () => {

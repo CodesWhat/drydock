@@ -273,3 +273,24 @@ test('initTrigger should execute registered container event callbacks', async ()
 
   expect(triggerSpy).toHaveBeenCalledTimes(2);
 });
+
+test('deregister then initTrigger should not duplicate container event callbacks', async () => {
+  mqtt.configuration = {
+    ...configurationValid,
+    clientid: 'dd',
+    hass: { enabled: false, discovery: false, prefix: 'homeassistant' },
+  };
+  vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({
+    publish: vi.fn().mockResolvedValue(undefined),
+  });
+  const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+
+  await mqtt.initTrigger();
+  await mqtt.deregister();
+  await mqtt.initTrigger();
+
+  emitContainerAdded({ name: 'container-c', watcher: 'local' });
+  await Promise.resolve();
+
+  expect(triggerSpy).toHaveBeenCalledTimes(1);
+});

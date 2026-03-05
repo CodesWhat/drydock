@@ -82,6 +82,12 @@ class Hass {
 
   log: HassLogger;
 
+  private unregisterContainerAdded?: () => void;
+  private unregisterContainerUpdated?: () => void;
+  private unregisterContainerRemoved?: () => void;
+  private unregisterWatcherStart?: () => void;
+  private unregisterWatcherStop?: () => void;
+
   constructor({
     client,
     configuration,
@@ -96,13 +102,40 @@ class Hass {
     this.log = log;
 
     // Subscribe to container events to sync HA
-    registerContainerAdded((container) => this.addContainerSensor(container));
-    registerContainerUpdated((container) => this.addContainerSensor(container));
-    registerContainerRemoved((container) => this.removeContainerSensor(container));
+    this.unregisterContainerAdded = registerContainerAdded((container) =>
+      this.addContainerSensor(container),
+    );
+    this.unregisterContainerUpdated = registerContainerUpdated((container) =>
+      this.addContainerSensor(container),
+    );
+    this.unregisterContainerRemoved = registerContainerRemoved((container) =>
+      this.removeContainerSensor(container),
+    );
 
     // Subscribe to watcher events to sync HA
-    registerWatcherStart((watcher) => this.updateWatcherSensors({ watcher, isRunning: true }));
-    registerWatcherStop((watcher) => this.updateWatcherSensors({ watcher, isRunning: false }));
+    this.unregisterWatcherStart = registerWatcherStart((watcher) =>
+      this.updateWatcherSensors({ watcher, isRunning: true }),
+    );
+    this.unregisterWatcherStop = registerWatcherStop((watcher) =>
+      this.updateWatcherSensors({ watcher, isRunning: false }),
+    );
+  }
+
+  deregister() {
+    this.unregisterContainerAdded?.();
+    this.unregisterContainerAdded = undefined;
+
+    this.unregisterContainerUpdated?.();
+    this.unregisterContainerUpdated = undefined;
+
+    this.unregisterContainerRemoved?.();
+    this.unregisterContainerRemoved = undefined;
+
+    this.unregisterWatcherStart?.();
+    this.unregisterWatcherStart = undefined;
+
+    this.unregisterWatcherStop?.();
+    this.unregisterWatcherStop = undefined;
   }
 
   /**

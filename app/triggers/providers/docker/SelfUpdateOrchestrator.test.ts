@@ -76,6 +76,23 @@ describe('SelfUpdateOrchestrator', () => {
     await expect(orchestrator.emitSelfUpdateStarting({})).resolves.toBeUndefined();
   });
 
+  test('constructor default dependency stubs throw when required runtime dependencies are omitted', async () => {
+    const orchestrator = new SelfUpdateOrchestrator();
+
+    await expect(orchestrator.runtimeConfigManager.getCloneRuntimeConfigOptions()).rejects.toThrow(
+      'SelfUpdateOrchestrator requires dependency "runtimeConfigManager.getCloneRuntimeConfigOptions"',
+    );
+    await expect(
+      orchestrator.pullImage({} as never, undefined, 'img', {} as never),
+    ).rejects.toThrow('SelfUpdateOrchestrator requires dependency "pullImage"');
+    expect(() => orchestrator.cloneContainer({} as never, 'img', {})).toThrow(
+      'SelfUpdateOrchestrator requires dependency "cloneContainer"',
+    );
+    await expect(
+      orchestrator.createContainer({} as never, {}, 'name', {} as never),
+    ).rejects.toThrow('SelfUpdateOrchestrator requires dependency "createContainer"');
+  });
+
   test('identifies self-update containers and docker socket bind path', () => {
     const orchestrator = createOrchestrator();
 
@@ -128,10 +145,14 @@ describe('SelfUpdateOrchestrator', () => {
     const orchestrator = createOrchestrator({
       getConfiguration: () => ({ dryrun: true }),
     });
+    const log = { info: vi.fn(), warn: vi.fn() };
 
-    await expect(
-      orchestrator.execute(createContext(), createContainer(), { info: vi.fn(), warn: vi.fn() }),
-    ).resolves.toBe(false);
+    await expect(orchestrator.execute(createContext(), createContainer(), log)).resolves.toBe(
+      false,
+    );
+    expect(log.info).toHaveBeenCalledWith(
+      'Do not replace the existing container because dry-run mode is enabled',
+    );
   });
 
   test('throws when docker socket bind is missing', async () => {
@@ -158,6 +179,7 @@ describe('SelfUpdateOrchestrator', () => {
     const insertContainerImageBackup = vi.fn();
     const pullImage = vi.fn().mockResolvedValue(undefined);
     const getCloneRuntimeConfigOptions = vi.fn().mockResolvedValue({ runtime: true });
+    const log = { info: vi.fn(), warn: vi.fn() };
     const orchestrator = createOrchestrator({
       createContainer: createContainerFn,
       insertContainerImageBackup,
@@ -167,41 +189,92 @@ describe('SelfUpdateOrchestrator', () => {
       },
     });
 
-    await expect(
-      orchestrator.execute(context, createContainer(), { info: vi.fn(), warn: vi.fn() }, 'op-123'),
-    ).resolves.toBe(true);
+    await expect(orchestrator.execute(context, createContainer(), log, 'op-123')).resolves.toBe(
+      true,
+    );
 
     expect(insertContainerImageBackup).toHaveBeenCalled();
-    expect(pullImage).toHaveBeenCalled();
-    expect(getCloneRuntimeConfigOptions).toHaveBeenCalled();
+    expect(pullImage).toHaveBeenCalledWith(context.dockerApi, context.auth, context.newImage, log);
+    expect(getCloneRuntimeConfigOptions).toHaveBeenCalledWith(
+      context.dockerApi,
+      context.currentContainerSpec,
+      context.newImage,
+      log,
+    );
     expect(createContainerFn).toHaveBeenCalledWith(
       context.dockerApi,
       { cloned: true },
       'drydock',
-      expect.anything(),
+      log,
     );
     expect(context.helperContainer.start).toHaveBeenCalled();
     expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
       expect.objectContaining({
-        Env: expect.arrayContaining(['DD_SELF_UPDATE_OP_ID=op-123']),
+        Image: context.newImage,
+        Env: expect.arrayContaining([
+          'DD_SELF_UPDATE_OP_ID=op-123',
+          'DD_SELF_UPDATE_OLD_CONTAINER_ID=old-container-id',
+          'DD_SELF_UPDATE_NEW_CONTAINER_ID=new-container-id',
+          'DD_SELF_UPDATE_OLD_CONTAINER_NAME=drydock',
+        ]),
+        HostConfig: {
+          AutoRemove: true,
+          Binds: ['/var/run/docker.sock:/var/run/docker.sock'],
+        },
       }),
+    );
+    expect(log.info).toHaveBeenCalledWith(
+      'Helper container started — process will terminate when old container stops',
+    );
+  });
+
+  test('generates operation id when none is provided', async () => {
+    const context = createContext();
+    const createContainerFn = vi.fn().mockResolvedValue(context.newContainer);
+    const orchestrator = new SelfUpdateOrchestrator({
+      getConfiguration: () => ({ dryrun: false }),
+      runtimeConfigManager: {
+        getCloneRuntimeConfigOptions: vi.fn().mockResolvedValue({ runtime: true }),
+      },
+      pullImage: vi.fn().mockResolvedValue(undefined),
+      cloneContainer: vi.fn(() => ({ cloned: true })),
+      createContainer: createContainerFn,
+      insertContainerImageBackup: vi.fn(),
+      emitSelfUpdateStarting: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await orchestrator.execute(context, createContainer(), { info: vi.fn(), warn: vi.fn() });
+
+    const helperContainerSpec = context.dockerApi.createContainer.mock.calls[0][0];
+    const operationIdEnvVar = helperContainerSpec.Env.find((value) =>
+      value.startsWith('DD_SELF_UPDATE_OP_ID='),
+    );
+
+    expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Env: expect.arrayContaining([expect.stringMatching(/^DD_SELF_UPDATE_OP_ID=/)]),
+      }),
+    );
+    expect(operationIdEnvVar).toMatch(
+      /^DD_SELF_UPDATE_OP_ID=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     );
   });
 
   test('rolls back rename when creation/inspect/helper steps fail', async () => {
     const contextCreateFail = createContext();
+    const createFailLog = { info: vi.fn(), warn: vi.fn() };
     const orchestratorCreateFail = createOrchestrator({
       createContainer: vi.fn().mockRejectedValue(new Error('create failed')),
     });
     await expect(
-      orchestratorCreateFail.execute(contextCreateFail, createContainer(), {
-        info: vi.fn(),
-        warn: vi.fn(),
-      }),
+      orchestratorCreateFail.execute(contextCreateFail, createContainer(), createFailLog),
     ).rejects.toThrow('create failed');
     expect(contextCreateFail.currentContainer.rename).toHaveBeenNthCalledWith(2, {
       name: 'drydock',
     });
+    expect(createFailLog.warn).toHaveBeenCalledWith(
+      'Failed to create new container, rolling back rename: create failed',
+    );
 
     const contextInspectFail = createContext();
     contextInspectFail.newContainer.inspect.mockRejectedValue(new Error('inspect failed'));

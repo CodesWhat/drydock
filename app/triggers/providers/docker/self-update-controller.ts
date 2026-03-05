@@ -1,5 +1,12 @@
 import Dockerode from 'dockerode';
 import { getErrorMessage } from '../../../util/error.js';
+import { toPositiveInteger } from '../../../util/parse.js';
+import { sleep } from '../../../util/sleep.js';
+import {
+  SELF_UPDATE_HEALTH_TIMEOUT_MS,
+  SELF_UPDATE_POLL_INTERVAL_MS,
+  SELF_UPDATE_START_TIMEOUT_MS,
+} from './self-update-timeouts.js';
 
 type SelfUpdateControllerConfig = {
   opId: string;
@@ -10,29 +17,6 @@ type SelfUpdateControllerConfig = {
   healthTimeoutMs: number;
   pollIntervalMs: number;
 };
-
-const DEFAULT_START_TIMEOUT_MS = 30_000;
-const DEFAULT_HEALTH_TIMEOUT_MS = 120_000;
-const DEFAULT_POLL_INTERVAL_MS = 1_000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function parsePositiveInt(rawValue: string | undefined, fallback: number): number {
-  if (!rawValue) {
-    return fallback;
-  }
-  const normalizedValue = rawValue.trim();
-  if (!/^\d+$/.test(normalizedValue)) {
-    return fallback;
-  }
-  const parsed = Number.parseInt(normalizedValue, 10);
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
-    return fallback;
-  }
-  return parsed;
-}
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
@@ -48,17 +32,17 @@ function readConfigFromEnv(): SelfUpdateControllerConfig {
     oldContainerId: getRequiredEnv('DD_SELF_UPDATE_OLD_CONTAINER_ID'),
     oldContainerName: process.env.DD_SELF_UPDATE_OLD_CONTAINER_NAME || 'drydock',
     newContainerId: getRequiredEnv('DD_SELF_UPDATE_NEW_CONTAINER_ID'),
-    startTimeoutMs: parsePositiveInt(
+    startTimeoutMs: toPositiveInteger(
       process.env.DD_SELF_UPDATE_START_TIMEOUT_MS,
-      DEFAULT_START_TIMEOUT_MS,
+      SELF_UPDATE_START_TIMEOUT_MS,
     ),
-    healthTimeoutMs: parsePositiveInt(
+    healthTimeoutMs: toPositiveInteger(
       process.env.DD_SELF_UPDATE_HEALTH_TIMEOUT_MS,
-      DEFAULT_HEALTH_TIMEOUT_MS,
+      SELF_UPDATE_HEALTH_TIMEOUT_MS,
     ),
-    pollIntervalMs: parsePositiveInt(
+    pollIntervalMs: toPositiveInteger(
       process.env.DD_SELF_UPDATE_POLL_INTERVAL_MS,
-      DEFAULT_POLL_INTERVAL_MS,
+      SELF_UPDATE_POLL_INTERVAL_MS,
     ),
   };
 }
@@ -305,4 +289,7 @@ export async function runSelfUpdateControllerEntrypoint(
   }
 }
 
-export { getRequiredEnv as testable_getRequiredEnv, parsePositiveInt as testable_parsePositiveInt };
+export {
+  getRequiredEnv as testable_getRequiredEnv,
+  toPositiveInteger as testable_parsePositiveInt,
+};

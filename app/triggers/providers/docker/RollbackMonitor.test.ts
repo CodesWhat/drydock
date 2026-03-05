@@ -36,10 +36,19 @@ describe('RollbackMonitor', () => {
   test('constructor provides default logger and trigger-instance fallbacks', () => {
     const monitor = new RollbackMonitor({
       getPreferredLabelValue: () => undefined,
+      getCurrentContainer: vi.fn(),
+      inspectContainer: vi.fn(),
+      startHealthMonitor: vi.fn(),
     });
 
     expect(monitor.getLogger()).toBeUndefined();
     expect(monitor.getTriggerInstance()).toBeUndefined();
+  });
+
+  test('constructor should throw when required dependencies are missing', () => {
+    expect(() => new RollbackMonitor({} as never)).toThrow(
+      'RollbackMonitor requires dependency "getPreferredLabelValue"',
+    );
   });
 
   test('getConfig parses rollback labels and applies defaults for invalid values', () => {
