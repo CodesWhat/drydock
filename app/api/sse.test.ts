@@ -421,6 +421,57 @@ describe('SSE Router', () => {
 
       expect(sseRouter._activeSseClientRegistry.sizeByTokenHash()).toBe(1);
     });
+
+    test('should drop stale client when response is writableEnded', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const activeClient = sseRouter._activeSseClientRegistry.getByResponse(res);
+      (activeClient as any).connectedAtMs = Date.now() - 60 * 60 * 1000;
+      (res as any).writableEnded = true;
+
+      sseRouter._sweepStaleSseState(Date.now());
+
+      expect(sseRouter._activeSseClientRegistry.hasByResponse(res)).toBe(false);
+      expect(sseRouter._clients.has(res)).toBe(false);
+    });
+
+    test('should drop stale client when response is writableFinished', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const activeClient = sseRouter._activeSseClientRegistry.getByResponse(res);
+      (activeClient as any).connectedAtMs = Date.now() - 60 * 60 * 1000;
+      (res as any).writableFinished = true;
+
+      sseRouter._sweepStaleSseState(Date.now());
+
+      expect(sseRouter._activeSseClientRegistry.hasByResponse(res)).toBe(false);
+    });
+
+    test('should drop stale client when response is destroyed', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const activeClient = sseRouter._activeSseClientRegistry.getByResponse(res);
+      (activeClient as any).connectedAtMs = Date.now() - 60 * 60 * 1000;
+      (res as any).destroyed = true;
+
+      sseRouter._sweepStaleSseState(Date.now());
+
+      expect(sseRouter._activeSseClientRegistry.hasByResponse(res)).toBe(false);
+    });
+
+    test('should keep closed responses when entry age is below stale ttl', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const activeClient = sseRouter._activeSseClientRegistry.getByResponse(res);
+
+      (activeClient as any).connectedAtMs = Date.now() - 1000;
+      (res as any).writableEnded = true;
+
+      sseRouter._sweepStaleSseState(Date.now());
+
+      expect(sseRouter._activeSseClientRegistry.hasByResponse(res)).toBe(true);
+      expect(sseRouter._clients.has(res)).toBe(true);
+    });
   });
 
   describe('per-IP connection limits', () => {
@@ -491,6 +542,17 @@ describe('SSE Router', () => {
       req._listeners.close();
     });
 
+    test('should fallback session tracking key to ip when sessionID is missing', () => {
+      const handler = getHandler();
+      const req = createSSERequest('203.0.113.1', '');
+      const res = createSSEResponse();
+
+      handler(req, res);
+
+      expect(sseRouter._connectionsPerSession.get('ip:203.0.113.1')).toBe(1);
+      req._listeners.close();
+    });
+
     test('should safely close when ip counter has already been removed', () => {
       const handler = getHandler();
       const ip = '192.168.1.1';
@@ -502,6 +564,36 @@ describe('SSE Router', () => {
 
       expect(() => req._listeners.close()).not.toThrow();
       expect(sseRouter._connectionsPerIp.has(ip)).toBe(false);
+    });
+
+    test('should make cleanup idempotent when close is emitted multiple times', () => {
+      const handler = getHandler();
+      const req = createSSERequest('192.168.2.5');
+      const res = createSSEResponse();
+
+      handler(req, res);
+
+      expect(() => {
+        req._listeners.close();
+        req._listeners.close();
+      }).not.toThrow();
+      expect(sseRouter._connectionsPerIp.has('192.168.2.5')).toBe(false);
+    });
+
+    test('should remove client from set when registry entry is already gone', () => {
+      const handler = getHandler();
+      const req = createSSERequest('198.51.100.9');
+      const res = createSSEResponse();
+
+      handler(req, res);
+      expect(sseRouter._clients.has(res)).toBe(true);
+
+      // Simulate inconsistent state where the registry no longer has this response.
+      sseRouter._activeSseClientRegistry.clear();
+      req._listeners.close();
+
+      expect(sseRouter._clients.has(res)).toBe(false);
+      expect(sseRouter._connectionsPerIp.has('198.51.100.9')).toBe(false);
     });
 
     test('should allow new connection after disconnect frees a slot', () => {
@@ -930,6 +1022,16 @@ describe('SSE Router', () => {
       expect(res.write).toHaveBeenCalledWith(
         'event: dd:container-removed\ndata: {"id":"container-1"}\n\n',
       );
+    });
+
+    test('should serialize null payloads as empty objects', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onContainerAdded = mockRegisterContainerAdded.mock.calls.at(-1)[0];
+
+      onContainerAdded(null);
+
+      expect(res.write).toHaveBeenCalledWith('event: dd:container-added\ndata: {}\n\n');
     });
   });
 

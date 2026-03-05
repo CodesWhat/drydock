@@ -243,15 +243,15 @@ function broadcastContainerEvent(eventName: string, payload: unknown): void {
 }
 
 export function init(): express.Router {
-  if (initialized) {
-    return router;
-  }
-  initialized = true;
   if (!staleSweepIntervalHandle) {
     staleSweepIntervalHandle = globalThis.setInterval(() => {
       sweepStaleSseState();
     }, SSE_STALE_SWEEP_INTERVAL_MS);
   }
+  if (initialized) {
+    return router;
+  }
+  initialized = true;
 
   // Register for self-update events from the trigger system
   registerSelfUpdateStarting(async (payload: SelfUpdateStartingEventPayload) => {
