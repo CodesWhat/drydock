@@ -564,6 +564,47 @@ test('callback should accept pending checks without numeric createdAt', async ()
   expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
 });
 
+test('redirect should not wait forever when previous session lock never settles', async () => {
+  vi.useFakeTimers();
+  const originalMapGet = Map.prototype.get;
+  let injectedNeverSettlingLock = false;
+  const neverSettlingLock = new Promise<void>(() => undefined);
+  const mapGetSpy = vi.spyOn(Map.prototype, 'get').mockImplementation(function (key) {
+    if (!injectedNeverSettlingLock && key === 'never-settling-session-lock') {
+      injectedNeverSettlingLock = true;
+      return neverSettlingLock;
+    }
+    return originalMapGet.call(this, key);
+  });
+
+  try {
+    const req = createReq({
+      sessionID: 'never-settling-session-lock',
+      session: {
+        reload: vi.fn((cb) => cb()),
+        save: vi.fn((cb) => cb()),
+      },
+    });
+    const res = createRes();
+    const redirectPromise = oidc.redirect(req, res);
+    let settled = false;
+    redirectPromise.finally(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(60 * 1000);
+    await Promise.resolve();
+
+    expect(settled).toBe(true);
+    await redirectPromise;
+    expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+    expect(res.status).not.toHaveBeenCalled();
+  } finally {
+    mapGetSpy.mockRestore();
+    vi.useRealTimers();
+  }
+});
+
 test('redirect should recover when a stale rejected lock promise exists', async () => {
   const originalMapGet = Map.prototype.get;
   let injectedRejectedLock = false;

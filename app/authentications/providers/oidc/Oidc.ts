@@ -9,6 +9,8 @@ import OidcStrategy from './OidcStrategy.js';
 
 const OIDC_CHECKS_TTL_MS = 5 * 60 * 1000;
 const OIDC_MAX_PENDING_CHECKS = 5;
+const OIDC_SESSION_LOCK_WAIT_TIMEOUT_MS = 10 * 1000;
+const OIDC_SESSION_LOCK_STALE_TTL_MS = 60 * 1000;
 const oidcSessionLocks = new Map<string, Promise<void>>();
 const OIDC_STATE_PATTERN = /^[A-Za-z0-9._~-]{8,256}$/;
 
@@ -153,10 +155,30 @@ async function withOidcSessionLock<T>(sessionId: string, operation: () => Promis
   });
   const nextLock = previousLock.catch(() => undefined).then(() => currentLock);
   oidcSessionLocks.set(sessionId, nextLock);
-  await previousLock.catch(() => undefined);
+
+  const staleLockCleanupTimer = setTimeout(() => {
+    if (oidcSessionLocks.get(sessionId) === nextLock) {
+      oidcSessionLocks.delete(sessionId);
+    }
+  }, OIDC_SESSION_LOCK_STALE_TTL_MS);
+  staleLockCleanupTimer.unref?.();
+
+  let previousLockWaitTimer: ReturnType<typeof setTimeout> | undefined;
+
   try {
+    await Promise.race([
+      previousLock.catch(() => undefined),
+      new Promise<void>((resolve) => {
+        previousLockWaitTimer = setTimeout(resolve, OIDC_SESSION_LOCK_WAIT_TIMEOUT_MS);
+        previousLockWaitTimer.unref?.();
+      }),
+    ]);
     return await operation();
   } finally {
+    if (previousLockWaitTimer !== undefined) {
+      clearTimeout(previousLockWaitTimer);
+    }
+    clearTimeout(staleLockCleanupTimer);
     releaseLock?.();
     if (oidcSessionLocks.get(sessionId) === nextLock) {
       oidcSessionLocks.delete(sessionId);
@@ -466,7 +488,6 @@ class Oidc extends Authentication {
             if (req.session.rememberMe) {
               req.session.cookie.maxAge = 3600 * 1000 * 24 * 30;
             } else {
-              req.session.cookie.expires = false;
               req.session.cookie.maxAge = null;
             }
           }
