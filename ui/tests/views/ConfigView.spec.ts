@@ -170,9 +170,9 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/theme/useTheme', () => ({
   useTheme: () => ({
-    themeFamily: { value: 'drydock' },
-    themeVariant: { value: 'dark' },
-    isDark: { value: true },
+    themeFamily: { value: 'drydock', __v_isRef: true },
+    themeVariant: { value: 'dark', __v_isRef: true },
+    isDark: { value: true, __v_isRef: true },
     setThemeFamily: vi.fn(),
     transitionTheme: vi.fn((cb: () => void) => cb()),
   }),
@@ -190,9 +190,9 @@ vi.mock('@/composables/useFont', () => ({
 
 vi.mock('@/composables/useIcons', () => ({
   useIcons: () => ({
-    iconLibrary: { value: 'ph-duotone' },
+    iconLibrary: { value: 'ph-duotone', __v_isRef: true },
     setIconLibrary: vi.fn(),
-    iconScale: { value: 1 },
+    iconScale: { value: 1, __v_isRef: true },
     setIconScale: vi.fn(),
   }),
 }));
@@ -557,6 +557,21 @@ describe('ConfigView', () => {
       await nextTick();
       return w;
     }
+
+    it('does not emit invalid prop warnings when opening appearance tab', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        await mountAppearanceTab();
+
+        const invalidPropWarnings = warnSpy.mock.calls.filter(([firstArg]) =>
+          String(firstArg).includes('Invalid prop'),
+        );
+        expect(invalidPropWarnings).toHaveLength(0);
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
 
     it('renders theme family selection buttons', async () => {
       const w = await mountAppearanceTab();
