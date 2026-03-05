@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
+import { getErrorMessage } from '../../util/error.js';
+import * as sharedModule from './shared.js';
 import {
-  getErrorMessage,
   getErrorStatusCode,
   isSensitiveKey,
   redactContainerRuntimeEnv,
@@ -8,6 +9,12 @@ import {
 } from './shared.js';
 
 describe('api/container/shared', () => {
+  describe('module exports', () => {
+    test('does not re-export getErrorMessage', () => {
+      expect('getErrorMessage' in sharedModule).toBe(false);
+    });
+  });
+
   describe('getErrorMessage', () => {
     test('returns a non-empty string error directly', () => {
       expect(getErrorMessage('network timeout')).toBe('network timeout');

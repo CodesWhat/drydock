@@ -19,13 +19,13 @@ import * as auditStore from '../store/audit.js';
 import * as storeContainer from '../store/container.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
+import { getErrorMessage } from '../util/error.js';
 import { uniqStrings } from '../util/string-array.js';
 import { mapComponentsToList } from './component.js';
 import { createCrudHandlers } from './container/crud.js';
 import { createLogHandlers } from './container/logs.js';
 import { createSecurityHandlers } from './container/security.js';
 import {
-  getErrorMessage,
   getErrorStatusCode,
   redactContainerRuntimeEnv,
   redactContainersRuntimeEnv,

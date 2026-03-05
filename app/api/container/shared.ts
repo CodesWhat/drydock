@@ -41,7 +41,6 @@ export function isSensitiveKey(key: string): boolean {
   const upper = key.toUpperCase();
   return SENSITIVE_KEY_PATTERNS.some((pattern) => upper.includes(pattern));
 }
-export { getErrorMessage };
 
 export function getErrorStatusCode(error: unknown): number | undefined {
   if (!error || typeof error !== 'object') {
