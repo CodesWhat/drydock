@@ -156,6 +156,12 @@ const screenshots = [
     label: "Detail View",
   },
   {
+    srcLight: "/screenshots/security-light-desktop.png",
+    srcDark: "/screenshots/security-dark-desktop.png",
+    alt: "Security Vulnerability Scanner",
+    label: "Security",
+  },
+  {
     srcLight: "/screenshots/login-light-desktop.png",
     srcDark: "/screenshots/login-dark-desktop.png",
     alt: "Login Page",
@@ -225,25 +231,28 @@ const roadmap = [
     version: "v1.4.0",
     title: "UI Stack Modernization",
     emoji: "\u{1F3A8}",
-    status: "next" as const,
+    status: "released" as const,
     dotColor:
-      "border-amber-500 bg-amber-50 text-amber-600 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-400",
+      "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
     items: [
-      "Tailwind CSS 4 with custom component library",
-      "4 color themes, 7 icon libraries, 6 font families",
-      "Shared data components & settings backend",
-      "SSE real-time updates & remember-me auth",
-      "Non-self rollback & CSRF protection",
-      "Event-stream reconnect & error sanitization",
+      "Tailwind CSS 4 + custom component library, 4 themes, 7 icon libraries",
+      "Cmd/K command palette with scope filtering",
+      "Compose-native YAML-preserving updates",
+      "Rename-first rollback with health gates",
+      "Self-update controller with SSE ack flow",
+      "Fail-closed auth enforcement across watchers, registries, and triggers",
+      "Tag-family semver, notification rules, container grouping by stack",
+      "Dual-slot security scanning, scheduled scans, audit history view",
+      "WUD migration CLI, bundled offline icons, dashboard drag-reorder",
     ],
   },
   {
     version: "v1.5.0",
     title: "Observability",
     emoji: "\u{26A1}",
-    status: "planned" as const,
+    status: "next" as const,
     dotColor:
-      "border-sky-400 bg-sky-50 text-sky-500 dark:border-sky-500 dark:bg-sky-950 dark:text-sky-400",
+      "border-amber-500 bg-amber-50 text-amber-600 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-400",
     items: [
       "Real-time log viewer",
       "Container resource monitoring",
@@ -436,7 +445,7 @@ export default function Home() {
 
               {/* Version Badge */}
               <Badge variant="secondary" className="mb-6 px-4 py-1.5 text-sm font-medium">
-                v1.3.7 &middot; Open Source
+                v1.4.0 &middot; Open Source
               </Badge>
 
               {/* Heading */}
@@ -481,7 +490,7 @@ export default function Home() {
                     rel="noopener noreferrer"
                   >
                     <img
-                      src="https://img.shields.io/badge/GHCR-11.8K_pulls-2ea44f?logo=github&logoColor=white"
+                      src="https://img.shields.io/badge/GHCR-24K%2B_pulls-2ea44f?logo=github&logoColor=white"
                       alt="GHCR pulls"
                     />
                   </a>

@@ -77,7 +77,93 @@ See the [Quick Start guide](https://drydock.codeswhat.com/docs/quickstart) for D
 
 <h2 align="center" id="screenshots">📸 Screenshots</h2>
 
-<!-- TODO: Capture fresh v1.4 screenshots before release (login, dashboard, containers, container detail — light/dark + mobile) -->
+<details open>
+<summary><strong>Dashboard</strong></summary>
+<table>
+<tr>
+<td width="50%" align="center"><strong>Light</strong></td>
+<td width="50%" align="center"><strong>Dark</strong></td>
+</tr>
+<tr>
+<td><img src="docs/assets/drydock-dashboard-light.png" alt="Dashboard Light"></td>
+<td><img src="docs/assets/drydock-dashboard-dark.png" alt="Dashboard Dark"></td>
+</tr>
+</table>
+</details>
+
+<details>
+<summary><strong>Containers</strong></summary>
+<table>
+<tr>
+<td width="50%" align="center"><strong>Light</strong></td>
+<td width="50%" align="center"><strong>Dark</strong></td>
+</tr>
+<tr>
+<td><img src="docs/assets/drydock-containers-light.png" alt="Containers Light"></td>
+<td><img src="docs/assets/drydock-containers-dark.png" alt="Containers Dark"></td>
+</tr>
+</table>
+</details>
+
+<details>
+<summary><strong>Container Detail</strong></summary>
+<table>
+<tr>
+<td width="50%" align="center"><strong>Light</strong></td>
+<td width="50%" align="center"><strong>Dark</strong></td>
+</tr>
+<tr>
+<td><img src="docs/assets/drydock-container-detail-light.png" alt="Container Detail Light"></td>
+<td><img src="docs/assets/drydock-container-detail-dark.png" alt="Container Detail Dark"></td>
+</tr>
+</table>
+</details>
+
+<details>
+<summary><strong>Security</strong></summary>
+<table>
+<tr>
+<td width="50%" align="center"><strong>Light</strong></td>
+<td width="50%" align="center"><strong>Dark</strong></td>
+</tr>
+<tr>
+<td><img src="docs/assets/drydock-security-light.png" alt="Security Light"></td>
+<td><img src="docs/assets/drydock-security-dark.png" alt="Security Dark"></td>
+</tr>
+</table>
+</details>
+
+<details>
+<summary><strong>Login</strong></summary>
+<table>
+<tr>
+<td width="50%" align="center"><strong>Light</strong></td>
+<td width="50%" align="center"><strong>Dark</strong></td>
+</tr>
+<tr>
+<td><img src="docs/assets/drydock-login-light.png" alt="Login Light"></td>
+<td><img src="docs/assets/drydock-login-dark.png" alt="Login Dark"></td>
+</tr>
+</table>
+</details>
+
+<details>
+<summary><strong>Mobile Responsive</strong></summary>
+<table>
+<tr>
+<td width="25%" align="center"><strong>Dashboard Light</strong></td>
+<td width="25%" align="center"><strong>Dashboard Dark</strong></td>
+<td width="25%" align="center"><strong>Containers Light</strong></td>
+<td width="25%" align="center"><strong>Containers Dark</strong></td>
+</tr>
+<tr>
+<td><img src="docs/assets/drydock-mobile-dashboard-light.png" alt="Mobile Dashboard Light"></td>
+<td><img src="docs/assets/drydock-mobile-dashboard-dark.png" alt="Mobile Dashboard Dark"></td>
+<td><img src="docs/assets/drydock-mobile-containers-light.png" alt="Mobile Containers Light"></td>
+<td><img src="docs/assets/drydock-mobile-containers-dark.png" alt="Mobile Containers Dark"></td>
+</tr>
+</table>
+</details>
 
 <hr>
 
@@ -260,8 +346,8 @@ Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully suppo
 | Version | Theme | Highlights |
 | --- | --- | --- |
 | **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Bouncer, SBOM, 7 new registries, 4 new triggers, rollback fixes, GHCR auth, self-hosted TLS, re2js regex engine, compose trigger fixes, DB persistence on shutdown |
-| **v1.4.0** ✅ | UI Modernization | Tailwind CSS 4 + custom component library, 4 themes, 7 icon libraries, 6 fonts, settings backend + icon proxy cache, SSE real-time updates, remember-me auth, notification rules, tag-family semver |
-| **v1.4.1** ✅ | Reliability & Resilience | Non-self rollback, rename-first update strategy, CSRF hardening (Sec-Fetch-Site + HTTPS cookie enforcement), mutation-only JSON parsing, scheduled security scans, Prometheus collect() pattern, SSE heartbeat dedup, LRU scan cache, trivy path validation, log buffer toggle, exponential backoff retry, dashboard composable extraction |
+| **v1.4.0** ✅ | UI Modernization | Tailwind CSS 4 + custom component library, 4 themes, 7 icon libraries, Cmd/K command palette, compose-native YAML-preserving updates, rename-first rollback with health gates, self-update controller with SSE ack, fail-closed auth enforcement, tag-family semver, notification rules, container grouping by stack, audit history view, dual-slot security scanning, scheduled scans, WUD migration CLI, bundled offline icons, dashboard drag-reorder, gzip compression |
+| **v1.4.1** | Reliability & Resilience | Error sanitization, compose validation, trigger schema validation, backup retention, rollback audit accuracy, UI resilience |
 | **v1.5.0** | Observability | Real-time log viewer, container resource monitoring, registry webhooks |
 | **v1.5.1** | Scanner Decoupling | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers |
