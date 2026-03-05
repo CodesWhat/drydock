@@ -22,6 +22,7 @@ import {
 } from '../configuration/index.js';
 import type Registry from '../registries/Registry.js';
 import type Trigger from '../triggers/providers/Trigger.js';
+import { getErrorMessage } from '../util/error.js';
 import type Watcher from '../watchers/Watcher.js';
 import type Component from './Component.js';
 import type { ComponentConfiguration } from './Component.js';
@@ -163,9 +164,7 @@ async function registerComponents(
       (result): result is PromiseRejectedResult => result.status === 'rejected',
     );
     if (failures.length > 0) {
-      const failureMessages = failures.map((failure) =>
-        failure.reason instanceof Error ? failure.reason.message : String(failure.reason),
-      );
+      const failureMessages = failures.map((failure) => getErrorMessage(failure.reason));
       throw new Error(failureMessages.join('; '));
     }
     return registrationResults
@@ -282,14 +281,9 @@ function sanitizeLegacyPublicTokenAuthConfigurations(
       continue;
     }
 
-    const publicConfiguration = isObjectRecord(providerConfiguration.public)
-      ? providerConfiguration.public
-      : {};
+    const publicConfiguration = providerConfiguration.public as Record<string, unknown>;
     const configuredCredentialKeys = getConfiguredCredentialKeys(publicConfiguration);
-    const configuredCredentialKeysSuffix =
-      configuredCredentialKeys.length > 0
-        ? ` Configured keys: ${configuredCredentialKeys.join(', ')}.`
-        : '';
+    const configuredCredentialKeysSuffix = ` Configured keys: ${configuredCredentialKeys.join(', ')}.`;
 
     log.warn(
       `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials for ${provider}.public.${configuredCredentialKeysSuffix} Falling back to anonymous ${provider}.public registry for backward compatibility. This fallback is deprecated; migrate to LOGIN+PASSWORD, LOGIN+TOKEN, AUTH, or no credentials.`,
