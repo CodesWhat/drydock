@@ -116,14 +116,7 @@ function isAbortError(error: unknown): boolean {
 }
 
 function getAbortReason(signal: AbortSignal): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error) {
-    return reason;
-  }
-  if (typeof reason === 'string' && reason) {
-    return createAbortError(reason);
-  }
-  return createAbortError('Scheduled scan batch aborted');
+  return signal.reason as Error;
 }
 
 function withAbortSignal<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -155,7 +148,7 @@ type ScanDigestGroupOutcome = 'cached' | 'scanned' | 'error' | 'aborted';
 async function scanDigestGroup(options: {
   digest: string;
   group: Container[];
-  signal?: AbortSignal;
+  signal: AbortSignal;
   scanIntervalMs: number;
   trivyDbUpdatedAt?: string;
 }): Promise<ScanDigestGroupOutcome> {
@@ -163,13 +156,6 @@ async function scanDigestGroup(options: {
   let startedBroadcast = false;
 
   try {
-    if (!signal) {
-      throw createAbortError('Scheduled scan batch controller unavailable');
-    }
-    if (signal.aborted) {
-      throw getAbortReason(signal);
-    }
-
     const representative = group[0];
     const image = getContainerImageFullName(representative);
     const auth = await withAbortSignal(getContainerRegistryAuth(representative), signal);
@@ -249,10 +235,7 @@ export async function runScheduledScans(): Promise<void> {
     // Group by digest
     const digestGroups = new Map<string, Container[]>();
     for (const container of containersWithDigest) {
-      const digest = container.image?.digest?.value;
-      if (typeof digest !== 'string') {
-        continue;
-      }
+      const digest = container.image?.digest?.value as string;
       const group = digestGroups.get(digest);
       if (group) {
         group.push(container);

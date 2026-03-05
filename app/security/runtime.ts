@@ -59,7 +59,7 @@ export function hasValidCommandPath(command: string): boolean {
 }
 
 function checkCommandAvailability(command: string): Promise<CommandAvailabilityResult> {
-  const commandValue = `${command || ''}`.trim();
+  const commandValue = command.trim();
   if (!commandValue) {
     return Promise.resolve({ available: false, invalidPath: false });
   }

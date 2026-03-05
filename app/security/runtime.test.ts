@@ -232,6 +232,63 @@ test('getSecurityRuntimeStatus should reject scanner commands with shell metacha
   expect(status.scanner.message).toContain('invalid');
 });
 
+test('getSecurityRuntimeStatus should treat blank scanner command as unavailable', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: {
+      ...createEnabledConfiguration().trivy,
+      command: '   ',
+    },
+    signature: {
+      ...createEnabledConfiguration().signature,
+      verify: false,
+    },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, 'ok', '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const status = await getSecurityRuntimeStatus();
+
+  expect(execFileMock).not.toHaveBeenCalled();
+  expect(status.ready).toBe(false);
+  expect(status.scanner.status).toBe('missing');
+  expect(status.scanner.commandAvailable).toBe(false);
+  expect(status.scanner.message).toContain('not available');
+});
+
+test('getSecurityRuntimeStatus should fallback to default trivy command when scanner command is empty', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: {
+      ...createEnabledConfiguration().trivy,
+      command: '',
+    },
+    signature: {
+      ...createEnabledConfiguration().signature,
+      verify: false,
+    },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, 'ok', '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const status = await getSecurityRuntimeStatus();
+
+  expect(execFileMock).toHaveBeenCalledWith(
+    'trivy',
+    ['--version'],
+    expect.objectContaining({ timeout: 4000 }),
+    expect.any(Function),
+  );
+  expect(status.scanner.command).toBe('trivy');
+  expect(status.scanner.status).toBe('ready');
+});
+
 test('getSecurityRuntimeStatus should reject signature commands with shell metacharacters', async () => {
   mockGetSecurityConfiguration.mockReturnValue({
     ...createEnabledConfiguration(),
@@ -266,6 +323,36 @@ test('getSecurityRuntimeStatus should reject signature commands with shell metac
   expect(status.signature.status).toBe('missing');
   expect(status.signature.commandAvailable).toBe(false);
   expect(status.signature.message).toContain('invalid');
+});
+
+test('getSecurityRuntimeStatus should fallback to default cosign command when signature command is empty', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    signature: {
+      ...createEnabledConfiguration().signature,
+      verify: true,
+      cosign: {
+        ...createEnabledConfiguration().signature.cosign,
+        command: '',
+      },
+    },
+  });
+  const execFileMock = vi.fn((command, _args, _options, callback) => {
+    callback(null, `${command} version`, '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const status = await getSecurityRuntimeStatus();
+
+  expect(execFileMock).toHaveBeenCalledWith(
+    'cosign',
+    ['--version'],
+    expect.objectContaining({ timeout: 4000 }),
+    expect.any(Function),
+  );
+  expect(status.signature.command).toBe('cosign');
+  expect(status.signature.status).toBe('ready');
 });
 
 describe('getTrivyDatabaseStatus', () => {
@@ -318,6 +405,21 @@ describe('getTrivyDatabaseStatus', () => {
     );
   });
 
+  test('should treat undefined stdout as empty output', async () => {
+    const execFileMock = vi.fn(
+      (_command: unknown, _args: unknown, _options: unknown, callback: Function) => {
+        callback(null, undefined, '');
+        return { exitCode: 0 };
+      },
+    );
+    childProcessControl.execFileImpl = execFileMock;
+
+    const result = await getTrivyDatabaseStatus();
+
+    expect(result).toBeUndefined();
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+  });
+
   test('should return cached result on second call without invoking execFile again', async () => {
     const execFileMock = mockExecFileSuccess(validTrivyVersionOutput);
 
@@ -346,6 +448,28 @@ describe('getTrivyDatabaseStatus', () => {
       downloadedAt: '2025-06-02T12:00:00Z',
     });
     expect(second).toEqual(first);
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('should still resolve in-flight lookup if cache is cleared before completion', async () => {
+    const execFileMock = vi.fn(
+      (_command: unknown, _args: unknown, _options: unknown, callback: Function) => {
+        setTimeout(() => {
+          callback(null, validTrivyVersionOutput, '');
+        }, 5);
+        return { exitCode: 0 };
+      },
+    );
+    childProcessControl.execFileImpl = execFileMock;
+
+    const inFlight = getTrivyDatabaseStatus();
+    clearTrivyDatabaseStatusCache();
+    const result = await inFlight;
+
+    expect(result).toEqual({
+      updatedAt: '2025-06-01T00:00:00Z',
+      downloadedAt: '2025-06-02T12:00:00Z',
+    });
     expect(execFileMock).toHaveBeenCalledTimes(1);
   });
 

@@ -1,3 +1,4 @@
+import cronParser from 'cron-parser';
 import { vi } from 'vitest';
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
@@ -750,6 +751,93 @@ describe('runScheduledScans', () => {
       expect.objectContaining({ digest: 'sha256:abc123' }),
       21600000,
     );
+  });
+
+  test('should fallback to 24h for comma-separated hour cron when only one valid hour remains', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: '0 3,99 * * *', jitter: 60000 },
+    });
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockScanImageWithDedup).toHaveBeenCalledWith(
+      expect.objectContaining({ digest: 'sha256:abc123' }),
+      86400000,
+    );
+  });
+
+  test('should fallback to 24h for comma-separated hour cron with duplicate hours', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: '0 3,3 * * *', jitter: 60000 },
+    });
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockScanImageWithDedup).toHaveBeenCalledWith(
+      expect.objectContaining({ digest: 'sha256:abc123' }),
+      86400000,
+    );
+  });
+
+  test('should fallback to 24h when cron parser yields non-positive intervals', async () => {
+    const parseExpressionSpy = vi.spyOn(cronParser, 'parseExpression');
+    parseExpressionSpy.mockReturnValue({
+      next: vi.fn(() => ({
+        toDate: () => new Date('2026-03-01T00:00:00.000Z'),
+      })),
+    } as any);
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: '0 3 15 * *', jitter: 60000 },
+    });
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    try {
+      await runScheduledScans();
+    } finally {
+      parseExpressionSpy.mockRestore();
+    }
+
+    expect(mockScanImageWithDedup).toHaveBeenCalledWith(
+      expect.objectContaining({ digest: 'sha256:abc123' }),
+      86400000,
+    );
+  });
+
+  test('should mark digest as error without scan-completed broadcast when auth resolution fails before start', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockResolveContainerRegistryAuth.mockRejectedValueOnce(new Error('auth resolution failed'));
+
+    await runScheduledScans();
+
+    expect(mockBroadcastScanStarted).not.toHaveBeenCalled();
+    expect(mockBroadcastScanCompleted).not.toHaveBeenCalled();
+    expect(mockScanImageWithDedup).not.toHaveBeenCalled();
+  });
+
+  test('should abort an in-flight batch when shutdown is invoked during auth resolution', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockResolveContainerRegistryAuth.mockImplementation(async () => {
+      shutdown();
+      return undefined;
+    });
+
+    await runScheduledScans();
+
+    expect(mockScanImageWithDedup).not.toHaveBeenCalled();
+    expect(_isScanInProgress()).toBe(false);
   });
 
   test('should fallback to 24h for invalid */0 minute pattern', async () => {
