@@ -1827,6 +1827,143 @@ test('container query cache invalidation should avoid parsing cache keys during 
   }
 });
 
+test('container query cache indexing should reuse existing reverse-index sets for shared values', () => {
+  const cacheKeyOne = '[["watcher","watcher-a"],["status","running"]]';
+  const cacheKeyTwo = '[["watcher","watcher-a"],["name","api"]]';
+  container._setContainersQueryCacheEntriesForTests([
+    [cacheKeyOne, []],
+    [cacheKeyTwo, []],
+  ]);
+
+  const watcherValueSet = container
+    ._getContainersQueryCacheReverseIndexForTests()
+    .get('watcher')
+    ?.get(JSON.stringify('watcher-a'));
+  expect(watcherValueSet?.has(cacheKeyOne)).toBe(true);
+  expect(watcherValueSet?.has(cacheKeyTwo)).toBe(true);
+
+  container._deleteContainersQueryCacheEntryForTests(cacheKeyOne);
+  expect(watcherValueSet?.has(cacheKeyTwo)).toBe(true);
+});
+
+test('container query cache invalidation should keep candidate entries when full query does not match', () => {
+  const cacheKey = '[["watcher","watcher-a"],["status","paused"]]';
+  container._setContainersQueryCacheEntriesForTests([[cacheKey, []]]);
+
+  container._invalidateContainersCacheForMutationForTests(undefined, {
+    watcher: 'watcher-a',
+    status: 'running',
+  });
+
+  expect(container._getContainersQueryCacheForTests().has(cacheKey)).toBe(true);
+});
+
+test('security state incremental prune should reset iterator when cache is empty', () => {
+  const nowMs = Date.now();
+  container._setSecurityStateCacheEntryForTests('incremental_seed', {
+    security: { seeded: true },
+    expiresAt: nowMs + 60_000,
+  });
+  container._pruneSecurityStateCacheIncrementallyForTests(nowMs);
+  container.clearAllCachedSecurityState();
+
+  expect(() => container._pruneSecurityStateCacheIncrementallyForTests(nowMs)).not.toThrow();
+});
+
+test('container query cache indexing should tolerate non-serializable query values', () => {
+  const originalStringify = JSON.stringify;
+  const stringifySpy = vi.spyOn(JSON, 'stringify').mockImplementation((value, replacer, space) => {
+    if (value === 'trigger-nonjson') {
+      throw new Error('cannot stringify');
+    }
+    return originalStringify(value as never, replacer as never, space as never);
+  });
+
+  try {
+    const cacheKey = '[["watcher","trigger-nonjson"]]';
+    container._setContainersQueryCacheEntriesForTests([[cacheKey, []]]);
+    container._invalidateContainersCacheForMutationForTests(undefined, {
+      watcher: 'trigger-nonjson',
+    });
+    expect(container._getContainersQueryCacheForTests().has(cacheKey)).toBe(false);
+  } finally {
+    stringifySpy.mockRestore();
+  }
+});
+
+test('container query cache entry delete should ignore orphan cache metadata misses', () => {
+  const cache = container._getContainersQueryCacheForTests();
+  cache.set('orphan-cache-key', []);
+
+  expect(() =>
+    container._deleteContainersQueryCacheEntryForTests('orphan-cache-key'),
+  ).not.toThrow();
+  expect(cache.has('orphan-cache-key')).toBe(false);
+});
+
+test('container query cache entry delete should tolerate missing reverse-index path maps', () => {
+  const cacheKey = '[["watcher","watcher-a"]]';
+  container._setContainersQueryCacheEntriesForTests([[cacheKey, []]]);
+  container._getContainersQueryCacheReverseIndexForTests().delete('watcher');
+
+  expect(() => container._deleteContainersQueryCacheEntryForTests(cacheKey)).not.toThrow();
+  expect(container._getContainersQueryCacheForTests().has(cacheKey)).toBe(false);
+});
+
+test('container query cache entry delete should tolerate missing reverse-index value sets', () => {
+  const cacheKey = '[["watcher","watcher-a"]]';
+  container._setContainersQueryCacheEntriesForTests([[cacheKey, []]]);
+  const pathValueMap = container._getContainersQueryCacheReverseIndexForTests().get('watcher');
+  pathValueMap?.delete(JSON.stringify('watcher-a'));
+
+  expect(() => container._deleteContainersQueryCacheEntryForTests(cacheKey)).not.toThrow();
+  expect(container._getContainersQueryCacheForTests().has(cacheKey)).toBe(false);
+});
+
+test('container query cache invalidation should evict candidate keys with missing parsed entries', () => {
+  const cacheKey = '[["watcher","watcher-a"]]';
+  container._setContainersQueryCacheEntriesForTests([[cacheKey, []]]);
+  container._getContainersQueryCacheParsedEntriesForTests().delete(cacheKey);
+
+  container._invalidateContainersCacheForMutationForTests(undefined, { watcher: 'watcher-a' });
+
+  expect(container._getContainersQueryCacheForTests().has(cacheKey)).toBe(false);
+});
+
+test('getContainers query cache eviction should stop when iterator returns undefined keys', () => {
+  const collection = {
+    find: vi.fn(() => [{ data: createContainerFixture() }]),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+  collection.find.mockClear();
+
+  const maxEntries = container.CONTAINERS_QUERY_CACHE_MAX_ENTRIES;
+  for (let index = 0; index <= maxEntries; index += 1) {
+    container.getContainers({ watcher: `evict-${index}` });
+  }
+
+  const queryCache = container._getContainersQueryCacheForTests();
+  const keysSpy = vi.spyOn(queryCache, 'keys').mockImplementation(
+    () =>
+      ({
+        next: () => ({ done: false, value: undefined }),
+        [Symbol.iterator]() {
+          return this;
+        },
+      }) as IterableIterator<string>,
+  );
+  try {
+    container.getContainers({ watcher: 'evict-extra' });
+    expect(queryCache.size).toBe(maxEntries + 1);
+  } finally {
+    keysSpy.mockRestore();
+  }
+});
+
 test('getValueByPath helper should reject unsafe and invalid traversal paths', () => {
   expect(
     container._getValueByPathForTests({ safe: { value: 'ok' } }, '__proto__.polluted'),

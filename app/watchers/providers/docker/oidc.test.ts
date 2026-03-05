@@ -190,6 +190,32 @@ describe('docker oidc module', () => {
     ).toThrow('backend down');
   });
 
+  test('token polling errors should parse unknown payload shapes and include fallback messages', () => {
+    const log = {
+      debug: vi.fn(),
+    };
+
+    expect(() =>
+      handleTokenErrorResponse(new Error('network exploded'), 1000, { watcherName: 'w', log }),
+    ).toThrow('OIDC device authorization for w failed: network exploded');
+
+    expect(() =>
+      handleTokenErrorResponse(
+        {
+          response: {
+            data: 'bad-data-shape',
+          },
+        },
+        1000,
+        { watcherName: 'w', log },
+      ),
+    ).toThrow('OIDC device authorization for w failed: [object Object]');
+
+    expect(() =>
+      handleTokenErrorResponse('string-failure', 1000, { watcherName: 'w', log }),
+    ).toThrow('OIDC device authorization for w failed: string-failure');
+  });
+
   test('refresh requirement uses access token presence and expiry window', () => {
     const now = Date.now();
     expect(isRemoteOidcTokenRefreshRequired({}, now)).toBe(true);

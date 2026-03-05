@@ -223,6 +223,24 @@ describe('docker image details orchestration module', () => {
     expect(watcher.ensureRemoteAuthHeaders).toHaveBeenCalledTimes(1);
   });
 
+  test('throws a clear error when image inspection rejects with a non-Error value', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+
+    const { watcher, inspectImage } = createWatcher();
+    inspectImage.mockRejectedValue('inspect failed as string');
+
+    await expect(
+      addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      ),
+    ).rejects.toThrow(
+      'Unable to inspect image for container container-1: inspect failed as string',
+    );
+  });
+
   test('returns undefined when image parsing cannot resolve a normalized image name', async () => {
     vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
 
