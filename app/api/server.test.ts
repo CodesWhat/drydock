@@ -10,6 +10,9 @@ vi.mock('../configuration', () => ({
   getWebhookConfiguration: vi.fn(() => ({
     enabled: false,
   })),
+  getLogLevel: vi.fn(() => 'info'),
+  getLogFormat: vi.fn(() => 'json'),
+  getLogBufferEnabled: vi.fn(() => true),
 }));
 
 vi.mock('../security/runtime.js', () => ({
@@ -128,7 +131,7 @@ describe('Server Router', () => {
     expect(getSecurityRuntimeStatus).toHaveBeenCalled();
     expect(mockRes.status).toHaveBeenCalledWith(500);
     expect(mockRes.json).toHaveBeenCalledWith({
-      error: 'Error loading security runtime status (runtime unavailable)',
+      error: 'Error loading security runtime status',
     });
   });
 });

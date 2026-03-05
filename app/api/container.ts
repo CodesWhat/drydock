@@ -162,7 +162,7 @@ export function init() {
     '/:id/env/reveal',
     rateLimit({
       windowMs: 60_000,
-      max: 100,
+      max: 10,
       standardHeaders: true,
       legacyHeaders: false,
       validate: { xForwardedForHeader: false },

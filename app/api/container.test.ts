@@ -232,6 +232,20 @@ describe('Container Router', () => {
       const rateLimitOptions = rateLimit.mock.calls[0][0];
       expect(rateLimitOptions.validate).toEqual({ xForwardedForHeader: false });
     });
+
+    test('should enforce strict rate limit on env reveal endpoint', () => {
+      containerRouter.init();
+      const envRevealRateLimitOptions = rateLimit.mock.calls[0][0];
+      expect(envRevealRateLimitOptions).toEqual(
+        expect.objectContaining({
+          windowMs: 60_000,
+          max: 10,
+          standardHeaders: true,
+          legacyHeaders: false,
+          validate: { xForwardedForHeader: false },
+        }),
+      );
+    });
   });
 
   describe('getContainers', () => {
