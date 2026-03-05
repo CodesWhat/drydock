@@ -21,11 +21,38 @@ import { getLog, getLogEntries } from '../services/log';
 import { getServer } from '../services/server';
 import { clearIconCache, getSettings, updateSettings } from '../services/settings';
 import { getStore } from '../services/store';
+import { preferences } from '../preferences/store';
+import { usePreference } from '../preferences/usePreference';
 import { useTheme } from '../theme/useTheme';
 import { errorMessage } from '../utils/error';
 
 const route = useRoute();
 const { themeFamily, themeVariant, isDark, setThemeFamily, transitionTheme } = useTheme();
+
+// --- Border Radius ---
+const radiusPresets = [
+  { id: 'none', label: 'None', sm: 0, md: 0, lg: 0 },
+  { id: 'sharp', label: 'Sharp', sm: 2, md: 3, lg: 4 },
+  { id: 'modern', label: 'Modern', sm: 4, md: 8, lg: 12 },
+  { id: 'soft', label: 'Soft', sm: 6, md: 12, lg: 16 },
+  { id: 'round', label: 'Round', sm: 8, md: 16, lg: 24 },
+];
+
+const activeRadius = usePreference(
+  () => preferences.appearance.radius,
+  (v) => {
+    preferences.appearance.radius = v;
+  },
+);
+
+function setRadius(id: string) {
+  activeRadius.value = id;
+  const p = radiusPresets.find((r) => r.id === id) ?? radiusPresets[1];
+  const el = document.documentElement;
+  el.style.setProperty('--dd-radius', `${p.md}px`);
+  el.style.setProperty('--dd-radius-sm', `${p.sm}px`);
+  el.style.setProperty('--dd-radius-lg', `${p.lg}px`);
+}
 
 const { iconLibrary, setIconLibrary, iconScale, setIconScale } = useIcons();
 const { activeFont, setFont, fontLoading, isFontLoaded } = useFont();
@@ -492,21 +519,23 @@ function handleSelectIconLibrary(library: string) {
     <ConfigAppearanceTab
       v-if="activeSettingsTab === 'appearance'"
       :theme-families="availableThemeFamilies"
-      :theme-family="themeFamily.value"
-      :is-dark="isDark.value"
-      :theme-variant="themeVariant.value"
-      :active-font="activeFont.value"
-      :font-loading="fontLoading.value"
+      :theme-family="themeFamily"
+      :is-dark="isDark"
+      :active-font="activeFont"
+      :font-loading="fontLoading"
       :font-options="fontOptions"
       :is-font-loaded="isFontLoaded"
-      :icon-library="iconLibrary.value"
+      :icon-library="iconLibrary"
       :library-labels="libraryLabels"
       :icon-map="iconMap"
-      :icon-scale="iconScale.value"
+      :icon-scale="iconScale"
       :on-select-theme-family="handleSelectThemeFamily"
       :on-select-font="handleSelectFont"
       :on-select-icon-library="handleSelectIconLibrary"
       :on-change-icon-scale="setIconScale"
+      :active-radius="activeRadius"
+      :radius-presets="radiusPresets"
+      :on-select-radius="setRadius"
     />
 
     <ConfigLogsTab

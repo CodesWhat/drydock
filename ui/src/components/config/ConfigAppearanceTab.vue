@@ -15,12 +15,19 @@ interface FontOption {
   bundled?: boolean;
 }
 
+interface RadiusPreset {
+  id: string;
+  label: string;
+  sm: number;
+  md: number;
+  lg: number;
+}
+
 const props = withDefaults(
   defineProps<{
     themeFamilies: ThemeFamilyOption[];
     themeFamily?: string;
     isDark?: boolean;
-    themeVariant?: string;
     activeFont?: string;
     fontLoading?: boolean;
     fontOptions: FontOption[];
@@ -29,19 +36,22 @@ const props = withDefaults(
     libraryLabels: Record<string, string>;
     iconMap: Record<string, Record<string, string>>;
     iconScale?: number;
+    activeRadius?: string;
+    radiusPresets: RadiusPreset[];
     onSelectThemeFamily: (familyId: string, event: Event) => void;
     onSelectFont: (fontId: string) => void;
     onSelectIconLibrary: (library: string) => void;
     onChangeIconScale: (value: number) => void;
+    onSelectRadius: (id: string) => void;
   }>(),
   {
     themeFamily: '',
     isDark: false,
-    themeVariant: 'system',
     activeFont: '',
     fontLoading: false,
     iconLibrary: '',
     iconScale: 1,
+    activeRadius: 'sharp',
   },
 );
 
@@ -98,24 +108,6 @@ function handleIconScaleInput(event: Event) {
             </div>
           </button>
         </div>
-      </div>
-    </div>
-
-    <!-- Theme variant -->
-    <div
-      class="dd-rounded overflow-hidden"
-      :style="{
-        backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
-      }"
-    >
-      <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-        <AppIcon :name="props.themeVariant === 'system' ? 'monitor' : props.isDark ? 'moon' : 'sun'" :size="14" class="text-drydock-secondary" />
-        <h2 class="text-sm font-semibold dd-text">Theme</h2>
-      </div>
-      <div class="p-5 flex items-center gap-4">
-        <ThemeToggle size="md" />
-        <span class="text-[12px] font-semibold dd-text-secondary capitalize">{{ props.themeVariant }}</span>
       </div>
     </div>
 
@@ -268,5 +260,47 @@ function handleIconScaleInput(event: Event) {
         </div>
       </div>
     </div>
+
+    <!-- Border Radius -->
+    <div
+      class="dd-rounded overflow-hidden"
+      :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }"
+    >
+      <div
+        class="px-5 py-3.5 flex items-center gap-2"
+        :style="{ borderBottom: '1px solid var(--dd-border-strong)' }"
+      >
+        <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
+        <h2 class="text-sm font-semibold dd-text">Border Radius</h2>
+      </div>
+      <div class="p-5">
+        <div class="grid grid-cols-5 gap-2">
+          <button
+            v-for="p in props.radiusPresets"
+            :key="p.id"
+            class="flex flex-col items-center gap-2 px-3 py-3 dd-rounded transition-colors"
+            :class="props.activeRadius === p.id ? 'ring-2 ring-drydock-secondary' : ''"
+            :style="{
+              backgroundColor: props.activeRadius === p.id ? 'var(--dd-primary-muted)' : 'var(--dd-bg-inset)',
+              border: props.activeRadius === p.id ? '1.5px solid var(--dd-primary)' : '1px solid var(--dd-border-strong)',
+            }"
+            @click="props.onSelectRadius(p.id)"
+          >
+            <div
+              class="w-10 h-7 border-2 transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+              :class="props.activeRadius === p.id ? 'border-drydock-secondary/60' : 'dd-border-strong'"
+              :style="{ borderRadius: p.md + 'px', backgroundColor: props.activeRadius === p.id ? 'var(--dd-primary-muted)' : 'transparent' }"
+            />
+            <div
+              class="text-[11px] font-semibold"
+              :class="props.activeRadius === p.id ? 'text-drydock-secondary' : 'dd-text'"
+            >
+              {{ p.label }}
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
