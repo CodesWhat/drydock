@@ -488,6 +488,7 @@ class Oidc extends Authentication {
             if (req.session.rememberMe) {
               req.session.cookie.maxAge = 3600 * 1000 * 24 * 30;
             } else {
+              req.session.cookie.expires = false as unknown as Date;
               req.session.cookie.maxAge = null;
             }
           }
