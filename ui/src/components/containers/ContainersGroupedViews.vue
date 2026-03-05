@@ -101,6 +101,7 @@ const {
                  :sort-asc="containerSortAsc"
                  :selected-key="selectedContainer?.name"
                  :show-actions="true"
+                 :virtual-scroll="false"
                  @update:sort-key="containerSortKey = $event"
                  @update:sort-asc="containerSortAsc = $event"
                  @row-click="selectContainer($event)">

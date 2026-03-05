@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 
 export interface DataTableColumn {
   key: string;
@@ -11,16 +11,30 @@ export interface DataTableColumn {
   icon?: boolean;
 }
 
-const props = defineProps<{
-  columns: DataTableColumn[];
-  rows: Record<string, unknown>[];
-  rowKey: string | ((row: Record<string, unknown>) => string);
-  sortKey?: string;
-  sortAsc?: boolean;
-  selectedKey?: string | null;
-  showActions?: boolean;
-  compact?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    columns: DataTableColumn[];
+    rows: Record<string, unknown>[];
+    rowKey: string | ((row: Record<string, unknown>) => string);
+    sortKey?: string;
+    sortAsc?: boolean;
+    selectedKey?: string | null;
+    showActions?: boolean;
+    compact?: boolean;
+    virtualScroll?: boolean;
+    virtualRowHeight?: number;
+    virtualOverscan?: number;
+    virtualMaxHeight?: string;
+  }>(),
+  {
+    showActions: false,
+    compact: false,
+    virtualScroll: false,
+    virtualRowHeight: 56,
+    virtualOverscan: 6,
+    virtualMaxHeight: '70vh',
+  },
+);
 
 const emit = defineEmits<{
   'update:sortKey': [key: string];
@@ -50,8 +64,11 @@ function toggleSort(
 
 // -- Column resizing --
 const tableRef = ref<HTMLTableElement | null>(null);
+const scrollViewportRef = ref<HTMLDivElement | null>(null);
 const colWidths = reactive<Record<string, number>>({});
 const resizing = ref(false);
+const virtualScrollTop = ref(0);
+const virtualViewportHeight = ref(0);
 const lastResizableColumnKey = computed(() => {
   for (let i = props.columns.length - 1; i >= 0; i -= 1) {
     if (!props.columns[i].icon) {
@@ -81,6 +98,139 @@ function getHeaderEl(colKey: string): HTMLElement | null {
     }
   }
   return null;
+}
+
+function parsePixelHeight(value: string): number | null {
+  const match = value.trim().match(/^([0-9]+(?:\.[0-9]+)?)px$/);
+  if (!match) {
+    return null;
+  }
+  const parsed = Number.parseFloat(match[1]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+const totalColumnCount = computed(() => props.columns.length + (props.showActions ? 1 : 0));
+const normalizedRowHeight = computed(() => Math.max(24, props.virtualRowHeight));
+const normalizedOverscan = computed(() => Math.max(0, props.virtualOverscan));
+const virtualizationEnabled = computed(() => props.virtualScroll && props.rows.length > 0);
+
+function fallbackViewportHeight(): number {
+  const explicitMaxHeight = parsePixelHeight(props.virtualMaxHeight);
+  if (explicitMaxHeight !== null) {
+    return explicitMaxHeight;
+  }
+  return normalizedRowHeight.value * 10;
+}
+
+function syncViewportHeight() {
+  if (!props.virtualScroll) {
+    virtualViewportHeight.value = 0;
+    return;
+  }
+  const measured = scrollViewportRef.value?.clientHeight ?? 0;
+  virtualViewportHeight.value = measured > 0 ? measured : fallbackViewportHeight();
+}
+
+function clampScrollTop() {
+  if (!props.virtualScroll) {
+    return;
+  }
+  const maxScrollTop = Math.max(
+    props.rows.length * normalizedRowHeight.value - virtualViewportHeight.value,
+    0,
+  );
+  if (virtualScrollTop.value <= maxScrollTop) {
+    return;
+  }
+  virtualScrollTop.value = maxScrollTop;
+  if (scrollViewportRef.value) {
+    scrollViewportRef.value.scrollTop = maxScrollTop;
+  }
+}
+
+watch(
+  () => props.virtualScroll,
+  (enabled) => {
+    if (!enabled) {
+      virtualScrollTop.value = 0;
+      if (scrollViewportRef.value) {
+        scrollViewportRef.value.scrollTop = 0;
+      }
+      return;
+    }
+    void nextTick(syncViewportHeight);
+  },
+  { immediate: true },
+);
+
+watch(() => props.rows.length, clampScrollTop);
+watch(() => props.virtualMaxHeight, syncViewportHeight);
+watch(normalizedRowHeight, () => {
+  syncViewportHeight();
+  clampScrollTop();
+});
+
+onMounted(() => {
+  syncViewportHeight();
+  globalThis.addEventListener('resize', syncViewportHeight);
+});
+
+onUnmounted(() => {
+  globalThis.removeEventListener('resize', syncViewportHeight);
+});
+
+function handleVirtualScroll(event: Event) {
+  if (!props.virtualScroll) {
+    return;
+  }
+  const target = event.target as HTMLElement;
+  virtualScrollTop.value = target.scrollTop;
+}
+
+const visibleRangeStart = computed(() => {
+  if (!virtualizationEnabled.value) {
+    return 0;
+  }
+  const candidate =
+    Math.floor(virtualScrollTop.value / normalizedRowHeight.value) - normalizedOverscan.value;
+  return Math.max(0, candidate);
+});
+
+const visibleRangeEnd = computed(() => {
+  if (!virtualizationEnabled.value) {
+    return props.rows.length;
+  }
+  const viewport =
+    virtualViewportHeight.value > 0 ? virtualViewportHeight.value : fallbackViewportHeight();
+  const visibleRows = Math.max(
+    1,
+    Math.ceil(viewport / normalizedRowHeight.value) + normalizedOverscan.value * 2,
+  );
+  return Math.min(props.rows.length, visibleRangeStart.value + visibleRows);
+});
+
+const visibleRows = computed(() => {
+  if (!virtualizationEnabled.value) {
+    return props.rows;
+  }
+  return props.rows.slice(visibleRangeStart.value, visibleRangeEnd.value);
+});
+
+const topSpacerHeight = computed(() =>
+  virtualizationEnabled.value ? visibleRangeStart.value * normalizedRowHeight.value : 0,
+);
+
+const bottomSpacerHeight = computed(() =>
+  virtualizationEnabled.value
+    ? (props.rows.length - visibleRangeEnd.value) * normalizedRowHeight.value
+    : 0,
+);
+
+function rowAbsoluteIndex(localIndex: number): number {
+  if (!virtualizationEnabled.value) {
+    return localIndex;
+  }
+  return visibleRangeStart.value + localIndex;
 }
 
 function applyLiveWidth(colKey: string, width: number) {
@@ -169,8 +319,17 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
 <template>
   <div class="dd-rounded overflow-hidden"
        :style="{ border: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-card)' }">
-    <div class="overflow-hidden">
-      <table ref="tableRef" class="w-full text-xs" :style="Object.keys(colWidths).length > 0 ? { tableLayout: 'fixed' } : {}">
+    <div
+      ref="scrollViewportRef"
+      class="overflow-x-auto"
+      :class="virtualScroll ? 'overflow-y-auto' : 'overflow-y-visible'"
+      :data-test="virtualScroll ? 'data-table-scroll' : undefined"
+      :style="virtualScroll ? { maxHeight: virtualMaxHeight } : {}"
+      @scroll="handleVirtualScroll">
+      <table
+        ref="tableRef"
+        class="w-full text-xs"
+        :style="Object.keys(colWidths).length > 0 ? { tableLayout: 'fixed' } : {}">
         <thead>
           <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
             <th v-for="(col, colIdx) in columns" :key="col.key"
@@ -212,14 +371,20 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(row, i) in rows" :key="getRowKey(row, rowKey)"
+          <tr
+            v-if="topSpacerHeight > 0"
+            aria-hidden="true"
+            class="pointer-events-none">
+            <td :colspan="totalColumnCount" class="p-0 border-0" :style="{ height: `${topSpacerHeight}px` }" />
+          </tr>
+          <tr v-for="(row, i) in visibleRows" :key="getRowKey(row, rowKey)"
               class="cursor-pointer transition-colors hover:dd-bg-hover"
               :class="selectedKey != null && getRowKey(row, rowKey) === selectedKey ? 'ring-1 ring-inset ring-drydock-secondary' : ''"
               :style="{
                 backgroundColor: selectedKey != null && getRowKey(row, rowKey) === selectedKey
                   ? 'var(--dd-bg-elevated)'
-                  : (i % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)'),
-                borderBottom: i < rows.length - 1 ? '1px solid var(--dd-border-strong)' : 'none',
+                  : (rowAbsoluteIndex(i) % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)'),
+                borderBottom: rowAbsoluteIndex(i) < rows.length - 1 ? '1px solid var(--dd-border-strong)' : 'none',
               }"
               tabindex="0"
               @keydown="handleRowKeydown($event, row)"
@@ -234,6 +399,12 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
             <td v-if="showActions" class="px-3 py-3 text-right whitespace-nowrap relative">
               <slot name="actions" :row="row" />
             </td>
+          </tr>
+          <tr
+            v-if="bottomSpacerHeight > 0"
+            aria-hidden="true"
+            class="pointer-events-none">
+            <td :colspan="totalColumnCount" class="p-0 border-0" :style="{ height: `${bottomSpacerHeight}px` }" />
           </tr>
         </tbody>
       </table>

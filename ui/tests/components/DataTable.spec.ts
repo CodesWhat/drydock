@@ -319,4 +319,50 @@ describe('DataTable', () => {
       expect(firstCell.text()).toContain('Custom: Alpha');
     });
   });
+
+  describe('virtual scrolling', () => {
+    function makeRows(count: number) {
+      return Array.from({ length: count }, (_, i) => ({
+        id: `${i + 1}`,
+        name: `Container ${i + 1}`,
+        status: i % 2 === 0 ? 'running' : 'stopped',
+      }));
+    }
+
+    it('renders only a visible window when virtual scrolling is enabled', () => {
+      const manyRows = makeRows(200);
+      const w = factory({
+        rows: manyRows,
+        virtualScroll: true,
+        virtualRowHeight: 40,
+        virtualMaxHeight: '120px',
+      });
+
+      const renderedRows = w.findAll('tbody tr').filter((tr) => !tr.attributes('aria-hidden'));
+      expect(renderedRows.length).toBeLessThan(manyRows.length);
+      expect(renderedRows.length).toBeGreaterThan(0);
+    });
+
+    it('updates the rendered window after scrolling', async () => {
+      const manyRows = makeRows(200);
+      const w = factory({
+        rows: manyRows,
+        virtualScroll: true,
+        virtualRowHeight: 40,
+        virtualMaxHeight: '120px',
+      });
+
+      const scrollViewport = w.find('[data-test="data-table-scroll"]');
+      expect(scrollViewport.exists()).toBe(true);
+
+      expect(w.findAll('tbody tr').some((tr) => tr.text().includes('Container 1'))).toBe(true);
+
+      (scrollViewport.element as HTMLElement).scrollTop = 1200;
+      scrollViewport.trigger('scroll');
+      await nextTick();
+
+      expect(w.findAll('tbody tr').some((tr) => tr.text().includes('Container 1'))).toBe(false);
+      expect(w.findAll('tbody tr').some((tr) => tr.text().includes('Container 25'))).toBe(true);
+    });
+  });
 });
