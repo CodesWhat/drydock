@@ -19,4 +19,14 @@ describe('Store Service', () => {
     expect(fetch).toHaveBeenCalledWith('/api/store', { credentials: 'include' });
     expect(result).toEqual(payload);
   });
+
+  it('throws when fetching store configuration fails', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      statusText: 'Internal Server Error',
+      json: async () => ({}),
+    } as any);
+
+    await expect(getStore()).rejects.toThrow('Failed to get store: Internal Server Error');
+  });
 });

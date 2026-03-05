@@ -42,6 +42,13 @@ interface GetAllContainersOptions {
   signal?: AbortSignal;
 }
 
+interface ContainerTriggerRequest {
+  containerId: string;
+  triggerType: string;
+  triggerName: string;
+  triggerAgent?: string;
+}
+
 function isAbortSignal(value: unknown): value is AbortSignal {
   return (
     typeof value === 'object' &&
@@ -125,7 +132,7 @@ async function refreshAllContainers() {
   return response.json();
 }
 
-async function refreshContainer(containerId) {
+async function refreshContainer(containerId: string) {
   const response = await fetch(`/api/containers/${containerId}/watch`, {
     method: 'POST',
     credentials: 'include',
@@ -139,7 +146,7 @@ async function refreshContainer(containerId) {
   return response.json();
 }
 
-async function deleteContainer(containerId) {
+async function deleteContainer(containerId: string) {
   const response = await fetch(`/api/containers/${containerId}`, {
     method: 'DELETE',
     credentials: 'include',
@@ -150,7 +157,7 @@ async function deleteContainer(containerId) {
   return response;
 }
 
-async function getContainerTriggers(containerId) {
+async function getContainerTriggers(containerId: string) {
   const response = await fetch(`/api/containers/${containerId}/triggers`, {
     credentials: 'include',
   });
@@ -160,7 +167,12 @@ async function getContainerTriggers(containerId) {
   return response.json();
 }
 
-async function runTrigger({ containerId, triggerType, triggerName, triggerAgent }) {
+async function runTrigger({
+  containerId,
+  triggerType,
+  triggerName,
+  triggerAgent,
+}: ContainerTriggerRequest) {
   const url = triggerAgent
     ? `/api/containers/${containerId}/triggers/${triggerAgent}/${triggerType}/${triggerName}`
     : `/api/containers/${containerId}/triggers/${triggerType}/${triggerName}`;
@@ -175,7 +187,7 @@ async function runTrigger({ containerId, triggerType, triggerName, triggerAgent 
   return response.json();
 }
 
-async function getContainerLogs(containerId, tail = 100) {
+async function getContainerLogs(containerId: string, tail: number = 100) {
   const response = await fetch(`/api/containers/${containerId}/logs?tail=${tail}`, {
     credentials: 'include',
   });
@@ -185,7 +197,7 @@ async function getContainerLogs(containerId, tail = 100) {
   return response.json();
 }
 
-async function getContainerUpdateOperations(containerId) {
+async function getContainerUpdateOperations(containerId: string) {
   const response = await fetch(`/api/containers/${containerId}/update-operations`, {
     credentials: 'include',
   });
@@ -197,7 +209,7 @@ async function getContainerUpdateOperations(containerId) {
   return response.json();
 }
 
-async function getContainerVulnerabilities(containerId) {
+async function getContainerVulnerabilities(containerId: string) {
   const response = await fetch(`/api/containers/${containerId}/vulnerabilities`, {
     credentials: 'include',
   });
@@ -209,7 +221,7 @@ async function getContainerVulnerabilities(containerId) {
   return response.json();
 }
 
-async function getContainerSbom(containerId, format = 'spdx-json') {
+async function getContainerSbom(containerId: string, format: string = 'spdx-json') {
   const response = await fetch(
     `/api/containers/${containerId}/sbom?format=${encodeURIComponent(format)}`,
     {
@@ -222,7 +234,11 @@ async function getContainerSbom(containerId, format = 'spdx-json') {
   return response.json();
 }
 
-async function updateContainerPolicy(containerId, action, payload = {}) {
+async function updateContainerPolicy(
+  containerId: string,
+  action: string,
+  payload: Record<string, unknown> = {},
+) {
   const response = await fetch(`/api/containers/${containerId}/update-policy`, {
     method: 'PATCH',
     credentials: 'include',

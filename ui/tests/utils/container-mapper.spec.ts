@@ -328,6 +328,17 @@ describe('container-mapper', () => {
       expect((c as any).releaseLink).toBe('https://example.com/changelog');
     });
 
+    it('ignores non-http release links', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'minor' },
+          result: { tag: '1.26', link: 'ftp://example.com/changelog' },
+        }),
+      );
+      expect((c as any).releaseLink).toBeUndefined();
+    });
+
     it('sets newTag to null when no update', () => {
       const c = mapApiContainer(makeApiContainer());
       expect(c.newTag).toBeNull();
@@ -451,6 +462,25 @@ describe('container-mapper', () => {
           updatePolicy: {
             skipTags: ['1.25'],
             skipDigests: ['sha256:other'],
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBeUndefined();
+      expect((c as any).suppressedUpdateTag).toBeUndefined();
+    });
+
+    it('does not mark snoozed updates when snoozeUntil is in the past', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+            remoteValue: '1.26',
+          },
+          updatePolicy: {
+            snoozeUntil: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
           },
         }),
       );
@@ -661,6 +691,35 @@ describe('container-mapper', () => {
         { key: 'PLAIN', value: 'no-flag' },
       ]);
     });
+
+    it('normalizes non-string runtime detail values and filters invalid env keys', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          id: null,
+          name: null,
+          image: {
+            registry: null,
+            tag: { value: '1.25' },
+          },
+          details: {
+            env: [
+              { key: 'OBJECT', value: { nested: true } },
+              { key: 'EMPTY', value: undefined },
+              { key: 123, value: 'ignored' },
+            ],
+          },
+        }),
+      );
+
+      expect(c.id).toBe('');
+      expect(c.name).toBe('');
+      expect(c.image).toBe('');
+      expect(c.registry).toBe('custom');
+      expect(c.details.env).toEqual([
+        { key: 'OBJECT', value: '[object Object]' },
+        { key: 'EMPTY', value: '' },
+      ]);
+    });
   });
 
   describe('mapApiContainers', () => {
@@ -728,6 +787,21 @@ describe('container-mapper', () => {
         }),
       );
       expect(c.updateBouncer).toBe('safe');
+    });
+
+    it('marks update scan state as not-scanned when update scan status is not-scanned', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          security: {
+            scan: null,
+            updateScan: {
+              status: 'not-scanned',
+              summary: null,
+            },
+          },
+        }),
+      );
+      expect(c.updateSecurityScanState).toBe('not-scanned');
     });
   });
 

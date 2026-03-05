@@ -4,6 +4,9 @@ function getServerIcon() {
 
 async function getServer() {
   const response = await fetch('/api/server', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get server: ${response.statusText}`);
+  }
   return response.json();
 }
 

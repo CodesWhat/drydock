@@ -12,6 +12,7 @@ describe('Log Service', () => {
   it('should get log', async () => {
     const mockResponse = { logs: [] };
     global.fetch.mockResolvedValue({
+      ok: true,
       json: vi.fn().mockResolvedValue(mockResponse),
     });
 
@@ -19,6 +20,16 @@ describe('Log Service', () => {
 
     expect(global.fetch).toHaveBeenCalledWith('/api/log', { credentials: 'include' });
     expect(result).toEqual(mockResponse);
+  });
+
+  it('should throw when fetching log fails', async () => {
+    global.fetch.mockResolvedValue({
+      ok: false,
+      statusText: 'Internal Server Error',
+      json: vi.fn().mockResolvedValue({}),
+    });
+
+    await expect(getLog()).rejects.toThrow('Failed to get log: Internal Server Error');
   });
 
   describe('getLogEntries', () => {

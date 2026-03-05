@@ -34,6 +34,7 @@ describe('Watcher Service', () => {
   it('should get all watchers', async () => {
     const mockResponse = { watchers: [] };
     global.fetch.mockResolvedValue({
+      ok: true,
       json: vi.fn().mockResolvedValue(mockResponse),
     });
 
@@ -41,6 +42,16 @@ describe('Watcher Service', () => {
 
     expect(global.fetch).toHaveBeenCalledWith('/api/watchers', { credentials: 'include' });
     expect(result).toEqual(mockResponse);
+  });
+
+  it('throws when fetching all watchers fails', async () => {
+    global.fetch.mockResolvedValue({
+      ok: false,
+      statusText: 'Internal Server Error',
+      json: vi.fn().mockResolvedValue({}),
+    });
+
+    await expect(getAllWatchers()).rejects.toThrow('Failed to get watchers: Internal Server Error');
   });
 
   it('fetches a specific watcher by type and name', async () => {
@@ -56,6 +67,18 @@ describe('Watcher Service', () => {
       credentials: 'include',
     });
     expect(result).toEqual(mockWatcher);
+  });
+
+  it('throws when fetching a specific watcher fails', async () => {
+    global.fetch.mockResolvedValue({
+      ok: false,
+      statusText: 'Not Found',
+      json: vi.fn().mockResolvedValue({}),
+    });
+
+    await expect(getWatcher({ type: 'docker', name: 'local' })).rejects.toThrow(
+      'Failed to get watcher: Not Found',
+    );
   });
 
   it('fetches an agent-scoped watcher when agent is provided', async () => {

@@ -136,6 +136,18 @@ describe('Auth Service', () => {
       });
       expect(strategies).toEqual(mockStrategies);
     });
+
+    it('throws when fetching authentication strategies fails', async () => {
+      fetch.mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Internal Server Error',
+        json: async () => ({}),
+      });
+
+      await expect(getStrategies()).rejects.toThrow(
+        'Failed to get auth strategies: Internal Server Error',
+      );
+    });
   });
 
   describe('getOidcRedirection', () => {

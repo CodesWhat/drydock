@@ -4,24 +4,14 @@ import type { ContainerSecurityDelta, ContainerSecuritySummary } from '../types/
 import { computeSecurityDelta } from '../utils/container-mapper';
 import { errorMessage } from '../utils/error';
 import { normalizeSeverity } from '../utils/security';
+import type { Vulnerability } from '../views/security/securityViewTypes';
 import {
   chooseLatestTimestamp,
   normalizeSeverityCount,
   severityOrder,
 } from '../views/security/securityViewUtils';
 
-export interface Vulnerability {
-  id: string;
-  severity: string;
-  package: string;
-  version: string;
-  fixedIn: string | null;
-  title?: string;
-  target?: string;
-  primaryUrl?: string;
-  image: string;
-  publishedDate: string;
-}
+export type { Vulnerability } from '../views/security/securityViewTypes';
 
 export interface ImageSummary {
   image: string;

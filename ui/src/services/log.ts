@@ -4,6 +4,9 @@ function getLogIcon() {
 
 async function getLog() {
   const response = await fetch('/api/log', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get log: ${response.statusText}`);
+  }
   return response.json();
 }
 

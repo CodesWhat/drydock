@@ -179,7 +179,6 @@ class SseService {
     this.consecutiveErrors = 0;
     this.serverClientId = undefined;
     this.serverClientToken = undefined;
-    return;
   }
 }
 

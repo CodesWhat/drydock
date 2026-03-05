@@ -35,7 +35,13 @@ const REGISTRY_PROVIDER_ICONS = {
   docr: 'sh-digitalocean',
 };
 
-function getRegistryProviderIcon(provider) {
+interface RegistryDetailPathOptions {
+  type: string;
+  name: string;
+  agent?: string;
+}
+
+function getRegistryProviderIcon(provider: string) {
   const providerName = `${provider || ''}`.split('.')[0];
   return REGISTRY_PROVIDER_ICONS[providerName] || 'sh-docker';
 }
@@ -70,7 +76,7 @@ const REGISTRY_PROVIDER_COLORS = {
   trueforge: '#6B7280',
 };
 
-function getRegistryProviderColor(provider) {
+function getRegistryProviderColor(provider: string) {
   return REGISTRY_PROVIDER_COLORS[provider.split('.')[0]] || '#6B7280';
 }
 
@@ -80,10 +86,13 @@ function getRegistryProviderColor(provider) {
  */
 async function getAllRegistries() {
   const response = await fetch('/api/registries', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get registries: ${response.statusText}`);
+  }
   return response.json();
 }
 
-function buildRegistryDetailPath({ type, name, agent }) {
+function buildRegistryDetailPath({ type, name, agent }: RegistryDetailPathOptions) {
   const segments = ['/api/registries'];
   if (agent) {
     segments.push(encodeURIComponent(agent));
@@ -92,10 +101,13 @@ function buildRegistryDetailPath({ type, name, agent }) {
   return segments.join('/');
 }
 
-async function getRegistry({ type, name, agent }) {
+async function getRegistry({ type, name, agent }: RegistryDetailPathOptions) {
   const response = await fetch(buildRegistryDetailPath({ type, name, agent }), {
     credentials: 'include',
   });
+  if (!response.ok) {
+    throw new Error(`Failed to get registry: ${response.statusText}`);
+  }
   return response.json();
 }
 

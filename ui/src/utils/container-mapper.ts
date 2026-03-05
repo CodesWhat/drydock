@@ -367,15 +367,13 @@ function deriveSuppressedUpdateTag(
     return undefined;
   }
 
-  if (updateKind?.kind === 'tag') {
-    const remoteTag = asNonEmptyString(updateKind.remoteValue);
-    if (remoteTag) {
-      return remoteTag;
-    }
-    const resultTag = asNonEmptyString(apiContainer.result?.tag);
-    if (resultTag) {
-      return resultTag;
-    }
+  const remoteTag = asNonEmptyString(updateKind?.remoteValue);
+  if (remoteTag) {
+    return remoteTag;
+  }
+  const resultTag = asNonEmptyString(apiContainer.result?.tag);
+  if (resultTag) {
+    return resultTag;
   }
 
   return undefined;

@@ -37,6 +37,7 @@ export default mergeConfig(
           'src/main.ts',
           'src/registerServiceWorker.ts',
           'src/services/sse.ts',
+          '**/*.typecheck.ts',
           '**/*.d.ts',
           '**/node_modules/**',
         ],

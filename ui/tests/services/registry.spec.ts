@@ -108,6 +108,18 @@ describe('Registry Service', () => {
       });
       expect(registries).toEqual(mockRegistries);
     });
+
+    it('throws when fetching registries fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Internal Server Error',
+        json: async () => ({}),
+      } as any);
+
+      await expect(getAllRegistries()).rejects.toThrow(
+        'Failed to get registries: Internal Server Error',
+      );
+    });
   });
 
   describe('getRegistry', () => {
@@ -124,6 +136,18 @@ describe('Registry Service', () => {
         credentials: 'include',
       });
       expect(result).toEqual(mockRegistry);
+    });
+
+    it('throws when fetching a specific registry fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Not Found',
+        json: async () => ({}),
+      } as any);
+
+      await expect(getRegistry({ type: 'hub', name: 'private' })).rejects.toThrow(
+        'Failed to get registry: Not Found',
+      );
     });
 
     it('fetches an agent-scoped registry when agent is provided', async () => {

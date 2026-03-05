@@ -1,148 +1,215 @@
-import type { InjectionKey, Ref } from 'vue';
+import type { ComputedRef, InjectionKey, Ref, WritableComputedRef } from 'vue';
 import { inject } from 'vue';
+import type { useBreakpoints } from '../../composables/useBreakpoints';
+import type { useColumnVisibility } from '../../composables/useColumnVisibility';
+import type { useContainerFilters } from '../../composables/useContainerFilters';
+import type { useDetailPanel } from '../../composables/useDetailPanel';
+import type { LogAutoFetchIntervalOption } from '../../composables/useLogViewerBehavior';
+import type { PreferencesSchema } from '../../preferences/schema';
+import type { useViewMode } from '../../preferences/useViewMode';
+import type { Container } from '../../types/container';
+import type {
+  parseServer,
+  registryColorBg,
+  registryColorText,
+  registryLabel,
+  serverBadgeColor,
+  updateKindColor,
+} from '../../utils/display';
+import type { useContainerActions } from '../../views/containers/useContainerActions';
+import type { useContainerLogs } from '../../views/containers/useContainerLogs';
+import type { useContainerSecurity } from '../../views/containers/useContainerSecurity';
 
-export interface ContainersViewTemplateContext {
-  error: unknown;
-  loading: unknown;
-  containers: unknown;
-  containerViewMode: unknown;
-  showFilters: unknown;
-  filteredContainers: unknown;
-  activeFilterCount: unknown;
-  filterSearch: Ref<string>;
-  filterStatus: unknown;
-  filterBouncer: unknown;
-  filterRegistry: unknown;
-  filterServer: unknown;
-  serverNames: unknown;
-  filterKind: unknown;
-  clearFilters: unknown;
-  showColumnPicker: unknown;
-  toggleColumnPicker: unknown;
-  columnPickerStyle: unknown;
-  allColumns: unknown;
-  toggleColumn: unknown;
-  visibleColumns: unknown;
-  tt: unknown;
-  groupByStack: unknown;
-  rechecking: unknown;
-  recheckAll: unknown;
-  renderGroups: unknown;
-  toggleGroupCollapse: unknown;
-  collapsedGroups: unknown;
-  groupUpdateInProgress: unknown;
-  actionInProgress: unknown;
-  updateAllInGroup: unknown;
-  tableColumns: unknown;
-  containerSortKey: unknown;
-  containerSortAsc: unknown;
-  selectedContainer: unknown;
-  isCompact: unknown;
-  selectContainer: unknown;
-  tableActionStyle: unknown;
-  openActionsMenu: unknown;
-  toggleActionsMenu: unknown;
-  updateContainer: (containerName: string) => Promise<void>;
-  confirmStop: unknown;
-  startContainer: unknown;
-  confirmRestart: unknown;
-  scanContainer: unknown;
-  confirmForceUpdate: unknown;
-  skipUpdate: unknown;
-  closeActionsMenu: unknown;
-  confirmDelete: unknown;
-  displayContainers: unknown;
-  actionsMenuStyle: unknown;
-  updateKindColor: unknown;
-  hasRegistryError: unknown;
-  registryErrorTooltip: unknown;
-  containerPolicyTooltip: unknown;
-  getContainerListPolicyState: unknown;
-  serverBadgeColor: unknown;
-  parseServer: unknown;
-  registryColorBg: unknown;
-  registryColorText: unknown;
-  registryLabel: unknown;
-  detailPanelOpen: unknown;
-  isMobile: unknown;
-  panelSize: unknown;
-  closePanel: unknown;
-  openFullPage: unknown;
-  detailTabs: Array<{ id: string; label: string; icon: string }>;
-  activeDetailTab: unknown;
-  selectedRuntimeOrigins: unknown;
-  runtimeOriginStyle: unknown;
-  runtimeOriginLabel: unknown;
-  selectedRuntimeDriftWarnings: unknown;
-  selectedLifecycleHooks: unknown;
-  lifecycleHookTemplateVariables: unknown;
-  selectedAutoRollbackConfig: unknown;
-  selectedImageMetadata: unknown;
-  formatTimestamp: unknown;
-  detailVulnerabilityLoading: unknown;
-  detailSbomLoading: unknown;
-  loadDetailSecurityData: unknown;
-  detailVulnerabilityError: unknown;
-  vulnerabilitySummary: unknown;
-  vulnerabilityTotal: unknown;
-  vulnerabilityPreview: unknown;
-  severityStyle: unknown;
-  normalizeSeverity: unknown;
-  getVulnerabilityPackage: unknown;
-  selectedSbomFormat: unknown;
-  loadDetailSbom: unknown;
-  detailSbomError: unknown;
-  sbomDocument: unknown;
-  sbomComponentCount: unknown;
-  sbomGeneratedAt: unknown;
-  LOG_AUTO_FETCH_INTERVALS: unknown;
-  containerAutoFetchInterval: unknown;
-  getContainerLogs: unknown;
-  containerLogRef: unknown;
-  containerHandleLogScroll: unknown;
-  containerScrollBlocked: unknown;
-  containerResumeAutoScroll: unknown;
-  previewLoading: unknown;
-  runContainerPreview: unknown;
-  policyInProgress: unknown;
-  skipCurrentForSelected: unknown;
-  snoozeSelected: unknown;
-  snoozeDateInput: unknown;
-  snoozeSelectedUntilDate: unknown;
-  selectedSnoozeUntil: unknown;
-  unsnoozeSelected: unknown;
-  selectedSkipTags: unknown;
-  selectedSkipDigests: unknown;
-  clearSkipsSelected: unknown;
-  selectedUpdatePolicy: unknown;
-  clearPolicySelected: unknown;
-  policyMessage: unknown;
-  policyError: unknown;
-  removeSkipTagSelected: unknown;
-  removeSkipDigestSelected: unknown;
-  detailPreview: unknown;
-  previewError: unknown;
-  triggersLoading: unknown;
-  detailTriggers: unknown;
-  getTriggerKey: unknown;
-  triggerRunInProgress: unknown;
-  runAssociatedTrigger: unknown;
-  triggerMessage: unknown;
-  triggerError: unknown;
-  backupsLoading: unknown;
-  detailBackups: unknown;
-  rollbackInProgress: unknown;
-  rollbackToBackup: unknown;
-  rollbackMessage: unknown;
-  rollbackError: unknown;
-  updateOperationsLoading: unknown;
-  detailUpdateOperations: unknown;
-  getOperationStatusStyle: unknown;
-  formatOperationStatus: unknown;
-  formatOperationPhase: unknown;
-  formatRollbackReason: unknown;
-  updateOperationsError: unknown;
-  closeFullPage: unknown;
+type ContainerFiltersContext = Pick<
+  ReturnType<typeof useContainerFilters>,
+  | 'filterSearch'
+  | 'filterStatus'
+  | 'filterBouncer'
+  | 'filterRegistry'
+  | 'filterServer'
+  | 'filterKind'
+  | 'showFilters'
+  | 'activeFilterCount'
+  | 'filteredContainers'
+  | 'clearFilters'
+>;
+
+type ColumnVisibilityContext = Pick<
+  ReturnType<typeof useColumnVisibility>,
+  'showColumnPicker' | 'allColumns' | 'toggleColumn' | 'visibleColumns'
+>;
+
+type DetailPanelContext = Pick<
+  ReturnType<typeof useDetailPanel>,
+  | 'selectedContainer'
+  | 'detailPanelOpen'
+  | 'activeDetailTab'
+  | 'panelSize'
+  | 'detailTabs'
+  | 'selectContainer'
+  | 'openFullPage'
+  | 'closeFullPage'
+  | 'closePanel'
+>;
+
+type ContainerLogsContext = Pick<
+  ReturnType<typeof useContainerLogs>,
+  | 'containerAutoFetchInterval'
+  | 'getContainerLogs'
+  | 'containerLogRef'
+  | 'containerHandleLogScroll'
+  | 'containerScrollBlocked'
+  | 'containerResumeAutoScroll'
+>;
+
+type ContainerSecurityContext = Pick<
+  ReturnType<typeof useContainerSecurity>,
+  | 'selectedRuntimeOrigins'
+  | 'runtimeOriginStyle'
+  | 'runtimeOriginLabel'
+  | 'selectedRuntimeDriftWarnings'
+  | 'selectedLifecycleHooks'
+  | 'lifecycleHookTemplateVariables'
+  | 'selectedAutoRollbackConfig'
+  | 'selectedImageMetadata'
+  | 'detailVulnerabilityLoading'
+  | 'detailSbomLoading'
+  | 'loadDetailSecurityData'
+  | 'detailVulnerabilityError'
+  | 'vulnerabilitySummary'
+  | 'vulnerabilityTotal'
+  | 'vulnerabilityPreview'
+  | 'severityStyle'
+  | 'normalizeSeverity'
+  | 'getVulnerabilityPackage'
+  | 'selectedSbomFormat'
+  | 'loadDetailSbom'
+  | 'detailSbomError'
+  | 'sbomDocument'
+  | 'sbomComponentCount'
+  | 'sbomGeneratedAt'
+>;
+
+type ContainerActionsContext = Pick<
+  ReturnType<typeof useContainerActions>,
+  | 'actionInProgress'
+  | 'confirmDelete'
+  | 'confirmForceUpdate'
+  | 'confirmRestart'
+  | 'confirmStop'
+  | 'containerPolicyTooltip'
+  | 'detailBackups'
+  | 'detailPreview'
+  | 'detailTriggers'
+  | 'detailUpdateOperations'
+  | 'formatOperationPhase'
+  | 'formatOperationStatus'
+  | 'formatRollbackReason'
+  | 'formatTimestamp'
+  | 'getContainerListPolicyState'
+  | 'getOperationStatusStyle'
+  | 'getTriggerKey'
+  | 'groupUpdateInProgress'
+  | 'policyError'
+  | 'policyInProgress'
+  | 'policyMessage'
+  | 'previewError'
+  | 'previewLoading'
+  | 'removeSkipDigestSelected'
+  | 'removeSkipTagSelected'
+  | 'rollbackError'
+  | 'rollbackInProgress'
+  | 'rollbackMessage'
+  | 'rollbackToBackup'
+  | 'runAssociatedTrigger'
+  | 'runContainerPreview'
+  | 'scanContainer'
+  | 'selectedSkipDigests'
+  | 'selectedSkipTags'
+  | 'selectedSnoozeUntil'
+  | 'selectedUpdatePolicy'
+  | 'skipCurrentForSelected'
+  | 'skipUpdate'
+  | 'snoozeDateInput'
+  | 'snoozeSelected'
+  | 'snoozeSelectedUntilDate'
+  | 'startContainer'
+  | 'triggerError'
+  | 'triggerMessage'
+  | 'triggerRunInProgress'
+  | 'triggersLoading'
+  | 'unsnoozeSelected'
+  | 'updateAllInGroup'
+  | 'updateContainer'
+  | 'updateOperationsError'
+  | 'updateOperationsLoading'
+  | 'clearSkipsSelected'
+  | 'clearPolicySelected'
+>;
+
+export interface ContainersViewDisplayContainer extends Container {
+  _pending?: true;
+}
+
+export interface ContainersViewRenderGroup {
+  key: string;
+  name: string | null;
+  containers: ContainersViewDisplayContainer[];
+  containerCount: number;
+  updatesAvailable: number;
+  updatableCount: number;
+}
+
+export interface ContainersViewTableColumn {
+  key: string;
+  label: string;
+  align?: string;
+  sortable: boolean;
+  width?: string;
+  icon: boolean;
+}
+
+export interface ContainersViewTemplateContext
+  extends ContainerFiltersContext,
+    ColumnVisibilityContext,
+    DetailPanelContext,
+    ContainerLogsContext,
+    ContainerSecurityContext,
+    ContainerActionsContext {
+  error: Ref<string | null>;
+  loading: Ref<boolean>;
+  containers: Ref<Container[]>;
+  containerViewMode: ReturnType<typeof useViewMode>;
+  serverNames: ComputedRef<string[]>;
+  toggleColumnPicker: (event: MouseEvent) => void;
+  columnPickerStyle: Ref<Record<string, string>>;
+  tt: (label: string) => { value: string; showDelay: number };
+  groupByStack: WritableComputedRef<boolean>;
+  rechecking: Ref<boolean>;
+  recheckAll: () => Promise<void>;
+  renderGroups: ComputedRef<ContainersViewRenderGroup[]>;
+  toggleGroupCollapse: (key: string) => void;
+  collapsedGroups: Ref<Set<string>>;
+  tableColumns: ComputedRef<ContainersViewTableColumn[]>;
+  containerSortKey: WritableComputedRef<string>;
+  containerSortAsc: WritableComputedRef<boolean>;
+  isCompact: ComputedRef<boolean>;
+  tableActionStyle: WritableComputedRef<PreferencesSchema['containers']['tableActions']>;
+  openActionsMenu: Ref<string | null>;
+  toggleActionsMenu: (name: string, event: MouseEvent) => void;
+  closeActionsMenu: () => void;
+  displayContainers: ComputedRef<ContainersViewDisplayContainer[]>;
+  actionsMenuStyle: Ref<Record<string, string>>;
+  updateKindColor: typeof updateKindColor;
+  hasRegistryError: (container: Container) => boolean;
+  registryErrorTooltip: (container: Container) => string;
+  serverBadgeColor: typeof serverBadgeColor;
+  parseServer: typeof parseServer;
+  registryColorBg: typeof registryColorBg;
+  registryColorText: typeof registryColorText;
+  registryLabel: typeof registryLabel;
+  isMobile: ReturnType<typeof useBreakpoints>['isMobile'];
+  LOG_AUTO_FETCH_INTERVALS: ReadonlyArray<LogAutoFetchIntervalOption>;
 }
 
 export const containersViewTemplateContextKey: InjectionKey<ContainersViewTemplateContext> = Symbol(

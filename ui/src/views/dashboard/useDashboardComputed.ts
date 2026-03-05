@@ -1,5 +1,4 @@
 import { computed, type Ref } from 'vue';
-import type { ApiWatcherConfiguration } from '../../types/api';
 import type { Container } from '../../types/container';
 import {
   buildDashboardContainerMetrics,
@@ -16,6 +15,7 @@ import type {
   UpdateBreakdownBucket,
   UpdateKind,
 } from './dashboardTypes';
+import { getWatcherConfiguration } from './watcherConfiguration';
 
 const DONUT_CIRCUMFERENCE = 301.6;
 const RECENT_UPDATES_LIMIT = 6;
@@ -50,16 +50,6 @@ const UPDATE_BREAKDOWN_BUCKETS: ReadonlyArray<Omit<UpdateBreakdownBucket, 'count
     icon: 'fingerprint',
   },
 ];
-
-function getWatcherConfiguration(watcher: Record<string, unknown>): ApiWatcherConfiguration {
-  if (watcher?.configuration && typeof watcher.configuration === 'object') {
-    return watcher.configuration as ApiWatcherConfiguration;
-  }
-  if (watcher?.config && typeof watcher.config === 'object') {
-    return watcher.config as ApiWatcherConfiguration;
-  }
-  return {};
-}
 
 function formatMaintenanceDuration(durationMs: number): string {
   const totalMinutes = Math.max(1, Math.ceil(durationMs / 60_000));
@@ -268,7 +258,7 @@ interface UseDashboardComputedInput {
 export function useDashboardComputed(input: UseDashboardComputedInput) {
   const maintenanceWindowWatchers = computed(() =>
     input.watchers.value.filter((watcher) => {
-      const configuration = getWatcherConfiguration(watcher as Record<string, unknown>);
+      const configuration = getWatcherConfiguration(watcher);
       const maintenanceWindow = configuration.maintenancewindow ?? configuration.maintenanceWindow;
       return typeof maintenanceWindow === 'string' && maintenanceWindow.trim().length > 0;
     }),
@@ -277,7 +267,7 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
   const maintenanceWindowOpenCount = computed(
     () =>
       maintenanceWindowWatchers.value.filter((watcher) => {
-        const configuration = getWatcherConfiguration(watcher as Record<string, unknown>);
+        const configuration = getWatcherConfiguration(watcher);
         const open = configuration.maintenancewindowopen ?? configuration.maintenanceWindowOpen;
         return open === true;
       }).length,
@@ -286,7 +276,7 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
   const nextMaintenanceWindowAt = computed<number | undefined>(() => {
     const windows = maintenanceWindowWatchers.value
       .map((watcher) => {
-        const configuration = getWatcherConfiguration(watcher as Record<string, unknown>);
+        const configuration = getWatcherConfiguration(watcher);
         return configuration.maintenancenextwindow ?? configuration.maintenanceNextWindow;
       })
       .map((value: unknown) => {

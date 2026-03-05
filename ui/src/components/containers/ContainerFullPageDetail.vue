@@ -17,7 +17,7 @@ const {
   updateKindColor,
   detailTabs,
   activeDetailTab,
-} = useContainersViewTemplateContext() as any;
+} = useContainersViewTemplateContext();
 </script>
 
 <template>

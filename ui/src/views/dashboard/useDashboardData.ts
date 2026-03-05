@@ -8,7 +8,6 @@ import {
 import { getAllRegistries } from '../../services/registry';
 import { getServer } from '../../services/server';
 import { getAllWatchers } from '../../services/watcher';
-import type { ApiWatcherConfiguration } from '../../types/api';
 import type { Container } from '../../types/container';
 import { mapApiContainers } from '../../utils/container-mapper';
 import { errorMessage } from '../../utils/error';
@@ -18,6 +17,7 @@ import type {
   DashboardServerInfo,
   RecentAuditStatus,
 } from './dashboardTypes';
+import { getWatcherConfiguration } from './watcherConfiguration';
 
 const DASHBOARD_REALTIME_REFRESH_DEBOUNCE_MS = 1_000;
 
@@ -43,19 +43,9 @@ function normalizeRecentStatusByContainer(response: unknown): Record<string, Rec
   return normalizedStatuses;
 }
 
-function getWatcherConfiguration(watcher: Record<string, unknown>): ApiWatcherConfiguration {
-  if (watcher?.configuration && typeof watcher.configuration === 'object') {
-    return watcher.configuration as ApiWatcherConfiguration;
-  }
-  if (watcher?.config && typeof watcher.config === 'object') {
-    return watcher.config as ApiWatcherConfiguration;
-  }
-  return {};
-}
-
 function watcherHasMaintenanceWindow(watcher: unknown): boolean {
   if (!watcher || typeof watcher !== 'object') return false;
-  const configuration = getWatcherConfiguration(watcher as Record<string, unknown>);
+  const configuration = getWatcherConfiguration(watcher);
   const maintenanceWindow = configuration.maintenancewindow ?? configuration.maintenanceWindow;
   return typeof maintenanceWindow === 'string' && maintenanceWindow.trim().length > 0;
 }
@@ -155,7 +145,7 @@ export function useDashboardData() {
   let maintenanceCountdownTimer: ReturnType<typeof setInterval> | undefined;
   let realtimeRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   let scheduledRealtimeRefreshMode: RealtimeRefreshMode | undefined;
-  let stopMaintenanceWindowWatch: ReturnType<typeof watch> | undefined;
+  let stopMaintenanceWindowWatch!: ReturnType<typeof watch>;
 
   function isPageVisible() {
     return typeof document === 'undefined' || document.visibilityState !== 'hidden';
@@ -256,7 +246,7 @@ export function useDashboardData() {
     }
     realtimeRefreshTimer = window.setTimeout(() => {
       realtimeRefreshTimer = undefined;
-      const refreshMode = scheduledRealtimeRefreshMode ?? 'summary';
+      const refreshMode = scheduledRealtimeRefreshMode;
       scheduledRealtimeRefreshMode = undefined;
       if (refreshMode === 'full') {
         void fetchDashboardData({ background: true });
@@ -286,10 +276,7 @@ export function useDashboardData() {
     globalThis.removeEventListener('dd:sse-scan-completed', fullRefreshListener);
     globalThis.removeEventListener('dd:sse-connected', fullRefreshListener);
     document.removeEventListener('visibilitychange', visibilityChangeListener);
-    if (stopMaintenanceWindowWatch) {
-      stopMaintenanceWindowWatch();
-      stopMaintenanceWindowWatch = undefined;
-    }
+    stopMaintenanceWindowWatch();
     if (realtimeRefreshTimer !== undefined) {
       clearTimeout(realtimeRefreshTimer);
       realtimeRefreshTimer = undefined;

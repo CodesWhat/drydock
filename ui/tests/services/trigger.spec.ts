@@ -61,6 +61,18 @@ describe('Trigger Service', () => {
       expect(fetch).toHaveBeenCalledWith('/api/triggers', { credentials: 'include' });
       expect(result).toEqual(mockTriggers);
     });
+
+    it('throws when fetching triggers fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Internal Server Error',
+        json: async () => ({}),
+      } as any);
+
+      await expect(getAllTriggers()).rejects.toThrow(
+        'Failed to get triggers: Internal Server Error',
+      );
+    });
   });
 
   describe('getTriggerProviderColor', () => {
@@ -164,6 +176,18 @@ describe('Trigger Service', () => {
         credentials: 'include',
       });
       expect(result).toEqual(mockTrigger);
+    });
+
+    it('throws when fetching a specific trigger fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Not Found',
+        json: async () => ({}),
+      } as any);
+
+      await expect(getTrigger({ type: 'slack', name: 'alerts' })).rejects.toThrow(
+        'Failed to get trigger: Not Found',
+      );
     });
 
     it('fetches an agent-scoped trigger when agent is provided', async () => {

@@ -13,6 +13,7 @@ describe('App Service', () => {
   it('should get app infos', async () => {
     const mockResponse = { name: 'drydock', version: '1.0.0' };
     global.fetch.mockResolvedValue({
+      ok: true,
       json: vi.fn().mockResolvedValue(mockResponse),
     });
 
@@ -20,6 +21,16 @@ describe('App Service', () => {
 
     expect(global.fetch).toHaveBeenCalledWith('/api/app', { credentials: 'include' });
     expect(result).toEqual(mockResponse);
+  });
+
+  it('should throw when fetching app infos fails', async () => {
+    global.fetch.mockResolvedValue({
+      ok: false,
+      statusText: 'Internal Server Error',
+      json: vi.fn().mockResolvedValue({}),
+    });
+
+    await expect(getAppInfos()).rejects.toThrow('Failed to get app infos: Internal Server Error');
   });
 });
 
@@ -35,6 +46,7 @@ describe('Server Service', () => {
   it('should get server data', async () => {
     const mockResponse = { configuration: {} };
     global.fetch.mockResolvedValue({
+      ok: true,
       json: vi.fn().mockResolvedValue(mockResponse),
     });
 

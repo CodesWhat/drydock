@@ -2,7 +2,19 @@ function getTriggerIcon() {
   return 'sh-bolt';
 }
 
-function getTriggerProviderIcon(type) {
+interface TriggerDetailPathOptions {
+  type: string;
+  name: string;
+  agent?: string;
+}
+
+interface RunTriggerRequest {
+  triggerType: string;
+  triggerName: string;
+  container: unknown;
+}
+
+function getTriggerProviderIcon(type: string) {
   switch (type) {
     case 'http':
       return 'sh-globe';
@@ -49,7 +61,7 @@ function getTriggerProviderIcon(type) {
   }
 }
 
-function getTriggerProviderColor(type) {
+function getTriggerProviderColor(type: string) {
   switch (type) {
     case 'slack':
       return '#4A154B';
@@ -97,10 +109,13 @@ function getTriggerProviderColor(type) {
 
 async function getAllTriggers() {
   const response = await fetch('/api/triggers', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get triggers: ${response.statusText}`);
+  }
   return response.json();
 }
 
-function buildTriggerDetailPath({ type, name, agent }) {
+function buildTriggerDetailPath({ type, name, agent }: TriggerDetailPathOptions) {
   const segments = ['/api/triggers'];
   if (agent) {
     segments.push(encodeURIComponent(agent));
@@ -109,14 +124,17 @@ function buildTriggerDetailPath({ type, name, agent }) {
   return segments.join('/');
 }
 
-async function getTrigger({ type, name, agent }) {
+async function getTrigger({ type, name, agent }: TriggerDetailPathOptions) {
   const response = await fetch(buildTriggerDetailPath({ type, name, agent }), {
     credentials: 'include',
   });
+  if (!response.ok) {
+    throw new Error(`Failed to get trigger: ${response.statusText}`);
+  }
   return response.json();
 }
 
-async function runTrigger({ triggerType, triggerName, container }) {
+async function runTrigger({ triggerType, triggerName, container }: RunTriggerRequest) {
   const response = await fetch(`/api/triggers/${triggerType}/${triggerName}`, {
     method: 'POST',
     credentials: 'include',

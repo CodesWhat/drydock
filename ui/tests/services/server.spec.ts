@@ -24,6 +24,16 @@ describe('Server Service', () => {
     expect(result).toEqual(payload);
   });
 
+  it('throws when fetching server configuration fails', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      statusText: 'Internal Server Error',
+      json: async () => ({}),
+    } as any);
+
+    await expect(getServer()).rejects.toThrow('Failed to get server: Internal Server Error');
+  });
+
   it('fetches security runtime status', async () => {
     const payload = { ready: true };
     vi.mocked(fetch).mockResolvedValueOnce({

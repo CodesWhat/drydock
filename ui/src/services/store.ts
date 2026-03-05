@@ -9,6 +9,9 @@ export interface StoreResponse {
 
 async function getStore(): Promise<StoreResponse> {
   const response = await fetch('/api/store', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get store: ${response.statusText}`);
+  }
   return response.json();
 }
 

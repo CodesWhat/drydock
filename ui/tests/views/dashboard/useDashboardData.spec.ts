@@ -168,18 +168,25 @@ describe('useDashboardData', () => {
     expect(clearIntervalSpy).toHaveBeenCalled();
   });
 
-  it('normalizes non-array watcher/registry responses and missing recent-status entries', async () => {
+  it('normalizes malformed watcher/registry/status responses', async () => {
     const setIntervalSpy = vi.spyOn(window, 'setInterval');
-    mocks.getAllWatchers.mockResolvedValue({ data: [] });
+    mocks.getAllWatchers.mockResolvedValue(['not-an-object']);
     mocks.getAllRegistries.mockResolvedValue({ data: [] });
-    mocks.getContainerRecentStatus.mockResolvedValue({});
+    mocks.getContainerRecentStatus.mockResolvedValue(null);
 
     const { state } = await mountDashboardData();
 
-    expect(state.watchers.value).toEqual([]);
+    expect(state.watchers.value).toEqual(['not-an-object']);
     expect(state.registries.value).toEqual([]);
     expect(state.recentStatusByContainer.value).toEqual({});
     expect(setIntervalSpy).not.toHaveBeenCalled();
+
+    mocks.getAllWatchers.mockResolvedValueOnce({ data: [] });
+    mocks.getContainerRecentStatus.mockResolvedValueOnce({ statuses: [] });
+    await state.fetchDashboardData();
+
+    expect(state.watchers.value).toEqual([]);
+    expect(state.recentStatusByContainer.value).toEqual({});
   });
 
   it('normalizes malformed summary payload values during debounced summary refresh', async () => {
@@ -209,6 +216,29 @@ describe('useDashboardData', () => {
       security: { issues: 0 },
     });
     expect(setIntervalSpy).not.toHaveBeenCalled();
+
+    mocks.getContainerSummary.mockResolvedValueOnce({
+      containers: 'invalid',
+      security: 'invalid',
+    });
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    vi.advanceTimersByTime(1_000);
+    await flushPromises();
+
+    expect(state.containerSummary.value).toEqual({
+      containers: { total: 0, running: 0, stopped: 0 },
+      security: { issues: 0 },
+    });
+
+    mocks.getContainerSummary.mockResolvedValueOnce({});
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    vi.advanceTimersByTime(1_000);
+    await flushPromises();
+
+    expect(state.containerSummary.value).toEqual({
+      containers: { total: 0, running: 0, stopped: 0 },
+      security: { issues: 0 },
+    });
   });
 
   it('sets error for a failed foreground fetch and clears loading', async () => {

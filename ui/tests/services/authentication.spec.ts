@@ -54,6 +54,18 @@ describe('Authentication Service', () => {
     expect(result).toEqual(mockAuthentications);
   });
 
+  it('throws when fetching all authentications fails', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      statusText: 'Internal Server Error',
+      json: async () => ({}),
+    } as any);
+
+    await expect(getAllAuthentications()).rejects.toThrow(
+      'Failed to get authentications: Internal Server Error',
+    );
+  });
+
   it('fetches a specific authentication provider by type and name', async () => {
     const mockAuthentication = { id: 'basic.local', type: 'basic', name: 'local' };
     vi.mocked(fetch).mockResolvedValueOnce({
@@ -67,6 +79,18 @@ describe('Authentication Service', () => {
       credentials: 'include',
     });
     expect(result).toEqual(mockAuthentication);
+  });
+
+  it('throws when fetching a specific authentication provider fails', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      statusText: 'Not Found',
+      json: async () => ({}),
+    } as any);
+
+    await expect(getAuthentication({ type: 'basic', name: 'local' })).rejects.toThrow(
+      'Failed to get authentication: Not Found',
+    );
   });
 
   it('fetches an agent-scoped authentication provider when agent is provided', async () => {

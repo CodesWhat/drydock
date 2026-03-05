@@ -121,6 +121,11 @@ describe('useDashboardWidgetOrder', () => {
     } as unknown as DragEvent);
     expect(preventDefault).not.toHaveBeenCalled();
 
+    state.onWidgetDragOver('recent-updates', {
+      preventDefault,
+    } as unknown as DragEvent);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+
     state.widgetOrder.value = DASHBOARD_WIDGET_IDS.filter((id) => id !== 'stat-security');
     await nextTick();
     state.onWidgetDrop('stat-security', {

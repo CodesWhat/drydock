@@ -52,8 +52,6 @@ const allColumns: ColumnDef[] = [
   },
 ];
 
-const defaultVisibleCols = allColumns.map((c) => c.key);
-
 const visibleColumns = ref<Set<string>>(new Set(preferences.containers.columns));
 watch(
   visibleColumns,

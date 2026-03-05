@@ -1,10 +1,11 @@
 import { computed, type Ref, ref } from 'vue';
 import { getContainerSbom } from '../services/container';
 import { errorMessage } from '../utils/error';
+import type { SbomFormat } from '../views/security/securityViewTypes';
 import { severityOrder, toSafeFileName } from '../views/security/securityViewUtils';
 import type { ImageSummaryWithVulns } from './useVulnerabilities';
 
-export type SbomFormat = 'spdx-json' | 'cyclonedx-json';
+export type { SbomFormat } from '../views/security/securityViewTypes';
 
 interface UseSbomDetailOptions {
   containerIdsByImage: Ref<Record<string, string[]>>;

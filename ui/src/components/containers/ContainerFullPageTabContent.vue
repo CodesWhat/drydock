@@ -129,7 +129,7 @@ const {
   registryColorText,
   registryLabel,
   updateKindColor,
-} = useContainersViewTemplateContext() as any;
+} = useContainersViewTemplateContext();
 </script>
 
 <template>

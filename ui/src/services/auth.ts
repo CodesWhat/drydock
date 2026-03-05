@@ -13,6 +13,9 @@ let user = undefined;
  */
 async function getStrategies() {
   const response = await fetch('/auth/strategies', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get auth strategies: ${response.statusText}`);
+  }
   return response.json();
 }
 
@@ -46,7 +49,7 @@ async function getUser() {
  * @param password
  * @returns {Promise<*>}
  */
-async function loginBasic(username, password, remember = false) {
+async function loginBasic(username: string, password: string, remember: boolean = false) {
   const base64 = btoa(`${username}:${password}`);
   const response = await fetch(`/auth/login`, {
     method: 'POST',
@@ -80,7 +83,7 @@ async function setRememberMe(remember: boolean) {
  * Get Oidc redirection url.
  * @returns {Promise<*>}
  */
-async function getOidcRedirection(name) {
+async function getOidcRedirection(name: string) {
   const response = await fetch(`/auth/oidc/${name}/redirect`, { credentials: 'include' });
   user = await response.json();
   return user;
