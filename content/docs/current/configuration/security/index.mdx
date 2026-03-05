@@ -27,8 +27,10 @@ DD_SECURITY_SCANNER=trivy
 | `DD_SECURITY_SCANNER` | 🔴 | Enable scanner provider | `trivy` | disabled |
 | `DD_SECURITY_BLOCK_SEVERITY` | ⚪ | Blocking severities (comma-separated) | Any of `UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL` | `CRITICAL,HIGH` |
 | `DD_SECURITY_TRIVY_SERVER` | ⚪ | Trivy server URL (enables client/server mode) | URL | empty (local CLI mode) |
-| `DD_SECURITY_TRIVY_COMMAND` | ⚪ | Trivy command path for local CLI mode | executable path | `trivy` |
+| `DD_SECURITY_TRIVY_COMMAND` | ⚪ | Trivy command path for local CLI mode (must not contain shell metacharacters or `..` path traversal) | executable path | `trivy` |
 | `DD_SECURITY_TRIVY_TIMEOUT` | ⚪ | Trivy command timeout in milliseconds | integer (`>=1000`) | `120000` |
+| `DD_SECURITY_SCAN_CRON` | ⚪ | Cron expression for scheduled background security scans | cron expression | disabled |
+| `DD_SECURITY_SCAN_JITTER` | ⚪ | Random jitter delay (ms) before each scheduled scan starts | integer (`>=0`) | `60000` |
 | `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES` | ⚪ | Max in-memory digest scan cache entries (oldest entries are evicted first) | integer (`>0`) | `500` |
 
 ## Trivy modes
@@ -139,9 +141,23 @@ services:
 
 <Callout type="info">SBOM documents are retrievable per-container via `GET /api/containers/:id/sbom?format=\{format\}` where `format` is one of `spdx-json` or `cyclonedx-json`.</Callout>
 
+## Scheduled scanning
+
+Set `DD_SECURITY_SCAN_CRON` to automatically scan all watched containers on a schedule. A random jitter delay (`DD_SECURITY_SCAN_JITTER`, default 60 seconds) is applied before each cycle to spread load.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:latest
+    environment:
+      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_SCAN_CRON=0 3 * * *   # every day at 3 AM
+      - DD_SECURITY_SCAN_JITTER=60000      # up to 60s random delay
+```
+
 ## On-demand scanning
 
-You can trigger a security scan for any individual container without waiting for the next watch cycle.
+You can trigger a security scan for any individual container without waiting for the next watch cycle or scheduled scan.
 
 - **UI:** Click the shield button on a container row to start a scan.
 - **API:** `POST /api/containers/:id/scan` runs vulnerability scanning, signature verification (if configured), and SBOM generation (if configured) on demand.

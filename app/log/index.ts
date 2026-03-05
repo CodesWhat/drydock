@@ -37,7 +37,7 @@ function createMainLogStream() {
 }
 
 function createLogStreams() {
-  const streams = [{ stream: createMainLogStream() }];
+  const streams: { stream: Writable }[] = [{ stream: createMainLogStream() }];
   if (getLogBufferEnabled()) {
     streams.push({ stream: bufferStream });
   }

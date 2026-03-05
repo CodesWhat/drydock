@@ -13,10 +13,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Dual-slot security scanning** — "Scan Now" automatically scans both the current running image and the available update image when an update exists. Results are stored in separate slots (`scan`/`updateScan`) and the Security page shows a delta comparison badge (+N fixed, -N new) next to each image that has both scans.
+- **`DD_LOG_BUFFER_ENABLED` toggle** — Disable the in-memory log ring buffer via `DD_LOG_BUFFER_ENABLED=false` to reduce per-log processing overhead. When disabled, `/api/log/entries` returns an empty array. Defaults to `true`.
+- **Scheduled security scanning** — Set `DD_SECURITY_SCAN_CRON` to automatically scan all watched containers on a cron schedule. `DD_SECURITY_SCAN_JITTER` (default 60s) spreads load with random delay before each cycle.
+- **Security scheduler shutdown on exit** — Security scan scheduler is now explicitly shut down during graceful exit, preventing orphan timers from delaying process termination.
+
+### Changed
+
+- **Prometheus collect() callback pattern** — Switched container gauge from interval-based polling to the Prometheus `collect()` callback, letting Prometheus control collection timing and eliminating the background 5s timer.
+- **Container security API refactored** — Container security routes refactored into a dedicated module with type-safe SecurityGate integration, concurrent scan limiting (max 1), and trivy DB status-based cache invalidation.
+- **DashboardView composable extraction** — Extracted 700+ line monolith into `useDashboardData`, `useDashboardComputed`, `useDashboardWidgetOrder`, and shared `dashboardTypes` for better testability and separation of concerns.
+- **Event-driven connectivity polling** — AppLayout SSE connectivity monitoring now starts on disconnect and stops on reconnect instead of running a fixed interval, reducing unnecessary network requests.
+- **Vulnerability loading optimized** — Vulnerability data loaded from the container list API payload (`includeVulnerabilities` flag) instead of separate per-container fetches, reducing API calls on the Security view.
+- **Default log format is JSON** — Official Docker image now defaults to `DD_LOG_FORMAT=json` for structured production logs. Override with `DD_LOG_FORMAT=text` for pretty logs.
 
 ### Fixed
 
 - **Log auto-fetch pauses in background tabs** — `useAutoFetchLogs` now stops polling when the browser tab is hidden and automatically resumes when it becomes visible again.
+- **SBOM download DOM isolation** — Isolated DOM element creation and `URL.createObjectURL` references in the SBOM download composable, fixing potential memory leaks and test failures from uncleared object URLs. JSON serialization skipped when SBOM panel is hidden.
+
+### Security
+
+- **Mutation-only JSON body parser** — Express JSON body parsing restricted to mutation methods (POST/PUT/PATCH) only on both API and auth routers, reducing attack surface on read requests.
+- **CSRF Sec-Fetch-Site validation** — CSRF middleware now rejects requests with `Sec-Fetch-Site: cross-site` header, blocking cross-site state-changing requests even when the Origin header is absent.
+- **HTTPS enforcement for SameSite=none cookies** — `DD_SERVER_COOKIE_SAMESITE=none` now requires HTTPS configuration (`DD_SERVER_TLS_ENABLED=true` or `DD_SERVER_TRUSTPROXY`) and throws at startup if neither is set.
+- **Remember-me endpoint requires authentication** — `/auth/remember` POST moved after `requireAuthentication` middleware, preventing unauthenticated access.
+- **Env reveal rate limit tightened** — `/api/containers/:id/env` rate limit reduced from 100/min to 10/min to prevent credential enumeration. Server error responses return generic messages instead of internal details.
+- **Trivy command path validation** — Trivy binary paths are validated against shell metacharacters and path traversal before execution.
+- **Digest scan cache LRU eviction** — Scan result cache uses LRU eviction (max 500 entries, configurable via `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES`) to prevent unbounded memory growth. Trivy DB status lookups are deduplicated across concurrent calls.
+
+### Performance
+
+- **LokiJS autosave interval set to 60 seconds** — Fixed autosave interval at 60s instead of the LokiJS default, reducing disk I/O while maintaining acceptable data durability.
+- **SSE shared heartbeat interval** — Deduplicated per-client SSE heartbeat timers into a single shared interval that starts on first connection and stops when all clients disconnect.
+- **LoginView exponential backoff** — Login page connectivity retry uses exponential backoff (5s doubling to 30s max) instead of fixed intervals, reducing server load during outages.
 
 ## [1.4.0] — 2026-02-28
 

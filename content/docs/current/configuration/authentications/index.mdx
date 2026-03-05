@@ -34,4 +34,4 @@ If you are upgrading from WUD or an earlier drydock version and see new auth err
 
 The login form includes a **Remember me** checkbox. When checked, the session cookie is extended to **30 days** so the browser stays logged in across restarts. When unchecked, the cookie expires when the browser is closed (default session lifetime is 7 days).
 
-Remember-me works with both Basic and OIDC authentication strategies. The preference is stored server-side in the session via `POST /auth/remember` before the auth flow begins.
+Remember-me works with both Basic and OIDC authentication strategies. The preference is stored server-side in the authenticated session via `POST /auth/remember`.
