@@ -200,6 +200,46 @@ describe('Agent Log Entries Route', () => {
     });
   });
 
+  test('should return 400 when level query parameter is not allowlisted', async () => {
+    const getLogEntries = vi.fn().mockResolvedValue([]);
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries,
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: { level: 'verbose' },
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid level query parameter' });
+    expect(getLogEntries).not.toHaveBeenCalled();
+  });
+
+  test('should return 400 when component query parameter contains unsafe characters', async () => {
+    const getLogEntries = vi.fn().mockResolvedValue([]);
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries,
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: { component: 'docker;rm -rf /' },
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid component query parameter' });
+    expect(getLogEntries).not.toHaveBeenCalled();
+  });
+
   test('should return 502 when agent getLogEntries fails', async () => {
     mockGetAgent.mockReturnValue({
       isConnected: true,
