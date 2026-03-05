@@ -3,6 +3,7 @@ import { getAllContainers } from '../services/container';
 import type { ContainerSecurityDelta, ContainerSecuritySummary } from '../types/container';
 import { computeSecurityDelta } from '../utils/container-mapper';
 import { errorMessage } from '../utils/error';
+import { normalizeSeverity } from '../utils/security';
 import {
   chooseLatestTimestamp,
   normalizeSeverityCount,
@@ -82,22 +83,6 @@ interface UseVulnerabilitiesOptions {
 }
 
 interface UpdateScanSummary extends ContainerSecuritySummary {}
-
-function normalizeSeverity(value: unknown): string {
-  if (typeof value !== 'string') {
-    return 'UNKNOWN';
-  }
-  const normalized = value.toUpperCase();
-  if (
-    normalized === 'CRITICAL' ||
-    normalized === 'HIGH' ||
-    normalized === 'MEDIUM' ||
-    normalized === 'LOW'
-  ) {
-    return normalized;
-  }
-  return 'UNKNOWN';
-}
 
 export function useVulnerabilities({
   securitySortField,

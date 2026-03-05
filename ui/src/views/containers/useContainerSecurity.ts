@@ -5,6 +5,7 @@ import {
 } from '../../services/container';
 import type { ApiSbomDocument, ApiVulnerability } from '../../types/api';
 import { errorMessage } from '../../utils/error';
+import { normalizeSeverity } from '../../utils/security';
 
 type RuntimeOrigin = 'explicit' | 'inherited' | 'unknown';
 
@@ -253,22 +254,6 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
   );
   const sbomGeneratedAt = computed(() => detailSbomResult.value?.generatedAt as string | undefined);
   const sbomComponentCount = computed(() => detectSbomComponentCount(sbomDocument.value));
-
-  function normalizeSeverity(value: unknown): string {
-    if (typeof value !== 'string') {
-      return 'UNKNOWN';
-    }
-    const normalized = value.toUpperCase();
-    if (
-      normalized === 'CRITICAL' ||
-      normalized === 'HIGH' ||
-      normalized === 'MEDIUM' ||
-      normalized === 'LOW'
-    ) {
-      return normalized;
-    }
-    return 'UNKNOWN';
-  }
 
   function severityStyle(severity: string) {
     if (severity === 'CRITICAL') {
