@@ -50,28 +50,6 @@ const containerLabelNames = [
 const containerLabelSet = new Set(containerLabelNames);
 
 /**
- * Populate gauge.
- */
-function populateGauge() {
-  gaugeContainer.reset();
-  storeContainer.getContainers().forEach((container) => {
-    try {
-      const flatContainer = flatten(container);
-      const gaugeLabels = Object.keys(flatContainer)
-        .filter((key) => containerLabelSet.has(key))
-        .reduce((obj, key) => {
-          obj[key] = flatContainer[key];
-          return obj;
-        }, {});
-      gaugeContainer.set(gaugeLabels, 1);
-    } catch (e) {
-      log.warn(`${container.id} - Error when adding container to the metrics (${e.message})`);
-      log.debug(e);
-    }
-  });
-}
-
-/**
  * Init Container prometheus gauge.
  * @returns {Gauge<string>}
  */
@@ -84,9 +62,24 @@ export function init() {
     name: 'dd_containers',
     help: 'The watched containers',
     labelNames: containerLabelNames,
+    collect() {
+      this.reset();
+      storeContainer.getContainers().forEach((container) => {
+        try {
+          const flatContainer = flatten(container);
+          const gaugeLabels = Object.keys(flatContainer)
+            .filter((key) => containerLabelSet.has(key))
+            .reduce((obj, key) => {
+              obj[key] = flatContainer[key];
+              return obj;
+            }, {});
+          this.set(gaugeLabels, 1);
+        } catch (e) {
+          log.warn(`${container.id} - Error when adding container to the metrics (${e.message})`);
+          log.debug(e);
+        }
+      });
+    },
   });
-  log.debug('Start container metrics interval');
-  setInterval(populateGauge, 5000);
-  populateGauge();
   return gaugeContainer;
 }

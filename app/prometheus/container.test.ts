@@ -7,7 +7,6 @@ import * as store from '../store/container.js';
 import * as container from './container.js';
 
 test('gauge must be populated when containers are in the store', async () => {
-  vi.useFakeTimers();
   store.getContainers = () => [
     {
       id: 'container-123456789',
@@ -44,7 +43,7 @@ test('gauge must be populated when containers are in the store', async () => {
   ];
   const gauge = container.init();
   const spySet = vi.spyOn(gauge, 'set');
-  vi.runOnlyPendingTimers();
+  await gauge.collect();
   expect(spySet).toHaveBeenCalledWith(
     {
       id: 'container-123456789',
@@ -69,7 +68,6 @@ test('gauge must be populated when containers are in the store', async () => {
 });
 
 test('gauge must silently ignore labels not in the initial labelset', async () => {
-  vi.useFakeTimers();
   store.getContainers = () => [
     {
       extra: 'extra',
@@ -78,13 +76,12 @@ test('gauge must silently ignore labels not in the initial labelset', async () =
   const spyLog = vi.spyOn(log, 'warn');
   const gauge = container.init();
   const spySet = vi.spyOn(gauge, 'set');
-  vi.runOnlyPendingTimers();
+  await gauge.collect();
   expect(spyLog).not.toHaveBeenCalled();
   expect(spySet).toHaveBeenCalledWith({}, 1);
 });
 
 test('gauge should warn when flattening a container throws', async () => {
-  vi.useFakeTimers();
   const circular: any = { id: 'broken-container' };
   circular.self = circular;
   store.getContainers = () => [circular];
@@ -94,8 +91,8 @@ test('gauge should warn when flattening a container throws', async () => {
   const spyWarn = vi.spyOn(log, 'warn');
   const spyDebug = vi.spyOn(log, 'debug');
 
-  container.init();
-  vi.runOnlyPendingTimers();
+  const gauge = container.init();
+  await gauge.collect();
 
   expect(spyWarn).toHaveBeenCalledWith(
     expect.stringContaining('broken-container - Error when adding container to the metrics'),

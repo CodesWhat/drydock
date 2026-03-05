@@ -25,7 +25,7 @@ export function init() {
     return;
   }
   log.info('Init Prometheus module');
-  collectDefaultMetrics();
+  collectDefaultMetrics({ eventLoopMonitoringPrecision: 1000 });
   compatibility.init();
   container.init();
   registry.init();

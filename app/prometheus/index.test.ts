@@ -74,7 +74,7 @@ describe('Prometheus Module', () => {
 
     prometheus.init();
 
-    expect(collectDefaultMetrics).toHaveBeenCalled();
+    expect(collectDefaultMetrics).toHaveBeenCalledWith({ eventLoopMonitoringPrecision: 1000 });
     expect(compatibility.init).toHaveBeenCalled();
     expect(container.init).toHaveBeenCalled();
     expect(registry.init).toHaveBeenCalled();
