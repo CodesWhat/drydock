@@ -831,12 +831,29 @@ watch(showSearch, async (val) => {
 const connectionLost = ref(false);
 const selfUpdateInProgress = ref(false);
 const selfUpdateOperationId = ref<string | undefined>(undefined);
+const CONNECTIVITY_POLL_INTERVAL_MS = 5_000;
 let connectivityTimer: ReturnType<typeof setInterval> | undefined;
 let sidebarRefreshDebounceTimer: ReturnType<typeof setTimeout> | undefined;
 const sidebarDataLoading = ref(false);
 
+function startConnectivityPolling() {
+  if (connectivityTimer) {
+    return;
+  }
+  connectivityTimer = setInterval(checkConnectivity, CONNECTIVITY_POLL_INTERVAL_MS);
+}
+
+function stopConnectivityPolling() {
+  if (!connectivityTimer) {
+    return;
+  }
+  clearInterval(connectivityTimer);
+  connectivityTimer = undefined;
+}
+
 async function checkConnectivity() {
   if (!connectionLost.value) {
+    stopConnectivityPolling();
     return;
   }
 
@@ -847,14 +864,13 @@ async function checkConnectivity() {
       // Hard reload is required because a server restart produces new asset
       // hashes; router.push would try to lazy-load stale chunks and fail.
       sseService.disconnect();
-      if (connectivityTimer) {
-        clearInterval(connectivityTimer);
-      }
+      stopConnectivityPolling();
       globalThis.location.replace('/login');
     }
   } catch {
     // Network error — server is unreachable
     connectionLost.value = true;
+    startConnectivityPolling();
   }
 }
 
@@ -925,6 +941,7 @@ function emitUiSseEvent(name: string) {
 function handleSseEvent(event: string, payload?: unknown) {
   if (event === 'sse:connected') {
     connectionLost.value = false;
+    stopConnectivityPolling();
     selfUpdateInProgress.value = false;
     selfUpdateOperationId.value = undefined;
     emitUiSseEvent('dd:sse-connected');
@@ -933,6 +950,7 @@ function handleSseEvent(event: string, payload?: unknown) {
   if (event === 'self-update') {
     selfUpdateInProgress.value = true;
     connectionLost.value = true;
+    startConnectivityPolling();
     selfUpdateOperationId.value =
       payload && typeof payload === 'object'
         ? String((payload as Record<string, unknown>).opId || '') || undefined
@@ -960,6 +978,7 @@ function handleSseEvent(event: string, payload?: unknown) {
   }
   if (event === 'connection-lost') {
     connectionLost.value = true;
+    startConnectivityPolling();
   }
 }
 
@@ -968,8 +987,6 @@ onMounted(async () => {
   sseService.connect({
     emit: (event, payload) => handleSseEvent(event, payload),
   });
-  // Start connectivity polling (every 10s)
-  connectivityTimer = setInterval(checkConnectivity, 10_000);
   // Fetch sidebar badge data and user info
   try {
     const [, , user] = await Promise.all([
@@ -985,7 +1002,7 @@ onMounted(async () => {
 onUnmounted(() => {
   clearTimeout(sidebarRefreshDebounceTimer);
   globalThis.removeEventListener('keydown', handleKeydown);
-  if (connectivityTimer) clearInterval(connectivityTimer);
+  stopConnectivityPolling();
   sseService.disconnect();
 });
 </script>

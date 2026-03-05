@@ -127,9 +127,12 @@ function mountLayout() {
 
 describe('AppLayout', () => {
   const mountedWrappers: VueWrapper[] = [];
+  let mockFetch: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetch = vi.fn();
+    vi.stubGlobal('fetch', mockFetch);
     mockGetAllContainers.mockResolvedValue([]);
     mockGetAgents.mockResolvedValue([]);
     mockGetAllTriggers.mockResolvedValue([]);
@@ -146,7 +149,102 @@ describe('AppLayout', () => {
     for (const wrapper of mountedWrappers.splice(0)) {
       wrapper.unmount();
     }
+    vi.unstubAllGlobals();
     vi.useRealTimers();
+  });
+
+  it('starts connectivity polling only after a disconnect event', async () => {
+    vi.useFakeTimers();
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+
+    try {
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      expect(setIntervalSpy).not.toHaveBeenCalled();
+
+      const emit = mockSseConnect.mock.calls[0]?.[0]?.emit as
+        | ((event: string, payload?: unknown) => void)
+        | undefined;
+      expect(emit).toBeTypeOf('function');
+
+      emit?.('connection-lost');
+      await flushPromises();
+
+      expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 5_000);
+    } finally {
+      setIntervalSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops connectivity polling when SSE reconnects', async () => {
+    vi.useFakeTimers();
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
+
+    try {
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      const emit = mockSseConnect.mock.calls[0]?.[0]?.emit as
+        | ((event: string, payload?: unknown) => void)
+        | undefined;
+      expect(emit).toBeTypeOf('function');
+
+      emit?.('connection-lost');
+      await flushPromises();
+
+      const pollTimer = setIntervalSpy.mock.results[0]?.value;
+      emit?.('sse:connected');
+      await flushPromises();
+
+      expect(clearIntervalSpy).toHaveBeenCalledWith(pollTimer);
+    } finally {
+      clearIntervalSpy.mockRestore();
+      setIntervalSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops connectivity polling when connectivity check succeeds', async () => {
+    vi.useFakeTimers();
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
+    mockFetch.mockResolvedValue({ ok: true, status: 200 } as Response);
+
+    try {
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      const emit = mockSseConnect.mock.calls[0]?.[0]?.emit as
+        | ((event: string, payload?: unknown) => void)
+        | undefined;
+      expect(emit).toBeTypeOf('function');
+
+      emit?.('connection-lost');
+      await flushPromises();
+
+      const pollTimer = setIntervalSpy.mock.results[0]?.value;
+
+      vi.advanceTimersByTime(5_000);
+      await flushPromises();
+
+      expect(mockFetch).toHaveBeenCalledWith('/auth/user', {
+        credentials: 'include',
+        redirect: 'manual',
+      });
+      expect(mockSseDisconnect).toHaveBeenCalledTimes(1);
+      expect(clearIntervalSpy).toHaveBeenCalledWith(pollTimer);
+    } finally {
+      clearIntervalSpy.mockRestore();
+      setIntervalSpy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('debounces burst scan/container SSE events into one sidebar refresh', async () => {
