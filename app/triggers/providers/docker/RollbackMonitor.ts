@@ -1,3 +1,5 @@
+import { resolveFunctionDependencies } from './dependency-constructor.js';
+
 type RollbackMonitorLogger = {
   info: (message: string) => void;
   warn: (message: string) => void;
@@ -64,16 +66,6 @@ const REQUIRED_ROLLBACK_MONITOR_DEPENDENCY_KEYS = [
   'startHealthMonitor',
 ] as const;
 
-function assertRequiredDependencies(
-  options: Partial<RollbackMonitorDependencies>,
-): asserts options is RollbackMonitorConstructorOptions {
-  for (const key of REQUIRED_ROLLBACK_MONITOR_DEPENDENCY_KEYS) {
-    if (typeof options[key] !== 'function') {
-      throw new TypeError(`RollbackMonitor requires dependency "${key}"`);
-    }
-  }
-}
-
 class RollbackMonitor {
   getPreferredLabelValue: RollbackMonitorDependencies['getPreferredLabelValue'];
 
@@ -88,13 +80,15 @@ class RollbackMonitor {
   getTriggerInstance: RollbackMonitorDependencies['getTriggerInstance'];
 
   constructor(options: RollbackMonitorConstructorOptions) {
-    assertRequiredDependencies(options);
-    this.getPreferredLabelValue = options.getPreferredLabelValue;
-    this.getLogger = options.getLogger || (() => undefined);
-    this.getCurrentContainer = options.getCurrentContainer;
-    this.inspectContainer = options.inspectContainer;
-    this.startHealthMonitor = options.startHealthMonitor;
-    this.getTriggerInstance = options.getTriggerInstance || (() => undefined);
+    const dependencies = resolveFunctionDependencies<RollbackMonitorDependencies>(options, {
+      requiredKeys: REQUIRED_ROLLBACK_MONITOR_DEPENDENCY_KEYS,
+      defaults: {
+        getLogger: () => undefined,
+        getTriggerInstance: () => undefined,
+      },
+      componentName: 'RollbackMonitor',
+    });
+    Object.assign(this, dependencies);
   }
 
   getConfig(container: RollbackContainer): RollbackConfig {

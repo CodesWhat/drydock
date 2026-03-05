@@ -1,4 +1,5 @@
 import * as updateOperationStore from '../../../store/update-operation.js';
+import { resolveFunctionDependencies } from './dependency-constructor.js';
 
 type ContainerUpdateLogger = {
   info: (message: string) => void;
@@ -68,8 +69,27 @@ type ContainerUpdateContext = {
   currentContainerSpec: ContainerSpecLike;
 };
 
+type PreparedContainerUpdateExecution = {
+  dockerApi: DockerApiLike;
+  newImage: string;
+  currentContainer: DockerContainerHandle;
+  currentContainerSpec: ContainerSpecLike;
+  cloneRuntimeConfigOptions: unknown;
+  oldName: string;
+  tempName: string;
+  wasRunning: boolean;
+  shouldHealthGate: boolean;
+  operationId: string;
+};
+
+type ContainerUpdateAttemptState = {
+  newContainer: DockerContainerHandle | undefined;
+  oldContainerStopped: boolean;
+  failureReason: string;
+};
+
 type ContainerUpdateExecutorDependencies = {
-  getConfiguration: () => { dryrun?: boolean };
+  getConfiguration: () => { dryrun?: boolean; [key: string]: unknown };
   getTriggerId: () => string;
   stopContainer: (
     container: DockerContainerHandle,
@@ -165,16 +185,6 @@ const REQUIRED_CONTAINER_UPDATE_EXECUTOR_DEPENDENCY_KEYS = [
   'waitForContainerHealthy',
 ] as const;
 
-function assertRequiredDependencies(
-  options: Partial<ContainerUpdateExecutorDependencies>,
-): asserts options is ContainerUpdateExecutorConstructorOptions {
-  for (const key of REQUIRED_CONTAINER_UPDATE_EXECUTOR_DEPENDENCY_KEYS) {
-    if (typeof options[key] !== 'function') {
-      throw new TypeError(`ContainerUpdateExecutor requires dependency "${key}"`);
-    }
-  }
-}
-
 function getErrorMessage(error: unknown): string {
   return String((error as Error)?.message ?? error);
 }
@@ -211,25 +221,21 @@ class ContainerUpdateExecutor {
   waitForContainerHealthy: ContainerUpdateExecutorDependencies['waitForContainerHealthy'];
 
   constructor(options: ContainerUpdateExecutorConstructorOptions) {
-    assertRequiredDependencies(options);
-    this.getConfiguration = options.getConfiguration || (() => ({}));
-    this.getTriggerId = options.getTriggerId;
-    this.stopContainer = options.stopContainer;
-    this.waitContainerRemoved = options.waitContainerRemoved;
-    this.removeContainer = options.removeContainer;
-    this.createContainer = options.createContainer;
-    this.startContainer = options.startContainer;
-    this.pullImage = options.pullImage;
-    this.cloneContainer = options.cloneContainer;
-    this.getCloneRuntimeConfigOptions = options.getCloneRuntimeConfigOptions;
-    this.isContainerNotFoundError = options.isContainerNotFoundError;
-    this.recordRollbackTelemetry = options.recordRollbackTelemetry;
-    this.buildRuntimeConfigCompatibilityError = options.buildRuntimeConfigCompatibilityError;
-    this.hasHealthcheckConfigured = options.hasHealthcheckConfigured;
-    this.waitForContainerHealthy = options.waitForContainerHealthy;
+    const dependencies = resolveFunctionDependencies<ContainerUpdateExecutorDependencies>(options, {
+      requiredKeys: REQUIRED_CONTAINER_UPDATE_EXECUTOR_DEPENDENCY_KEYS,
+      defaults: {
+        getConfiguration: () => ({}),
+      },
+      componentName: 'ContainerUpdateExecutor',
+    });
+    Object.assign(this, dependencies);
   }
 
-  async inspectContainerByIdentifier(dockerApi: DockerApiLike, identifier: string | undefined) {
+  async inspectContainerByIdentifier(
+    dockerApi: DockerApiLike,
+    identifier: string | undefined,
+    logContainer?: ContainerUpdateLogger,
+  ) {
     if (!identifier) {
       return undefined;
     }
@@ -237,7 +243,12 @@ class ContainerUpdateExecutor {
       const container = dockerApi.getContainer(identifier);
       const inspection = await container.inspect();
       return { container, inspection };
-    } catch {
+    } catch (e: unknown) {
+      if (!this.isContainerNotFoundError(e)) {
+        logContainer?.warn(
+          `Unable to inspect container ${identifier} during recovery (${getErrorMessage(e)})`,
+        );
+      }
       return undefined;
     }
   }
@@ -247,7 +258,7 @@ class ContainerUpdateExecutor {
     identifier: string,
     logContainer: ContainerUpdateLogger,
   ) {
-    const inspected = await this.inspectContainerByIdentifier(dockerApi, identifier);
+    const inspected = await this.inspectContainerByIdentifier(dockerApi, identifier, logContainer);
     if (!inspected) {
       return false;
     }
@@ -288,8 +299,13 @@ class ContainerUpdateExecutor {
     const activeByOriginalName = await this.inspectContainerByIdentifier(
       dockerApi,
       pending.oldName,
+      logContainer,
     );
-    const tempByRenamedName = await this.inspectContainerByIdentifier(dockerApi, pending.tempName);
+    const tempByRenamedName = await this.inspectContainerByIdentifier(
+      dockerApi,
+      pending.tempName,
+      logContainer,
+    );
 
     if (activeByOriginalName && tempByRenamedName) {
       const removedTemp = await this.stopAndRemoveContainerBestEffort(
@@ -385,6 +401,46 @@ class ContainerUpdateExecutor {
     container: ContainerForUpdate,
     logContainer: ContainerUpdateLogger,
   ) {
+    const preparedExecution = await this.prepareContainerUpdateExecution(
+      context,
+      container,
+      logContainer,
+    );
+    if (!preparedExecution) {
+      return false;
+    }
+
+    const attemptState: ContainerUpdateAttemptState = {
+      newContainer: undefined,
+      oldContainerStopped: false,
+      failureReason: 'update_runtime_failed',
+    };
+
+    try {
+      attemptState.newContainer = await this.createAndStartReplacementContainer(
+        preparedExecution,
+        logContainer,
+        attemptState,
+      );
+      await this.cleanupRenamedContainer(preparedExecution, logContainer, attemptState);
+      this.markOperationSucceeded(preparedExecution.operationId);
+      return true;
+    } catch (e: unknown) {
+      return this.rollbackFailedContainerUpdate(
+        e,
+        preparedExecution,
+        attemptState,
+        container,
+        logContainer,
+      );
+    }
+  }
+
+  private async prepareContainerUpdateExecution(
+    context: ContainerUpdateContext,
+    container: ContainerForUpdate,
+    logContainer: ContainerUpdateLogger,
+  ): Promise<PreparedContainerUpdateExecution | undefined> {
     const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
     const configuration = this.getConfiguration();
 
@@ -393,7 +449,7 @@ class ContainerUpdateExecutor {
 
     if (configuration.dryrun) {
       logContainer.info('Do not replace the existing container because dry-run mode is enabled');
-      return false;
+      return undefined;
     }
 
     const cloneRuntimeConfigOptions = await this.getCloneRuntimeConfigOptions(
@@ -428,165 +484,275 @@ class ContainerUpdateExecutor {
     await currentContainer.rename({ name: tempName });
     updateOperationStore.updateOperation(operation.id, { phase: 'renamed' });
 
-    let newContainer: DockerContainerHandle | undefined;
-    let oldContainerStopped = false;
-    let failureReason = 'update_runtime_failed';
+    return {
+      dockerApi,
+      newImage,
+      currentContainer,
+      currentContainerSpec,
+      cloneRuntimeConfigOptions,
+      oldName,
+      tempName,
+      wasRunning,
+      shouldHealthGate,
+      operationId: operation.id,
+    };
+  }
+
+  private async createAndStartReplacementContainer(
+    preparedExecution: PreparedContainerUpdateExecution,
+    logContainer: ContainerUpdateLogger,
+    attemptState: ContainerUpdateAttemptState,
+  ): Promise<DockerContainerHandle> {
+    attemptState.failureReason = 'create_new_failed';
+    const containerToCreateInspect = this.cloneContainer(
+      preparedExecution.currentContainerSpec,
+      preparedExecution.newImage,
+      preparedExecution.cloneRuntimeConfigOptions,
+    );
+
+    const newContainer = await this.createContainer(
+      preparedExecution.dockerApi,
+      containerToCreateInspect,
+      preparedExecution.oldName,
+      logContainer,
+    );
+
+    const newContainerId = await this.getContainerIdBestEffort(
+      newContainer,
+      preparedExecution.oldName,
+      logContainer,
+    );
+    updateOperationStore.updateOperation(preparedExecution.operationId, {
+      phase: 'new-created',
+      newContainerId,
+    });
+
+    if (preparedExecution.wasRunning) {
+      await this.runReplacementContainerTransition(
+        preparedExecution,
+        newContainer,
+        logContainer,
+        attemptState,
+      );
+    }
+
+    return newContainer;
+  }
+
+  private async getContainerIdBestEffort(
+    container: DockerContainerHandle,
+    containerName: string,
+    logContainer: ContainerUpdateLogger,
+  ) {
+    try {
+      return (await container.inspect())?.Id;
+    } catch (inspectError: unknown) {
+      logContainer.warn(
+        `Unable to inspect candidate container ${containerName} after creation (${getErrorMessage(
+          inspectError,
+        )})`,
+      );
+      return undefined;
+    }
+  }
+
+  private async runReplacementContainerTransition(
+    preparedExecution: PreparedContainerUpdateExecution,
+    newContainer: DockerContainerHandle,
+    logContainer: ContainerUpdateLogger,
+    attemptState: ContainerUpdateAttemptState,
+  ) {
+    attemptState.failureReason = 'stop_old_failed';
+    await this.stopContainer(
+      preparedExecution.currentContainer,
+      preparedExecution.tempName,
+      preparedExecution.currentContainerSpec.Id,
+      logContainer,
+    );
+    attemptState.oldContainerStopped = true;
+    updateOperationStore.updateOperation(preparedExecution.operationId, {
+      phase: 'old-stopped',
+      oldContainerStopped: true,
+    });
+
+    attemptState.failureReason = 'start_new_failed';
+    await this.startContainer(newContainer, preparedExecution.oldName, logContainer);
+    updateOperationStore.updateOperation(preparedExecution.operationId, { phase: 'new-started' });
+
+    if (!preparedExecution.shouldHealthGate) {
+      return;
+    }
+
+    attemptState.failureReason = 'health_gate_failed';
+    updateOperationStore.updateOperation(preparedExecution.operationId, { phase: 'health-gate' });
+    await this.waitForContainerHealthy(newContainer, preparedExecution.oldName, logContainer);
+    updateOperationStore.updateOperation(preparedExecution.operationId, {
+      phase: 'health-gate-passed',
+    });
+  }
+
+  private async cleanupRenamedContainer(
+    preparedExecution: PreparedContainerUpdateExecution,
+    logContainer: ContainerUpdateLogger,
+    attemptState: ContainerUpdateAttemptState,
+  ) {
+    attemptState.failureReason = 'cleanup_old_failed';
+    try {
+      if (
+        preparedExecution.currentContainerSpec.HostConfig?.AutoRemove === true &&
+        preparedExecution.wasRunning
+      ) {
+        await this.waitContainerRemoved(
+          preparedExecution.currentContainer,
+          preparedExecution.tempName,
+          preparedExecution.currentContainerSpec.Id,
+          logContainer,
+        );
+      } else {
+        await this.removeContainer(
+          preparedExecution.currentContainer,
+          preparedExecution.tempName,
+          preparedExecution.currentContainerSpec.Id,
+          logContainer,
+        );
+      }
+    } catch (cleanupError: unknown) {
+      if (!this.isContainerNotFoundError(cleanupError)) {
+        throw cleanupError;
+      }
+      logContainer.info(
+        `Container ${preparedExecution.tempName} with id ${preparedExecution.currentContainerSpec.Id} was already removed during cleanup`,
+      );
+    }
+  }
+
+  private markOperationSucceeded(operationId: string) {
+    updateOperationStore.updateOperation(operationId, {
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+  }
+
+  private async rollbackFailedContainerUpdate(
+    error: unknown,
+    preparedExecution: PreparedContainerUpdateExecution,
+    attemptState: ContainerUpdateAttemptState,
+    container: ContainerForUpdate,
+    logContainer: ContainerUpdateLogger,
+  ): Promise<never> {
+    logContainer.warn(
+      `Container update failed for ${preparedExecution.oldName}, attempting rollback (${getErrorMessage(error)})`,
+    );
+    updateOperationStore.updateOperation(preparedExecution.operationId, {
+      phase: 'rollback-started',
+      lastError: getErrorMessage(error),
+    });
+
+    await this.cleanupNewContainerBestEffort(
+      attemptState.newContainer,
+      preparedExecution.oldName,
+      logContainer,
+    );
+
+    const rollbackSucceeded = await this.restoreOriginalContainerState(
+      preparedExecution,
+      attemptState.oldContainerStopped,
+      logContainer,
+    );
+
+    updateOperationStore.updateOperation(preparedExecution.operationId, {
+      status: rollbackSucceeded ? 'rolled-back' : 'failed',
+      phase: rollbackSucceeded ? 'rolled-back' : 'rollback-failed',
+      oldContainerStopped: attemptState.oldContainerStopped,
+      rollbackReason: attemptState.failureReason,
+      lastError: getErrorMessage(error),
+    });
+
+    this.recordRollbackTelemetry(
+      container,
+      rollbackSucceeded ? 'success' : 'error',
+      rollbackSucceeded
+        ? attemptState.failureReason
+        : `${attemptState.failureReason}_rollback_failed`,
+      rollbackSucceeded
+        ? `Rollback completed after ${attemptState.failureReason} during container update`
+        : `Rollback failed after ${attemptState.failureReason}: ${getErrorMessage(error)}`,
+      container.updateKind.remoteValue ?? container.image.tag.value,
+      container.updateKind.localValue ?? container.image.tag.value,
+    );
+
+    const compatibilityError = this.buildRuntimeConfigCompatibilityError(
+      error,
+      preparedExecution.oldName,
+      preparedExecution.currentContainerSpec,
+      preparedExecution.newImage,
+      rollbackSucceeded,
+    );
+    if (compatibilityError) {
+      throw compatibilityError;
+    }
+
+    throw error;
+  }
+
+  private async cleanupNewContainerBestEffort(
+    newContainer: DockerContainerHandle | undefined,
+    containerName: string,
+    logContainer: ContainerUpdateLogger,
+  ) {
+    if (!newContainer) {
+      return;
+    }
+    try {
+      await newContainer.stop();
+    } catch (stopError: unknown) {
+      logContainer.warn(
+        `Unable to stop failed candidate container ${containerName} during rollback (${getErrorMessage(
+          stopError,
+        )})`,
+      );
+    }
+    try {
+      await newContainer.remove({ force: true });
+    } catch (removeError: unknown) {
+      logContainer.warn(
+        `Unable to remove failed candidate container ${containerName} during rollback (${getErrorMessage(
+          removeError,
+        )})`,
+      );
+    }
+  }
+
+  private async restoreOriginalContainerState(
+    preparedExecution: PreparedContainerUpdateExecution,
+    oldContainerStopped: boolean,
+    logContainer: ContainerUpdateLogger,
+  ): Promise<boolean> {
+    let rollbackSucceeded = true;
+    let restoreName = preparedExecution.tempName;
 
     try {
-      failureReason = 'create_new_failed';
-      const containerToCreateInspect = this.cloneContainer(
-        currentContainerSpec,
-        newImage,
-        cloneRuntimeConfigOptions,
-      );
-      newContainer = await this.createContainer(
-        dockerApi,
-        containerToCreateInspect,
-        oldName,
-        logContainer,
-      );
-
-      let newContainerId: string | undefined;
-      try {
-        newContainerId = (await newContainer.inspect())?.Id;
-      } catch {
-        newContainerId = undefined;
-      }
-      updateOperationStore.updateOperation(operation.id, {
-        phase: 'new-created',
-        newContainerId,
-      });
-
-      if (wasRunning) {
-        failureReason = 'stop_old_failed';
-        await this.stopContainer(currentContainer, tempName, currentContainerSpec.Id, logContainer);
-        oldContainerStopped = true;
-        updateOperationStore.updateOperation(operation.id, {
-          phase: 'old-stopped',
-          oldContainerStopped: true,
-        });
-
-        failureReason = 'start_new_failed';
-        await this.startContainer(newContainer, oldName, logContainer);
-        updateOperationStore.updateOperation(operation.id, { phase: 'new-started' });
-
-        if (shouldHealthGate) {
-          failureReason = 'health_gate_failed';
-          updateOperationStore.updateOperation(operation.id, { phase: 'health-gate' });
-          await this.waitForContainerHealthy(newContainer, oldName, logContainer);
-          updateOperationStore.updateOperation(operation.id, { phase: 'health-gate-passed' });
-        }
-      }
-
-      failureReason = 'cleanup_old_failed';
-      try {
-        if (currentContainerSpec.HostConfig?.AutoRemove === true && wasRunning) {
-          await this.waitContainerRemoved(
-            currentContainer,
-            tempName,
-            currentContainerSpec.Id,
-            logContainer,
-          );
-        } else {
-          await this.removeContainer(
-            currentContainer,
-            tempName,
-            currentContainerSpec.Id,
-            logContainer,
-          );
-        }
-      } catch (cleanupError: unknown) {
-        if (!this.isContainerNotFoundError(cleanupError)) {
-          throw cleanupError;
-        }
-        logContainer.info(
-          `Container ${tempName} with id ${currentContainerSpec.Id} was already removed during cleanup`,
-        );
-      }
-
-      updateOperationStore.updateOperation(operation.id, {
-        status: 'succeeded',
-        phase: 'succeeded',
-      });
-      return true;
-    } catch (e: unknown) {
+      await preparedExecution.currentContainer.rename({ name: preparedExecution.oldName });
+      restoreName = preparedExecution.oldName;
+    } catch (renameError: unknown) {
+      rollbackSucceeded = false;
       logContainer.warn(
-        `Container update failed for ${oldName}, attempting rollback (${getErrorMessage(e)})`,
+        `Rollback failed to restore container name from ${preparedExecution.tempName} to ${preparedExecution.oldName} (${getErrorMessage(renameError)})`,
       );
-      updateOperationStore.updateOperation(operation.id, {
-        phase: 'rollback-started',
-        lastError: getErrorMessage(e),
-      });
+    }
 
-      if (newContainer) {
-        try {
-          await newContainer.stop();
-        } catch {
-          // best effort
-        }
-        try {
-          await newContainer.remove({ force: true });
-        } catch {
-          // best effort
-        }
-      }
-
-      let rollbackSucceeded = true;
-      let restoreName = tempName;
-
+    if (preparedExecution.wasRunning && oldContainerStopped) {
       try {
-        await currentContainer.rename({ name: oldName });
-        restoreName = oldName;
-      } catch (renameError: unknown) {
+        await this.startContainer(preparedExecution.currentContainer, restoreName, logContainer);
+      } catch (restartError: unknown) {
         rollbackSucceeded = false;
         logContainer.warn(
-          `Rollback failed to restore container name from ${tempName} to ${oldName} (${getErrorMessage(renameError)})`,
+          `Rollback failed to restart previous container ${restoreName} (${getErrorMessage(restartError)})`,
         );
       }
-
-      if (wasRunning && oldContainerStopped) {
-        try {
-          await this.startContainer(currentContainer, restoreName, logContainer);
-        } catch (restartError: unknown) {
-          rollbackSucceeded = false;
-          logContainer.warn(
-            `Rollback failed to restart previous container ${restoreName} (${getErrorMessage(restartError)})`,
-          );
-        }
-      }
-
-      updateOperationStore.updateOperation(operation.id, {
-        status: rollbackSucceeded ? 'rolled-back' : 'failed',
-        phase: rollbackSucceeded ? 'rolled-back' : 'rollback-failed',
-        oldContainerStopped,
-        rollbackReason: failureReason,
-        lastError: getErrorMessage(e),
-      });
-
-      this.recordRollbackTelemetry(
-        container,
-        rollbackSucceeded ? 'success' : 'error',
-        rollbackSucceeded ? failureReason : `${failureReason}_rollback_failed`,
-        rollbackSucceeded
-          ? `Rollback completed after ${failureReason} during container update`
-          : `Rollback failed after ${failureReason}: ${getErrorMessage(e)}`,
-        container.updateKind.remoteValue ?? container.image.tag.value,
-        container.updateKind.localValue ?? container.image.tag.value,
-      );
-
-      const compatibilityError = this.buildRuntimeConfigCompatibilityError(
-        e,
-        oldName,
-        currentContainerSpec,
-        newImage,
-        rollbackSucceeded,
-      );
-      if (compatibilityError) {
-        throw compatibilityError;
-      }
-
-      throw e;
     }
+
+    return rollbackSucceeded;
   }
 }
 

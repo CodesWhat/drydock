@@ -104,6 +104,7 @@ describe('ContainerUpdateExecutor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockInsertOperation.mockReturnValue({ id: 'op-1' });
+    mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
   });
 
   test('constructor provides default configuration fallback', () => {
@@ -138,23 +139,27 @@ describe('ContainerUpdateExecutor', () => {
       getContainer: vi.fn(() => ({ inspect })),
     };
     const executor = createExecutor();
+    const log = createLog();
 
     await expect(
-      executor.inspectContainerByIdentifier(dockerApi, undefined),
+      executor.inspectContainerByIdentifier(dockerApi, undefined, log),
     ).resolves.toBeUndefined();
-    await expect(executor.inspectContainerByIdentifier(dockerApi, 'container-id')).resolves.toEqual(
-      {
-        container: { inspect },
-        inspection: { State: { Running: true } },
-      },
-    );
+    await expect(
+      executor.inspectContainerByIdentifier(dockerApi, 'container-id', log),
+    ).resolves.toEqual({
+      container: { inspect },
+      inspection: { State: { Running: true } },
+    });
 
     dockerApi.getContainer = vi.fn(() => ({
       inspect: vi.fn().mockRejectedValue(new Error('boom')),
     }));
     await expect(
-      executor.inspectContainerByIdentifier(dockerApi, 'container-id'),
+      executor.inspectContainerByIdentifier(dockerApi, 'container-id', log),
     ).resolves.toBeUndefined();
+    expect(log.warn).toHaveBeenCalledWith(
+      'Unable to inspect container container-id during recovery (boom)',
+    );
   });
 
   test('stopAndRemoveContainerBestEffort handles missing, stop failure, and remove failure cases', async () => {
@@ -487,6 +492,9 @@ describe('ContainerUpdateExecutor', () => {
     expect(log.info).toHaveBeenCalledWith(
       expect.stringContaining('was already removed during cleanup'),
     );
+    expect(log.warn).toHaveBeenCalledWith(
+      'Unable to inspect candidate container web after creation (inspect unavailable)',
+    );
     expect(mockUpdateOperation).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
@@ -522,6 +530,38 @@ describe('ContainerUpdateExecutor', () => {
       expect.stringContaining('Rollback completed after create_new_failed'),
       '1.0.1',
       '1.0.0',
+    );
+  });
+
+  test('execute logs best-effort rollback cleanup failures for failed candidate container', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: true },
+      }),
+    });
+    context.newContainer.stop.mockRejectedValue(new Error('new stop failed'));
+    context.newContainer.remove.mockRejectedValue('remove failed as string');
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      stopContainer: vi.fn().mockResolvedValue(undefined),
+      startContainer: vi.fn().mockResolvedValue(undefined),
+      hasHealthcheckConfigured: vi.fn(() => false),
+      waitContainerRemoved: vi.fn().mockRejectedValue(new Error('cleanup exploded')),
+      isContainerNotFoundError: vi.fn(() => false),
+      buildRuntimeConfigCompatibilityError: vi.fn(() => undefined),
+    });
+    const log = createLog();
+
+    await expect(executor.execute(context, createContainer(), log)).rejects.toThrow(
+      'cleanup exploded',
+    );
+
+    expect(log.warn).toHaveBeenCalledWith(
+      'Unable to stop failed candidate container web during rollback (new stop failed)',
+    );
+    expect(log.warn).toHaveBeenCalledWith(
+      'Unable to remove failed candidate container web during rollback (remove failed as string)',
     );
   });
 

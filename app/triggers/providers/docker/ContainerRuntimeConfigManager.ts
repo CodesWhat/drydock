@@ -1,3 +1,5 @@
+import { resolveFunctionDependencies } from './dependency-constructor.js';
+
 const RUNTIME_PROCESS_FIELDS = ['Entrypoint', 'Cmd'] as const;
 const RUNTIME_ORIGIN_EXPLICIT = 'explicit';
 const RUNTIME_ORIGIN_INHERITED = 'inherited';
@@ -50,16 +52,6 @@ type RuntimeConfigManagerConstructorOptions = Omit<
 
 const REQUIRED_RUNTIME_CONFIG_MANAGER_DEPENDENCY_KEYS = ['getPreferredLabelValue'] as const;
 
-function assertRequiredDependencies(
-  options: Partial<RuntimeConfigManagerDependencies>,
-): asserts options is RuntimeConfigManagerConstructorOptions {
-  for (const key of REQUIRED_RUNTIME_CONFIG_MANAGER_DEPENDENCY_KEYS) {
-    if (typeof options[key] !== 'function') {
-      throw new TypeError(`ContainerRuntimeConfigManager requires dependency "${key}"`);
-    }
-  }
-}
-
 type EndpointConfig = {
   IPAMConfig?: unknown;
   Links?: unknown;
@@ -80,15 +72,35 @@ const RUNTIME_FIELD_ORIGIN_LABELS = {
   },
 };
 
+function isRuntimeConfigOptions(
+  runtimeOptionsOrLogContainer: RuntimeConfigOptions | RuntimeConfigLogger | undefined,
+): runtimeOptionsOrLogContainer is RuntimeConfigOptions {
+  if (!runtimeOptionsOrLogContainer) {
+    return false;
+  }
+
+  return (
+    Object.hasOwn(runtimeOptionsOrLogContainer, 'sourceImageConfig') ||
+    Object.hasOwn(runtimeOptionsOrLogContainer, 'targetImageConfig') ||
+    Object.hasOwn(runtimeOptionsOrLogContainer, 'runtimeFieldOrigins') ||
+    Object.hasOwn(runtimeOptionsOrLogContainer, 'logContainer')
+  );
+}
+
 class ContainerRuntimeConfigManager {
   getPreferredLabelValue: RuntimeConfigManagerDependencies['getPreferredLabelValue'];
 
   getLogger: RuntimeConfigManagerDependencies['getLogger'];
 
   constructor(options: RuntimeConfigManagerConstructorOptions) {
-    assertRequiredDependencies(options);
-    this.getPreferredLabelValue = options.getPreferredLabelValue;
-    this.getLogger = options.getLogger || (() => undefined);
+    const dependencies = resolveFunctionDependencies<RuntimeConfigManagerDependencies>(options, {
+      requiredKeys: REQUIRED_RUNTIME_CONFIG_MANAGER_DEPENDENCY_KEYS,
+      defaults: {
+        getLogger: () => undefined,
+      },
+      componentName: 'ContainerRuntimeConfigManager',
+    });
+    Object.assign(this, dependencies);
   }
 
   sanitizeEndpointConfig(
@@ -248,13 +260,7 @@ class ContainerRuntimeConfigManager {
       return {};
     }
 
-    const hasRuntimeConfigOptions =
-      Object.hasOwn(runtimeOptionsOrLogContainer, 'sourceImageConfig') ||
-      Object.hasOwn(runtimeOptionsOrLogContainer, 'targetImageConfig') ||
-      Object.hasOwn(runtimeOptionsOrLogContainer, 'runtimeFieldOrigins') ||
-      Object.hasOwn(runtimeOptionsOrLogContainer, 'logContainer');
-
-    if (hasRuntimeConfigOptions) {
+    if (isRuntimeConfigOptions(runtimeOptionsOrLogContainer)) {
       return runtimeOptionsOrLogContainer;
     }
 

@@ -7,6 +7,7 @@ import type {
   ContainerVulnerabilitySummary,
 } from '../../../security/scan.js';
 import { getErrorMessage } from '../../../util/error.js';
+import { resolveFunctionDependencies } from './dependency-constructor.js';
 import TriggerPipelineError from './TriggerPipelineError.js';
 
 type SecurityContainer = Container;
@@ -103,16 +104,6 @@ const REQUIRED_SECURITY_GATE_DEPENDENCY_KEYS = [
   'fullName',
 ] as const;
 
-function assertRequiredDependencies(
-  options: Partial<SecurityGateDependencies>,
-): asserts options is SecurityGateConstructorOptions {
-  for (const key of REQUIRED_SECURITY_GATE_DEPENDENCY_KEYS) {
-    if (typeof options[key] !== 'function') {
-      throw new TypeError(`SecurityGate requires dependency "${key}"`);
-    }
-  }
-}
-
 class SecurityGate {
   securityConfig: Pick<SecurityGateDependencies, 'getSecurityConfiguration'>;
 
@@ -132,24 +123,30 @@ class SecurityGate {
   >;
 
   constructor(options: SecurityGateConstructorOptions) {
-    assertRequiredDependencies(options);
+    const dependencies = resolveFunctionDependencies<SecurityGateDependencies>(options, {
+      requiredKeys: REQUIRED_SECURITY_GATE_DEPENDENCY_KEYS,
+      defaults: {
+        recordSecurityAudit: () => undefined,
+      },
+      componentName: 'SecurityGate',
+    });
     this.securityConfig = {
-      getSecurityConfiguration: options.getSecurityConfiguration,
+      getSecurityConfiguration: dependencies.getSecurityConfiguration,
     };
     this.scanners = {
-      verifyImageSignature: options.verifyImageSignature,
-      scanImageForVulnerabilities: options.scanImageForVulnerabilities,
-      generateImageSbom: options.generateImageSbom,
+      verifyImageSignature: dependencies.verifyImageSignature,
+      scanImageForVulnerabilities: dependencies.scanImageForVulnerabilities,
+      generateImageSbom: dependencies.generateImageSbom,
     };
     this.stateStore = {
-      getContainer: options.getContainer,
-      updateContainer: options.updateContainer,
-      cacheSecurityState: options.cacheSecurityState,
+      getContainer: dependencies.getContainer,
+      updateContainer: dependencies.updateContainer,
+      cacheSecurityState: dependencies.cacheSecurityState,
     };
     this.telemetry = {
-      emitSecurityAlert: options.emitSecurityAlert,
-      fullName: options.fullName,
-      recordSecurityAudit: options.recordSecurityAudit ?? (() => undefined),
+      emitSecurityAlert: dependencies.emitSecurityAlert,
+      fullName: dependencies.fullName,
+      recordSecurityAudit: dependencies.recordSecurityAudit,
     };
   }
 

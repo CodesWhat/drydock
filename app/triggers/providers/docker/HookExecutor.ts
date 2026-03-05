@@ -1,3 +1,4 @@
+import { resolveFunctionDependencies } from './dependency-constructor.js';
 import TriggerPipelineError from './TriggerPipelineError.js';
 
 type HookExecutorLogger = {
@@ -65,16 +66,6 @@ type HookExecutorConstructorOptions = Omit<
 
 const REQUIRED_HOOK_EXECUTOR_DEPENDENCY_KEYS = ['runHook', 'getPreferredLabelValue'] as const;
 
-function assertRequiredDependencies(
-  options: Partial<HookExecutorDependencies>,
-): asserts options is HookExecutorConstructorOptions {
-  for (const key of REQUIRED_HOOK_EXECUTOR_DEPENDENCY_KEYS) {
-    if (typeof options[key] !== 'function') {
-      throw new TypeError(`HookExecutor requires dependency "${key}"`);
-    }
-  }
-}
-
 class HookExecutor {
   runHook: HookExecutorDependencies['runHook'];
 
@@ -85,11 +76,15 @@ class HookExecutor {
   recordHookAudit: HookExecutorDependencies['recordHookAudit'];
 
   constructor(options: HookExecutorConstructorOptions) {
-    assertRequiredDependencies(options);
-    this.runHook = options.runHook;
-    this.getPreferredLabelValue = options.getPreferredLabelValue;
-    this.getLogger = options.getLogger || (() => undefined);
-    this.recordHookAudit = options.recordHookAudit || (() => undefined);
+    const dependencies = resolveFunctionDependencies<HookExecutorDependencies>(options, {
+      requiredKeys: REQUIRED_HOOK_EXECUTOR_DEPENDENCY_KEYS,
+      defaults: {
+        getLogger: () => undefined,
+        recordHookAudit: () => undefined,
+      },
+      componentName: 'HookExecutor',
+    });
+    Object.assign(this, dependencies);
   }
 
   buildHookConfig(container: HookContainer): HookConfig {
