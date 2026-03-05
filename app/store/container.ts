@@ -3,6 +3,7 @@
  */
 import { byString, byValues } from 'sort-es';
 import { redactContainerRuntimeEnv, redactContainersRuntimeEnv } from '../api/container/shared.js';
+import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
 import type { ContainerLifecycleEventPayload } from '../event/index.js';
 import * as container from '../model/container.js';
 import { toPositiveInteger } from '../util/parse.js';
@@ -13,17 +14,22 @@ import { emitContainerAdded, emitContainerRemoved, emitContainerUpdated } from '
 import { initCollection } from './util.js';
 
 let containers: ReturnType<typeof initCollection> | undefined;
-const containersQueryCache = new Map();
+const containersQueryCache = new Map<string, container.Container[]>();
+const containersQueryCacheReverseIndex = new Map<string, Map<string, Set<string>>>();
+const containersQueryCacheAlwaysInvalidateKeys = new Set<string>();
+const containersQueryCacheMalformedKeys = new Set<string>();
+const containersQueryCacheParsedEntries = new Map<string, Array<readonly [string, unknown]>>();
+const DEFAULT_CACHE_MAX_ENTRIES = getDefaultCacheMaxEntries();
 
 // Security state cache: keyed by "{watcher}_{name}" to survive container recreation
 const securityStateCache = new Map();
-const DEFAULT_CONTAINERS_QUERY_CACHE_MAX_ENTRIES = 500;
+const DEFAULT_CONTAINERS_QUERY_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
 const DEFAULT_SECURITY_STATE_CACHE_TTL_MS = 15 * 60 * 1000;
-const DEFAULT_SECURITY_STATE_CACHE_MAX_ENTRIES = 500;
-const SECURITY_STATE_CACHE_PRUNE_WRITE_INTERVAL = 25;
+const DEFAULT_SECURITY_STATE_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
+const SECURITY_STATE_CACHE_PRUNE_SCAN_BUDGET = 10;
 const CONTAINER_COLLECTION_INDICES = ['data.watcher', 'data.status', 'data.updateAvailable'];
 const UNSAFE_QUERY_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
-let securityStateCacheWriteCount = 0;
+let securityStateCachePruneIterator: IterableIterator<[string, any]> | undefined;
 
 interface ContainerListPaginationOptions {
   limit?: number;
@@ -48,6 +54,7 @@ export const SECURITY_STATE_CACHE_MAX_ENTRIES = toPositiveInteger(
 );
 
 function pruneSecurityStateCache(nowMs = Date.now()) {
+  securityStateCachePruneIterator = undefined;
   const activeKeys = [];
   let activeStartIndex = 0;
 
@@ -63,6 +70,33 @@ function pruneSecurityStateCache(nowMs = Date.now()) {
       activeStartIndex += 1;
       securityStateCache.delete(oldestActiveCacheKey);
     }
+  }
+}
+
+function pruneSecurityStateCacheIncrementally(nowMs = Date.now()) {
+  if (securityStateCache.size === 0) {
+    securityStateCachePruneIterator = undefined;
+    return;
+  }
+
+  if (!securityStateCachePruneIterator) {
+    // Reuse a persistent iterator so prune work is amortized across writes.
+    securityStateCachePruneIterator = securityStateCache.entries();
+  }
+
+  let scannedEntryCount = 0;
+  while (scannedEntryCount < SECURITY_STATE_CACHE_PRUNE_SCAN_BUDGET) {
+    const nextEntry = securityStateCachePruneIterator.next();
+    if (nextEntry.done) {
+      securityStateCachePruneIterator = undefined;
+      break;
+    }
+
+    const [cacheKey, cacheEntry] = nextEntry.value;
+    if (cacheEntry.expiresAt <= nowMs) {
+      securityStateCache.delete(cacheKey);
+    }
+    scannedEntryCount += 1;
   }
 }
 
@@ -95,29 +129,26 @@ function getContainerQueryCacheKey(query: Record<string, unknown> = {}) {
 }
 
 function cloneContainers(containersToClone) {
-  return containersToClone.map((container) => deepCloneValue(container));
+  return containersToClone.map((container) => cloneContainer(container));
 }
 
-function deepCloneValue(value) {
-  if (Array.isArray(value)) {
-    return value.map((item) => deepCloneValue(item));
+function cloneContainer(containerToClone) {
+  if (
+    !containerToClone ||
+    typeof containerToClone !== 'object' ||
+    typeof containerToClone.resultChanged !== 'function'
+  ) {
+    return structuredClone(containerToClone);
   }
 
-  if (value instanceof Date) {
-    return new Date(value);
-  }
-
-  if (value instanceof RegExp) {
-    return new RegExp(value.source, value.flags);
-  }
-
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, nestedValue]) => [key, deepCloneValue(nestedValue)]),
-    );
-  }
-
-  return value;
+  const resultChanged = containerToClone.resultChanged;
+  const containerWithoutResultChanged = {
+    ...containerToClone,
+    resultChanged: undefined,
+  };
+  const clonedContainer = structuredClone(containerWithoutResultChanged);
+  clonedContainer.resultChanged = resultChanged;
+  return clonedContainer;
 }
 
 function normalizeContainerListPaginationOptions(
@@ -194,6 +225,111 @@ function parseContainerQueryCacheKey(cacheKey) {
   }
 }
 
+function getContainersQueryIndexValueKey(value) {
+  try {
+    const serializedValue = JSON.stringify(value);
+    return serializedValue === undefined ? '__undefined__' : serializedValue;
+  } catch {
+    return `__nonjson__:${String(value)}`;
+  }
+}
+
+function indexContainerQueryCacheKey(cacheKey) {
+  const queryEntries = parseContainerQueryCacheKey(cacheKey);
+  containersQueryCacheParsedEntries.set(cacheKey, queryEntries ?? null);
+
+  if (!queryEntries) {
+    containersQueryCacheMalformedKeys.add(cacheKey);
+    return;
+  }
+
+  if (queryEntries.length === 0) {
+    containersQueryCacheAlwaysInvalidateKeys.add(cacheKey);
+    return;
+  }
+
+  for (const [queryPath, queryValue] of queryEntries) {
+    const valueKey = getContainersQueryIndexValueKey(queryValue);
+    let pathValueMap = containersQueryCacheReverseIndex.get(queryPath);
+    if (!pathValueMap) {
+      pathValueMap = new Map();
+      containersQueryCacheReverseIndex.set(queryPath, pathValueMap);
+    }
+    let indexedCacheKeys = pathValueMap.get(valueKey);
+    if (!indexedCacheKeys) {
+      indexedCacheKeys = new Set();
+      pathValueMap.set(valueKey, indexedCacheKeys);
+    }
+    indexedCacheKeys.add(cacheKey);
+  }
+}
+
+function unindexContainerQueryCacheKey(cacheKey) {
+  if (!containersQueryCacheParsedEntries.has(cacheKey)) {
+    return;
+  }
+  const queryEntries = containersQueryCacheParsedEntries.get(cacheKey);
+  containersQueryCacheParsedEntries.delete(cacheKey);
+  containersQueryCacheMalformedKeys.delete(cacheKey);
+  containersQueryCacheAlwaysInvalidateKeys.delete(cacheKey);
+
+  if (!queryEntries || queryEntries.length === 0) {
+    return;
+  }
+
+  for (const [queryPath, queryValue] of queryEntries) {
+    const valueKey = getContainersQueryIndexValueKey(queryValue);
+    const pathValueMap = containersQueryCacheReverseIndex.get(queryPath);
+    if (!pathValueMap) {
+      continue;
+    }
+    const indexedCacheKeys = pathValueMap.get(valueKey);
+    if (!indexedCacheKeys) {
+      continue;
+    }
+    indexedCacheKeys.delete(cacheKey);
+    if (indexedCacheKeys.size === 0) {
+      pathValueMap.delete(valueKey);
+    }
+    if (pathValueMap.size === 0) {
+      containersQueryCacheReverseIndex.delete(queryPath);
+    }
+  }
+}
+
+function deleteContainersQueryCacheEntry(cacheKey) {
+  containersQueryCache.delete(cacheKey);
+  unindexContainerQueryCacheKey(cacheKey);
+}
+
+function clearContainersQueryCacheState() {
+  containersQueryCache.clear();
+  containersQueryCacheReverseIndex.clear();
+  containersQueryCacheAlwaysInvalidateKeys.clear();
+  containersQueryCacheMalformedKeys.clear();
+  containersQueryCacheParsedEntries.clear();
+}
+
+function collectIndexedContainersCacheKeysForContainer(
+  containerToMatch,
+  keysToCollect: Set<string>,
+) {
+  if (!containerToMatch || typeof containerToMatch !== 'object') {
+    return;
+  }
+
+  for (const [queryPath, pathValueMap] of containersQueryCacheReverseIndex.entries()) {
+    const valueKey = getContainersQueryIndexValueKey(getValueByPath(containerToMatch, queryPath));
+    const indexedCacheKeys = pathValueMap.get(valueKey);
+    if (!indexedCacheKeys) {
+      continue;
+    }
+    for (const cacheKey of indexedCacheKeys) {
+      keysToCollect.add(cacheKey);
+    }
+  }
+}
+
 function containerMatchesQuery(containerToMatch, queryEntries) {
   if (!containerToMatch || typeof containerToMatch !== 'object') {
     return false;
@@ -223,7 +359,7 @@ function hasClassifiedRuntimeEnvValues(details) {
 }
 
 function invalidateContainersCache() {
-  containersQueryCache.clear();
+  clearContainersQueryCacheState();
 }
 
 function invalidateContainersCacheForMutation(containerBefore, containerAfter) {
@@ -231,31 +367,50 @@ function invalidateContainersCacheForMutation(containerBefore, containerAfter) {
     return;
   }
 
-  for (const cacheKey of containersQueryCache.keys()) {
-    const queryEntries = parseContainerQueryCacheKey(cacheKey);
+  const candidateCacheKeys = new Set<string>();
+  collectIndexedContainersCacheKeysForContainer(containerBefore, candidateCacheKeys);
+  collectIndexedContainersCacheKeysForContainer(containerAfter, candidateCacheKeys);
+
+  const cacheKeysToInvalidate = new Set<string>();
+  for (const cacheKey of containersQueryCacheMalformedKeys.values()) {
+    cacheKeysToInvalidate.add(cacheKey);
+  }
+  for (const cacheKey of containersQueryCacheAlwaysInvalidateKeys.values()) {
+    cacheKeysToInvalidate.add(cacheKey);
+  }
+
+  for (const cacheKey of candidateCacheKeys.values()) {
+    const queryEntries = containersQueryCacheParsedEntries.get(cacheKey);
     if (!queryEntries || queryEntries.length === 0) {
-      containersQueryCache.delete(cacheKey);
+      cacheKeysToInvalidate.add(cacheKey);
       continue;
     }
-
     if (
       containerMatchesQuery(containerBefore, queryEntries) ||
       containerMatchesQuery(containerAfter, queryEntries)
     ) {
-      containersQueryCache.delete(cacheKey);
+      cacheKeysToInvalidate.add(cacheKey);
     }
+  }
+
+  for (const cacheKey of cacheKeysToInvalidate.values()) {
+    deleteContainersQueryCacheEntry(cacheKey);
   }
 }
 
 function setContainersQueryCache(cacheKey, cacheValue) {
   if (containersQueryCache.has(cacheKey)) {
-    containersQueryCache.delete(cacheKey);
+    deleteContainersQueryCacheEntry(cacheKey);
   }
   containersQueryCache.set(cacheKey, cacheValue);
+  indexContainerQueryCacheKey(cacheKey);
 
   while (containersQueryCache.size > CONTAINERS_QUERY_CACHE_MAX_ENTRIES) {
     const oldestCacheKey = containersQueryCache.keys().next().value;
-    containersQueryCache.delete(oldestCacheKey);
+    if (oldestCacheKey === undefined) {
+      break;
+    }
+    deleteContainersQueryCacheEntry(oldestCacheKey);
   }
 }
 
@@ -270,11 +425,7 @@ export function cacheSecurityState(watcher, name, security) {
     expiresAt: nowMs + SECURITY_STATE_CACHE_TTL_MS,
   });
   enforceSecurityStateCacheSizeLimit();
-  securityStateCacheWriteCount += 1;
-  if (securityStateCacheWriteCount >= SECURITY_STATE_CACHE_PRUNE_WRITE_INTERVAL) {
-    pruneSecurityStateCache(nowMs);
-    securityStateCacheWriteCount = 0;
-  }
+  pruneSecurityStateCacheIncrementally(nowMs);
 }
 
 export function getCachedSecurityState(watcher, name) {
@@ -296,7 +447,7 @@ export function clearCachedSecurityState(watcher, name) {
 
 export function clearAllCachedSecurityState() {
   securityStateCache.clear();
-  securityStateCacheWriteCount = 0;
+  securityStateCachePruneIterator = undefined;
 }
 
 function getUpdateDetectedAt(containerCurrent, containerNext) {
@@ -529,9 +680,9 @@ export function deleteContainer(id) {
 }
 
 export function _resetContainerStoreStateForTests() {
-  containersQueryCache.clear();
+  clearContainersQueryCacheState();
   securityStateCache.clear();
-  securityStateCacheWriteCount = 0;
+  securityStateCachePruneIterator = undefined;
 }
 
 export function _setSecurityStateCacheEntryForTests(cacheKey: string, entry: any) {
@@ -553,9 +704,10 @@ export function _enforceSecurityStateCacheSizeLimitForTests() {
 export function _setContainersQueryCacheEntriesForTests(
   entries: Array<[string, container.Container[]]>,
 ) {
-  containersQueryCache.clear();
+  clearContainersQueryCacheState();
   entries.forEach(([cacheKey, cacheValue]) => {
     containersQueryCache.set(cacheKey, cacheValue);
+    indexContainerQueryCacheKey(cacheKey);
   });
 }
 

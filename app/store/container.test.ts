@@ -1010,6 +1010,33 @@ test('getContainersRaw should preserve Date and RegExp values when cloning', asy
   expect((result[0].labels.namePattern as unknown as RegExp).flags).toBe('i');
 });
 
+test('getContainers should preserve Map values when cloning', async () => {
+  const metadataByKey = new Map([['release', '2026.03.05']]);
+  const containerExample = createContainerFixture();
+  containerExample.labels = {
+    metadataByKey,
+  } as unknown as Record<string, string>;
+  const containers = [{ data: containerExample }];
+  const collection = {
+    find: () => containers,
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({
+      findOne: () => {},
+      insert: () => {},
+    }),
+  };
+  container.createCollections(db);
+
+  const result = container.getContainers({});
+
+  expect(result[0].labels.metadataByKey).toBeInstanceOf(Map);
+  expect((result[0].labels.metadataByKey as unknown as Map<string, string>).get('release')).toBe(
+    '2026.03.05',
+  );
+});
+
 test('getContainer should return 1 container by id', async () => {
   const containerExample = { data: createContainerFixture() };
   const collection = {
@@ -1342,17 +1369,36 @@ test('cacheSecurityState should refresh existing cache entries', async () => {
   container.clearCachedSecurityState('refresh', 'entry');
 });
 
-test('cacheSecurityState should avoid full-map prune on each write', async () => {
+test('cacheSecurityState should bound prune work per write', async () => {
   container.clearAllCachedSecurityState();
-  const entriesSpy = vi.spyOn(Map.prototype, 'entries');
-  const callsBeforeWrites = entriesSpy.mock.calls.length;
+  const originalEntries = Map.prototype.entries;
+  let totalEntrySteps = 0;
+  let maxEntryStepsPerWrite = 0;
+
+  const entriesSpy = vi.spyOn(Map.prototype, 'entries').mockImplementation(function () {
+    const iterator = originalEntries.call(this);
+    return {
+      next() {
+        totalEntrySteps += 1;
+        return iterator.next();
+      },
+      [Symbol.iterator]() {
+        return this;
+      },
+    } as IterableIterator<[unknown, unknown]>;
+  });
 
   try {
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 30; index += 1) {
+      const entryStepsBeforeWrite = totalEntrySteps;
       container.cacheSecurityState('counter-prune', `entry-${index}`, { status: 'ok', index });
+      maxEntryStepsPerWrite = Math.max(
+        maxEntryStepsPerWrite,
+        totalEntrySteps - entryStepsBeforeWrite,
+      );
     }
 
-    expect(entriesSpy.mock.calls.length - callsBeforeWrites).toBe(0);
+    expect(maxEntryStepsPerWrite).toBeLessThanOrEqual(12);
   } finally {
     entriesSpy.mockRestore();
     container.clearAllCachedSecurityState();
@@ -1672,6 +1718,32 @@ test('getContainers should isolate nested objects from cached query results', as
   expect(secondRead[0].image.tag.value).toBe('version');
 });
 
+test('getContainers should clone cached cyclic structures without throwing', () => {
+  const containerExample = createContainerFixture();
+  const cyclicLabels: Record<string, unknown> = { key: 'value' };
+  cyclicLabels.self = cyclicLabels;
+  containerExample.labels = cyclicLabels as Record<string, string>;
+
+  const collection = {
+    find: vi.fn(() => []),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+  container._setContainersQueryCacheEntriesForTests([['[]', [containerExample]]]);
+
+  let result: ReturnType<typeof container.getContainers> = [];
+  expect(() => {
+    result = container.getContainers({});
+  }).not.toThrow();
+
+  const clonedLabels = result[0].labels as Record<string, unknown>;
+  expect(clonedLabels).not.toBe(containerExample.labels);
+  expect(clonedLabels.self).toBe(clonedLabels);
+});
+
 test('security state prune should remove expired entries and trim oldest active entries', () => {
   const nowMs = Date.now();
   const maxEntries = container.SECURITY_STATE_CACHE_MAX_ENTRIES;
@@ -1732,6 +1804,27 @@ test('container query cache invalidation should tolerate malformed cache keys', 
 
   expect(() => container._invalidateContainersCacheForMutationForTests({}, {})).not.toThrow();
   expect(container._getContainersQueryCacheForTests().size).toBe(0);
+});
+
+test('container query cache invalidation should avoid parsing cache keys during mutation lookups', () => {
+  const watcherAKey = '[["watcher","watcher-a"]]';
+  const watcherBKey = '[["watcher","watcher-b"]]';
+  container._setContainersQueryCacheEntriesForTests([
+    [watcherAKey, []],
+    [watcherBKey, []],
+  ]);
+
+  const parseSpy = vi.spyOn(JSON, 'parse');
+  try {
+    parseSpy.mockClear();
+    container._invalidateContainersCacheForMutationForTests(undefined, { watcher: 'watcher-a' });
+
+    expect(parseSpy).not.toHaveBeenCalled();
+    expect(container._getContainersQueryCacheForTests().has(watcherAKey)).toBe(false);
+    expect(container._getContainersQueryCacheForTests().has(watcherBKey)).toBe(true);
+  } finally {
+    parseSpy.mockRestore();
+  }
 });
 
 test('getValueByPath helper should reject unsafe and invalid traversal paths', () => {
