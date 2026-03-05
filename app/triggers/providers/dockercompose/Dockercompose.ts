@@ -160,8 +160,7 @@ function doesContainerBelongToCompose(compose, container) {
 
 function getLineStartOffset(text, offset) {
   const beforeOffset = Math.max(0, offset - 1);
-  const lineBreakIndex = text.lastIndexOf('\n', beforeOffset);
-  return lineBreakIndex < 0 ? 0 : lineBreakIndex + 1;
+  return text.lastIndexOf('\n', beforeOffset) + 1;
 }
 
 function getLineIndentationAtOffset(text, offset) {
@@ -170,9 +169,6 @@ function getLineIndentationAtOffset(text, offset) {
 }
 
 function getPreferredChildIndentation(parentIndentation) {
-  if (parentIndentation.includes('\t')) {
-    return `${parentIndentation}\t`;
-  }
   return `${parentIndentation}  `;
 }
 
@@ -180,13 +176,12 @@ function getMapPairByKey(
   mapNode: unknown,
   keyName: string,
 ): Pair<ParsedNode | null, ParsedNode | null> | undefined {
-  if (!yaml.isMap(mapNode)) {
-    return undefined;
-  }
-  return mapNode.items.find((pair): pair is Pair<ParsedNode | null, ParsedNode | null> => {
-    const pairKeyValue = yaml.isScalar(pair?.key) ? pair.key.value : undefined;
-    return `${pairKeyValue}` === keyName;
-  });
+  return (mapNode as { items: Pair<ParsedNode | null, ParsedNode | null>[] }).items.find(
+    (pair): pair is Pair<ParsedNode | null, ParsedNode | null> => {
+      const pairKeyValue = (pair?.key as { value?: unknown })?.value;
+      return `${pairKeyValue}` === keyName;
+    },
+  );
 }
 
 function formatReplacementImageValue(currentImageValueText, newImage) {
@@ -230,10 +225,7 @@ function updateComposeServiceImageInText(composeFileText, serviceName, newImage)
   if (yaml.isMap(serviceValueNode)) {
     const imagePair = getMapPairByKey(serviceValueNode, 'image');
     if (imagePair) {
-      const imageValueRange = imagePair.value?.range;
-      if (!Array.isArray(imageValueRange) || imageValueRange.length < 2) {
-        throw new Error(`Unable to locate compose image value for service ${serviceName}`);
-      }
+      const imageValueRange = imagePair.value!.range!;
       const imageValueStart = imageValueRange[0];
       const imageValueEnd = imageValueRange[1];
       const currentImageValueText = composeFileText.slice(imageValueStart, imageValueEnd);
@@ -252,11 +244,7 @@ function updateComposeServiceImageInText(composeFileText, serviceName, newImage)
     throw new Error(`Unable to patch compose service ${serviceName} because it is not a map`);
   }
 
-  const serviceKeyOffset = servicePair.key?.range?.[0];
-  if (typeof serviceKeyOffset !== 'number') {
-    throw new Error(`Unable to locate compose service ${serviceName}`);
-  }
-
+  const serviceKeyOffset = servicePair.key!.range![0];
   const serviceIndentation = getLineIndentationAtOffset(composeFileText, serviceKeyOffset);
   const imageIndentation = getPreferredChildIndentation(serviceIndentation);
   const lineBreakOffset = composeFileText.indexOf('\n', serviceKeyOffset);
@@ -266,9 +254,7 @@ function updateComposeServiceImageInText(composeFileText, serviceName, newImage)
     return `${composeFileText.slice(0, insertionOffset)}${imageIndentation}image: ${newImage}${newline}${composeFileText.slice(insertionOffset)}`;
   }
 
-  const needsLeadingNewline = composeFileText.length > 0;
-  const separator = needsLeadingNewline ? newline : '';
-  return `${composeFileText}${separator}${imageIndentation}image: ${newImage}`;
+  return `${composeFileText}${newline}${imageIndentation}image: ${newImage}`;
 }
 
 function updateComposeServiceImagesInText(composeFileText, serviceImageUpdates) {

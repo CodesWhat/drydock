@@ -1304,6 +1304,42 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('getContainerRunningState should assume running when watcher dockerApi is unavailable', async () => {
+    const logContainer = { warn: vi.fn() };
+
+    const running = await trigger.getContainerRunningState(
+      {
+        name: 'nginx',
+        watcher: 'missing',
+      },
+      logContainer,
+    );
+
+    expect(running).toBe(true);
+  });
+
+  test('getContainerRunningState should assume running when watcher dockerApi is not an object', async () => {
+    const logContainer = { warn: vi.fn() };
+    getState.mockReturnValue({
+      registry: getState().registry,
+      watcher: {
+        'docker.local': {
+          dockerApi: 'invalid',
+        },
+      },
+    });
+
+    const running = await trigger.getContainerRunningState(
+      {
+        name: 'nginx',
+        watcher: 'local',
+      },
+      logContainer,
+    );
+
+    expect(running).toBe(true);
+  });
+
   test('resolveComposeServiceContext should throw when no compose file is configured', async () => {
     trigger.configuration.file = undefined;
 
@@ -1413,6 +1449,23 @@ describe('Dockercompose Trigger', () => {
     await trigger.runServicePostStartHooks(container, 'netbox', {});
 
     expect(mockDockerApi.getContainer).not.toHaveBeenCalled();
+  });
+
+  test('runServicePostStartHooks should warn when watcher dockerApi is unavailable', async () => {
+    trigger.configuration.dryrun = false;
+
+    await trigger.runServicePostStartHooks(
+      {
+        name: 'ghost',
+        watcher: 'missing',
+      },
+      'ghost',
+      { post_start: ['echo hello'] },
+    );
+
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      'Skip compose post_start hooks for ghost (ghost) because watcher Docker API is unavailable',
+    );
   });
 
   test('runServicePostStartHooks should skip when container is not running', async () => {
@@ -1640,6 +1693,171 @@ describe('Dockercompose Trigger', () => {
       '/opt/drydock/test/compose.yml',
     );
     expect(fs.unlink).toHaveBeenCalledWith('/opt/drydock/test/compose.yml.drydock.lock');
+  });
+
+  test('withComposeFileLock should wait and retry when lock exists but is not stale', async () => {
+    vi.useFakeTimers();
+    const lockBusyError: any = new Error('lock exists');
+    lockBusyError.code = 'EEXIST';
+    fs.writeFile.mockRejectedValueOnce(lockBusyError).mockResolvedValueOnce(undefined);
+    fs.stat.mockResolvedValueOnce({
+      mtimeMs: Date.now(),
+    });
+    const operation = vi.fn().mockResolvedValue('ok');
+
+    let result;
+    try {
+      const lockPromise = trigger.withComposeFileLock('/opt/drydock/test/compose.yml', operation);
+      await vi.advanceTimersByTimeAsync(100);
+      result = await lockPromise;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(result).toBe('ok');
+    expect(operation).toHaveBeenCalledWith('/opt/drydock/test/compose.yml');
+  });
+
+  test('withComposeFileLock should time out while waiting for a busy lock', async () => {
+    const lockBusyError: any = new Error('lock exists');
+    lockBusyError.code = 'EEXIST';
+    fs.writeFile.mockRejectedValueOnce(lockBusyError);
+    fs.stat.mockResolvedValueOnce({
+      mtimeMs: 0,
+    });
+    const dateNowSpy = vi
+      .spyOn(Date, 'now')
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(10)
+      .mockReturnValueOnce(10_001);
+
+    try {
+      await expect(
+        trigger.withComposeFileLock('/opt/drydock/test/compose.yml', async () => 'never'),
+      ).rejects.toThrow('Timed out waiting for compose file lock');
+    } finally {
+      dateNowSpy.mockRestore();
+    }
+  });
+
+  test('withComposeFileLock should warn when lock removal fails with a non-ENOENT error', async () => {
+    const lockRemovalError: any = new Error('permission denied');
+    lockRemovalError.code = 'EPERM';
+    fs.unlink.mockRejectedValueOnce(lockRemovalError);
+
+    await trigger.withComposeFileLock('/opt/drydock/test/compose.yml', async () => undefined);
+
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Could not remove compose file lock'),
+    );
+  });
+
+  test('withComposeFileLock should ignore ENOENT when lock removal races', async () => {
+    const lockRemovalError: any = new Error('gone');
+    lockRemovalError.code = 'ENOENT';
+    fs.unlink.mockRejectedValueOnce(lockRemovalError);
+
+    await trigger.withComposeFileLock('/opt/drydock/test/compose.yml', async () => undefined);
+
+    expect(
+      mockLog.warn.mock.calls.some(([message]) =>
+        String(message).includes('Could not remove compose file lock'),
+      ),
+    ).toBe(false);
+  });
+
+  test('withComposeFileLock should execute immediately when lock is already held by this process', async () => {
+    const filePath = '/opt/drydock/test/compose.yml';
+    trigger._composeFileLocksHeld.add(filePath);
+    const operation = vi.fn().mockResolvedValue('ok');
+
+    try {
+      const result = await trigger.withComposeFileLock(filePath, operation);
+      expect(result).toBe('ok');
+      expect(operation).toHaveBeenCalledWith(filePath);
+      expect(fs.writeFile).not.toHaveBeenCalledWith(
+        `${filePath}.drydock.lock`,
+        expect.any(String),
+        { flag: 'wx' },
+      );
+    } finally {
+      trigger._composeFileLocksHeld.delete(filePath);
+    }
+  });
+
+  test('maybeReleaseStaleComposeFileLock should treat missing lock file as released', async () => {
+    const missingLockError: any = new Error('missing lock');
+    missingLockError.code = 'ENOENT';
+    fs.stat.mockRejectedValueOnce(missingLockError);
+
+    await expect(
+      trigger.maybeReleaseStaleComposeFileLock('/opt/drydock/test/compose.yml.drydock.lock'),
+    ).resolves.toBe(true);
+  });
+
+  test('maybeReleaseStaleComposeFileLock should warn and return false on unexpected stat errors', async () => {
+    const statError: any = new Error('permission denied');
+    statError.code = 'EPERM';
+    fs.stat.mockRejectedValueOnce(statError);
+
+    await expect(
+      trigger.maybeReleaseStaleComposeFileLock('/opt/drydock/test/compose.yml.drydock.lock'),
+    ).resolves.toBe(false);
+
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Could not inspect compose file lock'),
+    );
+  });
+
+  test('writeComposeFile should preserve rename error when temp cleanup also fails', async () => {
+    const renameError = new Error('rename failed');
+    fs.rename.mockRejectedValueOnce(renameError);
+    fs.unlink.mockRejectedValueOnce(new Error('cleanup failed'));
+
+    await expect(trigger.writeComposeFile('/opt/drydock/test/compose.yml', 'data')).rejects.toThrow(
+      'rename failed',
+    );
+  });
+
+  test('mutateComposeFile should return false when no text changes are applied', async () => {
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from('services:\n  nginx:\n    image: nginx:1.0.0\n'),
+    );
+    const writeSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+
+    const changed = await trigger.mutateComposeFile(
+      '/opt/drydock/test/compose.yml',
+      (text) => text,
+    );
+
+    expect(changed).toBe(false);
+    expect(writeSpy).not.toHaveBeenCalled();
+  });
+
+  test('updateComposeServiceImageInText should throw when compose document has parse errors', () => {
+    expect(() =>
+      testable_updateComposeServiceImageInText('services:\n  nginx: [\n', 'nginx', 'nginx:2.0.0'),
+    ).toThrow();
+  });
+
+  test('updateComposeServiceImageInText should throw when service definition is not a map', () => {
+    expect(() =>
+      testable_updateComposeServiceImageInText(
+        ['services:', '  nginx: "literal-service"', ''].join('\n'),
+        'nginx',
+        'nginx:2.0.0',
+      ),
+    ).toThrow('Unable to patch compose service nginx because it is not a map');
+  });
+
+  test('updateComposeServiceImageInText should append image line when service key has no trailing newline', () => {
+    const updated = testable_updateComposeServiceImageInText(
+      'services:\n  nginx:',
+      'nginx',
+      'nginx:2.0.0',
+    );
+
+    expect(updated).toBe('services:\n  nginx:\n    image: nginx:2.0.0');
   });
 
   test('writeComposeFile should remove stale lock and continue', async () => {
