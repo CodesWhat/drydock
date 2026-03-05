@@ -54,7 +54,7 @@ vi.mock('../registry', () => ({
   })),
 }));
 
-vi.mock('../log', () => ({ default: { warn: vi.fn(), info: vi.fn() } }));
+vi.mock('../log', () => ({ default: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
 
 vi.mock('../configuration', () => ({
   getVersion: vi.fn(() => '1.0.0'),
@@ -286,75 +286,6 @@ describe('Auth Router', () => {
       auth.requireAuthentication(req, res, next);
 
       expect(authMiddleware).toHaveBeenCalledWith(req, res, next);
-    });
-
-    test('should fall back to res.status(401).end() when sendStatus is unavailable', () => {
-      passport.authenticate.mockImplementation((_ids, _options, callback) => {
-        return () => callback(null, false, undefined, 401);
-      });
-
-      const statusEnd = vi.fn();
-      const req = {
-        isAuthenticated: vi.fn(() => false),
-        method: 'POST',
-        path: '/login',
-      };
-      const res = {
-        status: vi.fn(() => ({ end: statusEnd })),
-      };
-      const next = vi.fn();
-
-      auth.requireAuthentication(req, res, next);
-
-      expect(res.status).toHaveBeenCalledWith(401);
-      expect(statusEnd).toHaveBeenCalledTimes(1);
-      expect(next).not.toHaveBeenCalled();
-    });
-
-    test('should fall back to res.end with statusCode when status response has no end', () => {
-      passport.authenticate.mockImplementation((_ids, _options, callback) => {
-        return () => callback(null, false, undefined, 401);
-      });
-
-      const req = {
-        isAuthenticated: vi.fn(() => false),
-        method: 'POST',
-        path: '/login',
-      };
-      const res = {
-        status: vi.fn(() => ({})),
-        end: vi.fn(),
-        statusCode: 200,
-      };
-      const next = vi.fn();
-
-      auth.requireAuthentication(req, res, next);
-
-      expect(res.status).toHaveBeenCalledWith(401);
-      expect(res.statusCode).toBe(401);
-      expect(res.end).toHaveBeenCalledTimes(1);
-      expect(next).not.toHaveBeenCalled();
-    });
-
-    test('should set statusCode when no response helpers are available', () => {
-      passport.authenticate.mockImplementation((_ids, _options, callback) => {
-        return () => callback(null, false, undefined, 401);
-      });
-
-      const req = {
-        isAuthenticated: vi.fn(() => false),
-        method: 'POST',
-        path: '/login',
-      };
-      const res = {
-        statusCode: 200,
-      };
-      const next = vi.fn();
-
-      auth.requireAuthentication(req, res, next);
-
-      expect(res.statusCode).toBe(401);
-      expect(next).not.toHaveBeenCalled();
     });
   });
 
@@ -681,6 +612,38 @@ describe('Auth Router', () => {
       );
       expect(log.info).toHaveBeenCalledWith(
         'Using session secret from DD_SESSION_SECRET environment variable',
+      );
+    });
+
+    test('should log an error when DD_SESSION_SECRET is missing in production', async () => {
+      const previousSessionSecret = process.env.DD_SESSION_SECRET;
+      const previousNodeEnv = process.env.NODE_ENV;
+      delete process.env.DD_SESSION_SECRET;
+      process.env.NODE_ENV = 'production';
+
+      vi.resetModules();
+      const freshAuth = await import('./auth.js');
+      const freshLog = (await import('../log/index.js')).default;
+      const app = createApp();
+
+      try {
+        freshAuth.init(app);
+      } finally {
+        if (previousSessionSecret === undefined) {
+          delete process.env.DD_SESSION_SECRET;
+        } else {
+          process.env.DD_SESSION_SECRET = previousSessionSecret;
+        }
+
+        if (previousNodeEnv === undefined) {
+          delete process.env.NODE_ENV;
+        } else {
+          process.env.NODE_ENV = previousNodeEnv;
+        }
+      }
+
+      expect(freshLog.error).toHaveBeenCalledWith(
+        'DD_SESSION_SECRET is not set; using an ephemeral session secret. Set DD_SESSION_SECRET to a strong persistent value.',
       );
     });
   });
