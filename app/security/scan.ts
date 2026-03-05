@@ -113,7 +113,7 @@ const COSIGN_UNVERIFIED_PATTERNS = [
   'invalid signature',
 ];
 
-function toPositiveInteger(rawValue: string | undefined, fallbackValue: number): number {
+export function toPositiveInteger(rawValue: string | undefined, fallbackValue: number): number {
   const parsedValue = Number.parseInt(String(rawValue ?? ''), 10);
   if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
     return fallbackValue;
@@ -699,10 +699,7 @@ function setDigestScanCacheEntry(
 
   while (digestScanCache.size > DIGEST_SCAN_CACHE_MAX_ENTRIES) {
     const oldestDigest = digestScanCache.keys().next().value;
-    if (typeof oldestDigest !== 'string') {
-      break;
-    }
-    digestScanCache.delete(oldestDigest);
+    digestScanCache.delete(oldestDigest as string);
   }
 }
 

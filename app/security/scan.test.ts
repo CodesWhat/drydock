@@ -48,6 +48,7 @@ import {
   getDigestScanCacheSize,
   scanImageForVulnerabilities,
   scanImageWithDedup,
+  toPositiveInteger,
   updateDigestScanCache,
   verifyImageSignature,
 } from './scan.js';
@@ -86,6 +87,10 @@ beforeEach(() => {
   clearDigestScanCache();
   mockHasValidCommandPath.mockReturnValue(true);
   mockGetSecurityConfiguration.mockReturnValue(createEnabledConfiguration());
+});
+
+test('toPositiveInteger should return parsed positive values', () => {
+  expect(toPositiveInteger('42', 500)).toBe(42);
 });
 
 test('scanImageForVulnerabilities should return error result when scanner disabled', async () => {
@@ -771,6 +776,22 @@ test('runTrivyVulnerabilityCommand should fallback to trivy when command is empt
   expect(execFileMock.mock.calls[0][0]).toBe('trivy');
 });
 
+test('runTrivyVulnerabilityCommand should fallback to trivy when command is whitespace', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: { ...createEnabledConfiguration().trivy, command: '   ' },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, JSON.stringify({ Results: [] }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(execFileMock.mock.calls[0][0]).toBe('trivy');
+});
+
 test('scanImageForVulnerabilities should reject invalid trivy command path before execution', async () => {
   mockGetSecurityConfiguration.mockReturnValue({
     ...createEnabledConfiguration(),
@@ -808,6 +829,45 @@ test('runTrivySbomCommand should fallback to trivy when command is empty', async
   await generateImageSbom({ image: 'img:test' });
 
   expect(execFileMock.mock.calls[0][0]).toBe('trivy');
+});
+
+test('runTrivySbomCommand should fallback to trivy when command is whitespace', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: { ...createEnabledConfiguration().trivy, command: '   ' },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, JSON.stringify({ spdxVersion: 'SPDX-2.3' }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  await generateImageSbom({ image: 'img:test' });
+
+  expect(execFileMock.mock.calls[0][0]).toBe('trivy');
+});
+
+test('generateImageSbom should reject invalid trivy command path before execution', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: {
+      ...createEnabledConfiguration().trivy,
+      command: '../bin/trivy',
+    },
+  });
+  mockHasValidCommandPath.mockReturnValue(false);
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, JSON.stringify({ spdxVersion: 'SPDX-2.3' }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const result = await generateImageSbom({ image: 'img:test' });
+
+  expect(mockHasValidCommandPath).toHaveBeenCalledWith('../bin/trivy');
+  expect(execFileMock).not.toHaveBeenCalled();
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('invalid');
 });
 
 test('runCosignVerifyCommand should fallback to cosign when command is empty', async () => {

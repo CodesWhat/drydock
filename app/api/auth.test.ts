@@ -432,6 +432,28 @@ describe('Auth Router', () => {
       expect(session).not.toHaveBeenCalled();
     });
 
+    test.each([
+      ['enabled boolean', true],
+      ['positive hop count', 1],
+      ['truthy string', 'true'],
+    ])('should allow sameSite none when trustproxy is an %s value', (_label, trustproxy) => {
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: false },
+        trustproxy,
+      });
+      const app = createApp();
+
+      expect(() => auth.init(app)).not.toThrow();
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie).toEqual(
+        expect.objectContaining({
+          sameSite: 'none',
+          secure: true,
+        }),
+      );
+    });
+
     test('should register strategies from the registry', () => {
       const mockStrategy = { type: 'mock' };
       const mockAuth = {

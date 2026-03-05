@@ -685,6 +685,30 @@ describe('api/container/security', () => {
       );
     });
 
+    test('uses empty DB timestamp when trivy DB status is unavailable', async () => {
+      const harness = createHarness({
+        container: createContainer({
+          image: {
+            registry: { name: 'hub', url: 'my-registry' },
+            name: 'test/app',
+            tag: { value: '1.2.3' },
+            digest: { watch: true, value: 'sha256:abc123' },
+          },
+        }),
+      });
+      const scanResult = createScanResult();
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(scanResult);
+      harness.deps.getTrivyDatabaseStatus.mockResolvedValueOnce(undefined);
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.updateDigestScanCache).toHaveBeenCalledWith(
+        'sha256:abc123',
+        scanResult,
+        '',
+      );
+    });
+
     test('does not populate digest scan cache when container has no digest', async () => {
       const harness = createHarness({
         container: createContainer({
