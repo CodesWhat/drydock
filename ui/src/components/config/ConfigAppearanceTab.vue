@@ -53,6 +53,7 @@ function handleIconScaleInput(event: Event) {
 
 <template>
   <div class="space-y-6">
+    <!-- Color Theme -->
     <div
       class="dd-rounded overflow-hidden"
       :style="{
@@ -69,16 +70,11 @@ function handleIconScaleInput(event: Event) {
           <button
             v-for="fam in props.themeFamilies"
             :key="fam.id"
-            class="dd-rounded p-3 text-left transition-[color,background-color,border-color,opacity,transform,box-shadow] relative"
+            class="dd-rounded p-3 text-left transition-[color,background-color,border-color,opacity,transform,box-shadow] border"
+            :class="props.themeFamily === fam.id ? 'ring-2 ring-drydock-secondary' : ''"
             :style="{
-              backgroundColor: props.themeFamily === fam.id
-                ? 'var(--dd-bg-card)'
-                : 'var(--dd-bg-inset)',
-              border: '1px solid var(--dd-border-strong)',
-              outline: props.themeFamily === fam.id
-                ? '2px solid var(--dd-text)'
-                : '2px solid transparent',
-              outlineOffset: '2px',
+              backgroundColor: props.themeFamily === fam.id ? 'var(--dd-primary-muted)' : 'var(--dd-bg-inset)',
+              border: props.themeFamily === fam.id ? '1px solid var(--dd-primary)' : '1px solid var(--dd-border-strong)',
             }"
             @click="props.onSelectThemeFamily(fam.id, $event)"
           >
@@ -91,17 +87,11 @@ function handleIconScaleInput(event: Event) {
                 }"
               />
               <span
-                class="text-[12px] font-semibold flex-1"
-                :class="props.themeFamily === fam.id ? 'dd-text' : 'dd-text'"
+                class="text-[12px] font-semibold"
+                :class="props.themeFamily === fam.id ? 'text-drydock-secondary' : 'dd-text'"
               >
                 {{ fam.label }}
               </span>
-              <AppIcon
-                v-if="props.themeFamily === fam.id"
-                name="check"
-                :size="14"
-                class="text-drydock-secondary shrink-0"
-              />
             </div>
             <div class="text-[10px] dd-text-muted">
               {{ fam.description }}
@@ -111,6 +101,7 @@ function handleIconScaleInput(event: Event) {
       </div>
     </div>
 
+    <!-- Theme variant -->
     <div
       class="dd-rounded overflow-hidden"
       :style="{
@@ -128,6 +119,7 @@ function handleIconScaleInput(event: Event) {
       </div>
     </div>
 
+    <!-- Font Family -->
     <div
       class="dd-rounded overflow-hidden"
       :style="{
@@ -144,17 +136,14 @@ function handleIconScaleInput(event: Event) {
           <button
             v-for="font in props.fontOptions"
             :key="font.id"
-            class="flex items-center gap-3 px-4 py-3 dd-rounded text-left transition-colors"
+            class="flex items-center gap-3 px-4 py-3 dd-rounded text-left transition-colors border"
             :class="[
+              props.activeFont === font.id ? 'ring-2 ring-drydock-secondary' : '',
               props.fontLoading ? 'pointer-events-none' : '',
             ]"
             :style="{
-              backgroundColor: 'var(--dd-bg-inset)',
-              border: '1px solid var(--dd-border-strong)',
-              outline: props.activeFont === font.id
-                ? '2px solid var(--dd-text)'
-                : '2px solid transparent',
-              outlineOffset: '2px',
+              backgroundColor: props.activeFont === font.id ? 'var(--dd-primary-muted)' : 'var(--dd-bg-inset)',
+              border: props.activeFont === font.id ? '1px solid var(--dd-primary)' : '1px solid var(--dd-border-strong)',
             }"
             @click="props.onSelectFont(font.id)"
           >
@@ -193,6 +182,7 @@ function handleIconScaleInput(event: Event) {
       </div>
     </div>
 
+    <!-- Icon Library -->
     <div
       class="dd-rounded overflow-hidden"
       :style="{
@@ -209,20 +199,19 @@ function handleIconScaleInput(event: Event) {
           <button
             v-for="(label, lib) in props.libraryLabels"
             :key="lib"
-            class="flex items-center gap-3 px-4 py-3 dd-rounded text-left transition-colors"
+            class="flex items-center gap-3 px-4 py-3 dd-rounded text-left transition-colors border"
+            :class="props.iconLibrary === lib ? 'ring-2 ring-drydock-secondary' : ''"
             :style="{
-              backgroundColor: 'var(--dd-bg-inset)',
-              border: '1px solid var(--dd-border-strong)',
-              outline: props.iconLibrary === lib
-                ? '2px solid var(--dd-text)'
-                : '2px solid transparent',
-              outlineOffset: '2px',
+              backgroundColor: props.iconLibrary === lib ? 'var(--dd-primary-muted)' : 'var(--dd-bg-inset)',
+              border: props.iconLibrary === lib ? '1px solid var(--dd-primary)' : '1px solid var(--dd-border-strong)',
             }"
             @click="props.onSelectIconLibrary(lib)"
           >
             <div
               class="w-8 h-8 dd-rounded flex items-center justify-center"
-              :style="{ backgroundColor: 'var(--dd-bg-elevated)' }"
+              :style="{
+                backgroundColor: props.iconLibrary === lib ? 'var(--dd-primary-muted)' : 'var(--dd-bg-elevated)',
+              }"
             >
               <iconify-icon
                 :icon="props.iconMap.dashboard?.[lib]"
@@ -247,6 +236,7 @@ function handleIconScaleInput(event: Event) {
       </div>
     </div>
 
+    <!-- Icon Size -->
     <div
       class="dd-rounded overflow-hidden"
       :style="{
