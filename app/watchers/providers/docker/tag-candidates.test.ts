@@ -1,3 +1,4 @@
+import { performance } from 'node:perf_hooks';
 import { describe, expect, test, vi } from 'vitest';
 
 import {
@@ -140,5 +141,43 @@ describe('docker tag candidates module', () => {
     );
 
     expect(filtered).toEqual(inputTags);
+  });
+
+  test('processes large tag lists within lightweight runtime budget', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '1.15.2-alpine3.21',
+          semver: true,
+        },
+      },
+      includeTags: '^1\\..*',
+      excludeTags: '.*-rc.*',
+      tagFamily: 'strict',
+    });
+
+    const tags = Array.from({ length: 1_000 }, (_, index) => {
+      if (index % 41 === 0) return `1.${index}.0-rc1`;
+      if (index % 13 === 0) return `2.${index % 30}.0`;
+      return `1.${index % 40}.${index % 15}-alpine3.${index % 30}`;
+    });
+
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const runs = 5;
+    let totalMs = 0;
+    let lastResult = getTagCandidates(container, tags, log);
+    for (let run = 0; run < runs; run += 1) {
+      const started = performance.now();
+      lastResult = getTagCandidates(container, tags, log);
+      totalMs += performance.now() - started;
+    }
+
+    expect(lastResult.tags.length).toBeGreaterThan(0);
+    const avgMs = totalMs / runs;
+    expect(avgMs).toBeLessThan(200);
   });
 });

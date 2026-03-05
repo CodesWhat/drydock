@@ -1,3 +1,4 @@
+import { performance } from 'node:perf_hooks';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import * as updateOperation from './update-operation.js';
 
@@ -273,5 +274,28 @@ describe('Update Operation Store', () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
     expect(fresh.getOperationsByContainerName('web')).toEqual([]);
+  });
+
+  test('retention pruning stays within lightweight runtime budget for medium history', () => {
+    const runs = 2;
+    const insertsPerRun = 500;
+    let totalMs = 0;
+
+    for (let run = 0; run < runs; run += 1) {
+      updateOperation.createCollections(createDb());
+      const started = performance.now();
+      for (let i = 0; i < insertsPerRun; i += 1) {
+        updateOperation.insertOperation({
+          containerName: `service-${i % 200}`,
+          status: i % 7 === 0 ? 'failed' : 'succeeded',
+          phase: i % 7 === 0 ? 'rollback-failed' : 'succeeded',
+          updatedAt: new Date(2026, 0, (i % 28) + 1, i % 24, i % 60, i % 60).toISOString(),
+        });
+      }
+      totalMs += performance.now() - started;
+    }
+
+    const avgMs = totalMs / runs;
+    expect(avgMs).toBeLessThan(1500);
   });
 });
