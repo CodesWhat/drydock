@@ -25,7 +25,7 @@ mqtt.log = log;
 const configurationValid = {
   url: 'mqtt://host:1883',
   topic: 'dd/container',
-  clientid: 'wud',
+  clientid: 'dd',
   hass: {
     discovery: false,
     enabled: false,
@@ -84,7 +84,7 @@ test('validateConfiguration should return validated configuration when valid', a
 test('validateConfiguration should apply_default_configuration', async () => {
   const validatedConfiguration = mqtt.validateConfiguration({
     url: configurationValid.url,
-    clientid: 'wud',
+    clientid: 'dd',
   });
   expect(validatedConfiguration).toStrictEqual(configurationValid);
 });
@@ -99,7 +99,7 @@ test('validateConfiguration should generate a default client id when not provide
 test('validateConfiguration should default hass.discovery to true when hass.enabled is true', async () => {
   const validatedConfiguration = mqtt.validateConfiguration({
     url: configurationValid.url,
-    clientid: 'wud',
+    clientid: 'dd',
     hass: {
       enabled: true,
       prefix: 'homeassistant',
@@ -149,7 +149,7 @@ test('initTrigger should init Mqtt client', async () => {
     ...configurationValid,
     user: 'user',
     password: 'password',
-    clientid: 'wud',
+    clientid: 'dd',
     hass: {
       enabled: true,
       discovery: true,
@@ -159,7 +159,7 @@ test('initTrigger should init Mqtt client', async () => {
   const spy = vi.spyOn(mqttClient, 'connectAsync');
   await mqtt.initTrigger();
   expect(spy).toHaveBeenCalledWith('mqtt://host:1883', {
-    clientId: 'wud',
+    clientId: 'dd',
     username: 'user',
     password: 'password',
     rejectUnauthorized: true,
@@ -213,7 +213,7 @@ test('initTrigger should read TLS files when configured', async () => {
 
   mqtt.configuration = {
     ...configurationValid,
-    clientid: 'wud',
+    clientid: 'dd',
     tls: {
       clientkey: '/path/to/key.pem',
       clientcert: '/path/to/cert.pem',
@@ -257,7 +257,7 @@ test('handleContainerEvent should log when trigger fails', async () => {
 test('initTrigger should execute registered container event callbacks', async () => {
   mqtt.configuration = {
     ...configurationValid,
-    clientid: 'wud',
+    clientid: 'dd',
     hass: { enabled: false, discovery: false, prefix: 'homeassistant' },
   };
   vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({
