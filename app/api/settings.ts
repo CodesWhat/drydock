@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import joi from 'joi';
 import nocache from 'nocache';
 import * as settingsStore from '../store/settings.js';
@@ -16,7 +16,7 @@ const settingsSchema = joi
  * @param req
  * @param res
  */
-function getSettings(req, res) {
+function getSettings(_req: Request, res: Response): void {
   res.status(200).json(settingsStore.getSettings());
 }
 
@@ -25,7 +25,7 @@ function getSettings(req, res) {
  * @param req
  * @param res
  */
-function updateSettings(req, res) {
+function updateSettings(req: Request, res: Response): void {
   const settingsToUpdate = settingsSchema.validate(req.body || {}, {
     stripUnknown: true,
   });

@@ -6,7 +6,21 @@ import { byString } from 'sort-es';
 import { uniqStrings } from '../util/string-array.js';
 import { initCollection } from './util.js';
 
-let notifications;
+type NotificationCollectionDocument = NotificationRule;
+
+interface NotificationCollection {
+  find(query?: Record<string, unknown>): NotificationCollectionDocument[];
+  findOne(query: { id: string }): NotificationCollectionDocument | null;
+  insert(document: NotificationCollectionDocument): void;
+  remove(document: NotificationCollectionDocument): void;
+}
+
+interface NotificationStoreDb {
+  getCollection(name: string): NotificationCollection | null;
+  addCollection(name: string): NotificationCollection;
+}
+
+let notifications: NotificationCollection | undefined;
 let notificationRulesCache: NotificationRule[] | null = null;
 
 export interface NotificationRule {
@@ -91,16 +105,16 @@ function normalizeRule(ruleToValidate: Partial<NotificationRule>): NotificationR
   if (ruleValidated.error) {
     throw ruleValidated.error;
   }
-  return ruleValidated.value;
+  return ruleValidated.value as NotificationRule;
 }
 
 function normalizeRules(rulesToNormalize: unknown): NotificationRule[] {
   const rulesById = new Map<string, Partial<NotificationRule>>();
   const rules = Array.isArray(rulesToNormalize) ? rulesToNormalize : [];
 
-  rules.forEach((rule: any) => {
-    if (rule && typeof rule === 'object' && typeof rule.id === 'string') {
-      rulesById.set(rule.id.toLowerCase(), rule);
+  rules.forEach((rule) => {
+    if (rule && typeof rule === 'object' && 'id' in rule && typeof rule.id === 'string') {
+      rulesById.set(rule.id.toLowerCase(), rule as Partial<NotificationRule>);
     }
   });
 
@@ -137,7 +151,7 @@ function invalidateNotificationRulesCache() {
 }
 
 function hasNotificationCollection() {
-  return notifications && typeof notifications.find === 'function';
+  return Boolean(notifications);
 }
 
 function replaceRules(rulesToSave: NotificationRule[]) {
@@ -150,8 +164,8 @@ function replaceRules(rulesToSave: NotificationRule[]) {
  * Create notification collection.
  * @param db
  */
-export function createCollections(db) {
-  notifications = initCollection(db, 'notifications');
+export function createCollections(db: NotificationStoreDb): void {
+  notifications = initCollection(db, 'notifications') as NotificationCollection;
   const rulesSaved = notifications.find();
   const rulesNormalized = normalizeRules(rulesSaved);
   replaceRules(rulesNormalized);

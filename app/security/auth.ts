@@ -8,6 +8,10 @@ export interface FailClosedAuthOptions {
   insecureFlagName?: string;
 }
 
+export interface RequestOptions {
+  headers?: Record<string, unknown>;
+}
+
 export function failClosedAuth(message: string, options: FailClosedAuthOptions = {}): void {
   if (options.allowInsecure) {
     const insecureFlagName = options.insecureFlagName || 'insecure';
@@ -26,7 +30,7 @@ export function requireAuthString(value: unknown, message: string): string {
 }
 
 export function withAuthorizationHeader(
-  requestOptions: any,
+  requestOptions: RequestOptions,
   scheme: 'Basic' | 'Bearer',
   credentials: unknown,
   failureMessage: string,

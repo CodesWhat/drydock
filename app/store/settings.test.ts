@@ -213,4 +213,15 @@ describe('Settings Store', () => {
 
     expect(settings.getSettings()).toEqual({ internetlessMode: false });
   });
+
+  test('updateSettings should not fail before createCollections initializes storage', async () => {
+    vi.resetModules();
+    const freshSettings = await import('./settings.js');
+
+    expect(
+      freshSettings.updateSettings({
+        internetlessMode: true,
+      }),
+    ).toEqual({ internetlessMode: true });
+  });
 });
