@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 import Trigger from '../Trigger.js';
 
 /**
@@ -87,7 +88,7 @@ class Teams extends Trigger {
       headers: {
         'content-type': 'application/json',
       },
-      timeout: 30000,
+      timeout: getOutboundHttpTimeoutMs(),
     });
   }
 }

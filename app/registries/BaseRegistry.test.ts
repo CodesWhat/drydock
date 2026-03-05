@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import BaseRegistry from './BaseRegistry.js';
+import { REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
 
 vi.mock('axios', () => ({
   default: vi.fn(),
@@ -13,6 +14,14 @@ class TestBaseRegistry extends BaseRegistry {
   exposeGetRegistryHostname(value) {
     return this.getRegistryHostname(value);
   }
+}
+
+function getBearerTokenCacheSize(registry: BaseRegistry) {
+  return (
+    registry as unknown as {
+      bearerTokenCache: Map<string, { token: string; expiresAt: number }>;
+    }
+  ).bearerTokenCache.size;
 }
 
 beforeEach(() => {
@@ -351,19 +360,20 @@ test('authenticateBearerFromAuthUrl should apply tls options to token request', 
   expect(result.httpsAgent.options.rejectUnauthorized).toBe(false);
 });
 
-test('authenticateBearerFromAuthUrl should reuse cached token within five minutes', async () => {
+test('authenticateBearerFromAuthUrl should reuse cached token within configured ttl', async () => {
   const { default: axios } = await import('axios');
   vi.useFakeTimers();
   axios.mockResolvedValue({ data: { token: 'abc123' } });
+  const startedAtMs = new Date('2026-03-05T10:00:00.000Z').getTime();
 
-  vi.setSystemTime(new Date('2026-03-05T10:00:00.000Z'));
+  vi.setSystemTime(startedAtMs);
   const firstResult = await baseRegistry.authenticateBearerFromAuthUrl(
     { headers: {} },
     'https://auth.example.com/token',
     'dXNlcjpwYXNz',
   );
 
-  vi.setSystemTime(new Date('2026-03-05T10:04:59.999Z'));
+  vi.setSystemTime(startedAtMs + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS - 1);
   const secondResult = await baseRegistry.authenticateBearerFromAuthUrl(
     { headers: {} },
     'https://auth.example.com/token',
@@ -376,21 +386,22 @@ test('authenticateBearerFromAuthUrl should reuse cached token within five minute
   vi.useRealTimers();
 });
 
-test('authenticateBearerFromAuthUrl should refresh cached token after five minutes', async () => {
+test('authenticateBearerFromAuthUrl should refresh cached token after configured ttl', async () => {
   const { default: axios } = await import('axios');
   vi.useFakeTimers();
   axios
     .mockResolvedValueOnce({ data: { token: 'abc123' } })
     .mockResolvedValueOnce({ data: { token: 'def456' } });
+  const startedAtMs = new Date('2026-03-05T10:00:00.000Z').getTime();
 
-  vi.setSystemTime(new Date('2026-03-05T10:00:00.000Z'));
+  vi.setSystemTime(startedAtMs);
   const firstResult = await baseRegistry.authenticateBearerFromAuthUrl(
     { headers: {} },
     'https://auth.example.com/token',
     'dXNlcjpwYXNz',
   );
 
-  vi.setSystemTime(new Date('2026-03-05T10:05:00.001Z'));
+  vi.setSystemTime(startedAtMs + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS + 1);
   const secondResult = await baseRegistry.authenticateBearerFromAuthUrl(
     { headers: {} },
     'https://auth.example.com/token',
@@ -401,4 +412,41 @@ test('authenticateBearerFromAuthUrl should refresh cached token after five minut
   expect(firstResult.headers.Authorization).toBe('Bearer abc123');
   expect(secondResult.headers.Authorization).toBe('Bearer def456');
   vi.useRealTimers();
+});
+
+test('authenticateBearerFromAuthUrl should evict expired cache entries from other auth URLs', async () => {
+  const { default: axios } = await import('axios');
+  vi.useFakeTimers();
+  axios
+    .mockResolvedValueOnce({ data: { token: 'abc123' } })
+    .mockResolvedValueOnce({ data: { token: 'def456' } })
+    .mockResolvedValueOnce({ data: { token: 'ghi789' } });
+  const startedAtMs = new Date('2026-03-05T10:00:00.000Z').getTime();
+
+  try {
+    vi.setSystemTime(startedAtMs);
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {} },
+      'https://auth.example.com/token-1',
+      'dXNlcjE6cGFzczE=',
+    );
+
+    vi.setSystemTime(startedAtMs + 1000);
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {} },
+      'https://auth.example.com/token-2',
+      'dXNlcjI6cGFzczI=',
+    );
+
+    vi.setSystemTime(startedAtMs + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS + 1001);
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {} },
+      'https://auth.example.com/token-3',
+      'dXNlcjM6cGFzczM=',
+    );
+
+    expect(getBearerTokenCacheSize(baseRegistry)).toBe(1);
+  } finally {
+    vi.useRealTimers();
+  }
 });

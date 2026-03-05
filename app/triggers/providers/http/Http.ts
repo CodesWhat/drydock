@@ -1,4 +1,5 @@
 import axios, { type AxiosRequestConfig } from 'axios';
+import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 import {
   failClosedAuth,
   requireAuthString,
@@ -64,7 +65,7 @@ class Http extends Trigger {
     let options: HttpRequestOptions = {
       method: this.configuration.method,
       url: this.configuration.url,
-      timeout: 30000,
+      timeout: getOutboundHttpTimeoutMs(),
     };
     if (this.configuration.method === 'POST') {
       options.data = body;

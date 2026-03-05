@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 
 import Trigger from '../Trigger.js';
 
@@ -70,7 +71,7 @@ class Apprise extends Trigger {
       method: 'POST',
       url: uri,
       data: body,
-      timeout: 30000,
+      timeout: getOutboundHttpTimeoutMs(),
     };
     const response = await axios(options);
     return response.data;
@@ -106,7 +107,7 @@ class Apprise extends Trigger {
       method: 'POST',
       url: uri,
       data: body,
-      timeout: 30000,
+      timeout: getOutboundHttpTimeoutMs(),
     };
     const response = await axios(options);
     return response.data;

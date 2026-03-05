@@ -1,4 +1,5 @@
 import axios, { type AxiosRequestConfig } from 'axios';
+import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 import Trigger from '../Trigger.js';
 
 /**
@@ -86,7 +87,7 @@ class Ntfy extends Trigger {
         'Content-Type': 'application/json',
       },
       data: body,
-      timeout: 30000,
+      timeout: getOutboundHttpTimeoutMs(),
     };
     if (auth?.user && auth?.password) {
       options.auth = {

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
 import { toPositiveInteger } from '../util/parse.js';
 import { initCollection } from './util.js';
 
@@ -85,7 +86,7 @@ interface UpdateOperationStoreDb {
 
 let updateOperationCollection: UpdateOperationCollection | undefined;
 const UPDATE_OPERATION_COLLECTION_INDICES = ['data.id', 'data.containerName', 'data.status'];
-const DEFAULT_UPDATE_OPERATION_MAX_ENTRIES = 500;
+const DEFAULT_UPDATE_OPERATION_MAX_ENTRIES = getDefaultCacheMaxEntries();
 const DEFAULT_UPDATE_OPERATION_RETENTION_DAYS = 30;
 const UPDATE_OPERATION_PRUNE_MUTATION_INTERVAL = 100;
 let updateOperationMutationsSincePrune = 0;

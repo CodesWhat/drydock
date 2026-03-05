@@ -270,4 +270,31 @@ describe('HTTP Trigger', () => {
       }),
     );
   });
+
+  test('should use centralized outbound timeout when env override is set', async () => {
+    const previousTimeout = process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+    process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = '1234';
+
+    try {
+      const { default: axios } = await import('axios');
+      axios.mockResolvedValue({ data: {} });
+      await http.register('trigger', 'http', 'test', {
+        url: 'https://example.com/webhook',
+      });
+
+      await http.trigger({ name: 'test' });
+
+      expect(axios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          timeout: 1234,
+        }),
+      );
+    } finally {
+      if (previousTimeout === undefined) {
+        delete process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+      } else {
+        process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = previousTimeout;
+      }
+    }
+  });
 });

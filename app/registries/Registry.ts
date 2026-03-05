@@ -5,6 +5,7 @@ import log from '../log/index.js';
 import type { ContainerImage } from '../model/container.js';
 import { getSummaryTags } from '../prometheus/registry.js';
 import Component from '../registry/Component.js';
+import { getRegistryRequestTimeoutMs } from './configuration.js';
 
 export interface RegistryImage extends ContainerImage {
   // Add any registry specific properties if needed
@@ -356,7 +357,7 @@ class Registry extends Component {
       method,
       headers,
       responseType: 'json',
-      timeout: 30000,
+      timeout: getRegistryRequestTimeoutMs(),
     };
 
     const axiosOptionsWithAuth = await this.authenticate(image, axiosOptions);

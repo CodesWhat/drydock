@@ -1,4 +1,5 @@
 import log from '../log/index.js';
+import { getRegistryRequestTimeoutMs } from './configuration.js';
 
 vi.mock('axios');
 vi.mock('../prometheus/registry', () => ({
@@ -428,12 +429,35 @@ describe('callRegistry', () => {
     ).rejects.toThrow('network error');
   });
 
-  test('should include 30s timeout in axios options', async () => {
+  test('should include configured timeout in axios options', async () => {
     const { default: axios } = await import('axios');
     axios.mockResolvedValue({ data: {} });
     const registryMocked = createMockedRegistry();
     await registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' });
-    expect(axios).toHaveBeenCalledWith(expect.objectContaining({ timeout: 30000 }));
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({ timeout: getRegistryRequestTimeoutMs() }),
+    );
+  });
+
+  test('should use centralized outbound timeout when env override is set', async () => {
+    const previousTimeout = process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+    process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = '2345';
+
+    try {
+      const { default: axios } = await import('axios');
+      axios.mockResolvedValue({ data: {} });
+      const registryMocked = createMockedRegistry();
+
+      await registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' });
+
+      expect(axios).toHaveBeenCalledWith(expect.objectContaining({ timeout: 2345 }));
+    } finally {
+      if (previousTimeout === undefined) {
+        delete process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+      } else {
+        process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = previousTimeout;
+      }
+    }
   });
 
   test('should set keep-alive http and https agents when authenticate does not provide them', async () => {

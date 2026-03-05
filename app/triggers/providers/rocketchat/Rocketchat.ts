@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 import Trigger from '../Trigger.js';
 
 interface RocketchatMessageBody {
@@ -119,7 +120,7 @@ class Rocketchat extends Trigger {
         'content-type': 'application/json',
         accept: 'application/json',
       },
-      timeout: 30000,
+      timeout: getOutboundHttpTimeoutMs(),
     };
   }
 }

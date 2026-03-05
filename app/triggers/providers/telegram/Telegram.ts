@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 import Trigger from '../Trigger.js';
 
 /**
@@ -99,7 +100,7 @@ class Telegram extends Trigger {
         text,
         parse_mode: this.getParseMode(),
       },
-      { timeout: 30000 },
+      { timeout: getOutboundHttpTimeoutMs() },
     );
 
     return response.data;

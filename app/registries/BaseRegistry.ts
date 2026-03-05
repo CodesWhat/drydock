@@ -3,6 +3,7 @@ import https from 'node:https';
 import axios, { type AxiosRequestConfig } from 'axios';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import { failClosedAuth, requireAuthString, withAuthorizationHeader } from '../security/auth.js';
+import { REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
 import Registry from './Registry.js';
 
 type RegistryRequestOptions = AxiosRequestConfig;
@@ -11,13 +12,19 @@ type RegistryRequestOptions = AxiosRequestConfig;
  * Base Registry with common patterns
  */
 class BaseRegistry extends Registry {
-  private static readonly BEARER_TOKEN_CACHE_TTL_MS = 5 * 60 * 1000;
-
   private httpsAgent?: https.Agent;
   private bearerTokenCache = new Map<string, { token: string; expiresAt: number }>();
 
   private getBearerTokenCacheKey(authUrl: string, credentials?: string) {
     return `${authUrl}|${credentials || ''}`;
+  }
+
+  private pruneExpiredBearerTokenCache(now: number) {
+    for (const [key, cachedToken] of this.bearerTokenCache.entries()) {
+      if (now >= cachedToken.expiresAt) {
+        this.bearerTokenCache.delete(key);
+      }
+    }
   }
 
   private getHttpsAgent() {
@@ -130,6 +137,7 @@ class BaseRegistry extends Registry {
     const tokenFailureMessage = `Unable to authenticate registry ${this.getId()}: token endpoint response does not contain token`;
     const cacheKey = this.getBearerTokenCacheKey(authUrl, credentials);
     const now = Date.now();
+    this.pruneExpiredBearerTokenCache(now);
     const cachedToken = this.bearerTokenCache.get(cacheKey);
     if (cachedToken && now < cachedToken.expiresAt) {
       return withAuthorizationHeader(
@@ -167,7 +175,7 @@ class BaseRegistry extends Registry {
     const token = requireAuthString(tokenExtractor(response), tokenFailureMessage);
     this.bearerTokenCache.set(cacheKey, {
       token,
-      expiresAt: Date.now() + BaseRegistry.BEARER_TOKEN_CACHE_TTL_MS,
+      expiresAt: Date.now() + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS,
     });
 
     return withAuthorizationHeader(requestOptionsWithAuth, 'Bearer', token, tokenFailureMessage);

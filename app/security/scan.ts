@@ -6,6 +6,7 @@ import {
   type SecuritySbomFormat,
   type SecuritySeverity,
 } from '../configuration/index.js';
+import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
 import log from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { toPositiveInteger } from '../util/parse.js';
@@ -108,7 +109,7 @@ const MAX_TRIVY_OUTPUT_BYTES = 50 * 1024 * 1024; // 50 MB
 const MAX_TRIVY_PARSE_BYTES = 20 * 1024 * 1024; // 20 MB
 const MAX_COSIGN_OUTPUT_BYTES = 2 * 1024 * 1024; // 2 MB
 const MAX_STORED_VULNERABILITIES = 500;
-const DEFAULT_DIGEST_SCAN_CACHE_MAX_ENTRIES = 500;
+const DEFAULT_DIGEST_SCAN_CACHE_MAX_ENTRIES = getDefaultCacheMaxEntries();
 const COSIGN_UNVERIFIED_PATTERNS = [
   'no matching signatures',
   'no signatures found',
