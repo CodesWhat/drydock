@@ -23,7 +23,7 @@ function createContext(overrides = {}) {
 }
 
 function createHarness(overrides = {}) {
-  const log = {
+  const rootLogger = {
     child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() })),
   };
   const deps = {
@@ -50,62 +50,169 @@ function createHarness(overrides = {}) {
   };
 
   const executor = new UpdateLifecycleExecutor({
-    getLogger: () => log,
-    ...deps,
+    logger: {
+      getLogger: () => rootLogger,
+    },
+    context: {
+      getContainerFullName: deps.getContainerFullName,
+      createTriggerContext: deps.createTriggerContext,
+    },
+    security: {
+      maybeScanAndGateUpdate: deps.maybeScanAndGateUpdate,
+    },
+    hooks: {
+      buildHookConfig: deps.buildHookConfig,
+      recordHookConfigurationAudit: deps.recordHookConfigurationAudit,
+      runPreUpdateHook: deps.runPreUpdateHook,
+      runPostUpdateHook: deps.runPostUpdateHook,
+    },
+    selfUpdate: {
+      isSelfUpdate: deps.isSelfUpdate,
+      maybeNotifySelfUpdate: deps.maybeNotifySelfUpdate,
+      executeSelfUpdate: deps.executeSelfUpdate,
+    },
+    runtimeUpdate: {
+      runPreRuntimeUpdateLifecycle: deps.runPreRuntimeUpdateLifecycle,
+      performContainerUpdate: deps.performContainerUpdate,
+    },
+    postUpdate: {
+      cleanupOldImages: deps.cleanupOldImages,
+      getRollbackConfig: deps.getRollbackConfig,
+      maybeStartAutoRollbackMonitor: deps.maybeStartAutoRollbackMonitor,
+      pruneOldBackups: deps.pruneOldBackups,
+      getBackupCount: deps.getBackupCount,
+    },
+    telemetry: {
+      emitContainerUpdateApplied: deps.emitContainerUpdateApplied,
+      emitContainerUpdateFailed: deps.emitContainerUpdateFailed,
+    },
   });
 
   return {
     executor,
-    log,
+    rootLogger,
     ...deps,
   };
 }
 
 describe('UpdateLifecycleExecutor', () => {
-  test('constructor provides logger fallback when omitted', () => {
+  test('constructor accepts grouped service facades', async () => {
+    const emitContainerUpdateApplied = vi.fn().mockResolvedValue(undefined);
     const executor = new UpdateLifecycleExecutor({
-      getContainerFullName: vi.fn(() => 'name'),
-      createTriggerContext: vi.fn().mockResolvedValue(undefined),
-      maybeScanAndGateUpdate: vi.fn(),
-      buildHookConfig: vi.fn(() => ({})),
-      recordHookConfigurationAudit: vi.fn(),
-      runPreUpdateHook: vi.fn(),
-      isSelfUpdate: vi.fn(() => false),
-      maybeNotifySelfUpdate: vi.fn(),
-      executeSelfUpdate: vi.fn(),
-      runPreRuntimeUpdateLifecycle: vi.fn(),
-      performContainerUpdate: vi.fn(),
-      runPostUpdateHook: vi.fn(),
-      cleanupOldImages: vi.fn(),
-      getRollbackConfig: vi.fn(() => ({})),
-      maybeStartAutoRollbackMonitor: vi.fn(),
-      emitContainerUpdateApplied: vi.fn(),
-      emitContainerUpdateFailed: vi.fn(),
+      logger: {
+        getLogger: () => ({
+          child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() })),
+        }),
+      },
+      context: {
+        getContainerFullName: vi.fn(() => 'name'),
+        createTriggerContext: vi.fn().mockResolvedValue(createContext()),
+      },
+      security: {
+        maybeScanAndGateUpdate: vi.fn().mockResolvedValue(undefined),
+      },
+      hooks: {
+        buildHookConfig: vi.fn(() => ({})),
+        recordHookConfigurationAudit: vi.fn(),
+        runPreUpdateHook: vi.fn().mockResolvedValue(undefined),
+        runPostUpdateHook: vi.fn().mockResolvedValue(undefined),
+      },
+      selfUpdate: {
+        isSelfUpdate: vi.fn(() => false),
+        maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
+        executeSelfUpdate: vi.fn().mockResolvedValue(true),
+      },
+      runtimeUpdate: {
+        runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
+        performContainerUpdate: vi.fn().mockResolvedValue(true),
+      },
+      postUpdate: {
+        cleanupOldImages: vi.fn().mockResolvedValue(undefined),
+        getRollbackConfig: vi.fn(() => ({})),
+        maybeStartAutoRollbackMonitor: vi.fn().mockResolvedValue(undefined),
+      },
+      telemetry: {
+        emitContainerUpdateApplied,
+        emitContainerUpdateFailed: vi.fn().mockResolvedValue(undefined),
+      },
     });
 
-    expect(executor.getLogger()).toBeUndefined();
+    await expect(executor.run(createContainer())).resolves.toBeUndefined();
+    expect(emitContainerUpdateApplied).toHaveBeenCalledWith('name');
+  });
+
+  test('constructor provides logger fallback when omitted', () => {
+    const executor = new UpdateLifecycleExecutor({
+      context: {
+        getContainerFullName: vi.fn(() => 'name'),
+        createTriggerContext: vi.fn().mockResolvedValue(undefined),
+      },
+      security: {
+        maybeScanAndGateUpdate: vi.fn(),
+      },
+      hooks: {
+        buildHookConfig: vi.fn(() => ({})),
+        recordHookConfigurationAudit: vi.fn(),
+        runPreUpdateHook: vi.fn(),
+        runPostUpdateHook: vi.fn(),
+      },
+      selfUpdate: {
+        isSelfUpdate: vi.fn(() => false),
+        maybeNotifySelfUpdate: vi.fn(),
+        executeSelfUpdate: vi.fn(),
+      },
+      runtimeUpdate: {
+        runPreRuntimeUpdateLifecycle: vi.fn(),
+        performContainerUpdate: vi.fn(),
+      },
+      postUpdate: {
+        cleanupOldImages: vi.fn(),
+        getRollbackConfig: vi.fn(() => ({})),
+        maybeStartAutoRollbackMonitor: vi.fn(),
+      },
+      telemetry: {
+        emitContainerUpdateApplied: vi.fn(),
+        emitContainerUpdateFailed: vi.fn(),
+      },
+    });
+
+    expect(executor.logger.getLogger()).toBeUndefined();
   });
 
   test('run should tolerate missing logger child factory', async () => {
     const emitContainerUpdateApplied = vi.fn().mockResolvedValue(undefined);
     const executor = new UpdateLifecycleExecutor({
-      getContainerFullName: vi.fn(() => 'name'),
-      createTriggerContext: vi.fn().mockResolvedValue(createContext()),
-      maybeScanAndGateUpdate: vi.fn().mockResolvedValue(undefined),
-      buildHookConfig: vi.fn(() => ({})),
-      recordHookConfigurationAudit: vi.fn(),
-      runPreUpdateHook: vi.fn().mockResolvedValue(undefined),
-      isSelfUpdate: vi.fn(() => false),
-      maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
-      executeSelfUpdate: vi.fn().mockResolvedValue(true),
-      runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
-      performContainerUpdate: vi.fn().mockResolvedValue(true),
-      runPostUpdateHook: vi.fn().mockResolvedValue(undefined),
-      cleanupOldImages: vi.fn().mockResolvedValue(undefined),
-      getRollbackConfig: vi.fn(() => ({})),
-      maybeStartAutoRollbackMonitor: vi.fn().mockResolvedValue(undefined),
-      emitContainerUpdateApplied,
-      emitContainerUpdateFailed: vi.fn().mockResolvedValue(undefined),
+      context: {
+        getContainerFullName: vi.fn(() => 'name'),
+        createTriggerContext: vi.fn().mockResolvedValue(createContext()),
+      },
+      security: {
+        maybeScanAndGateUpdate: vi.fn().mockResolvedValue(undefined),
+      },
+      hooks: {
+        buildHookConfig: vi.fn(() => ({})),
+        recordHookConfigurationAudit: vi.fn(),
+        runPreUpdateHook: vi.fn().mockResolvedValue(undefined),
+        runPostUpdateHook: vi.fn().mockResolvedValue(undefined),
+      },
+      selfUpdate: {
+        isSelfUpdate: vi.fn(() => false),
+        maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
+        executeSelfUpdate: vi.fn().mockResolvedValue(true),
+      },
+      runtimeUpdate: {
+        runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
+        performContainerUpdate: vi.fn().mockResolvedValue(true),
+      },
+      postUpdate: {
+        cleanupOldImages: vi.fn().mockResolvedValue(undefined),
+        getRollbackConfig: vi.fn(() => ({})),
+        maybeStartAutoRollbackMonitor: vi.fn().mockResolvedValue(undefined),
+      },
+      telemetry: {
+        emitContainerUpdateApplied,
+        emitContainerUpdateFailed: vi.fn().mockResolvedValue(undefined),
+      },
     });
 
     await expect(executor.run(createContainer())).resolves.toBeUndefined();
@@ -115,24 +222,42 @@ describe('UpdateLifecycleExecutor', () => {
   test('constructor provides prune/getBackup defaults when omitted', async () => {
     const emitContainerUpdateApplied = vi.fn().mockResolvedValue(undefined);
     const executor = new UpdateLifecycleExecutor({
-      getLogger: () => ({ child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() })) }),
-      getContainerFullName: vi.fn(() => 'name'),
-      createTriggerContext: vi.fn().mockResolvedValue(createContext()),
-      maybeScanAndGateUpdate: vi.fn().mockResolvedValue(undefined),
-      buildHookConfig: vi.fn(() => ({})),
-      recordHookConfigurationAudit: vi.fn(),
-      runPreUpdateHook: vi.fn().mockResolvedValue(undefined),
-      isSelfUpdate: vi.fn(() => false),
-      maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
-      executeSelfUpdate: vi.fn().mockResolvedValue(true),
-      runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
-      performContainerUpdate: vi.fn().mockResolvedValue(true),
-      runPostUpdateHook: vi.fn().mockResolvedValue(undefined),
-      cleanupOldImages: vi.fn().mockResolvedValue(undefined),
-      getRollbackConfig: vi.fn(() => ({})),
-      maybeStartAutoRollbackMonitor: vi.fn().mockResolvedValue(undefined),
-      emitContainerUpdateApplied,
-      emitContainerUpdateFailed: vi.fn().mockResolvedValue(undefined),
+      logger: {
+        getLogger: () => ({
+          child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() })),
+        }),
+      },
+      context: {
+        getContainerFullName: vi.fn(() => 'name'),
+        createTriggerContext: vi.fn().mockResolvedValue(createContext()),
+      },
+      security: {
+        maybeScanAndGateUpdate: vi.fn().mockResolvedValue(undefined),
+      },
+      hooks: {
+        buildHookConfig: vi.fn(() => ({})),
+        recordHookConfigurationAudit: vi.fn(),
+        runPreUpdateHook: vi.fn().mockResolvedValue(undefined),
+        runPostUpdateHook: vi.fn().mockResolvedValue(undefined),
+      },
+      selfUpdate: {
+        isSelfUpdate: vi.fn(() => false),
+        maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
+        executeSelfUpdate: vi.fn().mockResolvedValue(true),
+      },
+      runtimeUpdate: {
+        runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
+        performContainerUpdate: vi.fn().mockResolvedValue(true),
+      },
+      postUpdate: {
+        cleanupOldImages: vi.fn().mockResolvedValue(undefined),
+        getRollbackConfig: vi.fn(() => ({})),
+        maybeStartAutoRollbackMonitor: vi.fn().mockResolvedValue(undefined),
+      },
+      telemetry: {
+        emitContainerUpdateApplied,
+        emitContainerUpdateFailed: vi.fn().mockResolvedValue(undefined),
+      },
     });
 
     await expect(executor.run(createContainer())).resolves.toBeUndefined();
@@ -141,7 +266,7 @@ describe('UpdateLifecycleExecutor', () => {
 
   test('constructor should throw when required dependencies are missing', () => {
     expect(() => new UpdateLifecycleExecutor({} as never)).toThrow(
-      'UpdateLifecycleExecutor requires dependency "getContainerFullName"',
+      'UpdateLifecycleExecutor requires dependency "context.getContainerFullName"',
     );
   });
 

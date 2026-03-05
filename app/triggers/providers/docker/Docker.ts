@@ -220,14 +220,47 @@ class Docker extends Trigger {
       startHealthMonitor,
       getTriggerInstance: () => this,
     });
+    const updateLifecycleCallbacks = pickOrchestratorCallbacks(
+      this,
+      UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS,
+    );
     this.updateLifecycleExecutor = new UpdateLifecycleExecutor({
-      getLogger: () => this.log,
-      getContainerFullName: (container) => fullName(container),
-      ...pickOrchestratorCallbacks(this, UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS),
-      emitContainerUpdateApplied,
-      emitContainerUpdateFailed,
-      pruneOldBackups: backupStore.pruneOldBackups,
-      getBackupCount: () => this.configuration?.backupcount,
+      logger: {
+        getLogger: () => this.log,
+      },
+      context: {
+        getContainerFullName: (container) => fullName(container as any),
+        createTriggerContext: updateLifecycleCallbacks.createTriggerContext,
+      },
+      security: {
+        maybeScanAndGateUpdate: updateLifecycleCallbacks.maybeScanAndGateUpdate,
+      },
+      hooks: {
+        buildHookConfig: updateLifecycleCallbacks.buildHookConfig,
+        recordHookConfigurationAudit: updateLifecycleCallbacks.recordHookConfigurationAudit,
+        runPreUpdateHook: updateLifecycleCallbacks.runPreUpdateHook,
+        runPostUpdateHook: updateLifecycleCallbacks.runPostUpdateHook,
+      },
+      selfUpdate: {
+        isSelfUpdate: updateLifecycleCallbacks.isSelfUpdate,
+        maybeNotifySelfUpdate: updateLifecycleCallbacks.maybeNotifySelfUpdate,
+        executeSelfUpdate: updateLifecycleCallbacks.executeSelfUpdate,
+      },
+      runtimeUpdate: {
+        runPreRuntimeUpdateLifecycle: updateLifecycleCallbacks.runPreRuntimeUpdateLifecycle,
+        performContainerUpdate: updateLifecycleCallbacks.performContainerUpdate,
+      },
+      postUpdate: {
+        cleanupOldImages: updateLifecycleCallbacks.cleanupOldImages,
+        getRollbackConfig: updateLifecycleCallbacks.getRollbackConfig,
+        maybeStartAutoRollbackMonitor: updateLifecycleCallbacks.maybeStartAutoRollbackMonitor,
+        pruneOldBackups: backupStore.pruneOldBackups,
+        getBackupCount: () => this.configuration?.backupcount,
+      },
+      telemetry: {
+        emitContainerUpdateApplied,
+        emitContainerUpdateFailed,
+      },
     });
   }
 
@@ -647,7 +680,7 @@ class Docker extends Trigger {
     const endpointsConfig = Object.entries(currentContainerNetworks).reduce(
       (acc: Record<string, unknown>, [networkName, endpointConfig]) => {
         acc[networkName] = this.runtimeConfigManager.sanitizeEndpointConfig(
-          endpointConfig,
+          endpointConfig as Record<string, unknown> | null | undefined,
           currentContainer.Id,
         );
         return acc;
@@ -673,7 +706,12 @@ class Docker extends Trigger {
         )
       : sanitizedContainerConfig;
 
-    const containerClone = {
+    const containerClone: {
+      HostConfig?: { NetworkMode?: string };
+      Hostname?: unknown;
+      ExposedPorts?: unknown;
+      [key: string]: unknown;
+    } = {
       ...clonedContainerConfig,
       name: containerName,
       Image: newImage,
