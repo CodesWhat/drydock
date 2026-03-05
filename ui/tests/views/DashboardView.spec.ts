@@ -159,6 +159,134 @@ describe('DashboardView', () => {
     });
   });
 
+  describe('maintenance countdown timer', () => {
+    const maintenanceWindowWatcher = {
+      id: 'w1',
+      configuration: {
+        maintenanceWindow: 'Sun 02:00-03:00 UTC',
+      },
+    };
+    let originalVisibilityState: PropertyDescriptor | undefined;
+
+    const setVisibilityState = (state: DocumentVisibilityState) => {
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => state,
+      });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+
+    beforeEach(() => {
+      originalVisibilityState = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+      setVisibilityState('visible');
+    });
+
+    afterEach(() => {
+      if (originalVisibilityState) {
+        Object.defineProperty(document, 'visibilityState', originalVisibilityState);
+      } else {
+        Reflect.deleteProperty(document, 'visibilityState');
+      }
+    });
+
+    it('does not start timer when no maintenance windows exist', async () => {
+      vi.useFakeTimers();
+      const setIntervalSpy = vi.spyOn(window, 'setInterval');
+
+      try {
+        await mountDashboard([makeContainer()], [], {}, { watchers: [] });
+        expect(setIntervalSpy).not.toHaveBeenCalled();
+      } finally {
+        setIntervalSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('starts timer when at least one maintenance window exists', async () => {
+      vi.useFakeTimers();
+      const setIntervalSpy = vi.spyOn(window, 'setInterval');
+
+      try {
+        await mountDashboard([makeContainer()], [], {}, { watchers: [maintenanceWindowWatcher] });
+        expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+        expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30_000);
+      } finally {
+        setIntervalSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('pauses while hidden and resumes when visible again', async () => {
+      vi.useFakeTimers();
+      const setIntervalSpy = vi.spyOn(window, 'setInterval');
+      const clearIntervalSpy = vi.spyOn(window, 'clearInterval');
+
+      try {
+        await mountDashboard([makeContainer()], [], {}, { watchers: [maintenanceWindowWatcher] });
+        expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+        const timerId = setIntervalSpy.mock.results[0]?.value;
+
+        setVisibilityState('hidden');
+        expect(clearIntervalSpy).toHaveBeenCalledWith(timerId);
+
+        setVisibilityState('visible');
+        expect(setIntervalSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        clearIntervalSpy.mockRestore();
+        setIntervalSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('stops timer when maintenance windows are removed after refresh', async () => {
+      vi.useFakeTimers();
+      const setIntervalSpy = vi.spyOn(window, 'setInterval');
+      const clearIntervalSpy = vi.spyOn(window, 'clearInterval');
+
+      try {
+        await mountDashboard([makeContainer()], [], {}, { watchers: [maintenanceWindowWatcher] });
+        expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+        const timerId = setIntervalSpy.mock.results[0]?.value;
+
+        mockGetAllWatchers.mockResolvedValueOnce([]);
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+        vi.advanceTimersByTime(1_000);
+        await flushPromises();
+
+        expect(clearIntervalSpy).toHaveBeenCalledWith(timerId);
+      } finally {
+        clearIntervalSpy.mockRestore();
+        setIntervalSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('clears the timer on unmount', async () => {
+      vi.useFakeTimers();
+      const setIntervalSpy = vi.spyOn(window, 'setInterval');
+      const clearIntervalSpy = vi.spyOn(window, 'clearInterval');
+
+      try {
+        const wrapper = await mountDashboard(
+          [makeContainer()],
+          [],
+          {},
+          { watchers: [maintenanceWindowWatcher] },
+        );
+        const timerId = setIntervalSpy.mock.results[0]?.value;
+
+        mountedWrappers.splice(mountedWrappers.indexOf(wrapper), 1);
+        wrapper.unmount();
+
+        expect(clearIntervalSpy).toHaveBeenCalledWith(timerId);
+      } finally {
+        clearIntervalSpy.mockRestore();
+        setIntervalSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe('SSE refresh behavior', () => {
     it('refreshes dashboard data on dd:sse-container-changed', async () => {
       vi.useFakeTimers();
@@ -741,6 +869,27 @@ describe('DashboardView', () => {
       expect(wrapper.text()).toContain('Minor');
       expect(wrapper.text()).toContain('Patch');
       expect(wrapper.text()).toContain('Digest');
+    });
+
+    it('does not re-filter update kinds on unrelated renders', async () => {
+      const containers = [
+        makeContainer({ updateKind: 'major', newTag: '2.0.0' }),
+        makeContainer({ id: 'c2', name: 'redis', updateKind: 'minor', newTag: '1.1.0' }),
+        makeContainer({ id: 'c3', name: 'pg', updateKind: 'patch', newTag: '1.0.1' }),
+        makeContainer({ id: 'c4', name: 'mongo', updateKind: 'digest', newTag: 'sha256:abc' }),
+      ];
+      const containerFilterSpy = vi.spyOn(containers, 'filter');
+      try {
+        const wrapper = await mountDashboard(containers);
+        const initialFilterCalls = containerFilterSpy.mock.calls.length;
+
+        await wrapper.find('[data-widget-id="stat-containers"]').trigger('dragstart');
+        await flushPromises();
+
+        expect(containerFilterSpy.mock.calls.length).toBe(initialFilterCalls);
+      } finally {
+        containerFilterSpy.mockRestore();
+      }
     });
 
     it('shows an empty state when no updates are pending', async () => {

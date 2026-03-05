@@ -1,21 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
-import { preferences } from '../preferences/store';
-import { getAgents } from '../services/agent';
-import { getAuditLog } from '../services/audit';
-import { getAllContainers } from '../services/container';
-import { getAllRegistries } from '../services/registry';
-import { getServer } from '../services/server';
-import { getAllWatchers } from '../services/watcher';
-import type { ApiWatcherConfiguration } from '../types/api';
-import type { Container } from '../types/container';
-import { mapApiContainers } from '../utils/container-mapper';
-import {
-  buildDashboardContainerMetrics,
-  type ImageSecurityAggregate,
-} from '../utils/dashboard-container-metrics';
-import { errorMessage } from '../utils/error';
+import { useDashboardComputed } from './dashboard/useDashboardComputed';
+import { useDashboardData } from './dashboard/useDashboardData';
+import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
 
 const router = useRouter();
 
@@ -23,673 +10,59 @@ function navigateTo(route: RouteLocationRaw) {
   router.push(route);
 }
 
-const DASHBOARD_REALTIME_REFRESH_DEBOUNCE_MS = 1_000;
-const DASHBOARD_WIDGET_IDS = [
-  'stat-containers',
-  'stat-updates',
-  'stat-security',
-  'stat-registries',
-  'recent-updates',
-  'security-overview',
-  'host-status',
-  'update-breakdown',
-] as const;
-type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
+const {
+  draggedWidgetId,
+  onWidgetDragEnd,
+  onWidgetDragOver,
+  onWidgetDragStart,
+  onWidgetDrop,
+  widgetOrderIndex,
+  widgetOrderStyle,
+} = useDashboardWidgetOrder();
 
-function isDashboardWidgetId(value: unknown): value is DashboardWidgetId {
-  return typeof value === 'string' && (DASHBOARD_WIDGET_IDS as readonly string[]).includes(value);
-}
+const {
+  agents,
+  containers,
+  error,
+  fetchDashboardData,
+  loading,
+  maintenanceCountdownNow,
+  recentStatusByContainer,
+  registries,
+  serverInfo,
+  watchers,
+} = useDashboardData();
 
-function sanitizeWidgetOrder(rawOrder: unknown): DashboardWidgetId[] {
-  if (!Array.isArray(rawOrder)) {
-    return [...DASHBOARD_WIDGET_IDS];
-  }
-
-  const seen = new Set<DashboardWidgetId>();
-  const normalized: DashboardWidgetId[] = [];
-  for (const value of rawOrder) {
-    if (!isDashboardWidgetId(value) || seen.has(value)) {
-      continue;
-    }
-    seen.add(value);
-    normalized.push(value);
-  }
-
-  for (const id of DASHBOARD_WIDGET_IDS) {
-    if (!seen.has(id)) {
-      normalized.push(id);
-    }
-  }
-
-  return normalized;
-}
-
-// Loading and error state
-const loading = ref(true);
-const error = ref<string | null>(null);
-
-// Raw data from APIs
-const containers = ref<Container[]>([]);
-interface DashboardServerInfo {
-  configuration?: {
-    webhook?: {
-      enabled?: boolean;
-    };
-  };
-}
-
-interface DashboardAgent {
-  name: string;
-  connected: boolean;
-  host?: string;
-  port?: number | string;
-}
-
-const serverInfo = ref<DashboardServerInfo | null>(null);
-const agents = ref<DashboardAgent[]>([]);
-const watchers = ref<unknown[]>([]);
-const registries = ref<unknown[]>([]);
-type RecentAuditStatus = 'updated' | 'pending' | 'failed';
-const recentStatusByContainer = ref<Record<string, RecentAuditStatus>>({});
-const maintenanceCountdownNow = ref(Date.now());
-let maintenanceCountdownTimer: ReturnType<typeof setInterval> | undefined;
-let realtimeRefreshTimer: ReturnType<typeof setTimeout> | undefined;
-const widgetOrder = ref<DashboardWidgetId[]>([...DASHBOARD_WIDGET_IDS]);
-const draggedWidgetId = ref<DashboardWidgetId | null>(null);
-
-function mapAuditActionToRecentStatus(action: unknown): RecentAuditStatus | null {
-  if (action === 'update-applied') return 'updated';
-  if (action === 'update-failed') return 'failed';
-  if (action === 'update-available') return 'pending';
-  return null;
-}
-
-function buildRecentStatusByContainer(entries: unknown): Record<string, RecentAuditStatus> {
-  if (!Array.isArray(entries)) return {};
-  const statusByContainer: Record<string, RecentAuditStatus> = {};
-  for (const entry of entries) {
-    if (!entry || typeof entry !== 'object') continue;
-    const containerNameRaw = (entry as { containerName?: unknown }).containerName;
-    const containerName = typeof containerNameRaw === 'string' ? containerNameRaw.trim() : '';
-    if (!containerName || statusByContainer[containerName]) continue;
-    const mappedStatus = mapAuditActionToRecentStatus((entry as { action?: unknown }).action);
-    if (!mappedStatus) continue;
-    statusByContainer[containerName] = mappedStatus;
-  }
-  return statusByContainer;
-}
-
-function loadWidgetOrder() {
-  widgetOrder.value = sanitizeWidgetOrder(preferences.dashboard.widgetOrder);
-}
-
-function persistWidgetOrder(order: DashboardWidgetId[]) {
-  preferences.dashboard.widgetOrder = [...order];
-}
-
-watch(widgetOrder, (order) => {
-  persistWidgetOrder(order);
+const {
+  DONUT_CIRCUMFERENCE,
+  getRecentUpdateStatusColor,
+  getRecentUpdateStatusIcon,
+  getRecentUpdateStatusMutedColor,
+  recentUpdates,
+  securityCleanArcLength,
+  securityCleanCount,
+  securityIssueArcLength,
+  securityIssueCount,
+  securityNotScannedArcLength,
+  securityNotScannedCount,
+  securitySeverityTotals,
+  securityTotalCount,
+  servers,
+  showSecuritySeverityBreakdown,
+  stats,
+  totalUpdates,
+  updateBreakdownBuckets,
+  vulnerabilities,
+  webhookApiEnabled,
+} = useDashboardComputed({
+  agents,
+  containers,
+  maintenanceCountdownNow,
+  recentStatusByContainer,
+  registries,
+  serverInfo,
+  watchers,
 });
-
-function widgetOrderIndex(widgetId: DashboardWidgetId) {
-  const index = widgetOrder.value.indexOf(widgetId);
-  return index >= 0 ? index : DASHBOARD_WIDGET_IDS.indexOf(widgetId);
-}
-
-function widgetOrderStyle(widgetId: DashboardWidgetId) {
-  return {
-    order: widgetOrderIndex(widgetId),
-  };
-}
-
-function moveWidget(draggedId: DashboardWidgetId, targetId: DashboardWidgetId) {
-  if (draggedId === targetId) {
-    return;
-  }
-
-  const nextOrder = [...widgetOrder.value];
-  const draggedIndex = nextOrder.indexOf(draggedId);
-  const targetIndex = nextOrder.indexOf(targetId);
-  if (draggedIndex < 0 || targetIndex < 0) {
-    return;
-  }
-
-  nextOrder.splice(draggedIndex, 1);
-  nextOrder.splice(targetIndex, 0, draggedId);
-  widgetOrder.value = nextOrder;
-}
-
-function onWidgetDragStart(widgetId: DashboardWidgetId, event: DragEvent) {
-  draggedWidgetId.value = widgetId;
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', widgetId);
-  }
-}
-
-function onWidgetDragOver(widgetId: DashboardWidgetId, event: DragEvent) {
-  if (!draggedWidgetId.value || draggedWidgetId.value === widgetId) {
-    return;
-  }
-  event.preventDefault();
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'move';
-  }
-}
-
-function onWidgetDrop(widgetId: DashboardWidgetId, event: DragEvent) {
-  event.preventDefault();
-  const transferWidgetId = event.dataTransfer?.getData('text/plain');
-  const draggedId = isDashboardWidgetId(transferWidgetId)
-    ? transferWidgetId
-    : draggedWidgetId.value;
-  if (!draggedId || draggedId === widgetId) {
-    draggedWidgetId.value = null;
-    return;
-  }
-  moveWidget(draggedId, widgetId);
-  draggedWidgetId.value = null;
-}
-
-function onWidgetDragEnd() {
-  draggedWidgetId.value = null;
-}
-
-function resetWidgetOrder() {
-  widgetOrder.value = [...DASHBOARD_WIDGET_IDS];
-}
-
-interface DashboardRefreshOptions {
-  background?: boolean;
-}
-
-async function fetchDashboardData(options: DashboardRefreshOptions = {}) {
-  const background = options.background === true;
-  const hasRenderedData =
-    containers.value.length > 0 ||
-    watchers.value.length > 0 ||
-    registries.value.length > 0 ||
-    agents.value.length > 0 ||
-    serverInfo.value !== null;
-
-  if (!background) {
-    loading.value = true;
-    error.value = null;
-  }
-  try {
-    const [containersRes, serverRes, agentsRes, watchersRes, registriesRes, auditLogRes] =
-      await Promise.all([
-        getAllContainers(),
-        getServer().catch(() => null),
-        getAgents().catch(() => []),
-        getAllWatchers().catch(() => []),
-        getAllRegistries().catch(() => []),
-        getAuditLog({ limit: 100 }).catch(() => ({ entries: [] })),
-      ]);
-    containers.value = mapApiContainers(containersRes);
-    serverInfo.value = serverRes;
-    agents.value = agentsRes;
-    watchers.value = Array.isArray(watchersRes) ? watchersRes : [];
-    registries.value = Array.isArray(registriesRes) ? registriesRes : [];
-
-    const auditEntries = Array.isArray((auditLogRes as { entries?: unknown }).entries)
-      ? (auditLogRes as { entries: unknown[] }).entries
-      : [];
-    recentStatusByContainer.value = buildRecentStatusByContainer(auditEntries);
-    error.value = null;
-  } catch (e: unknown) {
-    if (!background || !hasRenderedData) {
-      error.value = errorMessage(e, 'Failed to load dashboard data');
-    } else {
-      console.debug(errorMessage(e, 'Dashboard background refresh failed'));
-    }
-  } finally {
-    if (!background) {
-      loading.value = false;
-    }
-  }
-}
-
-function handleRealtimeRefresh() {
-  if (realtimeRefreshTimer !== undefined) {
-    clearTimeout(realtimeRefreshTimer);
-  }
-  realtimeRefreshTimer = window.setTimeout(() => {
-    realtimeRefreshTimer = undefined;
-    void fetchDashboardData({ background: true });
-  }, DASHBOARD_REALTIME_REFRESH_DEBOUNCE_MS);
-}
-
-const realtimeRefreshListener = handleRealtimeRefresh as EventListener;
-
-onMounted(async () => {
-  loadWidgetOrder();
-  globalThis.addEventListener('dd:sse-container-changed', realtimeRefreshListener);
-  globalThis.addEventListener('dd:sse-scan-completed', realtimeRefreshListener);
-  globalThis.addEventListener('dd:sse-connected', realtimeRefreshListener);
-  maintenanceCountdownTimer = window.setInterval(() => {
-    maintenanceCountdownNow.value = Date.now();
-  }, 30_000);
-  await fetchDashboardData();
-});
-
-onUnmounted(() => {
-  globalThis.removeEventListener('dd:sse-container-changed', realtimeRefreshListener);
-  globalThis.removeEventListener('dd:sse-scan-completed', realtimeRefreshListener);
-  globalThis.removeEventListener('dd:sse-connected', realtimeRefreshListener);
-  if (realtimeRefreshTimer !== undefined) {
-    clearTimeout(realtimeRefreshTimer);
-    realtimeRefreshTimer = undefined;
-  }
-  if (maintenanceCountdownTimer !== undefined) {
-    clearInterval(maintenanceCountdownTimer);
-    maintenanceCountdownTimer = undefined;
-  }
-});
-
-function getWatcherConfiguration(watcher: Record<string, unknown>): ApiWatcherConfiguration {
-  if (watcher?.configuration && typeof watcher.configuration === 'object') {
-    return watcher.configuration as ApiWatcherConfiguration;
-  }
-  if (watcher?.config && typeof watcher.config === 'object') {
-    return watcher.config as ApiWatcherConfiguration;
-  }
-  return {};
-}
-
-const maintenanceWindowWatchers = computed(() =>
-  watchers.value.filter((watcher) => {
-    const configuration = getWatcherConfiguration(watcher as Record<string, unknown>);
-    const maintenanceWindow = configuration.maintenancewindow ?? configuration.maintenanceWindow;
-    return typeof maintenanceWindow === 'string' && maintenanceWindow.trim().length > 0;
-  }),
-);
-
-const maintenanceWindowOpenCount = computed(
-  () =>
-    maintenanceWindowWatchers.value.filter((watcher) => {
-      const configuration = getWatcherConfiguration(watcher as Record<string, unknown>);
-      const open = configuration.maintenancewindowopen ?? configuration.maintenanceWindowOpen;
-      return open === true;
-    }).length,
-);
-
-const nextMaintenanceWindowAt = computed<number | undefined>(() => {
-  const windows = maintenanceWindowWatchers.value
-    .map((watcher) => {
-      const configuration = getWatcherConfiguration(watcher as Record<string, unknown>);
-      return configuration.maintenancenextwindow ?? configuration.maintenanceNextWindow;
-    })
-    .map((value: unknown) => {
-      if (typeof value !== 'string') return undefined;
-      const parsed = Date.parse(value);
-      return Number.isNaN(parsed) ? undefined : parsed;
-    })
-    .filter((value): value is number => value !== undefined);
-
-  if (windows.length === 0) {
-    return undefined;
-  }
-
-  return Math.min(...windows);
-});
-
-function formatMaintenanceDuration(durationMs: number): string {
-  const totalMinutes = Math.max(1, Math.ceil(durationMs / 60_000));
-  const days = Math.floor(totalMinutes / (24 * 60));
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
-  const minutes = totalMinutes % 60;
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-}
-
-const maintenanceCountdownLabel = computed(() => {
-  if (maintenanceWindowWatchers.value.length === 0) {
-    return '';
-  }
-  if (maintenanceWindowOpenCount.value > 0) {
-    return 'Open now';
-  }
-  if (!nextMaintenanceWindowAt.value) {
-    return 'Scheduled';
-  }
-  const remainingMs = nextMaintenanceWindowAt.value - maintenanceCountdownNow.value;
-  if (remainingMs <= 0) {
-    return 'Opening soon';
-  }
-  return formatMaintenanceDuration(remainingMs);
-});
-
-const containerMetrics = computed(() => buildDashboardContainerMetrics(containers.value));
-const securityByImage = computed<ImageSecurityAggregate[]>(
-  () => containerMetrics.value.securityByImage,
-);
-
-const securityCounts = computed(() => {
-  let clean = 0;
-  let issues = 0;
-  let notScanned = 0;
-
-  for (const aggregate of securityByImage.value) {
-    if (!aggregate.scanned) {
-      notScanned += 1;
-    } else if (aggregate.hasIssue) {
-      issues += 1;
-    } else {
-      clean += 1;
-    }
-  }
-
-  return { clean, issues, notScanned };
-});
-const securityCleanCount = computed(() => securityCounts.value.clean);
-const securityIssueCount = computed(() => securityCounts.value.issues);
-const securityNotScannedCount = computed(() => securityCounts.value.notScanned);
-const securitySeverityTotals = computed(() =>
-  securityByImage.value.reduce(
-    (totals, aggregate) => {
-      totals.critical += aggregate.summary.critical;
-      totals.high += aggregate.summary.high;
-      totals.medium += aggregate.summary.medium;
-      totals.low += aggregate.summary.low;
-      return totals;
-    },
-    { critical: 0, high: 0, medium: 0, low: 0 },
-  ),
-);
-const showSecuritySeverityBreakdown = computed(() => {
-  const totals = securitySeverityTotals.value;
-  return totals.critical + totals.high + totals.medium + totals.low > 0;
-});
-const securityTotalCount = computed(() => securityByImage.value.length);
-
-// Computed: stat cards
-const stats = computed(() => {
-  const {
-    totalContainers: total,
-    runningContainers: running,
-    updatesAvailable,
-    securityIssueImageCount: securityIssues,
-  } = containerMetrics.value;
-
-  const stopped = Math.max(total - running, 0);
-  const registryCount = registries.value.length;
-  return [
-    {
-      id: 'stat-containers' as DashboardWidgetId,
-      label: 'Containers',
-      value: String(total),
-      icon: 'containers',
-      color: 'var(--dd-primary)',
-      colorMuted: 'var(--dd-primary-muted)',
-      route: '/containers',
-      detail: `${running} running · ${stopped} stopped`,
-    },
-    {
-      id: 'stat-updates' as DashboardWidgetId,
-      label: 'Updates Available',
-      value: String(updatesAvailable),
-      icon: 'updates',
-      color: (() => {
-        if (updatesAvailable === 0) return 'var(--dd-success)';
-        const ratio = total > 0 ? updatesAvailable / total : 0;
-        if (ratio >= 0.75) return 'var(--dd-danger)';
-        if (ratio >= 0.5) return 'var(--dd-warning)';
-        return 'var(--dd-caution)';
-      })(),
-      colorMuted: (() => {
-        if (updatesAvailable === 0) return 'var(--dd-success-muted)';
-        const ratio = total > 0 ? updatesAvailable / total : 0;
-        if (ratio >= 0.75) return 'var(--dd-danger-muted)';
-        if (ratio >= 0.5) return 'var(--dd-warning-muted)';
-        return 'var(--dd-caution-muted)';
-      })(),
-      route: { path: '/containers', query: { filterKind: 'any' } },
-    },
-    {
-      id: 'stat-security' as DashboardWidgetId,
-      label: 'Security Issues',
-      value: String(securityIssues),
-      icon: 'security',
-      color: securityIssues > 0 ? 'var(--dd-danger)' : 'var(--dd-success)',
-      colorMuted: securityIssues > 0 ? 'var(--dd-danger-muted)' : 'var(--dd-success-muted)',
-      route: '/security',
-    },
-    {
-      id: 'stat-registries' as DashboardWidgetId,
-      label: 'Registries',
-      value: String(registryCount),
-      icon: 'registries',
-      color: 'var(--dd-primary)',
-      colorMuted: 'var(--dd-primary-muted)',
-      route: '/registries',
-    },
-  ];
-});
-
-interface RecentUpdateRow {
-  id: string;
-  name: string;
-  image: string;
-  icon: string;
-  oldVer: string;
-  newVer: string;
-  releaseLink?: string;
-  status: 'updated' | 'pending' | 'failed' | 'error' | 'snoozed' | 'skipped';
-  running: boolean;
-  registryError?: string;
-}
-
-function getRecentUpdateStatusColor(status: RecentUpdateRow['status']): string {
-  switch (status) {
-    case 'updated':
-      return 'var(--dd-success)';
-    case 'pending':
-      return 'var(--dd-warning)';
-    case 'snoozed':
-      return 'var(--dd-primary)';
-    case 'skipped':
-      return 'var(--dd-text-muted)';
-    case 'failed':
-    case 'error':
-      return 'var(--dd-danger)';
-  }
-}
-
-function getRecentUpdateStatusMutedColor(status: RecentUpdateRow['status']): string {
-  switch (status) {
-    case 'updated':
-      return 'var(--dd-success-muted)';
-    case 'pending':
-      return 'var(--dd-warning-muted)';
-    case 'snoozed':
-      return 'var(--dd-primary-muted)';
-    case 'skipped':
-      return 'var(--dd-bg-elevated)';
-    case 'failed':
-    case 'error':
-      return 'var(--dd-danger-muted)';
-  }
-}
-
-function getRecentUpdateStatusIcon(status: RecentUpdateRow['status']): string {
-  switch (status) {
-    case 'updated':
-      return 'check';
-    case 'pending':
-      return 'pending';
-    case 'snoozed':
-      return 'pending';
-    case 'skipped':
-      return 'skip-forward';
-    case 'failed':
-    case 'error':
-      return 'xmark';
-  }
-}
-
-function deriveRecentUpdateStatus(container: Container): RecentUpdateRow['status'] {
-  if (container.updatePolicyState === 'snoozed') {
-    return 'snoozed';
-  }
-  if (container.updatePolicyState === 'skipped') {
-    return 'skipped';
-  }
-  return recentStatusByContainer.value[container.name] ?? 'pending';
-}
-
-function deriveRecentUpdateVersion(container: Container): string {
-  if (container.newTag) {
-    return container.newTag;
-  }
-  return container.suppressedUpdateTag ?? '';
-}
-
-function parseDetectedAt(value?: string): number {
-  if (!value) return 0;
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
-
-// Computed: recent updates + registry-check failures
-const recentUpdates = computed<RecentUpdateRow[]>(() => {
-  const registryFailures = containers.value
-    .filter((c) => !c.newTag && !!c.registryError)
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      image: c.image,
-      icon: c.icon,
-      oldVer: c.currentTag,
-      newVer: 'check failed',
-      releaseLink: undefined,
-      status: 'error' as const,
-      running: c.status === 'running',
-      registryError: c.registryError,
-    }));
-
-  const pendingUpdates = containers.value
-    .filter((c) => !!c.newTag || !!c.updatePolicyState)
-    .slice()
-    .sort((a, b) => {
-      const byDetectedAt =
-        parseDetectedAt(b.updateDetectedAt) - parseDetectedAt(a.updateDetectedAt);
-      if (byDetectedAt !== 0) return byDetectedAt;
-      return a.name.localeCompare(b.name);
-    })
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      image: c.image,
-      icon: c.icon,
-      oldVer: c.currentTag,
-      newVer: deriveRecentUpdateVersion(c),
-      releaseLink: c.releaseLink,
-      status: deriveRecentUpdateStatus(c),
-      running: c.status === 'running',
-      registryError: undefined,
-    }));
-
-  return [...registryFailures, ...pendingUpdates].slice(0, 6);
-});
-
-// Computed: security vulnerabilities (containers flagged by bouncer)
-const vulnerabilities = computed(() => {
-  return containers.value
-    .filter((c) => c.bouncer === 'blocked' || c.bouncer === 'unsafe')
-    .slice(0, 5)
-    .map((c) => ({
-      id: c.name,
-      severity: c.bouncer === 'blocked' ? 'CRITICAL' : 'HIGH',
-      package: c.image,
-      image: c.name,
-    }));
-});
-
-// Computed: servers list (local server + agents)
-function formatAgentHost(agent: DashboardAgent): string | undefined {
-  const host = typeof agent.host === 'string' ? agent.host.trim() : '';
-  if (!host) {
-    return undefined;
-  }
-  const portValue = agent.port;
-  if (typeof portValue === 'number' && Number.isFinite(portValue)) {
-    return `${host}:${portValue}`;
-  }
-  if (typeof portValue === 'string') {
-    const port = portValue.trim();
-    if (port.length > 0) {
-      return `${host}:${port}`;
-    }
-  }
-  return host;
-}
-
-const servers = computed(() => {
-  const list: Array<{
-    name: string;
-    host?: string;
-    status: 'connected' | 'disconnected';
-    statusLabel?: string;
-    containers: { running: number; total: number };
-  }> = [];
-
-  // Local server is always present
-  const localContainers = containers.value.filter((c) => c.server === 'Local');
-  list.push({
-    name: 'Local',
-    host: 'unix:///var/run/docker.sock',
-    status: 'connected',
-    containers: {
-      running: localContainers.filter((c) => c.status === 'running').length,
-      total: localContainers.length,
-    },
-  });
-
-  // Add agents as remote hosts
-  for (const agent of agents.value) {
-    const agentName =
-      typeof agent.name === 'string' && agent.name.length > 0 ? agent.name : 'unknown-agent';
-    const agentContainers = containers.value.filter((c) => c.server === agentName);
-    list.push({
-      name: agentName,
-      host: formatAgentHost(agent),
-      status: agent.connected ? 'connected' : 'disconnected',
-      containers: {
-        running: agentContainers.filter((c) => c.status === 'running').length,
-        total: agentContainers.length,
-      },
-    });
-  }
-
-  return list;
-});
-
-const webhookApiEnabled = computed(
-  () => serverInfo.value?.configuration?.webhook?.enabled === true,
-);
-
-// Computed: security donut chart data
-const DONUT_CIRCUMFERENCE = 301.6;
-const securityCleanArcLength = computed(() =>
-  securityTotalCount.value > 0
-    ? (securityCleanCount.value / securityTotalCount.value) * DONUT_CIRCUMFERENCE
-    : 0,
-);
-const securityIssueArcLength = computed(() =>
-  securityTotalCount.value > 0
-    ? (securityIssueCount.value / securityTotalCount.value) * DONUT_CIRCUMFERENCE
-    : 0,
-);
-const securityNotScannedArcLength = computed(() =>
-  securityTotalCount.value > 0
-    ? (securityNotScannedCount.value / securityTotalCount.value) * DONUT_CIRCUMFERENCE
-    : 0,
-);
-
-// Total containers with any update for breakdown bar scaling
-const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind).length);
 </script>
 
 <template>
@@ -1166,12 +539,7 @@ const totalUpdates = computed(() => containers.value.filter((c) => c.updateKind)
               No updates to categorize
             </div>
             <div v-else class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div v-for="kind in [
-                { label: 'Major', count: containers.filter(c => c.updateKind === 'major').length, color: 'var(--dd-danger)', colorMuted: 'var(--dd-danger-muted)', icon: 'chevrons-up' },
-                { label: 'Minor', count: containers.filter(c => c.updateKind === 'minor').length, color: 'var(--dd-warning)', colorMuted: 'var(--dd-warning-muted)', icon: 'chevron-up' },
-                { label: 'Patch', count: containers.filter(c => c.updateKind === 'patch').length, color: 'var(--dd-primary)', colorMuted: 'var(--dd-primary-muted)', icon: 'hashtag' },
-                { label: 'Digest', count: containers.filter(c => c.updateKind === 'digest').length, color: 'var(--dd-neutral)', colorMuted: 'var(--dd-neutral-muted)', icon: 'fingerprint' },
-              ]" :key="kind.label"
+              <div v-for="kind in updateBreakdownBuckets" :key="kind.label"
                    class="text-center p-3 dd-rounded"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <div class="w-9 h-9 mx-auto dd-rounded flex items-center justify-center mb-2"
