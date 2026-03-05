@@ -16,8 +16,6 @@ export const viewLoaders = {
   auth: () => import('../views/AuthView.vue'),
   notifications: () => import('../views/NotificationsView.vue'),
   audit: () => import('../views/AuditView.vue'),
-
-  playground: () => import('../views/PlaygroundView.vue'),
 };
 
 export function createLazyRoute(path: string, name: keyof typeof viewLoaders) {
@@ -42,8 +40,6 @@ const routes = [
       createLazyRoute('/auth', 'auth'),
       createLazyRoute('/notifications', 'notifications'),
       createLazyRoute('/audit', 'audit'),
-
-      createLazyRoute('/playground', 'playground'),
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

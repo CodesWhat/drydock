@@ -135,7 +135,6 @@ const navGroups = computed<NavGroup[]>(() => [
       { label: 'Triggers', icon: 'triggers', route: '/triggers' },
       { label: 'Auth', icon: 'auth', route: '/auth' },
       { label: 'Agents', icon: 'agents', route: '/agents' },
-      { label: 'Playground', icon: 'playground', route: '/playground' },
     ],
   },
 ]);

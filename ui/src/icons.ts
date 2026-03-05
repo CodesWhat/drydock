@@ -414,15 +414,6 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     heroicons: 'heroicons:trash',
     iconoir: 'iconoir:trash',
   },
-  playground: {
-    'fa6-solid': 'fa6-solid:palette',
-    ph: 'ph:palette',
-    'ph-duotone': 'ph:palette-duotone',
-    lucide: 'lucide:palette',
-    tabler: 'tabler:palette',
-    heroicons: 'heroicons:swatch',
-    iconoir: 'iconoir:palette',
-  },
   table: {
     'fa6-solid': 'fa6-solid:table',
     ph: 'ph:table',
@@ -712,24 +703,6 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     iconoir: 'iconoir:windows',
   },
 };
-
-/**
- * Extra icons bundled for the Playground spinner preview.
- * The extract script picks up any 'prefix:name' string in this file.
- */
-export const spinnerCandidateIcons = [
-  'ph:spinner-gap-duotone',
-  'ph:spinner-ball-duotone',
-  'ph:circle-notch-duotone',
-  'ph:circle-dashed-duotone',
-  'ph:arrow-clockwise-duotone',
-  'ph:arrows-clockwise-duotone',
-  'ph:gear-duotone',
-  'ph:gear-fine-duotone',
-  'ph:gear-six-duotone',
-  'ph:fan-duotone',
-  'ph:hourglass-duotone',
-];
 
 /** All semantic icon names */
 export const allIconNames = Object.keys(iconMap);
