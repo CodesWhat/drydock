@@ -103,6 +103,12 @@ describe('Store Module', () => {
 
     await store.init();
 
+    const Loki = (await import('lokijs')).default;
+    expect(Loki).toHaveBeenCalledWith('/test/store/test.json', {
+      autosave: true,
+      autosaveInterval: 60000,
+    });
+
     const app = await import('./app.js');
     const container = await import('./container.js');
     const notification = await import('./notification.js');
