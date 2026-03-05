@@ -6,6 +6,7 @@ const client = new AgentClient('typecheck-agent', {
   secret: 'typecheck-secret',
 });
 
+// @ts-expect-error `log` is private and should not be externally accessible.
 client.log.info('typecheck');
-// @ts-expect-error `log` must be strongly typed and reject unknown logger methods.
+// @ts-expect-error `log` is private and should not be externally accessible.
 client.log.notARealMethod('typecheck');

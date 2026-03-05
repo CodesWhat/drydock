@@ -7,6 +7,11 @@ import * as registry from '../../registry/index.js';
 
 const log = logger.child({ component: 'agent-api-trigger' });
 
+interface TriggerRouteParams {
+  type: string;
+  name: string;
+}
+
 /**
  * Get Triggers.
  */
@@ -24,7 +29,7 @@ export async function runTrigger(req: Request, res: Response) {
   if (req.body?.agent) {
     delete req.body.agent;
   }
-  return triggerApi.runTrigger(req, res);
+  return triggerApi.runTrigger(req as unknown as Request<TriggerRouteParams>, res);
 }
 
 /**

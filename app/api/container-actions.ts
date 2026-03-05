@@ -29,6 +29,19 @@ type ContainerAuditAction = Extract<
   'container-start' | 'container-stop' | 'container-restart'
 >;
 
+type DockerContainerHandle = {
+  start: () => Promise<void>;
+  stop: () => Promise<void>;
+  restart: () => Promise<void>;
+  inspect: () => Promise<{ State?: { Status?: string } }>;
+};
+
+type DockerWatcher = {
+  dockerApi: {
+    getContainer: (id: string) => DockerContainerHandle;
+  };
+};
+
 async function executeAction(
   req: Request,
   res: Response,
@@ -56,7 +69,7 @@ async function executeAction(
   }
 
   try {
-    const watcher = trigger.getWatcher(container);
+    const watcher = trigger.getWatcher(container) as DockerWatcher;
     const { dockerApi } = watcher;
     const dockerContainer = dockerApi.getContainer(container.id);
     await dockerContainer[method]();

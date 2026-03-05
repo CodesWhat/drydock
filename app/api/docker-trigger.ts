@@ -1,4 +1,5 @@
 import type { Container } from '../model/container.js';
+import type Docker from '../triggers/providers/docker/Docker.js';
 import type Trigger from '../triggers/providers/Trigger.js';
 
 export const NO_DOCKER_TRIGGER_FOUND_ERROR = 'No docker trigger found for this container';
@@ -9,7 +10,7 @@ export const NO_DOCKER_TRIGGER_FOUND_ERROR = 'No docker trigger found for this c
 export function findDockerTriggerForContainer(
   triggers: Record<string, Trigger> | undefined,
   container: Pick<Container, 'agent'>,
-): Trigger | undefined {
+): Docker | undefined {
   if (!triggers) {
     return undefined;
   }
@@ -24,7 +25,7 @@ export function findDockerTriggerForContainer(
     if (container.agent && !trigger.agent) {
       continue;
     }
-    return trigger;
+    return trigger as Docker;
   }
   return undefined;
 }

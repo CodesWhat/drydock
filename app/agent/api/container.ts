@@ -3,6 +3,21 @@ import { getServerConfiguration } from '../../configuration/index.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
 
+type AgentDockerWatcher = {
+  dockerApi: {
+    getContainer: (name: string) => {
+      logs: (options: {
+        stdout: boolean;
+        stderr: boolean;
+        tail: number;
+        since: number;
+        timestamps: boolean;
+        follow: boolean;
+      }) => Promise<Buffer | string>;
+    };
+  };
+};
+
 /**
  * Get Containers (Handshake).
  */
@@ -47,7 +62,7 @@ export async function getContainerLogs(req: Request, res: Response) {
   const timestamps = req.query.timestamps !== 'false';
 
   const watcherId = `docker.${container.watcher}`;
-  const watcher = registry.getState().watcher[watcherId];
+  const watcher = registry.getState().watcher[watcherId] as AgentDockerWatcher | undefined;
   if (!watcher) {
     res.status(500).json({
       error: `No watcher found for container ${id}`,
