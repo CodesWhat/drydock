@@ -151,6 +151,94 @@ describe('useSbomDetail', () => {
     expect(state.detailSbomComponentCount.value).toBe(2);
   });
 
+  it('downloads sbom json with a sanitized filename', () => {
+    const createObjectUrl = vi.fn().mockReturnValue('blob:sbom-document');
+    const revokeObjectUrl = vi.fn();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const appendChildSpy = vi.spyOn(document.body, 'appendChild');
+    const removeChildSpy = vi.spyOn(document.body, 'removeChild');
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectUrl,
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: revokeObjectUrl,
+    });
+
+    try {
+      const state = useSbomDetail({
+        containerIdsByImage: ref({ nginx: ['container-1'] }),
+      });
+      state.selectedImage.value = makeSummary({ image: 'ghcr.io/org/image:1.2.3' });
+      state.selectedSbomFormat.value = 'cyclonedx-json';
+      state.showSbomDocument.value = true;
+      state.detailSbomResult.value = {
+        document: {
+          bomFormat: 'CycloneDX',
+          components: [{ name: 'openssl' }],
+        },
+      };
+
+      state.downloadDetailSbom();
+
+      expect(createObjectUrl).toHaveBeenCalledOnce();
+      expect(appendChildSpy).toHaveBeenCalledOnce();
+
+      const link = appendChildSpy.mock.calls[0][0] as HTMLAnchorElement;
+      expect(link.download).toBe('ghcr.io-org-image-1.2.3.cyclonedx-json.sbom.json');
+      expect(link.getAttribute('href')).toBe('blob:sbom-document');
+
+      expect(clickSpy).toHaveBeenCalledOnce();
+      expect(removeChildSpy).toHaveBeenCalledWith(link);
+      expect(revokeObjectUrl).toHaveBeenCalledWith('blob:sbom-document');
+    } finally {
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        value: originalCreateObjectURL,
+      });
+      Object.defineProperty(URL, 'revokeObjectURL', {
+        configurable: true,
+        value: originalRevokeObjectURL,
+      });
+    }
+  });
+
+  it('does not throw when createObjectURL is unavailable', () => {
+    const originalCreateObjectURL = URL.createObjectURL;
+    const createElementSpy = vi.spyOn(document, 'createElement');
+
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: undefined,
+    });
+
+    try {
+      const state = useSbomDetail({
+        containerIdsByImage: ref({ nginx: ['container-1'] }),
+      });
+      state.selectedImage.value = makeSummary();
+      state.showSbomDocument.value = true;
+      state.detailSbomResult.value = {
+        document: {
+          spdxVersion: 'SPDX-2.3',
+          packages: [{ name: 'openssl' }],
+        },
+      };
+
+      expect(() => state.downloadDetailSbom()).not.toThrow();
+      expect(createElementSpy).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(URL, 'createObjectURL', {
+        configurable: true,
+        value: originalCreateObjectURL,
+      });
+    }
+  });
+
   it('clears selected detail state when panel closes', () => {
     const state = useSbomDetail({
       containerIdsByImage: ref({ nginx: ['container-1'] }),
@@ -167,5 +255,21 @@ describe('useSbomDetail', () => {
     expect(state.showSbomDocument.value).toBe(false);
     expect(state.detailSbomResult.value).toBeNull();
     expect(state.detailSbomError.value).toBeNull();
+  });
+
+  it('serializes sbom document json only when document display is enabled', () => {
+    const state = useSbomDetail({
+      containerIdsByImage: ref({ nginx: ['container-1'] }),
+    });
+    state.detailSbomResult.value = { document: { name: 'nginx' } };
+
+    expect(state.showSbomDocument.value).toBe(false);
+    expect(state.detailSbomDocumentJson.value).toBe('');
+
+    state.showSbomDocument.value = true;
+
+    expect(state.detailSbomDocumentJson.value).toBe(`{
+  "name": "nginx"
+}`);
   });
 });

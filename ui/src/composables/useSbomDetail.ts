@@ -50,7 +50,7 @@ export function useSbomDetail({ containerIdsByImage }: UseSbomDetailOptions) {
     return undefined;
   });
   const detailSbomDocumentJson = computed(() => {
-    if (!detailSbomDocument.value) {
+    if (!showSbomDocument.value || !detailSbomDocument.value) {
       return '';
     }
     try {
@@ -84,19 +84,32 @@ export function useSbomDetail({ containerIdsByImage }: UseSbomDetailOptions) {
     if (!detailSbomDocument.value || !selectedImage.value) {
       return;
     }
+    const runtimeDocument = globalThis.document;
+    const createObjectUrl = globalThis.URL?.createObjectURL;
+    const revokeObjectUrl = globalThis.URL?.revokeObjectURL;
+    if (
+      !runtimeDocument?.body ||
+      typeof createObjectUrl !== 'function' ||
+      typeof revokeObjectUrl !== 'function'
+    ) {
+      return;
+    }
     const payload = detailSbomDocumentJson.value;
     if (!payload) {
       return;
     }
     const blob = new Blob([payload], { type: 'application/json' });
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const objectUrl = createObjectUrl(blob);
+    const link = runtimeDocument.createElement('a');
     link.href = objectUrl;
     link.download = `${toSafeFileName(selectedImage.value.image)}.${selectedSbomFormat.value}.sbom.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(objectUrl);
+    runtimeDocument.body.appendChild(link);
+    try {
+      link.click();
+    } finally {
+      runtimeDocument.body.removeChild(link);
+      revokeObjectUrl(objectUrl);
+    }
   }
 
   function openDetail(summary: ImageSummaryWithVulns) {
