@@ -684,6 +684,15 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     heroicons: 'heroicons:arrows-pointing-out',
     iconoir: 'iconoir:expand',
   },
+  book: {
+    'fa6-solid': 'fa6-solid:book',
+    ph: 'ph:book-open',
+    'ph-duotone': 'ph:book-open-duotone',
+    lucide: 'lucide:book-open',
+    tabler: 'tabler:book',
+    heroicons: 'heroicons:book-open',
+    iconoir: 'iconoir:book',
+  },
   stack: {
     'fa6-solid': 'fa6-solid:boxes-stacked',
     ph: 'ph:stack',

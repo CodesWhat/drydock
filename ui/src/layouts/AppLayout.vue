@@ -1247,7 +1247,7 @@ onUnmounted(() => {
               <div class="pt-3 flex flex-col gap-1.5">
                 <a href="https://drydock.dev" target="_blank" rel="noopener"
                    class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-[12px] font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
-                  <AppIcon name="expand" :size="12" class="dd-text-muted" />
+                  <AppIcon name="book" :size="12" class="dd-text-muted" />
                   Documentation
                 </a>
                 <a href="https://github.com/CodesWhat/drydock" target="_blank" rel="noopener"
