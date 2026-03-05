@@ -103,7 +103,7 @@ class SelfUpdateExecutor {
       await dockerApi
         .createContainer({
           Image: newImage,
-          Cmd: ['node', 'dist/triggers/providers/docker/self-update-controller.js'],
+          Cmd: ['node', 'dist/triggers/providers/docker/self-update-controller-entrypoint.js'],
           Env: [
             `DD_SELF_UPDATE_OP_ID=${selfUpdateOperationId}`,
             `DD_SELF_UPDATE_OLD_CONTAINER_ID=${oldContainerId}`,

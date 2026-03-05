@@ -1,5 +1,5 @@
-import { pathToFileURL } from 'node:url';
 import Dockerode from 'dockerode';
+import { getErrorMessage } from '../../../util/error.js';
 
 type SelfUpdateControllerConfig = {
   opId: string;
@@ -68,7 +68,7 @@ function isContainerAlreadyStoppedError(error: any): boolean {
   if (statusCode === 304) {
     return true;
   }
-  const message = String(error?.message || '').toLowerCase();
+  const message = getErrorMessage(error, '').toLowerCase();
   return message.includes('is not running') || message.includes('already stopped');
 }
 
@@ -77,7 +77,7 @@ function isContainerAlreadyStartedError(error: any): boolean {
   if (statusCode === 304) {
     return true;
   }
-  const message = String(error?.message || '').toLowerCase();
+  const message = getErrorMessage(error, '').toLowerCase();
   return message.includes('already started');
 }
 
@@ -230,7 +230,7 @@ class SelfUpdateController {
   }
 
   async rollback(error: any): Promise<never> {
-    const reason = String(error?.message || error);
+    const reason = getErrorMessage(error, String(error));
     const oldContainer = this.docker.getContainer(this.config.oldContainerId);
     const newContainer = this.docker.getContainer(this.config.newContainerId);
 
@@ -238,7 +238,10 @@ class SelfUpdateController {
       this.logState('CLEANUP_CANDIDATE');
       await newContainer.remove({ force: true });
     } catch (cleanupError: any) {
-      this.logState('CLEANUP_CANDIDATE_FAILED', String(cleanupError?.message || cleanupError));
+      this.logState(
+        'CLEANUP_CANDIDATE_FAILED',
+        getErrorMessage(cleanupError, String(cleanupError)),
+      );
     }
 
     try {
@@ -246,7 +249,7 @@ class SelfUpdateController {
     } catch (restoreNameError: any) {
       this.logState(
         'ROLLBACK_RESTORE_NAME_FAILED',
-        String(restoreNameError?.message || restoreNameError),
+        getErrorMessage(restoreNameError, String(restoreNameError)),
       );
     }
 
@@ -255,7 +258,10 @@ class SelfUpdateController {
       await oldContainer.start();
     } catch (rollbackError: any) {
       if (!isContainerAlreadyStartedError(rollbackError)) {
-        this.logState('ROLLBACK_START_OLD_FAILED', String(rollbackError?.message || rollbackError));
+        this.logState(
+          'ROLLBACK_START_OLD_FAILED',
+          getErrorMessage(rollbackError, String(rollbackError)),
+        );
       }
     }
 
@@ -287,13 +293,16 @@ export async function runSelfUpdateController(): Promise<void> {
   await controller.run();
 }
 
-export { getRequiredEnv as testable_getRequiredEnv, parsePositiveInt as testable_parsePositiveInt };
-
-const scriptEntrypointUrl = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
-if (import.meta.url === scriptEntrypointUrl) {
-  runSelfUpdateController().catch((error: any) => {
+export async function runSelfUpdateControllerEntrypoint(
+  runner: () => Promise<void> = runSelfUpdateController,
+): Promise<void> {
+  try {
+    await runner();
+  } catch (error: any) {
     // eslint-disable-next-line no-console
-    console.error(`[self-update] controller failed: ${String(error?.message || error)}`);
+    console.error(`[self-update] controller failed: ${getErrorMessage(error, String(error))}`);
     process.exitCode = 1;
-  });
+  }
 }
+
+export { getRequiredEnv as testable_getRequiredEnv, parsePositiveInt as testable_parsePositiveInt };

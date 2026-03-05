@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   runSelfUpdateController,
+  runSelfUpdateControllerEntrypoint,
   testable_getRequiredEnv,
   testable_parsePositiveInt,
 } from './self-update-controller.js';
@@ -184,6 +185,24 @@ describe('self-update-controller orchestration', () => {
     expect(getLoggedStates()).toContain('[self-update:op-123] HEALTH_GATE');
   });
 
+  test('handles healthcheck transition from missing status to healthy', async () => {
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer({
+      inspect: vi
+        .fn()
+        .mockResolvedValueOnce({ State: { Running: true, Health: {} } })
+        .mockResolvedValueOnce({ State: { Running: true, Health: {} } })
+        .mockResolvedValueOnce({ State: { Running: true, Health: {} } })
+        .mockResolvedValueOnce({ State: { Running: true, Health: { Status: 'healthy' } } }),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await runSelfUpdateController();
+
+    expect(newContainer.inspect).toHaveBeenCalledTimes(4);
+    expect(oldContainer.remove).toHaveBeenCalledWith({ force: true });
+  });
+
   test('rolls back when healthcheck transitions to unhealthy', async () => {
     const oldContainer = createOldContainer({
       inspect: vi.fn().mockResolvedValue({ State: { Running: false }, Name: '/drydock-old-1' }),
@@ -310,6 +329,63 @@ describe('self-update-controller orchestration', () => {
     expect(oldContainer.start).not.toHaveBeenCalled();
   });
 
+  test('treats message-only already-stopped and already-started errors as benign', async () => {
+    const oldContainer = createOldContainer({
+      stop: vi.fn().mockRejectedValue(new Error('Container is not running')),
+    });
+    const newContainer = createNewContainer({
+      start: vi.fn().mockRejectedValue(new Error('already started by another process')),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await runSelfUpdateController();
+
+    expect(oldContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(newContainer.remove).not.toHaveBeenCalled();
+  });
+
+  test('throws when old container stop fails with non-benign error', async () => {
+    const oldContainer = createOldContainer({
+      stop: vi.fn().mockRejectedValue(new Error('stop failed hard')),
+    });
+    const newContainer = createNewContainer();
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).rejects.toThrow('stop failed hard');
+
+    expect(newContainer.start).not.toHaveBeenCalled();
+    expect(newContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(oldContainer.start).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps old container name unchanged when inspect name is missing during rollback', async () => {
+    const oldContainer = createOldContainer({
+      inspect: vi.fn().mockResolvedValue({ State: { Running: false } }),
+    });
+    const newContainer = createNewContainer({
+      start: vi.fn().mockRejectedValue(new Error('start failed')),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).rejects.toThrow('start failed');
+
+    expect(oldContainer.rename).not.toHaveBeenCalled();
+  });
+
+  test('restores old container name when inspect name is present without leading slash', async () => {
+    const oldContainer = createOldContainer({
+      inspect: vi.fn().mockResolvedValue({ State: { Running: false }, Name: 'drydock-old-123' }),
+    });
+    const newContainer = createNewContainer({
+      start: vi.fn().mockRejectedValue(new Error('start failed')),
+    });
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).rejects.toThrow('start failed');
+
+    expect(oldContainer.rename).toHaveBeenCalledWith({ name: 'drydock' });
+  });
+
   test('does not log rollback-start failure when old container start returns 304', async () => {
     const oldContainer = createOldContainer({
       inspect: vi.fn().mockResolvedValue({ State: { Running: false }, Name: '/drydock' }),
@@ -334,5 +410,18 @@ describe('self-update-controller orchestration', () => {
     await expect(runSelfUpdateController()).rejects.toThrow(
       'Missing required environment variable: DD_SELF_UPDATE_OLD_CONTAINER_ID',
     );
+  });
+
+  test('entrypoint should log failures and set process exitCode', async () => {
+    const originalExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    await runSelfUpdateControllerEntrypoint(async () => {
+      throw new Error('entrypoint boom');
+    });
+
+    expect(console.error).toHaveBeenCalledWith('[self-update] controller failed: entrypoint boom');
+    expect(process.exitCode).toBe(1);
+    process.exitCode = originalExitCode;
   });
 });
