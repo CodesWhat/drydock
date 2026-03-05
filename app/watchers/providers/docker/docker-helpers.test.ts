@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import {
   buildFallbackContainerReport,
+  getContainerName,
   getErrorMessage,
   getFirstConfigNumber,
   getFirstConfigString,
@@ -133,5 +134,25 @@ describe('docker helper extraction module', () => {
       'another failure',
     );
     expect(withKind.container.updateKind).toEqual({ kind: 'semver' });
+  });
+
+  test('buildFallbackContainerReport should not mutate the input container', () => {
+    const sourceContainer = {
+      id: 'c3',
+      name: 'worker',
+      result: { message: 'old' },
+    } as any;
+
+    const report = buildFallbackContainerReport(sourceContainer, 'processing failed');
+
+    expect(report.container).not.toBe(sourceContainer);
+    expect(sourceContainer.result).toEqual({ message: 'old' });
+    expect(sourceContainer.error).toBeUndefined();
+    expect(sourceContainer.updateAvailable).toBeUndefined();
+  });
+
+  test('getContainerName should only strip a leading slash', () => {
+    expect(getContainerName({ Names: ['/service/api'] })).toBe('service/api');
+    expect(getContainerName({ Names: ['service/api'] })).toBe('service/api');
   });
 });

@@ -29,7 +29,9 @@ export function getErrorMessage(error: unknown, fallback = UNKNOWN_CONTAINER_PRO
 }
 
 export function buildFallbackContainerReport(container: Container, message: string) {
-  const containerWithError = container;
+  const containerWithError = {
+    ...container,
+  };
   delete containerWithError.result;
   containerWithError.error = {
     message,
@@ -67,7 +69,7 @@ export function getContainerName(container: any) {
     [containerName] = names;
   }
   // Strip ugly forward slash
-  containerName = containerName.replace(/\//, '');
+  containerName = containerName.replace(/^\//, '');
   return containerName;
 }
 

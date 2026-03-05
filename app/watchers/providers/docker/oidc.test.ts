@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 
 import {
@@ -31,6 +33,12 @@ function getFirstConfigString(value: any, paths: string[]) {
 }
 
 describe('docker oidc module', () => {
+  test('OidcContext should avoid any-typed log', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, './oidc.ts'), 'utf8');
+
+    expect(source).not.toContain('log: any;');
+  });
+
   test('auto-detects remote auth type when explicit type is not set', () => {
     expect(getRemoteAuthResolution({ bearer: 'token' }, getFirstConfigString).authType).toBe(
       'bearer',

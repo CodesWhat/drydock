@@ -110,6 +110,80 @@ describe('docker runtime details module', () => {
     ).toBe(true);
   });
 
+  test('runtime details equality does not rely on JSON.stringify', () => {
+    const stringifySpy = vi.spyOn(JSON, 'stringify');
+    try {
+      const equal = areRuntimeDetailsEqual(
+        {
+          ports: ['8080->80/tcp'],
+          volumes: ['/data:/app'],
+          env: [{ key: 'A', value: '1' }],
+        },
+        {
+          ports: ['8080->80/tcp'],
+          volumes: ['/data:/app'],
+          env: [{ key: 'A', value: '1' }],
+        },
+      );
+
+      expect(equal).toBe(true);
+      expect(stringifySpy).not.toHaveBeenCalled();
+    } finally {
+      stringifySpy.mockRestore();
+    }
+  });
+
+  test('runtime details equality returns false when port list length differs', () => {
+    expect(
+      areRuntimeDetailsEqual(
+        {
+          ports: ['80/tcp'],
+          volumes: ['/data:/app'],
+          env: [{ key: 'A', value: '1' }],
+        },
+        {
+          ports: [],
+          volumes: ['/data:/app'],
+          env: [{ key: 'A', value: '1' }],
+        },
+      ),
+    ).toBe(false);
+  });
+
+  test('runtime details equality returns false when volume entries differ', () => {
+    expect(
+      areRuntimeDetailsEqual(
+        {
+          ports: ['80/tcp'],
+          volumes: ['/data:/app'],
+          env: [{ key: 'A', value: '1' }],
+        },
+        {
+          ports: ['80/tcp'],
+          volumes: ['/other:/app'],
+          env: [{ key: 'A', value: '1' }],
+        },
+      ),
+    ).toBe(false);
+  });
+
+  test('runtime details equality returns false when env entries differ', () => {
+    expect(
+      areRuntimeDetailsEqual(
+        {
+          ports: ['80/tcp'],
+          volumes: ['/data:/app'],
+          env: [{ key: 'A', value: '1' }],
+        },
+        {
+          ports: ['80/tcp'],
+          volumes: ['/data:/app'],
+          env: [{ key: 'A', value: '2' }],
+        },
+      ),
+    ).toBe(false);
+  });
+
   test('skips malformed inspect runtime values while preserving valid values', () => {
     const details = getRuntimeDetailsFromInspect({
       NetworkSettings: {

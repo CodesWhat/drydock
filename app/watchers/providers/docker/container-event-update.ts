@@ -48,6 +48,26 @@ export interface UpdateContainerFromInspectDependencies {
   logInfo?: (message: string) => void;
 }
 
+function areLabelsEqual(labelsA: Record<string, string>, labelsB: Record<string, string>): boolean {
+  if (labelsA === labelsB) {
+    return true;
+  }
+
+  const labelsAKeys = Object.keys(labelsA);
+  const labelsBKeys = Object.keys(labelsB);
+  if (labelsAKeys.length !== labelsBKeys.length) {
+    return false;
+  }
+
+  for (const key of labelsAKeys) {
+    if (labelsA[key] !== labelsB[key]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function updateContainerFromInspect(
   containerFound: Container,
   containerInspect: any,
@@ -62,7 +82,7 @@ export function updateContainerFromInspect(
   const labelsFromInspect = containerInspect.Config?.Labels;
   const labelsCurrent = containerFound.labels || {};
   const labelsToApply = labelsFromInspect || labelsCurrent;
-  const labelsChanged = JSON.stringify(labelsCurrent) !== JSON.stringify(labelsToApply);
+  const labelsChanged = !areLabelsEqual(labelsCurrent, labelsToApply);
 
   const customDisplayNameFromLabel = dependencies.getCustomDisplayNameFromLabels(labelsToApply);
   const hasCustomDisplayName =

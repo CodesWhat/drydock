@@ -60,10 +60,41 @@ export function areRuntimeDetailsEqual(
   detailsA: ContainerRuntimeDetails | undefined,
   detailsB: ContainerRuntimeDetails | undefined,
 ) {
-  return (
-    JSON.stringify(normalizeRuntimeDetails(detailsA)) ===
-    JSON.stringify(normalizeRuntimeDetails(detailsB))
-  );
+  const normalizedDetailsA = normalizeRuntimeDetails(detailsA);
+  const normalizedDetailsB = normalizeRuntimeDetails(detailsB);
+
+  if (normalizedDetailsA.ports.length !== normalizedDetailsB.ports.length) {
+    return false;
+  }
+  if (normalizedDetailsA.volumes.length !== normalizedDetailsB.volumes.length) {
+    return false;
+  }
+  if (normalizedDetailsA.env.length !== normalizedDetailsB.env.length) {
+    return false;
+  }
+
+  for (let index = 0; index < normalizedDetailsA.ports.length; index += 1) {
+    if (normalizedDetailsA.ports[index] !== normalizedDetailsB.ports[index]) {
+      return false;
+    }
+  }
+
+  for (let index = 0; index < normalizedDetailsA.volumes.length; index += 1) {
+    if (normalizedDetailsA.volumes[index] !== normalizedDetailsB.volumes[index]) {
+      return false;
+    }
+  }
+
+  for (let index = 0; index < normalizedDetailsA.env.length; index += 1) {
+    if (
+      normalizedDetailsA.env[index].key !== normalizedDetailsB.env[index].key ||
+      normalizedDetailsA.env[index].value !== normalizedDetailsB.env[index].value
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function formatContainerPortsFromInspect(networkPorts: unknown): string[] {

@@ -170,4 +170,60 @@ describe('container event update helpers', () => {
 
     expect(updateContainer).not.toHaveBeenCalled();
   });
+
+  test('updateContainerFromInspect treats equivalent labels with different key order as unchanged', () => {
+    const container = createMockContainer({
+      name: 'same-name',
+      displayName: 'custom-name',
+      status: 'running',
+      labels: { alpha: '1', beta: '2' },
+      details: {
+        state: {
+          status: 'running',
+        },
+      },
+    });
+    const updateContainer = vi.fn();
+
+    updateContainerFromInspect(
+      container as any,
+      {
+        Name: '/same-name',
+        State: { Status: 'running' },
+        Config: { Labels: { beta: '2', alpha: '1' } },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer,
+      },
+    );
+
+    expect(updateContainer).not.toHaveBeenCalled();
+  });
+
+  test('updateContainerFromInspect should persist when label values change', () => {
+    const container = createMockContainer({
+      name: 'same-name',
+      displayName: 'same-name',
+      status: 'running',
+      labels: { alpha: '1', beta: '2' },
+    });
+    const updateContainer = vi.fn();
+
+    updateContainerFromInspect(
+      container as any,
+      {
+        Name: '/same-name',
+        State: { Status: 'running' },
+        Config: { Labels: { alpha: '1', beta: 'changed' } },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer,
+      },
+    );
+
+    expect(container.labels).toEqual({ alpha: '1', beta: 'changed' });
+    expect(updateContainer).toHaveBeenCalledWith(container);
+  });
 });

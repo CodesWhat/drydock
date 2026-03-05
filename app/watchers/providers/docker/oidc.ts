@@ -46,6 +46,12 @@ export interface MutableOidcStateAccessor {
   setDeviceCodeCompleted: (value: boolean | undefined) => void;
 }
 
+export interface OidcLogger {
+  info: (message: string, ...args: unknown[]) => void;
+  warn: (message: string, ...args: unknown[]) => void;
+  debug: (message: string, ...args: unknown[]) => void;
+}
+
 const REDACTED_OIDC_TOKEN_VALUE = '[REDACTED]';
 
 function getRedactedTokenValue(value: string | undefined) {
@@ -103,12 +109,13 @@ export function createMutableOidcState(accessor: MutableOidcStateAccessor): Muta
 
 export interface OidcContext {
   watcherName: string;
-  log: any;
+  log: OidcLogger;
   state: MutableOidcState;
   getOidcAuthString: (paths: string[]) => string | undefined;
   getOidcAuthNumber: (paths: string[]) => number | undefined;
   normalizeNumber: (value: any) => number | undefined;
   sleep: (ms: number) => Promise<void>;
+  isDeviceCodePollingCancelled?: () => boolean;
 }
 
 export const OIDC_ACCESS_TOKEN_REFRESH_WINDOW_MS = 30 * 1000;
@@ -483,7 +490,7 @@ export function buildDeviceCodeTokenRequest(
 export function handleTokenErrorResponse(
   e: any,
   currentIntervalMs: number,
-  context: { watcherName: string; log: any },
+  context: { watcherName: string; log: Pick<OidcLogger, 'debug'> },
 ): { continuePolling: boolean; newIntervalMs: number } {
   const errorResponse = e?.response?.data;
   const errorCode = errorResponse?.error || '';
@@ -529,6 +536,14 @@ export async function pollDeviceCodeToken(
   context: OidcContext,
   options: DeviceCodeTokenPollOptions,
 ) {
+  const throwIfPollingCancelled = () => {
+    if (context.isDeviceCodePollingCancelled?.()) {
+      throw new Error(
+        `OIDC device authorization for ${context.watcherName} cancelled because watcher was deregistered`,
+      );
+    }
+  };
+
   const {
     tokenEndpoint,
     deviceCode,
@@ -542,37 +557,40 @@ export async function pollDeviceCodeToken(
   let currentIntervalMs = pollIntervalMs;
 
   while (Date.now() - startTime < pollTimeoutMs) {
+    throwIfPollingCancelled();
     await context.sleep(currentIntervalMs);
+    throwIfPollingCancelled();
 
     const tokenRequestBody = buildDeviceCodeTokenRequest(deviceCode, clientId, clientSecret);
 
+    let tokenResponse;
     try {
-      const tokenResponse = await axios.post(tokenEndpoint, tokenRequestBody.toString(), {
+      tokenResponse = await axios.post(tokenEndpoint, tokenRequestBody.toString(), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         timeout: timeout || OIDC_DEFAULT_TIMEOUT_MS,
       });
-
-      const applied = applyRemoteOidcTokenPayload(context.state, tokenResponse?.data || {}, {
-        watcherName: context.watcherName,
-        normalizeNumber: context.normalizeNumber,
-        markDeviceCodeCompleted: true,
-        allowMissingAccessToken: true,
-      });
-      if (!applied) {
-        continue;
-      }
-      context.log.info(
-        `OIDC device authorization for ${context.watcherName} completed successfully`,
-      );
-      return;
     } catch (e: any) {
       const result = handleTokenErrorResponse(e, currentIntervalMs, context);
       if (result.continuePolling) {
         currentIntervalMs = result.newIntervalMs;
       }
+      continue;
     }
+
+    throwIfPollingCancelled();
+    const applied = applyRemoteOidcTokenPayload(context.state, tokenResponse?.data || {}, {
+      watcherName: context.watcherName,
+      normalizeNumber: context.normalizeNumber,
+      markDeviceCodeCompleted: true,
+      allowMissingAccessToken: true,
+    });
+    if (!applied) {
+      continue;
+    }
+    context.log.info(`OIDC device authorization for ${context.watcherName} completed successfully`);
+    return;
   }
 
   throw new Error(

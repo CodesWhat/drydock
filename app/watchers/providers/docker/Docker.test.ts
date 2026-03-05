@@ -17,6 +17,7 @@ import Docker, {
   testable_getLabel,
   testable_getOldContainers,
   testable_normalizeConfigNumberValue,
+  testable_normalizeContainer,
   testable_pruneOldContainers,
   testable_shouldUpdateDisplayNameFromContainerName,
 } from './Docker.js';
@@ -956,6 +957,46 @@ describe('Docker Watcher', () => {
       expect(docker.sleep).toHaveBeenNthCalledWith(2, 6000);
 
       expect(docker.remoteOidcAccessToken).toBe('slow-down-token');
+    });
+
+    test('should cancel device code polling when watcher is deregistered during sleep', async () => {
+      mockAxios.post.mockImplementation((url) => {
+        if (url === 'https://idp.example.com/oauth/device/code') {
+          return Promise.resolve({
+            data: createDeviceCodeResponse({
+              device_code: 'cancel-code',
+              user_code: 'CANC-1234',
+              interval: 1,
+              expires_in: 60,
+            }),
+          });
+        }
+        return Promise.resolve({
+          data: createTokenResponse({
+            access_token: 'should-not-be-used',
+          }),
+        });
+      });
+
+      docker.name = 'test';
+      docker.type = 'docker';
+      docker.log = createMockLog(['info', 'warn', 'debug', 'error']);
+      docker.configuration = docker.validateConfiguration(createDeviceFlowConfig()) as any;
+      docker.dockerApi = mockDockerApi as any;
+
+      docker.sleep = vi.fn().mockImplementation(async () => {
+        await docker.deregisterComponent();
+      });
+
+      await expect(docker.ensureRemoteAuthHeaders()).rejects.toThrow(
+        'cancelled because watcher was deregistered',
+      );
+
+      const tokenCalls = mockAxios.post.mock.calls.filter(
+        (call) => call[0] === 'https://idp.example.com/oauth/token',
+      );
+      expect(tokenCalls).toHaveLength(0);
+      expect(docker.remoteOidcAccessToken).toBeUndefined();
     });
 
     test.each([
@@ -5348,6 +5389,33 @@ describe('Docker Watcher', () => {
         },
       };
       expect(testable_getImageForRegistryLookup(image)).toBe(image);
+    });
+
+    test('normalizeContainer should not mutate the input container object', () => {
+      const container = {
+        id: 'c1',
+        name: 'container-1',
+        image: {
+          registry: {
+            name: 'original-registry',
+            url: 'custom.registry',
+          },
+          name: 'myimage',
+          tag: {
+            value: '1.0.0',
+            semver: true,
+          },
+          digest: {
+            watch: false,
+          },
+        },
+      };
+
+      registry.getState.mockReturnValue({ registry: {} });
+      const result = testable_normalizeContainer(container);
+
+      expect(result.image.registry.name).toBe('unknown');
+      expect(container.image.registry.name).toBe('original-registry');
     });
 
     test('getInspectValueByPath should return undefined for empty path', () => {
