@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Container recent-status API** — `GET /api/containers/recent-status` returns pre-computed update status (`updated`/`pending`/`failed`) per container, replacing the client-side audit log scan and reducing dashboard fetch payload size.
 - **Dual-slot security scanning** — "Scan Now" automatically scans both the current running image and the available update image when an update exists. Results are stored in separate slots (`scan`/`updateScan`) and the Security page shows a delta comparison badge (+N fixed, -N new) next to each image that has both scans.
 - **`DD_LOG_BUFFER_ENABLED` toggle** — Disable the in-memory log ring buffer via `DD_LOG_BUFFER_ENABLED=false` to reduce per-log processing overhead. When disabled, `/api/log/entries` returns an empty array. Defaults to `true`.
 - **Scheduled security scanning** — Set `DD_SECURITY_SCAN_CRON` to automatically scan all watched containers on a cron schedule. `DD_SECURITY_SCAN_JITTER` (default 60s) spreads load with random delay before each cycle.
@@ -24,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Self-update controller testable entrypoint** — Extracted process-level entry logic to a separate entrypoint module, making the controller independently testable without triggering process-exit side effects.
+- **Dockercompose YAML patching simplified** — Removed redundant type guards and dead-code branches from compose file patching helpers, reducing code paths and improving maintainability.
+- **Dashboard fetches recent-status from backend** — Dashboard now fetches pre-computed container statuses from `/api/containers/recent-status` instead of scanning the raw audit log client-side.
 - **Prometheus collect() callback pattern** — Switched container gauge from interval-based polling to the Prometheus `collect()` callback, letting Prometheus control collection timing and eliminating the background 5s timer.
 - **Container security API refactored** — Container security routes refactored into a dedicated module with type-safe SecurityGate integration, concurrent scan limiting (max 1), and trivy DB status-based cache invalidation.
 - **DashboardView composable extraction** — Extracted 700+ line monolith into `useDashboardData`, `useDashboardComputed`, `useDashboardWidgetOrder`, and shared `dashboardTypes` for better testability and separation of concerns.
@@ -34,6 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Security scans persist across navigation** — Navigating away from the Security view no longer cancels in-flight batch scans. Module-scoped scan state survives unmount and the progress banner reappears on return.
+- **SSE stale sweep timer on re-initialization** — Stale client sweep interval now starts even when `init()` is called after a hot reload, preventing leaked SSE connections.
+- **About modal documentation icon** — Documentation link in the about modal now shows a book icon instead of the expand/maximize icon.
 - **Log auto-fetch pauses in background tabs** — `useAutoFetchLogs` now stops polling when the browser tab is hidden and automatically resumes when it becomes visible again.
 - **SBOM download DOM isolation** — Isolated DOM element creation and `URL.createObjectURL` references in the SBOM download composable, fixing potential memory leaks and test failures from uncleared object URLs. JSON serialization skipped when SBOM panel is hidden.
 - **Dashboard resource fetch error propagation** — Dashboard API fetch errors are now propagated consistently to the UI error state instead of being silently swallowed.
@@ -43,6 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Security API error sanitization** — SBOM and scan error responses now return generic messages (`Error generating SBOM`, `Security scan failed`) instead of leaking internal error details. Detailed errors logged server-side only.
+- **Agent log query parameter validation** — Agent log level and component query parameters are validated against an allowlist and safe-character pattern, returning 400 for invalid values.
+- **TLS key/cert paths stripped from config response** — Server configuration API response no longer includes filesystem paths for TLS private key and certificate files.
+- **Type-safe store and auth modules** — Settings, notification, and auth store modules upgraded from `any` to explicit typed interfaces, preventing implicit type coercion vulnerabilities.
+- **Fail-closed auth enforcement across registries and triggers** — Bearer token, OIDC, and credential flows use `failClosedAuth` with typed `RequestOptions`, rejecting requests when required credentials are missing.
+- **Input validation hardened** — Additional input validation and error redaction across auth, API, and configuration modules.
 - **Mutation-only JSON body parser** — Express JSON body parsing restricted to mutation methods (POST/PUT/PATCH) only on both API and auth routers, reducing attack surface on read requests.
 - **CSRF Sec-Fetch-Site validation** — CSRF middleware now rejects requests with `Sec-Fetch-Site: cross-site` header, blocking cross-site state-changing requests even when the Origin header is absent.
 - **HTTPS enforcement for SameSite=none cookies** — `DD_SERVER_COOKIE_SAMESITE=none` now requires HTTPS configuration (`DD_SERVER_TLS_ENABLED=true` or `DD_SERVER_TRUSTPROXY`) and throws at startup if neither is set.
@@ -56,6 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- **Audit store indexed date-range queries** — Audit entries now store a pre-parsed `timestampMs` index for numeric comparisons. Date-range queries use the LokiJS chain API with indexed filtering instead of full-collection scans. Automatic 30-day retention with periodic pruning.
+- **Backup store indexed lookups** — Backup collection adds indices on `data.containerName` and `data.id`, using `findOne()` for single-document lookups and indexed `find()` for name-filtered queries instead of full scans.
 - **LokiJS autosave interval set to 60 seconds** — Fixed autosave interval at 60s instead of the LokiJS default, reducing disk I/O while maintaining acceptable data durability.
 - **SSE shared heartbeat interval** — Deduplicated per-client SSE heartbeat timers into a single shared interval that starts on first connection and stops when all clients disconnect.
 - **LoginView exponential backoff** — Login page connectivity retry uses exponential backoff (5s doubling to 30s max) instead of fixed intervals, reducing server load during outages.
