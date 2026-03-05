@@ -367,28 +367,7 @@ onUnmounted(() => {
           <span v-else class="text-[10px] dd-text-muted">0%</span>
         </template>
         <template #cell-total="{ row }">
-          <div class="flex items-center gap-1.5">
-            <!-- Compact mode: inline severity pills -->
-            <template v-if="isCompact">
-              <span v-if="row.critical > 0" class="badge text-[8px] font-bold px-1 py-0"
-                    :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
-                C{{ row.critical }}
-              </span>
-              <span v-if="row.high > 0" class="badge text-[8px] font-bold px-1 py-0"
-                    :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
-                H{{ row.high }}
-              </span>
-              <span v-if="row.medium > 0" class="badge text-[8px] font-bold px-1 py-0"
-                    :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution)' }">
-                M{{ row.medium }}
-              </span>
-              <span v-if="row.low > 0" class="badge text-[8px] font-bold px-1 py-0"
-                    :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
-                L{{ row.low }}
-              </span>
-            </template>
-            <span class="text-[11px] font-semibold dd-text">{{ row.total }}</span>
-          </div>
+          <span class="text-[11px] font-semibold dd-text">{{ row.total }}</span>
         </template>
         <template #empty>
           <SecurityEmptyState
