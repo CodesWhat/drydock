@@ -117,6 +117,16 @@ function createJsonResponse() {
   };
 }
 
+function hashClientToken(token: string): Buffer {
+  const hash = mockCreateHash();
+  hash.update(token, 'utf8');
+  return hash.digest();
+}
+
+function hashClientTokens(tokens: string[]): Buffer[] {
+  return tokens.map((token) => hashClientToken(token));
+}
+
 function parseSseEventPayload(res, eventName) {
   const call = res.write.mock.calls.find(
     ([payload]) => typeof payload === 'string' && payload.startsWith(`event: ${eventName}\n`),
@@ -380,7 +390,7 @@ describe('SSE Router', () => {
         requiresAck: true,
         ackTimeoutMs: 1000,
         clientsAtEmit: 1,
-        eligibleClientTokens: new Set<string>(),
+        eligibleClientTokens: [],
         ackedClientIds: new Set<string>(),
         resolved: false,
         createdAtMs: Date.now() - 60 * 60 * 1000,
@@ -659,12 +669,13 @@ describe('SSE Router', () => {
   });
 
   describe('acknowledgeSelfUpdate', () => {
-    test('should avoid hashing every connected client token during ACK lookup', () => {
+    test('should avoid rehashing each eligible token during ACK lookup', () => {
       const handler = getHandler();
       const connectedClients = Array.from({ length: 25 }, (_, index) =>
         connectSseClient(handler, `10.1.0.${index + 1}`),
       );
       const targetClient = connectedClients[connectedClients.length - 1];
+      const eligibleClientTokens = connectedClients.map((client) => client.clientToken);
 
       sseRouter._pendingSelfUpdateAcks.set('op-efficient-lookup', {
         operationId: 'op-efficient-lookup',
@@ -672,7 +683,7 @@ describe('SSE Router', () => {
         ackTimeoutMs: 1000,
         createdAtMs: Date.now(),
         clientsAtEmit: connectedClients.length,
-        eligibleClientTokens: new Set<string>([targetClient.clientToken]),
+        eligibleClientTokens: hashClientTokens(eligibleClientTokens),
         ackedClientIds: new Set<string>(),
         resolved: false,
       });
@@ -687,7 +698,7 @@ describe('SSE Router', () => {
       ackHandler(req, jsonRes);
 
       expect(jsonRes.status).toHaveBeenCalledWith(202);
-      expect(mockCreateHash).toHaveBeenCalledTimes(3);
+      expect(mockCreateHash).toHaveBeenCalledTimes(2);
     });
 
     test('should use timing-safe comparison for client tokens', () => {
@@ -699,7 +710,7 @@ describe('SSE Router', () => {
         ackTimeoutMs: 1000,
         createdAtMs: Date.now(),
         clientsAtEmit: 1,
-        eligibleClientTokens: new Set<string>(['different-token']),
+        eligibleClientTokens: hashClientTokens(['different-token']),
         ackedClientIds: new Set<string>(),
         resolved: false,
       });
@@ -778,7 +789,7 @@ describe('SSE Router', () => {
         ackTimeoutMs: 1000,
         createdAtMs: Date.now(),
         clientsAtEmit: 1,
-        eligibleClientTokens: new Set<string>(['known-token']),
+        eligibleClientTokens: hashClientTokens(['known-token']),
         ackedClientIds: new Set<string>(),
         resolved: false,
       });
@@ -810,7 +821,7 @@ describe('SSE Router', () => {
         ackTimeoutMs: 1000,
         createdAtMs: Date.now(),
         clientsAtEmit: 1,
-        eligibleClientTokens: new Set<string>(['known-token']),
+        eligibleClientTokens: hashClientTokens(['known-token']),
         ackedClientIds: new Set<string>(),
         resolved: false,
       });
