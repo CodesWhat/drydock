@@ -333,7 +333,7 @@ describe('api/container/security', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Error generating SBOM (unknown SBOM error)',
+        error: 'Error generating SBOM',
       });
     });
 
@@ -346,7 +346,7 @@ describe('api/container/security', () => {
       expect(harness.deps.getErrorMessage).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Error generating SBOM (generator crashed)',
+        error: 'Error generating SBOM',
       });
     });
   });
@@ -486,7 +486,7 @@ describe('api/container/security', () => {
       expect(harness.storeContainer.updateContainer).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Security scan failed (scan failed)',
+        error: 'Security scan failed',
       });
     });
 

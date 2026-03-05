@@ -87,6 +87,8 @@ export function createSecurityHandlers({
   log,
 }: SecurityHandlerDependencies) {
   const MAX_CONCURRENT_ON_DEMAND_SCANS = 1;
+  const GENERIC_SBOM_ERROR_MESSAGE = 'Error generating SBOM';
+  const GENERIC_SCAN_ERROR_MESSAGE = 'Security scan failed';
   let inFlightOnDemandScans = 0;
 
   function getEmptyVulnerabilityResponse() {
@@ -191,8 +193,11 @@ export function createSecurityHandlers({
 
       const generatedDocument = sbomResult.documents?.[sbomFormat];
       if (sbomResult.status !== 'generated' || !generatedDocument) {
+        log.info(
+          `SBOM generation failed for ${image} (${sbomResult.error || 'unknown SBOM error'})`,
+        );
         res.status(500).json({
-          error: `Error generating SBOM (${sbomResult.error || 'unknown SBOM error'})`,
+          error: GENERIC_SBOM_ERROR_MESSAGE,
         });
         return;
       }
@@ -206,10 +211,132 @@ export function createSecurityHandlers({
         error: sbomResult.error,
       });
     } catch (error: unknown) {
+      log.info(`SBOM generation failed (${getErrorMessage(error)})`);
       res.status(500).json({
-        error: `Error generating SBOM (${getErrorMessage(error)})`,
+        error: GENERIC_SBOM_ERROR_MESSAGE,
       });
     }
+  }
+
+  async function scanCurrentImage(options: {
+    container: Container;
+    securityConfiguration: SecurityConfiguration;
+  }): Promise<{
+    auth: RegistryAuth | undefined;
+    scanResult: ContainerSecurityScan;
+    securityPatch: Partial<ContainerSecurityState>;
+  }> {
+    const { container, securityConfiguration } = options;
+    const image = getContainerImageFullName(container);
+    log.info(`Running on-demand security scan for ${image}`);
+    const auth = await getContainerRegistryAuth(container);
+    const scanResult = await scanImageForVulnerabilities({ image, auth });
+    const securityPatch: Partial<ContainerSecurityState> = { scan: scanResult };
+
+    // Populate the digest scan cache so scheduled scans can benefit
+    const containerDigest = container.image?.digest?.value;
+    if (updateDigestScanCache && containerDigest && scanResult.status !== 'error') {
+      const trivyDbStatus = await getTrivyDatabaseStatus();
+      updateDigestScanCache(containerDigest, scanResult, trivyDbStatus?.updatedAt || '');
+    }
+
+    const summary = scanResult.summary;
+    if (summary && (summary.critical > 0 || summary.high > 0)) {
+      const details = `critical=${summary.critical}, high=${summary.high}, medium=${summary.medium}, low=${summary.low}, unknown=${summary.unknown}`;
+      await emitSecurityAlert({
+        containerName: fullName(container),
+        details,
+        status: scanResult.status,
+        summary,
+        blockingCount: scanResult.blockingCount,
+        container,
+      });
+    }
+
+    if (securityConfiguration.signature.verify) {
+      const signatureResult = await verifyImageSignature({ image, auth });
+      securityPatch.signature = signatureResult;
+    }
+
+    if (securityConfiguration.sbom.enabled) {
+      const sbomResult = await generateImageSbom({
+        image,
+        auth,
+        formats: securityConfiguration.sbom.formats,
+      });
+      securityPatch.sbom = sbomResult;
+    }
+
+    return { auth, scanResult, securityPatch };
+  }
+
+  async function scanUpdateImage(options: {
+    container: Container;
+    securityConfiguration: SecurityConfiguration;
+    auth: RegistryAuth | undefined;
+    securityPatch: Partial<ContainerSecurityState>;
+  }): Promise<void> {
+    const { container, securityConfiguration, auth, securityPatch } = options;
+
+    if (container.updateAvailable && container.result?.tag) {
+      try {
+        const updateImage = getContainerImageFullName(container, container.result.tag);
+        log.info(`Running on-demand security scan for update image ${updateImage}`);
+        const updateScanResult = await scanImageForVulnerabilities({
+          image: updateImage,
+          auth,
+        });
+        securityPatch.updateScan = updateScanResult;
+
+        if (securityConfiguration.signature.verify) {
+          const updateSignatureResult = await verifyImageSignature({
+            image: updateImage,
+            auth,
+          });
+          securityPatch.updateSignature = updateSignatureResult;
+        }
+
+        if (securityConfiguration.sbom.enabled) {
+          const updateSbomResult = await generateImageSbom({
+            image: updateImage,
+            auth,
+            formats: securityConfiguration.sbom.formats,
+          });
+          securityPatch.updateSbom = updateSbomResult;
+        }
+      } catch (updateError: unknown) {
+        log.info(
+          `Update image scan failed (${getErrorMessage(updateError)}), current scan preserved`,
+        );
+      }
+      return;
+    }
+
+    // Clear stale update data when no update is available
+    securityPatch.updateScan = undefined;
+    securityPatch.updateSignature = undefined;
+    securityPatch.updateSbom = undefined;
+  }
+
+  function persistAndBroadcast(options: {
+    id: string;
+    container: Container;
+    securityPatch: Partial<ContainerSecurityState>;
+    status: ContainerSecurityScan['status'];
+    res: Response;
+  }): void {
+    const { id, container, securityPatch, status, res } = options;
+    const containerToStore = {
+      ...container,
+      security: {
+        ...(container.security || {}),
+        ...securityPatch,
+      },
+    };
+    const updatedContainer = storeContainer.updateContainer(containerToStore);
+
+    broadcastScanCompleted(id, status);
+    res.status(200).json(redactContainerRuntimeEnv(updatedContainer));
   }
 
   async function scanContainer(req: Request, res: Response) {
@@ -235,106 +362,28 @@ export function createSecurityHandlers({
     broadcastScanStarted(id);
 
     try {
-      const image = getContainerImageFullName(container);
-      log.info(`Running on-demand security scan for ${image}`);
-      const auth = await getContainerRegistryAuth(container);
-      const securityPatch: Partial<ContainerSecurityState> = {};
-
-      // Run vulnerability scan
-      const scanResult = await scanImageForVulnerabilities({ image, auth });
-      securityPatch.scan = scanResult;
-
-      // Populate the digest scan cache so scheduled scans can benefit
-      const containerDigest = container.image?.digest?.value;
-      if (updateDigestScanCache && containerDigest && scanResult.status !== 'error') {
-        const trivyDbStatus = await getTrivyDatabaseStatus();
-        updateDigestScanCache(containerDigest, scanResult, trivyDbStatus?.updatedAt || '');
-      }
-
-      const summary = scanResult.summary;
-      if (summary && (summary.critical > 0 || summary.high > 0)) {
-        const details = `critical=${summary.critical}, high=${summary.high}, medium=${summary.medium}, low=${summary.low}, unknown=${summary.unknown}`;
-        await emitSecurityAlert({
-          containerName: fullName(container),
-          details,
-          status: scanResult.status,
-          summary,
-          blockingCount: scanResult.blockingCount,
-          container,
-        });
-      }
-
-      // Run signature verification if configured
-      if (securityConfiguration.signature.verify) {
-        const signatureResult = await verifyImageSignature({ image, auth });
-        securityPatch.signature = signatureResult;
-      }
-
-      // Generate SBOM if configured
-      if (securityConfiguration.sbom.enabled) {
-        const sbomResult = await generateImageSbom({
-          image,
-          auth,
-          formats: securityConfiguration.sbom.formats,
-        });
-        securityPatch.sbom = sbomResult;
-      }
-
-      // Scan update image when an update is available
-      if (container.updateAvailable && container.result?.tag) {
-        try {
-          const updateImage = getContainerImageFullName(container, container.result.tag);
-          log.info(`Running on-demand security scan for update image ${updateImage}`);
-          const updateScanResult = await scanImageForVulnerabilities({
-            image: updateImage,
-            auth,
-          });
-          securityPatch.updateScan = updateScanResult;
-
-          if (securityConfiguration.signature.verify) {
-            const updateSignatureResult = await verifyImageSignature({
-              image: updateImage,
-              auth,
-            });
-            securityPatch.updateSignature = updateSignatureResult;
-          }
-
-          if (securityConfiguration.sbom.enabled) {
-            const updateSbomResult = await generateImageSbom({
-              image: updateImage,
-              auth,
-              formats: securityConfiguration.sbom.formats,
-            });
-            securityPatch.updateSbom = updateSbomResult;
-          }
-        } catch (updateError: unknown) {
-          log.info(
-            `Update image scan failed (${getErrorMessage(updateError)}), current scan preserved`,
-          );
-        }
-      } else {
-        // Clear stale update data when no update is available
-        securityPatch.updateScan = undefined;
-        securityPatch.updateSignature = undefined;
-        securityPatch.updateSbom = undefined;
-      }
-
-      // Persist results
-      const containerToStore = {
-        ...container,
-        security: {
-          ...(container.security || {}),
-          ...securityPatch,
-        },
-      };
-      const updatedContainer = storeContainer.updateContainer(containerToStore);
-
-      broadcastScanCompleted(id, scanResult.status);
-      res.status(200).json(redactContainerRuntimeEnv(updatedContainer));
+      const { auth, scanResult, securityPatch } = await scanCurrentImage({
+        container,
+        securityConfiguration,
+      });
+      await scanUpdateImage({
+        container,
+        securityConfiguration,
+        auth,
+        securityPatch,
+      });
+      persistAndBroadcast({
+        id,
+        container,
+        securityPatch,
+        status: scanResult.status,
+        res,
+      });
     } catch (error: unknown) {
+      log.info(`Security scan failed (${getErrorMessage(error)})`);
       broadcastScanCompleted(id, 'error');
       res.status(500).json({
-        error: `Security scan failed (${getErrorMessage(error)})`,
+        error: GENERIC_SCAN_ERROR_MESSAGE,
       });
     } finally {
       inFlightOnDemandScans = Math.max(0, inFlightOnDemandScans - 1);
