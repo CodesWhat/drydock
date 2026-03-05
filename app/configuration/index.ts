@@ -497,6 +497,13 @@ export function getSecurityConfiguration() {
   };
 }
 
+export type SecurityConfiguration = Pick<
+  ReturnType<typeof getSecurityConfiguration>,
+  'enabled' | 'scanner' | 'sbom'
+> & {
+  signature: Pick<ReturnType<typeof getSecurityConfiguration>['signature'], 'verify'>;
+};
+
 export function getPublicUrl(req) {
   const publicUrl = ddEnvVars.DD_PUBLIC_URL;
   if (publicUrl) {

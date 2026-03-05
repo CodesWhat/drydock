@@ -1,21 +1,45 @@
-import type { SecuritySbomFormat } from '../../../configuration/index.js';
+import type { SecurityConfiguration, SecuritySbomFormat } from '../../../configuration/index.js';
 import type { Container } from '../../../model/container.js';
+import type {
+  ContainerSecuritySbom,
+  ContainerSecurityScan,
+  ContainerSignatureVerification,
+  ContainerVulnerabilitySummary,
+} from '../../../security/scan.js';
 import { getErrorMessage } from '../../../util/error.js';
 import TriggerPipelineError from './TriggerPipelineError.js';
 
 type SecurityContainer = Container;
 type SecurityState = SecurityContainer['security'];
+type PersistedSecurityState = NonNullable<SecurityState>;
 
-type SecurityConfiguration = {
-  enabled: boolean;
-  scanner: string;
-  signature: {
-    verify: boolean;
-  };
-  sbom: {
-    enabled: boolean;
-    formats: SecuritySbomFormat[];
-  };
+type SecurityFailureCode =
+  | 'security-signature-blocked'
+  | 'security-signature-failed'
+  | 'security-scan-failed'
+  | 'security-scan-blocked';
+
+const SECURITY_FAILURE_AUDIT_CODES = [
+  'security-signature-blocked',
+  'security-signature-failed',
+  'security-scan-failed',
+  'security-scan-blocked',
+] as const satisfies readonly SecurityFailureCode[];
+
+function isSecurityFailureCode(code: string): code is SecurityFailureCode {
+  return SECURITY_FAILURE_AUDIT_CODES.includes(code as SecurityFailureCode);
+}
+
+type SecurityStatePatch = Partial<PersistedSecurityState> & Record<string, unknown>;
+
+type SecurityGateLogger = {
+  info: (message: string) => void;
+  warn: (message: string) => void;
+};
+
+type SecurityGateUpdateContext = {
+  newImage: string;
+  auth: SecurityScannerRequest['auth'];
 };
 
 type SecurityScannerRequest = {
@@ -23,33 +47,10 @@ type SecurityScannerRequest = {
   auth: unknown;
 };
 
-type SignatureScanResult = {
-  status: string;
-  signatures?: number;
-  error?: string;
-};
-
-type VulnerabilitySummary = {
-  critical: number;
-  high: number;
-  medium: number;
-  low: number;
-  unknown: number;
-};
-
-type VulnerabilityScanResult = {
-  status: string;
-  summary: VulnerabilitySummary;
-  blockingCount: number;
-  blockSeverities: string[];
-  error?: string;
-};
-
-type SbomResult = {
-  status: string;
-  formats: SecuritySbomFormat[];
-  error?: string;
-};
+type SignatureScanResult = ContainerSignatureVerification;
+type VulnerabilitySummary = ContainerVulnerabilitySummary;
+type VulnerabilityScanResult = ContainerSecurityScan;
+type SbomResult = ContainerSecuritySbom;
 
 type SecurityAlertPayload = {
   containerName: string;
@@ -86,27 +87,52 @@ type SecurityGateDependencies = {
   ) => void;
 };
 
-type SecurityGateConstructorGroup<K extends keyof SecurityGateDependencies> = Pick<
-  Partial<SecurityGateDependencies>,
-  K
->;
+type SecurityGateConstructorOptions = Omit<SecurityGateDependencies, 'recordSecurityAudit'> & {
+  recordSecurityAudit?: SecurityGateDependencies['recordSecurityAudit'];
+};
 
-type SecurityGateConstructorOptions = Partial<SecurityGateDependencies>;
+const REQUIRED_SECURITY_GATE_DEPENDENCY_KEYS = [
+  'getSecurityConfiguration',
+  'verifyImageSignature',
+  'scanImageForVulnerabilities',
+  'generateImageSbom',
+  'getContainer',
+  'updateContainer',
+  'cacheSecurityState',
+  'emitSecurityAlert',
+  'fullName',
+] as const;
+
+function assertRequiredDependencies(
+  options: Partial<SecurityGateDependencies>,
+): asserts options is SecurityGateConstructorOptions {
+  for (const key of REQUIRED_SECURITY_GATE_DEPENDENCY_KEYS) {
+    if (typeof options[key] !== 'function') {
+      throw new TypeError(`SecurityGate requires dependency "${key}"`);
+    }
+  }
+}
 
 class SecurityGate {
-  securityConfig: SecurityGateConstructorGroup<'getSecurityConfiguration'>;
+  securityConfig: Pick<SecurityGateDependencies, 'getSecurityConfiguration'>;
 
-  scanners: SecurityGateConstructorGroup<
+  scanners: Pick<
+    SecurityGateDependencies,
     'verifyImageSignature' | 'scanImageForVulnerabilities' | 'generateImageSbom'
   >;
 
-  stateStore: SecurityGateConstructorGroup<
+  stateStore: Pick<
+    SecurityGateDependencies,
     'getContainer' | 'updateContainer' | 'cacheSecurityState'
   >;
 
-  telemetry: SecurityGateConstructorGroup<'emitSecurityAlert' | 'fullName' | 'recordSecurityAudit'>;
+  telemetry: Pick<
+    SecurityGateDependencies,
+    'emitSecurityAlert' | 'fullName' | 'recordSecurityAudit'
+  >;
 
-  constructor(options: SecurityGateConstructorOptions = {}) {
+  constructor(options: SecurityGateConstructorOptions) {
+    assertRequiredDependencies(options);
     this.securityConfig = {
       getSecurityConfiguration: options.getSecurityConfiguration,
     };
@@ -123,27 +149,21 @@ class SecurityGate {
     this.telemetry = {
       emitSecurityAlert: options.emitSecurityAlert,
       fullName: options.fullName,
-      recordSecurityAudit: options.recordSecurityAudit || (() => undefined),
+      recordSecurityAudit: options.recordSecurityAudit ?? (() => undefined),
     };
   }
 
-  createSecurityFailure(code, message) {
+  createSecurityFailure(code: SecurityFailureCode, message: string): TriggerPipelineError {
     return new TriggerPipelineError(code, message, {
       source: 'SecurityGate',
     });
   }
 
-  getSecurityFailureAuditAction(code) {
-    const actionByCode = {
-      'security-signature-blocked': 'security-signature-blocked',
-      'security-signature-failed': 'security-signature-failed',
-      'security-scan-failed': 'security-scan-failed',
-      'security-scan-blocked': 'security-scan-blocked',
-    };
-    return actionByCode[code];
+  getSecurityFailureAuditAction(code: string): SecurityFailureCode | undefined {
+    return isSecurityFailureCode(code) ? code : undefined;
   }
 
-  recordSecurityFailure(container, error) {
+  recordSecurityFailure(container: SecurityContainer, error: { code: string; message: string }) {
     const action = this.getSecurityFailureAuditAction(error.code);
     if (!action) {
       return;
@@ -152,13 +172,13 @@ class SecurityGate {
   }
 
   async persistSecurityState(
-    container,
-    securityPatch,
-    logContainer,
+    container: SecurityContainer,
+    securityPatch: SecurityStatePatch,
+    logContainer: SecurityGateLogger,
     slot: 'current' | 'update' = 'current',
-  ) {
+  ): Promise<void> {
     try {
-      const mappedPatch =
+      const mappedPatch: SecurityStatePatch =
         slot === 'update'
           ? Object.fromEntries(
               Object.entries(securityPatch).map(([key, value]) => {
@@ -188,7 +208,11 @@ class SecurityGate {
     }
   }
 
-  async maybeScanAndGateUpdate(context, container, logContainer) {
+  async maybeScanAndGateUpdate(
+    context: SecurityGateUpdateContext,
+    container: SecurityContainer,
+    logContainer: SecurityGateLogger,
+  ): Promise<void> {
     const securityConfiguration = this.securityConfig.getSecurityConfiguration();
     if (!securityConfiguration.enabled || securityConfiguration.scanner !== 'trivy') {
       return;
@@ -295,9 +319,9 @@ class SecurityGate {
         'success',
         `Security scan passed. Summary: ${details}`,
       );
-    } catch (error) {
+    } catch (error: unknown) {
       if (TriggerPipelineError.isTriggerPipelineError(error)) {
-        this.recordSecurityFailure(container, error);
+        this.recordSecurityFailure(container, error as { code: string; message: string });
       }
       throw error;
     }

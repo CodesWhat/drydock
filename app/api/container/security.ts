@@ -1,6 +1,10 @@
 import type { Request, Response } from 'express';
-import type { SecuritySbomFormat } from '../../configuration/index.js';
+import type { SecurityConfiguration, SecuritySbomFormat } from '../../configuration/index.js';
 import type { Container, ContainerSecurityState } from '../../model/container.js';
+import {
+  getTrivyDatabaseStatus as getTrivyDatabaseStatusDefault,
+  type TrivyDatabaseStatus,
+} from '../../security/runtime.js';
 import type {
   ContainerSecuritySbom,
   ContainerSecurityScan,
@@ -11,18 +15,6 @@ import { getPathParamValue } from './request-helpers.js';
 interface SecurityStoreContainerApi {
   getContainer: (id: string) => Container | undefined;
   updateContainer: (container: Container) => Container;
-}
-
-interface SecurityConfiguration {
-  enabled: boolean;
-  scanner: string;
-  signature: {
-    verify: boolean;
-  };
-  sbom: {
-    enabled: boolean;
-    formats: SecuritySbomFormat[];
-  };
 }
 
 interface RegistryAuth {
@@ -69,6 +61,7 @@ export interface SecurityHandlerDependencies {
     scanResult: ContainerSecurityScan,
     trivyDbUpdatedAt: string,
   ) => void;
+  getTrivyDatabaseStatus?: () => Promise<TrivyDatabaseStatus | undefined>;
   log: {
     info: (message: string) => void;
   };
@@ -90,8 +83,12 @@ export function createSecurityHandlers({
   getContainerImageFullName,
   getContainerRegistryAuth,
   updateDigestScanCache,
+  getTrivyDatabaseStatus = getTrivyDatabaseStatusDefault,
   log,
 }: SecurityHandlerDependencies) {
+  const MAX_CONCURRENT_ON_DEMAND_SCANS = 1;
+  let inFlightOnDemandScans = 0;
+
   function getEmptyVulnerabilityResponse() {
     return {
       scanner: undefined,
@@ -229,6 +226,12 @@ export function createSecurityHandlers({
       return;
     }
 
+    if (inFlightOnDemandScans >= MAX_CONCURRENT_ON_DEMAND_SCANS) {
+      res.status(429).json({ error: 'Too many concurrent security scans in progress' });
+      return;
+    }
+
+    inFlightOnDemandScans += 1;
     broadcastScanStarted(id);
 
     try {
@@ -244,7 +247,8 @@ export function createSecurityHandlers({
       // Populate the digest scan cache so scheduled scans can benefit
       const containerDigest = container.image?.digest?.value;
       if (updateDigestScanCache && containerDigest && scanResult.status !== 'error') {
-        updateDigestScanCache(containerDigest, scanResult, '');
+        const trivyDbStatus = await getTrivyDatabaseStatus();
+        updateDigestScanCache(containerDigest, scanResult, trivyDbStatus?.updatedAt || '');
       }
 
       const summary = scanResult.summary;
@@ -332,6 +336,8 @@ export function createSecurityHandlers({
       res.status(500).json({
         error: `Security scan failed (${getErrorMessage(error)})`,
       });
+    } finally {
+      inFlightOnDemandScans = Math.max(0, inFlightOnDemandScans - 1);
     }
   }
 

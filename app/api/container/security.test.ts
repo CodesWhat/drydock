@@ -107,6 +107,9 @@ function createHarness(
         : `my-registry/${targetContainer.image.name}:${targetContainer.image.tag.value}`,
     ),
     getContainerRegistryAuth: vi.fn(async () => AUTH),
+    getTrivyDatabaseStatus: vi.fn(async () => ({
+      updatedAt: '2026-03-04T11:55:00.000Z',
+    })),
     updateDigestScanCache: vi.fn(),
     log: { info: vi.fn() },
   };
@@ -124,9 +127,228 @@ async function callScanContainer(handlers: ReturnType<typeof createSecurityHandl
   return res;
 }
 
+function callGetContainerVulnerabilities(
+  handlers: ReturnType<typeof createSecurityHandlers>,
+  id: string | string[] | undefined = 'c1',
+) {
+  const res = createMockResponse();
+  handlers.getContainerVulnerabilities({ params: { id } } as any, res as any);
+  return res;
+}
+
+async function callGetContainerSbom(
+  handlers: ReturnType<typeof createSecurityHandlers>,
+  options: {
+    id?: string | string[];
+    format?: string;
+  } = {},
+) {
+  const res = createMockResponse();
+  await handlers.getContainerSbom(
+    {
+      params: { id: options.id ?? 'c1' },
+      query: options.format ? { format: options.format } : {},
+    } as any,
+    res as any,
+  );
+  return res;
+}
+
 describe('api/container/security', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('getContainerVulnerabilities', () => {
+    test('returns 404 when the container does not exist', () => {
+      const harness = createHarness();
+      harness.storeContainer.getContainer.mockReturnValue(undefined);
+
+      const res = callGetContainerVulnerabilities(harness.handlers);
+
+      expect(harness.storeContainer.getContainer).toHaveBeenCalledWith('c1');
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+    });
+
+    test('returns an empty vulnerability payload when no scan exists', () => {
+      const harness = createHarness({
+        container: createContainer({ security: {} }),
+      });
+
+      const res = callGetContainerVulnerabilities(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        scanner: undefined,
+        scannedAt: undefined,
+        status: 'not-scanned',
+        blockSeverities: [],
+        blockingCount: 0,
+        summary: {
+          unknown: 0,
+          low: 0,
+          medium: 0,
+          high: 0,
+          critical: 0,
+        },
+        vulnerabilities: [],
+      });
+    });
+
+    test('returns stored scan payload when available', () => {
+      const scan = createScanResult({
+        status: 'blocked',
+        blockingCount: 2,
+        vulnerabilities: [{ id: 'CVE-123', severity: 'HIGH' }],
+      });
+      const harness = createHarness({
+        container: createContainer({ security: { scan } }),
+      });
+
+      const res = callGetContainerVulnerabilities(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(scan);
+    });
+  });
+
+  describe('getContainerSbom', () => {
+    test('returns 400 for an unsupported sbom format', async () => {
+      const harness = createHarness();
+
+      const res = await callGetContainerSbom(harness.handlers, { format: 'foo-json' });
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Unsupported SBOM format. Supported values: spdx-json, cyclonedx-json',
+      });
+      expect(harness.deps.generateImageSbom).not.toHaveBeenCalled();
+    });
+
+    test('returns 404 when the container does not exist', async () => {
+      const harness = createHarness();
+      harness.storeContainer.getContainer.mockReturnValue(undefined);
+
+      const res = await callGetContainerSbom(harness.handlers);
+
+      expect(harness.storeContainer.getContainer).toHaveBeenCalledWith('c1');
+      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(harness.deps.generateImageSbom).not.toHaveBeenCalled();
+    });
+
+    test('returns cached generated sbom document when requested format exists', async () => {
+      const cachedSbom = createSbomResult(CURRENT_IMAGE, {
+        status: 'generated',
+        formats: ['spdx-json', 'cyclonedx-json'],
+        documents: {
+          'spdx-json': { SPDXID: 'SPDXRef-CACHED' },
+          'cyclonedx-json': { bomFormat: 'CycloneDX' },
+        },
+      });
+      const harness = createHarness({
+        container: createContainer({ security: { sbom: cachedSbom } }),
+      });
+
+      const res = await callGetContainerSbom(harness.handlers, { format: 'spdx-json' });
+
+      expect(harness.deps.generateImageSbom).not.toHaveBeenCalled();
+      expect(harness.storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        generator: cachedSbom.generator,
+        image: cachedSbom.image,
+        generatedAt: cachedSbom.generatedAt,
+        format: 'spdx-json',
+        document: { SPDXID: 'SPDXRef-CACHED' },
+        error: cachedSbom.error,
+      });
+    });
+
+    test('generates sbom and persists merged documents when requested format is missing', async () => {
+      const existingSbom = createSbomResult(CURRENT_IMAGE, {
+        status: 'generated',
+        formats: ['spdx-json'],
+        documents: {
+          'spdx-json': { SPDXID: 'SPDXRef-CACHED' },
+        },
+      });
+      const generatedSbom = createSbomResult(CURRENT_IMAGE, {
+        status: 'generated',
+        formats: ['cyclonedx-json'],
+        documents: {
+          'cyclonedx-json': { bomFormat: 'CycloneDX', specVersion: '1.6' },
+        },
+      });
+      const harness = createHarness({
+        container: createContainer({ security: { sbom: existingSbom } }),
+      });
+      harness.deps.generateImageSbom.mockResolvedValueOnce(generatedSbom);
+
+      const res = await callGetContainerSbom(harness.handlers, { format: 'cyclonedx-json' });
+
+      expect(harness.deps.getContainerImageFullName).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }),
+      );
+      expect(harness.deps.getContainerRegistryAuth).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }),
+      );
+      expect(harness.deps.generateImageSbom).toHaveBeenCalledWith({
+        image: CURRENT_IMAGE,
+        auth: AUTH,
+        formats: ['cyclonedx-json'],
+      });
+      expect(harness.storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            sbom: expect.objectContaining({
+              documents: {
+                'spdx-json': { SPDXID: 'SPDXRef-CACHED' },
+                'cyclonedx-json': { bomFormat: 'CycloneDX', specVersion: '1.6' },
+              },
+            }),
+          }),
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        generator: generatedSbom.generator,
+        image: generatedSbom.image,
+        generatedAt: generatedSbom.generatedAt,
+        format: 'cyclonedx-json',
+        document: { bomFormat: 'CycloneDX', specVersion: '1.6' },
+        error: generatedSbom.error,
+      });
+    });
+
+    test('returns 500 when sbom generation succeeds without requested document', async () => {
+      const harness = createHarness();
+      harness.deps.generateImageSbom.mockResolvedValueOnce(
+        createSbomResult(CURRENT_IMAGE, {
+          status: 'generated',
+          documents: {},
+        }),
+      );
+
+      const res = await callGetContainerSbom(harness.handlers, { format: 'spdx-json' });
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error generating SBOM (unknown SBOM error)',
+      });
+    });
+
+    test('returns 500 when sbom generation throws', async () => {
+      const harness = createHarness();
+      harness.deps.generateImageSbom.mockRejectedValueOnce(new Error('generator crashed'));
+
+      const res = await callGetContainerSbom(harness.handlers);
+
+      expect(harness.deps.getErrorMessage).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error generating SBOM (generator crashed)',
+      });
+    });
   });
 
   describe('scanContainer edge paths', () => {
@@ -157,6 +379,47 @@ describe('api/container/security', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Security scanner is not configured' });
       expect(harness.deps.broadcastScanStarted).not.toHaveBeenCalled();
       expect(harness.deps.scanImageForVulnerabilities).not.toHaveBeenCalled();
+    });
+
+    test('returns 429 when another on-demand scan is already running', async () => {
+      const harness = createHarness({
+        container: createContainer({
+          updateAvailable: false,
+          result: undefined,
+        }),
+      });
+      const firstScanResult = createScanResult();
+      const thirdScanResult = createScanResult({
+        scannedAt: '2026-03-04T12:05:00.000Z',
+      });
+      let releaseFirstScan: (() => void) | undefined;
+
+      harness.deps.scanImageForVulnerabilities
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              releaseFirstScan = () => resolve(firstScanResult);
+            }),
+        )
+        .mockResolvedValueOnce(thirdScanResult);
+
+      const firstResponsePromise = callScanContainer(harness.handlers);
+      const secondResponse = await callScanContainer(harness.handlers);
+
+      expect(secondResponse.status).toHaveBeenCalledWith(429);
+      expect(secondResponse.json).toHaveBeenCalledWith({
+        error: 'Too many concurrent security scans in progress',
+      });
+      expect(harness.deps.broadcastScanStarted).toHaveBeenCalledTimes(1);
+      expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledTimes(1);
+
+      releaseFirstScan?.();
+      const firstResponse = await firstResponsePromise;
+      expect(firstResponse.status).toHaveBeenCalledWith(200);
+
+      const thirdResponse = await callScanContainer(harness.handlers);
+      expect(thirdResponse.status).toHaveBeenCalledWith(200);
+      expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledTimes(2);
     });
 
     test('runs only current-image scan and clears stale update fields when no update is available', async () => {
@@ -225,6 +488,39 @@ describe('api/container/security', () => {
       expect(res.json).toHaveBeenCalledWith({
         error: 'Security scan failed (scan failed)',
       });
+    });
+
+    test('emits a security alert when current-image scan reports high or critical findings', async () => {
+      const harness = createHarness({
+        container: createContainer({
+          updateAvailable: false,
+          result: undefined,
+        }),
+      });
+      const summary = { unknown: 1, low: 2, medium: 3, high: 4, critical: 5 };
+      const scanResult = createScanResult({
+        status: 'blocked',
+        blockingCount: 9,
+        summary,
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(scanResult);
+
+      const res = await callScanContainer(harness.handlers);
+
+      expect(harness.deps.emitSecurityAlert).toHaveBeenCalledTimes(1);
+      expect(harness.deps.emitSecurityAlert).toHaveBeenCalledWith({
+        containerName: 'local_nginx',
+        details: 'critical=5, high=4, medium=3, low=2, unknown=1',
+        status: 'blocked',
+        summary,
+        blockingCount: 9,
+        container: expect.objectContaining({
+          id: 'c1',
+          name: 'nginx',
+        }),
+      });
+      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c1', 'blocked');
+      expect(res.status).toHaveBeenCalledWith(200);
     });
   });
 
@@ -385,7 +681,7 @@ describe('api/container/security', () => {
       expect(harness.deps.updateDigestScanCache).toHaveBeenCalledWith(
         'sha256:abc123',
         scanResult,
-        '',
+        '2026-03-04T11:55:00.000Z',
       );
     });
 

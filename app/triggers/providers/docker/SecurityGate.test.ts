@@ -113,6 +113,12 @@ function createContext(overrides = {}) {
 }
 
 describe('SecurityGate', () => {
+  test('constructor should fail fast when required dependencies are missing', () => {
+    expect(() => new SecurityGate({} as any)).toThrow(
+      'SecurityGate requires dependency "getSecurityConfiguration"',
+    );
+  });
+
   test('recordSecurityFailure should ignore unknown error codes', () => {
     const recordSecurityAudit = vi.fn();
     const gate = new SecurityGate({
@@ -137,6 +143,35 @@ describe('SecurityGate', () => {
     });
 
     expect(recordSecurityAudit).not.toHaveBeenCalled();
+  });
+
+  test('getSecurityFailureAuditAction should return known failure codes unchanged', () => {
+    const gate = new SecurityGate({
+      getSecurityConfiguration: vi.fn(() => ({
+        enabled: false,
+        scanner: 'trivy',
+      })),
+      verifyImageSignature: vi.fn(),
+      scanImageForVulnerabilities: vi.fn(),
+      generateImageSbom: vi.fn(),
+      emitSecurityAlert: vi.fn(),
+      getContainer: vi.fn(),
+      updateContainer: vi.fn(),
+      cacheSecurityState: vi.fn(),
+      fullName: vi.fn(),
+      recordSecurityAudit: vi.fn(),
+    });
+
+    expect(gate.getSecurityFailureAuditAction('security-signature-blocked')).toBe(
+      'security-signature-blocked',
+    );
+    expect(gate.getSecurityFailureAuditAction('security-signature-failed')).toBe(
+      'security-signature-failed',
+    );
+    expect(gate.getSecurityFailureAuditAction('security-scan-failed')).toBe('security-scan-failed');
+    expect(gate.getSecurityFailureAuditAction('security-scan-blocked')).toBe(
+      'security-scan-blocked',
+    );
   });
 
   test('constructor should default recordSecurityAudit when omitted', async () => {
