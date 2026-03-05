@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { flushPromises } from '@vue/test-utils';
+import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import { ref } from 'vue';
 import LoginView from '@/views/LoginView.vue';
 import { mountWithPlugins } from '../helpers/mount';
@@ -37,10 +37,16 @@ const mockGetStrategies = getStrategies as ReturnType<typeof vi.fn>;
 const mockLoginBasic = loginBasic as ReturnType<typeof vi.fn>;
 const mockSetRememberMe = setRememberMe as ReturnType<typeof vi.fn>;
 const mockGetOidcRedirection = getOidcRedirection as ReturnType<typeof vi.fn>;
+const mountedWrappers: VueWrapper[] = [];
+
+function trackWrapper(wrapper: VueWrapper) {
+  mountedWrappers.push(wrapper);
+  return wrapper;
+}
 
 async function mountLogin(strategies: any[] = []) {
   mockGetStrategies.mockResolvedValue(strategies);
-  const wrapper = mountWithPlugins(LoginView);
+  const wrapper = trackWrapper(mountWithPlugins(LoginView));
   await flushPromises();
   return wrapper;
 }
@@ -51,10 +57,18 @@ describe('LoginView', () => {
     mockPush.mockClear();
   });
 
+  afterEach(() => {
+    for (const wrapper of mountedWrappers.splice(0)) {
+      wrapper.unmount();
+    }
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
   describe('loading state', () => {
     it('does not show login card before strategies resolve', () => {
       mockGetStrategies.mockReturnValue(new Promise(() => {}));
-      const wrapper = mountWithPlugins(LoginView);
+      const wrapper = trackWrapper(mountWithPlugins(LoginView));
       expect(wrapper.find('form').exists()).toBe(false);
       expect(wrapper.text()).not.toContain('Sign in to Drydock');
     });
@@ -73,7 +87,7 @@ describe('LoginView', () => {
 
     it('shows error when getStrategies fails', async () => {
       mockGetStrategies.mockRejectedValue(new Error('fail'));
-      const wrapper = mountWithPlugins(LoginView);
+      const wrapper = trackWrapper(mountWithPlugins(LoginView));
       await flushPromises();
       expect(wrapper.text()).toContain('Failed to load authentication methods');
     });
@@ -260,14 +274,11 @@ describe('LoginView', () => {
   });
 
   describe('connectivity monitor', () => {
-    const originalFetch = globalThis.fetch;
-
     beforeEach(() => {
       vi.useFakeTimers();
     });
 
     afterEach(() => {
-      globalThis.fetch = originalFetch;
       vi.useRealTimers();
     });
 
@@ -276,54 +287,74 @@ describe('LoginView', () => {
       expect(wrapper.text()).not.toContain('Connection Lost');
     });
 
-    it('shows connection lost overlay when server is unreachable', async () => {
-      // Stub fetch to simulate network failure
-      globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
-
+    it('does not poll when initial strategy fetch succeeds', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
       const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
-
-      // Advance timer to trigger connectivity check
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(60_000);
       await flushPromises();
 
-      expect(wrapper.text()).toContain('Connection Lost');
-      expect(wrapper.text()).toContain('Reconnecting');
+      expect(mockGetStrategies).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      wrapper.unmount();
     });
 
-    it('hides overlay and reloads strategies when server recovers', async () => {
-      // Start with fetch failing
-      const mockFetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
-      globalThis.fetch = mockFetch;
+    it('polls with backoff only after initial failure and stops after success', async () => {
+      mockGetStrategies
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockRejectedValueOnce(new Error('still offline'))
+        .mockResolvedValueOnce([{ type: 'basic', name: 'basic' }]);
 
-      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
-
-      // Server goes down
-      await vi.advanceTimersByTimeAsync(10_000);
+      const wrapper = trackWrapper(mountWithPlugins(LoginView));
       await flushPromises();
+      expect(mockGetStrategies).toHaveBeenCalledTimes(1);
       expect(wrapper.text()).toContain('Connection Lost');
 
-      // Server comes back
-      mockFetch.mockResolvedValue(new Response('', { status: 200 }));
-      mockGetStrategies.mockResolvedValue([{ type: 'basic', name: 'basic' }]);
+      await vi.advanceTimersByTimeAsync(4_999);
+      await flushPromises();
+      expect(mockGetStrategies).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(1);
+      await flushPromises();
+      expect(mockGetStrategies).toHaveBeenCalledTimes(2);
+      expect(wrapper.text()).toContain('Connection Lost');
+
+      await vi.advanceTimersByTimeAsync(9_999);
+      await flushPromises();
+      expect(mockGetStrategies).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await flushPromises();
+      expect(mockGetStrategies).toHaveBeenCalledTimes(3);
+      expect(wrapper.text()).not.toContain('Connection Lost');
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      await flushPromises();
+      expect(mockGetStrategies).toHaveBeenCalledTimes(3);
+      wrapper.unmount();
+    });
+
+    it('clears retry polling timer on unmount', async () => {
+      mockGetStrategies.mockRejectedValue(new Error('offline'));
+
+      const wrapper = trackWrapper(mountWithPlugins(LoginView));
+      await flushPromises();
+      expect(mockGetStrategies).toHaveBeenCalledTimes(1);
+
+      wrapper.unmount();
+      await vi.advanceTimersByTimeAsync(60_000);
       await flushPromises();
 
-      expect(wrapper.text()).not.toContain('Connection Lost');
-      // getStrategies called: once on mount + once on reconnect
-      expect(mockGetStrategies).toHaveBeenCalledTimes(2);
+      expect(mockGetStrategies).toHaveBeenCalledTimes(1);
     });
 
     it('shows warning icon and reconnecting text in overlay', async () => {
-      globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
-
-      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
-
-      await vi.advanceTimersByTimeAsync(10_000);
+      mockGetStrategies.mockRejectedValue(new Error('offline'));
+      const wrapper = trackWrapper(mountWithPlugins(LoginView));
       await flushPromises();
 
       expect(wrapper.find('.app-icon-stub[data-icon="warning"]').exists()).toBe(true);
       expect(wrapper.text()).toContain('Reconnecting');
+      wrapper.unmount();
     });
   });
 

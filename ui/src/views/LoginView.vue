@@ -25,6 +25,13 @@ const rememberMe = ref(false);
 
 const hasBasic = ref(false);
 const oidcStrategies = ref<Strategy[]>([]);
+const connectionLost = ref(false);
+
+const INITIAL_RETRY_DELAY_MS = 5_000;
+const MAX_RETRY_DELAY_MS = 30_000;
+
+let retryDelayMs = INITIAL_RETRY_DELAY_MS;
+let connectivityTimer: ReturnType<typeof setTimeout> | undefined;
 const oidcLayoutClass = computed(() => {
   const count = oidcStrategies.value.length;
   if (count <= 1) {
@@ -41,29 +48,14 @@ const oidcLayoutClass = computed(() => {
 
 onMounted(async () => {
   try {
-    const data = await getStrategies();
-    strategies.value = data;
-    hasBasic.value = data.some((s: Strategy) => s.type === 'basic');
-    oidcStrategies.value = data.filter((s: Strategy) => s.type === 'oidc');
-
-    // If anonymous strategy exists, skip login entirely
-    if (data.some((s: Strategy) => s.type === 'anonymous')) {
-      navigateAfterLogin();
-      return;
-    }
-
-    // If only one OIDC provider with auto-redirect, go straight there
-    if (!hasBasic.value && oidcStrategies.value.length === 1 && oidcStrategies.value[0].redirect) {
-      await handleOidc(oidcStrategies.value[0].name);
-      return;
-    }
+    await loadStrategies();
   } catch {
     error.value = 'Failed to load authentication methods';
+    connectionLost.value = true;
+    scheduleConnectivityRetry();
   } finally {
     loading.value = false;
   }
-
-  startConnectivityPolling();
 });
 
 function navigateAfterLogin() {
@@ -110,38 +102,52 @@ function oidcIcon(name: string): string {
   return 'sign-in';
 }
 
-// Server connectivity monitor
-const connectionLost = ref(false);
-let connectivityTimer: ReturnType<typeof setInterval> | undefined;
+async function loadStrategies() {
+  const data = await getStrategies();
+  strategies.value = data;
+  hasBasic.value = data.some((s: Strategy) => s.type === 'basic');
+  oidcStrategies.value = data.filter((s: Strategy) => s.type === 'oidc');
+  error.value = '';
+  connectionLost.value = false;
+  retryDelayMs = INITIAL_RETRY_DELAY_MS;
+  clearConnectivityRetry();
 
-async function checkConnectivity() {
-  try {
-    const res = await fetch('/auth/strategies', { redirect: 'manual' });
-    if (connectionLost.value && res.ok) {
-      connectionLost.value = false;
-      // Reload strategies now that the server is back
-      try {
-        const data = await getStrategies();
-        strategies.value = data;
-        hasBasic.value = data.some((s: Strategy) => s.type === 'basic');
-        oidcStrategies.value = data.filter((s: Strategy) => s.type === 'oidc');
-        error.value = '';
-      } catch {
-        // Strategies will be retried on next poll
-      }
-    }
-  } catch {
-    connectionLost.value = true;
+  // If anonymous strategy exists, skip login entirely
+  if (data.some((s: Strategy) => s.type === 'anonymous')) {
+    navigateAfterLogin();
+    return;
+  }
+
+  // If only one OIDC provider with auto-redirect, go straight there
+  if (!hasBasic.value && oidcStrategies.value.length === 1 && oidcStrategies.value[0].redirect) {
+    await handleOidc(oidcStrategies.value[0].name);
   }
 }
 
-function startConnectivityPolling() {
-  if (connectivityTimer) clearInterval(connectivityTimer);
-  connectivityTimer = setInterval(checkConnectivity, 10_000);
+async function checkConnectivity() {
+  try {
+    await loadStrategies();
+  } catch {
+    connectionLost.value = true;
+    scheduleConnectivityRetry();
+  }
+}
+
+function scheduleConnectivityRetry() {
+  clearConnectivityRetry();
+  connectivityTimer = setTimeout(checkConnectivity, retryDelayMs);
+  retryDelayMs = Math.min(retryDelayMs * 2, MAX_RETRY_DELAY_MS);
+}
+
+function clearConnectivityRetry() {
+  if (connectivityTimer) {
+    clearTimeout(connectivityTimer);
+    connectivityTimer = undefined;
+  }
 }
 
 onUnmounted(() => {
-  if (connectivityTimer) clearInterval(connectivityTimer);
+  clearConnectivityRetry();
 });
 </script>
 
