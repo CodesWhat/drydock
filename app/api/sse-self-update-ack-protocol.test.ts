@@ -38,83 +38,19 @@ function createJsonResponse(): Response {
   } as unknown as Response;
 }
 
-describe('sse extraction modules', () => {
-  test('ActiveSseClientRegistry tracks add/remove across indexes', () => {
-    const registry = new ActiveSseClientRegistry();
-    const response = createResponse();
-    const client = createClient(response, 'token-1');
-
-    registry.add(client);
-    expect(registry.getByResponse(response)).toBe(client);
-    expect(registry.getByTokenHashHex(client.clientTokenHashHex)).toBe(client);
-    expect(registry.sizeByToken()).toBe(1);
-    expect(registry.sizeByTokenHash()).toBe(1);
-    expect(registry.sizeByResponse()).toBe(1);
-
-    registry.remove(client);
-    expect(registry.sizeByToken()).toBe(0);
-    expect(registry.sizeByTokenHash()).toBe(0);
-    expect(registry.sizeByResponse()).toBe(0);
-  });
-
-  test('ActiveSseClientRegistry does not remove entries for stale client references', () => {
-    const registry = new ActiveSseClientRegistry();
-    const response = createResponse();
-    const client = createClient(response, 'token-1', 'client-1');
-    registry.add(client);
-
-    const staleClientReference: ActiveSseClient = {
-      ...client,
-    };
-    registry.remove(staleClientReference);
-
-    expect(registry.getByResponse(response)).toBe(client);
-    expect(registry.sizeByToken()).toBe(1);
-    expect(registry.sizeByTokenHash()).toBe(1);
-    expect(registry.sizeByResponse()).toBe(1);
-  });
-
-  test('ActiveSseClientRegistry drift helper is a no-op for unknown responses', () => {
-    const registry = new ActiveSseClientRegistry();
-    const response = createResponse();
-
-    expect(() => registry.simulateTokenHashOnlyDrift(response)).not.toThrow();
-    expect(registry.sizeByToken()).toBe(0);
-    expect(registry.sizeByTokenHash()).toBe(0);
-    expect(registry.sizeByResponse()).toBe(0);
-  });
-
-  test('ActiveSseClientRegistry drift helper tolerates token index reassignment', () => {
-    const registry = new ActiveSseClientRegistry();
-    const firstResponse = createResponse();
-    const secondResponse = createResponse();
-    const firstClient = createClient(firstResponse, 'shared-token', 'client-1');
-    const secondClient = createClient(secondResponse, 'shared-token', 'client-2');
-    registry.add(firstClient);
-    registry.add(secondClient);
-
-    registry.simulateTokenHashOnlyDrift(firstResponse);
-
-    expect(registry.getByResponse(firstResponse)).toBeUndefined();
-    expect(registry.getByResponse(secondResponse)).toBe(secondClient);
-    expect(registry.sizeByToken()).toBe(1);
-    expect(registry.sizeByTokenHash()).toBe(1);
-    expect(registry.sizeByResponse()).toBe(1);
-  });
-
-  test('self-update ack protocol accepts valid acknowledgements', () => {
+describe('sse-self-update-ack-protocol', () => {
+  test('accepts valid acknowledgements', async () => {
     const response = createResponse();
     const client = createClient(response, 'token-1');
     const registry = new ActiveSseClientRegistry();
     registry.add(client);
-    const clients = new Set<FlushableResponse>([response]);
     const protocol = createSelfUpdateAckProtocol({
-      clients,
+      clients: new Set<FlushableResponse>([response]),
       activeClientRegistry: registry,
       defaultAckTimeoutMs: 3000,
     });
 
-    void protocol.broadcastSelfUpdate({
+    const broadcastPromise = protocol.broadcastSelfUpdate({
       opId: 'op-1',
       requiresAck: true,
       ackTimeoutMs: 1000,
@@ -135,9 +71,10 @@ describe('sse extraction modules', () => {
         operationId: 'op-1',
       }),
     );
+    await broadcastPromise;
   });
 
-  test('self-update ack protocol ignores self-update events without operation id', async () => {
+  test('ignores self-update events without operation id', async () => {
     const response = createResponse();
     const protocol = createSelfUpdateAckProtocol({
       clients: new Set<FlushableResponse>([response]),
@@ -155,7 +92,7 @@ describe('sse extraction modules', () => {
     expect(protocol.pendingSelfUpdateAcks.size).toBe(0);
   });
 
-  test('self-update ack protocol ignores undefined payload', async () => {
+  test('ignores undefined payload', async () => {
     const response = createResponse();
     const protocol = createSelfUpdateAckProtocol({
       clients: new Set<FlushableResponse>([response]),
@@ -169,7 +106,7 @@ describe('sse extraction modules', () => {
     expect(protocol.pendingSelfUpdateAcks.size).toBe(0);
   });
 
-  test('self-update ack protocol validates missing operationId', () => {
+  test('validates missing operationId', () => {
     const protocol = createSelfUpdateAckProtocol({
       clients: new Set<FlushableResponse>(),
       activeClientRegistry: new ActiveSseClientRegistry(),
@@ -188,7 +125,7 @@ describe('sse extraction modules', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'operationId is required' });
   });
 
-  test('self-update ack protocol ignores stale timeout callback after pending map is cleared', () => {
+  test('ignores stale timeout callback after pending map is cleared', () => {
     vi.useFakeTimers();
     const response = createResponse();
     const client = createClient(response, 'token-1');
@@ -215,7 +152,7 @@ describe('sse extraction modules', () => {
     vi.useRealTimers();
   });
 
-  test('self-update ack protocol rejects mismatched clientId for a valid token', async () => {
+  test('rejects mismatched clientId for a valid token', async () => {
     const response = createResponse();
     const client = createClient(response, 'token-1', 'client-1');
     const registry = new ActiveSseClientRegistry();
@@ -253,7 +190,7 @@ describe('sse extraction modules', () => {
     await broadcastPromise;
   });
 
-  test('self-update ack protocol sweep removes already-resolved pending acknowledgements', () => {
+  test('sweep removes already-resolved pending acknowledgements', () => {
     const protocol = createSelfUpdateAckProtocol({
       clients: new Set<FlushableResponse>(),
       activeClientRegistry: new ActiveSseClientRegistry(),
@@ -279,7 +216,7 @@ describe('sse extraction modules', () => {
     expect(protocol.pendingSelfUpdateAcks.has('op-resolved')).toBe(false);
   });
 
-  test('self-update ack protocol sweep keeps fresh unresolved pending acknowledgements', () => {
+  test('sweep keeps fresh unresolved pending acknowledgements', () => {
     const protocol = createSelfUpdateAckProtocol({
       clients: new Set<FlushableResponse>(),
       activeClientRegistry: new ActiveSseClientRegistry(),

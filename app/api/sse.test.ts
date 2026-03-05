@@ -229,6 +229,32 @@ describe('SSE Router', () => {
       expect(mockRegisterAgentDisconnected).toHaveBeenCalledTimes(2);
     });
 
+    test('should deregister event listeners on process shutdown signal', () => {
+      const deregisterSelfUpdateStarting = vi.fn();
+      const deregisterContainerAdded = vi.fn();
+      const deregisterContainerUpdated = vi.fn();
+      const deregisterContainerRemoved = vi.fn();
+      const deregisterAgentConnected = vi.fn();
+      const deregisterAgentDisconnected = vi.fn();
+
+      mockRegisterSelfUpdateStarting.mockReturnValueOnce(deregisterSelfUpdateStarting);
+      mockRegisterContainerAdded.mockReturnValueOnce(deregisterContainerAdded);
+      mockRegisterContainerUpdated.mockReturnValueOnce(deregisterContainerUpdated);
+      mockRegisterContainerRemoved.mockReturnValueOnce(deregisterContainerRemoved);
+      mockRegisterAgentConnected.mockReturnValueOnce(deregisterAgentConnected);
+      mockRegisterAgentDisconnected.mockReturnValueOnce(deregisterAgentDisconnected);
+
+      sseRouter.init();
+      process.emit('SIGTERM');
+
+      expect(deregisterSelfUpdateStarting).toHaveBeenCalledTimes(1);
+      expect(deregisterContainerAdded).toHaveBeenCalledTimes(1);
+      expect(deregisterContainerUpdated).toHaveBeenCalledTimes(1);
+      expect(deregisterContainerRemoved).toHaveBeenCalledTimes(1);
+      expect(deregisterAgentConnected).toHaveBeenCalledTimes(1);
+      expect(deregisterAgentDisconnected).toHaveBeenCalledTimes(1);
+    });
+
     test('should register GET route on /', () => {
       sseRouter.init();
       expect(mockRouter.get).toHaveBeenCalledWith('/', expect.any(Function));

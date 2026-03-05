@@ -52,6 +52,8 @@ const pendingSelfUpdateAcks = selfUpdateAckProtocol.pendingSelfUpdateAcks;
 let staleSweepIntervalHandle: ReturnType<typeof globalThis.setInterval> | undefined;
 let sharedHeartbeatIntervalHandle: ReturnType<typeof globalThis.setInterval> | undefined;
 const eventListenerDeregistrations: Array<() => void> = [];
+const PROCESS_SHUTDOWN_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
+let processShutdownHandlersRegistered = false;
 
 function getClientIp(req: Request): string {
   return req.ip ?? 'unknown';
@@ -233,6 +235,48 @@ function trackEventListenerDeregistration(maybeDeregister: void | (() => void)):
   }
 }
 
+function deregisterEventListeners(): void {
+  for (const deregister of eventListenerDeregistrations.splice(0)) {
+    deregister();
+  }
+}
+
+function clearRuntimeIntervals(): void {
+  if (staleSweepIntervalHandle) {
+    globalThis.clearInterval(staleSweepIntervalHandle);
+    staleSweepIntervalHandle = undefined;
+  }
+  if (sharedHeartbeatIntervalHandle) {
+    globalThis.clearInterval(sharedHeartbeatIntervalHandle);
+    sharedHeartbeatIntervalHandle = undefined;
+  }
+}
+
+function cleanupOnProcessShutdown(): void {
+  deregisterEventListeners();
+  clearRuntimeIntervals();
+}
+
+function registerProcessShutdownHandlersIfNeeded(): void {
+  if (processShutdownHandlersRegistered) {
+    return;
+  }
+  for (const signal of PROCESS_SHUTDOWN_SIGNALS) {
+    process.on(signal, cleanupOnProcessShutdown);
+  }
+  processShutdownHandlersRegistered = true;
+}
+
+function unregisterProcessShutdownHandlersForTests(): void {
+  if (!processShutdownHandlersRegistered) {
+    return;
+  }
+  for (const signal of PROCESS_SHUTDOWN_SIGNALS) {
+    process.off(signal, cleanupOnProcessShutdown);
+  }
+  processShutdownHandlersRegistered = false;
+}
+
 export function broadcastScanStarted(containerId: string): void {
   const data = JSON.stringify({ containerId });
   for (const client of clients) {
@@ -263,6 +307,7 @@ function broadcastContainerEvent(eventName: string, payload: unknown): void {
 }
 
 export function init(): express.Router {
+  registerProcessShutdownHandlersIfNeeded();
   if (!staleSweepIntervalHandle) {
     staleSweepIntervalHandle = globalThis.setInterval(() => {
       sweepStaleSseState();
@@ -312,17 +357,9 @@ export function init(): express.Router {
 
 function resetInitializationStateForTests(): void {
   initialized = false;
-  for (const deregister of eventListenerDeregistrations.splice(0)) {
-    deregister();
-  }
-  if (staleSweepIntervalHandle) {
-    globalThis.clearInterval(staleSweepIntervalHandle);
-    staleSweepIntervalHandle = undefined;
-  }
-  if (sharedHeartbeatIntervalHandle) {
-    globalThis.clearInterval(sharedHeartbeatIntervalHandle);
-    sharedHeartbeatIntervalHandle = undefined;
-  }
+  deregisterEventListeners();
+  clearRuntimeIntervals();
+  unregisterProcessShutdownHandlersForTests();
 }
 
 // For testing
