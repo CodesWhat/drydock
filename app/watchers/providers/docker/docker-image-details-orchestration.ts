@@ -30,14 +30,75 @@ export interface ContainerLabelOverrides {
   registryLookupUrl?: string;
 }
 
+interface DockerContainerSummary {
+  Id: string;
+  Image: string;
+  Labels?: Record<string, string>;
+  State?: string;
+  Names?: string[];
+  Ports?: unknown;
+  Mounts?: unknown;
+}
+
+interface DockerContainerInspectPayload {
+  [key: string]: unknown;
+}
+
+interface DockerImageInspectPayload {
+  Id: string;
+  RepoTags?: string[];
+  RepoDigests?: string[];
+  Architecture?: string;
+  Os?: string;
+  Variant?: string;
+  Created?: string;
+  [key: string]: unknown;
+}
+
+interface ParsedDockerImageReference {
+  path: string;
+  domain?: string;
+  tag?: string;
+  [key: string]: unknown;
+}
+
+interface ResolvedContainerLabelOverrides {
+  includeTags?: string;
+  excludeTags?: string;
+  transformTags?: string;
+  tagFamily?: string;
+  linkTemplate?: string;
+  displayName?: string;
+  displayIcon?: string;
+  triggerInclude?: string;
+  triggerExclude?: string;
+  lookupImage?: string;
+  inspectTagPath?: string;
+}
+
+interface ResolvedContainerConfig {
+  includeTags?: string;
+  excludeTags?: string;
+  transformTags?: string;
+  tagFamily?: string;
+  linkTemplate?: string;
+  displayName?: string;
+  displayIcon?: string;
+  triggerInclude?: string;
+  triggerExclude?: string;
+  lookupImage?: string;
+  inspectTagPath?: string;
+  watchDigest?: string;
+}
+
 interface DockerImageDetailsWatcher {
   name: string;
   configuration: {
     watchevents: boolean;
   };
   dockerApi: {
-    getContainer: (id: string) => { inspect: () => Promise<any> };
-    getImage: (imageId: string) => { inspect: () => Promise<any> };
+    getContainer: (id: string) => { inspect: () => Promise<DockerContainerInspectPayload> };
+    getImage: (imageId: string) => { inspect: () => Promise<DockerImageInspectPayload> };
   };
   log: {
     warn: (message: string) => void;
@@ -51,22 +112,34 @@ interface DockerImageDetailsHelpers {
   resolveLabelsFromContainer: (
     containerLabels: Record<string, string>,
     overrides?: ContainerLabelOverrides,
-  ) => any;
+  ) => ResolvedContainerLabelOverrides;
   mergeConfigWithImgset: (
-    labelOverrides: any,
+    labelOverrides: ResolvedContainerLabelOverrides,
     matchingImgset: ResolvedImgset | undefined,
     containerLabels: Record<string, string>,
-  ) => any;
+  ) => ResolvedContainerConfig;
   normalizeContainer: (container: Container) => Container;
-  resolveImageName: (imageName: string, image: any) => any;
+  resolveImageName: (
+    imageName: string,
+    image: DockerImageInspectPayload,
+  ) => ParsedDockerImageReference | undefined;
   resolveTagName: (
-    parsedImage: any,
-    image: any,
+    parsedImage: ParsedDockerImageReference,
+    image: DockerImageInspectPayload,
     inspectTagPath: string | undefined,
     transformTagsFromLabel: string | undefined,
     containerId: string,
   ) => string;
-  getMatchingImgsetConfiguration: (parsedImage: any) => ResolvedImgset | undefined;
+  getMatchingImgsetConfiguration: (
+    parsedImage: ParsedDockerImageReference,
+  ) => ResolvedImgset | undefined;
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return `${error}`;
 }
 
 /**
@@ -74,12 +147,12 @@ interface DockerImageDetailsHelpers {
  */
 export async function addImageDetailsToContainerOrchestration(
   watcher: DockerImageDetailsWatcher,
-  container: any,
+  container: DockerContainerSummary,
   labelOverrides: ContainerLabelOverrides = {},
   helpers: DockerImageDetailsHelpers,
 ): Promise<Container | undefined> {
   const containerId = container.Id;
-  const containerLabels = container.Labels || {};
+  const containerLabels: Record<string, string> = container.Labels || {};
   const runtimeDetailsFromSummary = getRuntimeDetailsFromContainerSummary(container);
 
   // Is container already in store? Refresh volatile image fields, then return it
@@ -143,8 +216,8 @@ export async function addImageDetailsToContainerOrchestration(
   try {
     await watcher.ensureRemoteAuthHeaders();
     image = await watcher.dockerApi.getImage(container.Image).inspect();
-  } catch (e: any) {
-    throw new Error(`Unable to inspect image for container ${containerId}: ${e.message}`);
+  } catch (e: unknown) {
+    throw new Error(`Unable to inspect image for container ${containerId}: ${getErrorMessage(e)}`);
   }
 
   const parsedImage = helpers.resolveImageName(container.Image, image);

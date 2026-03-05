@@ -191,8 +191,18 @@ const containerLabelOverrideMappings = [
     wudKey: wudTagTransform,
     overrideKey: 'transformTags',
   },
-  { key: 'tagFamily', ddKey: ddTagFamily, overrideKey: 'tagFamily' },
-  { key: 'inspectTagPath', ddKey: ddInspectTagPath, wudKey: wudInspectTagPath },
+  {
+    key: 'tagFamily',
+    ddKey: ddTagFamily,
+    wudKey: undefined,
+    overrideKey: 'tagFamily',
+  },
+  {
+    key: 'inspectTagPath',
+    ddKey: ddInspectTagPath,
+    wudKey: wudInspectTagPath,
+    overrideKey: undefined,
+  },
   {
     key: 'linkTemplate',
     ddKey: ddLinkTemplate,

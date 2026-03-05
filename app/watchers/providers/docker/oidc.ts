@@ -52,14 +52,83 @@ export interface OidcLogger {
   debug: (message: string, ...args: unknown[]) => void;
 }
 
+interface OidcStateSerialized {
+  accessToken?: string;
+  refreshToken?: string;
+  accessTokenExpiresAt?: number;
+  deviceCodeCompleted?: boolean;
+}
+
+interface MutableOidcStateWithSerialization extends MutableOidcState {
+  toJSON: () => OidcStateSerialized;
+}
+
+interface OidcTokenPayload {
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: unknown;
+  [key: string]: unknown;
+}
+
+interface OidcDeviceAuthorizationPayload {
+  device_code?: string;
+  user_code?: string;
+  verification_uri?: string;
+  verification_url?: string;
+  verification_uri_complete?: string;
+  verification_url_complete?: string;
+  interval?: unknown;
+  expires_in?: unknown;
+  [key: string]: unknown;
+}
+
+interface OidcTokenErrorPayload {
+  error?: string;
+  error_description?: string;
+}
+
+export interface OidcRemoteAuthConfiguration {
+  type?: string;
+  bearer?: string;
+  user?: string;
+  password?: string;
+  oidc?: unknown;
+}
+
 const REDACTED_OIDC_TOKEN_VALUE = '[REDACTED]';
 
 function getRedactedTokenValue(value: string | undefined) {
   return value ? REDACTED_OIDC_TOKEN_VALUE : undefined;
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+function getUnknownErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return `${error}`;
+}
+
+function getOidcTokenErrorPayload(error: unknown): OidcTokenErrorPayload | undefined {
+  if (!isObjectRecord(error)) {
+    return undefined;
+  }
+  const response = error.response;
+  if (!isObjectRecord(response)) {
+    return undefined;
+  }
+  const data = response.data;
+  if (!isObjectRecord(data)) {
+    return undefined;
+  }
+  return data as OidcTokenErrorPayload;
+}
+
 export function createMutableOidcState(accessor: MutableOidcStateAccessor): MutableOidcState {
-  const state: any = {};
+  const state = {} as MutableOidcStateWithSerialization;
 
   Object.defineProperties(state, {
     accessToken: {
@@ -98,13 +167,14 @@ export function createMutableOidcState(accessor: MutableOidcStateAccessor): Muta
     },
   });
 
-  Object.defineProperty(state, Symbol.for('nodejs.util.inspect.custom'), {
+  const inspectCustomSymbol = Symbol.for('nodejs.util.inspect.custom');
+  Object.defineProperty(state, inspectCustomSymbol, {
     value: () => state.toJSON(),
     enumerable: false,
     configurable: false,
   });
 
-  return state as MutableOidcState;
+  return state;
 }
 
 export interface OidcContext {
@@ -113,7 +183,7 @@ export interface OidcContext {
   state: MutableOidcState;
   getOidcAuthString: (paths: string[]) => string | undefined;
   getOidcAuthNumber: (paths: string[]) => number | undefined;
-  normalizeNumber: (value: any) => number | undefined;
+  normalizeNumber: (value: unknown) => number | undefined;
   sleep: (ms: number) => Promise<void>;
   isDeviceCodePollingCancelled?: () => boolean;
 }
@@ -152,8 +222,8 @@ export const OIDC_DEVICE_POLL_INTERVAL_MS = 5000;
 export const OIDC_DEVICE_POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
 export function getRemoteAuthResolution(
-  auth: any,
-  getFirstConfigString: (value: any, paths: string[]) => string | undefined,
+  auth: OidcRemoteAuthConfiguration | undefined,
+  getFirstConfigString: (value: unknown, paths: string[]) => string | undefined,
 ) {
   const hasBearer = Boolean(auth?.bearer);
   const hasBasic = Boolean(auth?.user && auth?.password);
@@ -304,10 +374,10 @@ export function buildTokenRequestBody(
 
 export function applyRemoteOidcTokenPayload(
   state: MutableOidcState,
-  tokenPayload: any,
+  tokenPayload: OidcTokenPayload,
   options: {
     watcherName: string;
-    normalizeNumber: (value: any) => number | undefined;
+    normalizeNumber: (value: unknown) => number | undefined;
     markDeviceCodeCompleted?: boolean;
     allowMissingAccessToken?: boolean;
   },
@@ -378,12 +448,16 @@ export async function refreshRemoteOidcAccessToken(context: OidcContext) {
     context.state.refreshToken,
   );
 
-  const tokenResponse = await axios.post(tokenEndpoint, tokenRequestBody.toString(), {
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+  const tokenResponse = await axios.post<OidcTokenPayload>(
+    tokenEndpoint,
+    tokenRequestBody.toString(),
+    {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      timeout: oidcTimeout || OIDC_DEFAULT_TIMEOUT_MS,
     },
-    timeout: oidcTimeout || OIDC_DEFAULT_TIMEOUT_MS,
-  });
+  );
   applyRemoteOidcTokenPayload(context.state, tokenResponse?.data || {}, {
     watcherName: context.watcherName,
     normalizeNumber: context.normalizeNumber,
@@ -415,12 +489,16 @@ export async function performDeviceCodeFlow(
     false,
   );
 
-  const deviceResponse = await axios.post(deviceUrl, deviceRequestBody.toString(), {
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+  const deviceResponse = await axios.post<OidcDeviceAuthorizationPayload>(
+    deviceUrl,
+    deviceRequestBody.toString(),
+    {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      timeout: timeout || OIDC_DEFAULT_TIMEOUT_MS,
     },
-    timeout: timeout || OIDC_DEFAULT_TIMEOUT_MS,
-  });
+  );
 
   const devicePayload = deviceResponse?.data || {};
   const deviceCode = devicePayload.device_code;
@@ -488,11 +566,11 @@ export function buildDeviceCodeTokenRequest(
  * adjustment to the poll interval, or throws on fatal errors.
  */
 export function handleTokenErrorResponse(
-  e: any,
+  e: unknown,
   currentIntervalMs: number,
   context: { watcherName: string; log: Pick<OidcLogger, 'debug'> },
 ): { continuePolling: boolean; newIntervalMs: number } {
-  const errorResponse = e?.response?.data;
+  const errorResponse = getOidcTokenErrorPayload(e);
   const errorCode = errorResponse?.error || '';
 
   if (errorCode === 'authorization_pending') {
@@ -522,7 +600,7 @@ export function handleTokenErrorResponse(
     );
   }
 
-  const errorDescription = errorResponse?.error_description || e.message;
+  const errorDescription = errorResponse?.error_description || getUnknownErrorMessage(e);
   throw new Error(
     `OIDC device authorization for ${context.watcherName} failed: ${errorDescription}`,
   );
@@ -571,7 +649,7 @@ export async function pollDeviceCodeToken(
         },
         timeout: timeout || OIDC_DEFAULT_TIMEOUT_MS,
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       const result = handleTokenErrorResponse(e, currentIntervalMs, context);
       if (result.continuePolling) {
         currentIntervalMs = result.newIntervalMs;

@@ -39,6 +39,13 @@ describe('docker oidc module', () => {
     expect(source).not.toContain('log: any;');
   });
 
+  test('oidc source should avoid explicit any contracts', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, './oidc.ts'), 'utf8');
+
+    expect(source).not.toContain('Record<string, any>');
+    expect(source).not.toMatch(/:\s*any\b/);
+  });
+
   test('auto-detects remote auth type when explicit type is not set', () => {
     expect(getRemoteAuthResolution({ bearer: 'token' }, getFirstConfigString).authType).toBe(
       'bearer',
