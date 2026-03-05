@@ -276,6 +276,87 @@ test('updateContainer should preserve raw runtime env values when payload contai
   });
 });
 
+test('updateContainer should reject incoming details when env is missing', async () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      id: 'container-details-non-array',
+      details: {
+        ports: [],
+        volumes: [],
+        env: [{ key: 'DB_PASSWORD', value: 'super-secret-password' }],
+      },
+    }),
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: vi.fn((doc) => {
+      existingContainer.data = doc.data;
+    }),
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+  expect(() =>
+    container.updateContainer(
+      createContainerFixture({
+        id: 'container-details-non-array',
+        details: {
+          ports: [],
+          volumes: [],
+        },
+      }),
+    ),
+  ).toThrow('"details.env"');
+});
+
+test('updateContainer should keep incoming details when classified env list is empty', async () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      id: 'container-details-empty-env',
+      details: {
+        ports: [],
+        volumes: [],
+        env: [{ key: 'DB_PASSWORD', value: 'super-secret-password' }],
+      },
+    }),
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: vi.fn((doc) => {
+      existingContainer.data = doc.data;
+    }),
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+  const updated = container.updateContainer(
+    createContainerFixture({
+      id: 'container-details-empty-env',
+      details: {
+        ports: [],
+        volumes: [],
+        env: [],
+      },
+    }),
+  );
+
+  expect(updated.details.env).toEqual([]);
+});
+
 test('insertContainer should redact sensitive env values in SSE event payload', async () => {
   const collection = {
     findOne: () => {},
@@ -419,6 +500,136 @@ test('updateContainer should preserve updateDetectedAt when update has not chang
   const updated = container.updateContainer(containerToSave);
 
   expect(updated.updateDetectedAt).toBe(existingDetectedAt);
+});
+
+test('updateContainer should preserve explicit incoming updateDetectedAt when provided', async () => {
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
+      },
+      result: { tag: '2.0.0' },
+      updateDetectedAt: '2026-02-24T09:15:00.000Z',
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const explicitDetectedAt = '2026-02-24T10:00:00.000Z';
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '2.0.0' },
+    updateDetectedAt: explicitDetectedAt,
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  expect(updated.updateDetectedAt).toBe(explicitDetectedAt);
+});
+
+test('updateContainer should set updateDetectedAt when previous update lacks timestamp', async () => {
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
+      },
+      result: { tag: '2.0.0' },
+      updateDetectedAt: undefined,
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '2.0.0' },
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  expect(typeof updated.updateDetectedAt).toBe('string');
+});
+
+test('updateContainer should refresh updateDetectedAt when update result changes', async () => {
+  const existingDetectedAt = '2026-02-24T09:15:00.000Z';
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
+      },
+      result: { tag: '2.0.0' },
+      updateDetectedAt: existingDetectedAt,
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '2.1.0' },
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  expect(updated.updateDetectedAt).toBeDefined();
+  expect(updated.updateDetectedAt).not.toBe(existingDetectedAt);
 });
 
 test('updateContainer should clear updateDetectedAt when update is no longer available', async () => {
@@ -862,6 +1073,32 @@ test('insertContainer should clear cached security state after consuming it', as
   container.cacheSecurityState('test', 'test', securityData);
   container.insertContainer(createContainerFixture());
   expect(container.getCachedSecurityState('test', 'test')).toBeUndefined();
+});
+
+test('cacheSecurityState should refresh existing cache entries', async () => {
+  container.clearAllCachedSecurityState();
+  container.cacheSecurityState('refresh', 'entry', { status: 'old' });
+  container.cacheSecurityState('refresh', 'entry', { status: 'new' });
+
+  expect(container.getCachedSecurityState('refresh', 'entry')).toEqual({ status: 'new' });
+  container.clearCachedSecurityState('refresh', 'entry');
+});
+
+test('cacheSecurityState should prune expired entries before adding fresh entries', async () => {
+  vi.useFakeTimers();
+  try {
+    container.clearAllCachedSecurityState();
+    vi.setSystemTime(new Date('2026-02-01T00:00:00.000Z'));
+    container.cacheSecurityState('ttl-prune', 'stale', { status: 'old' });
+    vi.advanceTimersByTime(container.SECURITY_STATE_CACHE_TTL_MS + 1);
+    container.cacheSecurityState('ttl-prune', 'fresh', { status: 'new' });
+
+    expect(container.getCachedSecurityState('ttl-prune', 'stale')).toBeUndefined();
+    expect(container.getCachedSecurityState('ttl-prune', 'fresh')).toEqual({ status: 'new' });
+  } finally {
+    vi.useRealTimers();
+    container.clearAllCachedSecurityState();
+  }
 });
 
 test('insertContainer should not overwrite explicit security state with cache', async () => {

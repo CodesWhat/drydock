@@ -101,9 +101,6 @@ function setContainersQueryCache(cacheKey, cacheValue) {
 
   while (containersQueryCache.size > CONTAINERS_QUERY_CACHE_MAX_ENTRIES) {
     const oldestCacheKey = containersQueryCache.keys().next().value;
-    if (!oldestCacheKey) {
-      break;
-    }
     containersQueryCache.delete(oldestCacheKey);
   }
 }

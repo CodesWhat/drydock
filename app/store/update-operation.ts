@@ -102,12 +102,11 @@ function getOperationTimestamp(operation: UpdateOperation): number {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
-function pruneOperationsForRetention(nowMs = Date.now()): number {
-  if (!updateOperationCollection) {
-    return 0;
-  }
-
-  const documents = updateOperationCollection.find();
+function pruneOperationsForRetention(
+  collection: UpdateOperationCollection,
+  nowMs = Date.now(),
+): number {
+  const documents = collection.find();
   if (documents.length === 0) {
     return 0;
   }
@@ -132,7 +131,7 @@ function pruneOperationsForRetention(nowMs = Date.now()): number {
   });
 
   for (const document of toRemove) {
-    updateOperationCollection.remove(document);
+    collection.remove(document);
   }
 
   return toRemove.length;
@@ -164,7 +163,7 @@ export function insertOperation(operation: InsertUpdateOperationInput): UpdateOp
 
   if (updateOperationCollection) {
     updateOperationCollection.insert({ data: operationToSave });
-    pruneOperationsForRetention();
+    pruneOperationsForRetention(updateOperationCollection);
   }
 
   return operationToSave;
@@ -195,7 +194,7 @@ export function updateOperation(
 
   updateOperationCollection.remove(existingDoc);
   updateOperationCollection.insert({ data: updated });
-  pruneOperationsForRetention();
+  pruneOperationsForRetention(updateOperationCollection);
 
   return updated;
 }

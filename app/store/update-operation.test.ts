@@ -91,6 +91,11 @@ describe('Update Operation Store', () => {
     );
   });
 
+  test('updateOperation should return undefined when operation id does not exist', () => {
+    const result = updateOperation.updateOperation('missing-id', { status: 'failed' });
+    expect(result).toBeUndefined();
+  });
+
   test('getInProgressOperationByContainerName should return latest in-progress operation', () => {
     const older = updateOperation.insertOperation({
       containerName: 'web',
@@ -123,6 +128,27 @@ describe('Update Operation Store', () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
     expect(fresh.getInProgressOperationByContainerName('web')).toBeUndefined();
+  });
+
+  test('getInProgressOperationByContainerName should sort by latest timestamp', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+      });
+      vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
+      const second = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+      });
+
+      const active = updateOperation.getInProgressOperationByContainerName('web');
+      expect(active?.id).toBe(second.id);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('getOperationsByContainerName should return container operations sorted by latest update', () => {
@@ -274,6 +300,171 @@ describe('Update Operation Store', () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');
     expect(fresh.getOperationsByContainerName('web')).toEqual([]);
+  });
+
+  test('insertOperation should work without initialized collection', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    const inserted = fresh.insertOperation({ containerName: 'web' });
+    expect(inserted.id).toBeDefined();
+    expect(inserted.status).toBe('in-progress');
+    expect(inserted.phase).toBe('prepare');
+  });
+
+  test('updateOperation should return undefined when store is not initialized', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    expect(fresh.updateOperation('missing', { status: 'failed' })).toBeUndefined();
+  });
+
+  test('retention pruning should handle empty collections safely', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    const db = {
+      getCollection: () => null,
+      addCollection: () => ({
+        insert: vi.fn(),
+        find: vi.fn(() => []),
+        findOne: vi.fn(() => null),
+        remove: vi.fn(),
+      }),
+    };
+    fresh.createCollections(db as any);
+    const inserted = fresh.insertOperation({ containerName: 'web' });
+    expect(inserted.containerName).toBe('web');
+  });
+
+  test('sorting helpers should handle invalid timestamps by treating them as zero', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    const db = {
+      getCollection: () => null,
+      addCollection: () => {
+        const docs: any[] = [];
+        return {
+          insert: (doc: any) => {
+            doc.data.updatedAt = 'not-a-date';
+            docs.push(doc);
+          },
+          find: () => docs,
+          findOne: (query: Record<string, string>) =>
+            docs.find((doc) => doc.data.id === query['data.id']) || null,
+          remove: vi.fn(),
+        };
+      },
+    };
+    fresh.createCollections(db as any);
+    fresh.insertOperation({ containerName: 'web' });
+
+    expect(fresh.getOperationsByContainerName('web')).toHaveLength(1);
+    expect(fresh.getInProgressOperationByContainerName('web')).toBeDefined();
+  });
+
+  test('sorting should place records with invalid updatedAt behind valid timestamps', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    const db = {
+      getCollection: () => null,
+      addCollection: () => {
+        const docs: any[] = [];
+        return {
+          insert: (doc: any) => {
+            if (doc.data.phase === 'rollback-failed') {
+              doc.data.updatedAt = 'not-a-date';
+            }
+            docs.push(doc);
+          },
+          find: (query: Record<string, string> = {}) =>
+            docs.filter((doc) =>
+              Object.entries(query).every(([key, value]) => {
+                const path = key.split('.');
+                let current: any = doc;
+                for (const segment of path) current = current?.[segment];
+                return current === value;
+              }),
+            ),
+          findOne: (query: Record<string, string>) =>
+            docs.find((doc) => doc.data.id === query['data.id']) || null,
+          remove: vi.fn(),
+        };
+      },
+    };
+    fresh.createCollections(db as any);
+
+    const valid = fresh.insertOperation({
+      containerName: 'web',
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    const invalid = fresh.insertOperation({
+      containerName: 'web',
+      status: 'failed',
+      phase: 'rollback-failed',
+    });
+
+    const operations = fresh.getOperationsByContainerName('web');
+    expect(operations.map((operation) => operation.id)).toEqual([valid.id, invalid.id]);
+  });
+
+  test('sorting helpers should fallback to createdAt when updatedAt is blank', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    const db = {
+      getCollection: () => null,
+      addCollection: () => {
+        const docs: any[] = [];
+        return {
+          insert: (doc: any) => {
+            doc.data.updatedAt = '';
+            docs.push(doc);
+          },
+          find: () => docs,
+          findOne: (query: Record<string, string>) =>
+            docs.find((doc) => doc.data.id === query['data.id']) || null,
+          remove: vi.fn(),
+        };
+      },
+    };
+    fresh.createCollections(db as any);
+
+    const older = fresh.insertOperation({
+      containerName: 'web',
+      createdAt: '2026-02-23T00:00:00.000Z',
+    });
+    const newer = fresh.insertOperation({
+      containerName: 'web',
+      createdAt: '2026-02-23T00:01:00.000Z',
+    });
+
+    const operations = fresh.getOperationsByContainerName('web');
+    expect(operations.map((operation) => operation.id)).toEqual([newer.id, older.id]);
+  });
+
+  test('sorting helpers should treat invalid createdAt as zero when updatedAt is blank', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    const db = {
+      getCollection: () => null,
+      addCollection: () => {
+        const docs: any[] = [];
+        return {
+          insert: (doc: any) => {
+            doc.data.updatedAt = '';
+            doc.data.createdAt = 'invalid-created-at';
+            docs.push(doc);
+          },
+          find: () => docs,
+          findOne: (query: Record<string, string>) =>
+            docs.find((doc) => doc.data.id === query['data.id']) || null,
+          remove: vi.fn(),
+        };
+      },
+    };
+    fresh.createCollections(db as any);
+    fresh.insertOperation({ containerName: 'web' });
+
+    expect(fresh.getOperationsByContainerName('web')).toHaveLength(1);
+    expect(fresh.getInProgressOperationByContainerName('web')).toBeDefined();
   });
 
   test('retention pruning stays within lightweight runtime budget for medium history', () => {
