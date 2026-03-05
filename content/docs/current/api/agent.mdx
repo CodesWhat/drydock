@@ -122,6 +122,35 @@ Sent when a container is removed (e.g. stopped and pruned).
 }
 ```
 
+## Container Logs
+
+Returns stdout/stderr output from a container running on the Agent.
+
+```bash
+curl -H "X-Dd-Agent-Secret: <SECRET>" \
+  "http://agent:3000/api/containers/:id/logs?tail=100"
+```
+
+Query parameters are the same as the [controller container logs endpoint](/docs/api/container#get-container-logs).
+
+## Application Log Entries
+
+Returns application log entries from the Agent's in-memory ring buffer.
+
+```bash
+curl -H "X-Dd-Agent-Secret: <SECRET>" \
+  "http://agent:3000/api/log/entries?level=warn&tail=50"
+```
+
+### Query parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `level` | string | Filter by minimum log level |
+| `component` | string | Filter by component name |
+| `tail` | integer | Number of entries to return from the end |
+| `since` | integer | Unix timestamp (seconds) -- only entries after this time |
+
 ## Execute Remote Trigger
 
 Executes a specific trigger on the Agent (e.g., to update a container).
@@ -132,4 +161,28 @@ curl -X POST \
   -H "Content-Type: application/json" \
   -d '{ ...container_json... }' \
   http://agent:3000/api/triggers/:type/:name
+```
+
+### Batch execution
+
+Execute a trigger for multiple containers in a single request.
+
+```bash
+curl -X POST \
+  -H "X-Dd-Agent-Secret: <SECRET>" \
+  -H "Content-Type: application/json" \
+  -d '[{ ...container_json... }, { ...container_json... }]' \
+  http://agent:3000/api/triggers/:type/:name/batch
+```
+
+## Health Check
+
+Returns the Agent's uptime. This endpoint is unauthenticated and intended for Docker `HEALTHCHECK` directives.
+
+```bash
+curl http://agent:3000/health
+
+{
+  "uptime": 3600.123
+}
 ```

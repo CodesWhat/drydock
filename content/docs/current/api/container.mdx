@@ -13,36 +13,94 @@ This operation lets you get all the watched containers.
 curl http://drydock:3000/api/containers
 
 [
-   {
-  "id":"31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816",
-  "name":"homeassistant",
-  "watcher":"local",
-  "includeTags":"^\\d+\\.\\d+.\\d+$",
-  "image":{
-    "id":"sha256:d4a6fafb7d4da37495e5c9be3242590be24a87d7edcc4f79761098889c54fca6",
-    "registry":{
-      "url":"123456789.dkr.ecr.eu-west-1.amazonaws.com"
+  {
+    "id": "31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816",
+    "name": "homeassistant",
+    "displayName": "Home Assistant",
+    "displayIcon": "mdi:home-assistant",
+    "status": "running",
+    "watcher": "local",
+    "includeTags": "^\\d+\\.\\d+.\\d+$",
+    "image": {
+      "id": "sha256:d4a6fafb7d4da37495e5c9be3242590be24a87d7edcc4f79761098889c54fca6",
+      "registry": {
+        "name": "hub",
+        "url": "123456789.dkr.ecr.eu-west-1.amazonaws.com"
+      },
+      "name": "test",
+      "tag": {
+        "value": "2021.6.4",
+        "semver": true
+      },
+      "digest": {
+        "watch": false,
+        "repo": "sha256:ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72"
+      },
+      "architecture": "amd64",
+      "os": "linux",
+      "created": "2021-06-12T05:33:38.440Z"
     },
-    "name":"test",
-    "tag":{
-      "value":"2021.6.4",
-      "semver":true
+    "result": {
+      "tag": "2021.6.5"
     },
-    "digest":{
-      "watch":false,
-      "repo":"sha256:ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72"
+    "updateAvailable": true,
+    "updateKind": {
+      "kind": "tag",
+      "localValue": "2021.6.4",
+      "remoteValue": "2021.6.5",
+      "semverDiff": "patch"
     },
-    "architecture":"amd64",
-    "os":"linux",
-    "created":"2021-06-12T05:33:38.440Z"
-  },
-  "result":{
-    "tag":"2021.6.5"
-  },
-  "updateAvailable": true
-}
+    "updateDetectedAt": "2021-06-15T10:30:00.000Z",
+    "details": {
+      "ports": ["8123:8123/tcp"],
+      "volumes": ["/config:/config"],
+      "env": [
+        { "key": "TZ", "value": "***" }
+      ]
+    },
+    "security": {
+      "scan": {
+        "scanner": "trivy",
+        "image": "homeassistant/home-assistant:2021.6.5",
+        "scannedAt": "2021-06-15T11:00:00.000Z",
+        "status": "passed",
+        "blockSeverities": ["CRITICAL", "HIGH"],
+        "blockingCount": 0,
+        "summary": { "unknown": 0, "low": 1, "medium": 0, "high": 0, "critical": 0 },
+        "vulnerabilities": []
+      }
+    }
+  }
 ]
 ```
+
+## Get container summary
+
+Returns a lightweight summary of container and security counts, used by the dashboard sidebar.
+
+```bash
+curl http://drydock:3000/api/containers/summary
+
+{
+  "containers": {
+    "total": 12,
+    "running": 10,
+    "stopped": 2
+  },
+  "security": {
+    "issues": 3
+  }
+}
+```
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `containers.total` | integer | Total number of watched containers |
+| `containers.running` | integer | Number of running containers |
+| `containers.stopped` | integer | Number of stopped containers |
+| `security.issues` | integer | Number of containers with critical or high vulnerabilities |
 
 ## Watch all Containers
 
@@ -189,6 +247,12 @@ This operation lets you manually run a trigger on the container.
 curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/triggers/ntfy/one
 ```
 
+For containers managed by a remote agent, use the 4-segment variant to route the trigger through the agent:
+
+```bash
+curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/triggers/agent1/ntfy/one
+```
+
 ## Update a container
 
 This operation triggers a direct container update — pulling the new image, stopping the old container, and recreating it with the updated image. This is equivalent to clicking "Update now" in the UI. Requires the Docker trigger to be configured for the container's watcher and `DD_SERVER_FEATURE_CONTAINERACTIONS` to be enabled.
@@ -204,6 +268,7 @@ curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec
 This operation lets you control per-container update suppression policy (stored in drydock DB):
 
 - `skip-current`: skip the currently detected remote tag or digest
+- `remove-skip`: remove a single previously skipped tag or digest (requires `kind` and `value`)
 - `clear-skips`: remove `skipTags` and `skipDigests`
 - `snooze`: suppress update notifications until a date (supports `days` or explicit `snoozeUntil`)
 - `unsnooze`: remove `snoozeUntil`
@@ -213,6 +278,20 @@ This operation lets you control per-container update suppression policy (stored 
 curl -X PATCH http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
   -H 'Content-Type: application/json' \
   -d '{"action":"skip-current"}'
+```
+
+```bash
+# Remove a single skipped tag
+curl -X PATCH http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"remove-skip","kind":"tag","value":"1.2.3"}'
+```
+
+```bash
+# Remove a single skipped digest
+curl -X PATCH http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"remove-skip","kind":"digest","value":"sha256:abc123..."}'
 ```
 
 ```bash
@@ -267,6 +346,33 @@ curl "http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e3
 | `timestamps` | boolean | true | Include timestamps in output |
 
 Returns 200 with `{ "logs": "..." }` on success, 404 if the container is not found, or 500 on failure.
+
+## Reveal container environment variables
+
+Returns the full (unredacted) runtime environment variables for a container. Environment values in the standard container response are redacted to `***` for sensitive keys. This endpoint reveals the actual values and creates an audit trail entry.
+
+Rate-limited to 10 requests per minute.
+
+```bash
+curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/env/reveal
+
+{
+  "env": [
+    { "key": "TZ", "value": "America/New_York", "sensitive": false },
+    { "key": "DATABASE_PASSWORD", "value": "s3cret", "sensitive": true }
+  ]
+}
+```
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `env[].key` | string | Environment variable name |
+| `env[].value` | string | Unredacted value |
+| `env[].sensitive` | boolean | Whether the key matches known sensitive patterns (passwords, tokens, secrets) |
+
+Returns 200 with the env array on success, 404 if the container is not found, or 429 if rate-limited.
 
 ## Start a container
 

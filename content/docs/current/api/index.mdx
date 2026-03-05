@@ -43,8 +43,8 @@ The [webhook endpoints](/docs/configuration/webhooks) use a separate Bearer toke
 | `/api/server/security/runtime` | `GET` | Security tools availability (see [App API](/docs/api/app)) |
 | `/api/containers/groups` | `GET` | [Container groups](#container-groups) (by stack/compose project) |
 | `/api/webhook/watch` | `POST` | [Webhook](/docs/configuration/webhooks) — trigger watch on all containers |
-| `/api/webhook/watch/:name` | `POST` | [Webhook](/docs/configuration/webhooks) — watch specific container |
-| `/api/webhook/update/:name` | `POST` | [Webhook](/docs/configuration/webhooks) — update specific container |
+| `/api/webhook/watch/:containerName` | `POST` | [Webhook](/docs/configuration/webhooks) — watch specific container |
+| `/api/webhook/update/:containerName` | `POST` | [Webhook](/docs/configuration/webhooks) — update specific container |
 
 <Callout type="info">See each sub-page for detailed request/response examples.</Callout>
 
@@ -190,6 +190,23 @@ Connection limits: max 10 per IP, max 10 per session. Returns 429 when exceeded.
 | `dd:agent-connected` | Agent payload | A remote agent connected to the controller |
 | `dd:agent-disconnected` | Agent payload | A remote agent disconnected |
 
+### Self-update acknowledgment
+
+When a `dd:self-update` event has `requiresAck: true`, the UI must POST an acknowledgment before the timeout expires. The `clientId` and `clientToken` are provided in the initial `dd:connected` event.
+
+```bash
+curl -X POST http://drydock:3000/api/events/ui/self-update/op-abc123/ack \
+  -H 'Content-Type: application/json' \
+  -d '{"clientId": "client-1", "clientToken": "tok-xyz"}'
+```
+
+| Status | Response | Description |
+| --- | --- | --- |
+| 202 | `{ "status": "accepted", "operationId": "..." }` | Acknowledgment recorded |
+| 202 | `{ "status": "ignored", "operationId": "..." }` | No pending ack for this operation |
+| 400 | `{ "error": "..." }` | Missing required field (`operationId`, `clientId`, or `clientToken`) |
+| 403 | `{ "status": "rejected", "operationId": "..." }` | Invalid token, mismatched client, or client not bound to operation |
+
 ### SSE message format
 
 ```
@@ -280,3 +297,53 @@ curl http://drydock:3000/api/containers/groups
 | `containers` | array | List of containers with `id`, `name`, `displayName`, `updateAvailable` |
 | `containerCount` | integer | Number of containers in the group |
 | `updatesAvailable` | integer | Number of containers with a pending update |
+
+## Authentication routes
+
+When [authentication](/docs/configuration/authentications) is enabled, these endpoints manage the login flow. Auth routes are mounted at `/auth` (not `/api/auth`).
+
+### Get available strategies
+
+Returns the list of configured authentication strategies. This endpoint is unauthenticated so the login screen can render.
+
+```bash
+curl http://drydock:3000/auth/strategies
+```
+
+A legacy alias is available at `GET /api/auth/methods` (rate-limited).
+
+### Login
+
+Authenticate with credentials. The response sets a session cookie.
+
+```bash
+curl -X POST http://drydock:3000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username": "admin", "password": "..."}'
+```
+
+### Get current user
+
+Returns the currently authenticated user. Requires a valid session.
+
+```bash
+curl http://drydock:3000/auth/user
+```
+
+### Logout
+
+End the current session.
+
+```bash
+curl -X POST http://drydock:3000/auth/logout
+```
+
+### Remember me
+
+Store a remember-me preference for the current authenticated session.
+
+```bash
+curl -X POST http://drydock:3000/auth/remember \
+  -H 'Content-Type: application/json' \
+  -d '{"remember": true}'
+```
