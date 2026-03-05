@@ -89,10 +89,6 @@ class SseService {
       this.eventBus?.emit('agent-status-changed');
     });
 
-    this.eventSource.addEventListener('dd:heartbeat', () => {
-      // Keep-alive, no action needed
-    });
-
     this.eventSource.onerror = (): void => {
       this.consecutiveErrors++;
       if (this.selfUpdateMode) {

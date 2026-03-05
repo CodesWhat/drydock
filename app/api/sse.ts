@@ -148,6 +148,7 @@ const activeSseClientRegistryTestAdapter = {
 };
 const pendingSelfUpdateAcks = new Map<string, PendingSelfUpdateAck>();
 let staleSweepIntervalHandle: ReturnType<typeof globalThis.setInterval> | undefined;
+let sharedHeartbeatIntervalHandle: ReturnType<typeof globalThis.setInterval> | undefined;
 
 // Per-IP and per-session connection tracking to prevent connection exhaustion.
 const MAX_CONNECTIONS_PER_IP = 10;
@@ -214,6 +215,29 @@ function dropActiveClient(client: ActiveSseClient): void {
   sseClientRegistry.remove(client);
 }
 
+function writeHeartbeat(response: Response): void {
+  response.write('event: dd:heartbeat\ndata: {}\n\n');
+}
+
+function startSharedHeartbeatIntervalIfNeeded(): void {
+  if (sharedHeartbeatIntervalHandle || clients.size === 0) {
+    return;
+  }
+  sharedHeartbeatIntervalHandle = globalThis.setInterval(() => {
+    for (const client of clients) {
+      writeHeartbeat(client);
+    }
+  }, SSE_HEARTBEAT_INTERVAL_MS);
+}
+
+function stopSharedHeartbeatIntervalIfIdle(): void {
+  if (!sharedHeartbeatIntervalHandle || clients.size > 0) {
+    return;
+  }
+  globalThis.clearInterval(sharedHeartbeatIntervalHandle);
+  sharedHeartbeatIntervalHandle = undefined;
+}
+
 function sweepStaleSseState(nowMs = Date.now()): void {
   for (const activeClient of sseClientRegistry.listClients()) {
     const ageMs = nowMs - activeClient.connectedAtMs;
@@ -236,6 +260,8 @@ function sweepStaleSseState(nowMs = Date.now()): void {
       finalizePendingAck(operationId);
     }
   }
+
+  stopSharedHeartbeatIntervalIfIdle();
 }
 
 function eventsHandler(req: Request, res: Response): void {
@@ -291,11 +317,7 @@ function eventsHandler(req: Request, res: Response): void {
 
   clients.add(res);
   logger.debug(`SSE client connected (${clients.size} total)`);
-
-  // Heartbeat every 15s
-  const heartbeatInterval = globalThis.setInterval(() => {
-    res.write('event: dd:heartbeat\ndata: {}\n\n');
-  }, SSE_HEARTBEAT_INTERVAL_MS);
+  startSharedHeartbeatIntervalIfNeeded();
 
   let disconnected = false;
   const cleanup = () => {
@@ -303,12 +325,13 @@ function eventsHandler(req: Request, res: Response): void {
       return;
     }
     disconnected = true;
-    globalThis.clearInterval(heartbeatInterval);
-    clients.delete(res);
     const disconnectedClient = sseClientRegistry.getByResponse(res);
     if (disconnectedClient) {
       dropActiveClient(disconnectedClient);
+    } else {
+      clients.delete(res);
     }
+    stopSharedHeartbeatIntervalIfIdle();
     const count = connectionsPerIp.get(ip);
     if (count === undefined || count <= 1) {
       connectionsPerIp.delete(ip);
@@ -535,6 +558,10 @@ function resetInitializationStateForTests(): void {
   if (staleSweepIntervalHandle) {
     globalThis.clearInterval(staleSweepIntervalHandle);
     staleSweepIntervalHandle = undefined;
+  }
+  if (sharedHeartbeatIntervalHandle) {
+    globalThis.clearInterval(sharedHeartbeatIntervalHandle);
+    sharedHeartbeatIntervalHandle = undefined;
   }
 }
 

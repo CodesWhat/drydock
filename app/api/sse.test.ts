@@ -328,6 +328,26 @@ describe('SSE Router', () => {
       expect(res.write).toHaveBeenCalledWith('event: dd:heartbeat\ndata: {}\n\n');
     });
 
+    test('should use one shared heartbeat interval and clear it when the last client disconnects', () => {
+      const handler = getHandler();
+      const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+      const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
+
+      const firstClient = connectSseClient(handler, '10.0.0.1');
+      expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+
+      const secondClient = connectSseClient(handler, '10.0.0.2');
+      expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+
+      clearIntervalSpy.mockClear();
+
+      firstClient.req._listeners.close();
+      expect(clearIntervalSpy).not.toHaveBeenCalled();
+
+      secondClient.req._listeners.close();
+      expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
+    });
+
     test('should clear heartbeat interval on disconnect', () => {
       const handler = getHandler();
       const req = createSSERequest();
