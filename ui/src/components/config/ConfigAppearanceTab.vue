@@ -69,14 +69,16 @@ function handleIconScaleInput(event: Event) {
           <button
             v-for="fam in props.themeFamilies"
             :key="fam.id"
-            class="dd-rounded p-3 text-left transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+            class="dd-rounded p-3 text-left transition-[color,background-color,border-color,opacity,transform,box-shadow] relative"
             :style="{
               backgroundColor: props.themeFamily === fam.id
-                ? 'color-mix(in srgb, var(--dd-primary) 25%, var(--dd-bg-inset))'
+                ? 'var(--dd-bg-card)'
                 : 'var(--dd-bg-inset)',
-              border: props.themeFamily === fam.id
-                ? '2px solid var(--dd-primary)'
-                : '1px solid var(--dd-border-strong)',
+              border: '1px solid var(--dd-border-strong)',
+              outline: props.themeFamily === fam.id
+                ? '2px solid var(--dd-text)'
+                : '2px solid transparent',
+              outlineOffset: '2px',
             }"
             @click="props.onSelectThemeFamily(fam.id, $event)"
           >
@@ -89,11 +91,17 @@ function handleIconScaleInput(event: Event) {
                 }"
               />
               <span
-                class="text-[12px] font-semibold"
-                :class="props.themeFamily === fam.id ? 'text-drydock-secondary' : 'dd-text'"
+                class="text-[12px] font-semibold flex-1"
+                :class="props.themeFamily === fam.id ? 'dd-text' : 'dd-text'"
               >
                 {{ fam.label }}
               </span>
+              <AppIcon
+                v-if="props.themeFamily === fam.id"
+                name="check"
+                :size="14"
+                class="text-drydock-secondary shrink-0"
+              />
             </div>
             <div class="text-[10px] dd-text-muted">
               {{ fam.description }}
@@ -141,12 +149,12 @@ function handleIconScaleInput(event: Event) {
               props.fontLoading ? 'pointer-events-none' : '',
             ]"
             :style="{
-              backgroundColor: props.activeFont === font.id
-                ? 'color-mix(in srgb, var(--dd-primary) 25%, var(--dd-bg-inset))'
-                : 'var(--dd-bg-inset)',
-              border: props.activeFont === font.id
-                ? '2px solid var(--dd-primary)'
-                : '1px solid var(--dd-border-strong)',
+              backgroundColor: 'var(--dd-bg-inset)',
+              border: '1px solid var(--dd-border-strong)',
+              outline: props.activeFont === font.id
+                ? '2px solid var(--dd-text)'
+                : '2px solid transparent',
+              outlineOffset: '2px',
             }"
             @click="props.onSelectFont(font.id)"
           >
@@ -203,20 +211,18 @@ function handleIconScaleInput(event: Event) {
             :key="lib"
             class="flex items-center gap-3 px-4 py-3 dd-rounded text-left transition-colors"
             :style="{
-              backgroundColor: props.iconLibrary === lib
-                ? 'color-mix(in srgb, var(--dd-primary) 25%, var(--dd-bg-inset))'
-                : 'var(--dd-bg-inset)',
-              border: props.iconLibrary === lib
-                ? '2px solid var(--dd-primary)'
-                : '1px solid var(--dd-border-strong)',
+              backgroundColor: 'var(--dd-bg-inset)',
+              border: '1px solid var(--dd-border-strong)',
+              outline: props.iconLibrary === lib
+                ? '2px solid var(--dd-text)'
+                : '2px solid transparent',
+              outlineOffset: '2px',
             }"
             @click="props.onSelectIconLibrary(lib)"
           >
             <div
               class="w-8 h-8 dd-rounded flex items-center justify-center"
-              :style="{
-                backgroundColor: props.iconLibrary === lib ? 'color-mix(in srgb, var(--dd-primary) 20%, var(--dd-bg-elevated))' : 'var(--dd-bg-elevated)',
-              }"
+              :style="{ backgroundColor: 'var(--dd-bg-elevated)' }"
             >
               <iconify-icon
                 :icon="props.iconMap.dashboard?.[lib]"
