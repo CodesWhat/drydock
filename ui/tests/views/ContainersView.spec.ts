@@ -190,7 +190,18 @@ const childStubs = {
     props: ['modelValue', 'showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
   },
   DataTable: defineComponent({
-    props: ['columns', 'rows', 'rowKey', 'sortKey', 'sortAsc', 'selectedKey', 'showActions'],
+    props: [
+      'columns',
+      'rows',
+      'rowKey',
+      'sortKey',
+      'sortAsc',
+      'selectedKey',
+      'showActions',
+      'virtualScroll',
+      'virtualRowHeight',
+      'virtualMaxHeight',
+    ],
     template: `
       <div class="data-table">
         <div v-if="rows?.[0]" class="data-table-first-row">
@@ -429,6 +440,12 @@ describe('ContainersView', () => {
       const wrapper = await mountContainersView([makeContainer()]);
       const dataTable = wrapper.findComponent(childStubs.DataTable as any);
       expect(dataTable.props('showActions')).toBe(true);
+    });
+
+    it('disables virtual scrolling so the table flows with the page', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const dataTable = wrapper.findComponent(childStubs.DataTable as any);
+      expect(dataTable.props('virtualScroll')).toBe(false);
     });
 
     it('renders DataFilterBar', async () => {
