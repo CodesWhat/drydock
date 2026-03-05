@@ -1,6 +1,7 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import type { Request, Response } from 'express';
 import type { SelfUpdateStartingEventPayload } from '../event/index.js';
+import { hashToken } from '../util/crypto.js';
 import type {
   ActiveSseClient,
   ActiveSseClientRegistry,
@@ -38,10 +39,6 @@ export interface SelfUpdateAckProtocol {
   acknowledgeSelfUpdate(req: Request, res: Response): void;
   clearPendingSelfUpdateAcks(): void;
   sweepStalePendingSelfUpdateAcks(options: SelfUpdateAckSweepOptions): void;
-}
-
-function hashToken(token: string): Buffer {
-  return createHash('sha256').update(token, 'utf8').digest();
 }
 
 const DUMMY_CLIENT_TOKEN_HASH = hashToken('drydock-sse-dummy-client-token');

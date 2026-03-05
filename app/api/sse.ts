@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import express from 'express';
 import type { SelfUpdateStartingEventPayload } from '../event/index.js';
@@ -11,6 +11,7 @@ import {
   registerSelfUpdateStarting,
 } from '../event/index.js';
 import log from '../log/index.js';
+import { hashToken } from '../util/crypto.js';
 import {
   type ActiveSseClient,
   ActiveSseClientRegistry,
@@ -58,10 +59,6 @@ function getClientSessionKey(req: Request): string {
 
 function issueServerClientId(prefix: string): string {
   return `${prefix}-${randomUUID()}`;
-}
-
-function hashToken(token: string): Buffer {
-  return createHash('sha256').update(token, 'utf8').digest();
 }
 
 function isResponseClosed(response: FlushableResponse): boolean {
