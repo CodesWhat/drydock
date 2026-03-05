@@ -43,6 +43,12 @@ services:
 
 drydock exposes various metrics that [Prometheus](https://prometheus.io/) can scrape.
 
+### Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_PROMETHEUS_ENABLED` | ⚪ | Enable Prometheus metrics endpoint at `/metrics` | `true`, `false` | `true` |
+
 ### Metrics Endpoint
 
 The metrics are exposed at [/metrics](http://localhost:3000/metrics).

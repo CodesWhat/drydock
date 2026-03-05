@@ -37,7 +37,7 @@ For log output configuration (`DD_LOG_LEVEL`, `DD_LOG_FORMAT`), see [Logs config
 
 - Use `lax` (default) for typical web + OIDC setups.
 - Use `strict` only when drydock and IdP are same-site and you want the strictest cookie policy.
-- Use `none` only when you explicitly need cross-site cookies (for example embedded UI), and only over HTTPS.
+- Use `none` only when you explicitly need cross-site cookies (for example embedded UI), and only over HTTPS. Setting `DD_SERVER_COOKIE_SAMESITE=none` causes a startup validation check -- drydock will refuse to start unless `DD_SERVER_TLS_ENABLED=true` or `DD_SERVER_TRUSTPROXY` is set, ensuring cookies are only sent over a secure transport.
 
 ## Examples
 
@@ -144,6 +144,16 @@ docker run \
 ```
 </Tab>
 </Tabs>
+
+## Advanced Tuning
+
+These variables control the icon proxy cache used to serve container icons. Defaults are suitable for most deployments.
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_ICON_CACHE_TTL_MS` | ⚪ | TTL for cached icon files on disk | integer (ms) | `2592000000` (30 days) |
+| `DD_ICON_CACHE_MAX_FILES` | ⚪ | Maximum number of icon files in cache | integer (`>0`) | `5000` |
+| `DD_ICON_CACHE_MAX_BYTES` | ⚪ | Maximum total size of icon cache in bytes | integer (`>0`) | `104857600` (100 MB) |
 
 ### Secrets from files
 

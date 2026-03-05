@@ -31,7 +31,9 @@ DD_SECURITY_SCANNER=trivy
 | `DD_SECURITY_TRIVY_TIMEOUT` | ⚪ | Trivy command timeout in milliseconds | integer (`>=1000`) | `120000` |
 | `DD_SECURITY_SCAN_CRON` | ⚪ | Cron expression for scheduled background security scans | cron expression | disabled |
 | `DD_SECURITY_SCAN_JITTER` | ⚪ | Random jitter delay (ms) before each scheduled scan starts | integer (`>=0`) | `60000` |
-| `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES` | ⚪ | Max in-memory digest scan cache entries (oldest entries are evicted first) | integer (`>0`) | `500` |
+| `DD_SECURITY_SCAN_CONCURRENCY` | ⚪ | Max digest scans processed in parallel during scheduled scans | integer (`>=1`) | `4` |
+| `DD_SECURITY_SCAN_BATCH_TIMEOUT` | ⚪ | Total scheduled scan batch timeout in milliseconds (`0` disables timeout) | integer (`>=0`) | `1800000` |
+| `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES` | ⚪ | Max in-memory digest scan cache entries (LRU eviction -- least recently used entries are removed when the limit is reached) | integer (`>0`) | `500` |
 
 ## Trivy modes
 
@@ -143,7 +145,13 @@ services:
 
 ## Scheduled scanning
 
-Set `DD_SECURITY_SCAN_CRON` to automatically scan all watched containers on a schedule. A random jitter delay (`DD_SECURITY_SCAN_JITTER`, default 60 seconds) is applied before each cycle to spread load.
+Set `DD_SECURITY_SCAN_CRON` to automatically scan all watched containers on a schedule. A random jitter delay (`DD_SECURITY_SCAN_JITTER`, default 60 seconds) is applied before each cycle to spread load. You can tune parallelism with `DD_SECURITY_SCAN_CONCURRENCY` (default `4`) and cap total batch runtime with `DD_SECURITY_SCAN_BATCH_TIMEOUT` (default `1800000`, set `0` to disable).
+
+Digest-level scan dedup caching uses an interval derived from the cron schedule:
+
+- drydock parses `DD_SECURITY_SCAN_CRON` and uses the **shortest upcoming gap** between scheduled runs as cache TTL.
+- For irregular schedules (for example `0 3,9 * * *`), cache TTL is based on the shortest gap (`6h` in this case), not a fixed daily fallback.
+- If interval derivation fails, drydock falls back to `24h`.
 
 ```yaml
 services:
@@ -153,6 +161,8 @@ services:
       - DD_SECURITY_SCANNER=trivy
       - DD_SECURITY_SCAN_CRON=0 3 * * *   # every day at 3 AM
       - DD_SECURITY_SCAN_JITTER=60000      # up to 60s random delay
+      - DD_SECURITY_SCAN_CONCURRENCY=4     # scan up to 4 digests in parallel
+      - DD_SECURITY_SCAN_BATCH_TIMEOUT=1800000 # abort remaining digest queue after 30m
 ```
 
 ## On-demand scanning
@@ -163,6 +173,16 @@ You can trigger a security scan for any individual container without waiting for
 - **API:** `POST /api/containers/:id/scan` runs vulnerability scanning, signature verification (if configured), and SBOM generation (if configured) on demand.
 
 The endpoint is rate-limited to 30 requests per minute. Real-time progress is broadcast via SSE events `dd:scan-started` and `dd:scan-completed` so the UI updates automatically.
+
+## Dual-slot scanning
+
+When a container has an available update, clicking **Scan Now** (or calling `POST /api/containers/:id/scan`) scans both the current running image and the available update image in a single operation.
+
+- Results for the current image are stored in `container.security.scan`
+- Results for the update image are stored in `container.security.updateScan`
+- The UI shows delta comparison badges indicating how vulnerabilities change between versions (e.g. +3 fixed, -1 new)
+
+This differs from the pre-update Update Bouncer flow, which only scans the candidate image as a gate before applying an update. Dual-slot scanning is informational and does not block updates.
 
 ## Full example (scanning + signatures + SBOM)
 
