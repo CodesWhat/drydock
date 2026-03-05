@@ -273,7 +273,7 @@ export function ComparisonPage({
                   Ready to try Drydock?
                 </h2>
                 <p className="relative mb-8 text-neutral-600 dark:text-neutral-400">
-                  Open source, MIT licensed, and actively maintained.
+                  Open source, AGPL-3.0 licensed, and actively maintained.
                 </p>
               </div>
 
@@ -309,7 +309,7 @@ export function ComparisonPage({
                   height={20}
                   className="dark:invert"
                 />
-                <span>&copy; {new Date().getFullYear()} CodesWhat. MIT License.</span>
+                <span>&copy; {new Date().getFullYear()} CodesWhat. AGPL-3.0 License.</span>
               </div>
               <div className="flex items-center gap-4">
                 <a

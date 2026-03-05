@@ -16,7 +16,7 @@
   <br>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://ghcr-badge.egpl.dev/codeswhat/drydock/size" alt="Image size"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-C9A227" alt="License MIT"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
 </p>
 
 <p align="center">
@@ -48,7 +48,6 @@
 - [📖 Documentation](https://drydock.codeswhat.com/docs)
 - [🚀 Quick Start](#quick-start)
 - [📸 Screenshots](#screenshots)
-- [🖥️ UI Workflow](#ui-workflow)
 - [✨ Features](#features)
 - [🔌 Supported Integrations](#supported-integrations)
 - [⚖️ Feature Comparison](#feature-comparison)
@@ -327,7 +326,7 @@ Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully suppo
 
 ---
 
-**[MIT License](LICENSE)**
+**[AGPL-3.0 License](LICENSE)**
 
 <a href="https://github.com/CodesWhat"><img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="28"></a>
 
