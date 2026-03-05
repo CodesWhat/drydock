@@ -10,7 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-02-28
+
 ### Added
+
+#### Backend / Core
 
 - **Container recent-status API** — `GET /api/containers/recent-status` returns pre-computed update status (`updated`/`pending`/`failed`) per container, replacing the client-side audit log scan and reducing dashboard fetch payload size.
 - **Dual-slot security scanning** — "Scan Now" automatically scans both the current running image and the available update image when an update exists. Results are stored in separate slots (`scan`/`updateScan`) and the Security page shows a delta comparison badge (+N fixed, -N new) next to each image that has both scans.
@@ -22,65 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Per-container webhook opt-out** — New `dd.webhook.enabled=false` container label to exclude individual containers from webhook triggers without disabling the webhook API globally.
 - **Scan cancellation and mobile scan progress** — Security batch scans can now be cancelled mid-flight. Mobile scan progress UI improved with responsive layout.
 - **Security scan coverage counts** — Security view header shows scanned/total container counts for at-a-glance scan coverage.
-
-### Changed
-
-- **Self-update controller testable entrypoint** — Extracted process-level entry logic to a separate entrypoint module, making the controller independently testable without triggering process-exit side effects.
-- **Dockercompose YAML patching simplified** — Removed redundant type guards and dead-code branches from compose file patching helpers, reducing code paths and improving maintainability.
-- **Dashboard fetches recent-status from backend** — Dashboard now fetches pre-computed container statuses from `/api/containers/recent-status` instead of scanning the raw audit log client-side.
-- **Prometheus collect() callback pattern** — Switched container gauge from interval-based polling to the Prometheus `collect()` callback, letting Prometheus control collection timing and eliminating the background 5s timer.
-- **Container security API refactored** — Container security routes refactored into a dedicated module with type-safe SecurityGate integration, concurrent scan limiting (max 1), and trivy DB status-based cache invalidation.
-- **DashboardView composable extraction** — Extracted 700+ line monolith into `useDashboardData`, `useDashboardComputed`, `useDashboardWidgetOrder`, and shared `dashboardTypes` for better testability and separation of concerns.
-- **Event-driven connectivity polling** — AppLayout SSE connectivity monitoring now starts on disconnect and stops on reconnect instead of running a fixed interval, reducing unnecessary network requests.
-- **Vulnerability loading optimized** — Vulnerability data loaded from the container list API payload (`includeVulnerabilities` flag) instead of separate per-container fetches, reducing API calls on the Security view.
-- **Default log format is JSON** — Official Docker image now defaults to `DD_LOG_FORMAT=json` for structured production logs. Override with `DD_LOG_FORMAT=text` for pretty logs.
-- **Scan endpoint rate limit reduced** — `POST /api/containers/:id/scan` rate limit lowered from 100 to 30 requests/min to prevent resource exhaustion during aggressive scanning.
-
-### Fixed
-
-- **Security scans persist across navigation** — Navigating away from the Security view no longer cancels in-flight batch scans. Module-scoped scan state survives unmount and the progress banner reappears on return.
-- **SSE stale sweep timer on re-initialization** — Stale client sweep interval now starts even when `init()` is called after a hot reload, preventing leaked SSE connections.
-- **About modal documentation icon** — Documentation link in the about modal now shows a book icon instead of the expand/maximize icon.
-- **Log auto-fetch pauses in background tabs** — `useAutoFetchLogs` now stops polling when the browser tab is hidden and automatically resumes when it becomes visible again.
-- **SBOM download DOM isolation** — Isolated DOM element creation and `URL.createObjectURL` references in the SBOM download composable, fixing potential memory leaks and test failures from uncleared object URLs. JSON serialization skipped when SBOM panel is hidden.
-- **Dashboard resource fetch error propagation** — Dashboard API fetch errors are now propagated consistently to the UI error state instead of being silently swallowed.
-- **Docker image "latest" tag restricted to stable releases** — CI release workflow no longer tags prerelease versions as `latest`, preventing unstable images from being pulled by default.
-- **Security table refreshes progressively during batch scan** — Security view table updates incrementally as each container scan completes instead of waiting for the entire batch to finish.
-- **Vulnerability data fetched from per-container endpoint** — Security view now fetches vulnerability data from the correct per-container endpoint instead of a missing bulk endpoint.
-
-### Security
-
-- **Security API error sanitization** — SBOM and scan error responses now return generic messages (`Error generating SBOM`, `Security scan failed`) instead of leaking internal error details. Detailed errors logged server-side only.
-- **Agent log query parameter validation** — Agent log level and component query parameters are validated against an allowlist and safe-character pattern, returning 400 for invalid values.
-- **TLS key/cert paths stripped from config response** — Server configuration API response no longer includes filesystem paths for TLS private key and certificate files.
-- **Type-safe store and auth modules** — Settings, notification, and auth store modules upgraded from `any` to explicit typed interfaces, preventing implicit type coercion vulnerabilities.
-- **Fail-closed auth enforcement across registries and triggers** — Bearer token, OIDC, and credential flows use `failClosedAuth` with typed `RequestOptions`, rejecting requests when required credentials are missing.
-- **Input validation hardened** — Additional input validation and error redaction across auth, API, and configuration modules.
-- **Mutation-only JSON body parser** — Express JSON body parsing restricted to mutation methods (POST/PUT/PATCH) only on both API and auth routers, reducing attack surface on read requests.
-- **CSRF Sec-Fetch-Site validation** — CSRF middleware now rejects requests with `Sec-Fetch-Site: cross-site` header, blocking cross-site state-changing requests even when the Origin header is absent.
-- **HTTPS enforcement for SameSite=none cookies** — `DD_SERVER_COOKIE_SAMESITE=none` now requires HTTPS configuration (`DD_SERVER_TLS_ENABLED=true` or `DD_SERVER_TRUSTPROXY`) and throws at startup if neither is set.
-- **Remember-me endpoint requires authentication** — `/auth/remember` POST moved after `requireAuthentication` middleware, preventing unauthenticated access.
-- **Env reveal rate limit tightened** — `/api/containers/:id/env` rate limit reduced from 100/min to 10/min to prevent credential enumeration. Server error responses return generic messages instead of internal details.
-- **Trivy command path validation** — Trivy binary paths are validated against shell metacharacters and path traversal before execution.
-- **Digest scan cache LRU eviction** — Scan result cache uses LRU eviction (max 500 entries, configurable via `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES`) to prevent unbounded memory growth. Trivy DB status lookups are deduplicated across concurrent calls.
-- **CSP configured for Iconify CDN** — Content-Security-Policy updated to allow `connect-src` for the Iconify CDN origin, preventing blocked icon fetches in the browser.
-- **CSP connect-src restricted in internetless mode** — Content-Security-Policy `connect-src` directive tightened to `'self'` when running in internetless mode, blocking outbound connections from the browser.
-- **Legacy auth methods endpoint rate-limited** — `/api/auth/methods` rate-limited to prevent enumeration of available authentication providers.
-
-### Performance
-
-- **Audit store indexed date-range queries** — Audit entries now store a pre-parsed `timestampMs` index for numeric comparisons. Date-range queries use the LokiJS chain API with indexed filtering instead of full-collection scans. Automatic 30-day retention with periodic pruning.
-- **Backup store indexed lookups** — Backup collection adds indices on `data.containerName` and `data.id`, using `findOne()` for single-document lookups and indexed `find()` for name-filtered queries instead of full scans.
-- **LokiJS autosave interval set to 60 seconds** — Fixed autosave interval at 60s instead of the LokiJS default, reducing disk I/O while maintaining acceptable data durability.
-- **SSE shared heartbeat interval** — Deduplicated per-client SSE heartbeat timers into a single shared interval that starts on first connection and stops when all clients disconnect.
-- **LoginView exponential backoff** — Login page connectivity retry uses exponential backoff (5s doubling to 30s max) instead of fixed intervals, reducing server load during outages.
-
-## [1.4.0] — 2026-02-28
-
-### Added
-
-#### Backend / Core
-
 - **Notification rule management API and persistence** — `/api/notifications` CRUD endpoints backed by LokiJS-persisted notification rules for `update-available`, `update-applied`, `update-failed`, `security-alert`, and `agent-disconnect` event types.
 - **Rule-aware runtime dispatch** — Trigger event dispatch resolves notification rules at runtime so per-event enable/disable and trigger assignments actively control which triggers fire.
 - **Security-alert and agent-disconnect events** — New event types with audit logging and configurable deduplication windows. Security alerts fire automatically on critical/high vulnerability scan results.
@@ -134,6 +79,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Self-update controller testable entrypoint** — Extracted process-level entry logic to a separate entrypoint module, making the controller independently testable without triggering process-exit side effects.
+- **Dockercompose YAML patching simplified** — Removed redundant type guards and dead-code branches from compose file patching helpers, reducing code paths and improving maintainability.
+- **Dashboard fetches recent-status from backend** — Dashboard now fetches pre-computed container statuses from `/api/containers/recent-status` instead of scanning the raw audit log client-side.
+- **Prometheus collect() callback pattern** — Switched container gauge from interval-based polling to the Prometheus `collect()` callback, letting Prometheus control collection timing and eliminating the background 5s timer.
+- **Container security API refactored** — Container security routes refactored into a dedicated module with type-safe SecurityGate integration, concurrent scan limiting (max 1), and trivy DB status-based cache invalidation.
+- **DashboardView composable extraction** — Extracted 700+ line monolith into `useDashboardData`, `useDashboardComputed`, `useDashboardWidgetOrder`, and shared `dashboardTypes` for better testability and separation of concerns.
+- **Event-driven connectivity polling** — AppLayout SSE connectivity monitoring now starts on disconnect and stops on reconnect instead of running a fixed interval, reducing unnecessary network requests.
+- **Vulnerability loading optimized** — Vulnerability data loaded from the container list API payload (`includeVulnerabilities` flag) instead of separate per-container fetches, reducing API calls on the Security view.
+- **Default log format is JSON** — Official Docker image now defaults to `DD_LOG_FORMAT=json` for structured production logs. Override with `DD_LOG_FORMAT=text` for pretty logs.
+- **Scan endpoint rate limit reduced** — `POST /api/containers/:id/scan` rate limit lowered from 100 to 30 requests/min to prevent resource exhaustion during aggressive scanning.
 - **Single Docker image** — Removed thin/heavy image variants; all images now bundle Trivy and Cosign.
 - **Removed Vuetify dependency** — All Vuetify imports, components, and archived test files removed. Zero Vuetify references remain.
 - **Fail-closed auth enforcement** — Registry bearer-token flows error on token endpoint failures instead of falling through to anonymous. HTTP trigger auth errors on unsupported types. Docker entrypoint requires explicit `DD_RUN_AS_ROOT` + `DD_ALLOW_INSECURE_ROOT` for root mode.
@@ -142,6 +97,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Security scans persist across navigation** — Navigating away from the Security view no longer cancels in-flight batch scans. Module-scoped scan state survives unmount and the progress banner reappears on return.
+- **SSE stale sweep timer on re-initialization** — Stale client sweep interval now starts even when `init()` is called after a hot reload, preventing leaked SSE connections.
+- **About modal documentation icon** — Documentation link in the about modal now shows a book icon instead of the expand/maximize icon.
+- **Log auto-fetch pauses in background tabs** — `useAutoFetchLogs` now stops polling when the browser tab is hidden and automatically resumes when it becomes visible again.
+- **SBOM download DOM isolation** — Isolated DOM element creation and `URL.createObjectURL` references in the SBOM download composable, fixing potential memory leaks and test failures from uncleared object URLs. JSON serialization skipped when SBOM panel is hidden.
+- **Dashboard resource fetch error propagation** — Dashboard API fetch errors are now propagated consistently to the UI error state instead of being silently swallowed.
+- **Docker image "latest" tag restricted to stable releases** — CI release workflow no longer tags prerelease versions as `latest`, preventing unstable images from being pulled by default.
+- **Security table refreshes progressively during batch scan** — Security view table updates incrementally as each container scan completes instead of waiting for the entire batch to finish.
+- **Vulnerability data fetched from per-container endpoint** — Security view now fetches vulnerability data from the correct per-container endpoint instead of a missing bulk endpoint.
 - **OIDC callback session loss with cross-site IdPs** — Session cookies now default to `SameSite=Lax` for auth compatibility, fixing callback flows that could fail under `SameSite=Strict`. Added `DD_SERVER_COOKIE_SAMESITE` (`strict|lax|none`) for explicit control. ([#52](https://github.com/CodesWhat/drydock/issues/52))
 - **Compose trigger handles unknown update kinds** — Containers with `updateKind.kind === 'unknown'` now trigger `docker compose pull` instead of silently skipping. ([#91](https://github.com/CodesWhat/drydock/issues/91))
 - **Compose image patching uses structured YAML edits** — Replaced regex/indent heuristics with YAML parser targeting only `services.<name>.image`, preserving comments and formatting.
@@ -165,6 +129,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Security API error sanitization** — SBOM and scan error responses now return generic messages (`Error generating SBOM`, `Security scan failed`) instead of leaking internal error details. Detailed errors logged server-side only.
+- **Agent log query parameter validation** — Agent log level and component query parameters are validated against an allowlist and safe-character pattern, returning 400 for invalid values.
+- **TLS key/cert paths stripped from config response** — Server configuration API response no longer includes filesystem paths for TLS private key and certificate files.
+- **Type-safe store and auth modules** — Settings, notification, and auth store modules upgraded from `any` to explicit typed interfaces, preventing implicit type coercion vulnerabilities.
+- **Fail-closed auth enforcement across registries and triggers** — Bearer token, OIDC, and credential flows use `failClosedAuth` with typed `RequestOptions`, rejecting requests when required credentials are missing.
+- **Input validation hardened** — Additional input validation and error redaction across auth, API, and configuration modules.
+- **Mutation-only JSON body parser** — Express JSON body parsing restricted to mutation methods (POST/PUT/PATCH) only on both API and auth routers, reducing attack surface on read requests.
+- **CSRF Sec-Fetch-Site validation** — CSRF middleware now rejects requests with `Sec-Fetch-Site: cross-site` header, blocking cross-site state-changing requests even when the Origin header is absent.
+- **HTTPS enforcement for SameSite=none cookies** — `DD_SERVER_COOKIE_SAMESITE=none` now requires HTTPS configuration (`DD_SERVER_TLS_ENABLED=true` or `DD_SERVER_TRUSTPROXY`) and throws at startup if neither is set.
+- **Remember-me endpoint requires authentication** — `/auth/remember` POST moved after `requireAuthentication` middleware, preventing unauthenticated access.
+- **Env reveal rate limit tightened** — `/api/containers/:id/env` rate limit reduced from 100/min to 10/min to prevent credential enumeration. Server error responses return generic messages instead of internal details.
+- **Trivy command path validation** — Trivy binary paths are validated against shell metacharacters and path traversal before execution.
+- **Digest scan cache LRU eviction** — Scan result cache uses LRU eviction (max 500 entries, configurable via `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES`) to prevent unbounded memory growth. Trivy DB status lookups are deduplicated across concurrent calls.
+- **CSP configured for Iconify CDN** — Content-Security-Policy updated to allow `connect-src` for the Iconify CDN origin, preventing blocked icon fetches in the browser.
+- **CSP connect-src restricted in internetless mode** — Content-Security-Policy `connect-src` directive tightened to `'self'` when running in internetless mode, blocking outbound connections from the browser.
+- **Legacy auth methods endpoint rate-limited** — `/api/auth/methods` rate-limited to prevent enumeration of available authentication providers.
 - **Removed plaintext credentials from login request body** — The Basic auth login was redundantly sending username and password in both the Authorization header and the JSON body. The backend only reads the Authorization header via Passport, so the body credentials were unnecessary exposure.
 - **Server-issued SSE client identity** — Self-update ack requests validated against server-issued tokens, preventing spoofed acknowledgments.
 - **Fail-closed auth across watchers, registries, and triggers** — Token exchange failures no longer fall through to anonymous access.
@@ -172,6 +152,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- **Audit store indexed date-range queries** — Audit entries now store a pre-parsed `timestampMs` index for numeric comparisons. Date-range queries use the LokiJS chain API with indexed filtering instead of full-collection scans. Automatic 30-day retention with periodic pruning.
+- **Backup store indexed lookups** — Backup collection adds indices on `data.containerName` and `data.id`, using `findOne()` for single-document lookups and indexed `find()` for name-filtered queries instead of full scans.
+- **LokiJS autosave interval set to 60 seconds** — Fixed autosave interval at 60s instead of the LokiJS default, reducing disk I/O while maintaining acceptable data durability.
+- **SSE shared heartbeat interval** — Deduplicated per-client SSE heartbeat timers into a single shared interval that starts on first connection and stops when all clients disconnect.
+- **LoginView exponential backoff** — Login page connectivity retry uses exponential backoff (5s doubling to 30s max) instead of fixed intervals, reducing server load during outages.
 - **Gzip response compression** — API responses compressed above configurable threshold with automatic SSE exclusion.
 - **Skip connectivity polling when SSE connection is active** — Eliminates unnecessary `/auth/user` fetches every 10s during normal operation.
 - **Set-based lookups replace linear scans** — Repeated array lookups converted to Set operations in core paths.
