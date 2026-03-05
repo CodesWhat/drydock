@@ -260,9 +260,9 @@ Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully suppo
 
 | Version | Theme | Highlights |
 | --- | --- | --- |
-| **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Bouncer, SBOM, 7 new registries, 4 new triggers, self-update fix, rollback fixes, GHCR auth fix, self-hosted TLS options, re2-wasm → re2js regex engine swap, compose trigger fixes, DB persistence on shutdown, CI caching + pipeline hardening, biome → qlty lint migration |
-| **v1.4.0** ✅ | UI Modernization | Tailwind CSS 4 migration with custom component library, 4 color themes (Drydock/GitHub/Dracula/Catppuccin), 7 icon libraries, 6 font families, shared data components (DataTable/DataCardGrid/DataListAccordion/DataFilterBar/DetailPanel/EmptyState), settings backend + icon proxy cache, container ghost state during updates, SSE real-time updates, remember-me auth |
-| **v1.4.1** | Reliability & Resilience | Non-self rollback, event-stream reconnect, CSRF, error sanitization, UI resilience |
+| **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Bouncer, SBOM, 7 new registries, 4 new triggers, rollback fixes, GHCR auth, self-hosted TLS, re2js regex engine, compose trigger fixes, DB persistence on shutdown |
+| **v1.4.0** ✅ | UI Modernization | Tailwind CSS 4 + custom component library, 4 themes, 7 icon libraries, 6 fonts, settings backend + icon proxy cache, SSE real-time updates, remember-me auth, notification rules, tag-family semver |
+| **v1.4.1** ✅ | Reliability & Resilience | Non-self rollback, rename-first update strategy, CSRF hardening (Sec-Fetch-Site + HTTPS cookie enforcement), mutation-only JSON parsing, scheduled security scans, Prometheus collect() pattern, SSE heartbeat dedup, LRU scan cache, trivy path validation, log buffer toggle, exponential backoff retry, dashboard composable extraction |
 | **v1.5.0** | Observability | Real-time log viewer, container resource monitoring, registry webhooks |
 | **v1.5.1** | Scanner Decoupling | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers |
