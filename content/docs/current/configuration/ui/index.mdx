@@ -1,0 +1,101 @@
+---
+title: "UI Customization"
+description: "Customize the drydock dashboard appearance with themes, icon libraries, fonts, and layout preferences."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+All UI preferences are configured in **Config > Appearance** and persisted in the browser's localStorage. No server-side environment variables are needed.
+
+## Themes
+
+Drydock ships with 4 color themes, each available in dark and light variants:
+
+| Theme | Style |
+| --- | --- |
+| **Drydock** (default) | Navy tones |
+| **GitHub** | Clean, familiar |
+| **Dracula** | Bold purple |
+| **Catppuccin** | Warm pastels |
+
+Switch themes in **Config > Appearance**. A circle-reveal transition animation plays when changing themes.
+
+## Icon Libraries
+
+7 icon libraries are available:
+
+| Library | Notes |
+| --- | --- |
+| **Phosphor Duotone** (default) | Two-tone style |
+| **Phosphor** | Solid style |
+| **Lucide** | |
+| **Tabler** | |
+| **Heroicons** | |
+| **Iconoir** | |
+| **Font Awesome** | |
+
+An icon size slider in **Config > Appearance** adjusts icon scale across the UI.
+
+## Font Families
+
+6 monospace fonts are supported:
+
+| Font | Notes |
+| --- | --- |
+| **IBM Plex Mono** (default) | Bundled offline |
+| **JetBrains Mono** | Lazy-loaded from Google Fonts |
+| **Source Code Pro** | Lazy-loaded from Google Fonts |
+| **Inconsolata** | Lazy-loaded from Google Fonts |
+| **Commit Mono** | Lazy-loaded from Google Fonts |
+| **Comic Mono** | Lazy-loaded from Google Fonts |
+
+In internetless mode (no external network access), all fonts fall back to IBM Plex Mono which is bundled in the image.
+
+## Command Palette
+
+Open the command palette with **Cmd+K** (macOS) or **Ctrl+K** (Windows/Linux).
+
+### Scope prefixes
+
+Type a prefix character to filter results:
+
+| Prefix | Scope |
+| --- | --- |
+| `/` | Pages and navigation |
+| `@` | Runtime info |
+| `#` | Containers |
+
+Use arrow keys to navigate results, **Enter** to select, and **Escape** to close. Recent search history is persisted across sessions.
+
+## Dashboard
+
+The dashboard displays 4 stat cards: **Containers**, **Updates**, **Security**, and **Registries**. Cards are drag-reorderable and the layout is persisted in localStorage.
+
+Update and security stats are color-coded based on severity ratio.
+
+## View Modes
+
+All data views (Containers, Watchers, Registries, Triggers, Auth, Agents, Security) support three display modes:
+
+| Mode | Description |
+| --- | --- |
+| **Table** (default) | Rows with interactive column resizing |
+| **Cards** | Grid layout |
+| **List** | Accordion-style |
+
+Toggle between modes using the view mode buttons in the toolbar.
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| **Cmd/Ctrl+K** | Open command palette |
+| **Escape** | Close detail panel or dialog |
+| **Enter** | Confirm dialog action |
+| **Arrow keys** | Navigate command palette results |
+
+## Detail Panels
+
+Clicking any row in a data view opens a slide-in detail panel with contextual information and actions. Detail panels are available on all views: Containers, Watchers, Registries, Triggers, Auth, Agents, and Security.
+
+<Callout type="info">All UI preferences are stored in the browser's localStorage. They are not synced across devices or browsers.</Callout>

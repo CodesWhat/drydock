@@ -15,6 +15,7 @@
     "storage",
     "timezone",
     "triggers",
+    "ui",
     "watchers",
     "webhooks"
   ]
