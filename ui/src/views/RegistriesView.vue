@@ -136,10 +136,10 @@ const filteredRegistries = computed(() => {
 });
 
 const tableColumns = [
-  { key: 'name', label: 'Registry', sortable: false, width: '99%' },
+  { key: 'name', label: 'Registry', align: 'text-left', sortable: false },
   { key: 'type', label: 'Type', sortable: false },
   { key: 'status', label: 'Status', sortable: false },
-  { key: 'url', label: 'URL', align: 'text-right', sortable: false },
+  { key: 'url', label: 'URL', align: 'text-left', sortable: false, width: '99%' },
 ];
 
 onMounted(async () => {
