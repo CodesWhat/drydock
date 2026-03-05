@@ -145,6 +145,10 @@ function getCookieMaxAge(days) {
   return 3600 * 1000 * 24 * days;
 }
 
+function shouldParseJsonBody(method: string): boolean {
+  return method === 'POST' || method === 'PUT' || method === 'PATCH';
+}
+
 /**
  * Get session secret key.
  * Uses DD_SESSION_SECRET env var if set, otherwise falls back to a
@@ -329,12 +333,37 @@ function logout(req, res) {
   });
 }
 
+function isTrustProxyEnabled(trustproxy) {
+  if (trustproxy === true) {
+    return true;
+  }
+  if (typeof trustproxy === 'number') {
+    return trustproxy > 0;
+  }
+  if (typeof trustproxy === 'string') {
+    const normalized = trustproxy.trim().toLowerCase();
+    return normalized !== '' && normalized !== '0' && normalized !== 'false';
+  }
+  return false;
+}
+
 /**
  * Init auth (passport.js).
  * @returns {*}
  */
 export function init(app) {
-  const sessionCookieSameSite = getServerConfiguration().cookie?.samesite || 'lax';
+  const serverConfiguration = getServerConfiguration();
+  const sessionCookieSameSite = serverConfiguration.cookie?.samesite || 'lax';
+  const hasHttpsConfiguration =
+    serverConfiguration.tls?.enabled === true ||
+    isTrustProxyEnabled(serverConfiguration.trustproxy);
+
+  if (sessionCookieSameSite === 'none' && !hasHttpsConfiguration) {
+    throw new Error(
+      'DD_SERVER_COOKIE_SAMESITE=none requires HTTPS. Enable DD_SERVER_TLS_ENABLED=true or configure DD_SERVER_TRUSTPROXY for HTTPS reverse proxies.',
+    );
+  }
+
   const sessionCookieSecure = sessionCookieSameSite === 'none' ? true : 'auto';
   if (sessionCookieSameSite === 'none') {
     log.warn('DD_SERVER_COOKIE_SAMESITE=none requires HTTPS; forcing secure session cookie');
@@ -391,6 +420,14 @@ export function init(app) {
   });
   router.use(authLimiter);
 
+  const mutationJsonBodyParser = express.json();
+  router.use((req, res, next) => {
+    if (shouldParseJsonBody(req.method)) {
+      return mutationJsonBodyParser(req, res, next);
+    }
+    return next();
+  });
+
   // Return strategies
   router.get('/strategies', getStrategies);
 
@@ -398,11 +435,11 @@ export function init(app) {
   // This endpoint must stay unauthenticated so the login screen can render.
   app.get('/api/auth/methods', authLimiter, getStrategies);
 
-  // Store remember-me preference before auth flow starts
-  router.post('/remember', setRememberMe);
-
   // Routes to protect after this line
   router.use(requireAuthentication);
+
+  // Store remember-me preference for authenticated sessions
+  router.post('/remember', setRememberMe);
 
   // Add login/logout routes
   router.post('/login', login);

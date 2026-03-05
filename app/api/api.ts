@@ -24,6 +24,10 @@ import * as triggerRouter from './trigger.js';
 import * as watcherRouter from './watcher.js';
 import * as webhookRouter from './webhook.js';
 
+function shouldParseJsonBody(method: string): boolean {
+  return method === 'POST' || method === 'PUT' || method === 'PATCH';
+}
+
 /**
  * Init the API router.
  * @returns {*|Router}
@@ -39,6 +43,14 @@ export function init(): express.Router {
     validate: { xForwardedForHeader: false },
   });
   router.use(apiLimiter);
+
+  const mutationJsonBodyParser = express.json();
+  router.use((req, res, next) => {
+    if (shouldParseJsonBody(req.method)) {
+      return mutationJsonBodyParser(req, res, next);
+    }
+    return next();
+  });
 
   // Mount app router
   router.use('/app', appRouter.init());

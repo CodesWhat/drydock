@@ -1,12 +1,17 @@
-const { mockRouter, mockLokiStore } = vi.hoisted(() => ({
-  mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
-  mockLokiStore: vi.fn(),
-}));
+const { mockRouter, mockLokiStore, mockExpressJson, mockJsonMiddleware } = vi.hoisted(() => {
+  const jsonMiddleware = vi.fn();
+  return {
+    mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
+    mockLokiStore: vi.fn(),
+    mockJsonMiddleware: jsonMiddleware,
+    mockExpressJson: vi.fn(() => jsonMiddleware),
+  };
+});
 const mockGetServerConfiguration = vi.hoisted(() => vi.fn(() => ({ cookie: {} })));
 const mockRecordAuditEvent = vi.hoisted(() => vi.fn());
 
 vi.mock('express', () => ({
-  default: { Router: vi.fn(() => mockRouter) },
+  default: { Router: vi.fn(() => mockRouter), json: mockExpressJson },
 }));
 
 vi.mock('express-session', () => ({
@@ -394,7 +399,10 @@ describe('Auth Router', () => {
     });
 
     test('should force secure cookies when sameSite is none', () => {
-      mockGetServerConfiguration.mockReturnValue({ cookie: { samesite: 'none' } });
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: true },
+      });
       const app = createApp();
       auth.init(app);
 
@@ -408,6 +416,20 @@ describe('Auth Router', () => {
       expect(log.warn).toHaveBeenCalledWith(
         'DD_SERVER_COOKIE_SAMESITE=none requires HTTPS; forcing secure session cookie',
       );
+    });
+
+    test('should throw when sameSite is none without HTTPS configuration', () => {
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: false },
+        trustproxy: false,
+      });
+      const app = createApp();
+
+      expect(() => auth.init(app)).toThrow(
+        'DD_SERVER_COOKIE_SAMESITE=none requires HTTPS. Enable DD_SERVER_TLS_ENABLED=true or configure DD_SERVER_TRUSTPROXY for HTTPS reverse proxies.',
+      );
+      expect(session).not.toHaveBeenCalled();
     });
 
     test('should register strategies from the registry', () => {
@@ -471,6 +493,38 @@ describe('Auth Router', () => {
       auth.init(app);
 
       expect(app.use).toHaveBeenCalledWith('/auth', expect.anything());
+    });
+
+    test('should register a mutation-only json parser on the auth router', () => {
+      const app = createApp();
+      auth.init(app);
+
+      expect(mockExpressJson).toHaveBeenCalledTimes(1);
+
+      const authMiddlewareIndex = mockRouter.use.mock.calls.findIndex(
+        (c) => c[0] === auth.requireAuthentication,
+      );
+      const mutationParserIndex = mockRouter.use.mock.calls.findIndex(
+        (c, index) =>
+          index > 0 && typeof c[0] === 'function' && c[0] !== auth.requireAuthentication,
+      );
+
+      expect(authMiddlewareIndex).toBeGreaterThan(0);
+      expect(mutationParserIndex).toBeGreaterThan(0);
+      expect(mutationParserIndex).toBeLessThan(authMiddlewareIndex);
+
+      const mutationParser = mockRouter.use.mock.calls[mutationParserIndex][0];
+      const next = vi.fn();
+      mockJsonMiddleware.mockClear();
+
+      mutationParser({ method: 'GET' }, {}, next);
+      expect(mockJsonMiddleware).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalledTimes(1);
+
+      mutationParser({ method: 'POST' }, {}, next);
+      mutationParser({ method: 'PUT' }, {}, next);
+      mutationParser({ method: 'PATCH' }, {}, next);
+      expect(mockJsonMiddleware).toHaveBeenCalledTimes(3);
     });
 
     test('should register legacy public auth methods endpoint for compatibility with rate limiting', () => {
@@ -553,6 +607,23 @@ describe('Auth Router', () => {
       expect(postRoutes).toContain('/remember');
       expect(postRoutes).toContain('/login');
       expect(postRoutes).toContain('/logout');
+    });
+
+    test('should register /remember after authentication middleware', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const rememberRouteIndex = mockRouter.post.mock.calls.findIndex((c) => c[0] === '/remember');
+      const rememberRouteOrder = mockRouter.post.mock.invocationCallOrder[rememberRouteIndex];
+
+      const authMiddlewareIndex = mockRouter.use.mock.calls.findIndex(
+        (c) => c[0] === auth.requireAuthentication,
+      );
+      const authMiddlewareOrder = mockRouter.use.mock.invocationCallOrder[authMiddlewareIndex];
+
+      expect(rememberRouteIndex).toBeGreaterThanOrEqual(0);
+      expect(authMiddlewareIndex).toBeGreaterThanOrEqual(0);
+      expect(rememberRouteOrder).toBeGreaterThan(authMiddlewareOrder);
     });
 
     test('should configure store ttl for remember-me duration', () => {

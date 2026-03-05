@@ -292,7 +292,7 @@ describe('API Index', () => {
     expect(compressionCall).toBeUndefined();
   });
 
-  test('should register json parser before auth init', async () => {
+  test('should not register a global json parser middleware', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
       port: 3000,
@@ -302,15 +302,9 @@ describe('API Index', () => {
 
     vi.resetModules();
     const indexRouter = await import('./index.js');
-    const freshAuth = await import('./auth.js');
     await indexRouter.init();
 
-    const jsonCallIndex = mockApp.use.mock.calls.findIndex((c) => c[0] === 'json-middleware');
-    expect(jsonCallIndex).toBeGreaterThanOrEqual(0);
-
-    const jsonCallOrder = mockApp.use.mock.invocationCallOrder[jsonCallIndex];
-    const authInitCallOrder = freshAuth.init.mock.invocationCallOrder[0];
-    expect(jsonCallOrder).toBeLessThan(authInitCallOrder);
+    expect(mockApp.use).not.toHaveBeenCalledWith('json-middleware');
   });
 
   test('should register helmet middleware before auth init', async () => {

@@ -41,6 +41,11 @@ function isSessionCookieRequest(req: Request): boolean {
   return typeof cookieHeader === 'string' && cookieHeader.trim() !== '';
 }
 
+function isCrossSiteFetch(req: Request): boolean {
+  const secFetchSite = req.get('sec-fetch-site');
+  return typeof secFetchSite === 'string' && secFetchSite.trim().toLowerCase() === 'cross-site';
+}
+
 /**
  * Enforce same-origin checks for cookie-authenticated state-changing requests.
  */
@@ -51,6 +56,11 @@ export function requireSameOriginForMutations(
 ): void {
   if (!isUnsafeMethod(req.method) || !isSessionCookieRequest(req)) {
     next();
+    return;
+  }
+
+  if (isCrossSiteFetch(req)) {
+    res.status(403).json({ error: 'CSRF validation failed' });
     return;
   }
 

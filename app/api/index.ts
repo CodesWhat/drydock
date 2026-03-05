@@ -152,7 +152,6 @@ function createApp() {
   }
 
   configureCors(app);
-  app.use(express.json());
   registerRoutes(app);
   registerErrorHandler(app);
   return app;

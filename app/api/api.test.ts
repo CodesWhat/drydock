@@ -1,9 +1,17 @@
-const { mockInit } = vi.hoisted(() => ({
-  mockInit: () => ({ init: vi.fn(() => ({ use: vi.fn(), get: vi.fn(), post: vi.fn() })) }),
-}));
+const { mockInit, mockExpressJson, mockJsonMiddleware } = vi.hoisted(() => {
+  const jsonMiddleware = vi.fn();
+  return {
+    mockInit: () => ({ init: vi.fn(() => ({ use: vi.fn(), get: vi.fn(), post: vi.fn() })) }),
+    mockJsonMiddleware: jsonMiddleware,
+    mockExpressJson: vi.fn(() => jsonMiddleware),
+  };
+});
 
 vi.mock('express', () => ({
-  default: { Router: vi.fn(() => ({ use: vi.fn(), get: vi.fn(), post: vi.fn() })) },
+  default: {
+    Router: vi.fn(() => ({ use: vi.fn(), get: vi.fn(), post: vi.fn() })),
+    json: mockExpressJson,
+  },
 }));
 
 vi.mock('./app', mockInit);
@@ -45,6 +53,40 @@ describe('API Router', () => {
 
   test('should initialize and return a router', async () => {
     expect(router).toBeDefined();
+  });
+
+  test('should register a mutation-only json parser before API route mounts', async () => {
+    const auth = await import('./auth.js');
+    const csrf = await import('./csrf.js');
+    expect(mockExpressJson).toHaveBeenCalledTimes(1);
+
+    const useCalls = router.use.mock.calls;
+    const appMountIndex = useCalls.findIndex((c) => c[0] === '/app');
+    expect(appMountIndex).toBeGreaterThan(-1);
+
+    const mutationParserIndex = useCalls.findIndex((c, index) => {
+      return (
+        index > 0 &&
+        index < appMountIndex &&
+        typeof c[0] === 'function' &&
+        c[0] !== auth.requireAuthentication &&
+        c[0] !== csrf.requireSameOriginForMutations
+      );
+    });
+    expect(mutationParserIndex).toBeGreaterThan(-1);
+
+    const mutationParser = useCalls[mutationParserIndex][0];
+    const next = vi.fn();
+    mockJsonMiddleware.mockClear();
+
+    mutationParser({ method: 'GET' }, {}, next);
+    expect(mockJsonMiddleware).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(1);
+
+    mutationParser({ method: 'POST' }, {}, next);
+    mutationParser({ method: 'PUT' }, {}, next);
+    mutationParser({ method: 'PATCH' }, {}, next);
+    expect(mockJsonMiddleware).toHaveBeenCalledTimes(3);
   });
 
   test('should mount all sub-routers', async () => {

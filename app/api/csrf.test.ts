@@ -47,6 +47,47 @@ describe('CSRF middleware', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
+  test('should reject unsafe methods when Sec-Fetch-Site is cross-site', () => {
+    const req = createReq({
+      method: 'POST',
+      protocol: 'https',
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'drydock.example.com',
+        origin: 'https://drydock.example.com',
+        'sec-fetch-site': 'cross-site',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
+  });
+
+  test('should allow unsafe methods when Sec-Fetch-Site is same-site and origin matches request host', () => {
+    const req = createReq({
+      method: 'POST',
+      protocol: 'https',
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'drydock.example.com',
+        origin: 'https://drydock.example.com',
+        'sec-fetch-site': 'same-site',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
   test('should allow unsafe methods when referer matches request host', () => {
     const req = createReq({
       method: 'PATCH',
