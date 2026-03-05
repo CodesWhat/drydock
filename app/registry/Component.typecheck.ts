@@ -8,5 +8,5 @@ component.undocumentedProperty = true;
 
 const configuration: ComponentConfiguration = { secret: 'token' };
 
-// @ts-expect-error ComponentConfiguration values should require narrowing.
 const secret: string = configuration.secret;
+void secret;
