@@ -288,6 +288,7 @@ Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully suppo
 | Quick Start | [Quick Start](https://drydock.codeswhat.com/docs/quickstart) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
 | Roadmap | See [Roadmap](#roadmap) section above |
+| Contributing | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Issues | [GitHub Issues](https://github.com/CodesWhat/drydock/issues) |
 | Discussions | [GitHub Discussions](https://github.com/CodesWhat/drydock/discussions) — feature requests & ideas welcome |
 
