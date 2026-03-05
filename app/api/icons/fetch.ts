@@ -66,4 +66,8 @@ function fetchAndCacheIconOnce({
   return fetchPromise;
 }
 
-export { fetchAndCacheIconOnce };
+function clearInFlightIconFetchesForTests() {
+  inFlightIconFetches.clear();
+}
+
+export { clearInFlightIconFetchesForTests, fetchAndCacheIconOnce };
