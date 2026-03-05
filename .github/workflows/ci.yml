@@ -309,7 +309,7 @@ jobs:
       - name: Run Artillery behavior test (advisory)
         continue-on-error: true
         env:
-          ARTILLERY_FILE: ./test-behavior.yml
+          ARTILLERY_FILE: ./test/test-behavior.yml
           ARTILLERY_ENV: behavior
           DD_LOAD_TEST_BUILD_CACHE: gha
           DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/behavior
@@ -319,7 +319,7 @@ jobs:
       - name: Run Artillery rate-limit burst (advisory)
         continue-on-error: true
         env:
-          ARTILLERY_FILE: ./test-rate-limit.yml
+          ARTILLERY_FILE: ./test/test-rate-limit.yml
           ARTILLERY_ENV: ratelimit
           DD_LOAD_TEST_BUILD_CACHE: gha
           DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/rate-limit
@@ -557,7 +557,7 @@ jobs:
 
       - name: Run Artillery behavior test
         env:
-          ARTILLERY_FILE: ./test-behavior.yml
+          ARTILLERY_FILE: ./test/test-behavior.yml
           ARTILLERY_ENV: behavior
           DD_LOAD_TEST_BUILD_CACHE: gha
           DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/behavior
@@ -566,7 +566,7 @@ jobs:
 
       - name: Run Artillery rate-limit burst
         env:
-          ARTILLERY_FILE: ./test-rate-limit.yml
+          ARTILLERY_FILE: ./test/test-rate-limit.yml
           ARTILLERY_ENV: ratelimit
           DD_LOAD_TEST_BUILD_CACHE: gha
           DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/rate-limit

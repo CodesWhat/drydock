@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT="${SCRIPT_DIR}/.."
 COMPOSE_FILE="${REPO_ROOT}/test/ci-compose.yml"
-ARTILLERY_FILE="${ARTILLERY_FILE:-${REPO_ROOT}/test.yml}"
+ARTILLERY_FILE="${ARTILLERY_FILE:-${REPO_ROOT}/test/test.yml}"
 ARTILLERY_ENV="${ARTILLERY_ENV:-ci}"
 COMPOSE_PROJECT="${COMPOSE_PROJECT:-drydock-loadtest}"
 DD_LOAD_TEST_PORT="${DD_LOAD_TEST_PORT:-}"

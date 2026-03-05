@@ -2,7 +2,7 @@
 
 ## Load Testing (Artillery)
 
-Load-test scenarios live in `test.yml`, `test-behavior.yml`, and `test-rate-limit.yml` and run against the stack in `test/ci-compose.yml`.
+Load-test scenarios live in `test/test.yml`, `test/test-behavior.yml`, and `test/test-rate-limit.yml` and run against the stack in `test/ci-compose.yml`.
 
 ### Profiles
 
@@ -19,9 +19,9 @@ From repo root:
 ```bash
 ./scripts/run-load-test.sh
 ARTILLERY_ENV=smoke ./scripts/run-load-test.sh
-ARTILLERY_FILE=./test-behavior.yml ARTILLERY_ENV=behavior ./scripts/run-load-test.sh
+ARTILLERY_FILE=./test/test-behavior.yml ARTILLERY_ENV=behavior ./scripts/run-load-test.sh
 ARTILLERY_ENV=stress ./scripts/run-load-test.sh
-ARTILLERY_FILE=./test-rate-limit.yml ARTILLERY_ENV=ratelimit ./scripts/run-load-test.sh
+ARTILLERY_FILE=./test/test-rate-limit.yml ARTILLERY_ENV=ratelimit ./scripts/run-load-test.sh
 DD_LOAD_TEST_PORT=3333 ./scripts/run-load-test.sh
 ```
 
