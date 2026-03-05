@@ -4,6 +4,19 @@ vi.mock('../log/index.js', () => ({
 
 import * as backup from './backup.js';
 
+function getPathValue(document: Record<string, any>, path: string) {
+  return path.split('.').reduce((value, key) => value?.[key], document);
+}
+
+function matchesQuery(document: Record<string, any>, query: Record<string, any> | undefined) {
+  if (!query || Object.keys(query).length === 0) {
+    return true;
+  }
+  return Object.entries(query).every(
+    ([path, expected]) => getPathValue(document, path) === expected,
+  );
+}
+
 function createDb() {
   const collections = {};
   return {
@@ -15,7 +28,9 @@ function createDb() {
           doc.$loki = docs.length;
           docs.push(doc);
         },
-        find: () => [...docs],
+        find: (query = undefined) => docs.filter((doc) => matchesQuery(doc, query)),
+        findOne: (query = undefined) => docs.find((doc) => matchesQuery(doc, query)) ?? null,
+        ensureIndex: vi.fn(),
         remove: (doc) => {
           const idx = docs.indexOf(doc);
           if (idx >= 0) docs.splice(idx, 1);
@@ -38,7 +53,9 @@ describe('Backup Store', () => {
       addCollection: vi.fn(() => ({ insert: vi.fn(), find: vi.fn() })),
     };
     backup.createCollections(db);
-    expect(db.addCollection).toHaveBeenCalledWith('backups');
+    expect(db.addCollection).toHaveBeenCalledWith('backups', {
+      indices: ['data.containerName', 'data.id'],
+    });
   });
 
   test('createCollections should not create collection when already exists', () => {
@@ -182,6 +199,44 @@ describe('Backup Store', () => {
   test('deleteBackup should return false for unknown id', () => {
     const deleted = backup.deleteBackup('unknown');
     expect(deleted).toBe(false);
+  });
+
+  test('getBackup/deleteBackup should fall back to find() when findOne is unavailable', () => {
+    const docs = [] as Array<{ data: Record<string, unknown> }>;
+    const db = {
+      getCollection: vi.fn(() => null),
+      addCollection: vi.fn(() => ({
+        ensureIndex: vi.fn(),
+        insert: (doc) => {
+          docs.push(doc);
+        },
+        find: (query = {}) =>
+          docs.filter((doc) =>
+            Object.entries(query).every(([key, expected]) => {
+              const [, path] = key.split('.');
+              return (doc.data as Record<string, unknown>)[path] === expected;
+            }),
+          ),
+        remove: (doc) => {
+          const idx = docs.indexOf(doc);
+          if (idx >= 0) docs.splice(idx, 1);
+        },
+      })),
+    };
+
+    backup.createCollections(db as any);
+    backup.insertBackup({
+      id: 'legacy-find-path',
+      containerId: 'c1',
+      containerName: 'nginx',
+      imageName: 'library/nginx',
+      imageTag: '1.24',
+      triggerName: 'docker.default',
+    });
+
+    expect(backup.getBackup('legacy-find-path')?.id).toBe('legacy-find-path');
+    expect(backup.deleteBackup('legacy-find-path')).toBe(true);
+    expect(backup.getBackup('legacy-find-path')).toBeUndefined();
   });
 
   test('pruneOldBackups should keep only the N most recent backups', () => {
