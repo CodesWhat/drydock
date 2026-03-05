@@ -118,11 +118,11 @@ export function useDashboardData() {
       const [containersRes, serverRes, agentsRes, watchersRes, registriesRes, auditLogRes] =
         await Promise.all([
           getAllContainers(),
-          getServer().catch(() => null),
-          getAgents().catch(() => []),
-          getAllWatchers().catch(() => []),
-          getAllRegistries().catch(() => []),
-          getAuditLog({ limit: 100 }).catch(() => ({ entries: [] })),
+          getServer(),
+          getAgents(),
+          getAllWatchers(),
+          getAllRegistries(),
+          getAuditLog({ limit: 100 }),
         ]);
       containers.value = mapApiContainers(containersRes);
       serverInfo.value = serverRes;
