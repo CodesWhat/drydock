@@ -885,7 +885,7 @@ class Docker extends Watcher {
     }
 
     this.handleRemoteAuthFailure(
-      `Unable to authenticate remote watcher ${this.name}: auth type "${authType || auth.type}" is unsupported`,
+      `Unable to authenticate remote watcher ${this.name}: auth type "${authType}" is unsupported`,
     );
   }
 

@@ -48,6 +48,7 @@ import mockParse from 'parse-docker-image-name';
 import * as mockPrometheus from '../../../prometheus/watcher.js';
 import * as mockTag from '../../../tag/index.js';
 import * as maintenance from './maintenance.js';
+import * as oidcModule from './oidc.js';
 import {
   applyRemoteOidcTokenPayload,
   getOidcGrantType,
@@ -3100,6 +3101,61 @@ describe('Docker Watcher', () => {
       expect(result.image.digest.value).toBe('sha256:samedigest');
     });
 
+    test('should keep existing digest value when backfill is not needed', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      docker.log = createMockLog(['debug']);
+      const existingContainer = {
+        id: '123',
+        error: undefined,
+        image: {
+          digest: { repo: 'sha256:samedigest', value: 'sha256:already-set' },
+          id: 'same-image-id',
+          created: '2023-01-01',
+        },
+      };
+      storeContainer.getContainer.mockReturnValue(existingContainer);
+      mockImage.inspect.mockResolvedValue({
+        Id: 'same-image-id',
+        RepoDigests: ['nginx@sha256:samedigest'],
+        Created: '2023-01-01',
+      });
+
+      const result = await docker.addImageDetailsToContainer({
+        Id: '123',
+        Image: 'nginx:latest',
+      });
+
+      expect(result.image.digest.value).toBe('sha256:already-set');
+    });
+
+    test('should keep digest value unchanged when repo digest is missing but image metadata changes', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      docker.log = createMockLog(['debug']);
+      const existingContainer = {
+        id: '123',
+        error: undefined,
+        image: {
+          digest: { repo: 'sha256:cached', value: 'sha256:cached' },
+          id: 'old-image-id',
+          created: '2023-01-01',
+        },
+      };
+      storeContainer.getContainer.mockReturnValue(existingContainer);
+      mockImage.inspect.mockResolvedValue({
+        Id: 'new-image-id',
+        RepoDigests: [],
+      });
+
+      const result = await docker.addImageDetailsToContainer({
+        Id: '123',
+        Image: 'nginx:latest',
+      });
+
+      expect(result.image.digest.repo).toBeUndefined();
+      expect(result.image.digest.value).toBe('sha256:cached');
+      expect(result.image.id).toBe('new-image-id');
+    });
+
     test('should set digest value from repo digest for new container details', async () => {
       const container = await setupContainerDetailTest(docker, {
         container: { Image: 'nginx:latest' },
@@ -4198,6 +4254,59 @@ describe('Docker Watcher', () => {
       };
       await docker.listenDockerEvents();
       expect(mockDockerApi.getEvents).not.toHaveBeenCalled();
+    });
+
+    test('should expose and update deviceCodeCompleted through OIDC state adapter accessors', async () => {
+      await docker.register('watcher', 'docker', 'test', createOidcConfig());
+      docker.remoteOidcDeviceCodeCompleted = true;
+
+      const state = (docker as any).getOidcStateAdapter();
+      expect(state.deviceCodeCompleted).toBe(true);
+
+      state.deviceCodeCompleted = false;
+      expect(docker.remoteOidcDeviceCodeCompleted).toBe(false);
+    });
+
+    test('should throw when OIDC refresh succeeds without returning an access token', async () => {
+      await docker.register('watcher', 'docker', 'test', createOidcConfig());
+      docker.remoteOidcAccessToken = undefined;
+      docker.remoteOidcAccessTokenExpiresAt = 0;
+      const refreshSpy = vi
+        .spyOn(oidcModule, 'refreshRemoteOidcAccessToken')
+        .mockResolvedValue(undefined as any);
+
+      try {
+        await expect(docker.ensureRemoteAuthHeaders()).rejects.toThrow(
+          'no OIDC access token available',
+        );
+      } finally {
+        refreshSpy.mockRestore();
+      }
+    });
+
+    test('listenDockerEvents should return early when watchevents is disabled', async () => {
+      await docker.register('watcher', 'docker', 'test', { watchevents: false });
+      docker.isDockerEventsListenerActive = true;
+
+      await docker.listenDockerEvents();
+
+      expect(mockDockerApi.getEvents).not.toHaveBeenCalled();
+    });
+
+    test('listenDockerEvents should clear stale reconnect timeout before opening stream', async () => {
+      await docker.register('watcher', 'docker', 'test', { watchevents: true });
+      docker.isDockerEventsListenerActive = true;
+      const reconnectTimeout = setTimeout(() => {}, 10_000) as any;
+      docker.dockerEventsReconnectTimeout = reconnectTimeout;
+      const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+      vi.spyOn(docker, 'ensureRemoteAuthHeaders').mockResolvedValue(undefined);
+      mockDockerApi.getEvents.mockRejectedValueOnce(new Error('events failed'));
+
+      await docker.listenDockerEvents();
+
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(reconnectTimeout);
+      clearTimeoutSpy.mockRestore();
+      clearTimeout(reconnectTimeout);
     });
   });
 
