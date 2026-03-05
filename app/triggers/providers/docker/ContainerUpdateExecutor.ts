@@ -516,6 +516,7 @@ class ContainerUpdateExecutor {
       preparedExecution.oldName,
       logContainer,
     );
+    attemptState.newContainer = newContainer;
 
     const newContainerId = await this.getContainerIdBestEffort(
       newContainer,
