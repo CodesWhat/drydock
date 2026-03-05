@@ -123,6 +123,29 @@ describe('Server Router', () => {
     expect(payload.configuration.tls).not.toHaveProperty('cert');
   });
 
+  test('should preserve non-object tls values as-is', async () => {
+    const { getServerConfiguration } = await import('../configuration/index.js');
+    vi.mocked(getServerConfiguration).mockReturnValueOnce({
+      port: 3000,
+      cors: {},
+      enabled: true,
+      feature: { delete: true },
+      tls: false,
+    });
+    const router = serverRouter.init();
+
+    const routeHandler = router.get.mock.calls[0][1];
+    const mockRes = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    };
+
+    routeHandler({}, mockRes);
+
+    const payload = mockRes.json.mock.calls[0][0];
+    expect(payload.configuration.tls).toBe(false);
+  });
+
   test('should return security runtime status on runtime route', async () => {
     const { getSecurityRuntimeStatus } = await import('../security/runtime.js');
     const router = serverRouter.init();

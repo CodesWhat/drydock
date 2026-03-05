@@ -6,7 +6,9 @@ vi.mock('./configuration/migrate-cli', () => ({
   runConfigMigrateCommandIfRequested: vi.fn(() => null),
 }));
 
-vi.mock('./log', () => ({ default: { info: vi.fn(), child: vi.fn().mockReturnThis() } }));
+vi.mock('./log', () => ({
+  default: { info: vi.fn(), warn: vi.fn(), child: vi.fn().mockReturnThis() },
+}));
 
 vi.mock('./store', () => ({
   init: vi.fn().mockResolvedValue(),
@@ -39,6 +41,10 @@ vi.mock('./security/scheduler', () => ({
 
 describe('Main Application', () => {
   const originalArgv = process.argv;
+  const originalGetuid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
+  const originalRunAsRoot = process.env.DD_RUN_AS_ROOT;
+  const originalAllowInsecureRoot = process.env.DD_ALLOW_INSECURE_ROOT;
+  const originalExitCode = process.exitCode;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -51,6 +57,22 @@ describe('Main Application', () => {
 
   afterAll(() => {
     process.argv = originalArgv;
+    if (originalGetuid) {
+      (process as NodeJS.Process & { getuid?: () => number }).getuid = originalGetuid;
+    } else {
+      delete (process as NodeJS.Process & { getuid?: () => number }).getuid;
+    }
+    if (originalRunAsRoot === undefined) {
+      delete process.env.DD_RUN_AS_ROOT;
+    } else {
+      process.env.DD_RUN_AS_ROOT = originalRunAsRoot;
+    }
+    if (originalAllowInsecureRoot === undefined) {
+      delete process.env.DD_ALLOW_INSECURE_ROOT;
+    } else {
+      process.env.DD_ALLOW_INSECURE_ROOT = originalAllowInsecureRoot;
+    }
+    process.exitCode = originalExitCode;
   });
 
   test('should initialize controller mode by default', async () => {
@@ -147,5 +169,78 @@ describe('Main Application', () => {
     expect(agentManager.init).not.toHaveBeenCalled();
     expect(agentServer.init).not.toHaveBeenCalled();
     expect(api.init).not.toHaveBeenCalled();
+  });
+
+  test('should set process.exitCode when config migrate command returns a non-zero code', async () => {
+    const store = await import('./store/index.js');
+    const migrateCli = await import('./configuration/migrate-cli.js');
+    process.exitCode = undefined;
+    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(2);
+
+    await import('./index.js');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(process.exitCode).toBe(2);
+    expect(store.init).not.toHaveBeenCalled();
+  });
+
+  test('should throw when insecure root mode is not fully acknowledged', async () => {
+    const migrateCli = await import('./configuration/migrate-cli.js');
+    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(null);
+    process.env.DD_RUN_AS_ROOT = 'true';
+    process.env.DD_ALLOW_INSECURE_ROOT = 'false';
+    (process as NodeJS.Process & { getuid?: () => number }).getuid = () => 0;
+
+    await expect(import('./index.js')).rejects.toThrow(
+      'DD_RUN_AS_ROOT=true requires DD_ALLOW_INSECURE_ROOT=true (break-glass). Prefer socket-proxy mode for least privilege.',
+    );
+  });
+
+  test('should proceed without warning when root and DD_RUN_AS_ROOT is unset', async () => {
+    const { default: log } = await import('./log/index.js');
+    const store = await import('./store/index.js');
+    const migrateCli = await import('./configuration/migrate-cli.js');
+    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(null);
+    delete process.env.DD_RUN_AS_ROOT;
+    delete process.env.DD_ALLOW_INSECURE_ROOT;
+    (process as NodeJS.Process & { getuid?: () => number }).getuid = () => 0;
+
+    await import('./index.js');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(store.init).toHaveBeenCalled();
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  test('should skip root-mode enforcement when process.getuid is unavailable', async () => {
+    const { default: log } = await import('./log/index.js');
+    const store = await import('./store/index.js');
+    const migrateCli = await import('./configuration/migrate-cli.js');
+    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(null);
+    process.env.DD_RUN_AS_ROOT = 'true';
+    process.env.DD_ALLOW_INSECURE_ROOT = 'false';
+    delete (process as NodeJS.Process & { getuid?: () => number }).getuid;
+
+    await import('./index.js');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(store.init).toHaveBeenCalled();
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  test('should warn when insecure root mode is acknowledged', async () => {
+    const { default: log } = await import('./log/index.js');
+    const migrateCli = await import('./configuration/migrate-cli.js');
+    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(null);
+    process.env.DD_RUN_AS_ROOT = 'true';
+    process.env.DD_ALLOW_INSECURE_ROOT = 'true';
+    (process as NodeJS.Process & { getuid?: () => number }).getuid = () => 0;
+
+    await import('./index.js');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(log.warn).toHaveBeenCalledWith(
+      'Running in insecure root mode (DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true); use socket-proxy mode when possible.',
+    );
   });
 });

@@ -133,6 +133,22 @@ test('authenticate should call ecr auth endpoint', async () => {
   });
 });
 
+test('authenticate should handle missing request options object', async () => {
+  const ecrPrivate = new Ecr();
+  ecrPrivate.configuration = {
+    accesskeyid: 'accesskeyid',
+    secretaccesskey: 'secretaccesskey',
+    region: 'region',
+  };
+  ecrPrivate.fetchPrivateEcrAuthToken = vi.fn().mockResolvedValue('QVdTOnh4eHg=');
+
+  await expect(ecrPrivate.authenticate(undefined, undefined)).resolves.toEqual({
+    headers: {
+      Authorization: 'Basic QVdTOnh4eHg=',
+    },
+  });
+});
+
 test('getAuthPull should return decoded ECR credentials', async () => {
   await expect(ecr.getAuthPull()).resolves.toEqual({
     username: 'AWS',

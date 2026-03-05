@@ -291,6 +291,23 @@ describe('AgentClient', () => {
       expect(event.emitAgentConnected).not.toHaveBeenCalled();
     });
 
+    test('should log debug when agent-connected emission fails', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      event.emitAgentConnected.mockRejectedValueOnce(new Error('emit failed'));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+      await Promise.resolve();
+
+      expect(event.emitAgentConnected).toHaveBeenCalledWith({ agentName: 'test-agent' });
+      expect(client.log.debug).toHaveBeenCalledWith(
+        'Failed to emit agent connected event (emit failed)',
+      );
+    });
+
     test('should handle watcher fetch failure gracefully', async () => {
       axios.get
         .mockResolvedValueOnce({ data: [] }) // containers
@@ -564,6 +581,39 @@ describe('AgentClient', () => {
         uptimeSeconds: 102,
         lastSeen: '2026-02-28T12:00:00.000Z',
       });
+    });
+
+    test('should preserve existing runtime info when dd:ack payload fields are invalid', async () => {
+      client.info = {
+        version: 'existing-version',
+        os: 'existing-os',
+        arch: 'existing-arch',
+        cpus: 2,
+        memoryGb: 4,
+        uptimeSeconds: 10,
+        lastSeen: '2026-02-28T12:00:00.000Z',
+      };
+      const spy = vi.spyOn(client, 'handshake').mockResolvedValue(undefined);
+
+      await client.handleEvent('dd:ack', {
+        version: 123,
+        os: null,
+        arch: {},
+        cpus: 'NaN',
+        memoryGb: 'NaN',
+        uptimeSeconds: Infinity,
+        lastSeen: '',
+      });
+
+      expect(spy).toHaveBeenCalled();
+      expect(client.info.version).toBe('existing-version');
+      expect(client.info.os).toBe('existing-os');
+      expect(client.info.arch).toBe('existing-arch');
+      expect(client.info.cpus).toBe(2);
+      expect(client.info.memoryGb).toBe(4);
+      expect(client.info.uptimeSeconds).toBe(10);
+      expect(typeof client.info.lastSeen).toBe('string');
+      expect(client.info.lastSeen).not.toBe('');
     });
 
     test('should process container on dd:container-added', async () => {

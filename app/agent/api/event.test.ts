@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import * as event from '../../event/index.js';
+import * as storeContainer from '../../store/container.js';
 import * as eventApi from './event.js';
 
 vi.mock('../../log/index.js', () => ({
@@ -69,6 +70,20 @@ describe('agent API event', () => {
       expect(ackPayload).toContain('"memoryGb":16');
       expect(ackPayload).toContain('"containers":{"total":3,"running":2,"stopped":1}');
       expect(ackPayload).toContain('"images":2');
+    });
+
+    test('should compute image and stopped counts using fallback image keys', () => {
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'c1', status: 'running', image: { name: 'img-name' } },
+        { id: 'c2', status: 'created', image: {} },
+        { id: 'c3' },
+      ]);
+
+      eventApi.subscribeEvents(req, res);
+
+      const ackPayload = res.write.mock.calls[0][0];
+      expect(ackPayload).toContain('"containers":{"total":3,"running":1,"stopped":2}');
+      expect(ackPayload).toContain('"images":3');
     });
 
     test('should register close handler', () => {

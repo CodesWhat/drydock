@@ -94,6 +94,23 @@ labels:
     expect(migrated.labelReplacements).toBe(2);
   });
 
+  test('wud source migrates only WUD patterns', () => {
+    const content = `
+WUD_SERVER_PORT=3000
+labels:
+  - wud.watch=true
+  - com.centurylinklabs.watchtower.enable=false
+`;
+
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+
+    expect(migrated.content).toContain('DD_SERVER_PORT=3000');
+    expect(migrated.content).toContain('dd.watch=true');
+    expect(migrated.content).toContain('com.centurylinklabs.watchtower.enable=false');
+    expect(migrated.envReplacements).toBe(1);
+    expect(migrated.labelReplacements).toBe(1);
+  });
+
   test('avoids partial label matches', () => {
     const content = `
 labels:
@@ -155,6 +172,23 @@ describe('runConfigMigrateCommandIfRequested', () => {
     expect(result).toBe(0);
     expect(collector.out.join('\n')).toContain('Usage: drydock config migrate');
     expect(collector.err).toEqual([]);
+  });
+
+  test('uses process stdout/stderr fallback when io is not provided', () => {
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    try {
+      expect(runConfigMigrateCommandIfRequested(['config', 'migrate', '--help'])).toBe(0);
+      expect(runConfigMigrateCommandIfRequested(['config', 'migrate', '--unknown'])).toBe(1);
+      expect(stdoutSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Usage: drydock config migrate'),
+      );
+      expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('Error: Unknown argument'));
+    } finally {
+      stdoutSpy.mockRestore();
+      stderrSpy.mockRestore();
+    }
   });
 
   test('supports -h short help flag', () => {
@@ -453,6 +487,29 @@ describe('runConfigMigrateCommandIfRequested', () => {
       expect(collector.err.join('\n')).toContain('Failed to read');
       expect(collector.err.join('\n')).toContain(envPath);
       expect(collector.err.join('\n')).toContain('permission denied');
+    });
+  });
+
+  test('returns a user-friendly error when inspecting file metadata fails', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      const statSpy = vi.spyOn(fs, 'lstatSync').mockImplementationOnce(() => {
+        throw 'metadata unavailable';
+      });
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      statSpy.mockRestore();
+
+      expect(result).toBe(1);
+      expect(collector.err.join('\n')).toContain('Failed to inspect');
+      expect(collector.err.join('\n')).toContain('metadata unavailable');
     });
   });
 

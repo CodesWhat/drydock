@@ -65,3 +65,16 @@ test('failClosedAuth should warn and continue when insecure mode is enabled', ()
 
   expect(logger.warn).toHaveBeenCalledWith('auth failed; continuing because auth.insecure=true');
 });
+
+test('failClosedAuth should use default insecure flag name when not provided', () => {
+  const logger: AuthLogger = {
+    warn: vi.fn(),
+  };
+
+  failClosedAuth('auth failed', {
+    allowInsecure: true,
+    logger,
+  });
+
+  expect(logger.warn).toHaveBeenCalledWith('auth failed; continuing because insecure=true');
+});

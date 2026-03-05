@@ -586,6 +586,17 @@ describe('Container Router', () => {
         },
       });
     });
+
+    test('should return empty statuses when recent entries is not an array', () => {
+      auditStore.getRecentEntries.mockReturnValue(undefined);
+
+      const handler = getHandler('get', '/recent-status');
+      const res = createResponse();
+      handler({ query: {} }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ statuses: {} });
+    });
   });
 
   describe('getContainersFromStore', () => {

@@ -106,6 +106,41 @@ describe('HTTP Trigger', () => {
     });
   });
 
+  test('should default auth type to BASIC when type is omitted', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://example.com/webhook',
+      auth: { user: 'user', password: 'pass' },
+    });
+
+    await http.trigger({ name: 'test' });
+
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auth: { username: 'user', password: 'pass' },
+      }),
+    );
+  });
+
+  test('should fallback to BASIC auth when auth type is an empty string at runtime', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://example.com/webhook',
+      auth: { type: 'BASIC', user: 'user', password: 'pass' },
+    });
+
+    http.configuration.auth.type = '';
+    await http.trigger({ name: 'test' });
+
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auth: { username: 'user', password: 'pass' },
+      }),
+    );
+  });
+
   test('should use BEARER auth', async () => {
     const { default: axios } = await import('axios');
     axios.mockResolvedValue({ data: {} });
@@ -217,5 +252,22 @@ describe('HTTP Trigger', () => {
       data: container,
       proxy: { host: 'proxy', port: 8080 },
     });
+  });
+
+  test('should use default https proxy port when none is specified', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://example.com/webhook',
+      proxy: 'https://secure-proxy',
+    });
+
+    await http.trigger({ name: 'test' });
+
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proxy: { host: 'secure-proxy', port: 443 },
+      }),
+    );
   });
 });

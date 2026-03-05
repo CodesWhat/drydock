@@ -135,6 +135,18 @@ describe('GitHub Container Registry', () => {
     expect(axios).toHaveBeenCalledTimes(1);
   });
 
+  test('should not retry when auth call rejects with a non-Error value', async () => {
+    ghcr.configuration = { username: 'test-user', token: 'test-token' };
+    axios.mockRejectedValueOnce('raw failure');
+    const image = { name: 'user/repo' };
+    const requestOptions = { headers: {} };
+
+    await expect(ghcr.authenticate(image, requestOptions)).rejects.toThrow(
+      'token request failed (undefined)',
+    );
+    expect(axios).toHaveBeenCalledTimes(1);
+  });
+
   test('should authenticate without token', async () => {
     ghcr.configuration = {};
     const image = { name: 'user/repo' };
@@ -161,6 +173,10 @@ describe('GitHub Container Registry', () => {
     const result = await ghcr.authenticate(image, requestOptions);
 
     expect(result.headers.Authorization).toBe('Bearer access-token');
+  });
+
+  test('should ignore non-Error values when parsing rejected credential status', async () => {
+    expect((ghcr as any).getRejectedCredentialStatus('raw-failure')).toBeUndefined();
   });
 
   test('should validate string configuration', async () => {

@@ -829,6 +829,19 @@ describe('Auth Router', () => {
       expect(res.json).toHaveBeenCalledWith({ ok: true });
     });
 
+    test('setRememberMe should return 500 when session is unavailable', () => {
+      const handler = getRouteHandler('post', '/remember');
+      const req = {
+        body: { remember: true },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to access session' });
+    });
+
     test('login should apply remember-me cookie max age', () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
@@ -910,6 +923,33 @@ describe('Auth Router', () => {
           action: 'auth-login',
           status: 'error',
           details: expect.stringContaining('regenerate failed'),
+        }),
+      );
+    });
+
+    test('login should fail when session is unavailable after regenerate callback', () => {
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        user: { username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn((done) => {
+            req.session = undefined;
+            done();
+          }),
+        },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auth-login',
+          status: 'error',
+          details: expect.stringContaining('persist session after regeneration'),
         }),
       );
     });

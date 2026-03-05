@@ -83,7 +83,10 @@ describe('agent API container', () => {
       );
     });
 
-    test('should return logs successfully', async () => {
+    test.each([
+      ['string route param', 'c1'],
+      ['array route param', ['c1']],
+    ])('should return logs successfully for %s id', async (_label, routeId) => {
       const mockLogs = dockerStreamBuffer('log output');
       const mockDockerContainer = { logs: vi.fn().mockResolvedValue(mockLogs) };
       const mockWatcher = {
@@ -95,10 +98,13 @@ describe('agent API container', () => {
         watcher: 'local',
       });
       registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
-      req.params.id = 'c1';
+      req.params.id = routeId;
       req.query = {};
       res.status = vi.fn().mockReturnThis();
+
       await containerApi.getContainerLogs(req, res);
+
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
       expect(mockWatcher.dockerApi.getContainer).toHaveBeenCalledWith('my-container');
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ logs: 'log output' });
@@ -243,13 +249,18 @@ describe('agent API container', () => {
       expect(res.sendStatus).toHaveBeenCalledWith(404);
     });
 
-    test('should delete container and return 204', () => {
+    test.each([
+      ['string route param', 'c1'],
+      ['array route param', ['c1']],
+    ])('should delete container and return 204 for %s id', (_label, routeId) => {
       configuration.getServerConfiguration.mockReturnValue({
         feature: { delete: true },
       });
-      req.params.id = 'c1';
+      req.params.id = routeId;
       storeContainer.getContainer.mockReturnValue({ id: 'c1' });
+
       containerApi.deleteContainer(req, res);
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c1');
       expect(res.sendStatus).toHaveBeenCalledWith(204);
     });

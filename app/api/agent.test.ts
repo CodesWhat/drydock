@@ -117,6 +117,35 @@ describe('Agent Router', () => {
 
     expect(res.json).toHaveBeenCalledWith([]);
   });
+
+  test('should compute container stats using status and image fallbacks', () => {
+    getAgents.mockReturnValue([
+      {
+        name: 'agent-fallbacks',
+        config: { host: 'localhost', port: 3000 },
+        isConnected: true,
+        info: {},
+      },
+    ]);
+    getContainers.mockReturnValue([
+      { id: 'c1', status: undefined, image: { name: 'img-name' } },
+      { id: 'c2', status: 'running', image: {} },
+      { id: 'c3', status: null },
+    ]);
+
+    agentRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+    const res = createResponse();
+    handler({}, res);
+
+    expect(res.json).toHaveBeenCalledWith([
+      expect.objectContaining({
+        name: 'agent-fallbacks',
+        containers: { total: 3, running: 1, stopped: 2 },
+        images: 3,
+      }),
+    ]);
+  });
 });
 
 describe('Agent Log Entries Route', () => {
@@ -220,6 +249,29 @@ describe('Agent Log Entries Route', () => {
     expect(getLogEntries).not.toHaveBeenCalled();
   });
 
+  test.each([
+    ['level', 123, 'Invalid level query parameter'],
+    ['component', ['docker'], 'Invalid component query parameter'],
+  ])('should return 400 when %s query parameter is not a string', async (param, value, expectedError) => {
+    const getLogEntries = vi.fn().mockResolvedValue([]);
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries,
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: { [param]: value },
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: expectedError });
+    expect(getLogEntries).not.toHaveBeenCalled();
+  });
+
   test('should return 400 when component query parameter contains unsafe characters', async () => {
     const getLogEntries = vi.fn().mockResolvedValue([]);
     mockGetAgent.mockReturnValue({
@@ -277,6 +329,66 @@ describe('Agent Log Entries Route', () => {
     expect(res.status).toHaveBeenCalledWith(502);
     expect(res.json).toHaveBeenCalledWith({
       error: 'Failed to fetch logs from agent: Connection refused',
+    });
+  });
+
+  test('should stringify non-Error failures from getLogEntries', async () => {
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries: vi.fn().mockRejectedValue('upstream unavailable'),
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: {},
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Failed to fetch logs from agent: upstream unavailable',
+    });
+  });
+
+  test('should stringify non-string non-Error failures from getLogEntries', async () => {
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries: vi.fn().mockRejectedValue(503),
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: {},
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Failed to fetch logs from agent: 503',
+    });
+  });
+
+  test('should stringify object failures from getLogEntries', async () => {
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries: vi.fn().mockRejectedValue({ code: 'E_UPSTREAM' }),
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: {},
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Failed to fetch logs from agent: [object Object]',
     });
   });
 });

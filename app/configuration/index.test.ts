@@ -61,6 +61,32 @@ test('getLogBufferEnabled should return false when disabled via env', async () =
   delete configuration.ddEnvVars.DD_LOG_BUFFER_ENABLED;
 });
 
+test('should include additional legacy env count in warning suffix when more than 10 WUD vars are present', async () => {
+  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  const legacyKeys = Array.from({ length: 12 }, (_, index) => `WUD_LEGACY_${index}`);
+  const previousValues = new Map<string, string | undefined>();
+  for (const key of legacyKeys) {
+    previousValues.set(key, process.env[key]);
+    process.env[key] = '1';
+  }
+
+  try {
+    vi.resetModules();
+    await import('./index.js');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('(+2 more)'));
+  } finally {
+    for (const key of legacyKeys) {
+      const previousValue = previousValues.get(key);
+      if (previousValue === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = previousValue;
+      }
+    }
+    warnSpy.mockRestore();
+  }
+});
+
 test('getWatcherConfiguration should return empty object by default', async () => {
   delete configuration.ddEnvVars.DD_WATCHER_WATCHER1_X;
   delete configuration.ddEnvVars.DD_WATCHER_WATCHER1_Y;
