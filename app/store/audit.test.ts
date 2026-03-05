@@ -7,6 +7,14 @@ vi.mock('../log/index.js', () => ({
 import * as audit from './audit.js';
 
 function createDb() {
+  function getByPath(object, path) {
+    return path.split('.').reduce((acc, key) => acc?.[key], object);
+  }
+
+  function matchesQuery(doc, query = {}) {
+    return Object.entries(query).every(([key, value]) => getByPath(doc, key) === value);
+  }
+
   var collections = {};
   return {
     getCollection: (name) => collections[name] || null,
@@ -17,7 +25,7 @@ function createDb() {
           doc.$loki = docs.length;
           docs.push(doc);
         },
-        find: () => [...docs],
+        find: (query = {}) => docs.filter((doc) => matchesQuery(doc, query)),
         remove: (doc) => {
           var idx = docs.indexOf(doc);
           if (idx >= 0) docs.splice(idx, 1);
@@ -37,20 +45,27 @@ describe('Audit Store', () => {
   test('createCollections should create audit collection when not exist', () => {
     var db = {
       getCollection: () => null,
-      addCollection: vi.fn(() => ({ insert: vi.fn(), find: vi.fn() })),
+      addCollection: vi.fn(() => ({ insert: vi.fn(), find: vi.fn(), ensureIndex: vi.fn() })),
     };
     audit.createCollections(db);
-    expect(db.addCollection).toHaveBeenCalledWith('audit');
+    expect(db.addCollection).toHaveBeenCalledWith(
+      'audit',
+      expect.objectContaining({
+        indices: expect.arrayContaining(['data.action', 'data.timestamp']),
+      }),
+    );
   });
 
-  test('createCollections should not create collection when already exists', () => {
-    var existing = { insert: vi.fn(), find: vi.fn() };
+  test('createCollections should not create collection when already exists and should ensure indexes', () => {
+    var existing = { insert: vi.fn(), find: vi.fn(), ensureIndex: vi.fn() };
     var db = {
       getCollection: () => existing,
       addCollection: vi.fn(),
     };
     audit.createCollections(db);
     expect(db.addCollection).not.toHaveBeenCalled();
+    expect(existing.ensureIndex).toHaveBeenCalledWith('data.action');
+    expect(existing.ensureIndex).toHaveBeenCalledWith('data.timestamp');
   });
 
   test('insertAudit should insert an entry and return it with id', () => {

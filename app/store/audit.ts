@@ -3,13 +3,14 @@ import type { AuditEntry } from '../model/audit.js';
 import { initCollection } from './util.js';
 
 let auditCollection;
+const AUDIT_COLLECTION_INDICES = ['data.action', 'data.timestamp'];
 
 /**
  * Create audit collections.
  * @param db
  */
 export function createCollections(db) {
-  auditCollection = initCollection(db, 'audit');
+  auditCollection = initCollection(db, 'audit', { indices: AUDIT_COLLECTION_INDICES });
 }
 
 /**
@@ -46,30 +47,34 @@ export function getAuditEntries(
     return { entries: [], total: 0 };
   }
 
-  let results = auditCollection.find().map((item) => item.data as AuditEntry);
-
+  const collectionQuery: Record<string, string> = {};
   if (query.action) {
-    results = results.filter((e) => e.action === query.action);
+    collectionQuery['data.action'] = query.action;
   }
   if (query.container) {
-    results = results.filter((e) => e.containerName === query.container);
+    collectionQuery['data.containerName'] = query.container;
   }
+
+  let results = auditCollection.find(collectionQuery);
+
   if (query.from) {
     const fromDate = new Date(query.from).getTime();
-    results = results.filter((e) => new Date(e.timestamp).getTime() >= fromDate);
+    results = results.filter((entry) => new Date(entry.data.timestamp).getTime() >= fromDate);
   }
   if (query.to) {
     const toDate = new Date(query.to).getTime();
-    results = results.filter((e) => new Date(e.timestamp).getTime() <= toDate);
+    results = results.filter((entry) => new Date(entry.data.timestamp).getTime() <= toDate);
   }
 
   // Sort newest first
-  results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  results.sort(
+    (a, b) => new Date(b.data.timestamp).getTime() - new Date(a.data.timestamp).getTime(),
+  );
 
   const total = results.length;
   const skip = query.skip || 0;
   const limit = query.limit || 50;
-  const entries = results.slice(skip, skip + limit);
+  const entries = results.slice(skip, skip + limit).map((entry) => entry.data as AuditEntry);
 
   return { entries, total };
 }
