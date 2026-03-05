@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import AgentDetailConfigTab from '../components/agents/AgentDetailConfigTab.vue';
+import AgentDetailLogsTab from '../components/agents/AgentDetailLogsTab.vue';
+import AgentDetailOverviewTab from '../components/agents/AgentDetailOverviewTab.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
@@ -764,215 +767,36 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
 
           <!-- Tab content -->
           <template v-if="selectedAgent">
-            <!-- Overview tab -->
-            <div v-if="agentDetailTab === 'overview'" class="p-4 space-y-5">
-              <!-- Resources -->
-              <div v-if="getResourceFields(selectedAgent).length > 0">
-                <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Resources</div>
-                <div class="grid grid-cols-2 gap-2">
-                  <div v-for="field in getResourceFields(selectedAgent)" :key="field.label"
-                       class="px-2.5 py-1.5 dd-rounded text-[11px]"
-                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                    <div class="text-[10px] dd-text-muted">{{ field.label }}</div>
-                    <div class="font-semibold" :class="field.muted ? 'dd-text-muted' : 'dd-text'">{{ field.value }}</div>
-                  </div>
-                </div>
-              </div>
+            <AgentDetailOverviewTab
+              v-if="agentDetailTab === 'overview'"
+              :agent="selectedAgent"
+              :resource-fields="getResourceFields(selectedAgent)"
+              :system-fields="getSystemFields(selectedAgent)"
+            />
 
-              <!-- System -->
-              <div v-if="getSystemFields(selectedAgent).length > 0">
-                <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">System</div>
-                <div class="space-y-1">
-                  <div v-for="field in getSystemFields(selectedAgent)" :key="field.label"
-                       class="flex items-center justify-between px-2.5 py-1.5 dd-rounded text-[11px]"
-                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                    <span class="dd-text-muted">{{ field.label }}</span>
-                    <span class="font-mono font-semibold" :class="field.muted ? 'dd-text-muted' : 'dd-text'">{{ field.value }}</span>
-                  </div>
-                </div>
-              </div>
+            <AgentDetailLogsTab
+              v-if="agentDetailTab === 'logs'"
+              :logs="getAgentLogs(selectedAgent.id)"
+              :loading="agentLogsLoading"
+              :error="agentLogsError"
+              :log-level-filter="agentLogLevelFilter"
+              :tail="agentLogTail"
+              :component-filter="agentLogComponent"
+              :last-fetched-iso="agentLogsLastFetched"
+              :status="selectedAgent.status"
+              :format-last-fetched="formatLastFetched"
+              :format-timestamp="formatAgentLogTimestamp"
+              @update:log-level-filter="agentLogLevelFilter = $event"
+              @update:tail="agentLogTail = $event"
+              @update:component-filter="agentLogComponent = $event"
+              @refresh="refreshSelectedAgentLogs"
+              @reset="resetAgentLogFilters"
+            />
 
-              <!-- Containers -->
-              <div>
-                <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Containers</div>
-                <div class="grid grid-cols-3 gap-2 text-center">
-                  <div class="px-2 py-2 dd-rounded"
-                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                    <div class="text-lg font-bold dd-text">{{ selectedAgent.containers.total }}</div>
-                    <div class="text-[10px] dd-text-muted">Total</div>
-                  </div>
-                  <div class="px-2 py-2 dd-rounded"
-                       :style="{ backgroundColor: 'var(--dd-success-muted)' }">
-                    <div class="text-lg font-bold" :style="{ color: 'var(--dd-success)' }">{{ selectedAgent.containers.running }}</div>
-                    <div class="text-[10px]" :style="{ color: 'var(--dd-success)' }">Running</div>
-                  </div>
-                  <div class="px-2 py-2 dd-rounded"
-                       :style="{ backgroundColor: selectedAgent.containers.stopped > 0 ? 'var(--dd-danger-muted)' : 'var(--dd-bg-inset)' }">
-                    <div class="text-lg font-bold" :style="{ color: selectedAgent.containers.stopped > 0 ? 'var(--dd-danger)' : 'var(--dd-text-muted)' }">{{ selectedAgent.containers.stopped }}</div>
-                    <div class="text-[10px]" :style="{ color: selectedAgent.containers.stopped > 0 ? 'var(--dd-danger)' : 'var(--dd-text-muted)' }">Stopped</div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Automation -->
-              <div>
-                <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Automation</div>
-                <div class="space-y-2">
-                  <div class="px-2.5 py-2 dd-rounded text-[11px]"
-                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                    <div class="flex items-center justify-between gap-2">
-                      <span class="font-semibold dd-text">Watchers</span>
-                      <span class="text-[10px] dd-text-muted">{{ selectedAgent.watchers.length }}</span>
-                    </div>
-                    <div class="mt-1.5 flex flex-wrap gap-1.5">
-                      <span v-for="watcherName in selectedAgent.watchers"
-                            :key="watcherName"
-                            class="px-1.5 py-0.5 dd-rounded text-[10px] font-mono dd-bg-elevated dd-text-secondary">
-                        {{ watcherName }}
-                      </span>
-                      <span v-if="selectedAgent.watchers.length === 0"
-                            class="text-[10px] italic dd-text-muted">
-                        None
-                      </span>
-                    </div>
-                  </div>
-
-                  <div class="px-2.5 py-2 dd-rounded text-[11px]"
-                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                    <div class="flex items-center justify-between gap-2">
-                      <span class="font-semibold dd-text">Triggers</span>
-                      <span class="text-[10px] dd-text-muted">{{ selectedAgent.triggers.length }}</span>
-                    </div>
-                    <div class="mt-1.5 flex flex-wrap gap-1.5">
-                      <span v-for="triggerName in selectedAgent.triggers"
-                            :key="triggerName"
-                            class="px-1.5 py-0.5 dd-rounded text-[10px] font-mono dd-bg-elevated dd-text-secondary">
-                        {{ triggerName }}
-                      </span>
-                      <span v-if="selectedAgent.triggers.length === 0"
-                            class="text-[10px] italic dd-text-muted">
-                        None
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Logs tab -->
-            <div v-if="agentDetailTab === 'logs'" class="flex flex-col" style="height: calc(100% - 0px);">
-              <div class="px-3 py-2 flex flex-wrap items-center gap-2"
-                   :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
-                <select v-model="agentLogLevelFilter"
-                        data-testid="agent-log-level-filter"
-                        class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
-                  <option value="all">All Levels</option>
-                  <option value="debug">Debug</option>
-                  <option value="info">Info</option>
-                  <option value="warn">Warn</option>
-                  <option value="error">Error</option>
-                </select>
-
-                <select v-model.number="agentLogTail"
-                        data-testid="agent-log-tail-filter"
-                        class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
-                  <option :value="50">Tail 50</option>
-                  <option :value="100">Tail 100</option>
-                  <option :value="500">Tail 500</option>
-                  <option :value="1000">Tail 1000</option>
-                </select>
-
-                <input v-model="agentLogComponent"
-                       data-testid="agent-log-component-filter"
-                       type="text"
-                       placeholder="Filter by component..."
-                       class="flex-1 min-w-[160px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-placeholder dd-border-strong"
-                       @keyup.enter="refreshSelectedAgentLogs" />
-
-                <button data-testid="agent-log-apply"
-                        class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
-                        :class="agentLogsLoading ? 'opacity-50 pointer-events-none' : ''"
-                        @click="refreshSelectedAgentLogs">
-                  Apply
-                </button>
-                <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text"
-                        :class="agentLogsLoading ? 'opacity-50 pointer-events-none' : ''"
-                        @click="resetAgentLogFilters">
-                  Reset
-                </button>
-                <button data-testid="agent-log-refresh"
-                        class="p-1.5 dd-rounded transition-colors dd-text-muted hover:dd-text"
-                        :class="agentLogsLoading ? 'opacity-50 pointer-events-none' : ''"
-                        v-tooltip.top="'Refresh'"
-                        @click="refreshSelectedAgentLogs">
-                  <AppIcon name="refresh" :size="12" />
-                </button>
-              </div>
-
-              <div class="px-3 py-1 text-[10px] dd-text-muted">
-                Last fetched: {{ formatLastFetched(agentLogsLastFetched) }}
-              </div>
-
-              <div class="flex-1 min-h-0 flex flex-col overflow-hidden"
-                   :style="{ backgroundColor: 'var(--dd-bg-code)' }">
-                <div v-if="agentLogsLoading" class="text-[12px] dd-text-muted text-center py-6">
-                  Loading logs...
-                </div>
-                <div v-else-if="agentLogsError"
-                     class="mx-3 mt-3 text-[11px] px-3 py-2 dd-rounded"
-                     :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
-                  {{ agentLogsError }}
-                </div>
-                <div v-else class="flex-1 overflow-y-auto px-1"
-                     style="box-shadow: var(--dd-shadow-inset);">
-                  <div v-if="getAgentLogs(selectedAgent.id).length === 0"
-                       class="px-3 py-4 text-[11px] dd-text-muted text-center">
-                    No log entries found for current filters.
-                  </div>
-                  <div v-for="(line, i) in getAgentLogs(selectedAgent.id)" :key="i"
-                       class="px-3 py-[3px] font-mono text-[11px] leading-relaxed flex gap-3 transition-colors"
-                       :style="{ borderBottom: '1px solid var(--dd-log-line)' }">
-                    <span class="shrink-0 tabular-nums" style="color: var(--dd-text-muted);">{{ formatAgentLogTimestamp(line.timestamp) }}</span>
-                    <span class="shrink-0 w-11 text-right font-semibold uppercase text-[10px]"
-                          :style="{
-                            color: line.level === 'error' ? 'var(--dd-danger)'
-                                 : line.level === 'warn' ? 'var(--dd-warning)'
-                                 : line.level === 'debug' ? 'var(--dd-text-muted)'
-                                 : 'var(--dd-success)'
-                          }">
-                      {{ line.level }}
-                    </span>
-                    <span class="shrink-0" style="color: var(--dd-primary);">{{ line.component || '-' }}</span>
-                    <span class="break-all" style="color: var(--dd-text-secondary);">{{ line.message }}</span>
-                  </div>
-                </div>
-                <!-- Status bar -->
-                <div class="shrink-0 px-4 py-2 flex items-center justify-between"
-                     :style="{ borderTop: '1px solid var(--dd-log-divider)', backgroundColor: 'var(--dd-log-footer-bg)' }">
-                  <span class="text-[10px] font-medium" style="color: var(--dd-text-muted);">
-                    {{ getAgentLogs(selectedAgent.id).length }} entries
-                  </span>
-                  <div class="flex items-center gap-1.5">
-                    <div class="w-2 h-2 rounded-full"
-                         :style="{ backgroundColor: selectedAgent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-                    <span class="text-[10px] font-semibold"
-                          :style="{ color: selectedAgent.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }">
-                      {{ selectedAgent.status === 'connected' ? 'Live' : 'Offline' }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Config tab -->
-            <div v-if="agentDetailTab === 'config'" class="p-4 space-y-3">
-              <div v-for="field in getConfigFields(selectedAgent)" :key="field.label"
-                   class="flex items-center justify-between px-3 py-2 dd-rounded"
-                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                <span class="text-[10px] font-semibold uppercase tracking-wider dd-text-muted">{{ field.label }}</span>
-                <span class="text-[12px] font-mono" :class="field.muted ? 'dd-text-muted' : 'dd-text'">{{ field.value }}</span>
-              </div>
-            </div>
+            <AgentDetailConfigTab
+              v-if="agentDetailTab === 'config'"
+              :fields="getConfigFields(selectedAgent)"
+            />
           </template>
         </DetailPanel>
     </template>
