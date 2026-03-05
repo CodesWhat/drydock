@@ -4,6 +4,7 @@ import {
   getContainerIcon,
   getContainerLogs,
   getContainerSbom,
+  getContainerSummary,
   getContainerTriggers,
   getContainerUpdateOperations,
   getContainerVulnerabilities,
@@ -104,6 +105,37 @@ describe('Container Service', () => {
 
       await expect(getAllContainers()).rejects.toThrow(
         'Failed to get containers: Internal Server Error',
+      );
+    });
+  });
+
+  describe('getContainerSummary', () => {
+    it('fetches container summary successfully', async () => {
+      const mockSummary = {
+        containers: { total: 5, running: 4, stopped: 1 },
+        security: { issues: 2 },
+      };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockSummary,
+      } as any);
+
+      const summary = await getContainerSummary();
+
+      expect(fetch).toHaveBeenCalledWith('/api/containers/summary', {
+        credentials: 'include',
+      });
+      expect(summary).toEqual(mockSummary);
+    });
+
+    it('throws when summary response is not ok', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Service Unavailable',
+      } as any);
+
+      await expect(getContainerSummary()).rejects.toThrow(
+        'Failed to get container summary: Service Unavailable',
       );
     });
   });

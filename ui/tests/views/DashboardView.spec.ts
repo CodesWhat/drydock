@@ -14,6 +14,7 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/services/container', () => ({
   getAllContainers: vi.fn(),
+  getContainerSummary: vi.fn(),
 }));
 
 vi.mock('@/services/agent', () => ({
@@ -57,12 +58,13 @@ vi.mock('@/utils/dashboard-container-metrics', async () => {
 
 import { getAgents } from '@/services/agent';
 import { getAuditLog } from '@/services/audit';
-import { getAllContainers } from '@/services/container';
+import { getAllContainers, getContainerSummary } from '@/services/container';
 import { getAllRegistries } from '@/services/registry';
 import { getServer } from '@/services/server';
 import { getAllWatchers } from '@/services/watcher';
 
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
+const mockGetContainerSummary = getContainerSummary as ReturnType<typeof vi.fn>;
 const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
 const mockGetServer = getServer as ReturnType<typeof vi.fn>;
 const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
@@ -102,6 +104,14 @@ async function mountDashboard(
   overrides: DashboardDataOverrides = {},
 ) {
   mockGetAllContainers.mockResolvedValue(containers);
+  mockGetContainerSummary.mockResolvedValue({
+    containers: {
+      total: containers.length,
+      running: containers.filter((container) => container.status === 'running').length,
+      stopped: containers.filter((container) => container.status !== 'running').length,
+    },
+    security: { issues: 0 },
+  });
   mockGetAgents.mockResolvedValue(agents);
   mockGetServer.mockResolvedValue(server);
   mockGetAllWatchers.mockResolvedValue(overrides.watchers ?? []);
@@ -249,7 +259,7 @@ describe('DashboardView', () => {
         const timerId = setIntervalSpy.mock.results[0]?.value;
 
         mockGetAllWatchers.mockResolvedValueOnce([]);
-        globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-scan-completed'));
         vi.advanceTimersByTime(1_000);
         await flushPromises();
 
@@ -288,10 +298,11 @@ describe('DashboardView', () => {
   });
 
   describe('SSE refresh behavior', () => {
-    it('refreshes dashboard data on dd:sse-container-changed', async () => {
+    it('refreshes dashboard summary on dd:sse-container-changed without full refresh', async () => {
       vi.useFakeTimers();
       try {
         await mountDashboard([makeContainer()]);
+        const summaryCallsBefore = mockGetContainerSummary.mock.calls.length;
         const containersCallsBefore = mockGetAllContainers.mock.calls.length;
         const serverCallsBefore = mockGetServer.mock.calls.length;
         const agentsCallsBefore = mockGetAgents.mock.calls.length;
@@ -300,18 +311,20 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1000);
         await flushPromises();
 
-        expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(containersCallsBefore);
-        expect(mockGetServer.mock.calls.length).toBeGreaterThan(serverCallsBefore);
-        expect(mockGetAgents.mock.calls.length).toBeGreaterThan(agentsCallsBefore);
+        expect(mockGetContainerSummary.mock.calls.length).toBeGreaterThan(summaryCallsBefore);
+        expect(mockGetAllContainers.mock.calls.length).toBe(containersCallsBefore);
+        expect(mockGetServer.mock.calls.length).toBe(serverCallsBefore);
+        expect(mockGetAgents.mock.calls.length).toBe(agentsCallsBefore);
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it('debounces burst SSE events into a single dashboard refresh', async () => {
+    it('debounces burst SSE events into a single full refresh', async () => {
       vi.useFakeTimers();
       try {
         await mountDashboard([makeContainer()]);
+        const summaryCallsBefore = mockGetContainerSummary.mock.calls.length;
         const containersCallsBefore = mockGetAllContainers.mock.calls.length;
         const serverCallsBefore = mockGetServer.mock.calls.length;
         const agentsCallsBefore = mockGetAgents.mock.calls.length;
@@ -330,10 +343,12 @@ describe('DashboardView', () => {
         expect(mockGetAllWatchers).toHaveBeenCalledTimes(watchersCallsBefore);
         expect(mockGetAllRegistries).toHaveBeenCalledTimes(registriesCallsBefore);
         expect(mockGetAuditLog).toHaveBeenCalledTimes(auditCallsBefore);
+        expect(mockGetContainerSummary).toHaveBeenCalledTimes(summaryCallsBefore);
 
         vi.advanceTimersByTime(1000);
         await flushPromises();
 
+        expect(mockGetContainerSummary).toHaveBeenCalledTimes(summaryCallsBefore);
         expect(mockGetAllContainers).toHaveBeenCalledTimes(containersCallsBefore + 1);
         expect(mockGetServer).toHaveBeenCalledTimes(serverCallsBefore + 1);
         expect(mockGetAgents).toHaveBeenCalledTimes(agentsCallsBefore + 1);
@@ -349,7 +364,7 @@ describe('DashboardView', () => {
       vi.useFakeTimers();
       try {
         const wrapper = await mountDashboard([makeContainer()]);
-        mockGetAllContainers.mockReturnValueOnce(new Promise(() => {}));
+        mockGetContainerSummary.mockReturnValueOnce(new Promise(() => {}));
 
         globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
         vi.advanceTimersByTime(1000);
@@ -595,7 +610,7 @@ describe('DashboardView', () => {
 
       const row = wrapper.find('[data-widget-id="recent-updates"] tbody tr');
       expect(row.text()).toContain('redis');
-      expect(row.text()).toContain('failed');
+      expect(row.attributes('data-update-status')).toBe('failed');
     });
 
     it('surfaces registry check failures in recent updates', async () => {
@@ -622,7 +637,7 @@ describe('DashboardView', () => {
       expect(errorRow.exists()).toBe(true);
       expect(errorRow.text()).toContain('registry-fail');
       expect(errorRow.text()).toContain('Registry request failed: unauthorized');
-      expect(errorRow.text()).toContain('error');
+      expect(errorRow.attributes('data-update-status')).toBe('error');
     });
 
     it('renders release notes links when available in recent updates rows', async () => {
@@ -784,19 +799,6 @@ describe('DashboardView', () => {
       const wrapper = await mountDashboard(containers);
       // "2/2 containers" for Local (both running)
       expect(wrapper.text()).toContain('2/2 containers');
-    });
-
-    it('shows webhook status indicator from server configuration', async () => {
-      const wrapper = await mountDashboard([], [], {
-        configuration: {
-          webhook: {
-            enabled: true,
-          },
-        },
-      });
-
-      expect(wrapper.text()).toContain('Webhook API');
-      expect(wrapper.text()).toContain('Enabled');
     });
 
     it('shows agent host and port in host status rows', async () => {

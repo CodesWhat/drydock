@@ -7,6 +7,7 @@ import {
 } from '../../utils/dashboard-container-metrics';
 import type {
   DashboardAgent,
+  DashboardContainerSummary,
   DashboardServerInfo,
   DashboardServerRow,
   DashboardStatCard,
@@ -118,6 +119,51 @@ function getRecentUpdateStatusIcon(status: RecentUpdateRow['status']): string {
   }
 }
 
+function getUpdateKindColor(kind: UpdateKind | null): string {
+  switch (kind) {
+    case 'major':
+      return 'var(--dd-danger)';
+    case 'minor':
+      return 'var(--dd-warning)';
+    case 'patch':
+      return 'var(--dd-primary)';
+    case 'digest':
+      return 'var(--dd-neutral)';
+    default:
+      return 'var(--dd-text-muted)';
+  }
+}
+
+function getUpdateKindMutedColor(kind: UpdateKind | null): string {
+  switch (kind) {
+    case 'major':
+      return 'var(--dd-danger-muted)';
+    case 'minor':
+      return 'var(--dd-warning-muted)';
+    case 'patch':
+      return 'var(--dd-primary-muted)';
+    case 'digest':
+      return 'var(--dd-neutral-muted)';
+    default:
+      return 'var(--dd-bg-elevated)';
+  }
+}
+
+function getUpdateKindIcon(kind: UpdateKind | null): string {
+  switch (kind) {
+    case 'major':
+      return 'chevrons-up';
+    case 'minor':
+      return 'chevron-up';
+    case 'patch':
+      return 'hashtag';
+    case 'digest':
+      return 'fingerprint';
+    default:
+      return 'info';
+  }
+}
+
 function deriveRecentUpdateStatus(
   container: Container,
   recentStatusByContainer: Record<string, RecentAuditStatus>,
@@ -210,6 +256,7 @@ function formatAgentHost(agent: DashboardAgent): string | undefined {
 
 interface UseDashboardComputedInput {
   agents: Ref<DashboardAgent[]>;
+  containerSummary: Ref<DashboardContainerSummary | null>;
   containers: Ref<Container[]>;
   maintenanceCountdownNow: Ref<number>;
   recentStatusByContainer: Ref<Record<string, RecentAuditStatus>>;
@@ -320,14 +367,12 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
   const securityTotalCount = computed(() => securityByImage.value.length);
 
   const stats = computed<DashboardStatCard[]>(() => {
-    const {
-      totalContainers: total,
-      runningContainers: running,
-      updatesAvailable,
-      securityIssueImageCount: securityIssues,
-    } = containerMetrics.value;
-
-    const stopped = Math.max(total - running, 0);
+    const summary = input.containerSummary.value;
+    const total = summary?.containers.total ?? containerMetrics.value.totalContainers;
+    const running = summary?.containers.running ?? containerMetrics.value.runningContainers;
+    const stopped = summary?.containers.stopped ?? Math.max(total - running, 0);
+    const updatesAvailable = containerMetrics.value.updatesAvailable;
+    const securityIssues = containerMetrics.value.securityIssueImageCount;
     const registryCount = input.registries.value.length;
     return [
       {
@@ -366,8 +411,18 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
         label: 'Security Issues',
         value: String(securityIssues),
         icon: 'security',
-        color: securityIssues > 0 ? 'var(--dd-danger)' : 'var(--dd-success)',
-        colorMuted: securityIssues > 0 ? 'var(--dd-danger-muted)' : 'var(--dd-success-muted)',
+        color:
+          securityIssues > 0
+            ? 'var(--dd-danger)'
+            : securityTotalCount.value > 0
+              ? 'var(--dd-success)'
+              : 'var(--dd-neutral)',
+        colorMuted:
+          securityIssues > 0
+            ? 'var(--dd-danger-muted)'
+            : securityTotalCount.value > 0
+              ? 'var(--dd-success-muted)'
+              : 'var(--dd-neutral-muted)',
         route: '/security',
       },
       {
@@ -394,6 +449,7 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
         newVer: 'check failed',
         releaseLink: undefined,
         status: 'error' as const,
+        updateKind: null,
         running: container.status === 'running',
         registryError: container.registryError,
       }));
@@ -422,6 +478,7 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
             newVer: deriveRecentUpdateVersion(container),
             releaseLink: container.releaseLink,
             status: deriveRecentUpdateStatus(container, input.recentStatusByContainer.value),
+            updateKind: container.updateKind ?? null,
             running: container.status === 'running',
             registryError: undefined,
           },
@@ -496,10 +553,6 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
     return list;
   });
 
-  const webhookApiEnabled = computed(
-    () => input.serverInfo.value?.configuration?.webhook?.enabled === true,
-  );
-
   const securityCleanArcLength = computed(() =>
     securityTotalCount.value > 0
       ? (securityCleanCount.value / securityTotalCount.value) * DONUT_CIRCUMFERENCE
@@ -547,6 +600,9 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
     getRecentUpdateStatusColor,
     getRecentUpdateStatusIcon,
     getRecentUpdateStatusMutedColor,
+    getUpdateKindColor,
+    getUpdateKindIcon,
+    getUpdateKindMutedColor,
     maintenanceCountdownLabel,
     maintenanceWindowWatchers,
     recentUpdates,
@@ -564,6 +620,5 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
     totalUpdates,
     updateBreakdownBuckets,
     vulnerabilities,
-    webhookApiEnabled,
   };
 }

@@ -22,6 +22,7 @@ const {
 
 const {
   agents,
+  containerSummary,
   containers,
   error,
   fetchDashboardData,
@@ -35,9 +36,9 @@ const {
 
 const {
   DONUT_CIRCUMFERENCE,
-  getRecentUpdateStatusColor,
-  getRecentUpdateStatusIcon,
-  getRecentUpdateStatusMutedColor,
+  getUpdateKindColor,
+  getUpdateKindIcon,
+  getUpdateKindMutedColor,
   recentUpdates,
   securityCleanArcLength,
   securityCleanCount,
@@ -53,9 +54,9 @@ const {
   totalUpdates,
   updateBreakdownBuckets,
   vulnerabilities,
-  webhookApiEnabled,
 } = useDashboardComputed({
   agents,
+  containerSummary,
   containers,
   maintenanceCountdownNow,
   recentStatusByContainer,
@@ -165,13 +166,19 @@ const {
 
           <div>
             <table class="w-full text-xs table-fixed">
+              <colgroup>
+                <col class="w-12" />
+                <col />
+                <col />
+                <col class="w-16 sm:w-24" />
+              </colgroup>
               <thead>
                 <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <th class="w-10 px-0 py-2.5" />
+                  <th class="px-0 py-2.5" />
                   <th class="text-left px-3 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Container</th>
-                  <th class="text-center px-2 sm:px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Version</th>
-                  <th class="w-10 sm:w-auto text-center px-1 sm:px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">
-                    <span class="hidden sm:inline">Status</span>
+                  <th class="text-left px-2 sm:px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Version</th>
+                  <th class="text-center px-1 sm:px-3 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">
+                    <span class="hidden sm:inline">Type</span>
                     <span class="sm:hidden inline-flex items-center justify-center"><AppIcon name="info" :size="12" /></span>
                   </th>
                 </tr>
@@ -179,12 +186,18 @@ const {
             </table>
             <div class="sm:overflow-y-auto sm:max-h-[340px]">
             <table class="w-full text-xs table-fixed">
+              <colgroup>
+                <col class="w-12" />
+                <col />
+                <col />
+                <col class="w-16 sm:w-24" />
+              </colgroup>
               <tbody>
                 <tr v-for="(row, i) in recentUpdates" :key="row.id"
                     :data-update-status="row.status"
                     class="transition-colors hover:dd-bg-elevated"
                     :style="{ borderBottom: i < recentUpdates.length - 1 ? '1px solid var(--dd-border-strong)' : 'none' }">
-                  <td class="w-12 px-0 py-3">
+                  <td class="px-0 py-3">
                     <div class="flex items-center justify-center">
                       <ContainerIcon :icon="row.icon" :size="28" />
                     </div>
@@ -214,7 +227,7 @@ const {
                       </span>
                       <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
                       <span class="text-[11px] font-semibold truncate max-w-[120px]"
-                            :style="{ color: getRecentUpdateStatusColor(row.status) }">
+                            :style="{ color: getUpdateKindColor(row.updateKind) }">
                         {{ row.newVer }}
                       </span>
                     </div>
@@ -223,29 +236,28 @@ const {
                       <span class="text-[9px] dd-text-secondary break-all leading-tight">
                         {{ row.oldVer }}
                       </span>
-                      <AppIcon name="chevron-down" :size="7" class="dd-text-muted shrink-0 self-center" />
                       <span class="text-[9px] font-semibold break-all leading-tight"
-                            :style="{ color: getRecentUpdateStatusColor(row.status) }">
+                            :style="{ color: getUpdateKindColor(row.updateKind) }">
                         {{ row.newVer }}
                       </span>
                     </div>
                   </td>
-                  <td class="px-1 sm:px-5 py-3 text-center align-middle">
-                    <span class="badge px-1.5 py-0 text-[9px] md:!hidden"
+                  <td class="px-1 sm:px-3 py-3 text-center align-middle">
+                    <span class="badge px-1.5 py-0 text-[9px] sm:!hidden"
                           :style="{
-                            backgroundColor: getRecentUpdateStatusMutedColor(row.status),
-                            color: getRecentUpdateStatusColor(row.status),
+                            backgroundColor: getUpdateKindMutedColor(row.updateKind),
+                            color: getUpdateKindColor(row.updateKind),
                           }">
-                      <AppIcon :name="getRecentUpdateStatusIcon(row.status)" :size="12" />
+                      <AppIcon :name="getUpdateKindIcon(row.updateKind)" :size="12" />
                     </span>
-                    <span class="badge max-md:!hidden"
+                    <span class="badge max-sm:!hidden"
                           :style="{
-                            backgroundColor: getRecentUpdateStatusMutedColor(row.status),
-                            color: getRecentUpdateStatusColor(row.status),
+                            backgroundColor: getUpdateKindMutedColor(row.updateKind),
+                            color: getUpdateKindColor(row.updateKind),
                           }">
-                      <AppIcon :name="getRecentUpdateStatusIcon(row.status)"
+                      <AppIcon :name="getUpdateKindIcon(row.updateKind)"
                          :size="12" class="mr-1" />
-                      {{ row.status }}
+                      {{ row.updateKind ?? 'unknown' }}
                     </span>
                   </td>
                 </tr>
@@ -445,28 +457,6 @@ const {
           </div>
 
           <div class="p-4 space-y-3">
-            <div
-                 class="flex items-center gap-3 p-3 dd-rounded"
-                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              <span class="badge px-1.5 py-0 text-[9px] max-md:!hidden"
-                    :style="{
-                      backgroundColor: webhookApiEnabled ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                      color: webhookApiEnabled ? 'var(--dd-success)' : 'var(--dd-danger)',
-                    }">
-                <AppIcon :name="webhookApiEnabled ? 'check' : 'xmark'" :size="12" />
-              </span>
-              <div class="flex-1 min-w-0">
-                <div class="text-[12px] font-semibold truncate dd-text">Webhook API</div>
-                <div class="text-[10px] dd-text-muted">Server configuration</div>
-              </div>
-              <span class="badge text-[9px] uppercase font-bold"
-                    :style="{
-                      backgroundColor: webhookApiEnabled ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-                      color: webhookApiEnabled ? 'var(--dd-success)' : 'var(--dd-danger)',
-                    }">
-                {{ webhookApiEnabled ? 'Enabled' : 'Disabled' }}
-              </span>
-            </div>
             <div v-for="server in servers" :key="server.name"
                  class="flex items-center gap-3 p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated"
                  :style="{ backgroundColor: 'var(--dd-bg-inset)' }"

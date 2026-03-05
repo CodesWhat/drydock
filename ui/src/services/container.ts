@@ -18,6 +18,17 @@ interface ContainerGroup {
   updatesAvailable: number;
 }
 
+interface ContainerSummary {
+  containers: {
+    total: number;
+    running: number;
+    stopped: number;
+  };
+  security: {
+    issues: number;
+  };
+}
+
 interface GetAllContainersOptions {
   includeVulnerabilities?: boolean;
   limit?: number;
@@ -73,6 +84,16 @@ async function getAllContainers(optionsOrSignal: GetAllContainersOptions | Abort
   });
   if (!response.ok) {
     throw new Error(`Failed to get containers: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+async function getContainerSummary(): Promise<ContainerSummary> {
+  const response = await fetch('/api/containers/summary', {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get container summary: ${response.statusText}`);
   }
   return response.json();
 }
@@ -255,6 +276,7 @@ async function revealContainerEnv(containerId: string) {
 export {
   getContainerIcon,
   getAllContainers,
+  getContainerSummary,
   getContainerGroups,
   refreshAllContainers,
   refreshContainer,
@@ -270,4 +292,4 @@ export {
   updateContainerPolicy,
 };
 
-export type { ContainerGroup, ContainerGroupMember };
+export type { ContainerGroup, ContainerGroupMember, ContainerSummary };

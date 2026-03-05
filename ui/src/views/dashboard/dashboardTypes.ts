@@ -29,6 +29,17 @@ export interface DashboardAgent {
   port?: number | string;
 }
 
+export interface DashboardContainerSummary {
+  containers: {
+    total: number;
+    running: number;
+    stopped: number;
+  };
+  security: {
+    issues: number;
+  };
+}
+
 export type RecentAuditStatus = 'updated' | 'pending' | 'failed';
 
 export interface DashboardStatCard {
@@ -51,6 +62,7 @@ export interface RecentUpdateRow {
   newVer: string;
   releaseLink?: string;
   status: 'updated' | 'pending' | 'failed' | 'error' | 'snoozed' | 'skipped';
+  updateKind: UpdateKind | null;
   running: boolean;
   registryError?: string;
 }

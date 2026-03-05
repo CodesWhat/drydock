@@ -77,8 +77,18 @@ export interface ApiSbomDocument {
 
 /** Vulnerability entry from security scan results. */
 export interface ApiVulnerability {
+  id?: string;
+  target?: string;
   packageName?: string;
   package?: string;
+  installedVersion?: string;
+  version?: string;
+  fixedVersion?: string;
+  fixedIn?: string | null;
   severity?: string;
-  [key: string]: unknown;
+  title?: string;
+  Title?: string;
+  primaryUrl?: string;
+  PrimaryURL?: string;
+  publishedDate?: string;
 }
