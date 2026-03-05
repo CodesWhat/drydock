@@ -43,6 +43,11 @@ describe('container-mapper', () => {
       const c = mapApiContainer(makeApiContainer({ watcher: { id: 'local' } }));
       expect(c.server).toBe('Local');
     });
+
+    it('capitalizes non-local watcher names when agent is absent', () => {
+      const c = mapApiContainer(makeApiContainer({ agent: null, watcher: 'remote-host' }));
+      expect(c.server).toBe('Remote-host');
+    });
   });
 
   describe('deriveRegistry', () => {
@@ -256,6 +261,16 @@ describe('container-mapper', () => {
       );
       expect(c.updateKind).toBeNull();
     });
+
+    it('returns null for unknown update kinds', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'manual', semverDiff: 'build' },
+        }),
+      );
+      expect(c.updateKind).toBeNull();
+    });
   });
 
   describe('mapApiContainer', () => {
@@ -386,6 +401,138 @@ describe('container-mapper', () => {
 
       expect((c as any).updatePolicyState).toBe('skipped');
       expect((c as any).suppressedUpdateTag).toBe('sha256:newdigest');
+    });
+
+    it('marks skipped tag updates when remote tag is in skipTags', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+            remoteValue: '1.26',
+          },
+          updatePolicy: {
+            skipTags: ['1.26'],
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBe('skipped');
+      expect((c as any).suppressedUpdateTag).toBe('1.26');
+    });
+
+    it('ignores non-object updatePolicy payloads', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+            remoteValue: '1.26',
+          },
+          updatePolicy: 'invalid-shape',
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBeUndefined();
+      expect((c as any).suppressedUpdateTag).toBeUndefined();
+    });
+
+    it('leaves update policy state undefined when snooze/skip do not match', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+            remoteValue: '1.26',
+          },
+          updatePolicy: {
+            skipTags: ['1.25'],
+            skipDigests: ['sha256:other'],
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBeUndefined();
+      expect((c as any).suppressedUpdateTag).toBeUndefined();
+    });
+
+    it('falls back to result.digest for suppressed digest updates when remote digest is missing', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'digest',
+            semverDiff: 'unknown',
+          },
+          result: { digest: 'sha256:from-result' },
+          updatePolicy: {
+            snoozeUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBe('snoozed');
+      expect((c as any).suppressedUpdateTag).toBe('sha256:from-result');
+    });
+
+    it('returns undefined suppressed digest tag when no digest values are available', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'digest',
+            semverDiff: 'unknown',
+          },
+          result: {},
+          updatePolicy: {
+            snoozeUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBe('snoozed');
+      expect((c as any).suppressedUpdateTag).toBeUndefined();
+    });
+
+    it('falls back to result.tag for suppressed tag updates when remote tag is missing', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+          },
+          result: { tag: '1.27' },
+          updatePolicy: {
+            snoozeUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBe('snoozed');
+      expect((c as any).suppressedUpdateTag).toBe('1.27');
+    });
+
+    it('returns undefined suppressed tag when no tag values are available', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+          },
+          result: {},
+          updatePolicy: {
+            snoozeUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBe('snoozed');
+      expect((c as any).suppressedUpdateTag).toBeUndefined();
     });
 
     it('maps updateDetectedAt from api payload when valid', () => {

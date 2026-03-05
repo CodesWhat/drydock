@@ -75,6 +75,21 @@ describe('display utilities', () => {
         (registryLabel as any)('custom', 'https://myacr.azurecr.io/v2/library/nginx', 'acr'),
       ).toBe('myacr.azurecr.io');
     });
+
+    it('falls back to host parsing for non-URL registry strings', () => {
+      expect((registryLabel as any)('custom', 'ghcr.io/org/image', 'custom-reg')).toBe('ghcr.io');
+    });
+
+    it('uses custom registry name when parsed host is unavailable', () => {
+      expect((registryLabel as any)('custom', '/v2/library/nginx', '  Internal ACR  ')).toBe(
+        'Internal ACR',
+      );
+    });
+
+    it('does not use registry name when it is "custom" or blank', () => {
+      expect((registryLabel as any)('custom', '   ', ' custom ')).toBe('Custom');
+      expect((registryLabel as any)('custom', '/v2/library/nginx', '   ')).toBe('Custom');
+    });
   });
 
   describe('registryColorBg', () => {

@@ -4,7 +4,10 @@ describe('useTheme', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.resetModules();
+    vi.unstubAllGlobals();
     document.documentElement.className = '';
+    document.documentElement.style.removeProperty('--x');
+    document.documentElement.style.removeProperty('--y');
   });
 
   async function loadUseTheme() {
@@ -115,6 +118,117 @@ describe('useTheme', () => {
       const { isDark, setThemeVariant } = await loadUseTheme();
       setThemeVariant('light');
       expect(isDark.value).toBe(false);
+    });
+  });
+
+  describe('transitionTheme', () => {
+    it('applies changes immediately when startViewTransition is unavailable', async () => {
+      Object.defineProperty(document, 'startViewTransition', {
+        configurable: true,
+        value: undefined,
+      });
+
+      const { transitionTheme, setThemeFamily } = await loadUseTheme();
+      await transitionTheme(() => {
+        setThemeFamily('github');
+      });
+
+      expect(document.documentElement.classList.contains('theme-github')).toBe(true);
+      expect(document.documentElement.classList.contains('dd-transitioning')).toBe(false);
+    });
+
+    it('runs view transition callbacks and cleans up transition classes', async () => {
+      const startViewTransition = vi.fn((change: () => void) => {
+        change();
+        return { finished: Promise.resolve() };
+      });
+      Object.defineProperty(document, 'startViewTransition', {
+        configurable: true,
+        value: startViewTransition,
+      });
+
+      const { transitionTheme, setThemeFamily } = await loadUseTheme();
+      await transitionTheme(
+        () => {
+          setThemeFamily('catppuccin');
+        },
+        { clientX: 40, clientY: 80 } as MouseEvent,
+      );
+
+      expect(startViewTransition).toHaveBeenCalledOnce();
+      expect(document.documentElement.style.getPropertyValue('--x')).toBe('40px');
+      expect(document.documentElement.style.getPropertyValue('--y')).toBe('80px');
+      expect(document.documentElement.classList.contains('theme-catppuccin')).toBe(true);
+      expect(document.documentElement.classList.contains('dd-transitioning')).toBe(false);
+    });
+
+    it('swallows aborted view transition promises and still cleans up state', async () => {
+      const startViewTransition = vi.fn((change: () => void) => {
+        change();
+        return { finished: Promise.reject(new Error('aborted')) };
+      });
+      Object.defineProperty(document, 'startViewTransition', {
+        configurable: true,
+        value: startViewTransition,
+      });
+
+      const { transitionTheme, setThemeVariant } = await loadUseTheme();
+      await expect(
+        transitionTheme(() => {
+          setThemeVariant('light');
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(document.documentElement.classList.contains('light')).toBe(true);
+      expect(document.documentElement.classList.contains('dd-transitioning')).toBe(false);
+    });
+  });
+
+  describe('system preference listener', () => {
+    function setupMatchMedia(matches = false) {
+      const listeners: Array<(event: { matches: boolean }) => void> = [];
+      const mediaQueryList = {
+        matches,
+        addEventListener: vi.fn((_event: string, callback: (event: { matches: boolean }) => void) =>
+          listeners.push(callback),
+        ),
+      };
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn(() => mediaQueryList),
+      );
+      return listeners;
+    }
+
+    it('uses transition path when system mode receives a change event', async () => {
+      const listeners = setupMatchMedia(false);
+      const startViewTransition = vi.fn((change: () => void) => {
+        change();
+        return { finished: Promise.resolve() };
+      });
+      Object.defineProperty(document, 'startViewTransition', {
+        configurable: true,
+        value: startViewTransition,
+      });
+
+      const { setThemeVariant, resolvedVariant } = await loadUseTheme();
+      setThemeVariant('system');
+      listeners[0]?.({ matches: true });
+
+      expect(startViewTransition).toHaveBeenCalledOnce();
+      expect(resolvedVariant.value).toBe('dark');
+    });
+
+    it('updates cached system state without transition when not in system mode', async () => {
+      const listeners = setupMatchMedia(true);
+      const { setThemeVariant, resolvedVariant } = await loadUseTheme();
+
+      setThemeVariant('light');
+      listeners[0]?.({ matches: false });
+      expect(resolvedVariant.value).toBe('light');
+
+      setThemeVariant('system');
+      expect(resolvedVariant.value).toBe('light');
     });
   });
 

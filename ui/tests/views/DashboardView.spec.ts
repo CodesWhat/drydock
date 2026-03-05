@@ -14,6 +14,7 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/services/container', () => ({
   getAllContainers: vi.fn(),
+  getContainerRecentStatus: vi.fn(),
   getContainerSummary: vi.fn(),
 }));
 
@@ -31,10 +32,6 @@ vi.mock('@/services/watcher', () => ({
 
 vi.mock('@/services/registry', () => ({
   getAllRegistries: vi.fn(),
-}));
-
-vi.mock('@/services/audit', () => ({
-  getAuditLog: vi.fn(),
 }));
 
 vi.mock('@/utils/container-mapper', () => ({
@@ -57,19 +54,22 @@ vi.mock('@/utils/dashboard-container-metrics', async () => {
 });
 
 import { getAgents } from '@/services/agent';
-import { getAuditLog } from '@/services/audit';
-import { getAllContainers, getContainerSummary } from '@/services/container';
+import {
+  getAllContainers,
+  getContainerRecentStatus,
+  getContainerSummary,
+} from '@/services/container';
 import { getAllRegistries } from '@/services/registry';
 import { getServer } from '@/services/server';
 import { getAllWatchers } from '@/services/watcher';
 
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
+const mockGetContainerRecentStatus = getContainerRecentStatus as ReturnType<typeof vi.fn>;
 const mockGetContainerSummary = getContainerSummary as ReturnType<typeof vi.fn>;
 const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
 const mockGetServer = getServer as ReturnType<typeof vi.fn>;
 const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 const mockGetAllRegistries = getAllRegistries as ReturnType<typeof vi.fn>;
-const mockGetAuditLog = getAuditLog as ReturnType<typeof vi.fn>;
 const PREFERENCES_STORAGE_KEY = 'dd-preferences';
 const mountedWrappers: VueWrapper[] = [];
 
@@ -95,6 +95,28 @@ interface DashboardDataOverrides {
   watchers?: any[];
   registries?: any[];
   auditEntries?: any[];
+  recentStatuses?: Record<string, string>;
+}
+
+function mapAuditEntriesToRecentStatuses(auditEntries: any[]): Record<string, string> {
+  const statuses: Record<string, string> = {};
+  const actionToStatus: Record<string, string> = {
+    'update-failed': 'failed',
+    'update-applied': 'updated',
+    'update-available': 'pending',
+  };
+  for (const entry of auditEntries) {
+    const containerName =
+      typeof entry?.containerName === 'string' ? entry.containerName.trim() : '';
+    if (!containerName || statuses[containerName]) {
+      continue;
+    }
+    const mappedStatus = actionToStatus[String(entry?.action ?? '')];
+    if (mappedStatus) {
+      statuses[containerName] = mappedStatus;
+    }
+  }
+  return statuses;
 }
 
 async function mountDashboard(
@@ -116,9 +138,9 @@ async function mountDashboard(
   mockGetServer.mockResolvedValue(server);
   mockGetAllWatchers.mockResolvedValue(overrides.watchers ?? []);
   mockGetAllRegistries.mockResolvedValue(overrides.registries ?? []);
-  mockGetAuditLog.mockResolvedValue({
-    entries: overrides.auditEntries ?? [],
-    total: (overrides.auditEntries ?? []).length,
+  mockGetContainerRecentStatus.mockResolvedValue({
+    statuses:
+      overrides.recentStatuses ?? mapAuditEntriesToRecentStatuses(overrides.auditEntries ?? []),
   });
 
   const { mapApiContainers } = await import('@/utils/container-mapper');
@@ -330,7 +352,7 @@ describe('DashboardView', () => {
         const agentsCallsBefore = mockGetAgents.mock.calls.length;
         const watchersCallsBefore = mockGetAllWatchers.mock.calls.length;
         const registriesCallsBefore = mockGetAllRegistries.mock.calls.length;
-        const auditCallsBefore = mockGetAuditLog.mock.calls.length;
+        const recentStatusCallsBefore = mockGetContainerRecentStatus.mock.calls.length;
 
         globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
         globalThis.dispatchEvent(new CustomEvent('dd:sse-scan-completed'));
@@ -342,7 +364,7 @@ describe('DashboardView', () => {
         expect(mockGetAgents).toHaveBeenCalledTimes(agentsCallsBefore);
         expect(mockGetAllWatchers).toHaveBeenCalledTimes(watchersCallsBefore);
         expect(mockGetAllRegistries).toHaveBeenCalledTimes(registriesCallsBefore);
-        expect(mockGetAuditLog).toHaveBeenCalledTimes(auditCallsBefore);
+        expect(mockGetContainerRecentStatus).toHaveBeenCalledTimes(recentStatusCallsBefore);
         expect(mockGetContainerSummary).toHaveBeenCalledTimes(summaryCallsBefore);
 
         vi.advanceTimersByTime(1000);
@@ -354,7 +376,7 @@ describe('DashboardView', () => {
         expect(mockGetAgents).toHaveBeenCalledTimes(agentsCallsBefore + 1);
         expect(mockGetAllWatchers).toHaveBeenCalledTimes(watchersCallsBefore + 1);
         expect(mockGetAllRegistries).toHaveBeenCalledTimes(registriesCallsBefore + 1);
-        expect(mockGetAuditLog).toHaveBeenCalledTimes(auditCallsBefore + 1);
+        expect(mockGetContainerRecentStatus).toHaveBeenCalledTimes(recentStatusCallsBefore + 1);
       } finally {
         vi.useRealTimers();
       }

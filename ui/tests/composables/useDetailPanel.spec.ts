@@ -1,4 +1,4 @@
-import { useDetailPanel } from '@/composables/useDetailPanel';
+import { isDetailPanelState, useDetailPanel } from '@/composables/useDetailPanel';
 import type { Container } from '@/types/container';
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
@@ -181,6 +181,31 @@ describe('useDetailPanel', () => {
       // Manually verify the stored state reflects the selection
       const stored = JSON.parse(sessionStorage.getItem('dd-panel') || '{}');
       expect(stored.name).toBe('nginx');
+    });
+  });
+
+  describe('isDetailPanelState', () => {
+    const validState = {
+      name: 'nginx',
+      tab: 'overview',
+      panel: true,
+      full: false,
+      size: 'sm',
+    } as const;
+
+    it('returns true for a valid panel state object', () => {
+      expect(isDetailPanelState(validState)).toBe(true);
+    });
+
+    it('returns false for invalid values and missing fields', () => {
+      expect(isDetailPanelState(null)).toBe(false);
+      expect(isDetailPanelState('bad')).toBe(false);
+      expect(isDetailPanelState({ ...validState, name: 123 })).toBe(false);
+      expect(isDetailPanelState({ ...validState, tab: 42 })).toBe(false);
+      expect(isDetailPanelState({ ...validState, panel: 'yes' })).toBe(false);
+      expect(isDetailPanelState({ ...validState, full: 'no' })).toBe(false);
+      expect(isDetailPanelState({ ...validState, size: 99 })).toBe(false);
+      expect(isDetailPanelState({ ...validState, size: 'xl' })).toBe(false);
     });
   });
 });

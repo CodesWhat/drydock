@@ -292,6 +292,80 @@ describe('useAutoFetchLogs', () => {
       }
     }
   });
+
+  it('does not attach visibility listeners when document is unavailable', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(undefined);
+    const originalDocumentDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'document');
+
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+
+    const scope = effectScope();
+    try {
+      scope.run(() => {
+        const { autoFetchInterval } = useAutoFetchLogs({
+          fetchFn,
+          scrollToBottom: vi.fn(),
+          scrollBlocked: ref(false),
+        });
+        autoFetchInterval.value = 2000;
+      });
+
+      await nextTick();
+      vi.advanceTimersByTime(2000);
+      await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
+    } finally {
+      scope.stop();
+      if (originalDocumentDescriptor) {
+        Object.defineProperty(globalThis, 'document', originalDocumentDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, 'document');
+      }
+    }
+  });
+
+  it('ignores visibilitychange resume when interval is off', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(undefined);
+    const originalHidden = Object.getOwnPropertyDescriptor(document, 'hidden');
+    const originalVisibilityState = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => false,
+    });
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+
+    const scope = effectScope();
+    try {
+      scope.run(() => {
+        useAutoFetchLogs({
+          fetchFn,
+          scrollToBottom: vi.fn(),
+          scrollBlocked: ref(false),
+        });
+      });
+
+      document.dispatchEvent(new Event('visibilitychange'));
+      await nextTick();
+      vi.advanceTimersByTime(5000);
+      expect(fetchFn).not.toHaveBeenCalled();
+    } finally {
+      scope.stop();
+      if (originalHidden) Object.defineProperty(document, 'hidden', originalHidden);
+      else Reflect.deleteProperty(document, 'hidden');
+      if (originalVisibilityState) {
+        Object.defineProperty(document, 'visibilityState', originalVisibilityState);
+      } else {
+        Reflect.deleteProperty(document, 'visibilityState');
+      }
+    }
+  });
 });
 
 describe('LOG_AUTO_FETCH_INTERVALS', () => {

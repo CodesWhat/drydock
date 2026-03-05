@@ -56,10 +56,6 @@ export function useDashboardWidgetOrder() {
   }
 
   function moveWidget(draggedId: DashboardWidgetId, targetId: DashboardWidgetId) {
-    if (draggedId === targetId) {
-      return;
-    }
-
     const nextOrder = [...widgetOrder.value];
     const draggedIndex = nextOrder.indexOf(draggedId);
     const targetIndex = nextOrder.indexOf(targetId);

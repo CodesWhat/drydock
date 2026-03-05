@@ -164,6 +164,75 @@ describe('useScanProgress', () => {
     vi.useRealTimers();
   });
 
+  it('aborts before retry starts when the signal flips between loop checks', async () => {
+    const { scanAllContainers, cancelScan, scanProgress } = await loadComposable();
+    const containers: Array<{ id: string }> = [];
+    const containerWithAbortOnIdRead = {} as { id: string };
+    Object.defineProperty(containerWithAbortOnIdRead, 'id', {
+      configurable: true,
+      get() {
+        cancelScan();
+        return 'c1';
+      },
+    });
+    containers.push(containerWithAbortOnIdRead);
+
+    mockGetAllContainers.mockResolvedValue(containers);
+    mockScanContainer.mockResolvedValue({});
+
+    await scanAllContainers({ scannerReady: true, runtimeLoading: false });
+
+    expect(mockScanContainer).not.toHaveBeenCalled();
+    expect(scanProgress.value).toEqual({ done: 0, total: 1 });
+  });
+
+  it('aborts immediately when retry backoff starts with an already-aborted signal', async () => {
+    mockGetAllContainers.mockResolvedValue([{ id: 'c1' }]);
+
+    const { scanAllContainers, cancelScan, scanProgress } = await loadComposable();
+    const tooManyRequestsError = await makeApiError(
+      'Failed to scan container: Too Many Requests',
+      429,
+    );
+    Object.defineProperty(tooManyRequestsError, 'status', {
+      configurable: true,
+      get() {
+        cancelScan();
+        return 429;
+      },
+    });
+    mockScanContainer.mockRejectedValueOnce(tooManyRequestsError);
+
+    await scanAllContainers({ scannerReady: true, runtimeLoading: false });
+
+    expect(mockScanContainer).toHaveBeenCalledTimes(1);
+    expect(scanProgress.value.done).toBe(0);
+  });
+
+  it('aborts during retry backoff sleep when cancelScan is called', async () => {
+    vi.useFakeTimers();
+    mockGetAllContainers.mockResolvedValue([{ id: 'c1' }, { id: 'c2' }]);
+    const tooManyRequestsError = await makeApiError(
+      'Failed to scan container: Too Many Requests',
+      429,
+    );
+    mockScanContainer.mockRejectedValueOnce(tooManyRequestsError).mockResolvedValueOnce({});
+
+    const { scanAllContainers, cancelScan, scanProgress } = await loadComposable();
+    const promise = scanAllContainers({ scannerReady: true, runtimeLoading: false });
+
+    await vi.waitFor(() => {
+      expect(mockScanContainer).toHaveBeenCalledTimes(1);
+    });
+    cancelScan();
+    await vi.runOnlyPendingTimersAsync();
+    await promise;
+
+    expect(mockScanContainer).toHaveBeenCalledTimes(1);
+    expect(scanProgress.value).toEqual({ done: 0, total: 2 });
+    vi.useRealTimers();
+  });
+
   it('does not retry plain Error with Too Many Requests message', async () => {
     vi.useFakeTimers();
     mockGetAllContainers.mockResolvedValue([{ id: 'c1' }]);
@@ -189,6 +258,52 @@ describe('useScanProgress', () => {
     await scanAllContainers({ scannerReady: true, runtimeLoading: false });
 
     expect(mockScanContainer).toHaveBeenCalledTimes(1);
+  });
+
+  it('breaks at the top of the loop when cancellation happens before the next iteration', async () => {
+    const { scanAllContainers, cancelScan, scanProgress } = await loadComposable();
+    const containers: Array<{ id: string }> = [{ id: 'c1' }];
+    Object.defineProperty(containers, '1', {
+      configurable: true,
+      get() {
+        cancelScan();
+        return { id: 'c2' };
+      },
+    });
+    containers.length = 2;
+
+    mockGetAllContainers.mockResolvedValue(containers);
+    mockScanContainer.mockResolvedValue({});
+
+    await scanAllContainers({ scannerReady: true, runtimeLoading: false });
+
+    expect(mockScanContainer).toHaveBeenCalledTimes(1);
+    expect(scanProgress.value).toEqual({ done: 1, total: 2 });
+  });
+
+  it('breaks after a successful scan when cancellation happens before progress increment', async () => {
+    vi.useFakeTimers();
+    mockGetAllContainers.mockResolvedValue([{ id: 'c1' }, { id: 'c2' }]);
+
+    const { scanAllContainers, cancelScan, scanProgress } = await loadComposable();
+    mockScanContainer.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            cancelScan();
+            resolve({});
+          }, 0);
+        }),
+    );
+    mockScanContainer.mockResolvedValue({});
+
+    const promise = scanAllContainers({ scannerReady: true, runtimeLoading: false });
+    await vi.advanceTimersByTimeAsync(0);
+    await promise;
+
+    expect(mockScanContainer).toHaveBeenCalledTimes(1);
+    expect(scanProgress.value).toEqual({ done: 0, total: 2 });
+    vi.useRealTimers();
   });
 
   it('cancels an in-flight batch scan and stops before the next container', async () => {
@@ -223,6 +338,19 @@ describe('useScanProgress', () => {
     expect(scanProgress.value.done).toBe(0);
     expect(mockScanContainer).toHaveBeenCalledTimes(1);
     expect(mockScanContainer).toHaveBeenCalledWith('c1', expect.any(AbortSignal));
+  });
+
+  it('treats abort errors from getAllContainers as cancellation, not fatal failures', async () => {
+    const abortError = new Error('Aborted');
+    abortError.name = 'AbortError';
+    mockGetAllContainers.mockRejectedValue(abortError);
+
+    const { scanning, scanAllContainers } = await loadComposable();
+    await expect(
+      scanAllContainers({ scannerReady: true, runtimeLoading: false }),
+    ).resolves.toBeUndefined();
+
+    expect(scanning.value).toBe(false);
   });
 
   it('shares state across multiple composable calls (singleton)', async () => {

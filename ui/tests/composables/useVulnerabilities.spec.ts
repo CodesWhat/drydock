@@ -345,6 +345,219 @@ describe('useVulnerabilities', () => {
     expect(state.securityVulnerabilities.value).toHaveLength(50);
   });
 
+  it('handles normalization, fallback fields, duplicate ids, and all severity filters/sorts', async () => {
+    const containers = [
+      {
+        id: 'dup-id',
+        name: 'critical-image',
+        displayName: 'critical-image',
+        security: {
+          scan: {
+            scannedAt: '2026-03-01T10:00:00.000Z',
+            vulnerabilities: [
+              {
+                id: 'CVE-CRIT',
+                severity: 'critical',
+                packageName: 'openssl',
+                fixedVersion: '3.0.1',
+              },
+            ],
+          },
+        },
+      },
+      {
+        id: 'dup-id',
+        name: 'critical-image',
+        displayName: 'critical-image',
+        security: {
+          scan: {
+            scannedAt: '2026-03-01T10:30:00.000Z',
+            vulnerabilities: [
+              {
+                id: 'CVE-HIGH-DUP',
+                severity: 'HIGH',
+                packageName: 'openssl',
+                fixedVersion: null,
+              },
+            ],
+          },
+        },
+      },
+      {
+        id: 'id-high',
+        name: 'high-image',
+        displayName: '',
+        security: {
+          scan: {
+            scannedAt: '2026-03-01T11:00:00.000Z',
+            vulnerabilities: [
+              {
+                id: 'CVE-HIGH-1',
+                severity: 'HIGH',
+                package: 'libssl',
+                fixedIn: null,
+              },
+              {
+                id: 'CVE-HIGH-2',
+                severity: 'HIGH',
+                package: 'libcrypto',
+                fixedIn: '1.2.3',
+              },
+            ],
+          },
+        },
+      },
+      {
+        id: 'id-medium',
+        name: 'medium-image',
+        displayName: 'medium-image',
+        security: {
+          scan: {
+            scannedAt: '2026-03-01T11:10:00.000Z',
+            vulnerabilities: [
+              {
+                id: 'CVE-MED',
+                severity: 'MEDIUM',
+                packageName: 'pkg-med',
+                fixedVersion: null,
+              },
+            ],
+          },
+        },
+      },
+      {
+        id: 'id-mixed',
+        name: '',
+        displayName: '',
+        security: {
+          scan: {
+            scannedAt: '2026-03-01T11:20:00.000Z',
+            vulnerabilities: [
+              {
+                id: 'CVE-LOW',
+                severity: 'LOW',
+                packageName: 'pkg-low',
+                fixedVersion: '1.0.0',
+              },
+              {
+                severity: 'negligible',
+              },
+              {
+                id: 'CVE-NONSTRING',
+                severity: 42,
+                packageName: 'pkg-num',
+              },
+            ],
+          },
+        },
+      },
+      {
+        id: 'id-empty',
+        name: 'empty-image',
+        displayName: 'empty-image',
+        security: {
+          scan: {
+            scannedAt: '2026-03-01T11:30:00.000Z',
+            vulnerabilities: null,
+          },
+        },
+      },
+    ];
+    mockGetAllContainers.mockResolvedValue(containers);
+    setupVulnMocks(containers);
+
+    const securitySortField = ref('critical');
+    const securitySortAsc = ref(false);
+    const state = useVulnerabilities({ securitySortField, securitySortAsc });
+
+    await state.fetchVulnerabilities();
+
+    expect(state.containerIdsByImage.value['critical-image']).toEqual(['dup-id']);
+    expect(state.containerIdsByImage.value['high-image']).toEqual(['id-high']);
+    expect(state.containerIdsByImage.value.unknown).toEqual(['id-mixed']);
+
+    const unknownVulnerability = state.securityVulnerabilities.value.find(
+      (v) => v.id === 'unknown',
+    );
+    expect(unknownVulnerability).toBeDefined();
+    expect(unknownVulnerability?.severity).toBe('UNKNOWN');
+    expect(unknownVulnerability?.package).toBe('unknown');
+
+    state.secFilterSeverity.value = 'HIGH';
+    expect(state.filteredSummaries.value).toHaveLength(2);
+    expect(state.filteredSummaries.value.every((summary) => summary.high > 0)).toBe(true);
+
+    state.secFilterSeverity.value = 'MEDIUM';
+    expect(state.filteredSummaries.value.map((summary) => summary.image)).toEqual(['medium-image']);
+
+    state.secFilterSeverity.value = 'LOW';
+    expect(state.filteredSummaries.value.map((summary) => summary.image)).toEqual(['unknown']);
+
+    state.secFilterSeverity.value = 'UNKNOWN';
+    expect(state.filteredSummaries.value.map((summary) => summary.image)).toEqual(['unknown']);
+
+    state.secFilterSeverity.value = 'all';
+    for (const field of ['high', 'medium', 'low', 'fixable', 'total'] as const) {
+      securitySortField.value = field;
+      const values = state.filteredSummaries.value.map((summary) => summary[field]);
+      expect(values).toEqual([...values].sort((a, b) => b - a));
+    }
+
+    state.securityVulnerabilities.value = [
+      {
+        id: 'CVE-UNEXPECTED',
+        severity: 'UNEXPECTED',
+        package: 'mystery',
+        version: '1.0.0',
+        fixedIn: null,
+        image: 'fallback-image',
+        publishedDate: '',
+      },
+      {
+        id: 'CVE-LOW-ORDER',
+        severity: 'LOW',
+        package: 'openssl',
+        version: '3.0.0',
+        fixedIn: null,
+        image: 'fallback-image',
+        publishedDate: '',
+      },
+    ];
+    expect(state.vulnerabilitiesByImage.value['fallback-image'].map((v) => v.id)).toEqual([
+      'CVE-LOW-ORDER',
+      'CVE-UNEXPECTED',
+    ]);
+
+    state.securityVulnerabilities.value = [
+      {
+        id: 'CVE-LOW-FIRST',
+        severity: 'LOW',
+        package: 'openssl',
+        version: '3.0.0',
+        fixedIn: null,
+        image: 'fallback-image-reversed',
+        publishedDate: '',
+      },
+      {
+        id: 'CVE-UNEXPECTED-SECOND',
+        severity: 'UNEXPECTED',
+        package: 'mystery',
+        version: '1.0.0',
+        fixedIn: null,
+        image: 'fallback-image-reversed',
+        publishedDate: '',
+      },
+    ];
+    expect(state.vulnerabilitiesByImage.value['fallback-image-reversed'].map((v) => v.id)).toEqual([
+      'CVE-LOW-FIRST',
+      'CVE-UNEXPECTED-SECOND',
+    ]);
+
+    mockGetAllContainers.mockResolvedValueOnce(containers);
+    await state.fetchVulnerabilities();
+    expect(state.loading.value).toBe(false);
+  });
+
   it('sets an error and clears derived state when loading fails', async () => {
     mockGetAllContainers.mockRejectedValue({ bad: true });
 

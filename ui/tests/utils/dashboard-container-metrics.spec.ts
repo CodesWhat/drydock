@@ -151,4 +151,23 @@ describe('buildDashboardContainerMetrics', () => {
     expect(byKey.nginx?.hasIssue).toBe(true);
     expect(byKey.redis?.hasIssue).toBe(true);
   });
+
+  it('keeps hasIssue false for scanned summaries with zero counts and safe bouncer', () => {
+    const metrics = buildDashboardContainerMetrics([
+      makeContainer({
+        id: 'c1',
+        image: 'nginx',
+        bouncer: 'safe',
+        securityScanState: 'scanned',
+        securitySummary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+      }),
+    ]);
+
+    expect(metrics.securityIssueImageCount).toBe(0);
+    expect(metrics.securityByImage[0]).toMatchObject({
+      key: 'nginx',
+      scanned: true,
+      hasIssue: false,
+    });
+  });
 });
