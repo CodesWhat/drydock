@@ -20,6 +20,11 @@ export function createUpdatePolicyHandlers({
   getErrorMessage,
   redactContainerRuntimeEnv,
 }: UpdatePolicyHandlerDependencies) {
+  const INVALID_SNOOZE_UNTIL_ERROR = 'Invalid snoozeUntil date';
+  const INVALID_SNOOZE_DAYS_ERROR = 'Invalid snooze days value';
+  const GENERIC_UPDATE_POLICY_ERROR = 'Failed to update container policy';
+  const SAFE_CLIENT_ERRORS = new Set([INVALID_SNOOZE_UNTIL_ERROR, INVALID_SNOOZE_DAYS_ERROR]);
+
   function normalizeUpdatePolicy(updatePolicy: ContainerUpdatePolicy = {}): ContainerUpdatePolicy {
     const normalizedPolicy: ContainerUpdatePolicy = {};
 
@@ -64,13 +69,13 @@ export function createUpdatePolicyHandlers({
     if (payload.snoozeUntil) {
       const customDate = new Date(`${payload.snoozeUntil}`);
       if (Number.isNaN(customDate.getTime())) {
-        throw new TypeError('Invalid snoozeUntil date');
+        throw new TypeError(INVALID_SNOOZE_UNTIL_ERROR);
       }
       return customDate.toISOString();
     }
     const days = Number(payload.days ?? 7);
     if (!Number.isFinite(days) || days <= 0 || days > 365) {
-      throw new Error('Invalid snooze days value');
+      throw new Error(INVALID_SNOOZE_DAYS_ERROR);
     }
     const snoozeUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
     return snoozeUntil.toISOString();
@@ -193,7 +198,12 @@ export function createUpdatePolicyHandlers({
       const containerUpdated = storeContainer.updateContainer(container);
       res.status(200).json(redactContainerRuntimeEnv(containerUpdated));
     } catch (error: unknown) {
-      res.status(400).json({ error: getErrorMessage(error) });
+      const errorMessage = getErrorMessage(error);
+      if (SAFE_CLIENT_ERRORS.has(errorMessage)) {
+        res.status(400).json({ error: errorMessage });
+        return;
+      }
+      res.status(400).json({ error: GENERIC_UPDATE_POLICY_ERROR });
     }
   }
 

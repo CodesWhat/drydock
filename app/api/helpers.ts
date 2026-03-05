@@ -26,6 +26,7 @@ export function handleContainerActionError({
   res: Response;
 }): string {
   const message = error instanceof Error ? error.message : String(error);
+  const publicErrorMessage = `Error ${actionLabel} container`;
   log.warn(`Error ${actionLabel} container ${sanitizeLogParam(id)} (${sanitizeLogParam(message)})`);
 
   recordAuditEvent({
@@ -36,7 +37,7 @@ export function handleContainerActionError({
   });
 
   res.status(500).json({
-    error: `Error ${actionLabel} container (${message})`,
+    error: publicErrorMessage,
   });
 
   return message;

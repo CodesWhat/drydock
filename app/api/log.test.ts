@@ -91,6 +91,79 @@ describe('Log Entries Route', () => {
     expect(res.json).toHaveBeenCalledWith(mockEntries);
   });
 
+  test('should normalize level query parameter to lowercase', () => {
+    logRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];
+
+    const req = createMockRequest({
+      query: { level: 'ERROR' },
+    });
+    const res = createResponse();
+
+    mockGetEntries.mockReturnValue([]);
+
+    handler(req, res);
+
+    expect(mockGetEntries).toHaveBeenCalledWith({
+      level: 'error',
+      component: undefined,
+      tail: undefined,
+      since: undefined,
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  test('should return 400 when level query parameter is not allowlisted', () => {
+    logRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];
+
+    const req = createMockRequest({
+      query: { level: 'verbose' },
+    });
+    const res = createResponse();
+
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid level query parameter' });
+    expect(mockGetEntries).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['level', 123, 'Invalid level query parameter'],
+    ['component', ['docker'], 'Invalid component query parameter'],
+  ])('should return 400 when %s query parameter is not a string', (param, value, expectedError) => {
+    logRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];
+
+    const req = createMockRequest({
+      query: { [param]: value },
+    });
+    const res = createResponse();
+
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: expectedError });
+    expect(mockGetEntries).not.toHaveBeenCalled();
+  });
+
+  test('should return 400 when component query parameter contains unsafe characters', () => {
+    logRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];
+
+    const req = createMockRequest({
+      query: { component: 'docker;rm -rf /' },
+    });
+    const res = createResponse();
+
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid component query parameter' });
+    expect(mockGetEntries).not.toHaveBeenCalled();
+  });
+
   test('should call getEntries with undefined for missing params', () => {
     logRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];

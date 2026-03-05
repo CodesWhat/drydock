@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import log from '../log/index.js';
@@ -340,6 +342,24 @@ test('replaceSecrets must read secret in file', async () => {
   });
 });
 
+test('replaceSecrets must reject secret files larger than 1MB', async () => {
+  const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-secret-'));
+  const largeSecretPath = path.join(tempDirectory, 'large-secret.txt');
+  fs.writeFileSync(largeSecretPath, 'x'.repeat(1024 * 1024 + 1), 'utf-8');
+
+  const vars = {
+    DD_SERVER_X__FILE: largeSecretPath,
+  };
+
+  try {
+    expect(() => configuration.replaceSecrets(vars)).toThrow(
+      'exceeds maximum size of 1048576 bytes',
+    );
+  } finally {
+    fs.rmSync(tempDirectory, { recursive: true, force: true });
+  }
+});
+
 describe('getSecurityConfiguration', () => {
   test('should return disabled scanner by default', () => {
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
@@ -387,7 +407,7 @@ describe('getSecurityConfiguration', () => {
     configuration.ddEnvVars.DD_SECURITY_VERIFY_SIGNATURES = 'true';
     configuration.ddEnvVars.DD_SECURITY_COSIGN_COMMAND = '/usr/local/bin/cosign';
     configuration.ddEnvVars.DD_SECURITY_COSIGN_TIMEOUT = '45000';
-    configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY = '/keys/cosign.pub';
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY = `${TEST_DIRECTORY}/secret.txt`;
     configuration.ddEnvVars.DD_SECURITY_COSIGN_IDENTITY = 'maintainer@example.com';
     configuration.ddEnvVars.DD_SECURITY_COSIGN_ISSUER =
       'https://token.actions.githubusercontent.com';
@@ -411,7 +431,7 @@ describe('getSecurityConfiguration', () => {
         cosign: {
           command: '/usr/local/bin/cosign',
           timeout: 45000,
-          key: '/keys/cosign.pub',
+          key: `${TEST_DIRECTORY}/secret.txt`,
           identity: 'maintainer@example.com',
           issuer: 'https://token.actions.githubusercontent.com',
         },
@@ -576,6 +596,30 @@ describe('getSecurityConfiguration', () => {
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_COSIGN_TIMEOUT;
   });
+
+  test('should throw when cosign key is not a regular file', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY = '/';
+
+    expect(() => configuration.getSecurityConfiguration()).toThrow(
+      'DD_SECURITY_COSIGN_KEY must reference an existing regular file',
+    );
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY;
+  });
+
+  test('should throw when cosign key path does not exist', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY = '/tmp/drydock-non-existent-cosign-key.pub';
+
+    expect(() => configuration.getSecurityConfiguration()).toThrow(
+      'DD_SECURITY_COSIGN_KEY must reference an existing regular file',
+    );
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY;
+  });
 });
 
 describe('WUD_ legacy dual-prefix support', () => {
@@ -636,6 +680,73 @@ describe('getPublicUrl', () => {
       protocol: 'ftp',
       hostname: 'example.com',
     });
+    expect(result).toBe('/');
+  });
+
+  test('should return / when DD_PUBLIC_URL uses a non-http protocol', () => {
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'javascript:alert(1)';
+
+    const result = configuration.getPublicUrl({
+      protocol: 'https',
+      hostname: 'example.com',
+    });
+
+    expect(result).toBe('/');
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('should return / when DD_PUBLIC_URL contains userinfo injection', () => {
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'https://trusted.example@attacker.example';
+
+    const result = configuration.getPublicUrl({
+      protocol: 'https',
+      hostname: 'example.com',
+    });
+
+    expect(result).toBe('/');
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('should return / when inferred hostname contains userinfo injection', () => {
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+    const result = configuration.getPublicUrl({
+      protocol: 'https',
+      hostname: 'trusted.example@attacker.example',
+    });
+    expect(result).toBe('/');
+  });
+
+  test('should return / when DD_PUBLIC_URL contains control characters', () => {
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'https://example.com\u0000evil';
+
+    const result = configuration.getPublicUrl({
+      protocol: 'https',
+      hostname: 'example.com',
+    });
+
+    expect(result).toBe('/');
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('should return / when inferred URL hostname normalization mismatches request hostname', () => {
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+
+    const result = configuration.getPublicUrl({
+      protocol: 'https',
+      hostname: '%65xample.com',
+    });
+
+    expect(result).toBe('/');
+  });
+
+  test('should return / when request protocol or hostname are not strings', () => {
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+
+    const result = configuration.getPublicUrl({
+      protocol: ['https'],
+      hostname: ['example.com'],
+    });
+
     expect(result).toBe('/');
   });
 });

@@ -693,6 +693,18 @@ test('parseTrivyOutput should handle missing VulnerabilityID', async () => {
   expect(result.vulnerabilities[0].id).toBe('unknown-vulnerability');
 });
 
+test('scanImageForVulnerabilities should reject oversized trivy output before parsing', async () => {
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    callback(null, 'x'.repeat(21 * 1024 * 1024), '');
+    return { exitCode: 0 };
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('too large to parse');
+});
+
 test('runCommand should use process.env when no env option provided', async () => {
   const execFileMock = vi.fn((_command, _args, options, callback) => {
     callback(null, JSON.stringify({ Results: [] }), '');
@@ -887,6 +899,51 @@ test('runCosignVerifyCommand should fallback to cosign when command is empty', a
   await verifyImageSignature({ image: 'img:test' });
 
   expect(execFileMock.mock.calls[0][0]).toBe('cosign');
+});
+
+test('runCosignVerifyCommand should fallback to cosign when command is whitespace', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    signature: {
+      ...createEnabledConfiguration().signature,
+      cosign: { ...createEnabledConfiguration().signature.cosign, command: '   ' },
+    },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, '[{"sig":1}]', '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  await verifyImageSignature({ image: 'img:test' });
+
+  expect(execFileMock.mock.calls[0][0]).toBe('cosign');
+});
+
+test('verifyImageSignature should reject invalid cosign command path before execution', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    signature: {
+      ...createEnabledConfiguration().signature,
+      cosign: {
+        ...createEnabledConfiguration().signature.cosign,
+        command: '../bin/cosign',
+      },
+    },
+  });
+  mockHasValidCommandPath.mockReturnValue(false);
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, '[{"sig":1}]', '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const result = await verifyImageSignature({ image: 'img:test' });
+
+  expect(mockHasValidCommandPath).toHaveBeenCalledWith('../bin/cosign');
+  expect(execFileMock).not.toHaveBeenCalled();
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('invalid');
 });
 
 test('parseCosignSignaturesCount should return 1 for non-array JSON object', async () => {

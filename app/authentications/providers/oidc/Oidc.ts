@@ -2,14 +2,15 @@ import type { Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import * as openidClientLibrary from 'openid-client';
 import { v4 as uuid } from 'uuid';
-import { getPublicUrl } from '../../../configuration/index.js';
+import { ddEnvVars, getPublicUrl } from '../../../configuration/index.js';
+import { getErrorMessage } from '../../../util/error.js';
 import Authentication from '../Authentication.js';
 import OidcStrategy from './OidcStrategy.js';
 
-const OIDC_CHECKS_TTL_MS = 10 * 60 * 1000;
+const OIDC_CHECKS_TTL_MS = 5 * 60 * 1000;
 const OIDC_MAX_PENDING_CHECKS = 5;
 const oidcSessionLocks = new Map<string, Promise<void>>();
-const OIDC_STATE_PATTERN = /^[A-Za-z0-9._~-]{1,256}$/;
+const OIDC_STATE_PATTERN = /^[A-Za-z0-9._~-]{8,256}$/;
 
 interface OidcAppLike {
   use: (path: string, middleware: unknown) => void;
@@ -41,6 +42,24 @@ interface OidcSessionLike {
   regenerate?: (callback: (error?: unknown) => void) => void;
   save?: (callback: (error?: unknown) => void) => void;
 }
+
+interface OidcAuthenticatedUser {
+  username: string;
+}
+
+type OidcVerifyDone = (error: unknown, user?: OidcAuthenticatedUser | false) => void;
+
+type OidcRedirectRequest = Request & {
+  session?: OidcSessionLike;
+  sessionID?: string;
+};
+
+type OidcCallbackRequest = Request & {
+  session?: OidcSessionLike;
+  originalUrl?: string;
+  url: string;
+  login: (user: OidcAuthenticatedUser, done: (error?: unknown) => void) => void;
+};
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
@@ -214,6 +233,15 @@ class Oidc extends Authentication {
     });
   }
 
+  validateConfiguration(configuration) {
+    const validatedConfiguration = super.validateConfiguration(configuration);
+    const publicUrl = ddEnvVars.DD_PUBLIC_URL;
+    if (typeof publicUrl !== 'string' || publicUrl.trim().length === 0) {
+      throw new Error('DD_PUBLIC_URL must be set when OIDC authentication is configured');
+    }
+    return validatedConfiguration;
+  }
+
   /**
    * Sanitize sensitive data
    * @returns {*}
@@ -245,7 +273,7 @@ class Oidc extends Authentication {
     try {
       this.logoutUrl = openidClient.buildEndSessionUrl(this.client).href;
     } catch (e) {
-      this.log.warn(` End session url is not supported (${e.message})`);
+      this.log.warn(` End session url is not supported (${getErrorMessage(e)})`);
     }
   }
 
@@ -294,7 +322,7 @@ class Oidc extends Authentication {
     };
   }
 
-  async redirect(req, res) {
+  async redirect(req: OidcRedirectRequest, res: Response): Promise<void> {
     const openidClient = await this.getOpenIdClient();
     const codeVerifier = openidClient.randomPKCECodeVerifier();
     const codeChallenge = await openidClient.calculatePKCECodeChallenge(codeVerifier);
@@ -343,7 +371,7 @@ class Oidc extends Authentication {
         await persistOidcChecks();
       }
     } catch (e) {
-      this.log.warn(`Unable to persist OIDC session checks (${e.message})`);
+      this.log.warn(`Unable to persist OIDC session checks (${getErrorMessage(e)})`);
       res.status(500).json({ error: 'Unable to initialize OIDC session' });
       return;
     }
@@ -353,7 +381,7 @@ class Oidc extends Authentication {
     });
   }
 
-  async callback(req, res) {
+  async callback(req: OidcCallbackRequest, res: Response): Promise<void> {
     try {
       this.log.debug('Validate callback data');
       const openidClient = await this.getOpenIdClient();
@@ -430,7 +458,7 @@ class Oidc extends Authentication {
       this.log.debug('Perform passport login');
       req.login(user, (err) => {
         if (err) {
-          this.log.warn(`Error when logging the user [${err.message}]`);
+          this.log.warn(`Error when logging the user [${getErrorMessage(err)}]`);
           res.status(401).json({ error: 'Authentication failed' });
         } else {
           // Apply remember-me preference stored before OIDC redirect
@@ -447,22 +475,22 @@ class Oidc extends Authentication {
         }
       });
     } catch (err) {
-      this.log.warn(`Error when logging the user [${err.message}]`);
+      this.log.warn(`Error when logging the user [${getErrorMessage(err)}]`);
       res.status(401).json({ error: 'Authentication failed' });
     }
   }
 
-  async verify(accessToken, done) {
+  async verify(accessToken: string, done: OidcVerifyDone): Promise<void> {
     try {
       const user = await this.getUserFromAccessToken(accessToken);
       done(null, user);
     } catch (e) {
-      this.log.warn(`Error when validating the user access token (${e.message})`);
+      this.log.warn(`Error when validating the user access token (${getErrorMessage(e)})`);
       done(null, false);
     }
   }
 
-  async getUserFromAccessToken(accessToken) {
+  async getUserFromAccessToken(accessToken: string): Promise<OidcAuthenticatedUser> {
     const openidClient = await this.getOpenIdClient();
     const userInfo = await openidClient.fetchUserInfo(
       this.client,

@@ -99,7 +99,7 @@ async function clearCache(_req: Request, res: Response) {
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
     log.warn(`Failed to clear icon cache: ${sanitizeLogParam(errorMessage)}`);
-    res.status(500).json({ error: `Failed to clear icon cache: ${errorMessage}` });
+    res.status(500).json({ error: 'Failed to clear icon cache' });
   }
 }
 

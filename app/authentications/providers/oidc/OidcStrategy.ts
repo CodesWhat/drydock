@@ -53,10 +53,10 @@ class OidcStrategy extends Strategy {
       const authorization = Array.isArray(req.headers.authorization)
         ? req.headers.authorization[0] || ''
         : (req.headers.authorization ?? '');
-      const authSplit = authorization.split('Bearer ');
-      if (authSplit.length === 2) {
+      const bearerTokenMatch = authorization.match(/^Bearer\s+(\S+)$/);
+      if (bearerTokenMatch) {
         this.log.debug('Bearer token found => validate it');
-        const accessToken = authSplit[1];
+        const accessToken = bearerTokenMatch[1];
         this.verify(accessToken, (err, user) => {
           if (err || !user) {
             this.log.warn('Bearer token is invalid');

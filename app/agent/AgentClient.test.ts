@@ -533,7 +533,7 @@ describe('AgentClient', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       stream.emit('error', new Error('connection lost'));
-      expect(reconnectSpy).toHaveBeenCalledWith(1000);
+      expect(reconnectSpy).toHaveBeenCalledWith();
     });
 
     test('should reconnect on stream end', async () => {
@@ -545,7 +545,7 @@ describe('AgentClient', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       stream.emit('end');
-      expect(reconnectSpy).toHaveBeenCalledWith(1000);
+      expect(reconnectSpy).toHaveBeenCalledWith();
     });
 
     test('should reconnect on connection failure', async () => {
@@ -555,7 +555,29 @@ describe('AgentClient', () => {
       client.startSse();
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(reconnectSpy).toHaveBeenCalledWith(5000);
+      expect(reconnectSpy).toHaveBeenCalledWith();
+    });
+
+    test('should use exponential reconnect backoff and cap at 60 seconds', async () => {
+      axios.mockRejectedValue(new Error('connection refused'));
+
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.advanceTimersByTimeAsync(2_000);
+      await vi.advanceTimersByTimeAsync(4_000);
+      await vi.advanceTimersByTimeAsync(8_000);
+      await vi.advanceTimersByTimeAsync(16_000);
+      await vi.advanceTimersByTimeAsync(32_000);
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      const reconnectDelays = setTimeoutSpy.mock.calls
+        .map(([, delay]) => delay)
+        .filter((delay): delay is number => typeof delay === 'number');
+
+      expect(reconnectDelays).toEqual([1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000]);
     });
   });
 
@@ -614,6 +636,18 @@ describe('AgentClient', () => {
       expect(client.info.uptimeSeconds).toBe(10);
       expect(typeof client.info.lastSeen).toBe('string');
       expect(client.info.lastSeen).not.toBe('');
+    });
+
+    test('should log when handshake fails after dd:ack', async () => {
+      const spy = vi.spyOn(client, 'handshake').mockRejectedValue(new Error('handshake failed'));
+
+      await client.handleEvent('dd:ack', { version: '1.0' });
+      await Promise.resolve();
+
+      expect(spy).toHaveBeenCalled();
+      expect(client.log.error).toHaveBeenCalledWith(
+        'Handshake failed after dd:ack: handshake failed',
+      );
     });
 
     test('should process container on dd:container-added', async () => {

@@ -105,6 +105,7 @@ interface TrivyRawOutput {
 }
 
 const MAX_TRIVY_OUTPUT_BYTES = 50 * 1024 * 1024; // 50 MB
+const MAX_TRIVY_PARSE_BYTES = 20 * 1024 * 1024; // 20 MB
 const MAX_COSIGN_OUTPUT_BYTES = 2 * 1024 * 1024; // 2 MB
 const MAX_STORED_VULNERABILITIES = 500;
 const DEFAULT_DIGEST_SCAN_CACHE_MAX_ENTRIES = 500;
@@ -192,6 +193,12 @@ function buildSummary(vulnerabilities: ContainerVulnerability[]): ContainerVulne
 }
 
 function parseTrivyOutput(trivyOutput: string): ContainerVulnerability[] {
+  const trivyOutputBytes = Buffer.byteLength(trivyOutput, 'utf8');
+  if (trivyOutputBytes > MAX_TRIVY_PARSE_BYTES) {
+    throw new Error(
+      `Trivy output is too large to parse (${trivyOutputBytes} bytes); max supported is ${MAX_TRIVY_PARSE_BYTES} bytes`,
+    );
+  }
   const parsedOutput = JSON.parse(trivyOutput) as TrivyRawOutput;
   const results = Array.isArray(parsedOutput?.Results) ? parsedOutput.Results : [];
   const vulnerabilities = results.flatMap((result) => {
@@ -361,7 +368,12 @@ function runCosignVerifyCommand(
   options: ScanImageOptions,
   configuration: ReturnType<typeof getSecurityConfiguration>,
 ): Promise<string> {
-  const cosignCommand = configuration.signature.cosign.command || 'cosign';
+  const cosignCommand = `${configuration.signature.cosign.command || 'cosign'}`.trim() || 'cosign';
+  if (!hasValidCommandPath(cosignCommand)) {
+    throw new Error(
+      `Cosign command "${sanitizeLogParam(cosignCommand)}" is invalid; use a command name or absolute path`,
+    );
+  }
   const args = ['verify', '--output', 'json'];
   if (configuration.signature.cosign.key) {
     args.push('--key', configuration.signature.cosign.key);

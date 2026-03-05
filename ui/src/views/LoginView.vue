@@ -84,9 +84,22 @@ async function handleOidc(name: string) {
   try {
     await setRememberMe(rememberMe.value);
     const result = await getOidcRedirection(name);
-    if (result?.redirect) {
-      window.location.href = result.redirect;
+    const redirect =
+      result && typeof result === 'object'
+        ? ((result as { redirect?: unknown; url?: unknown }).redirect ??
+          (result as { redirect?: unknown; url?: unknown }).url)
+        : undefined;
+
+    if (typeof redirect === 'string') {
+      const parsedUrl = new URL(redirect, globalThis.location.origin);
+      const isHttp = parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+      const isSameOrigin = parsedUrl.origin === globalThis.location.origin;
+      if (isHttp && isSameOrigin) {
+        globalThis.location.assign(parsedUrl.toString());
+        return;
+      }
     }
+    error.value = `Failed to connect to ${name}`;
   } catch {
     error.value = `Failed to connect to ${name}`;
   }

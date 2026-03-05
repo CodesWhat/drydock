@@ -33,6 +33,7 @@ import {
   clearTrivyDatabaseStatusCache,
   getSecurityRuntimeStatus,
   getTrivyDatabaseStatus,
+  hasValidCommandPath,
 } from './runtime.js';
 
 function createEnabledConfiguration() {
@@ -67,6 +68,28 @@ beforeEach(() => {
   childProcessControl.execFileImpl = null;
   mockGetSecurityConfiguration.mockReturnValue(createEnabledConfiguration());
   clearTrivyDatabaseStatusCache();
+});
+
+test('hasValidCommandPath should reject Windows absolute paths on non-Windows runtimes', () => {
+  if (process.platform === 'win32') {
+    return;
+  }
+
+  expect(hasValidCommandPath('C:\\malicious\\trivy')).toBe(false);
+});
+
+test('hasValidCommandPath should accept Windows absolute paths when runtime platform is win32', () => {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+  try {
+    Object.defineProperty(process, 'platform', {
+      value: 'win32',
+    });
+    expect(hasValidCommandPath('C:\\Program Files\\Trivy\\trivy.exe')).toBe(true);
+  } finally {
+    if (originalDescriptor) {
+      Object.defineProperty(process, 'platform', originalDescriptor);
+    }
+  }
 });
 
 test('getSecurityRuntimeStatus should report ready when trivy is available', async () => {
@@ -104,6 +127,34 @@ test('getSecurityRuntimeStatus should report missing trivy command', async () =>
   expect(status.ready).toBe(false);
   expect(status.scanner.status).toBe('missing');
   expect(status.scanner.commandAvailable).toBe(false);
+  expect(status.requirements).toContain('Install trivy (configured command: "trivy")');
+});
+
+test.each([
+  'EACCES',
+  'EPERM',
+])('getSecurityRuntimeStatus should report scanner command as unavailable when exec returns %s', async (errorCode) => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    signature: {
+      ...createEnabledConfiguration().signature,
+      verify: false,
+    },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    const error = new Error('permission denied') as NodeJS.ErrnoException;
+    error.code = errorCode;
+    callback(error, '', '');
+    return { exitCode: 1 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const status = await getSecurityRuntimeStatus();
+
+  expect(status.ready).toBe(false);
+  expect(status.scanner.status).toBe('missing');
+  expect(status.scanner.commandAvailable).toBe(false);
+  expect(status.scanner.message).toContain('not available');
   expect(status.requirements).toContain('Install trivy (configured command: "trivy")');
 });
 
@@ -323,6 +374,67 @@ test('getSecurityRuntimeStatus should reject signature commands with shell metac
   expect(status.signature.status).toBe('missing');
   expect(status.signature.commandAvailable).toBe(false);
   expect(status.signature.message).toContain('invalid');
+});
+
+test('getSecurityRuntimeStatus should reject relative signature command paths', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    signature: {
+      ...createEnabledConfiguration().signature,
+      verify: true,
+      cosign: {
+        ...createEnabledConfiguration().signature.cosign,
+        command: '../bin/cosign',
+      },
+    },
+  });
+  const execFileMock = vi.fn((command, _args, _options, callback) => {
+    if (command === 'trivy') {
+      callback(null, 'ok', '');
+      return { exitCode: 0 };
+    }
+    callback(null, 'ok', '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const status = await getSecurityRuntimeStatus();
+
+  expect(execFileMock).toHaveBeenCalledTimes(1);
+  expect(execFileMock).toHaveBeenCalledWith(
+    'trivy',
+    ['--version'],
+    expect.objectContaining({ timeout: 4000 }),
+    expect.any(Function),
+  );
+  expect(status.signature.status).toBe('missing');
+  expect(status.signature.commandAvailable).toBe(false);
+  expect(status.signature.message).toContain('invalid');
+});
+
+test.each([
+  'EACCES',
+  'EPERM',
+])('getSecurityRuntimeStatus should report signature command as unavailable when exec returns %s', async (errorCode) => {
+  const execFileMock = vi.fn((command, _args, _options, callback) => {
+    if (command === 'trivy') {
+      callback(null, 'trivy 0.1.0', '');
+      return { exitCode: 0 };
+    }
+    const error = new Error('permission denied') as NodeJS.ErrnoException;
+    error.code = errorCode;
+    callback(error, '', '');
+    return { exitCode: 1 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const status = await getSecurityRuntimeStatus();
+
+  expect(status.ready).toBe(true);
+  expect(status.signature.status).toBe('missing');
+  expect(status.signature.commandAvailable).toBe(false);
+  expect(status.signature.message).toContain('not available');
+  expect(status.requirements).toContain('Install cosign (configured command: "cosign")');
 });
 
 test('getSecurityRuntimeStatus should fallback to default cosign command when signature command is empty', async () => {

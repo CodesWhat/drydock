@@ -1465,11 +1465,11 @@ describe('Icons Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
-        error: expect.stringContaining('dir entry failure'),
+        error: 'Failed to clear icon cache',
       });
     });
 
-    test('should stringify non-Error failures when cache traversal throws', async () => {
+    test('should return generic error when cache traversal throws non-Error values', async () => {
       mockReaddir.mockResolvedValueOnce([
         {
           name: 'broken',
@@ -1485,7 +1485,7 @@ describe('Icons Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Failed to clear icon cache: dir traversal failed',
+        error: 'Failed to clear icon cache',
       });
     });
   });

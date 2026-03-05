@@ -3,6 +3,7 @@ import { vi } from 'vitest';
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
 const mockGetContainers = vi.hoisted(() => vi.fn());
+const mockGetContainersRaw = vi.hoisted(() => vi.fn());
 const mockUpdateContainer = vi.hoisted(() => vi.fn());
 const mockScanImageWithDedup = vi.hoisted(() => vi.fn());
 const mockClearDigestScanCache = vi.hoisted(() => vi.fn());
@@ -61,6 +62,7 @@ vi.mock('../api/sse.js', () => ({
 
 vi.mock('../store/container.js', () => ({
   getContainers: (...args: unknown[]) => mockGetContainers(...args),
+  getContainersRaw: (...args: unknown[]) => mockGetContainersRaw(...args),
   updateContainer: (...args: unknown[]) => mockUpdateContainer(...args),
 }));
 
@@ -135,6 +137,7 @@ function createScanResult(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.resetAllMocks();
   _resetForTesting();
+  mockGetContainersRaw.mockImplementation((...args: unknown[]) => mockGetContainers(...args));
   mockGetState.mockReturnValue({ registry: {} });
   mockResolveContainerImageFullName.mockReturnValue('docker.io/library/nginx:1.25');
   mockResolveContainerRegistryAuth.mockResolvedValue(undefined);
@@ -233,14 +236,8 @@ describe('init', () => {
       cronCallback = cb;
       return { stop: vi.fn() };
     });
-    // Make getSecurityConfiguration throw only on runScheduledScans call (second call)
-    let callCount = 0;
-    mockGetSecurityConfiguration.mockImplementation(() => {
-      callCount += 1;
-      if (callCount > 1) {
-        throw new Error('config exploded');
-      }
-      return createEnabledConfiguration();
+    mockGetContainersRaw.mockImplementation(() => {
+      throw new Error('scan exploded');
     });
 
     init();
@@ -249,6 +246,8 @@ describe('init', () => {
 
     // Wait a tick so the promise rejection is caught
     await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(mockLogWarn).toHaveBeenCalledWith('Scheduled scan run failed: scan exploded');
   });
 
   test('should catch non-Error thrown by runScheduledScans in the cron callback', async () => {
@@ -258,19 +257,16 @@ describe('init', () => {
       cronCallback = cb;
       return { stop: vi.fn() };
     });
-    let callCount = 0;
-    mockGetSecurityConfiguration.mockImplementation(() => {
-      callCount += 1;
-      if (callCount > 1) {
-        throw 'string error';
-      }
-      return createEnabledConfiguration();
+    mockGetContainersRaw.mockImplementation(() => {
+      throw 'string error';
     });
 
     init();
     cronCallback!();
 
     await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(mockLogWarn).toHaveBeenCalledWith('Scheduled scan run failed: string error');
   });
 
   test('should include message from object-like errors thrown by runScheduledScans in the cron callback', async () => {
@@ -280,13 +276,8 @@ describe('init', () => {
       cronCallback = cb;
       return { stop: vi.fn() };
     });
-    let callCount = 0;
-    mockGetSecurityConfiguration.mockImplementation(() => {
-      callCount += 1;
-      if (callCount > 1) {
-        throw { message: 'config exploded' };
-      }
-      return createEnabledConfiguration();
+    mockGetContainersRaw.mockImplementation(() => {
+      throw { message: 'scan exploded' };
     });
 
     init();
@@ -294,11 +285,52 @@ describe('init', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    expect(mockLogWarn).toHaveBeenCalledWith('Scheduled scan run failed: config exploded');
+    expect(mockLogWarn).toHaveBeenCalledWith('Scheduled scan run failed: scan exploded');
   });
 });
 
 describe('runScheduledScans', () => {
+  test('should compute cron interval once across scan runs', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: '0 3 15 * *', jitter: 60000, concurrency: 1, batchTimeout: 0 },
+    });
+    const parseExpressionSpy = vi.spyOn(cronParser, 'parseExpression');
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    try {
+      await runScheduledScans();
+      await runScheduledScans();
+      expect(parseExpressionSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      parseExpressionSpy.mockRestore();
+    }
+  });
+
+  test('should cache security configuration across scan runs', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    await runScheduledScans();
+    await runScheduledScans();
+
+    expect(mockGetSecurityConfiguration).toHaveBeenCalledTimes(1);
+  });
+
+  test('should read containers from raw store API for scheduled scans', async () => {
+    const container = createContainer();
+    mockGetContainersRaw.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockGetContainersRaw).toHaveBeenCalledTimes(1);
+    expect(mockGetContainers).not.toHaveBeenCalled();
+  });
+
   test('should process digest scans with configured concurrency', async () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),

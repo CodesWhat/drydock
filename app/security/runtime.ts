@@ -52,7 +52,9 @@ export function hasValidCommandPath(command: string): boolean {
 
   const hasPathSeparator = command.includes('/') || command.includes('\\');
   if (hasPathSeparator) {
-    return isAbsolutePath(command) || win32Path.isAbsolute(command);
+    const isAbsoluteForRuntime =
+      process.platform === 'win32' ? win32Path.isAbsolute(command) : isAbsolutePath(command);
+    return isAbsoluteForRuntime;
   }
 
   return !/\s/.test(command);

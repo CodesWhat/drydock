@@ -62,6 +62,7 @@ describe('LoginView', () => {
       wrapper.unmount();
     }
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
@@ -216,6 +217,74 @@ describe('LoginView', () => {
 
       expect(mockSetRememberMe).toHaveBeenCalledWith(false);
       expect(mockGetOidcRedirection).toHaveBeenCalledWith('GitHub');
+    });
+
+    it('redirects to same-origin OIDC URL', async () => {
+      mockSetRememberMe.mockResolvedValue(undefined);
+      const redirectUrl = `${window.location.origin}/auth/oidc/GitHub/cb?code=abc`;
+      mockGetOidcRedirection.mockResolvedValue({ redirect: redirectUrl });
+      const assignSpy = vi.fn();
+      vi.stubGlobal('location', {
+        ...window.location,
+        origin: window.location.origin,
+        href: window.location.href,
+        assign: assignSpy,
+      });
+      const wrapper = await mountLogin([{ type: 'oidc', name: 'GitHub' }]);
+
+      const oidcBtn = wrapper
+        .findAll('button[type="button"]')
+        .find((b) => b.text().includes('GitHub'));
+      await oidcBtn?.trigger('click');
+      await flushPromises();
+
+      expect(assignSpy).toHaveBeenCalledWith(redirectUrl);
+      expect(wrapper.text()).not.toContain('Failed to connect to GitHub');
+    });
+
+    it('redirects to same-origin OIDC URL from url payload field', async () => {
+      mockSetRememberMe.mockResolvedValue(undefined);
+      const redirectUrl = `${window.location.origin}/auth/oidc/GitHub/cb?code=abc`;
+      mockGetOidcRedirection.mockResolvedValue({ url: redirectUrl });
+      const assignSpy = vi.fn();
+      vi.stubGlobal('location', {
+        ...window.location,
+        origin: window.location.origin,
+        href: window.location.href,
+        assign: assignSpy,
+      });
+      const wrapper = await mountLogin([{ type: 'oidc', name: 'GitHub' }]);
+
+      const oidcBtn = wrapper
+        .findAll('button[type="button"]')
+        .find((b) => b.text().includes('GitHub'));
+      await oidcBtn?.trigger('click');
+      await flushPromises();
+
+      expect(assignSpy).toHaveBeenCalledWith(redirectUrl);
+      expect(wrapper.text()).not.toContain('Failed to connect to GitHub');
+    });
+
+    it('rejects cross-origin OIDC redirect URLs', async () => {
+      mockSetRememberMe.mockResolvedValue(undefined);
+      mockGetOidcRedirection.mockResolvedValue({ redirect: 'https://evil.example/phish' });
+      const assignSpy = vi.fn();
+      vi.stubGlobal('location', {
+        ...window.location,
+        origin: window.location.origin,
+        href: window.location.href,
+        assign: assignSpy,
+      });
+      const wrapper = await mountLogin([{ type: 'oidc', name: 'GitHub' }]);
+
+      const oidcBtn = wrapper
+        .findAll('button[type="button"]')
+        .find((b) => b.text().includes('GitHub'));
+      await oidcBtn?.trigger('click');
+      await flushPromises();
+
+      expect(assignSpy).not.toHaveBeenCalled();
+      expect(wrapper.text()).toContain('Failed to connect to GitHub');
     });
 
     it('shows error on OIDC failure', async () => {

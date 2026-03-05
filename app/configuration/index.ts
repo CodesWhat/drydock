@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import type { Request } from 'express';
 import joi from 'joi';
 import setValue from 'set-value';
 import { logWarn } from '../log/warn.js';
@@ -6,6 +7,7 @@ import { recordLegacyInput } from '../prometheus/compatibility.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
+const MAX_SECRET_FILE_SIZE_BYTES = 1024 * 1024;
 export const SECURITY_SEVERITY_VALUES = ['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 export const SECURITY_SBOM_FORMAT_VALUES = ['spdx-json', 'cyclonedx-json'] as const;
 const SERVER_COOKIE_SAMESITE_VALUES = ['strict', 'lax', 'none'] as const;
@@ -46,6 +48,12 @@ export function replaceSecrets(ddEnvVars: Record<string, string | undefined>) {
     const secretFilePath = resolveConfiguredPath(ddEnvVars[secretFileEnvVar], {
       label: `${secretFileEnvVar} path`,
     });
+    const secretFileStats = fs.statSync(secretFilePath);
+    if (secretFileStats.size > MAX_SECRET_FILE_SIZE_BYTES) {
+      throw new Error(
+        `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
+      );
+    }
     const secretFileValue = fs.readFileSync(secretFilePath, 'utf-8');
     delete ddEnvVars[secretFileEnvVar];
     ddEnvVars[secretKey] = secretFileValue;
@@ -406,6 +414,33 @@ function parseDelimitedEnumList<T extends string>(
   return parsedValues;
 }
 
+function validateCosignKeyPath(rawKeyPath: string): string {
+  if (!rawKeyPath) {
+    return '';
+  }
+
+  const resolvedKeyPath = resolveConfiguredPath(rawKeyPath, {
+    label: 'DD_SECURITY_COSIGN_KEY',
+  });
+
+  try {
+    const keyStats = fs.statSync(resolvedKeyPath);
+    if (!keyStats.isFile()) {
+      throw new Error('DD_SECURITY_COSIGN_KEY must reference an existing regular file');
+    }
+  } catch (e) {
+    if (
+      e instanceof Error &&
+      e.message === 'DD_SECURITY_COSIGN_KEY must reference an existing regular file'
+    ) {
+      throw e;
+    }
+    throw new Error('DD_SECURITY_COSIGN_KEY must reference an existing regular file');
+  }
+
+  return resolvedKeyPath;
+}
+
 export function getSecurityConfiguration() {
   const configurationFromEnv = get('dd.security', ddEnvVars);
   const configurationSchema = joi.object().keys({
@@ -472,6 +507,7 @@ export function getSecurityConfiguration() {
   const scanner = configuration.scanner ? configuration.scanner.toLowerCase() : '';
   const blockSeverities = parseSecuritySeverityList(configuration.block?.severity);
   const sbomFormats = parseSecuritySbomFormatList(configuration.sbom?.formats);
+  const cosignKey = validateCosignKeyPath(configuration.cosign?.key || '');
 
   return {
     enabled: scanner !== '',
@@ -487,7 +523,7 @@ export function getSecurityConfiguration() {
       cosign: {
         command: configuration.cosign?.command || 'cosign',
         timeout: configuration.cosign?.timeout || 60000,
-        key: configuration.cosign?.key || '',
+        key: cosignKey,
         identity: configuration.cosign?.identity || '',
         issuer: configuration.cosign?.issuer || '',
       },
@@ -512,20 +548,51 @@ export type SecurityConfiguration = Pick<
   signature: Pick<ReturnType<typeof getSecurityConfiguration>['signature'], 'verify'>;
 };
 
-export function getPublicUrl(req) {
-  const publicUrl = ddEnvVars.DD_PUBLIC_URL;
-  if (publicUrl) {
-    return publicUrl;
+function parseSafePublicUrlCandidate(value: unknown): URL | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
   }
-  // Try to guess from request, with validation to prevent open redirect
+  const trimmedValue = value.trim();
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control character detection for input validation
+  if (trimmedValue.length === 0 || /[\u0000-\u001F\u007F]/.test(trimmedValue)) {
+    return undefined;
+  }
+
+  let parsedUrl: URL;
   try {
-    const candidate = `${req.protocol}://${req.hostname}`;
-    const parsed = new URL(candidate);
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return candidate;
-    }
-    return '/';
+    parsedUrl = new URL(trimmedValue);
   } catch {
+    return undefined;
+  }
+
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    return undefined;
+  }
+  if (parsedUrl.username !== '' || parsedUrl.password !== '') {
+    return undefined;
+  }
+  return parsedUrl;
+}
+
+export function getPublicUrl(req: Request) {
+  const publicUrl = ddEnvVars.DD_PUBLIC_URL;
+  const configuredPublicUrl = parseSafePublicUrlCandidate(publicUrl);
+  if (configuredPublicUrl) {
+    return configuredPublicUrl.origin;
+  }
+  if (typeof publicUrl === 'string' && publicUrl.trim().length > 0) {
     return '/';
   }
+
+  // Try to infer from request, with strict validation to prevent host/header injection.
+  const protocol = typeof req.protocol === 'string' ? req.protocol : '';
+  const hostname = typeof req.hostname === 'string' ? req.hostname : '';
+  const inferredPublicUrl = parseSafePublicUrlCandidate(`${protocol}://${hostname}`);
+  if (!inferredPublicUrl) {
+    return '/';
+  }
+  if (inferredPublicUrl.hostname !== hostname.toLowerCase()) {
+    return '/';
+  }
+  return inferredPublicUrl.origin;
 }

@@ -1,7 +1,8 @@
 import { createMockResponse } from '../test/helpers.js';
 
-const { mockRouter } = vi.hoisted(() => ({
+const { mockRouter, mockLog } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
+  mockLog: { info: vi.fn(), warn: vi.fn(), debug: vi.fn() },
 }));
 
 vi.mock('express', () => ({
@@ -25,7 +26,7 @@ vi.mock('../agent', () => ({
 }));
 
 vi.mock('../log', () => ({
-  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() }) },
+  default: { child: () => mockLog },
 }));
 
 import * as agent from '../agent/index.js';
@@ -205,9 +206,30 @@ describe('Trigger Router', () => {
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
-          error: expect.stringContaining('trigger failed'),
+          error: 'Error when running trigger slack.default',
         }),
       );
+      expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('trigger failed'));
+    });
+
+    test('should stringify non-Error trigger failures in logs', async () => {
+      const mockTrigger = {
+        trigger: vi.fn().mockRejectedValue(503),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'slack.default': mockTrigger },
+      });
+
+      const req = {
+        params: { type: 'slack', name: 'default' },
+        body: { id: 'c1' },
+      };
+      const res = createResponse();
+
+      await runTrigger(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('(503)'));
     });
   });
 
@@ -303,9 +325,10 @@ describe('Trigger Router', () => {
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
-          error: expect.stringContaining('remote error'),
+          error: 'Error when running remote trigger slack.default on agent my-agent',
         }),
       );
+      expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('remote error'));
     });
   });
 });

@@ -7,8 +7,8 @@ beforeEach(async () => {
   basicStrategy.fail = vi.fn();
 });
 
-test('_challenge should return appropriate Auth header', async () => {
-  expect(basicStrategy._challenge()).toEqual(401);
+test('_challenge should return no auth header challenge', async () => {
+  expect(basicStrategy._challenge()).toBeUndefined();
 });
 
 test('authenticate should return user from session if so', async () => {

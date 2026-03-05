@@ -43,12 +43,13 @@ class BasicStrategy extends HttpBasicStrategy {
   }
 
   /**
-   * Override challenge to avoid browser popup on 401 errrors.
-   * @returns {string}
+   * Return no HTTP auth challenge so browsers do not show the native basic-auth popup.
+   * Passport still responds with 401 when authentication fails.
+   * @returns {undefined}
    * @private
    */
   _challenge() {
-    return 401;
+    return undefined;
   }
 }
 

@@ -23,6 +23,23 @@ let cronTask: ReturnType<typeof cron.schedule> | undefined;
 let running = false;
 let scanInProgress = false;
 let scanAbortController: AbortController | undefined;
+let cachedSecurityConfiguration: ReturnType<typeof getSecurityConfiguration> | undefined;
+let cachedScanIntervalMs: number | undefined;
+
+function getSchedulerSecurityConfiguration(): ReturnType<typeof getSecurityConfiguration> {
+  if (!cachedSecurityConfiguration) {
+    cachedSecurityConfiguration = getSecurityConfiguration();
+  }
+  return cachedSecurityConfiguration;
+}
+
+function getSchedulerScanIntervalMs(): number {
+  if (cachedScanIntervalMs === undefined) {
+    const securityConfig = getSchedulerSecurityConfiguration();
+    cachedScanIntervalMs = getCronIntervalMs(securityConfig.scan.cron);
+  }
+  return cachedScanIntervalMs;
+}
 
 function getContainerImageFullName(container: Container, tagOverride?: string): string {
   return resolveContainerImageFullName(container, registry.getState().registry || {}, tagOverride);
@@ -211,7 +228,7 @@ export async function runScheduledScans(): Promise<void> {
     return;
   }
 
-  const securityConfig = getSecurityConfiguration();
+  const securityConfig = getSchedulerSecurityConfiguration();
   if (!securityConfig.enabled || securityConfig.scanner !== 'trivy') {
     logScheduler.info('Security scanner not enabled, skipping scheduled scan');
     return;
@@ -222,7 +239,7 @@ export async function runScheduledScans(): Promise<void> {
   let batchTimeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
   try {
-    const containers = storeContainer.getContainers();
+    const containers = storeContainer.getContainersRaw();
     const containersWithDigest = containers.filter(
       (c: Container) => c.image?.digest?.value && typeof c.image.digest.value === 'string',
     );
@@ -244,7 +261,7 @@ export async function runScheduledScans(): Promise<void> {
       }
     }
 
-    const scanIntervalMs = getCronIntervalMs(securityConfig.scan.cron);
+    const scanIntervalMs = getSchedulerScanIntervalMs();
     const scanConcurrency = Math.max(1, Math.floor(Number(securityConfig.scan.concurrency) || 1));
     const batchTimeoutMs = Math.max(0, Math.floor(Number(securityConfig.scan.batchTimeout) || 0));
     const trivyDbStatus = await getTrivyDatabaseStatus();
@@ -332,7 +349,7 @@ export async function runScheduledScans(): Promise<void> {
 }
 
 export function init(): void {
-  const securityConfig = getSecurityConfiguration();
+  const securityConfig = getSchedulerSecurityConfiguration();
   const cronExpression = securityConfig.scan.cron;
 
   if (!cronExpression) {
@@ -350,6 +367,7 @@ export function init(): void {
     return;
   }
 
+  cachedScanIntervalMs = getSchedulerScanIntervalMs();
   const jitter = securityConfig.scan.jitter;
 
   cronTask = cron.schedule(
@@ -381,6 +399,8 @@ export function shutdown(): void {
     cronTask = undefined;
   }
   clearDigestScanCache();
+  cachedSecurityConfiguration = undefined;
+  cachedScanIntervalMs = undefined;
   running = false;
   scanInProgress = false;
 }

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
+import type { Logger } from 'pino';
 import { emitAgentConnected, emitAgentDisconnected, emitContainerReport } from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
@@ -31,15 +32,19 @@ export interface AgentClientRuntimeInfo {
   pollInterval?: string;
 }
 
+const INITIAL_SSE_RECONNECT_DELAY_MS = 1_000;
+const MAX_SSE_RECONNECT_DELAY_MS = 60_000;
+
 export class AgentClient {
   public name: string;
   public config: AgentClientConfig;
-  private readonly log: any;
+  private readonly log: Logger;
   private readonly baseUrl: string;
   private readonly axiosOptions: AxiosRequestConfig;
   public isConnected: boolean;
   public info: AgentClientRuntimeInfo;
   private reconnectTimer: NodeJS.Timeout | null;
+  private reconnectAttempts: number;
 
   constructor(name: string, config: AgentClientConfig) {
     this.name = name;
@@ -87,6 +92,7 @@ export class AgentClient {
     this.isConnected = false;
     this.info = {};
     this.reconnectTimer = null;
+    this.reconnectAttempts = 0;
   }
 
   async init() {
@@ -206,10 +212,20 @@ export class AgentClient {
     emitContainerReport(containerReport);
   }
 
-  scheduleReconnect(delay: number) {
+  private getNextReconnectDelayMs(): number {
+    const nextDelay = Math.min(
+      INITIAL_SSE_RECONNECT_DELAY_MS * 2 ** this.reconnectAttempts,
+      MAX_SSE_RECONNECT_DELAY_MS,
+    );
+    this.reconnectAttempts += 1;
+    return nextDelay;
+  }
+
+  scheduleReconnect(delay?: number) {
     if (this.reconnectTimer) {
       return;
     }
+    const reconnectDelay = delay ?? this.getNextReconnectDelayMs();
     const wasConnected = this.isConnected;
     this.isConnected = false;
     if (wasConnected) {
@@ -223,7 +239,7 @@ export class AgentClient {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.startSse();
-    }, delay);
+    }, reconnectDelay);
   }
 
   private parseSseLine(line: string) {
@@ -263,11 +279,11 @@ export class AgentClient {
     });
     stream.on('error', (e: Error) => {
       this.log.error(`SSE Connection failed: ${e.message}`);
-      this.scheduleReconnect(1000);
+      this.scheduleReconnect();
     });
     stream.on('end', () => {
       this.log.warn('SSE stream ended. Reconnecting...');
-      this.scheduleReconnect(1000);
+      this.scheduleReconnect();
     });
   }
 
@@ -283,11 +299,12 @@ export class AgentClient {
       ...this.axiosOptions,
     })
       .then((response) => {
+        this.reconnectAttempts = 0;
         this.attachStreamHandlers(response.data);
       })
       .catch((e) => {
         this.log.error(`SSE Connection failed: ${e.message}. Retrying...`);
-        this.scheduleReconnect(5000);
+        this.scheduleReconnect();
       });
   }
 
@@ -309,7 +326,9 @@ export class AgentClient {
             : new Date().toISOString(),
       };
       this.log.info(`Agent ${this.name} connected (version: ${data.version})`);
-      this.handshake();
+      void this.handshake().catch((e: any) => {
+        this.log.error(`Handshake failed after dd:ack: ${e.message}`);
+      });
     } else if (eventName === 'dd:container-added' || eventName === 'dd:container-updated') {
       await this.processContainer(data as Container);
     } else if (eventName === 'dd:container-removed') {

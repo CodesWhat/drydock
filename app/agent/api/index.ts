@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import https from 'node:https';
 import cors from 'cors';
@@ -5,21 +6,59 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { getServerConfiguration } from '../../configuration/index.js';
 import { getEntries } from '../../log/buffer.js';
 import logger from '../../log/index.js';
+import { hashToken } from '../../util/crypto.js';
 import * as containerApi from './container.js';
 import * as eventApi from './event.js';
 import * as triggerApi from './trigger.js';
 import * as watcherApi from './watcher.js';
 
 const log = logger.child({ component: 'agent-server' });
+const ALLOWED_LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
+const SAFE_LOG_COMPONENT_PATTERN = /^[a-zA-Z0-9._-]+$/;
 
 let cachedSecret: string | undefined;
+
+function getValidatedLogLevel(level: unknown): string | undefined | null {
+  if (level == null) {
+    return undefined;
+  }
+  if (typeof level !== 'string') {
+    return null;
+  }
+  const normalizedLevel = level.toLowerCase();
+  if (!ALLOWED_LOG_LEVELS.has(normalizedLevel)) {
+    return null;
+  }
+  return normalizedLevel;
+}
+
+function getValidatedLogComponent(component: unknown): string | undefined | null {
+  if (component == null) {
+    return undefined;
+  }
+  if (typeof component !== 'string') {
+    return null;
+  }
+  if (!SAFE_LOG_COMPONENT_PATTERN.test(component)) {
+    return null;
+  }
+  return component;
+}
 
 /**
  * Authenticate Middleware.
  */
 export function authenticate(req: Request, res: Response, next: NextFunction) {
-  const requestSecret = req.headers['x-dd-agent-secret'];
-  if (!cachedSecret || requestSecret !== cachedSecret) {
+  const requestSecretHeader = req.headers['x-dd-agent-secret'];
+  const requestSecret = typeof requestSecretHeader === 'string' ? requestSecretHeader : undefined;
+  if (!cachedSecret || !requestSecret) {
+    log.warn(`Unauthorized access attempt from ${req.ip}`);
+    return res.status(401).send();
+  }
+
+  const requestSecretHash = hashToken(requestSecret);
+  const cachedSecretHash = hashToken(cachedSecret);
+  if (!timingSafeEqual(requestSecretHash, cachedSecretHash)) {
     log.warn(`Unauthorized access attempt from ${req.ip}`);
     return res.status(401).send();
   }
@@ -79,8 +118,18 @@ export async function init() {
 
   // Routes
   app.get('/api/log/entries', (req: Request, res: Response) => {
-    const level = req.query.level as string | undefined;
-    const component = req.query.component as string | undefined;
+    const level = getValidatedLogLevel(req.query.level);
+    if (level === null) {
+      res.status(400).json({ error: 'Invalid level query parameter' });
+      return;
+    }
+
+    const component = getValidatedLogComponent(req.query.component);
+    if (component === null) {
+      res.status(400).json({ error: 'Invalid component query parameter' });
+      return;
+    }
+
     const tail = req.query.tail ? Number.parseInt(req.query.tail as string, 10) : undefined;
     const since = req.query.since ? Number.parseInt(req.query.since as string, 10) : undefined;
     res.status(200).json(getEntries({ level, component, tail, since }));

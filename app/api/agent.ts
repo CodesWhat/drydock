@@ -1,41 +1,50 @@
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import { getAgent, getAgents } from '../agent/index.js';
 import type { Container } from '../model/container.js';
 import * as storeContainer from '../store/container.js';
+import { getContainerStatusSummary } from '../util/container-summary.js';
 
 const router = express.Router();
 const ALLOWED_LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
 const SAFE_LOG_COMPONENT_PATTERN = /^[a-zA-Z0-9._-]+$/;
+const AGENT_LOG_FETCH_ERROR_MESSAGE = 'Failed to fetch logs from agent';
 
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === 'string') {
-    return error;
-  }
-  return String(error);
+interface AgentLogEntriesRequestParams {
+  name: string;
 }
 
-function getAgentContainerStats(agentName: string) {
-  const containers: Container[] = storeContainer.getContainers({ agent: agentName });
-  const running = containers.filter(
-    (container: Container) => String(container.status ?? '').toLowerCase() === 'running',
-  ).length;
-  const total = containers.length;
+interface AgentLogEntriesRequestQuery {
+  level?: string;
+  component?: string;
+  tail?: string;
+  since?: string;
+}
+
+function getAgentContainerStats(containers: Container[]) {
+  const containerStatus = getContainerStatusSummary(containers);
   const images = new Set(
     containers.map(
       (container: Container) => container.image?.id ?? container.image?.name ?? container.id,
     ),
   ).size;
   return {
-    containers: {
-      total,
-      running,
-      stopped: Math.max(total - running, 0),
-    },
+    containers: containerStatus,
     images,
   };
+}
+
+function groupContainersByAgent(containers: Container[]) {
+  const containersByAgent = new Map<string, Container[]>();
+  for (const container of containers) {
+    if (typeof container.agent !== 'string') {
+      continue;
+    }
+    if (!containersByAgent.has(container.agent)) {
+      containersByAgent.set(container.agent, []);
+    }
+    containersByAgent.get(container.agent)?.push(container);
+  }
+  return containersByAgent;
 }
 
 function getValidatedLogLevel(level: unknown): string | undefined | null {
@@ -65,10 +74,11 @@ function getValidatedLogComponent(component: unknown): string | undefined | null
   return component;
 }
 
-function getAgentsList(req, res) {
+function getAgentsList(req: Request, res: Response) {
   const agents = getAgents();
+  const containersByAgent = groupContainersByAgent(storeContainer.getContainers());
   const safeAgents = agents.map((agent) => {
-    const stats = getAgentContainerStats(agent.name);
+    const stats = getAgentContainerStats(containersByAgent.get(agent.name) ?? []);
     return {
       name: agent.name,
       host: agent.config.host,
@@ -89,7 +99,10 @@ function getAgentsList(req, res) {
   res.json(safeAgents);
 }
 
-async function getAgentLogEntries(req, res) {
+async function getAgentLogEntries(
+  req: Request<AgentLogEntriesRequestParams, unknown, unknown, AgentLogEntriesRequestQuery>,
+  res: Response,
+) {
   const agent = getAgent(req.params.name);
   if (!agent) {
     return res.status(404).json({ error: 'Agent not found' });
@@ -108,12 +121,12 @@ async function getAgentLogEntries(req, res) {
       return res.status(400).json({ error: 'Invalid component query parameter' });
     }
 
-    const tail = req.query.tail ? Number.parseInt(req.query.tail as string, 10) : undefined;
-    const since = req.query.since ? Number.parseInt(req.query.since as string, 10) : undefined;
+    const tail = req.query.tail ? Number.parseInt(req.query.tail, 10) : undefined;
+    const since = req.query.since ? Number.parseInt(req.query.since, 10) : undefined;
     const entries = await agent.getLogEntries({ level, component, tail, since });
     res.json(entries);
   } catch (error: unknown) {
-    res.status(502).json({ error: `Failed to fetch logs from agent: ${getErrorMessage(error)}` });
+    res.status(502).json({ error: AGENT_LOG_FETCH_ERROR_MESSAGE });
   }
 }
 

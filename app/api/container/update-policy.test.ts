@@ -165,4 +165,18 @@ describe('api/container/update-policy', () => {
       });
     });
   });
+
+  describe('error handling', () => {
+    test('returns a generic error when unexpected failures occur', () => {
+      const harness = createHarness();
+      harness.storeContainer.updateContainer.mockImplementation(() => {
+        throw new Error('database write failed: credentials mismatch');
+      });
+
+      const res = callPatchContainerUpdatePolicy(harness.handlers, { action: 'clear' });
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Failed to update container policy' });
+    });
+  });
 });

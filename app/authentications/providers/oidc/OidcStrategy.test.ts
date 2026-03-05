@@ -126,3 +126,35 @@ test('authenticate should fail when authorization header array is empty', async 
 
   expect(fail).toHaveBeenCalledWith(401);
 });
+
+test('authenticate should fail when bearer token contains trailing whitespace', async () => {
+  const fail = vi.spyOn(oidcStrategy, 'fail');
+  const verify = vi.fn();
+  oidcStrategy.verify = verify;
+
+  oidcStrategy.authenticate({
+    isAuthenticated: () => false,
+    headers: {
+      authorization: 'Bearer token-with-space ',
+    },
+  });
+
+  expect(verify).not.toHaveBeenCalled();
+  expect(fail).toHaveBeenCalledWith(401);
+});
+
+test('authenticate should fail when bearer token has extra authorization segments', async () => {
+  const fail = vi.spyOn(oidcStrategy, 'fail');
+  const verify = vi.fn();
+  oidcStrategy.verify = verify;
+
+  oidcStrategy.authenticate({
+    isAuthenticated: () => false,
+    headers: {
+      authorization: 'Bearer token extra',
+    },
+  });
+
+  expect(verify).not.toHaveBeenCalled();
+  expect(fail).toHaveBeenCalledWith(401);
+});
