@@ -23,7 +23,7 @@ import {
 } from './security/securityViewUtils';
 
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
-const { scanning, scanProgress, scanAllContainers: runScanAll, cancelScan } = useScanProgress();
+const { scanning, scanProgress, scanAllContainers: runScanAll } = useScanProgress();
 
 const runtimeLoading = ref(true);
 const runtimeError = ref<string | null>(null);
@@ -196,7 +196,6 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  cancelScan();
   clearTimeout(scanCompletedDebounceTimer);
   globalThis.removeEventListener('dd:sse-scan-completed', sseScanCompletedListener);
 });
