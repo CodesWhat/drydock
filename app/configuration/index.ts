@@ -450,6 +450,12 @@ export function getSecurityConfiguration() {
       .object({
         cron: joi.string().allow('').default(''),
         jitter: joi.number().integer().min(0).default(60000),
+        concurrency: joi.number().integer().min(1).default(4),
+        batch: joi
+          .object({
+            timeout: joi.number().integer().min(0).default(1800000),
+          })
+          .default({}),
       })
       .default({}),
   });
@@ -493,6 +499,8 @@ export function getSecurityConfiguration() {
     scan: {
       cron: configuration.scan?.cron || '',
       jitter: configuration.scan?.jitter ?? 60000,
+      concurrency: configuration.scan?.concurrency ?? 4,
+      batchTimeout: configuration.scan?.batch?.timeout ?? 1800000,
     },
   };
 }

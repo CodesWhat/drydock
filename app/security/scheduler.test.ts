@@ -92,7 +92,7 @@ function createEnabledConfiguration() {
       cosign: { command: 'cosign', timeout: 60000, key: '', identity: '', issuer: '' },
     },
     sbom: { enabled: false, formats: ['spdx-json'] },
-    scan: { cron: '0 3 * * *', jitter: 60000 },
+    scan: { cron: '0 3 * * *', jitter: 60000, concurrency: 1, batchTimeout: 0 },
   };
 }
 
@@ -298,6 +298,99 @@ describe('init', () => {
 });
 
 describe('runScheduledScans', () => {
+  test('should process digest scans with configured concurrency', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: '0 3 * * *', jitter: 60000, concurrency: 2, batchTimeout: 0 },
+    });
+    const container1 = createContainer({ id: 'c1' });
+    const container2 = createContainer({
+      id: 'c2',
+      name: 'redis',
+      image: {
+        ...createContainer().image,
+        name: 'library/redis',
+        digest: { watch: true, value: 'sha256:def456' },
+      },
+    });
+    const container3 = createContainer({
+      id: 'c3',
+      name: 'postgres',
+      image: {
+        ...createContainer().image,
+        name: 'library/postgres',
+        digest: { watch: true, value: 'sha256:ghi789' },
+      },
+    });
+    mockGetContainers.mockReturnValue([container1, container2, container3]);
+
+    const resolvers: Array<() => void> = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    mockScanImageWithDedup.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          resolvers.push(() => {
+            inFlight -= 1;
+            resolve({ scanResult: createScanResult(), fromCache: false });
+          });
+        }),
+    );
+
+    const scanPromise = runScheduledScans();
+
+    await vi.waitFor(() => {
+      expect(mockScanImageWithDedup).toHaveBeenCalledTimes(2);
+    });
+    expect(maxInFlight).toBe(2);
+
+    resolvers[0]?.();
+    resolvers[1]?.();
+
+    await vi.waitFor(() => {
+      expect(mockScanImageWithDedup).toHaveBeenCalledTimes(3);
+    });
+
+    resolvers[2]?.();
+    await scanPromise;
+    expect(mockUpdateContainer).toHaveBeenCalledTimes(3);
+  });
+
+  test('should stop queueing new digest scans once batch timeout elapses', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: '0 3 * * *', jitter: 60000, concurrency: 1, batchTimeout: 30 },
+    });
+    const container1 = createContainer({ id: 'c1' });
+    const container2 = createContainer({
+      id: 'c2',
+      name: 'redis',
+      image: {
+        ...createContainer().image,
+        name: 'library/redis',
+        digest: { watch: true, value: 'sha256:def456' },
+      },
+    });
+    mockGetContainers.mockReturnValue([container1, container2]);
+    mockScanImageWithDedup.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({ scanResult: createScanResult(), fromCache: false });
+          }, 100);
+        }),
+    );
+
+    await runScheduledScans();
+
+    expect(mockScanImageWithDedup).toHaveBeenCalledTimes(1);
+    expect(mockBroadcastScanStarted).toHaveBeenCalledWith('c1');
+    expect(mockBroadcastScanStarted).not.toHaveBeenCalledWith('c2');
+    expect(mockBroadcastScanCompleted).toHaveBeenCalledTimes(1);
+  });
+
   test('should group containers by digest and scan unique digests', async () => {
     const container1 = createContainer({ id: 'c1' });
     const container2 = createContainer({
@@ -622,7 +715,7 @@ describe('runScheduledScans', () => {
     );
   });
 
-  test('should fallback to 24h interval for cron with specific day pattern', async () => {
+  test('should use monthly-scale interval for cron with specific day pattern', async () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),
       scan: { cron: '0 3 15 * *', jitter: 60000 },
@@ -634,14 +727,13 @@ describe('runScheduledScans', () => {
 
     await runScheduledScans();
 
-    // dayField is '15', not '*', and hourField doesn't include '/' or ',' → fallback 24h
-    expect(mockScanImageWithDedup).toHaveBeenCalledWith(
-      expect.objectContaining({ digest: 'sha256:abc123' }),
-      86400000,
-    );
+    const [, intervalMs] = mockScanImageWithDedup.mock.calls[0];
+
+    // 0 3 15 * * runs monthly, so interval should be longer than a day.
+    expect(intervalMs).toBeGreaterThan(86400000);
   });
 
-  test('should fallback to 24h interval for cron with comma-separated hours', async () => {
+  test('should use shortest interval for cron with comma-separated hours', async () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),
       scan: { cron: '0 3,9 * * *', jitter: 60000 },
@@ -653,10 +745,10 @@ describe('runScheduledScans', () => {
 
     await runScheduledScans();
 
-    // hourField includes ',' → does not match any special case → fallback 24h
+    // 0 3,9 * * * runs at 03:00 and 09:00 each day, so the shortest interval is 6h.
     expect(mockScanImageWithDedup).toHaveBeenCalledWith(
       expect.objectContaining({ digest: 'sha256:abc123' }),
-      86400000,
+      21600000,
     );
   });
 
@@ -820,7 +912,7 @@ describe('runScheduledScans', () => {
     expect(_isScanInProgress()).toBe(false);
   });
 
-  test('should handle every-N-minutes pattern with non-wildcard hourField', async () => {
+  test('should derive every-N-minutes interval with non-wildcard hourField', async () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),
       scan: { cron: '*/15 3 * * *', jitter: 60000 },
@@ -832,16 +924,14 @@ describe('runScheduledScans', () => {
 
     await runScheduledScans();
 
-    // minuteField starts with '*/' but hourField is '3' (not '*'), so the first branch doesn't match
-    // hourField doesn't start with '*/' → second branch doesn't match
-    // dayField is '*', hourField doesn't include '/' or ',' → daily 24h
+    // */15 3 * * * runs every 15 minutes during hour 3.
     expect(mockScanImageWithDedup).toHaveBeenCalledWith(
       expect.objectContaining({ digest: 'sha256:abc123' }),
-      86400000,
+      900000,
     );
   });
 
-  test('should handle every-N-hours pattern with non-wildcard dayField', async () => {
+  test('should derive every-N-hours interval with non-wildcard dayField', async () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),
       scan: { cron: '0 */4 1 * *', jitter: 60000 },
@@ -853,12 +943,10 @@ describe('runScheduledScans', () => {
 
     await runScheduledScans();
 
-    // hourField starts with '*/' and dayField is '1' (not '*') → second branch doesn't match
-    // dayField is '1' (not '*') → third branch doesn't match
-    // Fallback 24h
+    // 0 */4 1 * * runs every 4 hours on day 1 of each month.
     expect(mockScanImageWithDedup).toHaveBeenCalledWith(
       expect.objectContaining({ digest: 'sha256:abc123' }),
-      86400000,
+      14400000,
     );
   });
 });

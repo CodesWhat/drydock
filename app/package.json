@@ -1,7 +1,7 @@
 {
   "name": "drydock-app",
   "version": "1.4.0",
-  "description": "drydock - the app",
+  "description": "Drydock backend — Docker container update manager",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -16,7 +16,7 @@
   },
   "author": "CodesWhat",
   "repository": "CodesWhat/drydock",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "dependencies": {
     "@aws-sdk/client-ecr": "^3.1000.0",
     "@slack/web-api": "^7.14.1",
@@ -26,6 +26,7 @@
     "compression": "^1.8.1",
     "connect-loki": "1.2.0",
     "cors": "2.8.6",
+    "cron-parser": "^2.18.0",
     "dockerode": "4.0.9",
     "express": "5.2.1",
     "express-healthcheck": "0.1.0",

@@ -346,6 +346,8 @@ describe('getSecurityConfiguration', () => {
       scan: {
         cron: '',
         jitter: 60000,
+        concurrency: 4,
+        batchTimeout: 1800000,
       },
     });
   });
@@ -365,6 +367,8 @@ describe('getSecurityConfiguration', () => {
       'https://token.actions.githubusercontent.com';
     configuration.ddEnvVars.DD_SECURITY_SBOM_ENABLED = 'true';
     configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS = 'cyclonedx-json,spdx-json,cyclonedx-json';
+    configuration.ddEnvVars.DD_SECURITY_SCAN_CONCURRENCY = '8';
+    configuration.ddEnvVars.DD_SECURITY_SCAN_BATCH_TIMEOUT = '900000';
 
     const result = configuration.getSecurityConfiguration();
     expect(result).toEqual({
@@ -393,6 +397,8 @@ describe('getSecurityConfiguration', () => {
       scan: {
         cron: '',
         jitter: 60000,
+        concurrency: 8,
+        batchTimeout: 900000,
       },
     });
 
@@ -409,6 +415,8 @@ describe('getSecurityConfiguration', () => {
     delete configuration.ddEnvVars.DD_SECURITY_COSIGN_ISSUER;
     delete configuration.ddEnvVars.DD_SECURITY_SBOM_ENABLED;
     delete configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS;
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_CONCURRENCY;
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_BATCH_TIMEOUT;
   });
 
   test('should fallback to default block severities when configured list is invalid', () => {
