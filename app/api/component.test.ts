@@ -68,6 +68,20 @@ describe('Component Router', () => {
       const result = component.mapComponentToItem('remote-agent.docker.hub', comp);
       expect(result.agent).toBe('remote-agent');
     });
+
+    test('should fallback to raw configuration when maskConfiguration is unavailable', () => {
+      const comp = {
+        type: 'docker',
+        name: 'hub',
+        configuration: { url: 'https://hub.docker.com' },
+      };
+      const result = component.mapComponentToItem('docker.hub', comp);
+      expect(result).toEqual(
+        expect.objectContaining({
+          configuration: { url: 'https://hub.docker.com' },
+        }),
+      );
+    });
   });
 
   describe('mapComponentsToList', () => {

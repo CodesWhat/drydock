@@ -102,6 +102,29 @@ curl http://drydock:3000/api/containers/summary
 | `containers.stopped` | integer | Number of stopped containers |
 | `security.issues` | integer | Number of containers with critical or high vulnerabilities |
 
+## Get recent container status
+
+Returns a map of container names to their most recent update status, derived from the last 100 audit log entries. Used by the dashboard to show status badges on containers.
+
+```bash
+curl http://drydock:3000/api/containers/recent-status
+
+{
+  "statuses": {
+    "homeassistant": "updated",
+    "nginx": "pending",
+    "postgres": "failed"
+  }
+}
+```
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `statuses` | object | Map of container name to status |
+| `statuses[name]` | string | `updated` (update applied), `pending` (update available), or `failed` (update failed) |
+
 ## Watch all Containers
 
 This operation triggers a manual watch on all containers.

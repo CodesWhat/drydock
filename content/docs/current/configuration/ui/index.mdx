@@ -43,13 +43,13 @@ An icon size slider in **Config > Appearance** adjusts icon scale across the UI.
 | Font | Notes |
 | --- | --- |
 | **IBM Plex Mono** (default) | Bundled offline |
-| **JetBrains Mono** | Lazy-loaded from Google Fonts |
-| **Source Code Pro** | Lazy-loaded from Google Fonts |
-| **Inconsolata** | Lazy-loaded from Google Fonts |
-| **Commit Mono** | Lazy-loaded from Google Fonts |
-| **Comic Mono** | Lazy-loaded from Google Fonts |
+| **JetBrains Mono** | Lazy-loaded from local `/fonts/` |
+| **Source Code Pro** | Lazy-loaded from local `/fonts/` |
+| **Inconsolata** | Lazy-loaded from local `/fonts/` |
+| **Commit Mono** | Lazy-loaded from local `/fonts/` |
+| **Comic Mono** | Lazy-loaded from local `/fonts/` |
 
-In internetless mode (no external network access), all fonts fall back to IBM Plex Mono which is bundled in the image.
+All non-default fonts are served locally from the container's `/fonts/` directory — no external network requests are made. In internetless mode, all fonts fall back to IBM Plex Mono which is bundled in the image.
 
 ## Command Palette
 
@@ -59,13 +59,27 @@ Open the command palette with **Cmd+K** (macOS) or **Ctrl+K** (Windows/Linux).
 
 Type a prefix character to filter results:
 
-| Prefix | Scope |
-| --- | --- |
-| `/` | Pages and navigation |
-| `@` | Runtime info |
-| `#` | Containers |
+| Prefix | Scope | Includes |
+| --- | --- | --- |
+| `/` | Pages | Pages and settings navigation |
+| `@` | Runtime | Agents, triggers, watchers |
+| `#` | Config | Registries, auth providers, notification rules |
 
 Use arrow keys to navigate results, **Enter** to select, and **Escape** to close. Recent search history is persisted across sessions.
+
+## Border Radius
+
+5 border radius presets control the roundness of UI elements:
+
+| Preset | Description |
+| --- | --- |
+| **None** | No rounding (0px) |
+| **Sharp** | Subtle rounding |
+| **Modern** | Balanced rounding |
+| **Soft** | Gentle rounding |
+| **Round** | Maximum rounding |
+
+Select a preset in **Config > Appearance**. The choice is persisted in localStorage.
 
 ## Dashboard
 

@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import type { AgentClient } from '../../agent/AgentClient.js';
 import type { Container, ContainerReport } from '../../model/container.js';
+import { getContainerStatusSummary } from '../../util/container-summary.js';
 import {
   getPathParamValue,
   parseBooleanQueryParam,
@@ -11,6 +12,11 @@ import { isSensitiveKey } from './shared.js';
 interface CrudStoreContainerApi {
   getContainer: (id: string) => Container | undefined;
   deleteContainer: (id: string) => void;
+}
+
+interface ContainerListPagination {
+  limit: number;
+  offset: number;
 }
 
 interface UpdateOperationStoreApi {
@@ -40,7 +46,10 @@ interface AuditStoreApi {
 }
 
 export interface CrudHandlerDependencies {
-  getContainersFromStore: (query: Request['query']) => Container[];
+  getContainersFromStore: (
+    query: Request['query'],
+    pagination?: ContainerListPagination,
+  ) => Container[];
   storeContainer: CrudStoreContainerApi;
   updateOperationStore: UpdateOperationStoreApi;
   getServerConfiguration: () => ServerConfiguration;
@@ -76,17 +85,6 @@ function normalizeContainerListPagination(query: Request['query']) {
   };
 }
 
-function applyContainerListPagination(containers: Container[], query: Request['query']) {
-  const { limit, offset } = normalizeContainerListPagination(query);
-  if (limit === 0 && offset === 0) {
-    return containers;
-  }
-  if (limit === 0) {
-    return containers.slice(offset);
-  }
-  return containers.slice(offset, offset + limit);
-}
-
 function stripContainerVulnerabilityArrays(container: Container): Container {
   if (!container.security) {
     return container;
@@ -109,10 +107,6 @@ function stripContainerVulnerabilityArrays(container: Container): Container {
         : container.security.updateScan,
     },
   };
-}
-
-function isContainerRunning(container: Container): boolean {
-  return String(container.status ?? '').toLowerCase() === 'running';
 }
 
 function getSecurityIssueCount(containers: Container[]): number {
@@ -145,8 +139,8 @@ export function createCrudHandlers({
     const { query } = req;
     const includeVulnerabilities = parseBooleanQueryParam(query.includeVulnerabilities, false);
     const filteredQuery = removeContainerListControlParams(query);
-    const containers = getContainersFromStore(filteredQuery);
-    const pagedContainers = applyContainerListPagination(containers, query);
+    const pagination = normalizeContainerListPagination(query);
+    const pagedContainers = getContainersFromStore(filteredQuery, pagination);
     const redactedContainers = redactContainersRuntimeEnv(pagedContainers);
     const responsePayload = includeVulnerabilities
       ? redactedContainers
@@ -161,14 +155,9 @@ export function createCrudHandlers({
    */
   function getContainerSummary(_req: Request, res: Response) {
     const containers = getContainersFromStore({});
-    const running = containers.filter((container) => isContainerRunning(container)).length;
-    const total = containers.length;
+    const containerStatus = getContainerStatusSummary(containers);
     res.status(200).json({
-      containers: {
-        total,
-        running,
-        stopped: Math.max(total - running, 0),
-      },
+      containers: containerStatus,
       security: {
         issues: getSecurityIssueCount(containers),
       },
@@ -325,6 +314,11 @@ export function createCrudHandlers({
 
   /**
    * Reveal unredacted environment variables for a container.
+   *
+   * Security note: this endpoint is intentionally authentication-gated only.
+   * In current single-operator deployments, any authenticated user can reveal
+   * secrets for any container. Fine-grained RBAC is planned for a future
+   * enterprise access release.
    * @param req
    * @param res
    */

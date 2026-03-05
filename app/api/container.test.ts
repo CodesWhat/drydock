@@ -258,7 +258,7 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ query: {} }, res);
 
-      expect(storeContainer.getContainers).toHaveBeenCalledWith({});
+      expect(storeContainer.getContainers).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith([{ id: 'c1' }]);
     });
@@ -269,7 +269,7 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ query: '' }, res);
 
-      expect(storeContainer.getContainers).toHaveBeenCalledWith({});
+      expect(storeContainer.getContainers).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith([{ id: 'c1' }]);
     });
@@ -341,7 +341,7 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ query: { includeVulnerabilities: 'true' } }, res);
 
-      expect(storeContainer.getContainers).toHaveBeenCalledWith({});
+      expect(storeContainer.getContainers).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith([container]);
     });
@@ -371,7 +371,17 @@ describe('Container Router', () => {
     });
 
     test('should apply limit and offset pagination and ignore control params in store query', () => {
-      storeContainer.getContainers.mockReturnValue([{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }]);
+      const containers = [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }];
+      storeContainer.getContainers.mockImplementation((_query, pagination) => {
+        if (!pagination) {
+          return containers;
+        }
+        const { limit, offset } = pagination;
+        if (limit === 0) {
+          return containers.slice(offset);
+        }
+        return containers.slice(offset, offset + limit);
+      });
 
       const handler = getHandler('get', '/');
       const res = createResponse();
@@ -387,18 +397,26 @@ describe('Container Router', () => {
         res,
       );
 
-      expect(storeContainer.getContainers).toHaveBeenCalledWith({ watcher: 'docker' });
+      expect(storeContainer.getContainers).toHaveBeenCalledWith(
+        { watcher: 'docker' },
+        { limit: 1, offset: 1 },
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith([{ id: 'c2' }]);
     });
 
     test('should apply offset when limit is zero', () => {
-      storeContainer.getContainers.mockReturnValue([
-        { id: 'c1' },
-        { id: 'c2' },
-        { id: 'c3' },
-        { id: 'c4' },
-      ]);
+      const containers = [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }, { id: 'c4' }];
+      storeContainer.getContainers.mockImplementation((_query, pagination) => {
+        if (!pagination) {
+          return containers;
+        }
+        const { limit, offset } = pagination;
+        if (limit === 0) {
+          return containers.slice(offset);
+        }
+        return containers.slice(offset, offset + limit);
+      });
 
       const handler = getHandler('get', '/');
       const res = createResponse();
@@ -413,7 +431,10 @@ describe('Container Router', () => {
         res,
       );
 
-      expect(storeContainer.getContainers).toHaveBeenCalledWith({ watcher: 'docker' });
+      expect(storeContainer.getContainers).toHaveBeenCalledWith(
+        { watcher: 'docker' },
+        { limit: 0, offset: 2 },
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith([{ id: 'c3' }, { id: 'c4' }]);
     });
@@ -604,6 +625,19 @@ describe('Container Router', () => {
       storeContainer.getContainers.mockReturnValue([{ id: 'c1' }]);
       const result = containerRouter.getContainersFromStore({ watcher: 'docker' });
       expect(storeContainer.getContainers).toHaveBeenCalledWith({ watcher: 'docker' });
+      expect(result).toEqual([{ id: 'c1' }]);
+    });
+
+    test('should pass pagination options when provided', () => {
+      storeContainer.getContainers.mockReturnValue([{ id: 'c1' }]);
+      const result = containerRouter.getContainersFromStore(
+        { watcher: 'docker' },
+        { limit: 10, offset: 20 },
+      );
+      expect(storeContainer.getContainers).toHaveBeenCalledWith(
+        { watcher: 'docker' },
+        { limit: 10, offset: 20 },
+      );
       expect(result).toEqual([{ id: 'c1' }]);
     });
   });

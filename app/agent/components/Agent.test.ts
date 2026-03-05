@@ -85,4 +85,16 @@ describe('Agent component', () => {
     expect(masked.secret).not.toBe('abc123');
     expect(masked.secret).toContain('*');
   });
+
+  test('maskConfiguration should handle non-string secret values', () => {
+    const agent = new Agent();
+    const masked = agent.maskConfiguration({
+      host: 'myhost',
+      port: 3000,
+      secret: 123 as unknown as string,
+    });
+
+    expect(masked.host).toBe('myhost');
+    expect(masked.secret).toBeUndefined();
+  });
 });

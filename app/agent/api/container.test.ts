@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { beforeEach, describe, expect, test } from 'vitest';
 import * as configuration from '../../configuration/index.js';
 import * as registry from '../../registry/index.js';
@@ -46,6 +48,12 @@ describe('agent API container', () => {
   });
 
   describe('getContainerLogs', () => {
+    test('should avoid any-cast when reading watcher from registry state', () => {
+      const source = fs.readFileSync(path.resolve(__dirname, './container.ts'), 'utf8');
+
+      expect(source).not.toContain('(registry.getState() as any).watcher[watcherId]');
+    });
+
     /** Build a Docker multiplexed stream buffer (8-byte header + payload). */
     function dockerStreamBuffer(text, stream = 1) {
       const payload = Buffer.from(text, 'utf-8');

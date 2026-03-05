@@ -94,7 +94,13 @@ function getTriggers() {
  * @param query
  * @returns {*}
  */
-export function getContainersFromStore(query) {
+export function getContainersFromStore(
+  query: Record<string, unknown>,
+  pagination?: { limit: number; offset: number },
+) {
+  if (pagination) {
+    return storeContainer.getContainers(query, pagination);
+  }
   return storeContainer.getContainers(query);
 }
 

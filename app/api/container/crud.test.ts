@@ -25,7 +25,23 @@ function createHarness(options: { containers?: any[] } = {}) {
   const byId = new Map(containers.map((container) => [container.id, container]));
 
   const deps = {
-    getContainersFromStore: vi.fn(() => containers),
+    getContainersFromStore: vi.fn((_query: Record<string, unknown>, pagination?: any) => {
+      const limit =
+        typeof pagination?.limit === 'number' && Number.isFinite(pagination.limit)
+          ? Math.max(0, Math.trunc(pagination.limit))
+          : 0;
+      const offset =
+        typeof pagination?.offset === 'number' && Number.isFinite(pagination.offset)
+          ? Math.max(0, Math.trunc(pagination.offset))
+          : 0;
+      if (limit === 0 && offset === 0) {
+        return containers;
+      }
+      if (limit === 0) {
+        return containers.slice(offset);
+      }
+      return containers.slice(offset, offset + limit);
+    }),
     storeContainer: {
       getContainer: vi.fn((id: string) => byId.get(id)),
       deleteContainer: vi.fn((id: string) => {
@@ -139,7 +155,7 @@ describe('api/container/crud', () => {
 
       harness.handlers.getContainers({ query: '' } as any, res as any);
 
-      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
     });
@@ -155,7 +171,10 @@ describe('api/container/crud', () => {
         offset: 'invalid',
       });
 
-      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({ watcher: 'docker' });
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        { watcher: 'docker' },
+        { limit: 0, offset: 0 },
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith([
         expect.objectContaining({ id: 'c1' }),
@@ -179,9 +198,33 @@ describe('api/container/crud', () => {
         offset: ['1', '99'],
       });
 
-      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({ watcher: 'docker' });
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        { watcher: 'docker' },
+        { limit: 1, offset: 1 },
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith([expect.objectContaining({ id: 'c2' })]);
+    });
+
+    test('forwards normalized pagination to store query', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1' }),
+          createContainer({ id: 'c2' }),
+          createContainer({ id: 'c3' }),
+        ],
+      });
+
+      callGetContainers(harness.handlers, {
+        watcher: 'docker',
+        limit: ['1', '99'],
+        offset: ['1', '99'],
+      });
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        { watcher: 'docker' },
+        { limit: 1, offset: 1 },
+      );
     });
 
     test('caps limit at 200 items', () => {

@@ -47,7 +47,7 @@ export async function getContainerLogs(req: Request, res: Response) {
   const timestamps = req.query.timestamps !== 'false';
 
   const watcherId = `docker.${container.watcher}`;
-  const watcher = (registry.getState() as any).watcher[watcherId];
+  const watcher = registry.getState().watcher[watcherId];
   if (!watcher) {
     res.status(500).json({
       error: `No watcher found for container ${id}`,

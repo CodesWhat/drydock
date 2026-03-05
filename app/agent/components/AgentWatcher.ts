@@ -1,6 +1,6 @@
 import type { Container } from '../../model/container.js';
 import Watcher from '../../watchers/Watcher.js';
-import { getAgent } from '../manager.js';
+import { getRequiredAgentClient } from './getRequiredAgentClient.js';
 
 /**
  * Agent Watcher.
@@ -12,14 +12,7 @@ class AgentWatcher extends Watcher {
    * Delegate to the agent client.
    */
   async watch(): Promise<any[]> {
-    const agentName = this.agent;
-    if (!agentName) {
-      throw new Error('AgentWatcher must have an agent assigned');
-    }
-    const client = getAgent(agentName);
-    if (!client) {
-      throw new Error(`Agent ${agentName} not found`);
-    }
+    const client = getRequiredAgentClient(this.agent, 'AgentWatcher');
     return client.watch(this.type, this.name);
   }
 
@@ -28,14 +21,7 @@ class AgentWatcher extends Watcher {
    * Delegate to the agent client.
    */
   async watchContainer(container: Container): Promise<any> {
-    const agentName = this.agent;
-    if (!agentName) {
-      throw new Error('AgentWatcher must have an agent assigned');
-    }
-    const client = getAgent(agentName);
-    if (!client) {
-      throw new Error(`Agent ${agentName} not found`);
-    }
+    const client = getRequiredAgentClient(this.agent, 'AgentWatcher');
     return client.watchContainer(this.type, this.name, container);
   }
 

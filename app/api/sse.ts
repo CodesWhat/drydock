@@ -32,6 +32,13 @@ const DEFAULT_SELF_UPDATE_ACK_TIMEOUT_MS = 3000;
 const SSE_HEARTBEAT_INTERVAL_MS = 15000;
 const SSE_STALE_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 const SSE_STALE_ENTRY_TTL_MS = 30 * 60 * 1000;
+const ALLOWED_CONTAINER_EVENT_NAMES = new Set<string>([
+  'dd:container-added',
+  'dd:container-updated',
+  'dd:container-removed',
+  'dd:agent-connected',
+  'dd:agent-disconnected',
+]);
 const clients = new Set<FlushableResponse>();
 const sseClientRegistry = new ActiveSseClientRegistry();
 const activeSseClientRegistryTestAdapter =
@@ -44,6 +51,7 @@ const selfUpdateAckProtocol = createSelfUpdateAckProtocol({
 const pendingSelfUpdateAcks = selfUpdateAckProtocol.pendingSelfUpdateAcks;
 let staleSweepIntervalHandle: ReturnType<typeof globalThis.setInterval> | undefined;
 let sharedHeartbeatIntervalHandle: ReturnType<typeof globalThis.setInterval> | undefined;
+const eventListenerDeregistrations: Array<() => void> = [];
 
 function getClientIp(req: Request): string {
   return req.ip ?? 'unknown';
@@ -101,9 +109,10 @@ function sweepStaleSseState(nowMs = Date.now()): void {
     const ageMs = nowMs - activeClient.connectedAtMs;
     const missingClientSetEntry = !clients.has(activeClient.response);
     const missingRegistryEntry = !sseClientRegistry.hasConsistentReferences(activeClient);
-    const shouldDrop =
-      missingClientSetEntry || missingRegistryEntry || isResponseClosed(activeClient.response);
-    if (shouldDrop && ageMs >= SSE_STALE_ENTRY_TTL_MS) {
+    const responseClosed = isResponseClosed(activeClient.response);
+    const staleByAge =
+      (missingClientSetEntry || missingRegistryEntry) && ageMs >= SSE_STALE_ENTRY_TTL_MS;
+    if (responseClosed || staleByAge) {
       dropActiveClient(activeClient);
     }
   }
@@ -218,6 +227,12 @@ function clearPendingSelfUpdateAcks(): void {
   selfUpdateAckProtocol.clearPendingSelfUpdateAcks();
 }
 
+function trackEventListenerDeregistration(maybeDeregister: void | (() => void)): void {
+  if (typeof maybeDeregister === 'function') {
+    eventListenerDeregistrations.push(maybeDeregister);
+  }
+}
+
 export function broadcastScanStarted(containerId: string): void {
   const data = JSON.stringify({ containerId });
   for (const client of clients) {
@@ -235,6 +250,11 @@ export function broadcastScanCompleted(containerId: string, status: string): voi
 }
 
 function broadcastContainerEvent(eventName: string, payload: unknown): void {
+  if (!ALLOWED_CONTAINER_EVENT_NAMES.has(eventName)) {
+    log.child({ component: 'sse' }).warn(`Dropping invalid SSE container event name: ${eventName}`);
+    return;
+  }
+
   const data = JSON.stringify(payload ?? {});
   for (const client of clients) {
     client.write(`event: ${eventName}\ndata: ${data}\n\n`);
@@ -254,24 +274,36 @@ export function init(): express.Router {
   initialized = true;
 
   // Register for self-update events from the trigger system
-  registerSelfUpdateStarting(async (payload: SelfUpdateStartingEventPayload) => {
-    await broadcastSelfUpdate(payload);
-  });
-  registerContainerAdded((payload: unknown) => {
-    broadcastContainerEvent('dd:container-added', payload);
-  });
-  registerContainerUpdated((payload: unknown) => {
-    broadcastContainerEvent('dd:container-updated', payload);
-  });
-  registerContainerRemoved((payload: unknown) => {
-    broadcastContainerEvent('dd:container-removed', payload);
-  });
-  registerAgentConnected((payload: unknown) => {
-    broadcastContainerEvent('dd:agent-connected', payload);
-  });
-  registerAgentDisconnected((payload: unknown) => {
-    broadcastContainerEvent('dd:agent-disconnected', payload);
-  });
+  trackEventListenerDeregistration(
+    registerSelfUpdateStarting(async (payload: SelfUpdateStartingEventPayload) => {
+      await broadcastSelfUpdate(payload);
+    }),
+  );
+  trackEventListenerDeregistration(
+    registerContainerAdded((payload: unknown) => {
+      broadcastContainerEvent('dd:container-added', payload);
+    }),
+  );
+  trackEventListenerDeregistration(
+    registerContainerUpdated((payload: unknown) => {
+      broadcastContainerEvent('dd:container-updated', payload);
+    }),
+  );
+  trackEventListenerDeregistration(
+    registerContainerRemoved((payload: unknown) => {
+      broadcastContainerEvent('dd:container-removed', payload);
+    }),
+  );
+  trackEventListenerDeregistration(
+    registerAgentConnected((payload: unknown) => {
+      broadcastContainerEvent('dd:agent-connected', payload);
+    }),
+  );
+  trackEventListenerDeregistration(
+    registerAgentDisconnected((payload: unknown) => {
+      broadcastContainerEvent('dd:agent-disconnected', payload);
+    }),
+  );
 
   router.get('/', eventsHandler);
   router.post('/self-update/:operationId/ack', acknowledgeSelfUpdate);
@@ -280,6 +312,9 @@ export function init(): express.Router {
 
 function resetInitializationStateForTests(): void {
   initialized = false;
+  for (const deregister of eventListenerDeregistrations.splice(0)) {
+    deregister();
+  }
   if (staleSweepIntervalHandle) {
     globalThis.clearInterval(staleSweepIntervalHandle);
     staleSweepIntervalHandle = undefined;
@@ -309,4 +344,5 @@ export {
   acknowledgeSelfUpdate as _acknowledgeSelfUpdate,
   broadcastScanStarted as _broadcastScanStarted,
   broadcastScanCompleted as _broadcastScanCompleted,
+  broadcastContainerEvent as _broadcastContainerEvent,
 };

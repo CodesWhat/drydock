@@ -38,9 +38,14 @@ vi.mock('../../store/container.js', () => ({
 describe('agent API event', () => {
   let req;
   let res;
+  let mockedNow = 0;
 
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
+    eventApi._resetAgentEventStateForTests();
+    mockedNow += 10_000;
+    vi.spyOn(Date, 'now').mockReturnValue(mockedNow);
     req = {
       ip: '127.0.0.1',
       on: vi.fn(),
@@ -52,6 +57,31 @@ describe('agent API event', () => {
   });
 
   describe('subscribeEvents', () => {
+    test('should rollover SSE client id when max safe integer is reached', () => {
+      eventApi._setNextSseClientIdForTests(Number.MAX_SAFE_INTEGER);
+
+      eventApi.subscribeEvents(req, res);
+
+      const ackPayload = res.write.mock.calls[0][0];
+      expect(ackPayload).toContain('dd:ack');
+    });
+
+    test('should reuse container summary for rapid consecutive ack payloads', () => {
+      const secondReq = {
+        ip: '127.0.0.2',
+        on: vi.fn(),
+      };
+      const secondRes = {
+        writeHead: vi.fn(),
+        write: vi.fn(),
+      };
+
+      eventApi.subscribeEvents(req, res);
+      eventApi.subscribeEvents(secondReq, secondRes);
+
+      expect(storeContainer.getContainers).toHaveBeenCalledTimes(1);
+    });
+
     test('should set SSE headers and send ack', () => {
       eventApi.subscribeEvents(req, res);
       expect(res.writeHead).toHaveBeenCalledWith(200, {
@@ -96,6 +126,38 @@ describe('agent API event', () => {
       const closeHandler = req.on.mock.calls[0][1];
       // Should not throw
       closeHandler();
+    });
+
+    test('close handler should only remove the disconnected client when connect timestamps collide', () => {
+      const firstReq = {
+        ip: '127.0.0.1',
+        on: vi.fn(),
+      };
+      const firstRes = {
+        writeHead: vi.fn(),
+        write: vi.fn(),
+      };
+      const secondReq = {
+        ip: '127.0.0.2',
+        on: vi.fn(),
+      };
+      const secondRes = {
+        writeHead: vi.fn(),
+        write: vi.fn(),
+      };
+
+      eventApi.subscribeEvents(firstReq, firstRes);
+      eventApi.subscribeEvents(secondReq, secondRes);
+
+      const firstCloseHandler = firstReq.on.mock.calls[0][1];
+      firstCloseHandler();
+
+      secondRes.write.mockClear();
+      eventApi.initEvents();
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler({ id: 'c2', name: 'still-connected' });
+
+      expect(secondRes.write).toHaveBeenCalled();
     });
   });
 

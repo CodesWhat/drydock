@@ -27,27 +27,20 @@ The number of backups retained per container is configurable via a trigger envir
 Rollback is available in two ways:
 
 - **UI** -- on the container detail page, select a previous backup and click **Rollback**.
-- **API** -- send a `POST` request to `/api/backup/:id/rollback`, where `:id` is the container ID.
+- **API** -- send a `POST` request to `/api/containers/:id/rollback`, where `:id` is the container ID.
 
-When a rollback is triggered, drydock uses a rename-first strategy that is crash-recoverable:
+Rollback uses a stop-remove-recreate strategy: drydock stops the current container, removes it, and creates a new container with the original name using the backup image.
 
-1. Pull the backup image while the current container is still running
-2. Rename the current container to `{name}-old-{timestamp}` to free the original name
-3. Create a new container with the original name using the backup image
-4. Stop the old (renamed) container
-5. Start the new container
-6. Remove the old container on success
-
-If any step fails, drydock restores the previous state: the new container is removed, the old container is renamed back to its original name, and restarted if it was running. On startup, drydock also reconciles any interrupted update operations left behind by a crash.
+<Callout type="info">Automatic updates (via Docker trigger) use a more sophisticated rename-first strategy with health gates — see [Updates](/docs/updates) for details. Manual rollback uses the simpler approach described here.</Callout>
 
 You can optionally pass a `backupId` in the request body to target a specific backup. If omitted, the most recent backup is used.
 
 ```bash
 # Roll back to the most recent backup
-curl -X POST http://localhost:3000/api/backup/my-container-id/rollback
+curl -X POST http://localhost:3000/api/containers/my-container-id/rollback
 
 # Roll back to a specific backup
-curl -X POST http://localhost:3000/api/backup/my-container-id/rollback \
+curl -X POST http://localhost:3000/api/containers/my-container-id/rollback \
   -H "Content-Type: application/json" \
   -d '{"backupId": "abc123"}'
 ```

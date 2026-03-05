@@ -39,4 +39,20 @@ describe('manager', () => {
     expect(manager.getAgent('a1')).toBe(c1);
     expect(manager.getAgent('a2')).toBe(c2);
   });
+
+  test('removeAgent should remove a client by name', () => {
+    const c1 = { name: 'a1' };
+    const c2 = { name: 'a2' };
+    manager.addAgent(c1);
+    manager.addAgent(c2);
+
+    expect(manager.removeAgent('a1')).toBe(true);
+    expect(manager.getAgents()).toHaveLength(1);
+    expect(manager.getAgent('a1')).toBeUndefined();
+    expect(manager.getAgent('a2')).toBe(c2);
+  });
+
+  test('removeAgent should return false when client does not exist', () => {
+    expect(manager.removeAgent('missing-agent')).toBe(false);
+  });
 });

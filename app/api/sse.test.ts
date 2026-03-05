@@ -9,6 +9,8 @@ var {
   mockRandomUUID,
   mockCreateHash,
   mockTimingSafeEqual,
+  mockLoggerDebug,
+  mockLoggerWarn,
 } = vi.hoisted(() => {
   let uuidCounter = 0;
   return {
@@ -44,6 +46,8 @@ var {
     mockTimingSafeEqual: vi.fn(
       (left: Buffer, right: Buffer) => left.length === right.length && left.equals(right),
     ),
+    mockLoggerDebug: vi.fn(),
+    mockLoggerWarn: vi.fn(),
   };
 });
 
@@ -67,7 +71,12 @@ vi.mock('../event/index', () => ({
 }));
 
 vi.mock('../log', () => ({
-  default: { child: vi.fn(() => ({ debug: vi.fn(), warn: vi.fn() })) },
+  default: {
+    child: vi.fn(() => ({
+      debug: mockLoggerDebug,
+      warn: mockLoggerWarn,
+    })),
+  },
 }));
 
 import * as sseRouter from './sse.js';
@@ -184,6 +193,40 @@ describe('SSE Router', () => {
       expect(mockRegisterContainerRemoved).toHaveBeenCalledTimes(1);
       expect(mockRegisterAgentConnected).toHaveBeenCalledTimes(1);
       expect(mockRegisterAgentDisconnected).toHaveBeenCalledTimes(1);
+    });
+
+    test('should deregister existing event listeners when reset runs before reinit', () => {
+      const deregisterSelfUpdateStarting = vi.fn();
+      const deregisterContainerAdded = vi.fn();
+      const deregisterContainerUpdated = vi.fn();
+      const deregisterContainerRemoved = vi.fn();
+      const deregisterAgentConnected = vi.fn();
+      const deregisterAgentDisconnected = vi.fn();
+
+      mockRegisterSelfUpdateStarting.mockReturnValueOnce(deregisterSelfUpdateStarting);
+      mockRegisterContainerAdded.mockReturnValueOnce(deregisterContainerAdded);
+      mockRegisterContainerUpdated.mockReturnValueOnce(deregisterContainerUpdated);
+      mockRegisterContainerRemoved.mockReturnValueOnce(deregisterContainerRemoved);
+      mockRegisterAgentConnected.mockReturnValueOnce(deregisterAgentConnected);
+      mockRegisterAgentDisconnected.mockReturnValueOnce(deregisterAgentDisconnected);
+
+      sseRouter.init();
+      sseRouter._resetInitializationStateForTests();
+      sseRouter.init();
+
+      expect(deregisterSelfUpdateStarting).toHaveBeenCalledTimes(1);
+      expect(deregisterContainerAdded).toHaveBeenCalledTimes(1);
+      expect(deregisterContainerUpdated).toHaveBeenCalledTimes(1);
+      expect(deregisterContainerRemoved).toHaveBeenCalledTimes(1);
+      expect(deregisterAgentConnected).toHaveBeenCalledTimes(1);
+      expect(deregisterAgentDisconnected).toHaveBeenCalledTimes(1);
+
+      expect(mockRegisterSelfUpdateStarting).toHaveBeenCalledTimes(2);
+      expect(mockRegisterContainerAdded).toHaveBeenCalledTimes(2);
+      expect(mockRegisterContainerUpdated).toHaveBeenCalledTimes(2);
+      expect(mockRegisterContainerRemoved).toHaveBeenCalledTimes(2);
+      expect(mockRegisterAgentConnected).toHaveBeenCalledTimes(2);
+      expect(mockRegisterAgentDisconnected).toHaveBeenCalledTimes(2);
     });
 
     test('should register GET route on /', () => {
@@ -459,13 +502,27 @@ describe('SSE Router', () => {
       expect(sseRouter._activeSseClientRegistry.hasByResponse(res)).toBe(false);
     });
 
-    test('should keep closed responses when entry age is below stale ttl', () => {
+    test('should drop closed responses immediately regardless of entry age', () => {
       const handler = getHandler();
       const { res } = connectSseClient(handler);
       const activeClient = sseRouter._activeSseClientRegistry.getByResponse(res);
 
       (activeClient as any).connectedAtMs = Date.now() - 1000;
       (res as any).writableEnded = true;
+
+      sseRouter._sweepStaleSseState(Date.now());
+
+      expect(sseRouter._activeSseClientRegistry.hasByResponse(res)).toBe(false);
+      expect(sseRouter._clients.has(res)).toBe(false);
+    });
+
+    test('should keep active open responses that are not stale', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const activeClient = sseRouter._activeSseClientRegistry.getByResponse(res);
+
+      expect(activeClient).toBeDefined();
+      (activeClient as any).connectedAtMs = Date.now() - 1000;
 
       sseRouter._sweepStaleSseState(Date.now());
 
@@ -1032,6 +1089,20 @@ describe('SSE Router', () => {
       onContainerAdded(null);
 
       expect(res.write).toHaveBeenCalledWith('event: dd:container-added\ndata: {}\n\n');
+    });
+
+    test('should drop invalid event names before writing to the SSE stream', () => {
+      const res = createSSEResponse();
+      sseRouter._clients.add(res);
+
+      sseRouter._broadcastContainerEvent('dd:container-added\ndata: injected', {
+        id: 'container-1',
+      });
+
+      expect(res.write).not.toHaveBeenCalled();
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        expect.stringContaining('Dropping invalid SSE container event name: dd:container-added'),
+      );
     });
   });
 

@@ -1,11 +1,20 @@
+import type { Container } from '../model/container.js';
+import type Trigger from '../triggers/providers/Trigger.js';
+
 export const NO_DOCKER_TRIGGER_FOUND_ERROR = 'No docker trigger found for this container';
 
 /**
  * Find a docker trigger compatible with a container's agent context.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function findDockerTriggerForContainer(triggers: Record<string, any>, container: any): any {
-  for (const trigger of Object.values(triggers || {})) {
+export function findDockerTriggerForContainer(
+  triggers: Record<string, Trigger> | undefined,
+  container: Pick<Container, 'agent'>,
+): Trigger | undefined {
+  if (!triggers) {
+    return undefined;
+  }
+
+  for (const trigger of Object.values(triggers)) {
     if (trigger.type !== 'docker') {
       continue;
     }

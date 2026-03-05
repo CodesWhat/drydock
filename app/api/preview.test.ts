@@ -121,9 +121,7 @@ describe('Preview Router', () => {
 
       const res = await callPreview();
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('Docker API error') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error previewing container' });
     });
 
     test('should stringify non-Error preview failures', async () => {
@@ -138,9 +136,7 @@ describe('Preview Router', () => {
 
       const res = await callPreview();
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('preview failed as string') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error previewing container' });
     });
 
     test('should skip docker triggers with mismatched agent', async () => {

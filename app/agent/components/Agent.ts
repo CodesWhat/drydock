@@ -24,9 +24,10 @@ export default class Agent extends Component {
    */
   maskConfiguration(configuration?: ComponentConfiguration): ComponentConfiguration {
     const config = configuration || this.configuration;
+    const secret = typeof config.secret === 'string' ? config.secret : undefined;
     return {
       ...config,
-      secret: Component.mask(config.secret),
+      secret: Component.mask(secret),
     };
   }
 }

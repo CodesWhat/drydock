@@ -4,6 +4,7 @@ import { getVersion } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import logger from '../../log/index.js';
 import * as storeContainer from '../../store/container.js';
+import { getContainerStatusSummary } from '../../util/container-summary.js';
 
 const log = logger.child({ component: 'agent-api-event' });
 
@@ -12,8 +13,34 @@ interface SseClient {
   res: Response;
 }
 
+interface ContainerSummary {
+  containers: {
+    total: number;
+    running: number;
+    stopped: number;
+  };
+  images: number;
+}
+
+interface ContainerSummaryCache {
+  summary: ContainerSummary;
+  expiresAtMs: number;
+}
+
+const CONTAINER_SUMMARY_CACHE_TTL_MS = 2_000;
+
 // SSE Clients
 let sseClients: SseClient[] = [];
+let nextSseClientId = 0;
+let containerSummaryCache: ContainerSummaryCache | undefined;
+
+function allocateSseClientId(): number {
+  if (nextSseClientId >= Number.MAX_SAFE_INTEGER) {
+    nextSseClientId = 0;
+  }
+  nextSseClientId += 1;
+  return nextSseClientId;
+}
 
 /**
  * Send SSE event to all clients.
@@ -31,25 +58,31 @@ function sendSseEvent(eventName: string, data: any) {
   });
 }
 
-function getContainerSummary() {
+function computeContainerSummary(): ContainerSummary {
   const containers = storeContainer.getContainers();
-  const running = containers.filter(
-    (container: any) => String(container.status ?? '').toLowerCase() === 'running',
-  ).length;
-  const total = containers.length;
+  const containerStatus = getContainerStatusSummary(containers);
   const images = new Set(
     containers.map(
       (container: any) => container.image?.id ?? container.image?.name ?? container.id,
     ),
   ).size;
   return {
-    containers: {
-      total,
-      running,
-      stopped: Math.max(total - running, 0),
-    },
+    containers: containerStatus,
     images,
   };
+}
+
+function getContainerSummary(nowMs: number = Date.now()): ContainerSummary {
+  if (containerSummaryCache && containerSummaryCache.expiresAtMs > nowMs) {
+    return containerSummaryCache.summary;
+  }
+
+  const summary = computeContainerSummary();
+  containerSummaryCache = {
+    summary,
+    expiresAtMs: nowMs + CONTAINER_SUMMARY_CACHE_TTL_MS,
+  };
+  return summary;
 }
 
 function getAckPayloadData() {
@@ -80,7 +113,7 @@ export function subscribeEvents(req: Request, res: Response) {
   res.writeHead(200, headers);
 
   const client: SseClient = {
-    id: Date.now(),
+    id: allocateSseClientId(),
     res,
   };
   sseClients.push(client);
@@ -111,4 +144,14 @@ export function initEvents() {
   event.registerContainerRemoved((container: event.ContainerLifecycleEventPayload) =>
     sendSseEvent('dd:container-removed', { id: container.id }),
   );
+}
+
+export function _setNextSseClientIdForTests(value: number): void {
+  nextSseClientId = value;
+}
+
+export function _resetAgentEventStateForTests(): void {
+  sseClients = [];
+  nextSseClientId = 0;
+  containerSummaryCache = undefined;
 }
