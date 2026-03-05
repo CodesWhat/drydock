@@ -150,6 +150,75 @@ function withAbortSignal<T>(operation: Promise<T>, signal: AbortSignal): Promise
   });
 }
 
+type ScanDigestGroupOutcome = 'cached' | 'scanned' | 'error' | 'aborted';
+
+async function scanDigestGroup(options: {
+  digest: string;
+  group: Container[];
+  signal?: AbortSignal;
+  scanIntervalMs: number;
+  trivyDbUpdatedAt?: string;
+}): Promise<ScanDigestGroupOutcome> {
+  const { digest, group, signal, scanIntervalMs, trivyDbUpdatedAt } = options;
+  let startedBroadcast = false;
+
+  try {
+    if (!signal) {
+      throw createAbortError('Scheduled scan batch controller unavailable');
+    }
+    if (signal.aborted) {
+      throw getAbortReason(signal);
+    }
+
+    const representative = group[0];
+    const image = getContainerImageFullName(representative);
+    const auth = await withAbortSignal(getContainerRegistryAuth(representative), signal);
+
+    // Broadcast scan-started for all containers with this digest
+    for (const container of group) {
+      broadcastScanStarted(container.id);
+    }
+    startedBroadcast = true;
+
+    const { scanResult, fromCache } = await withAbortSignal(
+      scanImageWithDedup({ image, auth, digest, trivyDbUpdatedAt }, scanIntervalMs),
+      signal,
+    );
+
+    if (fromCache) {
+      logScheduler.info(`Digest ${digest.slice(0, 12)} unchanged, using cached scan`);
+    }
+
+    // Update all containers sharing this digest
+    for (const container of group) {
+      const containerToStore = {
+        ...container,
+        security: {
+          ...(container.security || {}),
+          scan: scanResult,
+        },
+      };
+      storeContainer.updateContainer(containerToStore);
+      broadcastScanCompleted(container.id, scanResult.status);
+    }
+
+    return fromCache ? 'cached' : 'scanned';
+  } catch (error: unknown) {
+    if (!isAbortError(error)) {
+      const errorMessage = getErrorMessage(error);
+      logScheduler.warn(`Scheduled scan failed for digest ${digest.slice(0, 12)}: ${errorMessage}`);
+    }
+
+    if (startedBroadcast) {
+      for (const container of group) {
+        broadcastScanCompleted(container.id, 'error');
+      }
+    }
+
+    return isAbortError(error) ? 'aborted' : 'error';
+  }
+}
+
 export async function runScheduledScans(): Promise<void> {
   if (scanInProgress) {
     logScheduler.info('Scheduled scan already in progress, skipping');
@@ -230,70 +299,6 @@ export async function runScheduledScans(): Promise<void> {
       return nextDigestGroup;
     };
 
-    const scanDigestGroup = async (digest: string, group: Container[]) => {
-      let startedBroadcast = false;
-      try {
-        const signal = batchController?.signal;
-        if (!signal) {
-          throw createAbortError('Scheduled scan batch controller unavailable');
-        }
-        if (signal.aborted) {
-          throw getAbortReason(signal);
-        }
-
-        const representative = group[0];
-        const image = getContainerImageFullName(representative);
-        const auth = await withAbortSignal(getContainerRegistryAuth(representative), signal);
-
-        // Broadcast scan-started for all containers with this digest
-        for (const container of group) {
-          broadcastScanStarted(container.id);
-        }
-        startedBroadcast = true;
-
-        const { scanResult, fromCache } = await withAbortSignal(
-          scanImageWithDedup({ image, auth, digest, trivyDbUpdatedAt }, scanIntervalMs),
-          signal,
-        );
-
-        if (fromCache) {
-          cachedCount += 1;
-          logScheduler.info(`Digest ${digest.slice(0, 12)} unchanged, using cached scan`);
-        } else {
-          scannedCount += 1;
-        }
-
-        // Update all containers sharing this digest
-        for (const container of group) {
-          const containerToStore = {
-            ...container,
-            security: {
-              ...(container.security || {}),
-              scan: scanResult,
-            },
-          };
-          storeContainer.updateContainer(containerToStore);
-          broadcastScanCompleted(container.id, scanResult.status);
-        }
-      } catch (error: unknown) {
-        if (isAbortError(error)) {
-          abortedCount += 1;
-        } else {
-          errorCount += 1;
-          const errorMessage = getErrorMessage(error);
-          logScheduler.warn(
-            `Scheduled scan failed for digest ${digest.slice(0, 12)}: ${errorMessage}`,
-          );
-        }
-
-        if (startedBroadcast) {
-          for (const container of group) {
-            broadcastScanCompleted(container.id, 'error');
-          }
-        }
-      }
-    };
-
     await Promise.all(
       Array.from({ length: workerCount }, async () => {
         while (true) {
@@ -302,7 +307,27 @@ export async function runScheduledScans(): Promise<void> {
             return;
           }
           const [digest, group] = nextDigestGroup;
-          await scanDigestGroup(digest, group);
+          const outcome = await scanDigestGroup({
+            digest,
+            group,
+            signal: batchController?.signal,
+            scanIntervalMs,
+            trivyDbUpdatedAt,
+          });
+          switch (outcome) {
+            case 'cached':
+              cachedCount += 1;
+              break;
+            case 'scanned':
+              scannedCount += 1;
+              break;
+            case 'aborted':
+              abortedCount += 1;
+              break;
+            default:
+              errorCount += 1;
+              break;
+          }
         }
       }),
     );
