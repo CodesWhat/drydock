@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`DD_LOG_BUFFER_ENABLED` toggle** — Disable the in-memory log ring buffer via `DD_LOG_BUFFER_ENABLED=false` to reduce per-log processing overhead. When disabled, `/api/log/entries` returns an empty array. Defaults to `true`.
 - **Scheduled security scanning** — Set `DD_SECURITY_SCAN_CRON` to automatically scan all watched containers on a cron schedule. `DD_SECURITY_SCAN_JITTER` (default 60s) spreads load with random delay before each cycle.
 - **Security scheduler shutdown on exit** — Security scan scheduler is now explicitly shut down during graceful exit, preventing orphan timers from delaying process termination.
+- **On-demand sensitive env value reveal** — Container environment variables are redacted by default in API responses. Individual values can be revealed on-demand via `/api/containers/:id/env/reveal` with audit logging.
+- **On-demand scans populate digest cache** — Manual container scans now populate the digest-based dedup cache, preventing redundant rescans of the same image digest.
+- **Per-container webhook opt-out** — New `dd.webhook.enabled=false` container label to exclude individual containers from webhook triggers without disabling the webhook API globally.
+- **Scan cancellation and mobile scan progress** — Security batch scans can now be cancelled mid-flight. Mobile scan progress UI improved with responsive layout.
+- **Security scan coverage counts** — Security view header shows scanned/total container counts for at-a-glance scan coverage.
 
 ### Changed
 
@@ -25,11 +30,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Event-driven connectivity polling** — AppLayout SSE connectivity monitoring now starts on disconnect and stops on reconnect instead of running a fixed interval, reducing unnecessary network requests.
 - **Vulnerability loading optimized** — Vulnerability data loaded from the container list API payload (`includeVulnerabilities` flag) instead of separate per-container fetches, reducing API calls on the Security view.
 - **Default log format is JSON** — Official Docker image now defaults to `DD_LOG_FORMAT=json` for structured production logs. Override with `DD_LOG_FORMAT=text` for pretty logs.
+- **Scan endpoint rate limit reduced** — `POST /api/containers/:id/scan` rate limit lowered from 100 to 30 requests/min to prevent resource exhaustion during aggressive scanning.
 
 ### Fixed
 
 - **Log auto-fetch pauses in background tabs** — `useAutoFetchLogs` now stops polling when the browser tab is hidden and automatically resumes when it becomes visible again.
 - **SBOM download DOM isolation** — Isolated DOM element creation and `URL.createObjectURL` references in the SBOM download composable, fixing potential memory leaks and test failures from uncleared object URLs. JSON serialization skipped when SBOM panel is hidden.
+- **Dashboard resource fetch error propagation** — Dashboard API fetch errors are now propagated consistently to the UI error state instead of being silently swallowed.
+- **Docker image "latest" tag restricted to stable releases** — CI release workflow no longer tags prerelease versions as `latest`, preventing unstable images from being pulled by default.
+- **Security table refreshes progressively during batch scan** — Security view table updates incrementally as each container scan completes instead of waiting for the entire batch to finish.
+- **Vulnerability data fetched from per-container endpoint** — Security view now fetches vulnerability data from the correct per-container endpoint instead of a missing bulk endpoint.
 
 ### Security
 
@@ -40,6 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Env reveal rate limit tightened** — `/api/containers/:id/env` rate limit reduced from 100/min to 10/min to prevent credential enumeration. Server error responses return generic messages instead of internal details.
 - **Trivy command path validation** — Trivy binary paths are validated against shell metacharacters and path traversal before execution.
 - **Digest scan cache LRU eviction** — Scan result cache uses LRU eviction (max 500 entries, configurable via `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES`) to prevent unbounded memory growth. Trivy DB status lookups are deduplicated across concurrent calls.
+- **CSP configured for Iconify CDN** — Content-Security-Policy updated to allow `connect-src` for the Iconify CDN origin, preventing blocked icon fetches in the browser.
+- **CSP connect-src restricted in internetless mode** — Content-Security-Policy `connect-src` directive tightened to `'self'` when running in internetless mode, blocking outbound connections from the browser.
+- **Legacy auth methods endpoint rate-limited** — `/api/auth/methods` rate-limited to prevent enumeration of available authentication providers.
 
 ### Performance
 
