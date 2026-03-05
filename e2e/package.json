@@ -20,7 +20,7 @@
   },
   "author": "CodesWhat",
   "repository": "CodesWhat/drydock",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "dependencies": {
     "@cucumber/cucumber": "^12.7.0"
   },
