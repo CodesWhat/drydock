@@ -8,11 +8,13 @@ import {
 } from '../configuration/index.js';
 import log from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
+import { toPositiveInteger } from '../util/parse.js';
 import { hasValidCommandPath } from './runtime.js';
 
 export {
   SECURITY_SEVERITIES,
   SECURITY_SBOM_FORMATS,
+  toPositiveInteger,
   type SecuritySeverity,
   type SecuritySbomFormat,
 };
@@ -112,14 +114,6 @@ const COSIGN_UNVERIFIED_PATTERNS = [
   'signature verification failed',
   'invalid signature',
 ];
-
-export function toPositiveInteger(rawValue: string | undefined, fallbackValue: number): number {
-  const parsedValue = Number.parseInt(String(rawValue ?? ''), 10);
-  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-    return fallbackValue;
-  }
-  return parsedValue;
-}
 
 export const DIGEST_SCAN_CACHE_MAX_ENTRIES = toPositiveInteger(
   process.env.DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES,

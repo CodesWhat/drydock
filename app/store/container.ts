@@ -5,6 +5,7 @@ import { byString, byValues } from 'sort-es';
 import { redactContainerRuntimeEnv, redactContainersRuntimeEnv } from '../api/container/shared.js';
 import type { ContainerLifecycleEventPayload } from '../event/index.js';
 import * as container from '../model/container.js';
+import { toPositiveInteger } from '../util/parse.js';
 
 const { validate: validateContainer } = container;
 
@@ -23,14 +24,6 @@ const CONTAINER_COLLECTION_INDICES = ['data.watcher', 'data.status', 'data.updat
 
 function toCacheKey(watcher, name) {
   return `${watcher}_${name}`;
-}
-
-function toPositiveInteger(rawValue, fallbackValue) {
-  const parsedValue = Number.parseInt(String(rawValue ?? ''), 10);
-  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-    return fallbackValue;
-  }
-  return parsedValue;
 }
 
 export const SECURITY_STATE_CACHE_TTL_MS = toPositiveInteger(

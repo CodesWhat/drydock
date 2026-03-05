@@ -1,3 +1,5 @@
+import { toPositiveInteger } from '../../util/parse.js';
+
 const CACHE_CONTROL_HEADER = 'public, max-age=31536000, immutable';
 const FALLBACK_ICON = 'fab fa-docker';
 const FALLBACK_IMAGE_PROVIDER = 'selfhst';
@@ -11,14 +13,6 @@ const DEFAULT_ICON_CACHE_ENFORCEMENT_INTERVAL_MS = 10 * 1000;
 const DEFAULT_ICON_IN_FLIGHT_TIMEOUT_MS = 15 * 1000;
 const DEFAULT_ICON_PROXY_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const DEFAULT_ICON_PROXY_RATE_LIMIT_MAX = 100;
-
-function toPositiveInteger(rawValue: string | undefined, fallbackValue: number): number {
-  const parsedValue = Number.parseInt(String(rawValue ?? ''), 10);
-  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-    return fallbackValue;
-  }
-  return parsedValue;
-}
 
 const ICON_CACHE_TTL_MS = toPositiveInteger(
   process.env.DD_ICON_CACHE_TTL_MS,

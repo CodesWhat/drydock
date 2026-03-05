@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { toPositiveInteger } from '../util/parse.js';
 import { initCollection } from './util.js';
 
 export type UpdateOperationStatus =
@@ -86,14 +87,6 @@ let updateOperationCollection: UpdateOperationCollection | undefined;
 const UPDATE_OPERATION_COLLECTION_INDICES = ['data.id', 'data.containerName', 'data.status'];
 const DEFAULT_UPDATE_OPERATION_MAX_ENTRIES = 500;
 const DEFAULT_UPDATE_OPERATION_RETENTION_DAYS = 30;
-
-function toPositiveInteger(rawValue: unknown, fallbackValue: number): number {
-  const parsedValue = Number.parseInt(String(rawValue ?? ''), 10);
-  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
-    return fallbackValue;
-  }
-  return parsedValue;
-}
 
 export const UPDATE_OPERATION_MAX_ENTRIES = toPositiveInteger(
   process.env.DD_UPDATE_OPERATION_MAX_ENTRIES,
