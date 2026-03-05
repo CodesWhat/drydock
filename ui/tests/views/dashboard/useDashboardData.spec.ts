@@ -6,9 +6,10 @@ import { useDashboardData } from '@/views/dashboard/useDashboardData';
 const mocks = vi.hoisted(() => ({
   getAgents: vi.fn(),
   getAllContainers: vi.fn(),
+  getContainerRecentStatus: vi.fn(),
+  getContainerSummary: vi.fn(),
   getAllRegistries: vi.fn(),
   getAllWatchers: vi.fn(),
-  getAuditLog: vi.fn(),
   getServer: vi.fn(),
   mapApiContainers: vi.fn(),
 }));
@@ -17,12 +18,10 @@ vi.mock('@/services/agent', () => ({
   getAgents: mocks.getAgents,
 }));
 
-vi.mock('@/services/audit', () => ({
-  getAuditLog: mocks.getAuditLog,
-}));
-
 vi.mock('@/services/container', () => ({
   getAllContainers: mocks.getAllContainers,
+  getContainerRecentStatus: mocks.getContainerRecentStatus,
+  getContainerSummary: mocks.getContainerSummary,
 }));
 
 vi.mock('@/services/registry', () => ({
@@ -101,7 +100,11 @@ describe('useDashboardData', () => {
     mocks.getAgents.mockResolvedValue([{ name: 'agent-1', connected: true }]);
     mocks.getAllWatchers.mockResolvedValue([]);
     mocks.getAllRegistries.mockResolvedValue([{ name: 'hub' }]);
-    mocks.getAuditLog.mockResolvedValue({ entries: [], total: 0 });
+    mocks.getContainerSummary.mockResolvedValue({
+      containers: { total: 0, running: 0, stopped: 0 },
+      security: { issues: 0 },
+    });
+    mocks.getContainerRecentStatus.mockResolvedValue({ statuses: {} });
     mocks.mapApiContainers.mockReturnValue([makeContainer()]);
 
     originalVisibilityState = Object.getOwnPropertyDescriptor(document, 'visibilityState');
@@ -120,7 +123,7 @@ describe('useDashboardData', () => {
     vi.useRealTimers();
   });
 
-  it('loads dashboard data, maps audit statuses, and manages maintenance timer', async () => {
+  it('loads dashboard data, maps recent statuses, and manages maintenance timer', async () => {
     vi.useFakeTimers();
     const setIntervalSpy = vi.spyOn(window, 'setInterval');
     const clearIntervalSpy = vi.spyOn(window, 'clearInterval');
@@ -131,18 +134,14 @@ describe('useDashboardData', () => {
       { configuration: { maintenanceWindow: '   ' } },
       null,
     ]);
-    mocks.getAuditLog.mockResolvedValue({
-      entries: [
-        { containerName: 'api', action: 'update-failed' },
-        { containerName: 'api', action: 'update-applied' },
-        { containerName: 'worker', action: 'update-applied' },
-        { containerName: 'cache', action: 'update-available' },
-        { containerName: 'ignored', action: 'unknown' },
-        { containerName: '', action: 'update-failed' },
-        { action: 'update-failed' },
-        null,
-      ],
-      total: 8,
+    mocks.getContainerRecentStatus.mockResolvedValue({
+      statuses: {
+        api: 'failed',
+        worker: 'updated',
+        cache: 'pending',
+        ignored: 'nope',
+        '': 'failed',
+      },
     });
 
     const { state, wrapper } = await mountDashboardData();
@@ -169,17 +168,46 @@ describe('useDashboardData', () => {
     expect(clearIntervalSpy).toHaveBeenCalled();
   });
 
-  it('normalizes non-array watcher/registry responses and missing audit entries', async () => {
+  it('normalizes non-array watcher/registry responses and missing recent-status entries', async () => {
     const setIntervalSpy = vi.spyOn(window, 'setInterval');
     mocks.getAllWatchers.mockResolvedValue({ data: [] });
     mocks.getAllRegistries.mockResolvedValue({ data: [] });
-    mocks.getAuditLog.mockResolvedValue({});
+    mocks.getContainerRecentStatus.mockResolvedValue({});
 
     const { state } = await mountDashboardData();
 
     expect(state.watchers.value).toEqual([]);
     expect(state.registries.value).toEqual([]);
     expect(state.recentStatusByContainer.value).toEqual({});
+    expect(setIntervalSpy).not.toHaveBeenCalled();
+  });
+
+  it('normalizes malformed summary payload values during debounced summary refresh', async () => {
+    vi.useFakeTimers();
+    const setIntervalSpy = vi.spyOn(window, 'setInterval');
+    mocks.getAllWatchers.mockResolvedValue([{ id: 'watcher-without-config' }]);
+
+    const { state } = await mountDashboardData();
+    mocks.getContainerSummary.mockResolvedValueOnce({
+      containers: {
+        total: -5,
+        running: Number.POSITIVE_INFINITY,
+        stopped: 'invalid',
+      },
+      security: {
+        issues: -1,
+      },
+    });
+
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    vi.advanceTimersByTime(1_000);
+    await flushPromises();
+
+    expect(mocks.getContainerSummary).toHaveBeenCalledTimes(1);
+    expect(state.containerSummary.value).toEqual({
+      containers: { total: 0, running: 0, stopped: 0 },
+      security: { issues: 0 },
+    });
     expect(setIntervalSpy).not.toHaveBeenCalled();
   });
 
@@ -223,6 +251,21 @@ describe('useDashboardData', () => {
     wrapper.unmount();
   });
 
+  it('logs summary refresh failures when data has already rendered', async () => {
+    vi.useFakeTimers();
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+    await mountDashboardData();
+    mocks.getContainerSummary.mockRejectedValueOnce(new Error('summary refresh failed'));
+
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    vi.advanceTimersByTime(1_000);
+    await flushPromises();
+
+    expect(mocks.getContainerSummary).toHaveBeenCalledTimes(1);
+    expect(debugSpy).toHaveBeenCalledWith('summary refresh failed');
+  });
+
   it('surfaces background errors when no data has rendered yet', async () => {
     const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -235,6 +278,21 @@ describe('useDashboardData', () => {
     expect(state.error.value).toBe('background bootstrap failed');
     expect(debugSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+
+  it('surfaces summary refresh errors when no dashboard data has rendered yet', async () => {
+    vi.useFakeTimers();
+    mocks.getAllContainers.mockRejectedValue(new Error('initial load failed'));
+
+    const { state } = await mountDashboardData();
+    mocks.getContainerSummary.mockRejectedValueOnce(new Error('summary bootstrap failed'));
+
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
+    vi.advanceTimersByTime(1_000);
+    await flushPromises();
+
+    expect(mocks.getContainerSummary).toHaveBeenCalledTimes(1);
+    expect(state.error.value).toBe('summary bootstrap failed');
   });
 
   it('pauses timer while hidden, resumes when visible, and clears pending realtime timer on unmount', async () => {

@@ -29,6 +29,12 @@ interface ContainerSummary {
   };
 }
 
+type ContainerRecentStatus = 'updated' | 'pending' | 'failed';
+
+interface ContainerRecentStatusResponse {
+  statuses: Record<string, ContainerRecentStatus>;
+}
+
 interface GetAllContainersOptions {
   includeVulnerabilities?: boolean;
   limit?: number;
@@ -94,6 +100,16 @@ async function getContainerSummary(): Promise<ContainerSummary> {
   });
   if (!response.ok) {
     throw new Error(`Failed to get container summary: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+async function getContainerRecentStatus(): Promise<ContainerRecentStatusResponse> {
+  const response = await fetch('/api/containers/recent-status', {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get container recent status: ${response.statusText}`);
   }
   return response.json();
 }
@@ -276,6 +292,7 @@ async function revealContainerEnv(containerId: string) {
 export {
   getContainerIcon,
   getAllContainers,
+  getContainerRecentStatus,
   getContainerSummary,
   getContainerGroups,
   refreshAllContainers,

@@ -1,3 +1,4 @@
+import type { Request, Response } from 'express';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
@@ -39,6 +40,38 @@ import { broadcastScanCompleted, broadcastScanStarted } from './sse.js';
 const log = logger.child({ component: 'container' });
 
 const router = express.Router();
+const RECENT_STATUS_AUDIT_LIMIT = 100;
+
+type RecentContainerStatus = 'updated' | 'pending' | 'failed';
+
+function mapAuditActionToRecentStatus(action: unknown): RecentContainerStatus | null {
+  if (action === 'update-applied') return 'updated';
+  if (action === 'update-failed') return 'failed';
+  if (action === 'update-available') return 'pending';
+  return null;
+}
+
+function buildRecentStatusByContainer(entries: unknown): Record<string, RecentContainerStatus> {
+  if (!Array.isArray(entries)) return {};
+  const statusByContainer: Record<string, RecentContainerStatus> = {};
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    const containerNameRaw = (entry as { containerName?: unknown }).containerName;
+    const containerName = typeof containerNameRaw === 'string' ? containerNameRaw.trim() : '';
+    if (!containerName || statusByContainer[containerName]) continue;
+    const mappedStatus = mapAuditActionToRecentStatus((entry as { action?: unknown }).action);
+    if (!mappedStatus) continue;
+    statusByContainer[containerName] = mappedStatus;
+  }
+  return statusByContainer;
+}
+
+function getContainerRecentStatus(_req: Request, res: Response) {
+  const recentEntries = auditStore.getRecentEntries(RECENT_STATUS_AUDIT_LIMIT);
+  res.status(200).json({
+    statuses: buildRecentStatusByContainer(recentEntries),
+  });
+}
 
 /**
  * Return registered watchers.
@@ -148,6 +181,7 @@ export function init() {
   router.get('/', crudHandlers.getContainers);
   router.post('/watch', crudHandlers.watchContainers);
   router.get('/summary', crudHandlers.getContainerSummary);
+  router.get('/recent-status', getContainerRecentStatus);
   router.get('/:id', crudHandlers.getContainer);
   router.get('/:id/update-operations', crudHandlers.getContainerUpdateOperations);
   router.delete('/:id', crudHandlers.deleteContainer);

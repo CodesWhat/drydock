@@ -29,6 +29,7 @@ vi.mock('../store/container', () => ({
 
 vi.mock('../store/audit', () => ({
   insertAudit: vi.fn(),
+  getRecentEntries: vi.fn(() => []),
 }));
 
 vi.mock('../store/update-operation', () => ({
@@ -96,6 +97,7 @@ import rateLimit from 'express-rate-limit';
 import { getAgent } from '../agent/manager.js';
 import { getSecurityConfiguration, getServerConfiguration } from '../configuration/index.js';
 import * as registry from '../registry/index.js';
+import * as auditStore from '../store/audit.js';
 import * as storeContainer from '../store/container.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { mapComponentsToList } from './component.js';
@@ -197,6 +199,7 @@ describe('Container Router', () => {
       expect(router.use).toHaveBeenCalledWith('nocache-middleware');
       expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/summary', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/recent-status', expect.any(Function));
       expect(router.post).toHaveBeenCalledWith('/watch', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id', expect.any(Function));
       expect(router.delete).toHaveBeenCalledWith('/:id', expect.any(Function));
@@ -534,6 +537,52 @@ describe('Container Router', () => {
         },
         security: {
           issues: 1,
+        },
+      });
+    });
+  });
+
+  describe('getContainerRecentStatus', () => {
+    test('should return the latest status per container using recent audit entries', () => {
+      auditStore.getRecentEntries.mockReturnValue([
+        { containerName: 'api', action: 'update-failed' },
+        { containerName: 'api', action: 'update-applied' },
+        { containerName: 'worker', action: 'update-applied' },
+        { containerName: 'cache', action: 'update-available' },
+        { containerName: 'ignore-me', action: 'container-update' },
+      ]);
+
+      const handler = getHandler('get', '/recent-status');
+      const res = createResponse();
+      handler({ query: {} }, res);
+
+      expect(auditStore.getRecentEntries).toHaveBeenCalledWith(100);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        statuses: {
+          api: 'failed',
+          cache: 'pending',
+          worker: 'updated',
+        },
+      });
+    });
+
+    test('should ignore invalid entries and empty container names', () => {
+      auditStore.getRecentEntries.mockReturnValue([
+        null,
+        { action: 'update-failed' },
+        { containerName: ' ', action: 'update-failed' },
+        { containerName: 'trim-me', action: 'update-applied' },
+      ]);
+
+      const handler = getHandler('get', '/recent-status');
+      const res = createResponse();
+      handler({ query: {} }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        statuses: {
+          'trim-me': 'updated',
         },
       });
     });
@@ -901,11 +950,9 @@ describe('Container Router', () => {
       const res = createResponse();
       await handler({ params: { id: 'c1' }, query: {} }, res);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('scanner unavailable'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error generating SBOM',
+      });
     });
 
     test('should fallback to composed image name when registry helper is missing', async () => {
@@ -1006,11 +1053,9 @@ describe('Container Router', () => {
       const res = createResponse();
       await handler({ params: { id: 'c1' }, query: {} }, res);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('generator crashed'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error generating SBOM',
+      });
     });
 
     test('should return 500 when sbom generation throws a non-error value', async () => {
@@ -1027,11 +1072,9 @@ describe('Container Router', () => {
       const res = createResponse();
       await handler({ params: { id: 'c1' }, query: {} }, res);
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('unknown error'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error generating SBOM',
+      });
     });
   });
 
@@ -1522,11 +1565,9 @@ describe('Container Router', () => {
       expect(mockBroadcastScanStarted).toHaveBeenCalledWith('c1');
       expect(mockBroadcastScanCompleted).toHaveBeenCalledWith('c1', 'error');
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('scan engine crashed'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Security scan failed',
+      });
     });
 
     test('should return 500 on scan failure when rejection is not an Error instance', async () => {
@@ -1552,11 +1593,9 @@ describe('Container Router', () => {
       expect(mockBroadcastScanStarted).toHaveBeenCalledWith('c1');
       expect(mockBroadcastScanCompleted).toHaveBeenCalledWith('c1', 'error');
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('unknown error'),
-        }),
-      );
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Security scan failed',
+      });
     });
 
     test('should scan both current and update images when update is available', async () => {

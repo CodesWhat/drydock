@@ -3,6 +3,7 @@ import {
   getAllContainers,
   getContainerIcon,
   getContainerLogs,
+  getContainerRecentStatus,
   getContainerSbom,
   getContainerSummary,
   getContainerTriggers,
@@ -136,6 +137,39 @@ describe('Container Service', () => {
 
       await expect(getContainerSummary()).rejects.toThrow(
         'Failed to get container summary: Service Unavailable',
+      );
+    });
+  });
+
+  describe('getContainerRecentStatus', () => {
+    it('fetches recent status map successfully', async () => {
+      const mockStatusMap = {
+        statuses: {
+          api: 'failed',
+          worker: 'updated',
+        },
+      };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockStatusMap,
+      } as any);
+
+      const recentStatus = await getContainerRecentStatus();
+
+      expect(fetch).toHaveBeenCalledWith('/api/containers/recent-status', {
+        credentials: 'include',
+      });
+      expect(recentStatus).toEqual(mockStatusMap);
+    });
+
+    it('throws when recent status response is not ok', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Service Unavailable',
+      } as any);
+
+      await expect(getContainerRecentStatus()).rejects.toThrow(
+        'Failed to get container recent status: Service Unavailable',
       );
     });
   });

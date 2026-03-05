@@ -1,7 +1,10 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { getAgents } from '../../services/agent';
-import { getAuditLog } from '../../services/audit';
-import { getAllContainers, getContainerSummary } from '../../services/container';
+import {
+  getAllContainers,
+  getContainerRecentStatus,
+  getContainerSummary,
+} from '../../services/container';
 import { getAllRegistries } from '../../services/registry';
 import { getServer } from '../../services/server';
 import { getAllWatchers } from '../../services/watcher';
@@ -24,26 +27,20 @@ interface DashboardRefreshOptions {
 
 type RealtimeRefreshMode = 'summary' | 'full';
 
-function mapAuditActionToRecentStatus(action: unknown): RecentAuditStatus | null {
-  if (action === 'update-applied') return 'updated';
-  if (action === 'update-failed') return 'failed';
-  if (action === 'update-available') return 'pending';
-  return null;
-}
+function normalizeRecentStatusByContainer(response: unknown): Record<string, RecentAuditStatus> {
+  if (!response || typeof response !== 'object') return {};
+  const statusesData = (response as { statuses?: unknown }).statuses;
+  if (!statusesData || typeof statusesData !== 'object' || Array.isArray(statusesData)) return {};
 
-function buildRecentStatusByContainer(entries: unknown): Record<string, RecentAuditStatus> {
-  if (!Array.isArray(entries)) return {};
-  const statusByContainer: Record<string, RecentAuditStatus> = {};
-  for (const entry of entries) {
-    if (!entry || typeof entry !== 'object') continue;
-    const containerNameRaw = (entry as { containerName?: unknown }).containerName;
-    const containerName = typeof containerNameRaw === 'string' ? containerNameRaw.trim() : '';
-    if (!containerName || statusByContainer[containerName]) continue;
-    const mappedStatus = mapAuditActionToRecentStatus((entry as { action?: unknown }).action);
-    if (!mappedStatus) continue;
-    statusByContainer[containerName] = mappedStatus;
+  const normalizedStatuses: Record<string, RecentAuditStatus> = {};
+  for (const [containerNameRaw, statusRaw] of Object.entries(statusesData)) {
+    const containerName = containerNameRaw.trim();
+    if (!containerName) continue;
+    if (statusRaw === 'updated' || statusRaw === 'pending' || statusRaw === 'failed') {
+      normalizedStatuses[containerName] = statusRaw;
+    }
   }
-  return statusByContainer;
+  return normalizedStatuses;
 }
 
 function getWatcherConfiguration(watcher: Record<string, unknown>): ApiWatcherConfiguration {
@@ -206,14 +203,14 @@ export function useDashboardData() {
       error.value = null;
     }
     try {
-      const [containersRes, serverRes, agentsRes, watchersRes, registriesRes, auditLogRes] =
+      const [containersRes, serverRes, agentsRes, watchersRes, registriesRes, recentStatusRes] =
         await Promise.all([
           getAllContainers(),
           getServer(),
           getAgents(),
           getAllWatchers(),
           getAllRegistries(),
-          getAuditLog({ limit: 100 }),
+          getContainerRecentStatus(),
         ]);
       containers.value = mapApiContainers(containersRes);
       containerSummary.value = buildContainerSummaryFromContainers(containers.value);
@@ -222,10 +219,7 @@ export function useDashboardData() {
       watchers.value = Array.isArray(watchersRes) ? watchersRes : [];
       registries.value = Array.isArray(registriesRes) ? registriesRes : [];
 
-      const auditEntries = Array.isArray((auditLogRes as { entries?: unknown }).entries)
-        ? (auditLogRes as { entries: unknown[] }).entries
-        : [];
-      recentStatusByContainer.value = buildRecentStatusByContainer(auditEntries);
+      recentStatusByContainer.value = normalizeRecentStatusByContainer(recentStatusRes);
       error.value = null;
     } catch (e: unknown) {
       if (!background || !hasRenderedData) {
@@ -240,27 +234,17 @@ export function useDashboardData() {
     }
   }
 
-  async function fetchDashboardSummary(options: DashboardRefreshOptions = {}) {
-    const background = options.background === true;
+  async function fetchDashboardSummary() {
     const hasRenderedData = hasRenderedDashboardData();
-
-    if (!background) {
-      loading.value = true;
-      error.value = null;
-    }
     try {
       const summary = await getContainerSummary();
       containerSummary.value = normalizeContainerSummary(summary);
       error.value = null;
     } catch (e: unknown) {
-      if (!background || !hasRenderedData) {
+      if (!hasRenderedData) {
         error.value = errorMessage(e, 'Failed to load dashboard data');
       } else {
         console.debug(errorMessage(e, 'Dashboard summary refresh failed'));
-      }
-    } finally {
-      if (!background) {
-        loading.value = false;
       }
     }
   }
@@ -278,7 +262,7 @@ export function useDashboardData() {
         void fetchDashboardData({ background: true });
         return;
       }
-      void fetchDashboardSummary({ background: true });
+      void fetchDashboardSummary();
     }, DASHBOARD_REALTIME_REFRESH_DEBOUNCE_MS);
   }
 
