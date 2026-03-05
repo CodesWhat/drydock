@@ -219,4 +219,24 @@ describe('Agent Log Entries Route', () => {
       error: 'Failed to fetch logs from agent: Connection refused',
     });
   });
+
+  test('should return 502 with safe message when agent throws non-Error value', async () => {
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries: vi.fn().mockRejectedValue('Connection refused'),
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: {},
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Failed to fetch logs from agent: Connection refused',
+    });
+  });
 });

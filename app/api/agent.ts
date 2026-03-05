@@ -1,18 +1,29 @@
 import express from 'express';
 import { getAgent, getAgents } from '../agent/index.js';
+import type { Container } from '../model/container.js';
 import * as storeContainer from '../store/container.js';
 
 const router = express.Router();
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return String(error);
+}
+
 function getAgentContainerStats(agentName: string) {
-  const containers = storeContainer.getContainers({ agent: agentName });
+  const containers: Container[] = storeContainer.getContainers({ agent: agentName });
   const running = containers.filter(
-    (container: any) => String(container.status ?? '').toLowerCase() === 'running',
+    (container: Container) => String(container.status ?? '').toLowerCase() === 'running',
   ).length;
   const total = containers.length;
   const images = new Set(
     containers.map(
-      (container: any) => container.image?.id ?? container.image?.name ?? container.id,
+      (container: Container) => container.image?.id ?? container.image?.name ?? container.id,
     ),
   ).size;
   return {
@@ -64,8 +75,8 @@ async function getAgentLogEntries(req, res) {
     const since = req.query.since ? Number.parseInt(req.query.since as string, 10) : undefined;
     const entries = await agent.getLogEntries({ level, component, tail, since });
     res.json(entries);
-  } catch (e: any) {
-    res.status(502).json({ error: `Failed to fetch logs from agent: ${e.message}` });
+  } catch (error: unknown) {
+    res.status(502).json({ error: `Failed to fetch logs from agent: ${getErrorMessage(error)}` });
   }
 }
 
