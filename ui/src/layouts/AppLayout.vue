@@ -1034,10 +1034,10 @@ onUnmounted(() => {
       }">
 
       <!-- Logo -->
-      <div class="flex items-center justify-between h-12 shrink-0 overflow-hidden"
-           :class="isCollapsed ? 'justify-center px-1' : 'px-3'"
+      <div class="flex items-center h-12 shrink-0 overflow-hidden"
+           :class="isCollapsed ? 'justify-center px-1' : 'justify-between px-3'"
            :style="{ borderBottom: '1px solid var(--dd-border)' }">
-        <div class="flex items-center gap-2 overflow-hidden shrink-0">
+        <div class="flex items-center overflow-hidden" :class="isCollapsed ? '' : 'gap-2 shrink-0'">
           <img :src="whaleLogo" alt="Drydock"
                class="h-5 w-auto shrink-0 transition-transform duration-300"
                :style="[isCollapsed ? { transform: 'scaleX(-1)' } : {}, isDark ? { filter: 'invert(1)' } : {}]" />
