@@ -6,15 +6,38 @@ import {
   registerAuditLogSubscriptions,
 } from './audit-subscriptions.js';
 
-// Build EventEmitter
+/**
+ * Event dispatch architecture (temporary dual path):
+ *
+ * 1) Ordered handler pipeline (preferred): used by the async `emit*` functions
+ *    backed by `emitOrderedHandlers()`. Handlers can be async, are awaited in a
+ *    deterministic order (`order`, then `id`, then registration sequence), and
+ *    registration returns an unsubscribe function.
+ *
+ * 2) Node.js EventEmitter (legacy): used by container lifecycle and watcher
+ *    events below. Dispatch is synchronous, ordering is implicit registration
+ *    order, and registrations currently do not return an unsubscribe callback.
+ *
+ * Current split:
+ * - Ordered handlers: reports, update lifecycle, security alerts, agent
+ *   connectivity, self-update-starting.
+ * - Legacy EventEmitter: container added/updated/removed, watcher start/stop.
+ *
+ * Migration plan:
+ * - Phase 1: keep adding new events only on the ordered handler pipeline.
+ * - Phase 2: introduce ordered equivalents for legacy lifecycle/watcher events
+ *   and migrate subscribers (SSE, MQTT, audit) to those registrars.
+ * - Phase 3: expose unsubscribe cleanup for all subscriptions, then remove the
+ *   legacy EventEmitter path and `removeAllListeners()` test dependency.
+ */
 const eventEmitter = new EventEmitter();
 
-// Container related events
+// Legacy EventEmitter channel names.
 const DD_CONTAINER_ADDED = 'dd:container-added';
 const DD_CONTAINER_UPDATED = 'dd:container-updated';
 const DD_CONTAINER_REMOVED = 'dd:container-removed';
 
-// Watcher related events
+// Legacy EventEmitter channel names.
 const DD_WATCHER_START = 'dd:watcher-start';
 const DD_WATCHER_STOP = 'dd:watcher-stop';
 
@@ -270,6 +293,13 @@ export function registerAgentDisconnected(
 ): () => void {
   return registerOrderedEventHandler(agentDisconnectedHandlers, handler, options);
 }
+
+/**
+ * Legacy EventEmitter dispatch path.
+ *
+ * These lifecycle and watcher handlers are intentionally kept as-is for
+ * backwards compatibility while subscribers are migrated to ordered handlers.
+ */
 
 /**
  * Emit container added.
