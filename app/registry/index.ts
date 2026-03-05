@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import capitalize from 'capitalize';
 import logger from '../log/index.js';
+import * as securityScheduler from '../security/scheduler.js';
 import * as store from '../store/index.js';
 
 const log = logger.child({ component: 'registry' });
@@ -613,6 +614,7 @@ async function deregisterAll() {
 
 async function shutdown() {
   try {
+    securityScheduler.shutdown();
     await deregisterAll();
     await store.save();
     process.exit(0);

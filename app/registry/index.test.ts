@@ -8,6 +8,7 @@ import Component from './Component.js';
 vi.mock('../configuration', () => ({
   getLogLevel: vi.fn(() => 'info'),
   getLogFormat: vi.fn(() => 'json'),
+  getLogBufferEnabled: vi.fn(() => true),
   getRegistryConfigurations: vi.fn(),
   getTriggerConfigurations: vi.fn(),
   getWatcherConfigurations: vi.fn(),
@@ -17,6 +18,10 @@ vi.mock('../configuration', () => ({
 
 vi.mock('../store/index.js', () => ({
   save: vi.fn(),
+}));
+
+vi.mock('../security/scheduler.js', () => ({
+  shutdown: vi.fn(),
 }));
 
 let registries = {};
@@ -641,13 +646,40 @@ test('deregisterAll should deregister all components', async () => {
 
 test('shutdown should deregister all and exit 0', async () => {
   const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+  const securityScheduler = await import('../security/scheduler.js');
   registry.getState().trigger = {};
   registry.getState().registry = {};
   registry.getState().watcher = {};
   registry.getState().authentication = {};
   await registry.testable_shutdown();
   expect(store.save).toHaveBeenCalledTimes(1);
+  expect(securityScheduler.shutdown).toHaveBeenCalledTimes(1);
   expect(exitSpy).toHaveBeenCalledWith(0);
+  exitSpy.mockRestore();
+});
+
+test('init should invoke scheduler shutdown from SIGTERM handler', async () => {
+  const signalHandlers = new Map<string, (...args: any[]) => any>();
+  const onSpy = vi.spyOn(process, 'on').mockImplementation(((event: string, listener: any) => {
+    signalHandlers.set(event, listener);
+    return process;
+  }) as any);
+  const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
+  const securityScheduler = await import('../security/scheduler.js');
+
+  await registry.init();
+
+  expect(signalHandlers.has('SIGINT')).toBe(true);
+  expect(signalHandlers.has('SIGTERM')).toBe(true);
+
+  const sigtermHandler = signalHandlers.get('SIGTERM');
+  await sigtermHandler?.();
+
+  expect(securityScheduler.shutdown).toHaveBeenCalledTimes(1);
+  expect(store.save).toHaveBeenCalledTimes(1);
+  expect(exitSpy).toHaveBeenCalledWith(0);
+
+  onSpy.mockRestore();
   exitSpy.mockRestore();
 });
 
