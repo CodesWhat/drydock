@@ -1,7 +1,10 @@
 import { EventEmitter } from 'node:events';
 import type { Container, ContainerReport } from '../model/container.js';
-import { getAuditCounter } from '../prometheus/audit.js';
-import * as auditStore from '../store/audit.js';
+import {
+  clearAuditSubscriptionCachesForTests,
+  pruneAuditDedupeCacheForTests as pruneAuditDedupeCacheForTestsInternal,
+  registerAuditLogSubscriptions,
+} from './audit-subscriptions.js';
 
 // Build EventEmitter
 const eventEmitter = new EventEmitter();
@@ -16,8 +19,6 @@ const DD_WATCHER_START = 'dd:watcher-start';
 const DD_WATCHER_STOP = 'dd:watcher-stop';
 
 const DEFAULT_HANDLER_ORDER = 100;
-const SECURITY_ALERT_AUDIT_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
-const AGENT_DISCONNECT_AUDIT_DEDUPE_WINDOW_MS = 60 * 1000;
 
 interface EventHandlerRegistrationOptions {
   order?: number;
@@ -93,8 +94,6 @@ const selfUpdateStartingHandlers = new Map<
   OrderedEventHandler<SelfUpdateStartingEventPayload>
 >();
 let handlerRegistrationSequence = 0;
-const securityAlertAuditSeenAt = new Map<string, number>();
-const agentDisconnectedAuditSeenAt = new Map<string, number>();
 
 function registerOrderedEventHandler<TPayload>(
   handlers: Map<number, OrderedEventHandler<TPayload>>,
@@ -135,34 +134,6 @@ async function emitOrderedHandlers<TPayload>(
   for (const handler of handlersOrdered) {
     await handler.handler(payload);
   }
-}
-
-function pruneAuditDedupeCache(
-  cache: Map<string, number>,
-  now: number,
-  dedupeWindowMs: number,
-): void {
-  const oldestAllowedTimestamp = now - dedupeWindowMs * 2;
-  for (const [key, timestamp] of cache.entries()) {
-    if (timestamp < oldestAllowedTimestamp) {
-      cache.delete(key);
-    }
-  }
-}
-
-function isDuplicateAuditEvent(
-  cache: Map<string, number>,
-  key: string,
-  dedupeWindowMs: number,
-): boolean {
-  const now = Date.now();
-  const previousTimestamp = cache.get(key);
-  if (previousTimestamp && now - previousTimestamp < dedupeWindowMs) {
-    return true;
-  }
-  cache.set(key, now);
-  pruneAuditDedupeCache(cache, now, dedupeWindowMs);
-  return false;
 }
 
 /**
@@ -384,130 +355,14 @@ export function registerSelfUpdateStarting(
 }
 
 // Audit log integration
-registerContainerReport(
-  async (containerReport) => {
-    if (containerReport.container?.updateAvailable) {
-      auditStore.insertAudit({
-        id: '',
-        timestamp: new Date().toISOString(),
-        action: 'update-available',
-        containerName: containerReport.container.name,
-        containerImage: containerReport.container.image?.name,
-        fromVersion: containerReport.container.updateKind?.localValue,
-        toVersion: containerReport.container.updateKind?.remoteValue,
-        status: 'info',
-      });
-      getAuditCounter()?.inc({ action: 'update-available' });
-    }
-  },
-  { id: 'audit', order: 200 },
-);
-
-registerContainerUpdateApplied(
-  async (containerId: string) => {
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
-      action: 'update-applied',
-      containerName: containerId,
-      status: 'success',
-    });
-    getAuditCounter()?.inc({ action: 'update-applied' });
-  },
-  { id: 'audit', order: 200 },
-);
-
-registerContainerUpdateFailed(
-  async (payload) => {
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
-      action: 'update-failed',
-      containerName: payload.containerName,
-      status: 'error',
-      details: payload.error,
-    });
-    getAuditCounter()?.inc({ action: 'update-failed' });
-  },
-  { id: 'audit', order: 200 },
-);
-
-registerSecurityAlert(
-  async (payload) => {
-    const dedupeKey = `${payload.containerName}|${payload.details}`;
-    if (
-      isDuplicateAuditEvent(
-        securityAlertAuditSeenAt,
-        dedupeKey,
-        SECURITY_ALERT_AUDIT_DEDUPE_WINDOW_MS,
-      )
-    ) {
-      return;
-    }
-    const blockingCount =
-      Number.isFinite(payload.blockingCount) && payload.blockingCount > 0
-        ? `; blocking=${payload.blockingCount}`
-        : '';
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
-      action: 'security-alert',
-      containerName: payload.containerName,
-      status: 'error',
-      details: `${payload.details}${blockingCount}`,
-    });
-    getAuditCounter()?.inc({ action: 'security-alert' });
-  },
-  { id: 'audit', order: 200 },
-);
-
-registerAgentDisconnected(
-  async (payload) => {
-    const dedupeKey = `${payload.agentName}|${payload.reason || ''}`;
-    if (
-      isDuplicateAuditEvent(
-        agentDisconnectedAuditSeenAt,
-        dedupeKey,
-        AGENT_DISCONNECT_AUDIT_DEDUPE_WINDOW_MS,
-      )
-    ) {
-      return;
-    }
-    auditStore.insertAudit({
-      id: '',
-      timestamp: new Date().toISOString(),
-      action: 'agent-disconnect',
-      containerName: payload.agentName,
-      status: 'error',
-      details: payload.reason,
-    });
-    getAuditCounter()?.inc({ action: 'agent-disconnect' });
-  },
-  { id: 'audit', order: 200 },
-);
-
-registerContainerAdded((containerAdded) => {
-  auditStore.insertAudit({
-    id: '',
-    timestamp: new Date().toISOString(),
-    action: 'container-added',
-    containerName: containerAdded.name || containerAdded.id || '',
-    containerImage: containerAdded.image?.name,
-    status: 'info',
-  });
-  getAuditCounter()?.inc({ action: 'container-added' });
-});
-
-registerContainerRemoved((containerRemoved) => {
-  auditStore.insertAudit({
-    id: '',
-    timestamp: new Date().toISOString(),
-    action: 'container-removed',
-    containerName: containerRemoved.name || containerRemoved.id || '',
-    containerImage: containerRemoved.image?.name,
-    status: 'info',
-  });
-  getAuditCounter()?.inc({ action: 'container-removed' });
+registerAuditLogSubscriptions({
+  registerContainerReport,
+  registerContainerUpdateApplied,
+  registerContainerUpdateFailed,
+  registerSecurityAlert,
+  registerAgentDisconnected,
+  registerContainerAdded,
+  registerContainerRemoved,
 });
 
 // Testing helper.
@@ -516,7 +371,7 @@ export function pruneAuditDedupeCacheForTests(
   now: number,
   dedupeWindowMs: number,
 ): void {
-  pruneAuditDedupeCache(cache, now, dedupeWindowMs);
+  pruneAuditDedupeCacheForTestsInternal(cache, now, dedupeWindowMs);
 }
 
 // Testing helper.
@@ -530,7 +385,6 @@ export function clearAllListenersForTests(): void {
   agentConnectedHandlers.clear();
   agentDisconnectedHandlers.clear();
   selfUpdateStartingHandlers.clear();
-  securityAlertAuditSeenAt.clear();
-  agentDisconnectedAuditSeenAt.clear();
+  clearAuditSubscriptionCachesForTests();
   handlerRegistrationSequence = 0;
 }
