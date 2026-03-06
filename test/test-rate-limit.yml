@@ -15,7 +15,7 @@ config:
     headers:
       Accept: "application/json"
       Authorization: "Basic YWRtaW46cGFzc3dvcmQ="
-  processor: "./test/load-test.processor.cjs"
+  processor: "./load-test.processor.cjs"
   ensure:
     thresholds:
       - vusers.failed: 0
