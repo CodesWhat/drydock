@@ -405,9 +405,9 @@ describe('preferences migration', () => {
 
     describe('legacy key cleanup', () => {
       it('should defer deleting legacy keys until the idle callback runs', () => {
-        localStorage.setItem('drydock-theme-family-v1', 'github');
-        localStorage.setItem('dd-containers-view-v1', 'cards');
-        localStorage.setItem('dd-audit-view-v1', 'list');
+        for (const [index, key] of LEGACY_KEYS.entries()) {
+          localStorage.setItem(key, `value-${index}`);
+        }
         const callbacks: IdleRequestCallback[] = [];
         const original = globalThis.requestIdleCallback;
         globalThis.requestIdleCallback = vi.fn((callback: IdleRequestCallback) => {
@@ -419,18 +419,18 @@ describe('preferences migration', () => {
           migrateFromLegacyKeys();
 
           expect(globalThis.requestIdleCallback).toHaveBeenCalledTimes(1);
-          expect(localStorage.getItem('drydock-theme-family-v1')).toBe('github');
-          expect(localStorage.getItem('dd-containers-view-v1')).toBe('cards');
-          expect(localStorage.getItem('dd-audit-view-v1')).toBe('list');
+          for (const [index, key] of LEGACY_KEYS.entries()) {
+            expect(localStorage.getItem(key)).toBe(`value-${index}`);
+          }
 
           callbacks[0]({
             didTimeout: false,
             timeRemaining: () => 50,
           } as IdleDeadline);
 
-          expect(localStorage.getItem('drydock-theme-family-v1')).toBeNull();
-          expect(localStorage.getItem('dd-containers-view-v1')).toBeNull();
-          expect(localStorage.getItem('dd-audit-view-v1')).toBeNull();
+          for (const key of LEGACY_KEYS) {
+            expect(localStorage.getItem(key)).toBeNull();
+          }
         } finally {
           globalThis.requestIdleCallback = original;
         }
