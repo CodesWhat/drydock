@@ -41,10 +41,6 @@ setup((app) => {
   app.component('ConfirmDialog', ConfirmDialog);
 });
 
-const preview: Preview = {
-  parameters: {
-    chromatic: { viewports: [375, 1280] },
-  },
-};
+const preview: Preview = {};
 
 export default preview;
