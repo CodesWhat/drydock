@@ -108,6 +108,9 @@ interface ApiContainerInput {
   env?: unknown;
 }
 
+const DOCKERHUB_REGISTRY_HOSTS = new Set(['docker.io', 'registry-1.docker.io', 'index.docker.io']);
+const GHCR_REGISTRY_HOSTS = new Set(['ghcr.io']);
+
 function asNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
@@ -137,9 +140,14 @@ function deriveServer(apiContainer: ApiContainerInput): string {
 function deriveRegistry(apiContainer: ApiContainerInput): 'dockerhub' | 'ghcr' | 'custom' {
   const registryName = deriveRegistryName(apiContainer) ?? '';
   const registryUrl = deriveRegistryUrl(apiContainer) ?? '';
+  const registryHost = deriveRegistryHost(registryUrl);
 
-  if (registryName === 'hub' || registryUrl.includes('docker.io')) return 'dockerhub';
-  if (registryName === 'ghcr' || registryUrl.includes('ghcr.io')) return 'ghcr';
+  if (registryName === 'hub' || isKnownRegistryHost(registryHost, DOCKERHUB_REGISTRY_HOSTS)) {
+    return 'dockerhub';
+  }
+  if (registryName === 'ghcr' || isKnownRegistryHost(registryHost, GHCR_REGISTRY_HOSTS)) {
+    return 'ghcr';
+  }
   return 'custom';
 }
 
@@ -149,6 +157,26 @@ function deriveRegistryName(apiContainer: ApiContainerInput): string | undefined
 
 function deriveRegistryUrl(apiContainer: ApiContainerInput): string | undefined {
   return asNonEmptyString(apiContainer.image?.registry?.url);
+}
+
+function deriveRegistryHost(registryUrl: string): string | undefined {
+  if (!registryUrl) {
+    return undefined;
+  }
+
+  const normalizedUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(registryUrl)
+    ? registryUrl
+    : `https://${registryUrl}`;
+
+  try {
+    return new URL(normalizedUrl).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+function isKnownRegistryHost(host: string | undefined, knownHosts: ReadonlySet<string>): boolean {
+  return host !== undefined && knownHosts.has(host);
 }
 
 /** Derive bouncer status from security scan data. */

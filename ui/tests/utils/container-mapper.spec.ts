@@ -69,6 +69,32 @@ describe('container-mapper', () => {
       expect(c.registry).toBe('dockerhub');
     });
 
+    it('detects dockerhub from known docker registry hosts', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'custom', url: 'https://registry-1.docker.io/v2' },
+            name: 'img',
+            tag: { value: 'latest' },
+          },
+        }),
+      );
+      expect(c.registry).toBe('dockerhub');
+    });
+
+    it('does not treat docker.io substrings in non-matching hosts as dockerhub', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'custom', url: 'https://docker.io.evil.example/v2' },
+            name: 'img',
+            tag: { value: 'latest' },
+          },
+        }),
+      );
+      expect(c.registry).toBe('custom');
+    });
+
     it('detects ghcr from registry name', () => {
       const c = mapApiContainer(
         makeApiContainer({
@@ -89,6 +115,32 @@ describe('container-mapper', () => {
         }),
       );
       expect(c.registry).toBe('ghcr');
+    });
+
+    it('does not treat ghcr subdomains as ghcr', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'custom', url: 'https://packages.ghcr.io/v2' },
+            name: 'img',
+            tag: { value: 'latest' },
+          },
+        }),
+      );
+      expect(c.registry).toBe('custom');
+    });
+
+    it('does not treat ghcr.io substrings in non-matching hosts as ghcr', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'custom', url: 'https://ghcr.io.evil.example/v2' },
+            name: 'img',
+            tag: { value: 'latest' },
+          },
+        }),
+      );
+      expect(c.registry).toBe('custom');
     });
 
     it('returns custom for unknown registries', () => {
