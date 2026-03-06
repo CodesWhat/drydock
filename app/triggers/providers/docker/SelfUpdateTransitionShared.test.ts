@@ -115,6 +115,23 @@ describe('SelfUpdateTransitionShared', () => {
     );
   });
 
+  test('getErrorMessage coerces non-Error thrown values to string', async () => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockRejectedValue('connection refused'),
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).rejects.toBe('connection refused');
+
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'drydock' });
+    expect(log.warn).toHaveBeenCalledWith(
+      'Failed to create new container, rolling back rename: connection refused',
+    );
+  });
+
   test('uses dependency operation id factory when operation id is omitted', async () => {
     const context = createContext();
     const dependencies = createDependencies({

@@ -256,12 +256,12 @@ class ContainerRuntimeConfigManager {
   buildCloneRuntimeConfigOptions(
     runtimeOptionsOrLogContainer: RuntimeConfigOptions | RuntimeConfigLogger | undefined,
   ): RuntimeConfigOptions {
-    if (!runtimeOptionsOrLogContainer) {
-      return {};
-    }
-
     if (isRuntimeConfigOptions(runtimeOptionsOrLogContainer)) {
       return runtimeOptionsOrLogContainer;
+    }
+
+    if (!runtimeOptionsOrLogContainer) {
+      return {};
     }
 
     // Backward compatibility for existing callsites that passed logContainer

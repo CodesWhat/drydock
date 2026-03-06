@@ -963,3 +963,59 @@ test('redirect should skip session lock when sessionID is empty', async () => {
 
   expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
 });
+
+test('stale lock cleanup timer should delete session lock when operation outlives TTL', async () => {
+  vi.useFakeTimers();
+  const originalMapGet = Map.prototype.get;
+  let injectedNeverSettlingLock = false;
+  const neverSettlingLock = new Promise<void>(() => undefined);
+  const mapGetSpy = vi.spyOn(Map.prototype, 'get').mockImplementation(function (key) {
+    if (!injectedNeverSettlingLock && key === 'stale-ttl-session') {
+      injectedNeverSettlingLock = true;
+      return neverSettlingLock;
+    }
+    return originalMapGet.call(this, key);
+  });
+
+  // Track whether the lock map entry is deleted during the stale TTL window.
+  const mapDeleteSpy = vi.spyOn(Map.prototype, 'delete');
+
+  // Make session.reload never call back so the operation hangs indefinitely.
+  // This keeps us inside `await operation()` past the 60s stale lock TTL.
+  let resolveReload: ((error?: unknown) => void) | undefined;
+  const req = createReq({
+    sessionID: 'stale-ttl-session',
+    session: {
+      reload: vi.fn((cb) => {
+        resolveReload = cb;
+      }),
+      save: vi.fn((cb) => cb()),
+    },
+  });
+  const res = createRes();
+
+  const redirectPromise = oidc.redirect(req, res);
+
+  // Advance past the 10s wait timeout so the operation starts (but hangs on reload).
+  await vi.advanceTimersByTimeAsync(10_000);
+
+  // Clear the delete spy call history so we only track deletes from the stale timer.
+  mapDeleteSpy.mockClear();
+
+  // Advance to 60s total — the stale lock cleanup timer fires (lines 160-161).
+  await vi.advanceTimersByTimeAsync(50_000);
+
+  // The stale lock timer should have called oidcSessionLocks.delete('stale-ttl-session').
+  expect(mapDeleteSpy).toHaveBeenCalledWith('stale-ttl-session');
+
+  // Now let the reload callback resolve so the operation completes and the test finishes.
+  resolveReload?.();
+  await vi.advanceTimersByTimeAsync(0);
+  await redirectPromise;
+
+  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+
+  mapGetSpy.mockRestore();
+  mapDeleteSpy.mockRestore();
+  vi.useRealTimers();
+});

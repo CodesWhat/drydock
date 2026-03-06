@@ -162,6 +162,23 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('inspectContainerByIdentifier suppresses warning when error is a container-not-found error', async () => {
+    const dockerApi = {
+      getContainer: vi.fn(() => ({
+        inspect: vi.fn().mockRejectedValue(new Error('no such container')),
+      })),
+    };
+    const executor = createExecutor({
+      isContainerNotFoundError: vi.fn(() => true),
+    });
+    const log = createLog();
+
+    await expect(
+      executor.inspectContainerByIdentifier(dockerApi, 'gone-container', log),
+    ).resolves.toBeUndefined();
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
   test('stopAndRemoveContainerBestEffort handles missing, stop failure, and remove failure cases', async () => {
     const log = createLog();
     const executor = createExecutor();
