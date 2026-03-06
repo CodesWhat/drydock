@@ -26,10 +26,58 @@ scenarios:
       # Resolve a container id outside measured HTTP steps so scan latency
       # reflects rate-limit behavior instead of watch setup cost.
       - function: "ensureContainerId"
-      # In the CI/local test stack the scanner is typically disabled, so
-      # pre-limit requests can be 400. The rate limiter is set to max=30
-      # per minute; this burst of 6 validates the middleware is active
-      # without hitting the limit ceiling.
+      # The rate limiter is set to max=30 per minute. We fire 31 requests
+      # in a single virtual-user flow so at least one must receive HTTP 429.
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
       - post:
           url: "/api/containers/{{ containerId }}/scan"
       - post:

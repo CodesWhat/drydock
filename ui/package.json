@@ -21,7 +21,6 @@
     "test:storybook": "COMPONENTS_DTS=false storybook build --test --quiet",
     "storybook": "COMPONENTS_DTS=false storybook dev -p 6006",
     "build-storybook": "COMPONENTS_DTS=false storybook build",
-    "chromatic": "npx chromatic",
     "knip": "knip"
   },
   "dependencies": {
@@ -32,7 +31,6 @@
     "vue-router": "^5.0.2"
   },
   "devDependencies": {
-    "@chromatic-com/storybook": "^5.0.1",
     "@fontsource/comic-mono": "^5.2.5",
     "@fontsource/commit-mono": "^5.2.5",
     "@fontsource/inconsolata": "^5.2.7",
@@ -51,7 +49,6 @@
     "@vitejs/plugin-vue": "^6.0.4",
     "@vitest/coverage-v8": "^4.0.18",
     "@vue/test-utils": "^2.4.0",
-    "chromatic": "^15.2.0",
     "jsdom": "^28.1.0",
     "knip": "^5.85.0",
     "storybook": "^10.2.13",

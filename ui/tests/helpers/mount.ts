@@ -19,9 +19,6 @@ const routerStub = {
 
 const routeStub = { name: 'test', path: '/test', query: {}, params: {} };
 
-/** Stub for useConfirm() — returns a confirm with require as vi.fn() */
-const confirmStub = { require: vi.fn() };
-
 /**
  * Mount a component with directive + router stubs pre-configured.
  * Accepts all @vue/test-utils mount options.

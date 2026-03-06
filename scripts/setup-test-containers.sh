@@ -69,5 +69,5 @@ run_test_container trueforge_radarr --label "$LABEL_WATCH" --label 'dd.tag.inclu
 # QUAY
 run_test_container quay_prometheus --label "$LABEL_WATCH" --label 'dd.tag.include=^v\d+\.\d+\.\d+$' --user root --tmpfs /prometheus:rw,mode=777 quay.io/prometheus/prometheus:v2.52.0
 
-echo "✅ Test containers started (10 containers)"
+echo "✅ Test containers started (11 containers)"
 docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}" | grep -E "(ecr_|ghcr_|gitlab_|hub_|lscr_|quay_|trueforge_)"
