@@ -72,6 +72,8 @@ describe('icons/fetch', () => {
       {
         responseType: 'arraybuffer',
         timeout: 10000,
+        maxContentLength: 2 * 1024 * 1024,
+        maxBodyLength: 2 * 1024 * 1024,
       },
     );
     expect(mockWriteIconAtomically).toHaveBeenCalledWith(
@@ -81,6 +83,34 @@ describe('icons/fetch', () => {
     expect(mockEnforceIconCacheLimits).toHaveBeenCalledWith({
       protectedPath: '/store/icons/simple/docker.svg',
     });
+  });
+
+  test('rejects upstream payload when bytes do not match provider format', async () => {
+    await expect(
+      fetchAndCacheIconOnce({
+        provider: 'homarr',
+        slug: 'docker',
+        cachePath: '/store/icons/homarr/docker.png',
+      }),
+    ).rejects.toThrow(/Invalid icon payload/i);
+
+    expect(mockWriteIconAtomically).not.toHaveBeenCalled();
+    expect(mockEnforceIconCacheLimits).not.toHaveBeenCalled();
+  });
+
+  test('rejects upstream payload when icon size exceeds limit', async () => {
+    mockAxiosGet.mockResolvedValue({ data: Buffer.alloc(2 * 1024 * 1024 + 1, 0x41) });
+
+    await expect(
+      fetchAndCacheIconOnce({
+        provider: 'simple',
+        slug: 'oversize',
+        cachePath: '/store/icons/simple/oversize.svg',
+      }),
+    ).rejects.toThrow(/size is out of bounds/i);
+
+    expect(mockWriteIconAtomically).not.toHaveBeenCalled();
+    expect(mockEnforceIconCacheLimits).not.toHaveBeenCalled();
   });
 
   test('deduplicates concurrent fetches for the same provider and slug', async () => {

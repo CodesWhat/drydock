@@ -284,6 +284,8 @@ describe('Icons Router', () => {
       {
         responseType: 'arraybuffer',
         timeout: 10000,
+        maxContentLength: 2 * 1024 * 1024,
+        maxBodyLength: 2 * 1024 * 1024,
       },
     );
     expect(mockMkdir).toHaveBeenCalledWith('/store/icons/simple', { recursive: true });
@@ -303,7 +305,7 @@ describe('Icons Router', () => {
   test('should normalize slug extension and fetch homarr icon URL', async () => {
     mockAccess.mockRejectedValue(new Error('not found'));
     mockAxiosGet.mockResolvedValue({
-      data: Buffer.from('png'),
+      data: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     });
     const handler = getHandler();
     const res = createResponse();
@@ -323,6 +325,8 @@ describe('Icons Router', () => {
       {
         responseType: 'arraybuffer',
         timeout: 10000,
+        maxContentLength: 2 * 1024 * 1024,
+        maxBodyLength: 2 * 1024 * 1024,
       },
     );
     expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
@@ -380,6 +384,8 @@ describe('Icons Router', () => {
       {
         responseType: 'arraybuffer',
         timeout: 10000,
+        maxContentLength: 2 * 1024 * 1024,
+        maxBodyLength: 2 * 1024 * 1024,
       },
     );
     expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
