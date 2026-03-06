@@ -104,7 +104,31 @@ function getRouteHandler(method, path) {
   });
   auth.init(app);
   const call = mockRouter[method].mock.calls.find((c) => c[0] === path);
-  return call ? call[1] : undefined;
+  if (!call) return undefined;
+  // Return the last handler in the chain (route-level middleware precedes it)
+  return call[call.length - 1];
+}
+
+function getRouteMiddleware(method, path) {
+  const app = createApp();
+  registry.getState.mockReturnValue({
+    authentication: {
+      'oauth.provider': {
+        getId: vi.fn(() => 'oauth.provider'),
+        getStrategy: vi.fn(() => ({})),
+        getStrategyDescription: vi.fn(() => ({
+          type: 'oauth',
+          name: 'provider',
+          logoutUrl: 'https://logout.example.com',
+        })),
+      },
+    },
+  });
+  auth.init(app);
+  const call = mockRouter[method].mock.calls.find((c) => c[0] === path);
+  if (!call) return [];
+  // Return all middleware handlers (everything between route path and final handler)
+  return call.slice(1, -1);
 }
 
 describe('Auth Router', () => {
@@ -147,20 +171,41 @@ describe('Auth Router', () => {
       expect(authMiddleware).toHaveBeenCalledWith(req, res, next);
     });
 
-    test('should record failed login audit when credentials are invalid', () => {
-      passport.authenticate.mockImplementation((_ids, _options, callback) => {
-        return () => callback(null, false, undefined, 401);
-      });
+    test('should not special-case POST /login (handled by route-level middleware)', () => {
+      const authMiddleware = vi.fn();
+      passport.authenticate.mockReturnValue(authMiddleware);
 
       const req = {
         isAuthenticated: vi.fn(() => false),
         method: 'POST',
         path: '/login',
       };
-      const res = createResponse();
+      const res = {};
       const next = vi.fn();
 
       auth.requireAuthentication(req, res, next);
+
+      expect(passport.authenticate).toHaveBeenCalledWith(auth.getAllIds(), { session: true });
+      expect(authMiddleware).toHaveBeenCalledWith(req, res, next);
+    });
+  });
+
+  describe('authenticateLogin (route-level middleware)', () => {
+    function getLoginMiddleware() {
+      return getRouteMiddleware('post', '/login')[0];
+    }
+
+    test('should record failed login audit when credentials are invalid', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {};
+      const res = createResponse();
+      const next = vi.fn();
+
+      authenticateLoginFn(req, res, next);
 
       expect(passport.authenticate).toHaveBeenCalledWith(
         auth.getAllIds(),
@@ -183,30 +228,25 @@ describe('Auth Router', () => {
         return () => callback(error, false, undefined, 500);
       });
 
-      const req = {
-        isAuthenticated: vi.fn(() => false),
-        method: 'POST',
-        path: '/login',
-      };
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {};
       const res = createResponse();
       const next = vi.fn();
 
-      auth.requireAuthentication(req, res, next);
+      authenticateLoginFn(req, res, next);
 
       expect(next).toHaveBeenCalledWith(error);
       expect(res.sendStatus).not.toHaveBeenCalled();
       expect(mockRecordAuditEvent).not.toHaveBeenCalled();
     });
 
-    test('should continue to login handler when login credentials are valid', () => {
+    test('should continue to login handler when credentials are valid', () => {
       passport.authenticate.mockImplementation((_ids, _options, callback) => {
         return () => callback(null, { username: 'john' }, undefined, 200);
       });
 
+      const authenticateLoginFn = getLoginMiddleware();
       const req = {
-        isAuthenticated: vi.fn(() => false),
-        method: 'POST',
-        path: '/login',
         login: vi.fn((user, options, done) => {
           req.user = user;
           done();
@@ -215,7 +255,7 @@ describe('Auth Router', () => {
       const res = createResponse();
       const next = vi.fn();
 
-      auth.requireAuthentication(req, res, next);
+      authenticateLoginFn(req, res, next);
 
       expect(req.login).toHaveBeenCalledWith(
         { username: 'john' },
@@ -228,20 +268,17 @@ describe('Auth Router', () => {
       expect(res.sendStatus).not.toHaveBeenCalled();
     });
 
-    test('should continue when login credentials are valid and req.login is unavailable', () => {
+    test('should continue when credentials are valid and req.login is unavailable', () => {
       passport.authenticate.mockImplementation((_ids, _options, callback) => {
         return () => callback(null, { username: 'john' }, undefined, 200);
       });
 
-      const req = {
-        isAuthenticated: vi.fn(() => false),
-        method: 'POST',
-        path: '/login',
-      };
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {};
       const res = createResponse();
       const next = vi.fn();
 
-      auth.requireAuthentication(req, res, next);
+      authenticateLoginFn(req, res, next);
 
       expect(req.user).toEqual({ username: 'john' });
       expect(next).toHaveBeenCalled();
@@ -249,43 +286,24 @@ describe('Auth Router', () => {
       expect(res.sendStatus).not.toHaveBeenCalled();
     });
 
-    test('should call next with req.login errors while validating login credentials', () => {
+    test('should call next with req.login errors', () => {
       const loginError = new Error('login callback failed');
       passport.authenticate.mockImplementation((_ids, _options, callback) => {
         return () => callback(null, { username: 'john' }, undefined, 200);
       });
 
+      const authenticateLoginFn = getLoginMiddleware();
       const req = {
-        isAuthenticated: vi.fn(() => false),
-        method: 'POST',
-        path: '/login',
         login: vi.fn((_user, _options, done) => done(loginError)),
       };
       const res = createResponse();
       const next = vi.fn();
 
-      auth.requireAuthentication(req, res, next);
+      authenticateLoginFn(req, res, next);
 
       expect(next).toHaveBeenCalledWith(loginError);
       expect(mockRecordAuditEvent).not.toHaveBeenCalled();
       expect(res.sendStatus).not.toHaveBeenCalled();
-    });
-
-    test('should handle login requests even when response has no sendStatus/end helpers', () => {
-      const authMiddleware = vi.fn();
-      passport.authenticate.mockReturnValue(authMiddleware);
-
-      const req = {
-        isAuthenticated: vi.fn(() => false),
-        method: 'POST',
-        path: '/login',
-      };
-      const res = {};
-      const next = vi.fn();
-
-      auth.requireAuthentication(req, res, next);
-
-      expect(authMiddleware).toHaveBeenCalledWith(req, res, next);
     });
   });
 
@@ -560,6 +578,29 @@ describe('Auth Router', () => {
       expect(postRoutes).toContain('/remember');
       expect(postRoutes).toContain('/login');
       expect(postRoutes).toContain('/logout');
+    });
+
+    test('should register /login before authentication middleware with authenticateLogin', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const loginRouteIndex = mockRouter.post.mock.calls.findIndex((c) => c[0] === '/login');
+      const loginRouteOrder = mockRouter.post.mock.invocationCallOrder[loginRouteIndex];
+
+      const authMiddlewareIndex = mockRouter.use.mock.calls.findIndex(
+        (c) => c[0] === auth.requireAuthentication,
+      );
+      const authMiddlewareOrder = mockRouter.use.mock.invocationCallOrder[authMiddlewareIndex];
+
+      expect(loginRouteIndex).toBeGreaterThanOrEqual(0);
+      expect(authMiddlewareIndex).toBeGreaterThanOrEqual(0);
+      expect(loginRouteOrder).toBeLessThan(authMiddlewareOrder);
+
+      // Verify authenticateLogin is registered as route-level middleware
+      const loginCall = mockRouter.post.mock.calls[loginRouteIndex];
+      expect(loginCall).toHaveLength(3); // path, authenticateLogin, login
+      expect(typeof loginCall[1]).toBe('function'); // authenticateLogin middleware
+      expect(typeof loginCall[2]).toBe('function'); // login handler
     });
 
     test('should register /remember after authentication middleware', () => {

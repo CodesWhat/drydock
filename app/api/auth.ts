@@ -81,11 +81,6 @@ export function requireAuthentication(req: AuthRequest, res: Response, next: Nex
     return;
   }
 
-  if (req.method === 'POST' && req.path === '/login') {
-    authenticateLogin(req, res, next);
-    return;
-  }
-
   passport.authenticate(getAllIds(), { session: true })(req, res, next);
 }
 
@@ -458,14 +453,14 @@ export function init(app: Application): void {
   // This endpoint must stay unauthenticated so the login screen can render.
   app.get('/api/auth/methods', authLimiter, getStrategies);
 
+  // Login route with its own authentication middleware (before global auth guard)
+  router.post('/login', authenticateLogin, login);
+
   // Routes to protect after this line
   router.use(requireAuthentication);
 
   // Store remember-me preference for authenticated sessions
   router.post('/remember', setRememberMe);
-
-  // Add login/logout routes
-  router.post('/login', login);
 
   router.get('/user', getUser);
 
