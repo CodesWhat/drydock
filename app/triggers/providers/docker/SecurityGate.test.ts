@@ -805,7 +805,7 @@ describe('SecurityGate', () => {
   });
 
   test('persistSecurityState should map scan to updateScan when slot is update', async () => {
-    const { gate, updateContainer, cacheSecurityState } = createGateHarness();
+    const { gate, updateContainer } = createGateHarness();
     const log = createLog();
 
     await gate.persistSecurityState(
