@@ -46,3 +46,4 @@ jobs:
           projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
           workingDir: ui
           onlyChanged: true
+          exitOnceUploaded: true
