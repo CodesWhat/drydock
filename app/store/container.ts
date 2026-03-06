@@ -719,6 +719,22 @@ export function _invalidateContainersCacheForMutationForTests(containerBefore, c
   invalidateContainersCacheForMutation(containerBefore, containerAfter);
 }
 
+export function _getContainersQueryCacheReverseIndexForTests() {
+  return containersQueryCacheReverseIndex;
+}
+
+export function _getContainersQueryCacheParsedEntriesForTests() {
+  return containersQueryCacheParsedEntries;
+}
+
+export function _deleteContainersQueryCacheEntryForTests(cacheKey: string) {
+  deleteContainersQueryCacheEntry(cacheKey);
+}
+
+export function _pruneSecurityStateCacheIncrementallyForTests(nowMs = Date.now()) {
+  pruneSecurityStateCacheIncrementally(nowMs);
+}
+
 export function _getValueByPathForTests(source, path) {
   return getValueByPath(source, path);
 }
