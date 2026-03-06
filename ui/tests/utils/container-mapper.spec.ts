@@ -171,6 +171,21 @@ describe('container-mapper', () => {
       expect(c.registry).toBe('custom');
       expect(c.registryUrl).toBeUndefined();
     });
+
+    it('returns custom when registry url cannot be parsed', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'custom', url: 'https://[::1' },
+            name: 'img',
+            tag: { value: 'latest' },
+          },
+        }),
+      );
+      expect(c.registry).toBe('custom');
+      expect(c.registryName).toBe('custom');
+      expect(c.registryUrl).toBe('https://[::1');
+    });
   });
 
   describe('deriveBouncer', () => {
