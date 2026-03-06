@@ -128,5 +128,5 @@ name = "zizmor"
 
 # Entrypoint uses su-exec for runtime privilege drop; no static USER needed
 [[triage]]
-match.rules = ["trivy:DS002"]
+match.rules = ["trivy:DS002", "trivy:DS-0002"]
 set.ignored = true
