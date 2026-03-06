@@ -28,67 +28,9 @@ scenarios:
       # Resolve a container id outside measured HTTP steps so scan latency
       # reflects rate-limit behavior instead of watch setup cost.
       - function: "ensureContainerId"
-      # The rate limiter is set to max=30 per minute. We fire 31 requests
+      # The rate limiter is set to max=30 per minute. We fire 35 requests
       # in a single virtual-user flow so at least one must receive HTTP 429.
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
-      - post:
-          url: "/api/containers/{{ containerId }}/scan"
+      - loop:
+          - post:
+              url: "/api/containers/{{ containerId }}/scan"
+        count: 35
