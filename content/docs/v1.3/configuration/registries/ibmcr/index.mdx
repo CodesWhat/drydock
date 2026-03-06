@@ -1,0 +1,110 @@
+---
+title: "IBMCR (IBM Cloud Container Registry)"
+description: "The ibmcr registry lets you configure IBM Cloud Container Registry integration."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `ibmcr` registry lets you configure [IBM Cloud Container Registry](https://cloud.ibm.com/docs/Registry) integration.
+
+Drydock automatically detects IBMCR registries by matching `*.icr.io` hostnames.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_IBMCR_{REGISTRY_NAME}_APIKEY` | ⚪ | IBM Cloud API key | Automatically sets login to `iamapikey` | |
+| `DD_REGISTRY_IBMCR_{REGISTRY_NAME}_LOGIN` | ⚪ | Registry username | DD_REGISTRY_IBMCR_\{REGISTRY_NAME\}_PASSWORD must be defined | |
+| `DD_REGISTRY_IBMCR_{REGISTRY_NAME}_PASSWORD` | ⚪ | Registry password | DD_REGISTRY_IBMCR_\{REGISTRY_NAME\}_LOGIN must be defined | |
+| `DD_REGISTRY_IBMCR_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | DD_REGISTRY_IBMCR_\{REGISTRY_NAME\}_LOGIN/PASSWORD/APIKEY must not be defined | |
+
+## Examples
+
+### Configure with an IBM Cloud API key (recommended)
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_IBMCR_PRIVATE_APIKEY=xxxxx
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_IBMCR_PRIVATE_APIKEY=xxxxx" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Configure with login and password
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_IBMCR_PRIVATE_LOGIN=iamapikey
+      - DD_REGISTRY_IBMCR_PRIVATE_PASSWORD=xxxxx
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_IBMCR_PRIVATE_LOGIN=iamapikey" \
+  -e "DD_REGISTRY_IBMCR_PRIVATE_PASSWORD=xxxxx" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Configure with base64 auth
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_IBMCR_PRIVATE_AUTH=aWFtYXBpa2V5Onh4eHh4
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_IBMCR_PRIVATE_AUTH=aWFtYXBpa2V5Onh4eHh4" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+## How to create an API key on IBM Cloud
+
+### Go to your IBM Cloud Console
+
+Navigate to **Manage > Access (IAM) > API keys**.
+
+### Create an API key
+
+Click **Create an IBM Cloud API key**, give it a name and description, then copy the generated key.
+
+The API key is the simplest authentication method. When provided, drydock automatically uses `iamapikey` as the login and the API key as the password.

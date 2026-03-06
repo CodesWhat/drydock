@@ -1,15 +1,31 @@
-// @ts-nocheck
 import fs from 'node:fs';
 import https from 'node:https';
-import axios from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
 import { resolveConfiguredPath } from '../runtime/paths.js';
+import { failClosedAuth, requireAuthString, withAuthorizationHeader } from '../security/auth.js';
+import { REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
 import Registry from './Registry.js';
+
+type RegistryRequestOptions = AxiosRequestConfig;
 
 /**
  * Base Registry with common patterns
  */
 class BaseRegistry extends Registry {
-  private httpsAgent;
+  private httpsAgent?: https.Agent;
+  private bearerTokenCache = new Map<string, { token: string; expiresAt: number }>();
+
+  private getBearerTokenCacheKey(authUrl: string, credentials?: string) {
+    return `${authUrl}|${credentials || ''}`;
+  }
+
+  private pruneExpiredBearerTokenCache(now: number) {
+    for (const [key, cachedToken] of this.bearerTokenCache.entries()) {
+      if (now >= cachedToken.expiresAt) {
+        this.bearerTokenCache.delete(key);
+      }
+    }
+  }
 
   private getHttpsAgent() {
     const shouldDisableTlsVerification = this.configuration?.insecure === true;
@@ -39,8 +55,8 @@ class BaseRegistry extends Registry {
     return this.httpsAgent;
   }
 
-  private withTlsRequestOptions(requestOptions) {
-    const httpsAgent = requestOptions?.httpsAgent || this.getHttpsAgent();
+  private withTlsRequestOptions(requestOptions: RegistryRequestOptions): RegistryRequestOptions {
+    const httpsAgent = requestOptions.httpsAgent || this.getHttpsAgent();
     if (!httpsAgent) {
       return requestOptions;
     }
@@ -54,7 +70,10 @@ class BaseRegistry extends Registry {
    * Common URL normalization for registries that need https:// prefix and /v2 suffix
    */
   normalizeImageUrl(image, registryUrl = null) {
-    const imageNormalized = { ...image };
+    const imageNormalized = {
+      ...image,
+      registry: { ...image.registry },
+    };
     const url = registryUrl || image.registry.url;
 
     if (!url.startsWith('https://')) {
@@ -66,11 +85,15 @@ class BaseRegistry extends Registry {
   /**
    * Common Basic Auth implementation
    */
-  async authenticateBasic(requestOptions, credentials) {
+  async authenticateBasic(
+    requestOptions: RegistryRequestOptions,
+    credentials?: string,
+  ): Promise<RegistryRequestOptions> {
     const requestOptionsWithAuth = this.withTlsRequestOptions({ ...requestOptions });
     if (credentials) {
-      requestOptionsWithAuth.headers = requestOptionsWithAuth.headers || {};
-      requestOptionsWithAuth.headers.Authorization = `Basic ${credentials}`;
+      const headers = (requestOptionsWithAuth.headers || {}) as Record<string, unknown>;
+      headers.Authorization = `Basic ${credentials}`;
+      requestOptionsWithAuth.headers = headers as AxiosRequestConfig['headers'];
     }
     return requestOptionsWithAuth;
   }
@@ -78,11 +101,15 @@ class BaseRegistry extends Registry {
   /**
    * Common Bearer token authentication
    */
-  async authenticateBearer(requestOptions, token) {
+  async authenticateBearer(
+    requestOptions: RegistryRequestOptions,
+    token?: string,
+  ): Promise<RegistryRequestOptions> {
     const requestOptionsWithAuth = this.withTlsRequestOptions({ ...requestOptions });
     if (token) {
-      requestOptionsWithAuth.headers = requestOptionsWithAuth.headers || {};
-      requestOptionsWithAuth.headers.Authorization = `Bearer ${token}`;
+      const headers = (requestOptionsWithAuth.headers || {}) as Record<string, unknown>;
+      headers.Authorization = `Bearer ${token}`;
+      requestOptionsWithAuth.headers = headers as AxiosRequestConfig['headers'];
     }
     return requestOptionsWithAuth;
   }
@@ -98,16 +125,29 @@ class BaseRegistry extends Registry {
    * @returns the request options with Authorization header set
    */
   async authenticateBearerFromAuthUrl(
-    requestOptions,
-    authUrl,
-    credentials,
-    tokenExtractor = (response) => response.data.token,
+    requestOptions: RegistryRequestOptions,
+    authUrl: string,
+    credentials?: string,
+    tokenExtractor: (response: { data?: Record<string, unknown> }) => unknown = (response) =>
+      response.data?.token,
   ) {
     const requestOptionsWithAuth = this.withTlsRequestOptions({
       ...requestOptions,
     });
-    requestOptionsWithAuth.headers = requestOptionsWithAuth.headers || {};
-    let token;
+    const tokenFailureMessage = `Unable to authenticate registry ${this.getId()}: token endpoint response does not contain token`;
+    const cacheKey = this.getBearerTokenCacheKey(authUrl, credentials);
+    const now = Date.now();
+    this.pruneExpiredBearerTokenCache(now);
+    const cachedToken = this.bearerTokenCache.get(cacheKey);
+    if (cachedToken && now < cachedToken.expiresAt) {
+      return withAuthorizationHeader(
+        requestOptionsWithAuth,
+        'Bearer',
+        cachedToken.token,
+        tokenFailureMessage,
+      );
+    }
+    this.bearerTokenCache.delete(cacheKey);
 
     const request = this.withTlsRequestOptions({
       method: 'GET',
@@ -118,20 +158,27 @@ class BaseRegistry extends Registry {
     });
 
     if (credentials) {
-      request.headers.Authorization = `Basic ${credentials}`;
+      const headers = (request.headers || {}) as Record<string, unknown>;
+      headers.Authorization = `Basic ${credentials}`;
+      request.headers = headers as AxiosRequestConfig['headers'];
     }
 
+    let response: { data?: Record<string, unknown> } | undefined;
     try {
-      const response = await axios(request);
-      token = tokenExtractor(response);
+      response = await axios(request);
     } catch (e) {
-      this.log.warn(`Error when trying to get an access token (${e.message})`);
+      failClosedAuth(
+        `Unable to authenticate registry ${this.getId()}: token request failed (${e.message})`,
+      );
     }
 
-    if (token) {
-      requestOptionsWithAuth.headers.Authorization = `Bearer ${token}`;
-    }
-    return requestOptionsWithAuth;
+    const token = requireAuthString(tokenExtractor(response), tokenFailureMessage);
+    this.bearerTokenCache.set(cacheKey, {
+      token,
+      expiresAt: Date.now() + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS,
+    });
+
+    return withAuthorizationHeader(requestOptionsWithAuth, 'Bearer', token, tokenFailureMessage);
   }
 
   /**
@@ -171,6 +218,21 @@ class BaseRegistry extends Registry {
    */
   matchUrlPattern(image, pattern) {
     return pattern.test(image.registry.url);
+  }
+
+  /**
+   * Normalize a registry URL-like value into a lowercase hostname.
+   */
+  getRegistryHostname(value: string): string {
+    const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      return new URL(withProtocol).hostname.toLowerCase();
+    } catch {
+      return value
+        .replace(/^https?:\/\//i, '')
+        .split('/')[0]
+        .toLowerCase();
+    }
   }
 
   /**

@@ -1,7 +1,6 @@
-// @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-const { mockApp, mockServerConfig } = vi.hoisted(() => {
+const { mockApp, mockServerConfig, mockHashToken } = vi.hoisted(() => {
   const mockApp = {
     disable: vi.fn(),
     use: vi.fn(),
@@ -15,7 +14,10 @@ const { mockApp, mockServerConfig } = vi.hoisted(() => {
     tls: { enabled: false },
     cors: { enabled: false },
   };
-  return { mockApp, mockServerConfig };
+  const mockHashToken = vi.fn((token: string) =>
+    Buffer.from(token.padEnd(32, '_').slice(0, 32), 'utf8'),
+  );
+  return { mockApp, mockServerConfig, mockHashToken };
 });
 
 vi.mock('node:fs', () => ({
@@ -64,6 +66,9 @@ vi.mock('./event.js', () => ({
 vi.mock('../../log/buffer.js', () => ({
   getEntries: vi.fn().mockReturnValue([]),
 }));
+vi.mock('../../util/crypto.js', () => ({
+  hashToken: mockHashToken,
+}));
 
 import { authenticate, init } from './index.js';
 
@@ -93,6 +98,20 @@ describe('Agent API index', () => {
       const res = { status: vi.fn().mockReturnThis(), send: vi.fn() };
       const next = vi.fn();
       authenticate(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    test('should return 401 when secret header is not a string', async () => {
+      process.env.DD_AGENT_SECRET = 'correct-secret';
+      await init();
+
+      const req = { headers: { 'x-dd-agent-secret': ['correct-secret'] }, ip: '127.0.0.1' };
+      const res = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      const next = vi.fn();
+
+      authenticate(req, res, next);
+
       expect(res.status).toHaveBeenCalledWith(401);
       expect(next).not.toHaveBeenCalled();
     });
@@ -227,6 +246,25 @@ describe('Agent API index', () => {
       expect(next).not.toHaveBeenCalled();
     });
 
+    test('authenticate should compare hashed secrets with hashToken utility', async () => {
+      process.env.DD_AGENT_SECRET = 'correct-secret';
+      await init();
+
+      const { hashToken } = await import('../../util/crypto.js');
+      (hashToken as any).mockClear();
+
+      const req = { headers: { 'x-dd-agent-secret': 'wrong-secret' }, ip: '127.0.0.1' };
+      const res = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      const next = vi.fn();
+      authenticate(req, res, next);
+
+      expect(hashToken).toHaveBeenCalledTimes(2);
+      expect(hashToken).toHaveBeenCalledWith('wrong-secret');
+      expect(hashToken).toHaveBeenCalledWith('correct-secret');
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).not.toHaveBeenCalled();
+    });
+
     describe('/api/log/entries route handler', () => {
       let logEntriesHandler;
 
@@ -271,6 +309,45 @@ describe('Agent API index', () => {
           since: 99999,
         });
         expect(res.status).toHaveBeenCalledWith(200);
+      });
+
+      test('should return 400 when level query parameter is invalid', async () => {
+        const { getEntries } = await import('../../log/buffer.js');
+        const req = { query: { level: 'verbose' } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+        logEntriesHandler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Invalid level query parameter' });
+        expect(getEntries).not.toHaveBeenCalled();
+      });
+
+      test('should return 400 when component query parameter is invalid', async () => {
+        const { getEntries } = await import('../../log/buffer.js');
+        const req = { query: { component: 'docker;rm -rf /' } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+        logEntriesHandler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Invalid component query parameter' });
+        expect(getEntries).not.toHaveBeenCalled();
+      });
+
+      test.each([
+        ['level', 123, 'Invalid level query parameter'],
+        ['component', ['docker'], 'Invalid component query parameter'],
+      ])('should return 400 when %s query parameter is not a string', async (param, value, error) => {
+        const { getEntries } = await import('../../log/buffer.js');
+        const req = { query: { [param]: value } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+        logEntriesHandler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ error });
+        expect(getEntries).not.toHaveBeenCalled();
       });
     });
   });

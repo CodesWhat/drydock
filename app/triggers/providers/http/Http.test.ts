@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Http from './Http.js';
 
 // Mock axios
@@ -107,6 +106,41 @@ describe('HTTP Trigger', () => {
     });
   });
 
+  test('should default auth type to BASIC when type is omitted', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://example.com/webhook',
+      auth: { user: 'user', password: 'pass' },
+    });
+
+    await http.trigger({ name: 'test' });
+
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auth: { username: 'user', password: 'pass' },
+      }),
+    );
+  });
+
+  test('should fallback to BASIC auth when auth type is an empty string at runtime', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://example.com/webhook',
+      auth: { type: 'BASIC', user: 'user', password: 'pass' },
+    });
+
+    http.configuration.auth.type = '';
+    await http.trigger({ name: 'test' });
+
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auth: { username: 'user', password: 'pass' },
+      }),
+    );
+  });
+
   test('should use BEARER auth', async () => {
     const { default: axios } = await import('axios');
     axios.mockResolvedValue({ data: {} });
@@ -126,7 +160,7 @@ describe('HTTP Trigger', () => {
     });
   });
 
-  test('should handle unknown auth type without setting auth or headers', async () => {
+  test('should fail closed on unknown auth type', async () => {
     const { default: axios } = await import('axios');
     axios.mockResolvedValue({ data: {} });
     http.configuration = {
@@ -136,13 +170,34 @@ describe('HTTP Trigger', () => {
     };
     const container = { name: 'test' };
 
-    await http.trigger(container);
-    expect(axios).toHaveBeenCalledWith({
-      method: 'POST',
+    await expect(http.trigger(container)).rejects.toThrow('auth type "UNKNOWN" is unsupported');
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('should fail closed when BASIC auth credentials are incomplete', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    http.configuration = {
       url: 'https://example.com/webhook',
-      timeout: 30000,
-      data: container,
-    });
+      method: 'POST',
+      auth: { type: 'BASIC', user: 'user' },
+    };
+
+    await expect(http.trigger({ name: 'test' })).rejects.toThrow('basic auth password is missing');
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('should fail closed when BEARER token is missing', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    http.configuration = {
+      url: 'https://example.com/webhook',
+      method: 'POST',
+      auth: { type: 'BEARER' },
+    };
+
+    await expect(http.trigger({ name: 'test' })).rejects.toThrow('bearer token is missing');
+    expect(axios).not.toHaveBeenCalled();
   });
 
   test('should handle request with no auth and no proxy', async () => {
@@ -195,7 +250,51 @@ describe('HTTP Trigger', () => {
       url: 'https://example.com/webhook',
       timeout: 30000,
       data: container,
-      proxy: { host: 'proxy', port: '8080' },
+      proxy: { host: 'proxy', port: 8080 },
     });
+  });
+
+  test('should use default https proxy port when none is specified', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://example.com/webhook',
+      proxy: 'https://secure-proxy',
+    });
+
+    await http.trigger({ name: 'test' });
+
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proxy: { host: 'secure-proxy', port: 443 },
+      }),
+    );
+  });
+
+  test('should use centralized outbound timeout when env override is set', async () => {
+    const previousTimeout = process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+    process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = '1234';
+
+    try {
+      const { default: axios } = await import('axios');
+      axios.mockResolvedValue({ data: {} });
+      await http.register('trigger', 'http', 'test', {
+        url: 'https://example.com/webhook',
+      });
+
+      await http.trigger({ name: 'test' });
+
+      expect(axios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          timeout: 1234,
+        }),
+      );
+    } finally {
+      if (previousTimeout === undefined) {
+        delete process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+      } else {
+        process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = previousTimeout;
+      }
+    }
   });
 });

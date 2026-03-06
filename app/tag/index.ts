@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Semver utils.
  */
@@ -7,7 +6,7 @@ import { RE2JS } from 're2js';
 import semver from 'semver';
 import log from '../log/index.js';
 
-function normalizeNumericMultiSegmentTag(rawVersion) {
+function normalizeNumericMultiSegmentTag(rawVersion: string) {
   if (!/^v?\d+(?:\.\d+){3,}$/.test(rawVersion)) {
     return null;
   }
@@ -26,7 +25,7 @@ function normalizeNumericMultiSegmentTag(rawVersion) {
  * @param rawVersion
  * @returns {*|SemVer}
  */
-export function parse(rawVersion) {
+export function parse(rawVersion: string) {
   const normalizedMultiSegment = normalizeNumericMultiSegmentTag(rawVersion);
   if (normalizedMultiSegment) {
     return semver.parse(normalizedMultiSegment);
@@ -48,7 +47,7 @@ export function parse(rawVersion) {
  * @param version1
  * @param version2
  */
-export function isGreater(version1, version2) {
+export function isGreater(version1: string, version2: string) {
   const version1Semver = parse(version1);
   const version2Semver = parse(version2);
 
@@ -65,7 +64,7 @@ export function isGreater(version1, version2) {
  * @param version2
  * @returns {*|string|null}
  */
-export function diff(version1, version2) {
+export function diff(version1: string, version2: string) {
   const version1Semver = parse(version1);
   const version2Semver = parse(version2);
 
@@ -116,7 +115,7 @@ function safeRegExp(pattern: string): SafeRegex | null {
  * @param originalTag
  * @return {*}
  */
-export function transform(transformFormula, originalTag) {
+export function transform(transformFormula: string, originalTag: string) {
   // No formula ? return original tag value
   if (!transformFormula || transformFormula === '') {
     return originalTag;

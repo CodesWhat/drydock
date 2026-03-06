@@ -1,7 +1,19 @@
-// @ts-nocheck
-import axios from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
+import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
+import {
+  failClosedAuth,
+  requireAuthString,
+  withAuthorizationHeader,
+} from '../../../security/auth.js';
 
 import Trigger from '../Trigger.js';
+
+interface HttpRequestOptions extends Omit<AxiosRequestConfig, 'proxy'> {
+  proxy?: {
+    host: string;
+    port: number;
+  };
+}
 
 /**
  * HTTP Trigger implementation
@@ -50,10 +62,10 @@ class Http extends Trigger {
   }
 
   async sendHttpRequest(body) {
-    const options = {
+    let options: HttpRequestOptions = {
       method: this.configuration.method,
       url: this.configuration.url,
-      timeout: 30000,
+      timeout: getOutboundHttpTimeoutMs(),
     };
     if (this.configuration.method === 'POST') {
       options.data = body;
@@ -61,22 +73,38 @@ class Http extends Trigger {
       options.params = body;
     }
     if (this.configuration.auth) {
-      if (this.configuration.auth.type === 'BASIC') {
+      const authType = `${this.configuration.auth.type || 'BASIC'}`.toUpperCase();
+      if (authType === 'BASIC') {
         options.auth = {
-          username: this.configuration.auth.user,
-          password: this.configuration.auth.password,
+          username: requireAuthString(
+            this.configuration.auth.user,
+            `Unable to authenticate HTTP trigger ${this.getId()}: basic auth username is missing`,
+          ),
+          password: requireAuthString(
+            this.configuration.auth.password,
+            `Unable to authenticate HTTP trigger ${this.getId()}: basic auth password is missing`,
+          ),
         };
-      } else if (this.configuration.auth.type === 'BEARER') {
-        options.headers = {
-          Authorization: `Bearer ${this.configuration.auth.bearer}`,
-        };
+      } else if (authType === 'BEARER') {
+        options = withAuthorizationHeader(
+          options,
+          'Bearer',
+          this.configuration.auth.bearer,
+          `Unable to authenticate HTTP trigger ${this.getId()}: bearer token is missing`,
+        );
+      } else {
+        failClosedAuth(
+          `Unable to authenticate HTTP trigger ${this.getId()}: auth type "${authType}" is unsupported`,
+        );
       }
     }
     if (this.configuration.proxy) {
       const proxyUrl = new URL(this.configuration.proxy);
+      const defaultProxyPort = proxyUrl.protocol === 'https:' ? 443 : 80;
+      const proxyPort = proxyUrl.port ? Number.parseInt(proxyUrl.port, 10) : defaultProxyPort;
       options.proxy = {
         host: proxyUrl.hostname,
-        port: proxyUrl.port,
+        port: proxyPort,
       };
     }
     const response = await axios(options);

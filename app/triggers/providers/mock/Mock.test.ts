@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Mock from './Mock.js';
 
 describe('Mock Trigger', () => {

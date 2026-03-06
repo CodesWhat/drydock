@@ -1,0 +1,13 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "quickstart",
+    "configuration",
+    "updates",
+    "api",
+    "monitoring",
+    "faq",
+    "changelog"
+  ]
+}

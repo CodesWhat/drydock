@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Quay from '../quay/Quay.js';
 
 /**
@@ -12,7 +11,10 @@ class Trueforge extends Quay {
    */
 
   match(image) {
-    const url = image.registry.url;
+    const url = image?.registry?.url;
+    if (typeof url !== 'string') {
+      return false;
+    }
     return (
       url === 'oci.trueforge.org' ||
       (url.endsWith('.oci.trueforge.org') && /^[a-zA-Z0-9.-]+$/.test(url))
@@ -20,17 +22,13 @@ class Trueforge extends Quay {
   }
 
   /**
-   * Normalize image according to Github Container Registry characteristics.
+   * Normalize image according to Trueforge registry characteristics.
    * @param image
    * @returns {*}
    */
 
   normalizeImage(image) {
-    const imageNormalized = image;
-    if (!imageNormalized.registry.url.startsWith('https://')) {
-      imageNormalized.registry.url = `https://${imageNormalized.registry.url}/v2`;
-    }
-    return imageNormalized;
+    return this.normalizeImageUrl(image);
   }
 }
 

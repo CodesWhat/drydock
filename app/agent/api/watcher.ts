@@ -20,7 +20,8 @@ export function getWatchers(req: Request, res: Response) {
  * Watch a specific watcher.
  */
 export async function watchWatcher(req: Request, res: Response) {
-  const { type, name } = req.params;
+  const type = req.params.type as string;
+  const name = req.params.name as string;
   const watcherId = `${type.toLowerCase()}.${name.toLowerCase()}`;
   const watcher = registry.getState().watcher[watcherId];
 
@@ -41,7 +42,9 @@ export async function watchWatcher(req: Request, res: Response) {
  * Watch a specific container.
  */
 export async function watchContainer(req: Request, res: Response) {
-  const { type, name, id } = req.params;
+  const type = req.params.type as string;
+  const name = req.params.name as string;
+  const id = req.params.id as string;
   const watcherId = `${type.toLowerCase()}.${name.toLowerCase()}`;
   const watcher = registry.getState().watcher[watcherId];
 

@@ -1,21 +1,27 @@
 function getAuthenticationIcon() {
-  return 'fas fa-lock';
+  return 'sh-lock';
 }
 
-function getAuthProviderIcon(type) {
+interface AuthenticationDetailPathOptions {
+  type: string;
+  name: string;
+  agent?: string;
+}
+
+function getAuthProviderIcon(type: string) {
   switch (type) {
     case 'basic':
-      return 'fas fa-key';
+      return 'sh-key';
     case 'oidc':
-      return 'fas fa-openid';
+      return 'sh-openid';
     case 'anonymous':
-      return 'fas fa-user-secret';
+      return 'sh-user-secret';
     default:
-      return 'fas fa-lock';
+      return 'sh-lock';
   }
 }
 
-function getAuthProviderColor(type) {
+function getAuthProviderColor(type: string) {
   switch (type) {
     case 'basic':
       return '#F59E0B';
@@ -30,7 +36,35 @@ function getAuthProviderColor(type) {
 
 async function getAllAuthentications() {
   const response = await fetch('/api/authentications', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get authentications: ${response.statusText}`);
+  }
   return response.json();
 }
 
-export { getAuthenticationIcon, getAuthProviderIcon, getAuthProviderColor, getAllAuthentications };
+function buildAuthenticationDetailPath({ type, name, agent }: AuthenticationDetailPathOptions) {
+  const segments = ['/api/authentications'];
+  if (agent) {
+    segments.push(encodeURIComponent(agent));
+  }
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
+  return segments.join('/');
+}
+
+async function getAuthentication({ type, name, agent }: AuthenticationDetailPathOptions) {
+  const response = await fetch(buildAuthenticationDetailPath({ type, name, agent }), {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get authentication: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export {
+  getAuthenticationIcon,
+  getAuthProviderIcon,
+  getAuthProviderColor,
+  getAllAuthentications,
+  getAuthentication,
+};

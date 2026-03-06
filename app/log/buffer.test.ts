@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { addEntry, getEntries } from './buffer.js';
 
 function makeEntry(overrides = {}) {

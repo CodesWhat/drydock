@@ -9,7 +9,9 @@ let backupCollection: ReturnType<typeof initCollection> | undefined;
  * @param db
  */
 export function createCollections(db: InstanceType<typeof import('lokijs')>): void {
-  backupCollection = initCollection(db, 'backups');
+  backupCollection = initCollection(db, 'backups', {
+    indices: ['data.containerName', 'data.id'],
+  });
 }
 
 /**
@@ -39,9 +41,8 @@ export function getBackupsByName(containerName: string): ImageBackup[] {
     return [];
   }
   return backupCollection
-    .find()
+    .find({ 'data.containerName': containerName })
     .map((item) => item.data as ImageBackup)
-    .filter((b) => b.containerName === containerName)
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
@@ -66,7 +67,10 @@ export function getBackup(id: string): ImageBackup | undefined {
   if (!backupCollection) {
     return undefined;
   }
-  const doc = backupCollection.find().find((item) => item.data.id === id);
+  const doc =
+    typeof backupCollection.findOne === 'function'
+      ? backupCollection.findOne({ 'data.id': id })
+      : backupCollection.find({ 'data.id': id })[0];
   return doc ? (doc.data as ImageBackup) : undefined;
 }
 
@@ -78,7 +82,10 @@ export function deleteBackup(id: string): boolean {
   if (!backupCollection) {
     return false;
   }
-  const doc = backupCollection.find().find((item) => item.data.id === id);
+  const doc =
+    typeof backupCollection.findOne === 'function'
+      ? backupCollection.findOne({ 'data.id': id })
+      : backupCollection.find({ 'data.id': id })[0];
   if (doc) {
     backupCollection.remove(doc);
     return true;
@@ -95,7 +102,7 @@ export function pruneOldBackups(containerName: string, maxCount: number): number
   if (!backupCollection) {
     return 0;
   }
-  const docs = backupCollection.find().filter((item) => item.data.containerName === containerName);
+  const docs = backupCollection.find({ 'data.containerName': containerName });
   docs.sort((a, b) => new Date(b.data.timestamp).getTime() - new Date(a.data.timestamp).getTime());
   const toRemove = docs.slice(maxCount);
   toRemove.forEach((doc) => backupCollection.remove(doc));

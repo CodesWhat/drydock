@@ -1,5 +1,5 @@
-// @ts-nocheck
 import axios from 'axios';
+import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 import Trigger from '../Trigger.js';
 
 /**
@@ -66,6 +66,7 @@ class Matrix extends Trigger {
           Authorization: `Bearer ${this.configuration.accesstoken}`,
           'content-type': 'application/json',
         },
+        timeout: getOutboundHttpTimeoutMs(),
       },
     );
   }

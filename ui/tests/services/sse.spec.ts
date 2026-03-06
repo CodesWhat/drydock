@@ -6,6 +6,11 @@ describe('SseService', () => {
   let eventListeners: Record<string, EventListener>;
   let mockEventBus: any;
   let MockEventSourceCtor: any;
+  let mockFetch: any;
+  const connectedPayload = {
+    clientId: 'server-client-1',
+    clientToken: 'server-token-1',
+  };
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -22,6 +27,8 @@ describe('SseService', () => {
       return mockEventSource;
     });
     vi.stubGlobal('EventSource', MockEventSourceCtor);
+    mockFetch = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', mockFetch);
     mockEventBus = {
       emit: vi.fn(),
       on: vi.fn(),
@@ -40,7 +47,7 @@ describe('SseService', () => {
     expect(MockEventSourceCtor).toHaveBeenCalledWith('/api/events/ui');
   });
 
-  it('registers event listeners for dd:connected, dd:self-update, dd:scan-started, dd:scan-completed, and dd:heartbeat', () => {
+  it('registers event listeners for dd:connected, dd:self-update, container lifecycle events, agent status events, dd:scan-started, and dd:scan-completed', () => {
     sseService.connect(mockEventBus);
     expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
       'dd:connected',
@@ -51,15 +58,31 @@ describe('SseService', () => {
       expect.any(Function),
     );
     expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:container-added',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:container-updated',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:container-removed',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:agent-connected',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:agent-disconnected',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
       'dd:scan-started',
       expect.any(Function),
     );
     expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
       'dd:scan-completed',
-      expect.any(Function),
-    );
-    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
-      'dd:heartbeat',
       expect.any(Function),
     );
   });
@@ -70,19 +93,33 @@ describe('SseService', () => {
     expect(mockEventBus.emit).toHaveBeenCalledWith('sse:connected');
   });
 
-  it('emits self-update on dd:self-update event', () => {
+  it('emits self-update payload on dd:self-update event and acknowledges operation', () => {
     sseService.connect(mockEventBus);
-    eventListeners['dd:self-update']();
-    expect(mockEventBus.emit).toHaveBeenCalledWith('self-update');
-  });
-
-  it('handles heartbeat events without emitting additional bus events', () => {
-    sseService.connect(mockEventBus);
-    mockEventBus.emit.mockClear();
-
-    eventListeners['dd:heartbeat']();
-
-    expect(mockEventBus.emit).not.toHaveBeenCalled();
+    eventListeners['dd:connected']({ data: JSON.stringify(connectedPayload) });
+    eventListeners['dd:self-update']({
+      data: '{"opId":"op-123","requiresAck":true,"ackTimeoutMs":2000}',
+      lastEventId: 'evt-1',
+    });
+    expect(mockEventBus.emit).toHaveBeenCalledWith(
+      'self-update',
+      expect.objectContaining({
+        opId: 'op-123',
+        requiresAck: true,
+        ackTimeoutMs: 2000,
+      }),
+    );
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/events/ui/self-update/op-123/ack',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({
+          clientId: connectedPayload.clientId,
+          clientToken: connectedPayload.clientToken,
+          lastEventId: 'evt-1',
+        }),
+      }),
+    );
   });
 
   it('emits scan-started on dd:scan-started event', () => {
@@ -97,9 +134,32 @@ describe('SseService', () => {
     expect(mockEventBus.emit).toHaveBeenCalledWith('scan-completed');
   });
 
+  it('emits container-changed on container lifecycle events', () => {
+    sseService.connect(mockEventBus);
+
+    eventListeners['dd:container-added']();
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
+
+    eventListeners['dd:container-updated']();
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
+
+    eventListeners['dd:container-removed']();
+    expect(mockEventBus.emit).toHaveBeenCalledWith('container-changed');
+  });
+
+  it('emits agent-status-changed on agent lifecycle events', () => {
+    sseService.connect(mockEventBus);
+
+    eventListeners['dd:agent-connected']();
+    expect(mockEventBus.emit).toHaveBeenCalledWith('agent-status-changed');
+
+    eventListeners['dd:agent-disconnected']();
+    expect(mockEventBus.emit).toHaveBeenCalledWith('agent-status-changed');
+  });
+
   it('emits connection-lost on error when in self-update mode', () => {
     sseService.connect(mockEventBus);
-    eventListeners['dd:self-update']();
+    eventListeners['dd:self-update']({ data: '{"opId":"op-123"}' });
     mockEventBus.emit.mockClear();
 
     mockEventSource.onerror();
@@ -161,9 +221,39 @@ describe('SseService', () => {
     expect(firstSource.close).toHaveBeenCalled();
   });
 
+  it('handles self-update with falsy rawData gracefully', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:self-update']({ data: null });
+    expect(mockEventBus.emit).toHaveBeenCalledWith('self-update', {});
+  });
+
+  it('handles self-update with non-string rawData gracefully', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:self-update']({ data: 42 });
+    expect(mockEventBus.emit).toHaveBeenCalledWith('self-update', {});
+  });
+
+  it('handles self-update with non-object JSON gracefully', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:self-update']({ data: '"just a string"' });
+    expect(mockEventBus.emit).toHaveBeenCalledWith('self-update', {});
+  });
+
+  it('handles self-update with invalid JSON gracefully', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:self-update']({ data: '{broken' });
+    expect(mockEventBus.emit).toHaveBeenCalledWith('self-update', {});
+  });
+
+  it('skips ACK when server connection credentials are missing', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:self-update']({ data: '{"opId":"op-123"}' });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it('resets self-update mode on disconnect', () => {
     sseService.connect(mockEventBus);
-    eventListeners['dd:self-update']();
+    eventListeners['dd:self-update']({ data: '{"opId":"op-123"}' });
     sseService.disconnect();
 
     sseService.connect(mockEventBus);

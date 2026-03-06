@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { getVersion } from '../../../configuration/index.js';
 import {
   registerContainerAdded,
@@ -15,6 +14,28 @@ const HASS_MANUFACTURER = 'drydock';
 const HASS_ENTITY_VALUE_TEMPLATE = '{{ value_json.image_tag_value }}';
 const HASS_LATEST_VERSION_TEMPLATE =
   '{% if value_json.update_kind_kind == "digest" %}{{ value_json.result_digest[:15] }}{% else %}{{ value_json.result_tag }}{% endif %}';
+
+interface HassClient {
+  publish: (
+    topic: string,
+    message: string,
+    options?: {
+      retain?: boolean;
+    },
+  ) => Promise<unknown> | unknown;
+}
+
+interface HassConfiguration {
+  topic: string;
+  hass: {
+    prefix: string;
+    discovery: boolean;
+  };
+}
+
+interface HassLogger {
+  info: (message: string) => void;
+}
 
 /**
  * Get hass entity unique id.
@@ -55,19 +76,66 @@ function sanitizeIcon(icon) {
 }
 
 class Hass {
-  constructor({ client, configuration, log }) {
+  client: HassClient;
+
+  configuration: HassConfiguration;
+
+  log: HassLogger;
+
+  private unregisterContainerAdded?: () => void;
+  private unregisterContainerUpdated?: () => void;
+  private unregisterContainerRemoved?: () => void;
+  private unregisterWatcherStart?: () => void;
+  private unregisterWatcherStop?: () => void;
+
+  constructor({
+    client,
+    configuration,
+    log,
+  }: {
+    client: HassClient;
+    configuration: HassConfiguration;
+    log: HassLogger;
+  }) {
     this.client = client;
     this.configuration = configuration;
     this.log = log;
 
     // Subscribe to container events to sync HA
-    registerContainerAdded((container) => this.addContainerSensor(container));
-    registerContainerUpdated((container) => this.addContainerSensor(container));
-    registerContainerRemoved((container) => this.removeContainerSensor(container));
+    this.unregisterContainerAdded = registerContainerAdded((container) =>
+      this.addContainerSensor(container),
+    );
+    this.unregisterContainerUpdated = registerContainerUpdated((container) =>
+      this.addContainerSensor(container),
+    );
+    this.unregisterContainerRemoved = registerContainerRemoved((container) =>
+      this.removeContainerSensor(container),
+    );
 
     // Subscribe to watcher events to sync HA
-    registerWatcherStart((watcher) => this.updateWatcherSensors({ watcher, isRunning: true }));
-    registerWatcherStop((watcher) => this.updateWatcherSensors({ watcher, isRunning: false }));
+    this.unregisterWatcherStart = registerWatcherStart((watcher) =>
+      this.updateWatcherSensors({ watcher, isRunning: true }),
+    );
+    this.unregisterWatcherStop = registerWatcherStop((watcher) =>
+      this.updateWatcherSensors({ watcher, isRunning: false }),
+    );
+  }
+
+  deregister() {
+    this.unregisterContainerAdded?.();
+    this.unregisterContainerAdded = undefined;
+
+    this.unregisterContainerUpdated?.();
+    this.unregisterContainerUpdated = undefined;
+
+    this.unregisterContainerRemoved?.();
+    this.unregisterContainerRemoved = undefined;
+
+    this.unregisterWatcherStart?.();
+    this.unregisterWatcherStart = undefined;
+
+    this.unregisterWatcherStop?.();
+    this.unregisterWatcherStop = undefined;
   }
 
   /**
@@ -323,7 +391,21 @@ class Hass {
    * @param options
    * @returns {Promise<*>}
    */
-  async publishDiscoveryMessage({ discoveryTopic, stateTopic, kind, name, icon, options = {} }) {
+  async publishDiscoveryMessage({
+    discoveryTopic,
+    stateTopic,
+    kind,
+    name,
+    icon,
+    options = {},
+  }: {
+    discoveryTopic: string;
+    stateTopic: string;
+    kind: string;
+    name: string;
+    icon?: string;
+    options?: Record<string, unknown>;
+  }) {
     const entityId = getHassEntityId(stateTopic);
     return this.client.publish(
       discoveryTopic,

@@ -1,0 +1,52 @@
+---
+title: "FORGEJO"
+description: "The forgejo registry lets you configure a self-hosted Forgejo integration."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/registries/forgejo/forgejo.png)
+
+The `forgejo` registry lets you configure a self-hosted [Forgejo](https://forgejo.org/) integration.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_FORGEJO_{REGISTRY_NAME}_URL` | 🔴 | Registry URL (e.g. `https://forgejo.acme.com`) | | |
+| `DD_REGISTRY_FORGEJO_{REGISTRY_NAME}_LOGIN` | ⚪ | Forgejo username | DD_REGISTRY_FORGEJO_\{REGISTRY_NAME\}_PASSWORD must be defined | |
+| `DD_REGISTRY_FORGEJO_{REGISTRY_NAME}_PASSWORD` | ⚪ | Forgejo password or personal access token | DD_REGISTRY_FORGEJO_\{REGISTRY_NAME\}_LOGIN must be defined | |
+| `DD_REGISTRY_FORGEJO_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | DD_REGISTRY_FORGEJO_\{REGISTRY_NAME\}_LOGIN/PASSWORD must not be defined | |
+| `DD_REGISTRY_FORGEJO_{REGISTRY_NAME}_CAFILE` | ⚪ | Path to custom CA certificate file | | |
+| `DD_REGISTRY_FORGEJO_{REGISTRY_NAME}_INSECURE` | ⚪ | Allow insecure (non-TLS) connections | `true`, `false` | `false` |
+
+## Examples
+
+### Configure
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_FORGEJO_PRIVATE_URL=https://forgejo.acme.com
+      - DD_REGISTRY_FORGEJO_PRIVATE_LOGIN=john
+      - DD_REGISTRY_FORGEJO_PRIVATE_PASSWORD=doe
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_FORGEJO_PRIVATE_URL=https://forgejo.acme.com" \
+  -e "DD_REGISTRY_FORGEJO_PRIVATE_LOGIN=john" \
+  -e "DD_REGISTRY_FORGEJO_PRIVATE_PASSWORD=doe" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

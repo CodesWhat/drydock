@@ -1,0 +1,59 @@
+---
+title: "Telegram"
+description: "The telegram trigger lets you send realtime notifications using Telegram bots."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/triggers/telegram/telegram.png)
+
+The `telegram` trigger lets you send realtime notifications using [Telegram](https://telegram.org/) bots.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_TRIGGER_TELEGRAM_{trigger_name}_BOTTOKEN` | 🔴 | The Bot token | | |
+| `DD_TRIGGER_TELEGRAM_{trigger_name}_CHATID` | 🔴 | The Chat ID | | |
+| `DD_TRIGGER_TELEGRAM_{trigger_name}_DISABLETITLE` | ⚪ | Disable title to have full control over the message formatting | `true`, `false` | `false` |
+| `DD_TRIGGER_TELEGRAM_{trigger_name}_MESSAGEFORMAT` | ⚪ | Send the message as markdown or as html (useful for custom message formatting) | `Markdown`, `HTML` | `Markdown` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+## Examples
+
+### Configuration
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_TRIGGER_TELEGRAM_1_BOTTOKEN=0123456789:AApFzFLD0g0NVg8l0bZf55ex3sajC4Aw84Q
+      - DD_TRIGGER_TELEGRAM_1_CHATID=9876543210
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_TRIGGER_TELEGRAM_1_BOTTOKEN="0123456789:AApFzFLD0g0NVg8l0bZf55ex3sajC4Aw84Q" \
+  -e DD_TRIGGER_TELEGRAM_1_CHATID="9876543210" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+## How to create a bot and get the bot token
+
+[Follow this tutorial](https://medium.com/geekculture/generate-telegram-token-for-bot-api-d26faf9bf064)
+
+## How to get the chat id
+
+[Follow this tutorial](https://www.alphr.com/find-chat-id-telegram/)

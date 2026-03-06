@@ -2,15 +2,20 @@
  * Authentication service.
  */
 
+import { errorMessage } from '../utils/error';
+
 // Current logged user
 let user = undefined;
 
 /**
  * Get auth strategies.
- * @returns {Promise<any>}
+ * @returns {Promise<unknown>}
  */
 async function getStrategies() {
   const response = await fetch('/auth/strategies', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get auth strategies: ${response.statusText}`);
+  }
   return response.json();
 }
 
@@ -31,8 +36,8 @@ async function getUser() {
       user = undefined;
       return undefined;
     }
-  } catch (e: any) {
-    console.debug(`Unable to fetch current user: ${e?.message || e}`);
+  } catch (e: unknown) {
+    console.debug(`Unable to fetch current user: ${errorMessage(e)}`);
     user = undefined;
     return undefined;
   }
@@ -44,7 +49,7 @@ async function getUser() {
  * @param password
  * @returns {Promise<*>}
  */
-async function loginBasic(username, password) {
+async function loginBasic(username: string, password: string, remember: boolean = false) {
   const base64 = btoa(`${username}:${password}`);
   const response = await fetch(`/auth/login`, {
     method: 'POST',
@@ -53,10 +58,7 @@ async function loginBasic(username, password) {
       Authorization: `Basic ${base64}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      username,
-      password,
-    }),
+    body: JSON.stringify({ remember }),
   });
   if (!response.ok) {
     throw new Error('Username or password error');
@@ -66,10 +68,22 @@ async function loginBasic(username, password) {
 }
 
 /**
+ * Store remember-me preference in the session before any auth flow.
+ */
+async function setRememberMe(remember: boolean) {
+  await fetch('/auth/remember', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ remember }),
+  });
+}
+
+/**
  * Get Oidc redirection url.
  * @returns {Promise<*>}
  */
-async function getOidcRedirection(name) {
+async function getOidcRedirection(name: string) {
   const response = await fetch(`/auth/oidc/${name}/redirect`, { credentials: 'include' });
   user = await response.json();
   return user;
@@ -77,7 +91,7 @@ async function getOidcRedirection(name) {
 
 /**
  * Logout current user.
- * @returns {Promise<any>}
+ * @returns {Promise<unknown>}
  */
 async function logout() {
   const response = await fetch(`/auth/logout`, {
@@ -89,4 +103,4 @@ async function logout() {
   return response.json();
 }
 
-export { getStrategies, getUser, loginBasic, getOidcRedirection, logout };
+export { getStrategies, getUser, loginBasic, setRememberMe, getOidcRedirection, logout };

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { beforeEach, describe, expect, test } from 'vitest';
 import * as apiTrigger from '../../api/trigger.js';
 import * as registry from '../../registry/index.js';

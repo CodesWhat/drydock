@@ -1,10 +1,14 @@
-// @ts-nocheck
 // Mock all dependencies
 vi.mock('./configuration', () => ({
   getVersion: vi.fn(() => '1.0.0'),
 }));
+vi.mock('./configuration/migrate-cli', () => ({
+  runConfigMigrateCommandIfRequested: vi.fn(() => null),
+}));
 
-vi.mock('./log', () => ({ default: { info: vi.fn(), child: vi.fn().mockReturnThis() } }));
+vi.mock('./log', () => ({
+  default: { info: vi.fn(), warn: vi.fn(), child: vi.fn().mockReturnThis() },
+}));
 
 vi.mock('./store', () => ({
   init: vi.fn().mockResolvedValue(),
@@ -30,18 +34,45 @@ vi.mock('./prometheus', () => ({
   init: vi.fn(),
 }));
 
+vi.mock('./security/scheduler', () => ({
+  init: vi.fn(),
+  shutdown: vi.fn(),
+}));
+
 describe('Main Application', () => {
   const originalArgv = process.argv;
+  const originalGetuid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
+  const originalRunAsRoot = process.env.DD_RUN_AS_ROOT;
+  const originalAllowInsecureRoot = process.env.DD_ALLOW_INSECURE_ROOT;
+  const originalExitCode = process.exitCode;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     // Clear the module cache to ensure fresh imports
     vi.resetModules();
     process.argv = [...originalArgv].filter((arg) => arg !== '--agent');
+    const migrateCli = await import('./configuration/migrate-cli.js');
+    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(null);
   });
 
   afterAll(() => {
     process.argv = originalArgv;
+    if (originalGetuid) {
+      (process as NodeJS.Process & { getuid?: () => number }).getuid = originalGetuid;
+    } else {
+      delete (process as NodeJS.Process & { getuid?: () => number }).getuid;
+    }
+    if (originalRunAsRoot === undefined) {
+      delete process.env.DD_RUN_AS_ROOT;
+    } else {
+      process.env.DD_RUN_AS_ROOT = originalRunAsRoot;
+    }
+    if (originalAllowInsecureRoot === undefined) {
+      delete process.env.DD_ALLOW_INSECURE_ROOT;
+    } else {
+      process.env.DD_ALLOW_INSECURE_ROOT = originalAllowInsecureRoot;
+    }
+    process.exitCode = originalExitCode;
   });
 
   test('should initialize controller mode by default', async () => {
@@ -53,6 +84,7 @@ describe('Main Application', () => {
     const agentServer = await import('./agent/api/index.js');
     const prometheus = await import('./prometheus/index.js');
     const { getVersion } = await import('./configuration/index.js');
+    const migrateCli = await import('./configuration/migrate-cli.js');
 
     // Import and run the main module
     await import('./index.js');
@@ -61,6 +93,9 @@ describe('Main Application', () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     // Verify initialization order and calls
+    expect(migrateCli.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith(
+      process.argv.slice(2),
+    );
     expect(getVersion).toHaveBeenCalled();
     expect(log.info).toHaveBeenCalledWith(
       'drydock is starting in Controller mode (version = 1.0.0)',
@@ -71,6 +106,8 @@ describe('Main Application', () => {
     expect(agentManager.init).toHaveBeenCalled();
     expect(api.init).toHaveBeenCalled();
     expect(agentServer.init).not.toHaveBeenCalled();
+    const securityScheduler = await import('./security/scheduler.js');
+    expect(securityScheduler.init).toHaveBeenCalled();
   });
 
   test('should initialize agent mode with --agent flag', async () => {
@@ -83,16 +120,127 @@ describe('Main Application', () => {
     const agentManager = await import('./agent/index.js');
     const agentServer = await import('./agent/api/index.js');
     const prometheus = await import('./prometheus/index.js');
+    const migrateCli = await import('./configuration/migrate-cli.js');
 
     await import('./index.js');
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(log.info).toHaveBeenCalledWith('drydock is starting in Agent mode (version = 1.0.0)');
+    expect(migrateCli.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith(
+      process.argv.slice(2),
+    );
     expect(store.init).toHaveBeenCalledWith({ memory: true });
     expect(registry.init).toHaveBeenCalledWith({ agent: true });
     expect(prometheus.init).not.toHaveBeenCalled();
     expect(agentServer.init).toHaveBeenCalled();
     expect(agentManager.init).not.toHaveBeenCalled();
     expect(api.init).not.toHaveBeenCalled();
+    const securityScheduler = await import('./security/scheduler.js');
+    expect(securityScheduler.init).not.toHaveBeenCalled();
+  });
+
+  test('should run config migrate command and skip application bootstrap', async () => {
+    process.argv = [...originalArgv.slice(0, 2), 'config', 'migrate'];
+
+    const { default: log } = await import('./log/index.js');
+    const store = await import('./store/index.js');
+    const registry = await import('./registry/index.js');
+    const api = await import('./api/index.js');
+    const agentManager = await import('./agent/index.js');
+    const agentServer = await import('./agent/api/index.js');
+    const prometheus = await import('./prometheus/index.js');
+    const { getVersion } = await import('./configuration/index.js');
+    const migrateCli = await import('./configuration/migrate-cli.js');
+
+    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(0);
+
+    await import('./index.js');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(migrateCli.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith([
+      'config',
+      'migrate',
+    ]);
+    expect(log.info).not.toHaveBeenCalled();
+    expect(getVersion).not.toHaveBeenCalled();
+    expect(store.init).not.toHaveBeenCalled();
+    expect(registry.init).not.toHaveBeenCalled();
+    expect(prometheus.init).not.toHaveBeenCalled();
+    expect(agentManager.init).not.toHaveBeenCalled();
+    expect(agentServer.init).not.toHaveBeenCalled();
+    expect(api.init).not.toHaveBeenCalled();
+  });
+
+  test('should set process.exitCode when config migrate command returns a non-zero code', async () => {
+    const store = await import('./store/index.js');
+    const migrateCli = await import('./configuration/migrate-cli.js');
+    process.exitCode = undefined;
+    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(2);
+
+    await import('./index.js');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(process.exitCode).toBe(2);
+    expect(store.init).not.toHaveBeenCalled();
+  });
+
+  test('should throw when insecure root mode is not fully acknowledged', async () => {
+    const migrateCli = await import('./configuration/migrate-cli.js');
+    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(null);
+    process.env.DD_RUN_AS_ROOT = 'true';
+    process.env.DD_ALLOW_INSECURE_ROOT = 'false';
+    (process as NodeJS.Process & { getuid?: () => number }).getuid = () => 0;
+
+    await expect(import('./index.js')).rejects.toThrow(
+      'DD_RUN_AS_ROOT=true requires DD_ALLOW_INSECURE_ROOT=true (break-glass). Prefer socket-proxy mode for least privilege.',
+    );
+  });
+
+  test('should proceed without warning when root and DD_RUN_AS_ROOT is unset', async () => {
+    const { default: log } = await import('./log/index.js');
+    const store = await import('./store/index.js');
+    const migrateCli = await import('./configuration/migrate-cli.js');
+    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(null);
+    delete process.env.DD_RUN_AS_ROOT;
+    delete process.env.DD_ALLOW_INSECURE_ROOT;
+    (process as NodeJS.Process & { getuid?: () => number }).getuid = () => 0;
+
+    await import('./index.js');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(store.init).toHaveBeenCalled();
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  test('should skip root-mode enforcement when process.getuid is unavailable', async () => {
+    const { default: log } = await import('./log/index.js');
+    const store = await import('./store/index.js');
+    const migrateCli = await import('./configuration/migrate-cli.js');
+    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(null);
+    process.env.DD_RUN_AS_ROOT = 'true';
+    process.env.DD_ALLOW_INSECURE_ROOT = 'false';
+    delete (process as NodeJS.Process & { getuid?: () => number }).getuid;
+
+    await import('./index.js');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(store.init).toHaveBeenCalled();
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  test('should warn when insecure root mode is acknowledged', async () => {
+    const { default: log } = await import('./log/index.js');
+    const migrateCli = await import('./configuration/migrate-cli.js');
+    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(null);
+    process.env.DD_RUN_AS_ROOT = 'true';
+    process.env.DD_ALLOW_INSECURE_ROOT = 'true';
+    (process as NodeJS.Process & { getuid?: () => number }).getuid = () => 0;
+
+    await import('./index.js');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(log.warn).toHaveBeenCalledWith(
+      'Running in insecure root mode (DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true); use socket-proxy mode when possible.',
+    );
   });
 });

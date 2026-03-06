@@ -1,4 +1,3 @@
-// @ts-nocheck
 import axios from 'axios';
 import log from '../../../log/index.js';
 import Quay from './Quay.js';
@@ -145,7 +144,7 @@ test('authenticate should not populate header with base64 bearer when anonymous'
   });
 });
 
-test('authenticate should log warning when axios throws an error', async () => {
+test('authenticate should throw when token request fails', async () => {
   axios.mockImplementationOnce(() => {
     throw new Error('Network error');
   });
@@ -155,13 +154,9 @@ test('authenticate should log warning when axios throws an error', async () => {
     account: 'account',
     token: TEST_TOKEN,
   };
-  quayInstance.log = { warn: vi.fn() };
-  const result = await quayInstance.authenticate({ name: 'test/image' }, { headers: {} });
-  expect(quayInstance.log.warn).toHaveBeenCalledWith(
-    'Error when trying to get an access token (Network error)',
+  await expect(quayInstance.authenticate({ name: 'test/image' }, { headers: {} })).rejects.toThrow(
+    'token request failed (Network error)',
   );
-  // Token is undefined so no Authorization header should be set
-  expect(result).toEqual({ headers: {} });
 });
 
 test('getTagsPage should call registry with default pagination', async () => {

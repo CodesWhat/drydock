@@ -129,11 +129,24 @@ screenshots/
 # Demo prototype (standalone showcase, lives on demo branch)
 demo/
 
-# Docs content (local editing, copied to drydock-website)
-docs/content/
+# Generated lazy-loaded font assets (built by scripts/extract-fonts.mjs)
+ui/public/fonts/
+
+# Website local artifacts
+.vercel/
+.source/
+
+# Generated from CHANGELOG.md by sync-docs.mjs (single source of truth)
+content/docs/current/changelog/index.mdx
+content/docs/v1.3/changelog/index.mdx
+
+# Generated from content/docs/current for Turbopack compatibility
+# Canonical docs are versioned at content/docs/*
+apps/web/content/docs/
 
 # Storybook build output
 storybook-static/
 
 # Claude Code project instructions
 CLAUDE.md
+artifacts/

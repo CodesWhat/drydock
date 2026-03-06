@@ -1,0 +1,107 @@
+---
+title: "Backup & Rollback"
+description: "Automatic image backup before updates and one-click rollback to any previous version."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+## How It Works
+
+Before every container update, drydock automatically backs up the current image metadata including the image name, tag, digest, and timestamp. This ensures you always have a record of exactly which image was running prior to each update.
+
+Backups are stored in the LokiJS data store, which is persisted to the `/store` volume. Each container retains its N most recent backups, with older entries pruned automatically when the limit is exceeded.
+
+## Backup Retention
+
+The number of backups retained per container is configurable via a trigger environment variable.
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| -------------------------------------------------- | :--------------: | ---------------------------------------- | ---------------- | -------------------------- |
+| `DD_TRIGGER_DOCKER_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of backups to retain per container | integer | `3` |
+
+<Callout type="info">This variable is set on the [Docker trigger](/docs/configuration/triggers/docker), not on the target container.</Callout>
+
+## Manual Rollback
+
+Rollback is available in two ways:
+
+- **UI** -- on the container detail page, select a previous backup and click **Rollback**.
+- **API** -- send a `POST` request to `/api/backup/:id/rollback`, where `:id` is the container ID.
+
+When a rollback is triggered, drydock will:
+
+1. Pull the backup image
+2. Stop the current container
+3. Recreate the container using the backup image
+4. Start the new container
+
+You can optionally pass a `backupId` in the request body to target a specific backup. If omitted, the most recent backup is used.
+
+```bash
+# Roll back to the most recent backup
+curl -X POST http://localhost:3000/api/backup/my-container-id/rollback
+
+# Roll back to a specific backup
+curl -X POST http://localhost:3000/api/backup/my-container-id/rollback \
+  -H "Content-Type: application/json" \
+  -d '{"backupId": "abc123"}'
+```
+
+## Auto-Rollback on Health Failure
+
+Containers with a Docker `HEALTHCHECK` can automatically roll back if they become unhealthy after an update.
+
+### Container Labels
+
+| Label | Type | Default | Description |
+| ----------------------- | ------------- | ---------- | -------------------------------------------------------- |
+| `dd.rollback.auto` | boolean | `false` | Enable auto-rollback when health check fails after update |
+| `dd.rollback.window` | number (ms) | `300000` | Duration to monitor health after update (5 minutes) |
+| `dd.rollback.interval` | number (ms) | `10000` | Frequency of health status checks (10 seconds) |
+
+### How It Works
+
+1. An update completes successfully
+2. If `dd.rollback.auto=true` **and** the container has a `HEALTHCHECK`, monitoring starts
+3. Health status is polled every `dd.rollback.interval` for the duration of `dd.rollback.window`
+4. If the status becomes `unhealthy`, rollback is triggered automatically
+5. If the window expires without failure, the container is considered stable
+
+<Callout type="warn">Auto-rollback requires a `HEALTHCHECK` instruction in your Dockerfile. Without one, monitoring is skipped.</Callout>
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  myapp:
+    image: myapp:latest
+    labels:
+      - dd.rollback.auto=true
+      - dd.rollback.window=600000
+      - dd.rollback.interval=5000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  --label "dd.rollback.auto=true" \
+  --label "dd.rollback.window=600000" \
+  --label "dd.rollback.interval=5000" \
+  --health-cmd "curl -f http://localhost:8080/health" \
+  --health-interval 10s \
+  --health-timeout 5s \
+  --health-retries 3 \
+  myapp:latest
+```
+</Tab>
+</Tabs>

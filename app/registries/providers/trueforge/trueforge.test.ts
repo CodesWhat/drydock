@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Trueforge from './trueforge.js';
 
 vi.mock('axios');
@@ -67,6 +66,13 @@ test('match should return false when registry url is not from trueforge', async 
   ).toBeFalsy();
 });
 
+test('match should return false and never throw when registry url is missing', async () => {
+  expect(() => trueforge.match({ registry: { url: undefined } })).not.toThrow();
+  expect(() => trueforge.match({})).not.toThrow();
+  expect(trueforge.match({ registry: { url: undefined } })).toBe(false);
+  expect(trueforge.match({})).toBe(false);
+});
+
 test('match should reject hostnames that bypass unescaped dot in regex', async () => {
   expect(trueforge.match({ registry: { url: 'ociXtrueforgeXorg' } })).toBe(false);
   expect(trueforge.match({ registry: { url: 'evil-oci.trueforge.org.attacker.com' } })).toBe(false);
@@ -103,6 +109,22 @@ test('normalizeImage should preserve already-https registry urls', async () => {
       url: 'https://oci.trueforge.org/v2',
     },
   });
+});
+
+test('normalizeImage should not mutate the input image object', async () => {
+  const image = {
+    name: 'test/image',
+    registry: {
+      url: 'oci.trueforge.org/test/image',
+    },
+  };
+
+  const normalized = trueforge.normalizeImage(image);
+
+  expect(normalized).not.toBe(image);
+  expect(normalized.registry).not.toBe(image.registry);
+  expect(image.registry.url).toBe('oci.trueforge.org/test/image');
+  expect(normalized.registry.url).toBe('https://oci.trueforge.org/test/image/v2');
 });
 
 test('getAuthPull should return quay-compatible pull credentials', async () => {

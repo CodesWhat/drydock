@@ -1,70 +1,67 @@
 ---
 # Lefthook configuration — mirrors CI pipeline for local/CI parity.
-# pre-push is piped (sequential, fail-fast) so failures surface clearly.
-# Each step matches a CI job exactly — if lefthook passes, CI passes.
+#
+# Pre-push pipeline (piped = sequential, fail-fast):
+#   1. Lint gate (~20s) — catches formatting/lint before burning CPU
+#   2. Build + test (~26s parallel) — independent workspaces run concurrently
+#   3. E2E + security (advisory)
+#
+# Biome runs directly (not via qlty) because qlty's biome integration
+# does not reliably apply fixes. Qlty handles all other linters.
 
 pre-commit:
   piped: true
   commands:
-    lint-fix:
-      glob: '*.{ts,js,json,vue,css,yml,yaml,sh,Dockerfile}'
-      run: qlty check --fix --no-progress {staged_files} && git add {staged_files}
+    biome-fix:
+      glob: '*.{ts,js,json,vue,css}'
+      run: npx biome check --fix {staged_files} && git add {staged_files}
       priority: 1
-    lint-verify:
-      glob: '*.{ts,js,json,vue,css,yml,yaml,sh,Dockerfile}'
-      run: CI=1 qlty check --no-progress {staged_files}
+    biome-format:
+      glob: '*.{ts,js,json,vue,css}'
+      run: npx biome format --write {staged_files} && git add {staged_files}
       priority: 2
 
 pre-push:
   piped: true
   commands:
-    # ── Lint: mirrors CI "Lint" job (qlty check --all from root) ──
+    # ── Lint gate: fast checks that catch formatting/lint issues ──────
+    ts-nocheck:
+      run: node scripts/check-ts-nocheck-allowlist.mjs
+      priority: 1
+    biome:
+      run: npx biome check .
+      priority: 2
     qlty:
       run: CI=1 qlty check --all --no-progress
-      priority: 1
-
-    # ── Build: mirrors CI "Build" job ─────────────────────────────
-    build-app:
-      root: app/
-      run: npm run build
-      priority: 2
-    build-ui:
-      root: ui/
-      run: npm run build
       priority: 3
 
-    # ── Test: mirrors CI "Test & Coverage" job ────────────────────
-    test-app:
-      root: app/
-      run: npm test
+    # ── Build + test: parallel across independent workspaces ─────────
+    build-and-test:
+      run: ./scripts/pre-push-build-test.sh
       priority: 4
-    test-ui:
-      root: ui/
-      run: npm run test:unit
-      priority: 5
 
-    # ── E2E: mirrors CI "E2E Tests" job ───────────────────────────
+    # ── E2E: mirrors CI "E2E Tests" job ──────────────────────────────
     e2e:
       run: ./scripts/run-e2e-tests.sh
-      priority: 6
+      priority: 5
 
-    # ── Advisory: mirrors CI advisory jobs (non-blocking) ─────────
+    # ── Advisory: mirrors CI advisory jobs (non-blocking) ────────────
     zizmor:
       glob: '.github/workflows/*.yml'
       run: zizmor .github/workflows/ || true
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
-      priority: 7
+      priority: 6
 
-    # ── Local security gates (not in CI, skip if tool missing) ────
+    # ── Local security gates (not in CI, skip if tool missing) ───────
     snyk-deps:
       root: app/
       run: ../scripts/snyk-deps-gate.sh --org=codeswhat
       skip:
         - run: '! command -v snyk >/dev/null 2>&1'
-      priority: 8
+      priority: 7
     snyk-code:
       run: scripts/snyk-code-gate.sh --org=codeswhat
       skip:
         - run: '! command -v snyk >/dev/null 2>&1'
-      priority: 9
+      priority: 8

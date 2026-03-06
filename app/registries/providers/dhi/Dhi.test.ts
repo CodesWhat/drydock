@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Dhi from './Dhi.js';
 
 // Test fixture credentials - not real secrets
@@ -43,6 +42,7 @@ describe('DHI Registry', () => {
   test('should initialize with token as password', async () => {
     const dhiWithToken = new Dhi();
     await dhiWithToken.register('registry', 'dhi', 'test', {
+      login: 'mydockerid',
       token: TEST_TOKEN,
     });
     expect(dhiWithToken.configuration.password).toBe(TEST_TOKEN);
@@ -61,7 +61,7 @@ describe('DHI Registry', () => {
 
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
-      url: 'https://dhi.io/token?service=registry.docker.io&scope=repository:python:pull&grant_type=password',
+      url: 'https://dhi.io/token?service=registry.docker.io&scope=repository%3Apython%3Apull&grant_type=password',
       headers: {
         Accept: 'application/json',
         Authorization: 'Basic base64credentials',
@@ -83,12 +83,33 @@ describe('DHI Registry', () => {
 
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
-      url: 'https://dhi.io/token?service=registry.docker.io&scope=repository:python:pull&grant_type=password',
+      url: 'https://dhi.io/token?service=registry.docker.io&scope=repository%3Apython%3Apull&grant_type=password',
       headers: {
         Accept: 'application/json',
       },
     });
     expect(result.headers.Authorization).toBe('Bearer public-token');
+  });
+
+  test('should reject ambiguous auth configuration', async () => {
+    expect(() =>
+      dhi.validateConfiguration({
+        login: 'user',
+        password: TEST_PASSWORD,
+        auth: 'dGVzdDp0ZXN0',
+      }),
+    ).toThrow();
+  });
+
+  test('should throw when dhi token response is missing token', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    const image = { name: 'python' };
+    const requestOptions = { headers: {} };
+
+    await expect(dhi.authenticate(image, requestOptions)).rejects.toThrow(
+      'DHI token endpoint response does not contain token',
+    );
   });
 
   test('should mask all configuration fields', async () => {

@@ -1,6 +1,6 @@
-// @ts-nocheck
 import joi from 'joi';
 import log from '../../../log/index.js';
+import * as registryStore from '../../../registry';
 import * as backupStore from '../../../store/backup';
 import Docker from './Docker.js';
 
@@ -43,6 +43,10 @@ vi.mock('../../../security/scan.js', () => ({
   scanImageForVulnerabilities: mockScanImageForVulnerabilities,
   verifyImageSignature: mockVerifyImageSignature,
   generateImageSbom: mockGenerateImageSbom,
+  clearDigestScanCache: vi.fn(),
+  getDigestScanCacheSize: vi.fn().mockReturnValue(0),
+  updateDigestScanCache: vi.fn(),
+  scanImageWithDedup: vi.fn(),
 }));
 
 vi.mock('../../../store/container.js', () => ({
@@ -67,13 +71,30 @@ vi.mock('./HealthMonitor.js', () => ({
   startHealthMonitor: mockStartHealthMonitor,
 }));
 
+const mockInsertAudit = vi.hoisted(() => vi.fn());
 vi.mock('../../../store/audit.js', () => ({
-  insertAudit: vi.fn(),
+  insertAudit: (...args: any[]) => mockInsertAudit(...args),
 }));
 
 const mockAuditCounterInc = vi.hoisted(() => vi.fn());
 vi.mock('../../../prometheus/audit.js', () => ({
   getAuditCounter: () => ({ inc: mockAuditCounterInc }),
+}));
+
+const mockRollbackCounterInc = vi.hoisted(() => vi.fn());
+const mockGetRollbackCounter = vi.hoisted(() => vi.fn());
+vi.mock('../../../prometheus/rollback.js', () => ({
+  getRollbackCounter: (...args: any[]) => mockGetRollbackCounter(...args),
+}));
+
+const mockInsertOperation = vi.hoisted(() => vi.fn());
+const mockUpdateOperation = vi.hoisted(() => vi.fn());
+const mockGetInProgressOperationByContainerName = vi.hoisted(() => vi.fn());
+vi.mock('../../../store/update-operation.js', () => ({
+  insertOperation: (...args: any[]) => mockInsertOperation(...args),
+  updateOperation: (...args: any[]) => mockUpdateOperation(...args),
+  getInProgressOperationByContainerName: (...args: any[]) =>
+    mockGetInProgressOperationByContainerName(...args),
 }));
 
 vi.mock('../../../registry', () => ({
@@ -105,6 +126,7 @@ vi.mock('../../../registry', () => ({
                   stop: () => Promise.resolve(),
                   remove: () => Promise.resolve(),
                   start: () => Promise.resolve(),
+                  rename: () => Promise.resolve(),
                 });
               }
               return Promise.reject(new Error('Error when getting container'));
@@ -113,6 +135,13 @@ vi.mock('../../../registry', () => ({
               if (container.name === 'container-name') {
                 return Promise.resolve({
                   start: () => Promise.resolve(),
+                  inspect: () =>
+                    Promise.resolve({
+                      Id: 'new-container-id',
+                      State: { Health: { Status: 'healthy' } },
+                    }),
+                  stop: () => Promise.resolve(),
+                  remove: () => Promise.resolve(),
                 });
               }
               return Promise.reject(new Error('Error when creating container'));
@@ -141,6 +170,13 @@ vi.mock('../../../registry', () => ({
       registry: {
         hub: {
           getAuthPull: async () => undefined,
+          normalizeImage: (image) => ({
+            ...image,
+            registry: {
+              ...(image.registry || {}),
+              name: 'hub',
+            },
+          }),
           getImageFullName: (image, tagOrDigest) =>
             `${image.registry.url}/${image.name}:${tagOrDigest}`,
         },
@@ -274,6 +310,8 @@ function stubTriggerFlow(opts = {}) {
     inspect: () => Promise.resolve(),
     remove: vi.fn(),
     stop: () => Promise.resolve(),
+    rename: vi.fn().mockResolvedValue(undefined),
+    start: vi.fn().mockResolvedValue(undefined),
     wait: waitSpy,
   });
   vi.spyOn(docker, 'inspectContainer').mockResolvedValue({
@@ -290,7 +328,15 @@ function stubTriggerFlow(opts = {}) {
   vi.spyOn(docker, 'cloneContainer').mockReturnValue({ name: 'container-name' });
   vi.spyOn(docker, 'stopContainer').mockResolvedValue();
   vi.spyOn(docker, 'removeContainer').mockResolvedValue();
-  vi.spyOn(docker, 'createContainer').mockResolvedValue({ start: vi.fn() });
+  vi.spyOn(docker, 'createContainer').mockResolvedValue({
+    start: vi.fn(),
+    inspect: vi.fn().mockResolvedValue({
+      Id: 'new-container-id',
+      State: { Health: { Status: 'healthy' } },
+    }),
+    stop: vi.fn().mockResolvedValue(undefined),
+    remove: vi.fn().mockResolvedValue(undefined),
+  });
   vi.spyOn(docker, 'startContainer').mockResolvedValue();
   const removeImageSpy = vi.spyOn(docker, 'removeImage').mockResolvedValue();
 
@@ -343,6 +389,17 @@ beforeEach(async () => {
   mockGenerateImageSbom.mockResolvedValue({
     ...createSbomResult(),
   });
+  mockGetRollbackCounter.mockReturnValue({ inc: mockRollbackCounterInc });
+  mockInsertOperation.mockImplementation((operation) => ({
+    id: operation.id || 'op-1',
+    status: operation.status || 'in-progress',
+    phase: operation.phase || 'prepare',
+    createdAt: operation.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...operation,
+  }));
+  mockUpdateOperation.mockImplementation((id, patch = {}) => ({ id, ...patch }));
+  mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
 });
 
 // --- Configuration validation ---
@@ -686,6 +743,194 @@ test('cloneContainer should handle missing NetworkSettings by using empty endpoi
   expect(clone.NetworkingConfig).toEqual({ EndpointsConfig: {} });
 });
 
+test('cloneContainer should drop stale Entrypoint and Cmd inherited from source image defaults', () => {
+  const logContainer = createMockLog('info');
+  const clone = docker.cloneContainer(
+    {
+      Name: '/hub_nginx_120',
+      Id: 'abc123',
+      HostConfig: {},
+      Config: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      NetworkSettings: { Networks: {} },
+    },
+    'nginx:1.10-alpine',
+    {
+      sourceImageConfig: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      targetImageConfig: {
+        Entrypoint: null,
+        Cmd: ['nginx'],
+      },
+      runtimeFieldOrigins: {
+        Entrypoint: 'inherited',
+        Cmd: 'inherited',
+      },
+      logContainer,
+    },
+  );
+
+  expect(clone.Entrypoint).toBeUndefined();
+  expect(clone.Cmd).toBeUndefined();
+  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
+  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('inherited');
+  expect(logContainer.info).toHaveBeenCalledWith(
+    expect.stringContaining('Dropping stale Entrypoint'),
+  );
+  expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Cmd'));
+});
+
+test('cloneContainer should preserve Cmd/Entrypoint pins when runtime origin is unknown', () => {
+  const logContainer = createMockLog('debug');
+  const clone = docker.cloneContainer(
+    {
+      Name: '/hub_nginx_pinned',
+      Id: 'abc123',
+      HostConfig: {},
+      Config: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      NetworkSettings: { Networks: {} },
+    },
+    'nginx:1.10-alpine',
+    {
+      sourceImageConfig: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      targetImageConfig: {
+        Entrypoint: null,
+        Cmd: ['nginx'],
+      },
+      runtimeFieldOrigins: {
+        Entrypoint: 'unknown',
+        Cmd: 'unknown',
+      },
+      logContainer,
+    },
+  );
+
+  expect(clone.Entrypoint).toEqual(['/docker-entrypoint.sh']);
+  expect(clone.Cmd).toEqual(['nginx', '-g', 'daemon off;']);
+  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
+  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+  expect(logContainer.debug).toHaveBeenCalledWith(
+    expect.stringContaining('runtime origin is unknown'),
+  );
+});
+
+test('cloneContainer should preserve explicit Cmd pin while dropping inherited Entrypoint', () => {
+  const logContainer = createMockLog('info');
+  const clone = docker.cloneContainer(
+    {
+      Name: '/hub_nginx_cmd_pin',
+      Id: 'abc123',
+      HostConfig: {},
+      Config: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      NetworkSettings: { Networks: {} },
+    },
+    'nginx:1.10-alpine',
+    {
+      sourceImageConfig: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      targetImageConfig: {
+        Entrypoint: null,
+        Cmd: ['nginx'],
+      },
+      runtimeFieldOrigins: {
+        Entrypoint: 'inherited',
+        Cmd: 'unknown',
+      },
+      logContainer,
+    },
+  );
+
+  expect(clone.Entrypoint).toBeUndefined();
+  expect(clone.Cmd).toEqual(['nginx', '-g', 'daemon off;']);
+  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
+  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+  expect(logContainer.info).toHaveBeenCalledWith(
+    expect.stringContaining('Dropping stale Entrypoint'),
+  );
+});
+
+test('cloneContainer should preserve explicit Entrypoint pin while dropping inherited Cmd', () => {
+  const logContainer = createMockLog('info');
+  const clone = docker.cloneContainer(
+    {
+      Name: '/hub_nginx_entrypoint_pin',
+      Id: 'abc123',
+      HostConfig: {},
+      Config: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      NetworkSettings: { Networks: {} },
+    },
+    'nginx:1.10-alpine',
+    {
+      sourceImageConfig: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      targetImageConfig: {
+        Entrypoint: null,
+        Cmd: ['nginx'],
+      },
+      runtimeFieldOrigins: {
+        Entrypoint: 'unknown',
+        Cmd: 'inherited',
+      },
+      logContainer,
+    },
+  );
+
+  expect(clone.Entrypoint).toEqual(['/docker-entrypoint.sh']);
+  expect(clone.Cmd).toBeUndefined();
+  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
+  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('inherited');
+  expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Cmd'));
+});
+
+test('cloneContainer should preserve explicit Entrypoint/Cmd overrides', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/hub_nginx_custom',
+      Id: 'abc123',
+      HostConfig: {},
+      Config: {
+        Entrypoint: ['/custom-entrypoint.sh'],
+        Cmd: ['echo', 'healthy'],
+      },
+      NetworkSettings: { Networks: {} },
+    },
+    'nginx:1.10-alpine',
+    {
+      sourceImageConfig: {
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+      },
+      targetImageConfig: {
+        Entrypoint: null,
+        Cmd: ['nginx'],
+      },
+    },
+  );
+
+  expect(clone.Entrypoint).toEqual(['/custom-entrypoint.sh']);
+  expect(clone.Cmd).toEqual(['echo', 'healthy']);
+});
+
 // --- trigger ---
 
 test('trigger should not throw when all is ok', async () => {
@@ -780,6 +1025,66 @@ test('trigger should not throw when container does not exist', async () => {
   await expect(
     docker.trigger(createTriggerContainer({ name: 'test-container' })),
   ).resolves.toBeUndefined();
+});
+
+test('trigger should throw an explicit error when registry manager is unknown', async () => {
+  await expect(
+    docker.trigger(
+      createTriggerContainer({
+        image: {
+          name: 'test/test',
+          registry: { name: 'custom.local', url: '' },
+          tag: { value: '1.0.0' },
+        },
+      }),
+    ),
+  ).rejects.toThrowError('Unsupported registry manager "custom.local"');
+});
+
+test('trigger should throw an explicit error when registry manager is misconfigured', async () => {
+  const baseState = registryStore.getState();
+  vi.spyOn(registryStore, 'getState').mockReturnValue({
+    ...baseState,
+    registry: {
+      ...baseState.registry,
+      hub: {
+        getImageFullName: vi.fn(
+          (image, tagOrDigest) => `${image.registry.url}/${image.name}:${tagOrDigest}`,
+        ),
+      },
+    },
+  } as any);
+
+  await expect(docker.trigger(createTriggerContainer())).rejects.toThrowError(
+    /Registry manager "hub" is misconfigured.*getAuthPull/,
+  );
+});
+
+test('trigger should use anonymous registry mode when registry URL is provided', async () => {
+  stubTriggerFlow({ running: true });
+  const executeSelfUpdateSpy = vi.spyOn(docker, 'executeSelfUpdate').mockResolvedValue(false);
+  const maybeNotifySelfUpdateSpy = vi
+    .spyOn(docker, 'maybeNotifySelfUpdate')
+    .mockResolvedValue(undefined);
+
+  await expect(
+    docker.trigger(
+      createTriggerContainer({
+        image: {
+          name: 'drydock',
+          registry: { name: 'custom.local', url: 'http://localhost:5000/v2' },
+          tag: { value: 'good' },
+        },
+        updateKind: { kind: 'tag', remoteValue: 'bad' },
+      }),
+    ),
+  ).resolves.toBeUndefined();
+
+  expect(maybeNotifySelfUpdateSpy).toHaveBeenCalled();
+  expect(executeSelfUpdateSpy).toHaveBeenCalled();
+  const [contextArg] = executeSelfUpdateSpy.mock.calls[0];
+  expect(contextArg.newImage).toBe('localhost:5000/drydock:bad');
+  expect(contextArg.auth).toBeUndefined();
 });
 
 test('trigger should block update when security scan is blocked', async () => {
@@ -1078,6 +1383,23 @@ test('triggerBatch should call trigger for each container', async () => {
   expect(triggerSpy).toHaveBeenCalledTimes(2);
   expect(triggerSpy).toHaveBeenCalledWith({ name: 'c1' });
   expect(triggerSpy).toHaveBeenCalledWith({ name: 'c2' });
+});
+
+test('triggerBatch should limit concurrent container updates to 3', async () => {
+  const containers = Array.from({ length: 8 }, (_, index) => ({ name: `c${index}` }));
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const triggerSpy = vi.spyOn(docker, 'trigger').mockImplementation(async () => {
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    inFlight -= 1;
+  });
+
+  await docker.triggerBatch(containers);
+
+  expect(triggerSpy).toHaveBeenCalledTimes(containers.length);
+  expect(maxInFlight).toBeLessThanOrEqual(3);
 });
 
 // --- pruneImages (parametric: exclusion filters) ---
@@ -1392,35 +1714,6 @@ test('formatPullProgress should return formatted percentage', () => {
   );
 });
 
-// --- sanitizeEndpointConfig ---
-
-test('sanitizeEndpointConfig should return empty object for undefined config', () => {
-  expect(docker.sanitizeEndpointConfig(undefined, 'abc')).toEqual({});
-});
-
-test('sanitizeEndpointConfig should copy IPAMConfig, Links, DriverOpts, MacAddress', () => {
-  const config = {
-    IPAMConfig: { IPv4Address: '10.0.0.5' },
-    Links: ['link1'],
-    DriverOpts: { opt: 'val' },
-    MacAddress: '02:42:ac:11:00:02',
-  };
-  const result = docker.sanitizeEndpointConfig(config, 'abc');
-  expect(result).toEqual(config);
-});
-
-// --- getPrimaryNetworkName ---
-
-test('getPrimaryNetworkName should return NetworkMode when it exists in network names', () => {
-  const container = { HostConfig: { NetworkMode: 'custom_net' } };
-  expect(docker.getPrimaryNetworkName(container, ['bridge', 'custom_net'])).toBe('custom_net');
-});
-
-test('getPrimaryNetworkName should return first network when NetworkMode not in list', () => {
-  const container = { HostConfig: { NetworkMode: 'host' } };
-  expect(docker.getPrimaryNetworkName(container, ['bridge', 'custom'])).toBe('bridge');
-});
-
 // --- Lifecycle hooks ---
 
 describe('lifecycle hooks', () => {
@@ -1449,6 +1742,25 @@ describe('lifecycle hooks', () => {
     expect(mockRunHook).toHaveBeenCalledWith(
       'echo after',
       expect.objectContaining({ label: 'post-update' }),
+    );
+  });
+
+  test('trigger should emit hook-configured audit when hook labels are present', async () => {
+    mockRunHook.mockResolvedValue({ exitCode: 0, stdout: 'ok', stderr: '', timedOut: false });
+
+    await docker.trigger(
+      createTriggerContainer({
+        labels: { 'dd.hook.pre': 'echo before' },
+      }),
+    );
+
+    expect(mockAuditCounterInc).toHaveBeenCalledWith({ action: 'hook-configured' });
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'hook-configured',
+        status: 'info',
+        details: expect.stringContaining('pre=true'),
+      }),
     );
   });
 
@@ -1821,26 +2133,21 @@ describe('additional docker trigger coverage', () => {
     expect(preview.networks).toEqual([]);
   });
 
-  test('maybeNotifySelfUpdate should wait before proceeding for drydock image', async () => {
-    vi.useFakeTimers();
-    try {
-      const logContainer = createMockLog('info');
-      const notifyPromise = docker.maybeNotifySelfUpdate(
-        {
-          image: {
-            name: 'drydock',
-          },
+  test('maybeNotifySelfUpdate should notify immediately for drydock image', async () => {
+    const logContainer = createMockLog('info');
+
+    await docker.maybeNotifySelfUpdate(
+      {
+        image: {
+          name: 'drydock',
         },
-        logContainer,
-      );
-      await vi.advanceTimersByTimeAsync(500);
-      await notifyPromise;
-      expect(logContainer.info).toHaveBeenCalledWith(
-        'Self-update detected — notifying UI before proceeding',
-      );
-    } finally {
-      vi.useRealTimers();
-    }
+      },
+      logContainer,
+    );
+
+    expect(logContainer.info).toHaveBeenCalledWith(
+      'Self-update detected — notifying UI before proceeding',
+    );
   });
 
   test('maybeNotifySelfUpdate should no-op for non-drydock images', async () => {
@@ -2003,6 +2310,559 @@ describe('additional docker trigger coverage', () => {
   });
 });
 
+// --- Non-self update rollback ---
+
+describe('executeContainerUpdate', () => {
+  function createContainerUpdateContext(overrides = {}) {
+    const mockNewContainer = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'new-container-id',
+        State: { Health: { Status: 'healthy' } },
+      }),
+    };
+    const currentContainer = {
+      rename: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      wait: vi.fn().mockResolvedValue(undefined),
+      start: vi.fn().mockResolvedValue(undefined),
+    };
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: { Image: 'my-registry/test/test:1.0.0' },
+      State: { Running: true },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+
+    vi.spyOn(docker, 'pullImage').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'cloneContainer').mockReturnValue({ name: 'container-name' });
+    vi.spyOn(docker, 'createContainer').mockResolvedValue(mockNewContainer);
+    vi.spyOn(docker, 'stopContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'startContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'removeContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'waitContainerRemoved').mockResolvedValue(undefined);
+
+    return {
+      dockerApi: {},
+      auth: undefined,
+      newImage: 'my-registry/test/test:4.5.6',
+      currentContainer,
+      currentContainerSpec,
+      _mockNewContainer: mockNewContainer,
+      ...overrides,
+    };
+  }
+
+  test('should replace running container using rename/create/start/remove sequence', async () => {
+    const context = createContainerUpdateContext();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+
+    const result = await docker.executeContainerUpdate(
+      context,
+      createTriggerContainer(),
+      logContainer,
+    );
+
+    expect(result).toBe(true);
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(1);
+    const tempName = context.currentContainer.rename.mock.calls[0][0].name;
+    expect(tempName).toMatch(/^container-name-old-/);
+    expect(docker.createContainer).toHaveBeenCalled();
+    expect(docker.stopContainer).toHaveBeenCalledWith(
+      context.currentContainer,
+      tempName,
+      'old-container-id',
+      logContainer,
+    );
+    expect(docker.startContainer).toHaveBeenCalledWith(
+      context._mockNewContainer,
+      'container-name',
+      logContainer,
+    );
+    expect(docker.removeContainer).toHaveBeenCalledWith(
+      context.currentContainer,
+      tempName,
+      'old-container-id',
+      logContainer,
+    );
+  });
+
+  test('should preserve explicit runtime pins matching source defaults during update', async () => {
+    const currentContainer = {
+      rename: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      wait: vi.fn().mockResolvedValue(undefined),
+      start: vi.fn().mockResolvedValue(undefined),
+    };
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: {
+        Image: 'nginx:1.20-alpine',
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+        Labels: {},
+      },
+      State: { Running: false },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+    const dockerApi = {
+      getImage: vi.fn((imageRef) => ({
+        inspect: vi.fn().mockResolvedValue(
+          imageRef === 'nginx:1.20-alpine'
+            ? {
+                Config: {
+                  Entrypoint: ['/docker-entrypoint.sh'],
+                  Cmd: ['nginx', '-g', 'daemon off;'],
+                },
+              }
+            : {
+                Config: {
+                  Entrypoint: null,
+                  Cmd: ['nginx'],
+                },
+              },
+        ),
+      })),
+    };
+    const newContainer = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'new-container-id',
+        State: { Health: { Status: 'healthy' } },
+      }),
+    };
+    const createContainerSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue(newContainer);
+    vi.spyOn(docker, 'pullImage').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'removeContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'stopContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'startContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'waitContainerRemoved').mockResolvedValue(undefined);
+
+    const result = await docker.executeContainerUpdate(
+      {
+        dockerApi,
+        auth: undefined,
+        newImage: 'nginx:1.10-alpine',
+        currentContainer,
+        currentContainerSpec,
+      },
+      createTriggerContainer(),
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    expect(result).toBe(true);
+    const createPayload = createContainerSpy.mock.calls[0][1];
+    expect(createPayload.Entrypoint).toEqual(['/docker-entrypoint.sh']);
+    expect(createPayload.Cmd).toEqual(['nginx', '-g', 'daemon off;']);
+    expect(createPayload.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
+    expect(createPayload.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+  });
+
+  test('should drop stale inherited runtime defaults when origin labels mark inherited', async () => {
+    const currentContainer = {
+      rename: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      wait: vi.fn().mockResolvedValue(undefined),
+      start: vi.fn().mockResolvedValue(undefined),
+    };
+    const currentContainerSpec = {
+      Id: 'old-container-id',
+      Name: '/container-name',
+      Config: {
+        Image: 'nginx:1.20-alpine',
+        Entrypoint: ['/docker-entrypoint.sh'],
+        Cmd: ['nginx', '-g', 'daemon off;'],
+        Labels: {
+          'dd.runtime.entrypoint.origin': 'inherited',
+          'dd.runtime.cmd.origin': 'inherited',
+        },
+      },
+      State: { Running: false },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+    };
+    const dockerApi = {
+      getImage: vi.fn((imageRef) => ({
+        inspect: vi.fn().mockResolvedValue(
+          imageRef === 'nginx:1.20-alpine'
+            ? {
+                Config: {
+                  Entrypoint: ['/docker-entrypoint.sh'],
+                  Cmd: ['nginx', '-g', 'daemon off;'],
+                },
+              }
+            : {
+                Config: {
+                  Entrypoint: null,
+                  Cmd: ['nginx'],
+                },
+              },
+        ),
+      })),
+    };
+    const newContainer = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'new-container-id',
+        State: { Health: { Status: 'healthy' } },
+      }),
+    };
+    const createContainerSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue(newContainer);
+    vi.spyOn(docker, 'pullImage').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'removeContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'stopContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'startContainer').mockResolvedValue(undefined);
+    vi.spyOn(docker, 'waitContainerRemoved').mockResolvedValue(undefined);
+
+    const result = await docker.executeContainerUpdate(
+      {
+        dockerApi,
+        auth: undefined,
+        newImage: 'nginx:1.10-alpine',
+        currentContainer,
+        currentContainerSpec,
+      },
+      createTriggerContainer(),
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    expect(result).toBe(true);
+    const createPayload = createContainerSpy.mock.calls[0][1];
+    expect(createPayload.Entrypoint).toBeUndefined();
+    expect(createPayload.Cmd).toBeUndefined();
+    expect(createPayload.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
+    expect(createPayload.Labels['dd.runtime.cmd.origin']).toBe('inherited');
+  });
+
+  test('should rollback rename when creating new container fails', async () => {
+    const context = createContainerUpdateContext();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    vi.mocked(docker.createContainer).mockRejectedValueOnce(new Error('create failed'));
+
+    await expect(
+      docker.executeContainerUpdate(context, createTriggerContainer(), logContainer),
+    ).rejects.toThrow('create failed');
+
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(2);
+    expect(context.currentContainer.rename).toHaveBeenLastCalledWith({ name: 'container-name' });
+    expect(docker.stopContainer).not.toHaveBeenCalled();
+    expect(docker.startContainer).not.toHaveBeenCalledWith(
+      context.currentContainer,
+      'container-name',
+      logContainer,
+    );
+  });
+
+  test('should return actionable rollback error for incompatible runtime command', async () => {
+    const context = createContainerUpdateContext({
+      newImage: 'nginx:1.10-alpine',
+      currentContainerSpec: {
+        Id: 'old-container-id',
+        Name: '/container-name',
+        Config: {
+          Image: 'nginx:1.20-alpine',
+          Entrypoint: ['/docker-entrypoint.sh'],
+          Cmd: ['nginx', '-g', 'daemon off;'],
+        },
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+        NetworkSettings: { Networks: {} },
+      },
+    });
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    vi.mocked(docker.createContainer).mockRejectedValueOnce(
+      new Error(
+        '(HTTP code 400) unexpected - failed to create task for container: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: error during container init: exec: "/docker-entrypoint.sh": stat /docker-entrypoint.sh: no such file or directory',
+      ),
+    );
+
+    await expect(
+      docker.executeContainerUpdate(context, createTriggerContainer(), logContainer),
+    ).rejects.toThrow('runtime command is incompatible with target image nginx:1.10-alpine');
+
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(2);
+    expect(context.currentContainer.rename).toHaveBeenLastCalledWith({ name: 'container-name' });
+  });
+
+  test('should rollback to old container when starting new container fails', async () => {
+    const context = createContainerUpdateContext();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    vi.mocked(docker.startContainer)
+      .mockRejectedValueOnce(new Error('new start failed'))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(
+      docker.executeContainerUpdate(context, createTriggerContainer(), logContainer),
+    ).rejects.toThrow('new start failed');
+
+    const tempName = context.currentContainer.rename.mock.calls[0][0].name;
+    expect(docker.stopContainer).toHaveBeenCalledWith(
+      context.currentContainer,
+      tempName,
+      'old-container-id',
+      logContainer,
+    );
+    expect(context._mockNewContainer.stop).toHaveBeenCalled();
+    expect(context._mockNewContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(context.currentContainer.rename).toHaveBeenLastCalledWith({ name: 'container-name' });
+    expect(docker.startContainer).toHaveBeenNthCalledWith(
+      2,
+      context.currentContainer,
+      'container-name',
+      logContainer,
+    );
+  });
+
+  test('should wait for old container auto-removal when AutoRemove is enabled', async () => {
+    const context = createContainerUpdateContext({
+      currentContainerSpec: {
+        Id: 'old-container-id',
+        Name: '/container-name',
+        Config: { Image: 'my-registry/test/test:1.0.0' },
+        State: { Running: true },
+        HostConfig: { AutoRemove: true },
+        NetworkSettings: { Networks: {} },
+      },
+    });
+    const logContainer = createMockLog('info', 'warn', 'debug');
+
+    await docker.executeContainerUpdate(context, createTriggerContainer(), logContainer);
+
+    const tempName = context.currentContainer.rename.mock.calls[0][0].name;
+    expect(docker.waitContainerRemoved).toHaveBeenCalledWith(
+      context.currentContainer,
+      tempName,
+      'old-container-id',
+      logContainer,
+    );
+    expect(docker.removeContainer).not.toHaveBeenCalled();
+  });
+
+  test('should treat old AutoRemove cleanup 404 as success', async () => {
+    const context = createContainerUpdateContext({
+      currentContainerSpec: {
+        Id: 'old-container-id',
+        Name: '/container-name',
+        Config: { Image: 'my-registry/test/test:1.0.0' },
+        State: { Running: true },
+        HostConfig: { AutoRemove: true },
+        NetworkSettings: { Networks: {} },
+      },
+    });
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const alreadyRemovedError = Object.assign(new Error('No such container: old-container-id'), {
+      statusCode: 404,
+    });
+    vi.mocked(docker.waitContainerRemoved).mockRejectedValueOnce(alreadyRemovedError);
+
+    const result = await docker.executeContainerUpdate(
+      context,
+      createTriggerContainer(),
+      logContainer,
+    );
+
+    expect(result).toBe(true);
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(1);
+    expect(mockRollbackCounterInc).not.toHaveBeenCalled();
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        status: 'succeeded',
+        phase: 'succeeded',
+      }),
+    );
+  });
+
+  test('should not rollback-delete healthy new container when AutoRemove cleanup reports no such container', async () => {
+    const context = createContainerUpdateContext({
+      currentContainerSpec: {
+        Id: 'old-container-id',
+        Name: '/container-name',
+        Config: { Image: 'my-registry/test/test:1.0.0' },
+        State: { Running: true },
+        HostConfig: { AutoRemove: true },
+        NetworkSettings: { Networks: {} },
+      },
+    });
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    vi.mocked(docker.waitContainerRemoved).mockRejectedValueOnce(
+      new Error('No such container: old-container-id'),
+    );
+
+    await expect(
+      docker.executeContainerUpdate(context, createTriggerContainer(), logContainer),
+    ).resolves.toBe(true);
+
+    expect(context._mockNewContainer.stop).not.toHaveBeenCalled();
+    expect(context._mockNewContainer.remove).not.toHaveBeenCalled();
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(1);
+  });
+
+  test('should remove old container when AutoRemove is enabled but source was already stopped', async () => {
+    const context = createContainerUpdateContext({
+      currentContainerSpec: {
+        Id: 'old-container-id',
+        Name: '/container-name',
+        Config: { Image: 'my-registry/test/test:1.0.0' },
+        State: { Running: false },
+        HostConfig: { AutoRemove: true },
+        NetworkSettings: { Networks: {} },
+      },
+    });
+    const logContainer = createMockLog('info', 'warn', 'debug');
+
+    await docker.executeContainerUpdate(context, createTriggerContainer(), logContainer);
+
+    const tempName = context.currentContainer.rename.mock.calls[0][0].name;
+    expect(docker.removeContainer).toHaveBeenCalledWith(
+      context.currentContainer,
+      tempName,
+      'old-container-id',
+      logContainer,
+    );
+    expect(docker.waitContainerRemoved).not.toHaveBeenCalled();
+  });
+
+  test('should health-gate new container before removing old one when HEALTHCHECK is configured', async () => {
+    const context = createContainerUpdateContext({
+      currentContainerSpec: {
+        Id: 'old-container-id',
+        Name: '/container-name',
+        Config: { Image: 'my-registry/test/test:1.0.0', Healthcheck: { Test: ['CMD', 'true'] } },
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+        NetworkSettings: { Networks: {} },
+      },
+    });
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    const waitForHealthySpy = vi.spyOn(docker, 'waitForContainerHealthy').mockResolvedValue();
+
+    await docker.executeContainerUpdate(context, createTriggerContainer(), logContainer);
+
+    expect(waitForHealthySpy).toHaveBeenCalledWith(
+      context._mockNewContainer,
+      'container-name',
+      logContainer,
+    );
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ phase: 'health-gate-passed' }),
+    );
+  });
+
+  test('should rollback when health gate fails', async () => {
+    const context = createContainerUpdateContext({
+      currentContainerSpec: {
+        Id: 'old-container-id',
+        Name: '/container-name',
+        Config: { Image: 'my-registry/test/test:1.0.0', Healthcheck: { Test: ['CMD', 'true'] } },
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+        NetworkSettings: { Networks: {} },
+      },
+    });
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    vi.spyOn(docker, 'waitForContainerHealthy').mockRejectedValue(
+      new Error('Health gate failed: unhealthy'),
+    );
+    vi.mocked(docker.startContainer)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+
+    await expect(
+      docker.executeContainerUpdate(context, createTriggerContainer(), logContainer),
+    ).rejects.toThrow('Health gate failed: unhealthy');
+
+    expect(context._mockNewContainer.stop).toHaveBeenCalled();
+    expect(context._mockNewContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(context.currentContainer.rename).toHaveBeenLastCalledWith({ name: 'container-name' });
+    expect(mockRollbackCounterInc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: 'success',
+        reason: 'health_gate_failed',
+      }),
+    );
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'rollback',
+        status: 'success',
+      }),
+    );
+  });
+
+  test('should reconcile pending in-progress operation before update', async () => {
+    const staleTempContainer = {
+      inspect: vi.fn().mockResolvedValue({ Id: 'temp-id', State: { Running: false } }),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+    const activeContainer = {
+      inspect: vi.fn().mockResolvedValue({ Id: 'active-id', State: { Running: true } }),
+    };
+    const dockerApi = {
+      getContainer: vi.fn((id) => {
+        if (id === 'container-name') return activeContainer;
+        if (id === 'container-name-old-stale') return staleTempContainer;
+        return { inspect: vi.fn().mockRejectedValue(new Error('not found')) };
+      }),
+    };
+    const context = createContainerUpdateContext({ dockerApi });
+    const logContainer = createMockLog('info', 'warn', 'debug');
+    mockGetInProgressOperationByContainerName.mockReturnValue({
+      id: 'op-recover-1',
+      containerName: 'container-name',
+      oldName: 'container-name',
+      tempName: 'container-name-old-stale',
+      oldContainerWasRunning: true,
+      oldContainerStopped: true,
+      fromVersion: '1.0.0',
+      toVersion: '1.1.0',
+      status: 'in-progress',
+    });
+
+    await docker.executeContainerUpdate(context, createTriggerContainer(), logContainer);
+
+    expect(staleTempContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-recover-1',
+      expect.objectContaining({
+        status: 'succeeded',
+        phase: 'recovered-cleanup-temp',
+      }),
+    );
+    expect(mockRollbackCounterInc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'startup_reconcile_cleanup_temp',
+      }),
+    );
+  });
+
+  test('should return false in dry-run mode', async () => {
+    docker.configuration = { ...configurationValid, dryrun: true };
+    const context = createContainerUpdateContext();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+
+    const result = await docker.executeContainerUpdate(
+      context,
+      createTriggerContainer(),
+      logContainer,
+    );
+
+    expect(result).toBe(false);
+    expect(context.currentContainer.rename).not.toHaveBeenCalled();
+  });
+});
+
 // --- Self-update ---
 
 describe('isSelfUpdate', () => {
@@ -2113,7 +2973,7 @@ describe('executeSelfUpdate', () => {
     };
   }
 
-  test('should rename old container, create new, and spawn helper', async () => {
+  test('should rename old container, create new, and spawn controller helper', async () => {
     const context = createSelfUpdateContext();
     const logContainer = createMockLog('info', 'warn', 'debug');
     const container = createTriggerContainer({
@@ -2133,16 +2993,24 @@ describe('executeSelfUpdate', () => {
     });
     expect(docker.createContainer).toHaveBeenCalled();
     const helperCall = context.dockerApi.createContainer.mock.calls.find(
-      (call) => call[0]?.Cmd?.[0] === 'sh',
+      (call) => call[0]?.Cmd?.[0] === 'node',
     );
     expect(helperCall).toBeDefined();
-    const script = helperCall[0].Cmd[2];
-    expect(script).toContain('stop');
-    expect(script).toContain('start');
-    // Verify fallback: if new start fails, old is restarted
-    expect(script).toMatch(/\(.*start.*\|\|.*start.*\)/);
-    // Verify removeOld only runs after successful startNew, not after fallback
-    expect(script).toMatch(/start.*&&.*DELETE.*\|\|.*start/);
+    expect(helperCall[0].Cmd).toEqual([
+      'node',
+      'dist/triggers/providers/docker/self-update-controller-entrypoint.js',
+    ]);
+    expect(helperCall[0].Env).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^DD_SELF_UPDATE_OP_ID=/),
+        'DD_SELF_UPDATE_OLD_CONTAINER_ID=old-container-id',
+        'DD_SELF_UPDATE_NEW_CONTAINER_ID=new-container-id',
+        'DD_SELF_UPDATE_OLD_CONTAINER_NAME=drydock',
+      ]),
+    );
+    expect(helperCall[0].Labels).toMatchObject({
+      'dd.self-update.helper': 'true',
+    });
     expect(helperCall[0].HostConfig.AutoRemove).toBe(true);
     expect(context._mockHelperContainer.start).toHaveBeenCalled();
   });
@@ -2253,6 +3121,425 @@ describe('executeSelfUpdate', () => {
 
     expect(result).toBe(false);
     expect(context.currentContainer.rename).not.toHaveBeenCalled();
+  });
+});
+
+describe('extracted lifecycle delegation', () => {
+  test('executeSelfUpdate should delegate to selfUpdateOrchestrator', async () => {
+    const originalSelfUpdateOrchestrator = docker.selfUpdateOrchestrator;
+    const execute = vi.fn().mockResolvedValue('delegated-self-update');
+    docker.selfUpdateOrchestrator = { execute };
+    const context = { any: 'context' };
+    const container = createTriggerContainer();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+
+    try {
+      const result = await docker.executeSelfUpdate(context, container, logContainer, 'op-123');
+
+      expect(execute).toHaveBeenCalledWith(context, container, logContainer, 'op-123');
+      expect(result).toBe('delegated-self-update');
+    } finally {
+      docker.selfUpdateOrchestrator = originalSelfUpdateOrchestrator;
+    }
+  });
+
+  test('maybeNotifySelfUpdate should delegate to selfUpdateOrchestrator', async () => {
+    const originalSelfUpdateOrchestrator = docker.selfUpdateOrchestrator;
+    const maybeNotify = vi.fn().mockResolvedValue(undefined);
+    docker.selfUpdateOrchestrator = { maybeNotify };
+    const container = createTriggerContainer();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+
+    try {
+      await docker.maybeNotifySelfUpdate(container, logContainer, 'op-123');
+      expect(maybeNotify).toHaveBeenCalledWith(container, logContainer, 'op-123');
+    } finally {
+      docker.selfUpdateOrchestrator = originalSelfUpdateOrchestrator;
+    }
+  });
+
+  test('executeContainerUpdate should delegate to containerUpdateExecutor', async () => {
+    const originalContainerUpdateExecutor = docker.containerUpdateExecutor;
+    const execute = vi.fn().mockResolvedValue('delegated-container-update');
+    docker.containerUpdateExecutor = { execute };
+    const context = { any: 'context' };
+    const container = createTriggerContainer();
+    const logContainer = createMockLog('info', 'warn', 'debug');
+
+    try {
+      const result = await docker.executeContainerUpdate(context, container, logContainer);
+
+      expect(execute).toHaveBeenCalledWith(context, container, logContainer);
+      expect(result).toBe('delegated-container-update');
+    } finally {
+      docker.containerUpdateExecutor = originalContainerUpdateExecutor;
+    }
+  });
+
+  test('runContainerUpdateLifecycle should delegate to updateLifecycleExecutor', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockResolvedValue(undefined);
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+    const runtimeContext = { composeFile: '/tmp/docker-compose.yml' };
+
+    try {
+      await docker.runContainerUpdateLifecycle(container, runtimeContext);
+
+      expect(run).toHaveBeenCalledWith(container, runtimeContext);
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('getRollbackConfig should delegate to rollbackMonitor', () => {
+    const originalRollbackMonitor = docker.rollbackMonitor;
+    const getConfig = vi.fn().mockReturnValue({
+      autoRollback: true,
+      rollbackWindow: 45_000,
+      rollbackInterval: 2_000,
+    });
+    docker.rollbackMonitor = { getConfig };
+    const container = createTriggerContainer();
+
+    try {
+      const result = docker.getRollbackConfig(container);
+
+      expect(getConfig).toHaveBeenCalledWith(container);
+      expect(result).toEqual({
+        autoRollback: true,
+        rollbackWindow: 45_000,
+        rollbackInterval: 2_000,
+      });
+    } finally {
+      docker.rollbackMonitor = originalRollbackMonitor;
+    }
+  });
+
+  test('maybeStartAutoRollbackMonitor should delegate to rollbackMonitor', async () => {
+    const originalRollbackMonitor = docker.rollbackMonitor;
+    const start = vi.fn().mockResolvedValue(undefined);
+    docker.rollbackMonitor = { start };
+    const dockerApi = { any: 'docker' };
+    const container = createTriggerContainer();
+    const rollbackConfig = {
+      autoRollback: true,
+      rollbackWindow: 60_000,
+      rollbackInterval: 5_000,
+    };
+    const logContainer = createMockLog('info', 'warn', 'debug');
+
+    try {
+      await docker.maybeStartAutoRollbackMonitor(
+        dockerApi,
+        container,
+        rollbackConfig,
+        logContainer,
+      );
+
+      expect(start).toHaveBeenCalledWith(dockerApi, container, rollbackConfig, logContainer);
+    } finally {
+      docker.rollbackMonitor = originalRollbackMonitor;
+    }
+  });
+});
+
+describe('additional direct wrapper coverage', () => {
+  test('isContainerNotFoundError should handle empty, status, and message-based inputs', () => {
+    expect(docker.isContainerNotFoundError(undefined)).toBe(false);
+    expect(docker.isContainerNotFoundError({ statusCode: 404 })).toBe(true);
+    expect(docker.isContainerNotFoundError({ status: 404 })).toBe(true);
+    expect(docker.isContainerNotFoundError({ message: 'No such container: abc' })).toBe(true);
+    expect(docker.isContainerNotFoundError({ reason: 'No such container: def' })).toBe(true);
+    expect(docker.isContainerNotFoundError({ json: { message: 'No such container: ghi' } })).toBe(
+      true,
+    );
+    expect(docker.isContainerNotFoundError({ message: 'something else' })).toBe(false);
+  });
+
+  test('registry resolver wrapper methods should delegate to registryResolver', () => {
+    const originalResolver = docker.registryResolver as any;
+    const getStateSpy = vi.spyOn(registryStore, 'getState').mockReturnValue({} as any);
+    docker.registryResolver = {
+      normalizeRegistryHost: vi.fn().mockReturnValue('normalized-host'),
+      buildRegistryLookupCandidates: vi.fn().mockReturnValue(['a', 'b']),
+      isRegistryManagerCompatible: vi.fn().mockReturnValue(true),
+      createAnonymousRegistryManager: vi.fn().mockReturnValue({ name: 'anon' }),
+      resolveRegistryManager: vi.fn().mockReturnValue({ name: 'resolved' }),
+    } as any;
+
+    try {
+      expect(docker.normalizeRegistryHost('docker.io')).toBe('normalized-host');
+      expect(docker.buildRegistryLookupCandidates({ name: 'nginx' } as any)).toEqual(['a', 'b']);
+      expect(docker.isRegistryManagerCompatible({} as any, { withDigest: true })).toBe(true);
+      expect(docker.createAnonymousRegistryManager({} as any, {} as any)).toEqual({ name: 'anon' });
+      expect(
+        docker.resolveRegistryManager({ image: { registry: { name: 'hub' } } } as any, {} as any),
+      ).toEqual({ name: 'resolved' });
+    } finally {
+      getStateSpy.mockRestore();
+      docker.registryResolver = originalResolver;
+    }
+  });
+
+  test('recordRollbackTelemetry should normalize reasons and map info outcome', () => {
+    const rollbackCounterInc = vi.fn();
+    mockGetRollbackCounter.mockReturnValue({ inc: rollbackCounterInc });
+    const recordRollbackAuditSpy = vi
+      .spyOn(docker, 'recordRollbackAudit')
+      .mockImplementation(() => {
+        return undefined as any;
+      });
+    const container = { name: 'web', image: { name: 'nginx' } } as any;
+
+    docker.recordRollbackTelemetry(container, 'info', '', 'missing reason');
+    docker.recordRollbackTelemetry(container, 'info', '!!!', 'sanitized reason');
+    docker.recordRollbackTelemetry(container, 'success', 'manual', 'success reason');
+    docker.recordRollbackTelemetry(container, 'error', 'manual', 'error reason');
+
+    expect(rollbackCounterInc).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        outcome: 'info',
+        reason: 'unspecified',
+      }),
+    );
+    expect(rollbackCounterInc).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        outcome: 'info',
+        reason: 'unspecified',
+      }),
+    );
+    expect(recordRollbackAuditSpy).toHaveBeenNthCalledWith(
+      1,
+      container,
+      'info',
+      'missing reason',
+      undefined,
+      undefined,
+    );
+    expect(recordRollbackAuditSpy).toHaveBeenNthCalledWith(
+      2,
+      container,
+      'info',
+      'sanitized reason',
+      undefined,
+      undefined,
+    );
+    expect(recordRollbackAuditSpy).toHaveBeenNthCalledWith(
+      3,
+      container,
+      'success',
+      'success reason',
+      undefined,
+      undefined,
+    );
+    expect(recordRollbackAuditSpy).toHaveBeenNthCalledWith(
+      4,
+      container,
+      'error',
+      'error reason',
+      undefined,
+      undefined,
+    );
+    recordRollbackAuditSpy.mockRestore();
+  });
+
+  test('stopAndRemoveContainer should stop then remove when running and auto-remove is disabled', async () => {
+    const stopSpy = vi.spyOn(docker, 'stopContainer').mockResolvedValue();
+    const removeSpy = vi.spyOn(docker, 'removeContainer').mockResolvedValue();
+    const waitSpy = vi.spyOn(docker, 'waitContainerRemoved').mockResolvedValue();
+
+    await docker.stopAndRemoveContainer(
+      {} as any,
+      { State: { Running: true }, HostConfig: { AutoRemove: false } } as any,
+      { name: 'c1', id: 'id-1' } as any,
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    expect(stopSpy).toHaveBeenCalledTimes(1);
+    expect(removeSpy).toHaveBeenCalledTimes(1);
+    expect(waitSpy).not.toHaveBeenCalled();
+  });
+
+  test('stopAndRemoveContainer should wait for auto-removal when AutoRemove is enabled', async () => {
+    const stopSpy = vi.spyOn(docker, 'stopContainer').mockResolvedValue();
+    const removeSpy = vi.spyOn(docker, 'removeContainer').mockResolvedValue();
+    const waitSpy = vi.spyOn(docker, 'waitContainerRemoved').mockResolvedValue();
+
+    await docker.stopAndRemoveContainer(
+      {} as any,
+      { State: { Running: false }, HostConfig: { AutoRemove: true } } as any,
+      { name: 'c1', id: 'id-1' } as any,
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    expect(stopSpy).not.toHaveBeenCalled();
+    expect(removeSpy).not.toHaveBeenCalled();
+    expect(waitSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('recreateContainer should create and start new container when previous one was running', async () => {
+    const cloneSpy = vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
+    const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+    const startSpy = vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+    await docker.recreateContainer(
+      {} as any,
+      { State: { Running: true } } as any,
+      'repo/image:new',
+      { name: 'c1' } as any,
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    expect(cloneSpy).toHaveBeenCalledTimes(1);
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(startSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('recreateContainer should skip start when previous container was stopped', async () => {
+    vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
+    vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+    const startSpy = vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+    await docker.recreateContainer(
+      {} as any,
+      { State: { Running: false } } as any,
+      'repo/image:new',
+      { name: 'c1' } as any,
+      createMockLog('info', 'warn', 'debug'),
+    );
+
+    expect(startSpy).not.toHaveBeenCalled();
+  });
+
+  test('waitForContainerHealthy should wait when health state is initially unavailable', async () => {
+    vi.useFakeTimers();
+    const dateNowSpy = vi.spyOn(Date, 'now');
+    dateNowSpy.mockReturnValueOnce(0).mockReturnValueOnce(1_000).mockReturnValueOnce(2_000);
+    const containerToCheck = {
+      inspect: vi
+        .fn()
+        .mockResolvedValueOnce({ State: {} })
+        .mockResolvedValueOnce({ State: { Health: { Status: 'healthy' } } }),
+    };
+    const logContainer = createMockLog('info', 'warn', 'debug');
+
+    const waitPromise = docker.waitForContainerHealthy(
+      containerToCheck as any,
+      'web',
+      logContainer,
+    );
+    await vi.advanceTimersByTimeAsync(5_000);
+    await waitPromise;
+
+    expect(logContainer.debug).toHaveBeenCalledWith(
+      'Container web health state not yet available — waiting for health gate',
+    );
+    expect(logContainer.info).toHaveBeenCalledWith('Container web passed health gate');
+    dateNowSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
+  test('waitForContainerHealthy should fail when health status is unhealthy', async () => {
+    const containerToCheck = {
+      inspect: vi.fn().mockResolvedValue({ State: { Health: { Status: 'unhealthy' } } }),
+    };
+
+    await expect(
+      docker.waitForContainerHealthy(
+        containerToCheck as any,
+        'web',
+        createMockLog('info', 'warn', 'debug'),
+      ),
+    ).rejects.toThrow('Health gate failed: container web reported unhealthy');
+  });
+
+  test('waitForContainerHealthy should time out when status never becomes healthy', async () => {
+    const dateNowSpy = vi.spyOn(Date, 'now');
+    dateNowSpy.mockReturnValueOnce(0).mockReturnValueOnce(301_000);
+    const containerToCheck = {
+      inspect: vi.fn(),
+    };
+
+    await expect(
+      docker.waitForContainerHealthy(
+        containerToCheck as any,
+        'web',
+        createMockLog('info', 'warn', 'debug'),
+      ),
+    ).rejects.toThrow('Health gate timed out');
+
+    dateNowSpy.mockRestore();
+  });
+
+  test('waitForContainerHealthy should poll when health status is neither healthy nor unhealthy', async () => {
+    vi.useFakeTimers();
+    const dateNowSpy = vi.spyOn(Date, 'now');
+    dateNowSpy.mockReturnValueOnce(0).mockReturnValueOnce(0).mockReturnValueOnce(301_000);
+    const containerToCheck = {
+      inspect: vi.fn().mockResolvedValue({ State: { Health: { Status: 'starting' } } }),
+    };
+
+    try {
+      const waitPromise = docker.waitForContainerHealthy(
+        containerToCheck as any,
+        'web',
+        createMockLog('info', 'warn', 'debug'),
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expect(waitPromise).rejects.toThrow('Health gate timed out');
+    } finally {
+      dateNowSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  test('hook wrapper methods should delegate to hookExecutor', async () => {
+    const originalHookExecutor = docker.hookExecutor as any;
+    const runPreUpdateHook = vi.fn().mockResolvedValue(undefined);
+    const runPostUpdateHook = vi.fn().mockResolvedValue(undefined);
+    const isHookFailure = vi.fn().mockReturnValue(true);
+    const getHookFailureDetails = vi.fn().mockReturnValue('failed details');
+    docker.hookExecutor = {
+      runPreUpdateHook,
+      runPostUpdateHook,
+      isHookFailure,
+      getHookFailureDetails,
+    } as any;
+
+    try {
+      expect(docker.isHookFailure({ code: 1 })).toBe(true);
+      expect(docker.getHookFailureDetails('pre', { code: 1 }, 1000)).toBe('failed details');
+      await docker.runPreUpdateHook({} as any, {} as any, {} as any);
+      await docker.runPostUpdateHook({} as any, {} as any, {} as any);
+      expect(runPreUpdateHook).toHaveBeenCalledTimes(1);
+      expect(runPostUpdateHook).toHaveBeenCalledTimes(1);
+    } finally {
+      docker.hookExecutor = originalHookExecutor;
+    }
+  });
+
+  test('reconcileInProgressContainerUpdateOperation should delegate to containerUpdateExecutor', async () => {
+    const originalExecutor = docker.containerUpdateExecutor as any;
+    const reconcile = vi.fn().mockResolvedValue('reconciled');
+    docker.containerUpdateExecutor = {
+      reconcileInProgressContainerUpdateOperation: reconcile,
+    } as any;
+
+    try {
+      const result = await docker.reconcileInProgressContainerUpdateOperation(
+        {} as any,
+        {} as any,
+        {} as any,
+      );
+
+      expect(reconcile).toHaveBeenCalledTimes(1);
+      expect(result).toBe('reconciled');
+    } finally {
+      docker.containerUpdateExecutor = originalExecutor;
+    }
   });
 });
 

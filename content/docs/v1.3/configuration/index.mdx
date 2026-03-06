@@ -1,0 +1,116 @@
+---
+title: "Configuration"
+description: "Drydock is configured via environment variables and Docker labels."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+drydock is configured via **Environment Variables** and **[Docker labels](https://docs.docker.com/config/labels-custom-metadata/)**.
+
+## Prefix convention
+
+All environment variables use the `DD_` prefix. All Docker labels use the `dd.` prefix.
+
+| Context | Prefix | Example |
+| --------- | -------- | --------- |
+| Environment variables | `DD_` | `DD_SERVER_PORT` |
+| Docker labels | `dd.` | `dd.watch` |
+| Secret files | `DD_` + `__FILE` | `DD_AUTH_BASIC_JOHN_HASH__FILE` |
+
+Please find below the documentation for each of them:
+
+- [**Container Actions**](/docs/configuration/actions) — start, stop, restart, update, and delete
+- [**Authentication**](/docs/configuration/authentications)
+- [**Backup & Rollback**](/docs/configuration/rollback) — automatic image backup and one-click restore
+- [**Lifecycle Hooks**](/docs/configuration/hooks) — pre/post-update commands
+- [**Logs**](/docs/configuration/logs)
+- [**Registries**](/docs/configuration/registries)
+- [**Self-Update**](/docs/configuration/self-update) — graceful drydock self-update
+- [**Update Guard**](/docs/configuration/security) — vulnerability scanning, signatures, and SBOM
+- [**Server**](/docs/configuration/server)
+- [**Storage**](/docs/configuration/storage)
+- [**Timezone**](/docs/configuration/timezone)
+- [**Triggers**](/docs/configuration/triggers)
+- [**Watchers**](/docs/configuration/watchers)
+- [**Webhooks**](/docs/configuration/webhooks) — CI/CD integration
+
+## Complete example
+
+```yaml
+services:
+
+  # Valid semver following by os name
+  vaultwarden:
+    image: vaultwarden/server:1.22.1-alpine
+    container_name: bitwarden
+    labels:
+      - 'dd.tag.include=^\d+\.\d+\.\d+-alpine$$'
+      - 'dd.link.template=https://github.com/dani-garcia/vaultwarden/releases/tag/$${major}.$${minor}.$${patch}'
+
+  # Valid semver following by an build number (linux server style)
+  duplicati:
+    image: linuxserver/duplicati:v2.0.6.3-2.0.6.3_beta_2021-06-17-ls104
+    container_name: duplicati
+    labels:
+      - 'dd.tag.include=^v\d+\.\d+\.\d+\.\d+-\d+\.\d+\.\d+\.\d+.*$$'
+
+  # Valid calver
+  homeassistant:
+    image: homeassistant/home-assistant:2021.7.1
+    container_name: homeassistant
+    labels:
+      - 'dd.tag.include=^\d+\.\d+\.\d+$$'
+      - 'dd.link.template=https://github.com/home-assistant/core/releases/tag/$${major}.$${minor}.$${patch}'
+
+  # Valid semver with a leading v
+  pihole:
+    image: pihole/pihole:v5.8.1
+    container_name: pihole
+    labels:
+      - 'dd.tag.include=^v\d+\.\d+\.\d+$$'
+      - 'dd.link.template=https://github.com/pi-hole/FTL/releases/tag/v$${major}.$${minor}.$${patch}'
+
+  # Mutable tag (latest) with digest tracking
+  pyload:
+    image: writl/pyload:latest
+    container_name: pyload
+    labels:
+      - 'dd.tag.include=latest'
+      - 'dd.watch.digest=true'
+
+  # drydock self tracking :)
+  drydock:
+    image: codeswhat/drydock:latest
+    container_name: drydock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/drydock/store:/store
+    healthcheck:
+      test: curl --fail http://localhost:${DD_SERVER_PORT:-3000}/health || exit 1
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - 'dd.tag.include=^latest$$'
+      - 'dd.link.template=https://github.com/orgs/CodesWhat/packages/container/package/drydock'
+```
+
+## Secret management
+
+<Callout type="warn">If you don't want to expose your secret values as environment variables, you can externalize them in external files and reference them by suffixing the original env var name with `__FILE`.</Callout>
+
+For example, instead of providing the Basic auth details as
+
+```bash
+DD_AUTH_BASIC_JOHN_HASH={SHA}1rToTufzHYhhemtgQhRRJy6/Gjo=
+```
+
+You can create an external file with the appropriate permissions (let's say `/tmp/john_hash`) containing the secret value (`{SHA}1rToTufzHYhhemtgQhRRJy6/Gjo=`).
+Then you need to reference this file by using the following env var
+
+```bash
+DD_AUTH_BASIC_JOHN_HASH__FILE=/tmp/john_hash
+```
+
+<Callout type="info">This feature can be used for any `DD_` env var (no restrictions).</Callout>

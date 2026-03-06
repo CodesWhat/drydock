@@ -1,0 +1,43 @@
+---
+title: "REST API"
+description: "Access Drydock state and trigger actions using the HTTP REST API."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+You can access drydock state and trigger actions using the HTTP REST API.
+
+By default, the API is enabled and exposed on port `3000`. You can override this behaviour [using environment variables](/docs/configuration/server).
+
+## Authentication
+
+When [authentication](/docs/configuration/authentications) is enabled, all API endpoints require a valid session (cookie-based via Basic or OIDC login).
+
+The [webhook endpoints](/docs/configuration/webhooks) use a separate Bearer token authentication.
+
+## Endpoint overview
+
+| Category | Endpoints | Description |
+| --- | --- | --- |
+| [App](/docs/api/app) | `GET /api/app` | Application info (version, build) |
+| [Containers](/docs/api/container) | `GET /api/containers`, `POST`, `PATCH`, `DELETE` | Container state, actions, update policy, security |
+| [Agents](/docs/api/agent) | `GET /api/agents` | Remote agent status and logs |
+| [Logs](/docs/api/log) | `GET /api/log` | Application log entries |
+| [Registries](/docs/api/registry) | `GET /api/registries` | Registry configurations |
+| [Store](/docs/api/store) | `GET /api/store` | Data store info |
+| [Triggers](/docs/api/trigger) | `GET /api/triggers` | Trigger configurations |
+| [Watchers](/docs/api/watcher) | `GET /api/watchers` | Watcher configurations |
+
+### Additional endpoints
+
+| Endpoint | Method | Description |
+| --- | --- | --- |
+| `/health` | `GET` | Health check (returns 200 when healthy) |
+| `/metrics` | `GET` | Prometheus metrics (optional auth via `DD_SERVER_METRICS_AUTH`) |
+| `/api/events/ui` | `GET` | Server-Sent Events for real-time UI updates |
+| `/api/audit` | `GET` | Audit trail entries |
+| `/api/webhook/watch` | `POST` | [Webhook](/docs/configuration/webhooks) — trigger watch on all containers |
+| `/api/webhook/watch/:name` | `POST` | [Webhook](/docs/configuration/webhooks) — watch specific container |
+| `/api/webhook/update/:name` | `POST` | [Webhook](/docs/configuration/webhooks) — update specific container |
+
+<Callout type="info">See each sub-page for detailed request/response examples.</Callout>

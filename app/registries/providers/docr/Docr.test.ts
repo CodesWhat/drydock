@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Docr from './Docr.js';
 
 // Test fixture credentials - not real secrets
@@ -49,6 +48,13 @@ test('match should return false when registry url is not from docr', async () =>
       },
     }),
   ).toBeFalsy();
+});
+
+test('match should return false and never throw when registry url is missing', async () => {
+  expect(() => docr.match({ registry: { url: undefined } })).not.toThrow();
+  expect(() => docr.match({})).not.toThrow();
+  expect(docr.match({ registry: { url: undefined } })).toBe(false);
+  expect(docr.match({})).toBe(false);
 });
 
 test('match should reject hostnames that bypass unescaped dot in regex', async () => {

@@ -1,25 +1,28 @@
+import http from 'node:http';
+import https from 'node:https';
 import axios, { type AxiosRequestConfig, type AxiosResponse, type Method } from 'axios';
 import log from '../log/index.js';
 import type { ContainerImage } from '../model/container.js';
 import { getSummaryTags } from '../prometheus/registry.js';
 import Component from '../registry/Component.js';
+import { getRegistryRequestTimeoutMs } from './configuration.js';
 
-export interface RegistryImage extends ContainerImage {
+interface RegistryImage extends ContainerImage {
   // Add any registry specific properties if needed
 }
 
-export interface RegistryManifest {
+interface RegistryManifest {
   digest?: string;
   version?: number;
   created?: string;
 }
 
-export interface RegistryTagsList {
+interface RegistryTagsList {
   name: string;
   tags: string[];
 }
 
-export interface ManifestEntry {
+interface ManifestEntry {
   digest: string;
   mediaType: string;
   platform: {
@@ -29,7 +32,7 @@ export interface ManifestEntry {
   };
 }
 
-export interface RegistryManifestResponse {
+interface RegistryManifestResponse {
   schemaVersion: number;
   mediaType?: string;
   manifests?: ManifestEntry[];
@@ -107,6 +110,10 @@ function handleSchemaV1(response: RegistryManifestResponse): RegistryManifest {
     version: 1,
   };
 }
+
+// Shared keep-alive agents for default registry traffic.
+const DEFAULT_HTTP_KEEP_ALIVE_AGENT = new http.Agent({ keepAlive: true });
+const DEFAULT_HTTPS_KEEP_ALIVE_AGENT = new https.Agent({ keepAlive: true });
 
 /**
  * Docker Registry Abstract class.
@@ -350,13 +357,18 @@ class Registry extends Component {
       method,
       headers,
       responseType: 'json',
-      timeout: 30000,
+      timeout: getRegistryRequestTimeoutMs(),
     };
 
     const axiosOptionsWithAuth = await this.authenticate(image, axiosOptions);
+    const axiosOptionsWithConnectionReuse: AxiosRequestConfig = {
+      ...axiosOptionsWithAuth,
+      httpAgent: axiosOptionsWithAuth.httpAgent ?? DEFAULT_HTTP_KEEP_ALIVE_AGENT,
+      httpsAgent: axiosOptionsWithAuth.httpsAgent ?? DEFAULT_HTTPS_KEEP_ALIVE_AGENT,
+    };
 
     try {
-      const response = await axios<T>(axiosOptionsWithAuth);
+      const response = await axios<T>(axiosOptionsWithConnectionReuse);
       const end = Date.now();
       getSummaryTags()?.observe({ type: this.type, name: this.name }, (end - start) / 1000);
       return resolveWithFullResponse ? response : response.data;

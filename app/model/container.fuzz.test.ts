@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { fc, test } from '@fast-check/vitest';
 import { describe, expect, it } from 'vitest';
 import { flatten, testable_getLink, validate } from './container.js';

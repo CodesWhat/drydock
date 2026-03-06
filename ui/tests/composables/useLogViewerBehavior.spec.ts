@@ -1,146 +1,389 @@
-import { mount } from '@vue/test-utils';
-import { defineComponent, ref } from 'vue';
-import { useAutoFetchLogs, useLogViewport } from '@/composables/useLogViewerBehavior';
+import { effectScope, nextTick, ref } from 'vue';
+import {
+  LOG_AUTO_FETCH_INTERVALS,
+  useAutoFetchLogs,
+  useLogViewport,
+} from '@/composables/useLogViewerBehavior';
 
-const LogViewportHarness = defineComponent({
-  template: '<div />',
-  setup() {
-    return useLogViewport();
-  },
+describe('useLogViewport', () => {
+  describe('initial state', () => {
+    it('should have scrollBlocked as false initially', () => {
+      const { scrollBlocked } = useLogViewport();
+      expect(scrollBlocked.value).toBe(false);
+    });
+
+    it('should have logContainer as null initially', () => {
+      const { logContainer } = useLogViewport();
+      expect(logContainer.value).toBeNull();
+    });
+  });
+
+  describe('scrollToBottom', () => {
+    it('should scroll container to bottom', () => {
+      const { logContainer, scrollToBottom } = useLogViewport();
+      const el = { scrollTop: 0, scrollHeight: 500, clientHeight: 200 } as unknown as HTMLElement;
+      logContainer.value = el;
+
+      scrollToBottom();
+
+      expect(el.scrollTop).toBe(500);
+    });
+
+    it('should do nothing when logContainer is null', () => {
+      const { scrollToBottom } = useLogViewport();
+      expect(() => scrollToBottom()).not.toThrow();
+    });
+  });
+
+  describe('handleLogScroll', () => {
+    it('should set scrollBlocked true when scrolled up', () => {
+      const { logContainer, scrollBlocked, handleLogScroll } = useLogViewport();
+      const el = { scrollTop: 100, scrollHeight: 500, clientHeight: 200 } as unknown as HTMLElement;
+      logContainer.value = el;
+
+      handleLogScroll();
+
+      expect(scrollBlocked.value).toBe(true);
+    });
+
+    it('should set scrollBlocked false when at bottom', () => {
+      const { logContainer, scrollBlocked, handleLogScroll } = useLogViewport();
+      const el = { scrollTop: 280, scrollHeight: 500, clientHeight: 200 } as unknown as HTMLElement;
+      logContainer.value = el;
+
+      handleLogScroll();
+
+      expect(scrollBlocked.value).toBe(false);
+    });
+
+    it('should set scrollBlocked false when within threshold', () => {
+      const { logContainer, scrollBlocked, handleLogScroll } = useLogViewport();
+      // scrollHeight - scrollTop - clientHeight = 500 - 275 - 200 = 25 < 30
+      const el = { scrollTop: 275, scrollHeight: 500, clientHeight: 200 } as unknown as HTMLElement;
+      logContainer.value = el;
+
+      handleLogScroll();
+
+      expect(scrollBlocked.value).toBe(false);
+    });
+
+    it('should not error when logContainer is null', () => {
+      const { handleLogScroll } = useLogViewport();
+      expect(() => handleLogScroll()).not.toThrow();
+    });
+  });
+
+  describe('resumeAutoScroll', () => {
+    it('should reset scrollBlocked and scroll to bottom', () => {
+      const { logContainer, scrollBlocked, handleLogScroll, resumeAutoScroll } = useLogViewport();
+      const el = { scrollTop: 100, scrollHeight: 500, clientHeight: 200 } as unknown as HTMLElement;
+      logContainer.value = el;
+
+      // First block scrolling
+      handleLogScroll();
+      expect(scrollBlocked.value).toBe(true);
+
+      // Then resume
+      resumeAutoScroll();
+
+      expect(scrollBlocked.value).toBe(false);
+      expect(el.scrollTop).toBe(500);
+    });
+  });
 });
 
-function mountAutoFetchHarness(initialInterval = 5, initialLoading = false) {
-  const fetchLogs = vi.fn(async () => {});
-  const AutoFetchHarness = defineComponent({
-    template: '<div />',
-    setup() {
-      const intervalSeconds = ref(initialInterval);
-      const loading = ref(initialLoading);
-      const { startAutoFetch, stopAutoFetch } = useAutoFetchLogs({
-        intervalSeconds,
-        loading,
-        fetchLogs,
+describe('useAutoFetchLogs', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('should have autoFetchInterval as 0 initially', () => {
+    const scope = effectScope();
+    scope.run(() => {
+      const { autoFetchInterval } = useAutoFetchLogs({
+        fetchFn: vi.fn(),
+        scrollToBottom: vi.fn(),
+        scrollBlocked: ref(false),
       });
-      return {
-        intervalSeconds,
-        loading,
-        startAutoFetch,
-        stopAutoFetch,
-      };
-    },
+      expect(autoFetchInterval.value).toBe(0);
+    });
+    scope.stop();
   });
 
-  return {
-    wrapper: mount(AutoFetchHarness),
-    fetchLogs,
-  };
-}
-
-describe('useLogViewerBehavior', () => {
-  describe('useLogViewport', () => {
-    it('handleLogScroll is a no-op when no log element is attached', () => {
-      const wrapper = mount(LogViewportHarness);
-
-      wrapper.vm.scrollBlocked = true;
-      wrapper.vm.handleLogScroll();
-
-      expect(wrapper.vm.scrollBlocked).toBe(true);
-      wrapper.unmount();
+  it('should start periodic fetching when interval set > 0', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(undefined);
+    const scope = effectScope();
+    scope.run(() => {
+      const { autoFetchInterval } = useAutoFetchLogs({
+        fetchFn,
+        scrollToBottom: vi.fn(),
+        scrollBlocked: ref(false),
+      });
+      autoFetchInterval.value = 2000;
     });
 
-    it('resumeAutoScroll clears scroll lock even when no log element is attached', () => {
-      const wrapper = mount(LogViewportHarness);
+    await nextTick();
+    vi.advanceTimersByTime(2000);
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
 
-      wrapper.vm.scrollBlocked = true;
-      wrapper.vm.resumeAutoScroll();
-
-      expect(wrapper.vm.scrollBlocked).toBe(false);
-      wrapper.unmount();
-    });
+    scope.stop();
   });
 
-  describe('useAutoFetchLogs', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
+  it('should stop fetching when interval set to 0', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(undefined);
+    const scope = effectScope();
+    let interval = ref(0);
+    scope.run(() => {
+      const result = useAutoFetchLogs({
+        fetchFn,
+        scrollToBottom: vi.fn(),
+        scrollBlocked: ref(false),
+      });
+      interval = result.autoFetchInterval;
+      interval.value = 2000;
     });
 
-    afterEach(() => {
-      vi.useRealTimers();
+    await nextTick();
+    vi.advanceTimersByTime(2000);
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
+
+    interval.value = 0;
+    await nextTick();
+
+    vi.advanceTimersByTime(2000);
+    // Should still be 1 — no additional calls after stopping
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+
+    scope.stop();
+  });
+
+  it('should call scrollToBottom after fetch when not scroll-blocked', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(undefined);
+    const scrollToBottom = vi.fn();
+    const scope = effectScope();
+    scope.run(() => {
+      const { autoFetchInterval } = useAutoFetchLogs({
+        fetchFn,
+        scrollToBottom,
+        scrollBlocked: ref(false),
+      });
+      autoFetchInterval.value = 2000;
     });
 
-    it('does not start polling when interval is disabled', async () => {
-      const { wrapper, fetchLogs } = mountAutoFetchHarness(0);
+    await nextTick();
+    vi.advanceTimersByTime(2000);
+    await vi.waitFor(() => expect(scrollToBottom).toHaveBeenCalled());
 
-      wrapper.vm.startAutoFetch();
-      await vi.advanceTimersByTimeAsync(10_000);
+    scope.stop();
+  });
 
-      expect(fetchLogs).not.toHaveBeenCalled();
-      wrapper.unmount();
+  it('should not call scrollToBottom after fetch when scroll-blocked', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(undefined);
+    const scrollToBottom = vi.fn();
+    const scope = effectScope();
+    scope.run(() => {
+      const { autoFetchInterval } = useAutoFetchLogs({
+        fetchFn,
+        scrollToBottom,
+        scrollBlocked: ref(true),
+      });
+      autoFetchInterval.value = 2000;
     });
 
-    it('polls on the configured interval', async () => {
-      const { wrapper, fetchLogs } = mountAutoFetchHarness(2);
+    await nextTick();
+    vi.advanceTimersByTime(2000);
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
 
-      wrapper.vm.startAutoFetch();
-      await vi.advanceTimersByTimeAsync(6_000);
+    expect(scrollToBottom).not.toHaveBeenCalled();
 
-      expect(fetchLogs).toHaveBeenCalledTimes(3);
-      wrapper.unmount();
+    scope.stop();
+  });
+
+  it('should restart timer when interval changes', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(undefined);
+    const scope = effectScope();
+    let interval = ref(0);
+    scope.run(() => {
+      const result = useAutoFetchLogs({
+        fetchFn,
+        scrollToBottom: vi.fn(),
+        scrollBlocked: ref(false),
+      });
+      interval = result.autoFetchInterval;
+      interval.value = 2000;
     });
 
-    it('skips polling while loading is true', async () => {
-      const { wrapper, fetchLogs } = mountAutoFetchHarness(2, true);
+    await nextTick();
 
-      wrapper.vm.startAutoFetch();
-      await vi.advanceTimersByTimeAsync(4_000);
-      expect(fetchLogs).not.toHaveBeenCalled();
+    // Advance 1000ms (half of 2000) — should not fire yet
+    vi.advanceTimersByTime(1000);
+    expect(fetchFn).not.toHaveBeenCalled();
 
-      wrapper.vm.loading = false;
-      await wrapper.vm.$nextTick();
-      await vi.advanceTimersByTimeAsync(2_000);
+    // Change interval to 5000 — restarts the timer
+    interval.value = 5000;
+    await nextTick();
 
-      expect(fetchLogs).toHaveBeenCalledTimes(1);
-      wrapper.unmount();
+    // Advance 2000ms from new start — should not fire (need 5000)
+    vi.advanceTimersByTime(2000);
+    expect(fetchFn).not.toHaveBeenCalled();
+
+    // Advance 3000 more (total 5000 from restart) — should fire
+    vi.advanceTimersByTime(3000);
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
+
+    scope.stop();
+  });
+
+  it('should pause polling while tab is hidden and resume when visible', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(undefined);
+    const originalHidden = Object.getOwnPropertyDescriptor(document, 'hidden');
+    const originalVisibilityState = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+
+    const setVisibility = (hidden: boolean) => {
+      Object.defineProperty(document, 'hidden', {
+        configurable: true,
+        get: () => hidden,
+      });
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => (hidden ? 'hidden' : 'visible'),
+      });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+
+    setVisibility(false);
+
+    const scope = effectScope();
+    try {
+      scope.run(() => {
+        const { autoFetchInterval } = useAutoFetchLogs({
+          fetchFn,
+          scrollToBottom: vi.fn(),
+          scrollBlocked: ref(false),
+        });
+        autoFetchInterval.value = 2000;
+      });
+
+      await nextTick();
+      vi.advanceTimersByTime(2000);
+      await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
+
+      setVisibility(true);
+      await nextTick();
+      vi.advanceTimersByTime(4000);
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+
+      setVisibility(false);
+      await nextTick();
+      vi.advanceTimersByTime(2000);
+      await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(2));
+    } finally {
+      scope.stop();
+      if (originalHidden) Object.defineProperty(document, 'hidden', originalHidden);
+      else Reflect.deleteProperty(document, 'hidden');
+      if (originalVisibilityState) {
+        Object.defineProperty(document, 'visibilityState', originalVisibilityState);
+      } else {
+        Reflect.deleteProperty(document, 'visibilityState');
+      }
+    }
+  });
+
+  it('does not attach visibility listeners when document is unavailable', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(undefined);
+    const originalDocumentDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'document');
+
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      writable: true,
+      value: undefined,
     });
 
-    it('restarts polling when interval changes', async () => {
-      const { wrapper, fetchLogs } = mountAutoFetchHarness(5);
+    const scope = effectScope();
+    try {
+      scope.run(() => {
+        const { autoFetchInterval } = useAutoFetchLogs({
+          fetchFn,
+          scrollToBottom: vi.fn(),
+          scrollBlocked: ref(false),
+        });
+        autoFetchInterval.value = 2000;
+      });
 
-      wrapper.vm.startAutoFetch();
-      await vi.advanceTimersByTimeAsync(5_000);
-      expect(fetchLogs).toHaveBeenCalledTimes(1);
+      await nextTick();
+      vi.advanceTimersByTime(2000);
+      await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
+    } finally {
+      scope.stop();
+      if (originalDocumentDescriptor) {
+        Object.defineProperty(globalThis, 'document', originalDocumentDescriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, 'document');
+      }
+    }
+  });
 
-      wrapper.vm.intervalSeconds = 2;
-      await wrapper.vm.$nextTick();
-      await vi.advanceTimersByTimeAsync(4_000);
+  it('ignores visibilitychange resume when interval is off', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(undefined);
+    const originalHidden = Object.getOwnPropertyDescriptor(document, 'hidden');
+    const originalVisibilityState = Object.getOwnPropertyDescriptor(document, 'visibilityState');
 
-      expect(fetchLogs).toHaveBeenCalledTimes(3);
-      wrapper.unmount();
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => false,
+    });
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
     });
 
-    it('stops polling when stopAutoFetch is called', async () => {
-      const { wrapper, fetchLogs } = mountAutoFetchHarness(2);
+    const scope = effectScope();
+    try {
+      scope.run(() => {
+        useAutoFetchLogs({
+          fetchFn,
+          scrollToBottom: vi.fn(),
+          scrollBlocked: ref(false),
+        });
+      });
 
-      wrapper.vm.startAutoFetch();
-      await vi.advanceTimersByTimeAsync(2_000);
-      expect(fetchLogs).toHaveBeenCalledTimes(1);
+      document.dispatchEvent(new Event('visibilitychange'));
+      await nextTick();
+      vi.advanceTimersByTime(5000);
+      expect(fetchFn).not.toHaveBeenCalled();
+    } finally {
+      scope.stop();
+      if (originalHidden) Object.defineProperty(document, 'hidden', originalHidden);
+      else Reflect.deleteProperty(document, 'hidden');
+      if (originalVisibilityState) {
+        Object.defineProperty(document, 'visibilityState', originalVisibilityState);
+      } else {
+        Reflect.deleteProperty(document, 'visibilityState');
+      }
+    }
+  });
+});
 
-      wrapper.vm.stopAutoFetch();
-      await vi.advanceTimersByTimeAsync(4_000);
-      expect(fetchLogs).toHaveBeenCalledTimes(1);
-      wrapper.unmount();
-    });
+describe('LOG_AUTO_FETCH_INTERVALS', () => {
+  it('should have 5 entries', () => {
+    expect(LOG_AUTO_FETCH_INTERVALS).toHaveLength(5);
+  });
 
-    it('stops polling on unmount', async () => {
-      const { wrapper, fetchLogs } = mountAutoFetchHarness(2);
+  it('should start with Off/0', () => {
+    expect(LOG_AUTO_FETCH_INTERVALS[0]).toEqual({ label: 'Off', value: 0 });
+  });
 
-      wrapper.vm.startAutoFetch();
-      await vi.advanceTimersByTimeAsync(2_000);
-      expect(fetchLogs).toHaveBeenCalledTimes(1);
-
-      wrapper.unmount();
-      await vi.advanceTimersByTimeAsync(4_000);
-      expect(fetchLogs).toHaveBeenCalledTimes(1);
-    });
+  it('should have correct values', () => {
+    expect(LOG_AUTO_FETCH_INTERVALS).toEqual([
+      { label: 'Off', value: 0 },
+      { label: '2s', value: 2000 },
+      { label: '5s', value: 5000 },
+      { label: '10s', value: 10000 },
+      { label: '30s', value: 30000 },
+    ]);
   });
 });

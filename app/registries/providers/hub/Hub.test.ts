@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Hub from './Hub.js';
 
 // Mock axios
@@ -27,6 +26,11 @@ describe('Docker Hub Registry', () => {
     expect(hub.match({ registry: { url: 'docker.io' } })).toBe(true);
     expect(hub.match({ registry: { url: undefined } })).toBe(true);
     expect(hub.match({ registry: { url: 'other.registry.com' } })).toBe(false);
+  });
+
+  test('should match missing registry object as Docker Hub default', async () => {
+    expect(() => hub.match({})).not.toThrow();
+    expect(hub.match({})).toBe(true);
   });
 
   test('should reject hostnames that bypass unescaped dot in regex', async () => {
@@ -84,6 +88,7 @@ describe('Docker Hub Registry', () => {
   test('should initialize with token as password', async () => {
     const hubWithToken = new Hub();
     await hubWithToken.register('registry', 'hub', 'test', {
+      login: 'mydockerid',
       token: 'mytoken',
     });
     expect(hubWithToken.configuration.password).toBe('mytoken');
@@ -102,7 +107,7 @@ describe('Docker Hub Registry', () => {
 
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
-      url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/nginx:pull&grant_type=password',
+      url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Alibrary%2Fnginx%3Apull&grant_type=password',
       headers: {
         Accept: 'application/json',
         Authorization: 'Basic base64credentials',
@@ -124,7 +129,7 @@ describe('Docker Hub Registry', () => {
 
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
-      url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/nginx:pull&grant_type=password',
+      url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Alibrary%2Fnginx%3Apull&grant_type=password',
       headers: {
         Accept: 'application/json',
       },
@@ -134,14 +139,22 @@ describe('Docker Hub Registry', () => {
 
   test('should validate string configuration', async () => {
     expect(() => hub.validateConfiguration('')).not.toThrow();
-    expect(() => hub.validateConfiguration('some-string')).not.toThrow();
+    expect(() => hub.validateConfiguration('some-string')).toThrow();
   });
 
-  test('should validate object configuration with auth', async () => {
+  test('should reject conflicting object configuration with auth and password', async () => {
     const config = {
       login: 'user',
       password: 'pass',
       auth: Buffer.from('user:pass').toString('base64'),
+    };
+    expect(() => hub.validateConfiguration(config)).toThrow();
+  });
+
+  test('should validate object configuration with login/token', async () => {
+    const config = {
+      login: 'user',
+      token: 'pat-token',
     };
     expect(() => hub.validateConfiguration(config)).not.toThrow();
   });
@@ -162,5 +175,16 @@ describe('Docker Hub Registry', () => {
       token: 't*******n',
       auth: 'd**********0',
     });
+  });
+
+  test('should throw when hub token response is missing token', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    const image = { name: 'library/nginx' };
+    const requestOptions = { headers: {} };
+
+    await expect(hub.authenticate(image, requestOptions)).rejects.toThrow(
+      'Docker Hub token endpoint response does not contain token',
+    );
   });
 });

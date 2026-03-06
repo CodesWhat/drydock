@@ -1,0 +1,89 @@
+---
+title: "Triggers"
+description: "Triggers are responsible for performing actions when a new container version is found."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Triggers are responsible for performing actions when a new container version is found.
+  
+Triggers are enabled using environment variables.
+
+```bash
+DD_TRIGGER_{{ trigger_type }}_{{trigger_name }}_{{ trigger_configuration_item }}=XXX
+```
+
+<Callout type="warn">Multiple triggers of the same type can be configured (for example multiple Smtp addresses).
+You just need to give them different names.</Callout>
+
+<Callout type="info">See the _Triggers_ subsection to discover which triggers are implemented and how to use them.</Callout>
+
+## Common trigger configuration
+
+All implemented triggers, in addition to their specific configuration, also support the following common configuration variables.
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --------------------------------------------------------- | :--------------: | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_AUTO` | ⚪ | `true` to automatically execute the trigger. `false` to manually execute it (from UI, API...) | `true`, `false` | `true` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_BATCHTITLE` | ⚪ | The template to use to render the title of the notification (batch mode) | String template with placeholders `${count}` | `${containers.length} updates available` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_MODE` | ⚪ | Trigger for each container update or trigger once with all available updates as a list | `simple`, `batch` | `simple` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_ONCE` | ⚪ | Run trigger once (do not repeat previous results) | `true`, `false` | `true` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_ORDER` | ⚪ | Trigger execution order (lower runs first) | Number | `100` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_SIMPLEBODY` | ⚪ | The template to use to render the body of the notification | JS string template with vars `container` | `Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_SIMPLETITLE` | ⚪ | The template to use to render the title of the notification (simple mode) | JS string template with vars `${containers}` | `New ${container.updateKind.kind} found for container ${container.name}` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_THRESHOLD` | ⚪ | The threshold to reach to run the trigger | `all`, `major`, `major-only`, `minor`, `minor-only`, `patch`, `digest`, and `*-no-digest` variants (`major-no-digest`, `major-only-no-digest`, `minor-no-digest`, `minor-only-no-digest`, `patch-no-digest`) | `all` |
+| `DD_TRIGGER_{trigger_type}_{trigger_name}_RESOLVENOTIFICATIONS` | ⚪ | Auto-dismiss the notification after the container is successfully updated | `true`, `false` | `false` |
+
+<Callout type="info">`RESOLVENOTIFICATIONS` is currently implemented for Gotify (auto-deletes the notification message after a successful update). Other providers can be extended to support it.</Callout>
+
+<Callout type="info">Some messaging triggers (Slack, Discord, Telegram, Teams, Matrix, Mattermost, Rocket.Chat, Google Chat) also support `DD_TRIGGER_{trigger_type}_{trigger_name}_DISABLETITLE` (default `false`) to send only the body without a title line.</Callout>
+
+<Callout type="info">You can set `DD_TRIGGER_{trigger_type}_THRESHOLD` to define a default threshold for all triggers of the same type, for example `DD_TRIGGER_NTFY_THRESHOLD=minor`.</Callout>
+
+<Callout type="info">Threshold `all` means that the trigger will run regardless of the nature of the change</Callout>
+<Callout type="info">Triggers are executed by ascending `ORDER`; when two triggers have the same `ORDER`, they are sorted by trigger id.</Callout>
+<Callout type="info">Triggers sharing the same trigger name (for example `docker.update` and `discord.update`) can share `THRESHOLD`; if exactly one threshold value is defined among them, that value is used for the others unless they override it explicitly.</Callout>
+
+<Callout type="info">Threshold `major` means that the trigger will run only if this is a `major`, `minor` or `patch` semver change</Callout>
+
+<Callout type="info">Threshold `major-only` means that the trigger will run only if this is a `major` semver change</Callout>
+
+<Callout type="info">Threshold `minor` means that the trigger will run only if this is a `minor` or `patch` semver change</Callout>
+
+<Callout type="info">Threshold `minor-only` means that the trigger will run only if this is a `minor` semver change</Callout>
+
+<Callout type="info">Threshold `patch` means that the trigger will run only if this is a `patch` semver change</Callout>
+
+<Callout type="info">Threshold `digest` means that the trigger will run only on digest updates</Callout>
+
+<Callout type="info">Any threshold ending with `-no-digest` excludes digest updates for that threshold</Callout>
+
+<Callout type="info">`DD_TRIGGER_{trigger_type}_{trigger_name}_ONCE=false` can be useful when `DD_TRIGGER_{trigger_type}_{trigger_name}_MODE=batch` to get a report with all pending updates.</Callout>
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_TRIGGER_SMTP_GMAIL_SIMPLETITLE=Container $${container.name} can be updated
+      - DD_TRIGGER_SMTP_GMAIL_SIMPLEBODY=Container $${name} can be updated from $${local.substring(0, 15)} to $${remote.substring(0, 15)}
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e 'DD_TRIGGER_SMTP_GMAIL_SIMPLETITLE=Container ${container.name} can be updated' \
+  -e 'DD_TRIGGER_SMTP_GMAIL_SIMPLEBODY=Container ${name} can be updated from ${local.substring(0, 15)} to ${remote.substring(0, 15)}'
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

@@ -1,0 +1,76 @@
+---
+title: "Self-Update"
+description: "Drydock can gracefully update itself when a new version is available."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Drydock can gracefully update itself when a new version is available, using a safe rollback-capable process that ensures zero downtime.
+
+## How it works
+
+Drydock detects when its own container image has an update available, just like any other monitored container. When the Docker trigger runs for the drydock container, it uses a special self-update flow that ensures zero downtime and safe rollback.
+
+## Requirements
+
+- The Docker socket must be bind-mounted at `/var/run/docker.sock`
+- The Docker trigger must be enabled
+- Drydock must be able to create temporary helper containers
+
+<Callout type="warn">Lifecycle hooks (`dd.hook.pre` / `dd.hook.post`) are NOT executed during self-update.</Callout>
+
+## Update sequence
+
+1. **Notify UI** — An SSE event is sent to all connected browsers, displaying an animated full-screen overlay
+2. **Backup current image** — The running image is backed up before proceeding
+3. **Pull new image** — The updated image is pulled while the current container is still running
+4. **Rename old container** — The current container is renamed to `drydock-old-{timestamp}` to free the original name
+5. **Create new container** — A new container is created with the original name and updated image (not started yet)
+6. **Helper container** — A temporary container is spawned with the Docker socket mounted. It:
+   - Stops the old container
+   - Starts the new container
+   - Deletes the old container on success
+   - If the new container fails to start, restarts the old container as a fallback
+7. **Reconnect** — The UI automatically reconnects to the new container
+
+## Error recovery
+
+If any step fails, drydock attempts to restore the previous state:
+
+- If new container creation fails, the old container is renamed back to its original name
+- If the helper container fails to spawn, the new container is removed and the old container is renamed back
+- If the new container fails to start, the helper restarts the old container
+
+## Dry-run mode
+
+When `DD_TRIGGER_DOCKER_{trigger_name}_DRYRUN=true`, the self-update is logged but not executed. The new image is pulled ahead of time but no container replacement occurs.
+
+## Example
+
+<Tabs items={["Docker Compose"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:latest
+    container_name: drydock
+    labels:
+      - dd.watch=true
+    environment:
+      - DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - drydock-data:/store
+    ports:
+      - "3000:3000"
+
+volumes:
+  drydock-data:
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">The self-update overlay includes an animated visual indicator and auto-reconnect. No manual refresh is needed.</Callout>

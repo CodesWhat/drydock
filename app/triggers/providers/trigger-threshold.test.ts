@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { isThresholdReached, parseThresholdWithDigestBehavior } from './trigger-threshold.js';
 
 describe('trigger-threshold', () => {

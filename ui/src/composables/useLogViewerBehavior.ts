@@ -1,103 +1,87 @@
-import { onBeforeUnmount, type Ref, ref, watch } from 'vue';
-
-export type AutoFetchIntervalOption = {
-  title: string;
-  value: number;
-};
-
-export const LOG_AUTO_FETCH_INTERVALS: AutoFetchIntervalOption[] = [
-  { title: 'Off', value: 0 },
-  { title: '2s', value: 2 },
-  { title: '5s', value: 5 },
-  { title: '10s', value: 10 },
-  { title: '30s', value: 30 },
-];
-
-export function toLogErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
-}
-
-function isNearBottom(element: HTMLElement): boolean {
-  const thresholdPx = 16;
-  return element.scrollHeight - element.scrollTop - element.clientHeight <= thresholdPx;
-}
+import { onScopeDispose, type Ref, ref, watch } from 'vue';
 
 export function useLogViewport() {
-  const logPre = ref<HTMLElement | null>(null);
+  const logContainer = ref<HTMLElement | null>(null);
   const scrollBlocked = ref(false);
 
-  const scrollToBottom = function scrollToBottom(): void {
-    const element = logPre.value;
-    if (!element) {
-      return;
+  function scrollToBottom() {
+    if (logContainer.value) {
+      logContainer.value.scrollTop = logContainer.value.scrollHeight;
     }
-    element.scrollTop = element.scrollHeight;
-    scrollBlocked.value = false;
-  };
+  }
 
-  const handleLogScroll = function handleLogScroll(): void {
-    const element = logPre.value;
-    if (!element) {
-      return;
-    }
-    scrollBlocked.value = !isNearBottom(element);
-  };
+  function handleLogScroll() {
+    if (!logContainer.value) return;
+    const { scrollTop, scrollHeight, clientHeight } = logContainer.value;
+    const atBottom = scrollHeight - scrollTop - clientHeight < 30;
+    scrollBlocked.value = !atBottom;
+  }
 
-  const resumeAutoScroll = function resumeAutoScroll(): void {
+  function resumeAutoScroll() {
     scrollBlocked.value = false;
     scrollToBottom();
-  };
+  }
 
-  return {
-    logPre,
-    scrollBlocked,
-    scrollToBottom,
-    handleLogScroll,
-    resumeAutoScroll,
-  };
+  return { logContainer, scrollBlocked, scrollToBottom, handleLogScroll, resumeAutoScroll };
 }
 
-type UseAutoFetchLogsOptions = {
-  intervalSeconds: Ref<number>;
-  loading: Ref<boolean>;
-  fetchLogs: () => Promise<void>;
-};
+export interface LogAutoFetchIntervalOption {
+  label: string;
+  value: number;
+}
 
-export function useAutoFetchLogs(options: UseAutoFetchLogsOptions) {
-  let autoFetchTimer: ReturnType<typeof setInterval> | undefined;
+export const LOG_AUTO_FETCH_INTERVALS: LogAutoFetchIntervalOption[] = [
+  { label: 'Off', value: 0 },
+  { label: '2s', value: 2000 },
+  { label: '5s', value: 5000 },
+  { label: '10s', value: 10000 },
+  { label: '30s', value: 30000 },
+];
 
-  const stopAutoFetch = function stopAutoFetch(): void {
-    if (autoFetchTimer) {
-      clearInterval(autoFetchTimer);
-      autoFetchTimer = undefined;
+interface AutoFetchOptions {
+  fetchFn: () => Promise<void>;
+  scrollToBottom: () => void;
+  scrollBlocked: Ref<boolean>;
+}
+
+export function useAutoFetchLogs(options: AutoFetchOptions) {
+  const autoFetchInterval = ref(0);
+  let timerId: ReturnType<typeof setInterval> | undefined;
+
+  function isTabHidden() {
+    return typeof document !== 'undefined' && document.hidden;
+  }
+
+  function startAutoFetch() {
+    if (timerId) clearInterval(timerId);
+    timerId = setInterval(async () => {
+      await options.fetchFn();
+      if (!options.scrollBlocked.value) options.scrollToBottom();
+    }, autoFetchInterval.value);
+  }
+
+  function stopAutoFetch() {
+    if (timerId) {
+      clearInterval(timerId);
+      timerId = undefined;
     }
-  };
+  }
 
-  const startAutoFetch = function startAutoFetch(): void {
-    stopAutoFetch();
-    if (options.intervalSeconds.value <= 0) {
-      return;
-    }
-    autoFetchTimer = globalThis.setInterval(() => {
-      if (!options.loading.value) {
-        void options.fetchLogs();
-      }
-    }, options.intervalSeconds.value * 1000);
-  };
-
-  watch(options.intervalSeconds, function restartAutoFetchOnIntervalChange() {
-    startAutoFetch();
+  watch(autoFetchInterval, (val) => {
+    if (val > 0 && !isTabHidden()) startAutoFetch();
+    else stopAutoFetch();
   });
 
-  onBeforeUnmount(function stopAutoFetchOnUnmount() {
-    stopAutoFetch();
-  });
+  if (typeof document !== 'undefined') {
+    const handleVisibilityChange = () => {
+      if (isTabHidden()) stopAutoFetch();
+      else if (autoFetchInterval.value > 0) startAutoFetch();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    onScopeDispose(() => document.removeEventListener('visibilitychange', handleVisibilityChange));
+  }
 
-  return {
-    startAutoFetch,
-    stopAutoFetch,
-  };
+  onScopeDispose(() => stopAutoFetch());
+
+  return { autoFetchInterval };
 }

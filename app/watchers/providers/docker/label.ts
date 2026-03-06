@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Supported Docker labels (dd.* preferred, wud.* legacy fallback).
  */
@@ -26,6 +25,11 @@ export const wudTagExclude = 'wud.tag.exclude';
  */
 export const ddTagTransform = 'dd.tag.transform';
 export const wudTagTransform = 'wud.tag.transform';
+
+/**
+ * Optional tag family policy ('strict' by default, or 'loose' to allow cross-family updates).
+ */
+export const ddTagFamily = 'dd.tag.family';
 
 /**
  * Optional path in Docker inspect JSON to derive the running tag value.
@@ -110,6 +114,13 @@ export const wudHookPreAbort = 'wud.hook.pre.abort';
  */
 export const ddHookTimeout = 'dd.hook.timeout';
 export const wudHookTimeout = 'wud.hook.timeout';
+
+/**
+ * Per-container opt-out for webhook API calls (default: true).
+ * Set to 'false' to return 403 when the webhook API targets this container.
+ */
+export const ddWebhookEnabled = 'dd.webhook.enabled';
+export const wudWebhookEnabled = 'wud.webhook.enabled';
 
 /**
  * Whether to automatically rollback on health check failure (default: false).

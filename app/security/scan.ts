@@ -6,15 +6,13 @@ import {
   type SecuritySbomFormat,
   type SecuritySeverity,
 } from '../configuration/index.js';
+import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
 import log from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
+import { toPositiveInteger } from '../util/parse.js';
+import { hasValidCommandPath } from './runtime.js';
 
-export {
-  SECURITY_SEVERITIES,
-  SECURITY_SBOM_FORMATS,
-  type SecuritySeverity,
-  type SecuritySbomFormat,
-};
+export { SECURITY_SBOM_FORMATS, toPositiveInteger, type SecuritySeverity, type SecuritySbomFormat };
 export type SecurityScanStatus = 'passed' | 'blocked' | 'error';
 export type SecuritySignatureStatus = 'verified' | 'unverified' | 'error';
 export type SecuritySbomStatus = 'generated' | 'error';
@@ -70,7 +68,7 @@ export interface ContainerSecuritySbom {
   error?: string;
 }
 
-export interface ScanImageOptions {
+interface ScanImageOptions {
   image: string;
   auth?: {
     username?: string;
@@ -102,14 +100,21 @@ interface TrivyRawOutput {
 }
 
 const MAX_TRIVY_OUTPUT_BYTES = 50 * 1024 * 1024; // 50 MB
+const MAX_TRIVY_PARSE_BYTES = 20 * 1024 * 1024; // 20 MB
 const MAX_COSIGN_OUTPUT_BYTES = 2 * 1024 * 1024; // 2 MB
 const MAX_STORED_VULNERABILITIES = 500;
+const DEFAULT_DIGEST_SCAN_CACHE_MAX_ENTRIES = getDefaultCacheMaxEntries();
 const COSIGN_UNVERIFIED_PATTERNS = [
   'no matching signatures',
   'no signatures found',
   'signature verification failed',
   'invalid signature',
 ];
+
+export const DIGEST_SCAN_CACHE_MAX_ENTRIES = toPositiveInteger(
+  process.env.DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES,
+  DEFAULT_DIGEST_SCAN_CACHE_MAX_ENTRIES,
+);
 
 let trivyQueue: Promise<void> = Promise.resolve();
 
@@ -183,6 +188,12 @@ function buildSummary(vulnerabilities: ContainerVulnerability[]): ContainerVulne
 }
 
 function parseTrivyOutput(trivyOutput: string): ContainerVulnerability[] {
+  const trivyOutputBytes = Buffer.byteLength(trivyOutput, 'utf8');
+  if (trivyOutputBytes > MAX_TRIVY_PARSE_BYTES) {
+    throw new Error(
+      `Trivy output is too large to parse (${trivyOutputBytes} bytes); max supported is ${MAX_TRIVY_PARSE_BYTES} bytes`,
+    );
+  }
   const parsedOutput = JSON.parse(trivyOutput) as TrivyRawOutput;
   const results = Array.isArray(parsedOutput?.Results) ? parsedOutput.Results : [];
   const vulnerabilities = results.flatMap((result) => {
@@ -293,7 +304,12 @@ function runTrivyVulnerabilityCommand(
   configuration: ReturnType<typeof getSecurityConfiguration>,
 ): Promise<string> {
   return enqueueTrivy(() => {
-    const trivyCommand = configuration.trivy.command || 'trivy';
+    const trivyCommand = `${configuration.trivy.command || 'trivy'}`.trim() || 'trivy';
+    if (!hasValidCommandPath(trivyCommand)) {
+      throw new Error(
+        `Trivy command "${sanitizeLogParam(trivyCommand)}" is invalid; use a command name or absolute path`,
+      );
+    }
     const args = [...buildTrivyArgs(configuration, 'json'), options.image];
 
     return runCommand({
@@ -313,7 +329,12 @@ function runTrivySbomCommand(
   format: SecuritySbomFormat,
 ): Promise<string> {
   return enqueueTrivy(() => {
-    const trivyCommand = configuration.trivy.command || 'trivy';
+    const trivyCommand = `${configuration.trivy.command || 'trivy'}`.trim() || 'trivy';
+    if (!hasValidCommandPath(trivyCommand)) {
+      throw new Error(
+        `Trivy command "${sanitizeLogParam(trivyCommand)}" is invalid; use a command name or absolute path`,
+      );
+    }
     const args = [...buildTrivyArgs(configuration, format), options.image];
 
     return runCommand({
@@ -342,7 +363,12 @@ function runCosignVerifyCommand(
   options: ScanImageOptions,
   configuration: ReturnType<typeof getSecurityConfiguration>,
 ): Promise<string> {
-  const cosignCommand = configuration.signature.cosign.command || 'cosign';
+  const cosignCommand = `${configuration.signature.cosign.command || 'cosign'}`.trim() || 'cosign';
+  if (!hasValidCommandPath(cosignCommand)) {
+    throw new Error(
+      `Cosign command "${sanitizeLogParam(cosignCommand)}" is invalid; use a command name or absolute path`,
+    );
+  }
   const args = ['verify', '--output', 'json'];
   if (configuration.signature.cosign.key) {
     args.push('--key', configuration.signature.cosign.key);
@@ -644,4 +670,81 @@ export async function generateImageSbom(
   }
 
   return sbomResult;
+}
+
+// --- Digest-based scan dedup cache ---
+
+interface DigestScanCacheEntry {
+  digest: string;
+  scanResult: ContainerSecurityScan;
+  trivyDbUpdatedAt: string;
+  cachedAt: number;
+}
+
+const digestScanCache = new Map<string, DigestScanCacheEntry>();
+
+function setDigestScanCacheEntry(
+  digest: string,
+  scanResult: ContainerSecurityScan,
+  trivyDbUpdatedAt: string,
+): void {
+  if (digestScanCache.has(digest)) {
+    digestScanCache.delete(digest);
+  }
+  digestScanCache.set(digest, {
+    digest,
+    scanResult,
+    trivyDbUpdatedAt,
+    cachedAt: Date.now(),
+  });
+
+  while (digestScanCache.size > DIGEST_SCAN_CACHE_MAX_ENTRIES) {
+    const oldestDigest = digestScanCache.keys().next().value;
+    digestScanCache.delete(oldestDigest as string);
+  }
+}
+
+function markDigestScanCacheEntryAsRecentlyUsed(digest: string, entry: DigestScanCacheEntry): void {
+  digestScanCache.delete(digest);
+  digestScanCache.set(digest, entry);
+}
+
+export function clearDigestScanCache(): void {
+  digestScanCache.clear();
+}
+
+export function getDigestScanCacheSize(): number {
+  return digestScanCache.size;
+}
+
+export function updateDigestScanCache(
+  digest: string,
+  scanResult: ContainerSecurityScan,
+  trivyDbUpdatedAt: string,
+): void {
+  setDigestScanCacheEntry(digest, scanResult, trivyDbUpdatedAt);
+}
+
+export async function scanImageWithDedup(
+  options: ScanImageOptions & { digest: string; trivyDbUpdatedAt?: string },
+  scanIntervalMs: number,
+): Promise<{ scanResult: ContainerSecurityScan; fromCache: boolean }> {
+  const cached = digestScanCache.get(options.digest);
+  const dbUpdatedAt = options.trivyDbUpdatedAt;
+
+  if (
+    cached &&
+    dbUpdatedAt &&
+    cached.trivyDbUpdatedAt === dbUpdatedAt &&
+    Date.now() - cached.cachedAt < scanIntervalMs
+  ) {
+    markDigestScanCacheEntryAsRecentlyUsed(options.digest, cached);
+    return { scanResult: cached.scanResult, fromCache: true };
+  }
+
+  const scanResult = await scanImageForVulnerabilities(options);
+
+  setDigestScanCacheEntry(options.digest, scanResult, dbUpdatedAt || '');
+
+  return { scanResult, fromCache: false };
 }

@@ -1,4 +1,17 @@
-// @ts-nocheck
+var { mockTimingSafeEqual } = vi.hoisted(() => ({
+  mockTimingSafeEqual: vi.fn(
+    (left: Buffer, right: Buffer) => left.length === right.length && left.equals(right),
+  ),
+}));
+
+vi.mock('node:crypto', async () => {
+  const actual = await vi.importActual<typeof import('node:crypto')>('node:crypto');
+  return {
+    ...actual,
+    timingSafeEqual: mockTimingSafeEqual,
+  };
+});
+
 import Basic from './Basic.js';
 
 describe('Basic Authentication', () => {
@@ -6,6 +19,7 @@ describe('Basic Authentication', () => {
 
   beforeEach(async () => {
     basic = new Basic();
+    mockTimingSafeEqual.mockClear();
   });
 
   test('should create instance', async () => {
@@ -74,6 +88,25 @@ describe('Basic Authentication', () => {
         resolve();
       });
     });
+  });
+
+  test('should compare usernames with timingSafeEqual', async () => {
+    const { default: passJs } = await import('pass');
+    basic.configuration = {
+      user: 'testuser',
+      hash: '$2b$10$test.hash.value',
+    };
+    passJs.validate = vi.fn();
+
+    await new Promise<void>((resolve) => {
+      basic.authenticate('wronguser', 'password', (err, result) => {
+        expect(result).toBe(false);
+        resolve();
+      });
+    });
+
+    expect(mockTimingSafeEqual).toHaveBeenCalledTimes(1);
+    expect(passJs.validate).not.toHaveBeenCalled();
   });
 
   test('should reject invalid password', async () => {

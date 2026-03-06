@@ -1,0 +1,210 @@
+---
+title: "Update Bouncer"
+description: "Run security scanning, signature verification, and SBOM generation before applying container updates."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Update Bouncer runs security scanning in a safe-pull flow:
+
+1. Candidate image is scanned before update
+2. Update is blocked when CVEs match configured blocking severities
+3. Scan result is stored in `container.security.scan` and exposed in API/UI
+
+## Enablement
+
+Security scanning is disabled by default.
+To enable it, set:
+
+```bash
+DD_SECURITY_SCANNER=trivy
+```
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_SECURITY_SCANNER` | 🔴 | Enable scanner provider | `trivy` | disabled |
+| `DD_SECURITY_BLOCK_SEVERITY` | ⚪ | Blocking severities (comma-separated) | Any of `UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL` | `CRITICAL,HIGH` |
+| `DD_SECURITY_TRIVY_SERVER` | ⚪ | Trivy server URL (enables client/server mode) | URL | empty (local CLI mode) |
+| `DD_SECURITY_TRIVY_COMMAND` | ⚪ | Trivy command path for local CLI mode (must not contain shell metacharacters or `..` path traversal) | executable path | `trivy` |
+| `DD_SECURITY_TRIVY_TIMEOUT` | ⚪ | Trivy command timeout in milliseconds | integer (`>=1000`) | `120000` |
+| `DD_SECURITY_SCAN_CRON` | ⚪ | Cron expression for scheduled background security scans | cron expression | disabled |
+| `DD_SECURITY_SCAN_JITTER` | ⚪ | Random jitter delay (ms) before each scheduled scan starts | integer (`>=0`) | `60000` |
+| `DD_SECURITY_SCAN_CONCURRENCY` | ⚪ | Max digest scans processed in parallel during scheduled scans | integer (`>=1`) | `4` |
+| `DD_SECURITY_SCAN_BATCH_TIMEOUT` | ⚪ | Total scheduled scan batch timeout in milliseconds (`0` disables timeout) | integer (`>=0`) | `1800000` |
+| `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES` | ⚪ | Max in-memory digest scan cache entries (LRU eviction -- least recently used entries are removed when the limit is reached) | integer (`>0`) | `500` |
+
+## Trivy modes
+
+### Client mode (local CLI)
+
+Use this mode when the `trivy` binary is available inside the drydock runtime.
+
+<Callout type="info">As of v1.3.0, the official drydock image includes both `trivy` and `cosign`. No custom image is needed for local CLI mode.</Callout>
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:latest
+    environment:
+      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
+      - DD_SECURITY_TRIVY_COMMAND=trivy
+      - DD_SECURITY_TRIVY_TIMEOUT=120000
+```
+
+### Server mode (Trivy server)
+
+Use this mode when running a separate Trivy server and letting drydock call it.
+
+```yaml
+services:
+  trivy:
+    image: aquasec/trivy:latest
+    command: server --listen 0.0.0.0:4954
+
+  drydock:
+    image: codeswhat/drydock:latest
+    depends_on:
+      - trivy
+    environment:
+      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
+      - DD_SECURITY_TRIVY_SERVER=http://trivy:4954
+      - DD_SECURITY_TRIVY_TIMEOUT=120000
+```
+
+## Signature Verification (cosign)
+
+When enabled, candidate images are verified with [cosign](https://docs.sigstore.dev/cosign/overview/) before the update proceeds. Updates are blocked if signatures are missing, invalid, or verification fails.
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_SECURITY_VERIFY_SIGNATURES` | ⚪ | Enable signature verification gate | `true` / `false` | `false` |
+| `DD_SECURITY_COSIGN_KEY` | ⚪ | Path to cosign public key file | file path | empty (keyless / Sigstore) |
+| `DD_SECURITY_COSIGN_COMMAND` | ⚪ | Cosign command path | executable path | `cosign` |
+| `DD_SECURITY_COSIGN_TIMEOUT` | ⚪ | Cosign command timeout in milliseconds | integer (`>=1000`) | `60000` |
+| `DD_SECURITY_COSIGN_IDENTITY` | ⚪ | Certificate identity for keyless verification | string | empty |
+| `DD_SECURITY_COSIGN_ISSUER` | ⚪ | OIDC issuer for keyless verification | string | empty |
+
+<Callout type="info">When `DD_SECURITY_COSIGN_KEY` is empty, cosign runs in keyless mode using Sigstore's public transparency log. Set `DD_SECURITY_COSIGN_IDENTITY` and `DD_SECURITY_COSIGN_ISSUER` to constrain keyless verification to a specific signer.</Callout>
+
+### Key-based verification
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:latest
+    environment:
+      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_VERIFY_SIGNATURES=true
+      - DD_SECURITY_COSIGN_KEY=/keys/cosign.pub
+    volumes:
+      - ./cosign.pub:/keys/cosign.pub:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+```
+
+### Keyless verification (Sigstore)
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:latest
+    environment:
+      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_VERIFY_SIGNATURES=true
+      - DD_SECURITY_COSIGN_IDENTITY=https://github.com/CodesWhat/drydock/.github/workflows/release.yml@refs/tags/*
+      - DD_SECURITY_COSIGN_ISSUER=https://token.actions.githubusercontent.com
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+```
+
+## SBOM Generation
+
+When enabled, Trivy generates Software Bill of Materials (SBOM) documents for candidate images during the Update Bouncer flow. SBOMs are persisted in `container.security.sbom` and available via the API.
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_SECURITY_SBOM_ENABLED` | ⚪ | Enable SBOM generation | `true` / `false` | `false` |
+| `DD_SECURITY_SBOM_FORMATS` | ⚪ | Comma-separated list of SBOM formats | `spdx-json`, `cyclonedx-json` | `spdx-json` |
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:latest
+    environment:
+      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_SBOM_ENABLED=true
+      - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+```
+
+<Callout type="info">SBOM documents are retrievable per-container via `GET /api/containers/:id/sbom?format=\{format\}` where `format` is one of `spdx-json` or `cyclonedx-json`.</Callout>
+
+## Scheduled scanning
+
+Set `DD_SECURITY_SCAN_CRON` to automatically scan all watched containers on a schedule. A random jitter delay (`DD_SECURITY_SCAN_JITTER`, default 60 seconds) is applied before each cycle to spread load. You can tune parallelism with `DD_SECURITY_SCAN_CONCURRENCY` (default `4`) and cap total batch runtime with `DD_SECURITY_SCAN_BATCH_TIMEOUT` (default `1800000`, set `0` to disable).
+
+Digest-level scan dedup caching uses an interval derived from the cron schedule:
+
+- drydock parses `DD_SECURITY_SCAN_CRON` and uses the **shortest upcoming gap** between scheduled runs as cache TTL.
+- For irregular schedules (for example `0 3,9 * * *`), cache TTL is based on the shortest gap (`6h` in this case), not a fixed daily fallback.
+- If interval derivation fails, drydock falls back to `24h`.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:latest
+    environment:
+      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_SCAN_CRON=0 3 * * *   # every day at 3 AM
+      - DD_SECURITY_SCAN_JITTER=60000      # up to 60s random delay
+      - DD_SECURITY_SCAN_CONCURRENCY=4     # scan up to 4 digests in parallel
+      - DD_SECURITY_SCAN_BATCH_TIMEOUT=1800000 # abort remaining digest queue after 30m
+```
+
+## On-demand scanning
+
+You can trigger a security scan for any individual container without waiting for the next watch cycle or scheduled scan.
+
+- **UI:** Click the shield button on a container row to start a scan.
+- **API:** `POST /api/containers/:id/scan` runs vulnerability scanning, signature verification (if configured), and SBOM generation (if configured) on demand.
+
+The endpoint is rate-limited to 30 requests per minute. Real-time progress is broadcast via SSE events `dd:scan-started` and `dd:scan-completed` so the UI updates automatically.
+
+## Dual-slot scanning
+
+When a container has an available update, clicking **Scan Now** (or calling `POST /api/containers/:id/scan`) scans both the current running image and the available update image in a single operation.
+
+- Results for the current image are stored in `container.security.scan`
+- Results for the update image are stored in `container.security.updateScan`
+- The UI shows delta comparison badges indicating how vulnerabilities change between versions (e.g. +3 fixed, -1 new)
+
+This differs from the pre-update Update Bouncer flow, which only scans the candidate image as a gate before applying an update. Dual-slot scanning is informational and does not block updates.
+
+## Full example (scanning + signatures + SBOM)
+
+```yaml
+services:
+  trivy:
+    image: aquasec/trivy:latest
+    command: server --listen 0.0.0.0:4954
+
+  drydock:
+    image: codeswhat/drydock:latest
+    depends_on:
+      - trivy
+    environment:
+      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
+      - DD_SECURITY_TRIVY_SERVER=http://trivy:4954
+      - DD_SECURITY_VERIFY_SIGNATURES=true
+      - DD_SECURITY_COSIGN_IDENTITY=https://github.com/CodesWhat/drydock/.github/workflows/release.yml@refs/tags/*
+      - DD_SECURITY_COSIGN_ISSUER=https://token.actions.githubusercontent.com
+      - DD_SECURITY_SBOM_ENABLED=true
+      - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+```

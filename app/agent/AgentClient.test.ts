@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import axios from 'axios';
@@ -24,6 +22,8 @@ vi.mock('../store/container.js', () => ({
   deleteContainer: vi.fn(),
 }));
 vi.mock('../event/index.js', () => ({
+  emitAgentConnected: vi.fn().mockResolvedValue(undefined),
+  emitAgentDisconnected: vi.fn().mockResolvedValue(undefined),
   emitContainerReport: vi.fn(),
 }));
 vi.mock('../registry/index.js', () => ({
@@ -266,6 +266,48 @@ describe('AgentClient', () => {
       expect(client.isConnected).toBe(true);
     });
 
+    test('should emit agent-connected when transitioning to connected state', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainers.mockReturnValue([]);
+      await client.handshake();
+
+      expect(event.emitAgentConnected).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should not emit agent-connected when already connected', async () => {
+      client.isConnected = true;
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainers.mockReturnValue([]);
+      await client.handshake();
+
+      expect(event.emitAgentConnected).not.toHaveBeenCalled();
+    });
+
+    test('should log debug when agent-connected emission fails', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      event.emitAgentConnected.mockRejectedValueOnce(new Error('emit failed'));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+      await Promise.resolve();
+
+      expect(event.emitAgentConnected).toHaveBeenCalledWith({ agentName: 'test-agent' });
+      expect(client.log.debug).toHaveBeenCalledWith(
+        'Failed to emit agent connected event (emit failed)',
+      );
+    });
+
     test('should handle watcher fetch failure gracefully', async () => {
       axios.get
         .mockResolvedValueOnce({ data: [] }) // containers
@@ -322,6 +364,40 @@ describe('AgentClient', () => {
       await client.watch('docker', 'local');
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
     });
+
+    test('should use near-linear id lookups when pruning old containers', () => {
+      let newIdReads = 0;
+      let storeIdReads = 0;
+      const newContainers = Array.from({ length: 30 }, (_, index) => {
+        const container = {};
+        Object.defineProperty(container, 'id', {
+          enumerable: true,
+          get: () => {
+            newIdReads += 1;
+            return `id-${index}`;
+          },
+        });
+        return container;
+      });
+      const containersInStore = Array.from({ length: 30 }, (_, index) => {
+        const container = { name: `container-${index}` };
+        Object.defineProperty(container, 'id', {
+          enumerable: true,
+          get: () => {
+            storeIdReads += 1;
+            return `id-${index + 15}`;
+          },
+        });
+        return container;
+      });
+      storeContainer.getContainers.mockReturnValue(containersInStore);
+
+      client.pruneOldContainers(newContainers);
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledTimes(15);
+      expect(newIdReads).toBeLessThanOrEqual(80);
+      expect(storeIdReads).toBeLessThanOrEqual(80);
+    });
   });
 
   describe('scheduleReconnect', () => {
@@ -340,6 +416,37 @@ describe('AgentClient', () => {
       client.scheduleReconnect(1000); // second call should be ignored
       vi.advanceTimersByTime(1000);
       expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    test('should emit agent-disconnect only on connected -> disconnected transition', () => {
+      client.isConnected = true;
+      client.scheduleReconnect(1000);
+      expect(event.emitAgentDisconnected).toHaveBeenCalledWith({
+        agentName: 'test-agent',
+        reason: 'SSE connection lost',
+      });
+    });
+
+    test('should not emit agent-disconnect when already disconnected', () => {
+      client.isConnected = false;
+      client.scheduleReconnect(1000);
+      expect(event.emitAgentDisconnected).not.toHaveBeenCalled();
+    });
+
+    test('should log debug when agent-disconnect emission fails', async () => {
+      event.emitAgentDisconnected.mockRejectedValueOnce(new Error('emit failed'));
+      client.isConnected = true;
+
+      client.scheduleReconnect(1000);
+      await Promise.resolve();
+
+      expect(event.emitAgentDisconnected).toHaveBeenCalledWith({
+        agentName: 'test-agent',
+        reason: 'SSE connection lost',
+      });
+      expect(client.log.debug).toHaveBeenCalledWith(
+        'Failed to emit agent disconnected event (emit failed)',
+      );
     });
   });
 
@@ -426,7 +533,7 @@ describe('AgentClient', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       stream.emit('error', new Error('connection lost'));
-      expect(reconnectSpy).toHaveBeenCalledWith(1000);
+      expect(reconnectSpy).toHaveBeenCalledWith();
     });
 
     test('should reconnect on stream end', async () => {
@@ -438,7 +545,7 @@ describe('AgentClient', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       stream.emit('end');
-      expect(reconnectSpy).toHaveBeenCalledWith(1000);
+      expect(reconnectSpy).toHaveBeenCalledWith();
     });
 
     test('should reconnect on connection failure', async () => {
@@ -448,15 +555,99 @@ describe('AgentClient', () => {
       client.startSse();
       await vi.advanceTimersByTimeAsync(0);
 
-      expect(reconnectSpy).toHaveBeenCalledWith(5000);
+      expect(reconnectSpy).toHaveBeenCalledWith();
+    });
+
+    test('should use exponential reconnect backoff and cap at 60 seconds', async () => {
+      axios.mockRejectedValue(new Error('connection refused'));
+
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.advanceTimersByTimeAsync(2_000);
+      await vi.advanceTimersByTimeAsync(4_000);
+      await vi.advanceTimersByTimeAsync(8_000);
+      await vi.advanceTimersByTimeAsync(16_000);
+      await vi.advanceTimersByTimeAsync(32_000);
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      const reconnectDelays = setTimeoutSpy.mock.calls
+        .map(([, delay]) => delay)
+        .filter((delay): delay is number => typeof delay === 'number');
+
+      expect(reconnectDelays).toEqual([1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000]);
     });
   });
 
   describe('handleEvent', () => {
-    test('should call handshake on dd:ack', async () => {
+    test('should cache runtime info and call handshake on dd:ack', async () => {
       const spy = vi.spyOn(client, 'handshake').mockResolvedValue(undefined);
-      await client.handleEvent('dd:ack', { version: '1.0' });
+      await client.handleEvent('dd:ack', {
+        version: '1.0',
+        os: 'linux',
+        arch: 'x64',
+        cpus: 8,
+        memoryGb: 15.7,
+        uptimeSeconds: 102,
+        lastSeen: '2026-02-28T12:00:00.000Z',
+      });
       expect(spy).toHaveBeenCalled();
+      expect(client.info).toEqual({
+        version: '1.0',
+        os: 'linux',
+        arch: 'x64',
+        cpus: 8,
+        memoryGb: 15.7,
+        uptimeSeconds: 102,
+        lastSeen: '2026-02-28T12:00:00.000Z',
+      });
+    });
+
+    test('should preserve existing runtime info when dd:ack payload fields are invalid', async () => {
+      client.info = {
+        version: 'existing-version',
+        os: 'existing-os',
+        arch: 'existing-arch',
+        cpus: 2,
+        memoryGb: 4,
+        uptimeSeconds: 10,
+        lastSeen: '2026-02-28T12:00:00.000Z',
+      };
+      const spy = vi.spyOn(client, 'handshake').mockResolvedValue(undefined);
+
+      await client.handleEvent('dd:ack', {
+        version: 123,
+        os: null,
+        arch: {},
+        cpus: 'NaN',
+        memoryGb: 'NaN',
+        uptimeSeconds: Infinity,
+        lastSeen: '',
+      });
+
+      expect(spy).toHaveBeenCalled();
+      expect(client.info.version).toBe('existing-version');
+      expect(client.info.os).toBe('existing-os');
+      expect(client.info.arch).toBe('existing-arch');
+      expect(client.info.cpus).toBe(2);
+      expect(client.info.memoryGb).toBe(4);
+      expect(client.info.uptimeSeconds).toBe(10);
+      expect(typeof client.info.lastSeen).toBe('string');
+      expect(client.info.lastSeen).not.toBe('');
+    });
+
+    test('should log when handshake fails after dd:ack', async () => {
+      const spy = vi.spyOn(client, 'handshake').mockRejectedValue(new Error('handshake failed'));
+
+      await client.handleEvent('dd:ack', { version: '1.0' });
+      await Promise.resolve();
+
+      expect(spy).toHaveBeenCalled();
+      expect(client.log.error).toHaveBeenCalledWith(
+        'Handshake failed after dd:ack: handshake failed',
+      );
     });
 
     test('should process container on dd:container-added', async () => {

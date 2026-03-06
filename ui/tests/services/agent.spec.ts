@@ -9,7 +9,7 @@ describe('Agent Service', () => {
 
   describe('getAgentIcon', () => {
     it('returns the agent icon', () => {
-      expect(getAgentIcon()).toBe('fas fa-robot');
+      expect(getAgentIcon()).toBe('sh-robot');
     });
   });
 

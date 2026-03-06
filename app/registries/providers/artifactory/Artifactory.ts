@@ -1,4 +1,3 @@
-// @ts-nocheck
 import SelfHostedBasic from '../shared/SelfHostedBasic.js';
 
 /**

@@ -1,6 +1,8 @@
-// @ts-nocheck
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import log from '../log/index.js';
 import * as configuration from './index.js';
 
 function getTestDirectory() {
@@ -48,6 +50,43 @@ test('getLogFormat should fallback to text for unsupported values', async () => 
   configuration.ddEnvVars.DD_LOG_FORMAT = 'pretty';
   expect(configuration.getLogFormat()).toStrictEqual('text');
   delete configuration.ddEnvVars.DD_LOG_FORMAT;
+});
+
+test('getLogBufferEnabled should default to true', async () => {
+  delete configuration.ddEnvVars.DD_LOG_BUFFER_ENABLED;
+  expect(configuration.getLogBufferEnabled()).toStrictEqual(true);
+});
+
+test('getLogBufferEnabled should return false when disabled via env', async () => {
+  configuration.ddEnvVars.DD_LOG_BUFFER_ENABLED = 'false';
+  expect(configuration.getLogBufferEnabled()).toStrictEqual(false);
+  delete configuration.ddEnvVars.DD_LOG_BUFFER_ENABLED;
+});
+
+test('should include additional legacy env count in warning suffix when more than 10 WUD vars are present', async () => {
+  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  const legacyKeys = Array.from({ length: 12 }, (_, index) => `WUD_LEGACY_${index}`);
+  const previousValues = new Map<string, string | undefined>();
+  for (const key of legacyKeys) {
+    previousValues.set(key, process.env[key]);
+    process.env[key] = '1';
+  }
+
+  try {
+    vi.resetModules();
+    await import('./index.js');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('(+2 more)'));
+  } finally {
+    for (const key of legacyKeys) {
+      const previousValue = previousValues.get(key);
+      if (previousValue === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = previousValue;
+      }
+    }
+    warnSpy.mockRestore();
+  }
 });
 
 test('getWatcherConfiguration should return empty object by default', async () => {
@@ -199,12 +238,13 @@ test('getServerConfiguration should return configured api (new vars)', async () 
   configuration.ddEnvVars.DD_SERVER_PORT = '4000';
   delete configuration.ddEnvVars.DD_SERVER_METRICS_AUTH;
   expect(configuration.getServerConfiguration()).toStrictEqual({
+    cookie: {},
+    compression: {},
     cors: {},
     enabled: true,
     feature: {
       delete: true,
       containeractions: true,
-      webhook: true,
     },
     metrics: {},
     port: 4000,
@@ -217,12 +257,13 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
   delete configuration.ddEnvVars.DD_SERVER_PORT;
   configuration.ddEnvVars.DD_SERVER_METRICS_AUTH = 'false';
   expect(configuration.getServerConfiguration()).toStrictEqual({
+    cookie: {},
+    compression: {},
     cors: {},
     enabled: true,
     feature: {
       delete: true,
       containeractions: true,
-      webhook: true,
     },
     metrics: {
       auth: false,
@@ -231,6 +272,18 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
     tls: {},
     trustproxy: false,
   });
+});
+
+test('getServerConfiguration should allow tuning compression', async () => {
+  configuration.ddEnvVars.DD_SERVER_COMPRESSION_ENABLED = 'false';
+  configuration.ddEnvVars.DD_SERVER_COMPRESSION_THRESHOLD = '2048';
+  const config = configuration.getServerConfiguration();
+  expect(config.compression).toStrictEqual({
+    enabled: false,
+    threshold: 2048,
+  });
+  delete configuration.ddEnvVars.DD_SERVER_COMPRESSION_ENABLED;
+  delete configuration.ddEnvVars.DD_SERVER_COMPRESSION_THRESHOLD;
 });
 
 test('getServerConfiguration should accept trustproxy as number', async () => {
@@ -245,6 +298,24 @@ test('getServerConfiguration should accept trustproxy as boolean string', async 
   const config = configuration.getServerConfiguration();
   expect(config.trustproxy).toBe(true);
   delete configuration.ddEnvVars.DD_SERVER_TRUSTPROXY;
+});
+
+test('getServerConfiguration should allow overriding session cookie sameSite', async () => {
+  configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE = 'none';
+  const config = configuration.getServerConfiguration();
+  expect(config.cookie).toStrictEqual({
+    samesite: 'none',
+  });
+  delete configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE;
+});
+
+test('getServerConfiguration should normalize session cookie sameSite casing', async () => {
+  configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE = 'STRICT';
+  const config = configuration.getServerConfiguration();
+  expect(config.cookie).toStrictEqual({
+    samesite: 'strict',
+  });
+  delete configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE;
 });
 
 test('getPrometheusConfiguration should result in enabled by default', async () => {
@@ -269,6 +340,24 @@ test('replaceSecrets must read secret in file', async () => {
   expect(vars).toStrictEqual({
     DD_SERVER_X: 'super_secret',
   });
+});
+
+test('replaceSecrets must reject secret files larger than 1MB', async () => {
+  const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-secret-'));
+  const largeSecretPath = path.join(tempDirectory, 'large-secret.txt');
+  fs.writeFileSync(largeSecretPath, 'x'.repeat(1024 * 1024 + 1), 'utf-8');
+
+  const vars = {
+    DD_SERVER_X__FILE: largeSecretPath,
+  };
+
+  try {
+    expect(() => configuration.replaceSecrets(vars)).toThrow(
+      'exceeds maximum size of 1048576 bytes',
+    );
+  } finally {
+    fs.rmSync(tempDirectory, { recursive: true, force: true });
+  }
 });
 
 describe('getSecurityConfiguration', () => {
@@ -300,6 +389,12 @@ describe('getSecurityConfiguration', () => {
         enabled: false,
         formats: ['spdx-json'],
       },
+      scan: {
+        cron: '',
+        jitter: 60000,
+        concurrency: 4,
+        batchTimeout: 1800000,
+      },
     });
   });
 
@@ -312,12 +407,14 @@ describe('getSecurityConfiguration', () => {
     configuration.ddEnvVars.DD_SECURITY_VERIFY_SIGNATURES = 'true';
     configuration.ddEnvVars.DD_SECURITY_COSIGN_COMMAND = '/usr/local/bin/cosign';
     configuration.ddEnvVars.DD_SECURITY_COSIGN_TIMEOUT = '45000';
-    configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY = '/keys/cosign.pub';
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY = `${TEST_DIRECTORY}/secret.txt`;
     configuration.ddEnvVars.DD_SECURITY_COSIGN_IDENTITY = 'maintainer@example.com';
     configuration.ddEnvVars.DD_SECURITY_COSIGN_ISSUER =
       'https://token.actions.githubusercontent.com';
     configuration.ddEnvVars.DD_SECURITY_SBOM_ENABLED = 'true';
     configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS = 'cyclonedx-json,spdx-json,cyclonedx-json';
+    configuration.ddEnvVars.DD_SECURITY_SCAN_CONCURRENCY = '8';
+    configuration.ddEnvVars.DD_SECURITY_SCAN_BATCH_TIMEOUT = '900000';
 
     const result = configuration.getSecurityConfiguration();
     expect(result).toEqual({
@@ -334,7 +431,7 @@ describe('getSecurityConfiguration', () => {
         cosign: {
           command: '/usr/local/bin/cosign',
           timeout: 45000,
-          key: '/keys/cosign.pub',
+          key: `${TEST_DIRECTORY}/secret.txt`,
           identity: 'maintainer@example.com',
           issuer: 'https://token.actions.githubusercontent.com',
         },
@@ -342,6 +439,12 @@ describe('getSecurityConfiguration', () => {
       sbom: {
         enabled: true,
         formats: ['cyclonedx-json', 'spdx-json'],
+      },
+      scan: {
+        cron: '',
+        jitter: 60000,
+        concurrency: 8,
+        batchTimeout: 900000,
       },
     });
 
@@ -358,17 +461,62 @@ describe('getSecurityConfiguration', () => {
     delete configuration.ddEnvVars.DD_SECURITY_COSIGN_ISSUER;
     delete configuration.ddEnvVars.DD_SECURITY_SBOM_ENABLED;
     delete configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS;
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_CONCURRENCY;
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_BATCH_TIMEOUT;
   });
 
   test('should fallback to default block severities when configured list is invalid', () => {
     configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
     configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = 'foo,bar';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const result = configuration.getSecurityConfiguration();
     expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Invalid DD_SECURITY_BLOCK_SEVERITY values: FOO, BAR. Allowed values: UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL. Falling back to defaults: CRITICAL, HIGH.',
+      ),
+    );
 
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+    warnSpy.mockRestore();
+  });
+
+  test('should normalize and deduplicate invalid block severities in fallback warning', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = ' foo ,FOO, bar ';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Invalid DD_SECURITY_BLOCK_SEVERITY values: FOO, BAR. Allowed values: UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL. Falling back to defaults: CRITICAL, HIGH.',
+      ),
+    );
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+    warnSpy.mockRestore();
+  });
+
+  test('should warn and ignore invalid block severities when valid values are present', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = 'critical,foo,medium,foo';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).toEqual(['CRITICAL', 'MEDIUM']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Invalid DD_SECURITY_BLOCK_SEVERITY values: FOO. Allowed values: UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL. Invalid values were ignored.',
+      ),
+    );
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+    warnSpy.mockRestore();
   });
 
   test('should fallback to default block severities when list is empty after normalization', () => {
@@ -392,15 +540,40 @@ describe('getSecurityConfiguration', () => {
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_TIMEOUT;
   });
 
-  test('should fallback to default sbom formats when configured list is invalid', () => {
+  test('should warn and fallback to default sbom formats when configured list is invalid', () => {
     configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
     configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS = 'foo,bar';
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
 
     const result = configuration.getSecurityConfiguration();
     expect(result.sbom.formats).toEqual(['spdx-json']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Invalid DD_SECURITY_SBOM_FORMATS values: foo, bar. Allowed values: spdx-json, cyclonedx-json. Falling back to defaults: spdx-json.',
+      ),
+    );
 
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS;
+    warnSpy.mockRestore();
+  });
+
+  test('should warn and ignore invalid sbom formats when valid values are present', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS = 'spdx-json,foo,SPDX-JSON,baz';
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+    const result = configuration.getSecurityConfiguration();
+    expect(result.sbom.formats).toEqual(['spdx-json']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Invalid DD_SECURITY_SBOM_FORMATS values: foo, baz. Allowed values: spdx-json, cyclonedx-json. Invalid values were ignored.',
+      ),
+    );
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS;
+    warnSpy.mockRestore();
   });
 
   test('should fallback to default sbom formats when list is empty after normalization', () => {
@@ -422,6 +595,30 @@ describe('getSecurityConfiguration', () => {
 
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_COSIGN_TIMEOUT;
+  });
+
+  test('should throw when cosign key is not a regular file', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY = '/';
+
+    expect(() => configuration.getSecurityConfiguration()).toThrow(
+      'DD_SECURITY_COSIGN_KEY must reference an existing regular file',
+    );
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY;
+  });
+
+  test('should throw when cosign key path does not exist', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY = '/tmp/drydock-non-existent-cosign-key.pub';
+
+    expect(() => configuration.getSecurityConfiguration()).toThrow(
+      'DD_SECURITY_COSIGN_KEY must reference an existing regular file',
+    );
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY;
   });
 });
 
@@ -485,6 +682,73 @@ describe('getPublicUrl', () => {
     });
     expect(result).toBe('/');
   });
+
+  test('should return / when DD_PUBLIC_URL uses a non-http protocol', () => {
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'javascript:alert(1)';
+
+    const result = configuration.getPublicUrl({
+      protocol: 'https',
+      hostname: 'example.com',
+    });
+
+    expect(result).toBe('/');
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('should return / when DD_PUBLIC_URL contains userinfo injection', () => {
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'https://trusted.example@attacker.example';
+
+    const result = configuration.getPublicUrl({
+      protocol: 'https',
+      hostname: 'example.com',
+    });
+
+    expect(result).toBe('/');
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('should return / when inferred hostname contains userinfo injection', () => {
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+    const result = configuration.getPublicUrl({
+      protocol: 'https',
+      hostname: 'trusted.example@attacker.example',
+    });
+    expect(result).toBe('/');
+  });
+
+  test('should return / when DD_PUBLIC_URL contains control characters', () => {
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'https://example.com\u0000evil';
+
+    const result = configuration.getPublicUrl({
+      protocol: 'https',
+      hostname: 'example.com',
+    });
+
+    expect(result).toBe('/');
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('should return / when inferred URL hostname normalization mismatches request hostname', () => {
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+
+    const result = configuration.getPublicUrl({
+      protocol: 'https',
+      hostname: '%65xample.com',
+    });
+
+    expect(result).toBe('/');
+  });
+
+  test('should return / when request protocol or hostname are not strings', () => {
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+
+    const result = configuration.getPublicUrl({
+      protocol: ['https'],
+      hostname: ['example.com'],
+    });
+
+    expect(result).toBe('/');
+  });
 });
 
 describe('getPrometheusConfiguration errors', () => {
@@ -507,6 +771,12 @@ describe('getServerConfiguration errors', () => {
     configuration.ddEnvVars.DD_SERVER_PORT = 'not-a-number';
     expect(() => configuration.getServerConfiguration()).toThrow();
     delete configuration.ddEnvVars.DD_SERVER_PORT;
+  });
+
+  test('should throw when session cookie sameSite is invalid', () => {
+    configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE = 'invalid';
+    expect(() => configuration.getServerConfiguration()).toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE;
   });
 
   test('should fallback to defaults when nested server config is null', () => {

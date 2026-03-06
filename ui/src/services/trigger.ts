@@ -1,55 +1,67 @@
 function getTriggerIcon() {
-  return 'fas fa-bolt';
+  return 'sh-bolt';
 }
 
-function getTriggerProviderIcon(type) {
+interface TriggerDetailPathOptions {
+  type: string;
+  name: string;
+  agent?: string;
+}
+
+interface RunTriggerRequest {
+  triggerType: string;
+  triggerName: string;
+  container: unknown;
+}
+
+function getTriggerProviderIcon(type: string) {
   switch (type) {
     case 'http':
-      return 'fas fa-globe';
+      return 'sh-globe';
     case 'smtp':
-      return 'fas fa-envelope';
+      return 'sh-envelope';
     case 'slack':
-      return 'fab fa-slack';
+      return 'sh-slack';
     case 'discord':
-      return 'fab fa-discord';
+      return 'sh-discord';
     case 'telegram':
-      return 'fab fa-telegram';
+      return 'sh-telegram';
     case 'mqtt':
-      return 'fas fa-tower-broadcast';
+      return 'sh-mqtt';
     case 'kafka':
-      return 'fas fa-bars-staggered';
+      return 'sh-apache-kafka';
     case 'pushover':
-      return 'fas fa-bell';
+      return 'sh-pushover';
     case 'gotify':
-      return 'fas fa-bell';
+      return 'sh-gotify';
     case 'ntfy':
-      return 'fas fa-bell';
+      return 'sh-ntfy';
     case 'ifttt':
-      return 'fas fa-wand-magic-sparkles';
+      return 'sh-ifttt';
     case 'apprise':
-      return 'fas fa-paper-plane';
+      return 'sh-apprise';
     case 'command':
-      return 'fas fa-terminal';
+      return 'sh-terminal';
     case 'dockercompose':
-      return 'fab fa-docker';
+      return 'sh-docker';
     case 'rocketchat':
-      return 'fas fa-comment';
+      return 'sh-rocket-chat';
     case 'mattermost':
-      return 'fab fa-mattermost';
+      return 'sh-mattermost';
     case 'teams':
-      return 'fab fa-microsoft';
+      return 'sh-microsoft-teams';
     case 'matrix':
-      return 'fas fa-hashtag';
+      return 'sh-matrix';
     case 'googlechat':
-      return 'fab fa-google';
+      return 'sh-google-chat';
     case 'docker':
-      return 'fab fa-docker';
+      return 'sh-docker';
     default:
-      return 'fas fa-bolt';
+      return 'sh-bolt';
   }
 }
 
-function getTriggerProviderColor(type) {
+function getTriggerProviderColor(type: string) {
   switch (type) {
     case 'slack':
       return '#4A154B';
@@ -97,10 +109,32 @@ function getTriggerProviderColor(type) {
 
 async function getAllTriggers() {
   const response = await fetch('/api/triggers', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get triggers: ${response.statusText}`);
+  }
   return response.json();
 }
 
-async function runTrigger({ triggerType, triggerName, container }) {
+function buildTriggerDetailPath({ type, name, agent }: TriggerDetailPathOptions) {
+  const segments = ['/api/triggers'];
+  if (agent) {
+    segments.push(encodeURIComponent(agent));
+  }
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
+  return segments.join('/');
+}
+
+async function getTrigger({ type, name, agent }: TriggerDetailPathOptions) {
+  const response = await fetch(buildTriggerDetailPath({ type, name, agent }), {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get trigger: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+async function runTrigger({ triggerType, triggerName, container }: RunTriggerRequest) {
   const response = await fetch(`/api/triggers/${triggerType}/${triggerName}`, {
     method: 'POST',
     credentials: 'include',
@@ -119,5 +153,6 @@ export {
   getTriggerProviderIcon,
   getTriggerProviderColor,
   getAllTriggers,
+  getTrigger,
   runTrigger,
 };

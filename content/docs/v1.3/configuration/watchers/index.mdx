@@ -1,0 +1,729 @@
+---
+title: "Docker Watchers"
+description: "Watchers are responsible for scanning Docker containers."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/watchers/docker.png)
+
+Watchers are responsible for scanning Docker containers.
+
+The `docker` watcher lets you configure the Docker hosts you want to watch.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_WATCHER_{watcher_name}_CAFILE` | ⚪ | CA pem file path (only for TLS connection) | | |
+| `DD_WATCHER_{watcher_name}_AUTH_BEARER` | ⚪ | Bearer token for remote Docker API auth (HTTPS only) | | |
+| `DD_WATCHER_{watcher_name}_AUTH_PASSWORD` | ⚪ | Password for remote Docker API basic auth (HTTPS only) | | |
+| `DD_WATCHER_{watcher_name}_AUTH_TYPE` | ⚪ | Auth mode for remote Docker API auth | `BASIC`, `BEARER` | auto-detected from provided credentials |
+| `DD_WATCHER_{watcher_name}_AUTH_USER` | ⚪ | Username for remote Docker API basic auth (HTTPS only) | | |
+| `DD_WATCHER_{watcher_name}_CERTFILE` | ⚪ | Certificate pem file path (only for TLS connection) | | |
+| `DD_WATCHER_{watcher_name}_CRON` | ⚪ | Scheduling options | [Valid CRON expression](https://crontab.guru/) | `0 * * * *` (every hour) |
+| `DD_WATCHER_{watcher_name}_HOST` | ⚪ | Docker hostname or ip of the host to watch | | |
+| `DD_WATCHER_{watcher_name}_JITTER` | ⚪ | Jitter in ms applied to the CRON to better distribute the load on the registries (on the Hub at the first place) | > 0 | `60000` (1 minute) |
+| `DD_WATCHER_{watcher_name}_KEYFILE` | ⚪ | Key pem file path (only for TLS connection) | | |
+| `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` | ⚪ | Allowed update schedule (checks outside this window are skipped) | [Valid CRON expression](https://crontab.guru/) | |
+| `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_TZ` | ⚪ | Timezone used to evaluate `MAINTENANCE_WINDOW` | IANA timezone (e.g. `UTC`, `Europe/Paris`) | `UTC` |
+| `DD_WATCHER_{watcher_name}_PORT` | ⚪ | Docker port of the host to watch | | `2375` |
+| `DD_WATCHER_{watcher_name}_PROTOCOL` | ⚪ | Docker remote API protocol | `http`, `https` | `http` |
+| `DD_WATCHER_{watcher_name}_SOCKET` | ⚪ | Docker socket to watch | Valid unix socket | `/var/run/docker.sock` |
+| `DD_WATCHER_{watcher_name}_WATCHALL` | ⚪ | Include containers in **every** state (created, paused, exited, restarting, etc.) — not just running ones | `true`, `false` | `false` |
+| `DD_WATCHER_{watcher_name}_WATCHATSTART` (deprecated) | ⚪ | If drydock must check for image updates during startup | `true`, `false` | `true` if this watcher store is empty |
+| `DD_WATCHER_{watcher_name}_WATCHBYDEFAULT` | ⚪ | Watch containers that don't have an explicit `dd.watch` label | `true`, `false` | `true` |
+| `DD_WATCHER_{watcher_name}_WATCHEVENTS` | ⚪ | If drydock must monitor docker events | `true`, `false` | `true` |
+| `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_*` | ⚪ | Shared per-image defaults (image match + include/exclude/transform/link/display/trigger/lookup) | See **Image Set Presets** section below | |
+
+<Callout type="info">`WATCHALL` and `WATCHBYDEFAULT` are independent and operate at different stages.
+`WATCHALL` controls **which container states** Docker returns (running-only vs all states).
+`WATCHBYDEFAULT` controls **whether unlabeled containers are watched** — the `dd.watch` label always takes precedence when set.
+See the [behavior matrix](#watchall--watchbydefault-behavior-matrix) below for details.</Callout>
+
+<Callout type="info">If no watcher is configured, a default one named `local` will be automatically created (reading the Docker socket).</Callout>
+
+<Callout type="info">Multiple watchers can be configured (if you have multiple Docker hosts to watch).
+You just need to give them different names.</Callout>
+
+<Callout type="warn">Socket configuration and host/port configuration are mutually exclusive.</Callout>
+
+<Callout type="warn">If socket configuration is used, don't forget to mount the Docker socket on your drydock container.</Callout>
+
+<Callout type="warn">If host/port configuration is used, don't forget to enable the Docker remote API.
+[See dockerd documentation](https://docs.docker.com/engine/reference/commandline/dockerd/#description)</Callout>
+
+<Callout type="warn">If the Docker remote API is secured with TLS, don't forget to mount and configure the TLS certificates.
+[See dockerd documentation](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket)</Callout>
+
+<Callout type="warn">Remote watcher auth (`AUTH_*`) is only applied on HTTPS connections (`PROTOCOL=https`) or TLS certificate-based connections.</Callout>
+
+<Callout type="info">When `MAINTENANCE_WINDOW` is configured and a check is skipped outside the allowed schedule, drydock queues one pending check and runs it automatically when the next maintenance window opens.</Callout>
+
+<Callout type="warn">Watching image digests causes an extensive usage of _Docker Registry Pull API_ which is restricted by [**Quotas on the Docker Hub**](https://docs.docker.com/docker-hub/download-rate-limit/).
+By default, drydock enables it only for **non semver** image tags.
+You can tune this behavior per container using the `dd.watch.digest` label.
+If you face [quota related errors](https://docs.docker.com/docker-hub/download-rate-limit/#how-do-i-know-my-pull-requests-are-being-limited), consider slowing down the watcher rate by adjusting the `DD_WATCHER_{watcher_name}_CRON` variable.</Callout>
+
+## Variable examples
+
+### Watch the local docker host every day at 1am
+
+<Tabs items={["Docker Compose (Daily CRON)", "Docker (Daily CRON)"]}>
+<Tab value="Docker Compose (Daily CRON)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+        - DD_WATCHER_LOCAL_CRON=0 1 * * *
+```
+
+</Tab>
+<Tab value="Docker (Daily CRON)">
+```bash
+docker run \
+    -e DD_WATCHER_LOCAL_CRON="0 1 * * *" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Watch all containers regardless of their status (created, paused, exited, restarting, running...)
+
+<Tabs items={["Docker Compose (Watch All)", "Docker (Watch All)"]}>
+<Tab value="Docker Compose (Watch All)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+        - DD_WATCHER_LOCAL_WATCHALL=true
+```
+
+</Tab>
+<Tab value="Docker (Watch All)">
+```bash
+docker run \
+    -e DD_WATCHER_LOCAL_WATCHALL="true" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### WATCHALL / WATCHBYDEFAULT behavior matrix
+
+These two variables are **orthogonal** — they filter at different stages of the container selection pipeline:
+
+1. **WATCHALL** (Docker API level) — decides which container **states** are fetched from Docker.
+2. **WATCHBYDEFAULT** (per-container level) — decides whether containers **without** a `dd.watch` label are watched. An explicit `dd.watch` label always takes precedence.
+
+| `WATCHALL` | `WATCHBYDEFAULT` | Containers fetched | Unlabeled containers | `dd.watch=true` | `dd.watch=false` |
+| :---: | :---: | --- | --- | --- | --- |
+| `false` (default) | `true` (default) | Running only | Watched | Watched | **Not** watched |
+| `false` | `false` | Running only | **Not** watched | Watched | **Not** watched |
+| `true` | `true` | All states | Watched | Watched | **Not** watched |
+| `true` | `false` | All states | **Not** watched | Watched | **Not** watched |
+
+<Callout type="warn">A stopped container with `dd.watch=true` will **not** be watched when `WATCHALL` is `false` because it is never returned by the Docker API in the first place. Set `WATCHALL=true` if you need to monitor non-running containers.</Callout>
+
+### Watch a remote docker host via TCP on 2375
+
+<Tabs items={["Docker Compose (Remote TCP)", "Docker (Remote TCP)"]}>
+<Tab value="Docker Compose (Remote TCP)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+        - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
+```
+
+</Tab>
+<Tab value="Docker (Remote TCP)">
+```bash
+docker run \
+    -e DD_WATCHER_MYREMOTEHOST_HOST="myremotehost" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Watch a remote docker host behind HTTPS with bearer auth
+
+<Tabs items={["Docker Compose (HTTPS Bearer)", "Docker (HTTPS Bearer)"]}>
+<Tab value="Docker Compose (HTTPS Bearer)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+        - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
+        - DD_WATCHER_MYREMOTEHOST_PORT=443
+        - DD_WATCHER_MYREMOTEHOST_PROTOCOL=https
+        - DD_WATCHER_MYREMOTEHOST_AUTH_TYPE=BEARER
+        - DD_WATCHER_MYREMOTEHOST_AUTH_BEARER=my-secret-token
+```
+
+</Tab>
+<Tab value="Docker (HTTPS Bearer)">
+```bash
+docker run \
+    -e DD_WATCHER_MYREMOTEHOST_HOST="myremotehost" \
+    -e DD_WATCHER_MYREMOTEHOST_PORT="443" \
+    -e DD_WATCHER_MYREMOTEHOST_PROTOCOL="https" \
+    -e DD_WATCHER_MYREMOTEHOST_AUTH_TYPE="BEARER" \
+    -e DD_WATCHER_MYREMOTEHOST_AUTH_BEARER="my-secret-token" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Watch a remote docker host via TCP with TLS enabled on 2376
+
+<Tabs items={["Docker Compose (TLS)", "Docker (TLS)"]}>
+<Tab value="Docker Compose (TLS)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+        - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
+        - DD_WATCHER_MYREMOTEHOST_PORT=2376
+        - DD_WATCHER_MYREMOTEHOST_CAFILE=/certs/ca.pem
+        - DD_WATCHER_MYREMOTEHOST_CERTFILE=/certs/cert.pem
+        - DD_WATCHER_MYREMOTEHOST_KEYFILE=/certs/key.pem
+    volumes:
+        - /my-host/my-certs/ca.pem:/certs/ca.pem:ro
+        - /my-host/my-certs/ca.pem:/certs/cert.pem:ro
+        - /my-host/my-certs/ca.pem:/certs/key.pem:ro
+```
+
+</Tab>
+<Tab value="Docker (TLS)">
+```bash
+docker run \
+    -e DD_WATCHER_MYREMOTEHOST_HOST="myremotehost" \
+    -e DD_WATCHER_MYREMOTEHOST_PORT="2376" \
+    -e DD_WATCHER_MYREMOTEHOST_CAFILE="/certs/ca.pem" \
+    -e DD_WATCHER_MYREMOTEHOST_CERTFILE="/certs/cert.pem" \
+    -e DD_WATCHER_MYREMOTEHOST_KEYFILE="/certs/key.pem" \
+    -v /my-host/my-certs/ca.pem:/certs/ca.pem:ro \
+    -v /my-host/my-certs/ca.pem:/certs/cert.pem:ro \
+    -v /my-host/my-certs/ca.pem:/certs/key.pem:ro \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+<Callout type="warn">Don't forget to mount the certificates into the container!</Callout>
+
+## Docker Socket Security
+
+Drydock runs as a non-root user by default for security. This means a **read-only** Docker socket mount (`:ro`) will fail with a permission error because the Linux VFS denies `connect()` on a read-only bind mount for non-root users.
+
+There are two ways to resolve this:
+
+### Option 1: `DD_RUN_AS_ROOT=true` (quick fix)
+
+Set the `DD_RUN_AS_ROOT` environment variable to skip Drydock's privilege drop and run as root — the same approach used by Portainer, Watchtower, and other Docker management tools.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DD_RUN_AS_ROOT=true
+    ports:
+      - 3000:3000
+```
+
+<Callout type="warn">Running as root trades the privilege-drop security boundary for `:ro` socket compatibility. This is safe for most home-lab and single-host setups but may not meet your security requirements in multi-tenant or production environments.</Callout>
+
+### Option 2: Socket proxy (recommended)
+
+A socket proxy runs as a separate container with access to the Docker socket and exposes only the API endpoints Drydock needs. Drydock connects to the proxy over HTTP, so no socket mount is required at all.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    depends_on:
+      - socket-proxy
+    environment:
+      - DD_WATCHER_LOCAL_HOST=socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+    ports:
+      - 3000:3000
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - SERVICES=1
+    restart: unless-stopped
+```
+
+#### Proxy permissions by feature
+
+| Feature | Required proxy env vars |
+| --- | --- |
+| Watch containers (default) | `CONTAINERS=1`, `IMAGES=1`, `EVENTS=1`, `SERVICES=1` |
+| Docker trigger (auto-updates) | All of the above **plus** `POST=1`, `NETWORKS=1` |
+
+### Watch 1 local Docker host and 2 remote docker hosts at the same time
+
+<Tabs items={["Docker Compose (Multiple Hosts)", "Docker (Multiple Hosts)"]}>
+<Tab value="Docker Compose (Multiple Hosts)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+        -  DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+        -  DD_WATCHER_MYREMOTEHOST1_HOST=myremotehost1
+        -  DD_WATCHER_MYREMOTEHOST2_HOST=myremotehost2
+```
+
+</Tab>
+<Tab value="Docker (Multiple Hosts)">
+```bash
+docker run \
+    -e  DD_WATCHER_LOCAL_SOCKET="/var/run/docker.sock" \
+    -e  DD_WATCHER_MYREMOTEHOST1_HOST="myremotehost1" \
+    -e  DD_WATCHER_MYREMOTEHOST2_HOST="myremotehost2" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+## Image Set Presets
+
+Use `IMGSET` to define reusable defaults by image reference. This is useful when many containers need the same tag filters, link template, icon, or trigger routing.
+
+Looking for ready-to-copy presets for common containers? See [Popular IMGSET Presets](/docs/configuration/watchers/popular-imgsets).
+
+### Supported imgset keys
+
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_IMAGE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_INCLUDE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_EXCLUDE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_TRANSFORM`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_LINK_TEMPLATE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_DISPLAY_NAME`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_DISPLAY_ICON`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TRIGGER_INCLUDE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TRIGGER_EXCLUDE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_REGISTRY_LOOKUP_IMAGE`
+
+### Imgset precedence
+
+- `dd.*` labels on the container (or swarm service/container merged labels) are highest priority.
+- `IMGSET` values are defaults applied only when the corresponding label is not set.
+
+### Imgset example
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_IMAGE=ghcr.io/home-assistant/home-assistant
+      - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_TAG_INCLUDE=^\\d+\\.\\d+\\.\\d+$$
+      - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_DISPLAY_NAME=Home Assistant
+      - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_DISPLAY_ICON=hl-home-assistant
+      - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_LINK_TEMPLATE=https://www.home-assistant.io/changelogs/core-$${major}$${minor}$${patch}
+      - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_TRIGGER_INCLUDE=ntfy.default:major
+```
+
+## Labels
+
+To fine-tune the behaviour of drydock _per container_, you can add labels on them.
+
+| Label | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `dd.display.icon` | ⚪ | Custom display icon for the container | Valid [Fontawesome Icon](https://fontawesome.com/), [Homarr Labs Icon](https://dashboardicons.com/), [Selfh.st Icon](https://selfh.st/icons/), or [Simple Icon](https://simpleicons.org/) (see details below). `mdi:` icons are auto-resolved but not recommended. | `fab fa-docker` |
+| `dd.display.name` | ⚪ | Custom display name for the container | Valid String | Container name |
+| `dd.inspect.tag.path` | ⚪ | Docker inspect path used to derive a local semver tag | Slash-separated path in `docker inspect` output | |
+| `dd.registry.lookup.image` | ⚪ | Alternative image reference used for update lookups | Full image path (for example `library/traefik` or `ghcr.io/traefik/traefik`) | |
+| `dd.link.template` | ⚪ | Browsable link associated to the container version | JS string template with vars `${container}`, `${original}`, `${transformed}`, `${major}`, `${minor}`, `${patch}`, `${prerelease}` | |
+| `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | Valid JavaScript Regex | |
+| `dd.tag.include` | ⚪ | Regex to include specific tags only | Valid JavaScript Regex | |
+| `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` (see below) | |
+| `dd.trigger.exclude` | ⚪ | Optional list of triggers to exclude | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.trigger.include` | ⚪ | Optional list of triggers to include | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.watch.digest` | ⚪ | Watch this container digest | Valid Boolean | `false` |
+| `dd.watch` | ⚪ | Explicitly include or exclude this container from monitoring (overrides `WATCHBYDEFAULT`) | Valid Boolean | Inherits from `WATCHBYDEFAULT` (`true` by default) |
+
+<Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values.</Callout>
+<Callout type="warn">Legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
+
+## Label examples
+
+### Include specific containers to watch
+
+Set `WATCHBYDEFAULT=false` so that only containers with an explicit `dd.watch=true` label are monitored.
+<Tabs items={["Docker Compose (Disable Watch by Default)", "Docker (Disable Watch by Default)"]}>
+<Tab value="Docker Compose (Disable Watch by Default)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+```
+
+</Tab>
+<Tab value="Docker (Disable Watch by Default)">
+```bash
+docker run \
+    -e DD_WATCHER_LOCAL_WATCHBYDEFAULT="false" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+Then add the `dd.watch=true` label on the containers you want to watch.
+<Tabs items={["Docker Compose (Include Label)", "Docker (Include Label)"]}>
+<Tab value="Docker Compose (Include Label)">
+
+```yaml
+services:
+  mariadb:
+    image: mariadb:10.4.5
+    ...
+    labels:
+      - dd.watch=true
+```
+
+</Tab>
+<Tab value="Docker (Include Label)">
+```bash
+docker run -d --name mariadb --label dd.watch=true mariadb:10.4.5
+```
+</Tab>
+</Tabs>
+
+### Exclude specific containers to watch
+
+Ensure `DD_WATCHER_{watcher_name}_WATCHBYDEFAULT` is true (default value).
+
+Then add the `dd.watch=false` label on the containers you want to exclude from being watched.
+<Tabs items={["Docker Compose (Exclude Label)", "Docker (Exclude Label)"]}>
+<Tab value="Docker Compose (Exclude Label)">
+
+```yaml
+services:
+  mariadb:
+    image: mariadb:10.4.5
+    ...
+    labels:
+      - dd.watch=false
+```
+
+</Tab>
+<Tab value="Docker (Exclude Label)">
+```bash
+docker run -d --name mariadb --label dd.watch=false mariadb:10.4.5
+```
+</Tab>
+</Tabs>
+
+### Derive a semver from Docker inspect when image tag is `latest`
+
+Use this when the running container exposes a version label in `docker inspect`.
+
+<Tabs items={["Docker Compose (Inspect Tag Path)", "Docker (Inspect Tag Path)"]}>
+<Tab value="Docker Compose (Inspect Tag Path)">
+
+```yaml
+services:
+  myapp:
+    image: ghcr.io/example/myapp:latest
+    labels:
+      - dd.inspect.tag.path=Config/Labels/org.opencontainers.image.version
+```
+
+</Tab>
+<Tab value="Docker (Inspect Tag Path)">
+```bash
+docker run -d \
+  --name myapp \
+  --label dd.inspect.tag.path=Config/Labels/org.opencontainers.image.version \
+  ghcr.io/example/myapp:latest
+```
+</Tab>
+</Tabs>
+
+### Use an alternative image for update lookups
+
+Use this when your runtime image is pulled from a cache/proxy registry, but you want updates checked against an upstream image.
+
+<Tabs items={["Docker Compose (Lookup Image)", "Docker (Lookup Image)"]}>
+<Tab value="Docker Compose (Lookup Image)">
+
+```yaml
+services:
+  traefik:
+    image: harbor.example.com/dockerhub-proxy/traefik:v3.5.3
+    labels:
+      - dd.watch=true
+      - dd.registry.lookup.image=library/traefik
+```
+
+</Tab>
+<Tab value="Docker (Lookup Image)">
+```bash
+docker run -d \
+  --name traefik \
+  --label 'dd.watch=true' \
+  --label 'dd.registry.lookup.image=library/traefik' \
+  harbor.example.com/dockerhub-proxy/traefik:v3.5.3
+```
+</Tab>
+</Tabs>
+
+### Include only 3 digits semver tags
+
+You can filter (by inclusion or exclusion) which versions can be candidates for update.
+
+For example, you can indicate that you want to watch x.y.z versions only
+<Tabs items={["Docker Compose (Tag Include)", "Docker (Tag Include)"]}>
+<Tab value="Docker Compose (Tag Include)">
+
+```yaml
+services:
+
+  mariadb:
+    image: mariadb:10.4.5
+    labels:
+      - dd.tag.include=^\d+\.\d+\.\d+$$
+```
+
+</Tab>
+<Tab value="Docker (Tag Include)">
+```bash
+docker run -d --name mariadb --label 'dd.tag.include=^\d+\.\d+\.\d+$' mariadb:10.4.5
+```
+</Tab>
+</Tabs>
+
+### Transform the tags before performing the analysis
+
+In certain cases, tag values are so badly formatted that the resolution algorithm cannot find any valid update candidates or, worst, find bad positive matches.
+
+For example, you can encounter such an issue if you need to deal with tags looking like `1.0.0-99-7b368146`, `1.0.0-273-21d7efa6`...  
+By default, drydock will report bad positive matches because of the `sha-1` part at the end of the tag value (`-7b368146`...).  
+That's a shame because `1.0.0-99` and `1.0.0-273` would have been valid semver values (`$major.$minor.$patch-$prerelease`).
+
+You can get around this issue by providing a function that keeps only the part you are interested in.  
+
+How does it work?  
+The transform function must follow the following syntax:
+
+```text
+$valid_regex_with_capturing_groups => $valid_string_with_placeholders
+```
+
+For example:
+
+```bash
+^(\d+\.\d+\.\d+-\d+)-.*$ => $1
+```
+
+The capturing groups are accessible with the syntax `$1`, `$2`, `$3`....
+
+<Callout type="warn">The first capturing group is accessible as `$1`!</Callout>
+
+For example, you can indicate that you want to watch x.y.z versions only
+<Tabs items={["Docker Compose (Tag Transform)", "Docker (Tag Transform)"]}>
+<Tab value="Docker Compose (Tag Transform)">
+
+```yaml
+services:
+
+  searx:
+    image: searx/searx:1.0.0-269-7b368146
+    labels:
+      - dd.tag.include=^\d+\.\d+\.\d+-\d+-.*$$
+      - dd.tag.transform=^(\d+\.\d+\.\d+-\d+)-.*$$ => $$1
+```
+
+</Tab>
+<Tab value="Docker (Tag Transform)">
+```bash
+docker run -d --name searx \
+--label 'dd.tag.include=^\d+\.\d+\.\d+-\d+-.*$' \
+--label 'dd.tag.transform=^(\d+\.\d+\.\d+-\d+)-.*$ => $1' \
+searx/searx:1.0.0-269-7b368146
+```
+</Tab>
+</Tabs>
+
+### Enable digest watching
+
+Additionally to semver tag tracking, you can also track if the digest associated to the local tag has been updated.  
+It can be convenient to monitor image tags known to be overridden (`latest`, `10`, `10.6`...)
+
+<Tabs items={["Docker Compose (Digest Watch)", "Docker (Digest Watch)"]}>
+<Tab value="Docker Compose (Digest Watch)">
+
+```yaml
+services:
+
+  mariadb:
+    image: mariadb:10
+    labels:
+      - dd.tag.include=^\d+$$
+      - dd.watch.digest=true
+```
+
+</Tab>
+<Tab value="Docker (Digest Watch)">
+```bash
+docker run -d --name mariadb --label 'dd.tag.include=^\d+$' --label dd.watch.digest=true mariadb:10
+```
+</Tab>
+</Tabs>
+
+### Associate a link to the container version
+
+You can associate a browsable link to the container version using a templated string.
+For example, if you want to associate a mariadb version to a changelog (e.g. `https://mariadb.com/kb/en/mariadb-1064-changelog`),
+
+you would specify a template like `https://mariadb.com/kb/en/mariadb-${major}${minor}${patch}-changelog`
+
+The available variables are:
+
+- `${original}` the original unparsed tag
+- `${transformed}` the original unparsed tag transformed with the optional `dd.tag.transform` label option
+- `${major}` the major version (if tag value is semver)
+- `${minor}` the minor version (if tag value is semver)
+- `${patch}` the patch version (if tag value is semver)
+- `${prerelease}` the prerelease version (if tag value is semver)
+
+<Tabs items={["Docker Compose (Link Template)", "Docker (Link Template)"]}>
+<Tab value="Docker Compose (Link Template)">
+
+```yaml
+services:
+
+  mariadb:
+    image: mariadb:10.6.4
+    labels:
+      - dd.link.template=https://mariadb.com/kb/en/mariadb-$${major}$${minor}$${patch}-changelog
+```
+
+</Tab>
+<Tab value="Docker (Link Template)">
+```bash
+docker run -d --name mariadb --label 'dd.link.template=https://mariadb.com/kb/en/mariadb-${major}${minor}${patch}-changelog' mariadb:10
+```
+</Tab>
+</Tabs>
+
+### Customize the name and the icon to display
+
+You can customize the name & the icon of a container (displayed in the UI, in Home-Assistant...)
+
+Icons must be prefixed with:
+
+- `fab:` or `fab-` for [Fontawesome brand icons](https://fontawesome.com/) (`fab:github`, `fab-mailchimp`...)
+- `far:` or `far-` for [Fontawesome regular icons](https://fontawesome.com/) (`far:heart`, `far-house`...)
+- `fas:` or `fas-` for [Fontawesome solid icons](https://fontawesome.com/) (`fas:heart`, `fas-house`...)
+- `hl:` or `hl-` for [Homarr Labs icons](https://dashboardicons.com/) (`hl:plex`, `hl-authelia`...)
+- `mdi:` or `mdi-` icons are auto-resolved to Dashboard Icons but are **not recommended**; prefer `hl:` or `fa` prefixes instead
+- `sh:` or `sh-` for [Selfh.st](https://selfh.st/icons/) (`sh:authentik`, `sh-authelia-light`...) (only works for logo available as `png`)
+- `si:` or `si-` for [Simple icons](https://simpleicons.org/) (`si:mysql`, `si-plex`...)
+
+<Callout type="info">If you want to display Fontawesome icons or Simple icons in Home-Assistant, you need to install first the [HASS-fontawesome](https://github.com/thomasloven/hass-fontawesome) and the [HASS-simpleicons](https://github.com/vigonotion/hass-simpleicons) components.</Callout>
+
+<Tabs items={["Docker Compose (Display Name & Icon)", "Docker (Display Name & Icon)"]}>
+<Tab value="Docker Compose (Display Name & Icon)">
+
+```yaml
+services:
+
+  mariadb:
+    image: mariadb:10.6.4
+    labels:
+      - dd.display.name=Maria DB
+      - dd.display.icon=si:mariadb
+```
+
+</Tab>
+<Tab value="Docker (Display Name & Icon)">
+```bash
+docker run -d --name mariadb --label 'dd.display.name=Maria DB' --label 'dd.display.icon=si:mariadb' mariadb:10.6.4
+```
+</Tab>
+</Tabs>
+
+### Assign different triggers to containers
+
+You can assign different triggers and thresholds on a per container basis.
+
+#### Example send a mail notification for all updates but auto-update only if minor or patch
+
+<Tabs items={["Docker Compose (Trigger Include)", "Docker (Trigger Include)"]}>
+<Tab value="Docker Compose (Trigger Include)">
+
+```yaml
+services:
+
+  my_important_service:
+    image: my_important_service:1.0.0
+    labels:
+      - dd.trigger.include=smtp.gmail,dockercompose.local:minor
+```
+
+</Tab>
+<Tab value="Docker (Trigger Include)">
+```bash
+docker run -d --name my_important_service --label 'dd.trigger.include=smtp.gmail,dockercompose.local:minor' my_important_service:1.0.0
+```
+</Tab>
+</Tabs>
+
+<Callout type="info">`dd.trigger.include=smtp.gmail` is a shorthand for `dd.trigger.include=smtp.gmail:all`</Callout>
+<Callout type="info">`dd.trigger.include=update` (or `dd.trigger.exclude=update`) targets all triggers named `update`, for example `docker.update` and `discord.update`</Callout>
+
+<Callout type="info">Threshold `all` means that the trigger will run regardless of the nature of the change</Callout>
+
+<Callout type="info">Threshold `major` means that the trigger will run only if this is a `major`, `minor` or `patch` semver change</Callout>
+
+<Callout type="info">Threshold `minor` means that the trigger will run only if this is a `minor` or `patch` semver change</Callout>
+
+<Callout type="info">Threshold `patch` means that the trigger will run only if this is a `patch` semver change</Callout>
+
+<Callout type="info">Threshold `digest` means that the trigger will run only on digest updates</Callout>
+
+<Callout type="info">Any threshold ending with `-no-digest` excludes digest updates for that threshold</Callout>

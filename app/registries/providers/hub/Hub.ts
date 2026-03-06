@@ -1,5 +1,5 @@
-// @ts-nocheck
 import axios from 'axios';
+import { withAuthorizationHeader } from '../../../security/auth.js';
 import Custom from '../custom/Custom.js';
 import { getTokenAuthConfigurationSchema } from '../shared/tokenAuthConfigurationSchema.js';
 
@@ -37,10 +37,11 @@ class Hub extends Custom {
    */
 
   match(image) {
+    const registryUrl = image?.registry?.url;
     return (
-      !image.registry.url ||
-      image.registry.url === 'docker.io' ||
-      (image.registry.url.endsWith('.docker.io') && /^[a-zA-Z0-9.-]+$/.test(image.registry.url))
+      !registryUrl ||
+      registryUrl === 'docker.io' ||
+      (registryUrl.endsWith('.docker.io') && /^[a-zA-Z0-9.-]+$/.test(registryUrl))
     );
   }
 
@@ -66,12 +67,13 @@ class Hub extends Custom {
    * @returns {Promise<*>}
    */
   async authenticate(image, requestOptions) {
+    const scope = encodeURIComponent(`repository:${image.name}:pull`);
     const axiosConfig = {
       method: 'GET',
-      url: `https://auth.docker.io/token?service=registry.docker.io&scope=repository:${image.name}:pull&grant_type=password`,
+      url: `https://auth.docker.io/token?service=registry.docker.io&scope=${scope}&grant_type=password`,
       headers: {
         Accept: 'application/json',
-      },
+      } as Record<string, string>,
     };
 
     // Add Authorization if any
@@ -81,9 +83,12 @@ class Hub extends Custom {
     }
 
     const response = await axios(axiosConfig);
-    const requestOptionsWithAuth = requestOptions;
-    requestOptionsWithAuth.headers.Authorization = `Bearer ${response.data.token}`;
-    return requestOptionsWithAuth;
+    return withAuthorizationHeader(
+      requestOptions,
+      'Bearer',
+      response.data.token,
+      `Unable to authenticate registry ${this.getId()}: Docker Hub token endpoint response does not contain token`,
+    );
   }
 
   getImageFullName(image, tagOrDigest) {

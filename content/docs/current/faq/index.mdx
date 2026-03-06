@@ -1,0 +1,137 @@
+---
+title: "FAQ"
+description: "Frequently asked questions and common troubleshooting tips for drydock."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+## Core dumped on Raspberry PI
+
+If at startup you face an issue looking like
+
+```text
+#
+# Fatal error in , line 0
+# unreachable code
+#
+#
+#
+#FailureMessage Object: 0x7eace25c
+```
+
+Add the `--security-opt seccomp=unconfined` option to your docker command
+Example
+
+```bash
+docker run ... --security-opt seccomp=unconfined codeswhat/drydock
+```
+
+## Socket permission errors (EACCES)
+
+Drydock runs as a non-root user by default. The entrypoint automatically detects the Docker socket GID and adds the `node` user to the matching group. If the socket is owned by GID 0 (root), the entrypoint refuses to start implicitly as root.
+
+**Recommended fix:** Use a [Docker socket proxy](/docs/configuration/watchers#option-2-socket-proxy-recommended) so drydock never needs direct socket access.
+
+**Break-glass override:** If you cannot use a socket proxy, set **both** environment variables:
+
+```yaml
+environment:
+  - DD_RUN_AS_ROOT=true
+  - DD_ALLOW_INSECURE_ROOT=true
+```
+
+Setting only `DD_RUN_AS_ROOT=true` without `DD_ALLOW_INSECURE_ROOT=true` will fail closed at startup. See [Docker Socket Security](/docs/configuration/watchers#docker-socket-security) for details.
+
+## OIDC callback fails or session lost after login
+
+If your OIDC callback redirects back to the login page or loses the session, the session cookie is likely being blocked by the browser's `SameSite` policy during the cross-origin IdP redirect.
+
+**Fix:** Set `DD_SERVER_COOKIE_SAMESITE=lax` (this is the default since v1.4.0). If you previously set it to `strict`, change it to `lax`:
+
+```yaml
+environment:
+  - DD_SERVER_COOKIE_SAMESITE=lax
+```
+
+Use `strict` only when your IdP is on the same domain as drydock. Use `lax` (default) for all cross-site IdP callback flows. See [Authentication](/docs/configuration/authentications) and [Server configuration](/docs/configuration/server) for details.
+
+## Registry auth failures (401/403)
+
+Token exchange is required for most registries, even for public images. Common causes:
+
+- **GHCR/LSCR:** If configured credentials are rejected with 401 or 403, drydock automatically retries the token request without credentials for public image checks. If you only pull public images, you may not need credentials at all.
+- **Docker Hub:** Anonymous access requires a token exchange with `https://auth.docker.io`. Ensure outbound HTTPS is not blocked.
+- **Quay:** Similar token exchange flow. Check that your token has `repo:read` scope.
+
+<Callout type="warn">Since v1.4.0, auth is **fail-closed**: if credentials are configured and the token exchange fails, drydock does **not** fall back to anonymous. This prevents silent degradation but means bad credentials will cause errors instead of silently downgrading. See [Fail-closed auth enforcement](/docs/configuration/authentications#fail-closed-auth-enforcement).</Callout>
+
+Check the drydock logs at `debug` level for the exact token exchange URL and response status.
+
+## Container shows "update available" but it is wrong (tag family mismatch)
+
+This usually happens when the registry has tags from different naming families (e.g. `5.1.4` and `20.04.1` for Ubuntu, or `18-alpine` vs `18.20.1`). Drydock may pick a higher semver tag from a different family.
+
+Since v1.4.0, **tag family detection** (`dd.tag.family`) defaults to `strict`, which infers the current tag's prefix, suffix, and segment structure and only considers candidates within the same family.
+
+If you still see cross-family false positives, verify that your `dd.tag.include` regex is specific enough. If you intentionally want cross-family updates (e.g. you want to jump from one naming scheme to another), set:
+
+```yaml
+labels:
+  - dd.tag.family=loose
+```
+
+See [Docker Watchers](/docs/configuration/watchers#labels) for the full label reference.
+
+## Log output format (JSON vs pretty)
+
+Drydock log behavior is controlled by environment variables:
+
+| Variable | Values | Default |
+| --- | --- | --- |
+| `DD_LOG_LEVEL` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` | `info` |
+| `DD_LOG_FORMAT` | `text`, `json` | `json` |
+| `DD_LOG_BUFFER_ENABLED` | `true`, `false` | `true` |
+
+The official image defaults to `DD_LOG_FORMAT=json` for structured output suitable for log aggregators like Elasticsearch or Loki. Set `DD_LOG_FORMAT=text` if you prefer pretty logs.
+Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory application log ring buffer used by `/api/log/entries` and the UI log viewer.
+See [Logs](/docs/configuration/logs) for examples.
+
+## Trivy or Cosign not found errors
+
+Since v1.4.0, drydock ships a **single image** that bundles both Trivy and Cosign. If you see "not found" errors, you are likely running a custom or older image that does not include them.
+
+Verify tool availability at runtime via the API:
+
+```bash
+curl http://drydock:3000/api/server/security/runtime
+```
+
+If you build a custom image, ensure Trivy and Cosign are installed in your Dockerfile. See [Security](/docs/configuration/security) for scanning configuration.
+
+## Self-update leaves container stopped
+
+Drydock updates itself using a **helper container pattern**: it renames the old container, creates a new one with the updated image, then spawns a short-lived helper container that stops the old container, starts the new one, and removes the old one on success. If the new container fails to start, the helper restarts the old container as a fallback.
+
+For this to work:
+
+- The Docker socket must be bind-mounted at `/var/run/docker.sock`
+- The Docker trigger must be enabled
+- Drydock must be able to create temporary helper containers
+
+If the container ends up stopped, check `docker logs drydock-old-*` for the helper container output. See [Self-Update](/docs/configuration/self-update) for the full sequence.
+
+## Legacy WUD environment variables or labels
+
+Drydock accepts legacy `WUD_*` environment variables and `wud.*` container labels as fallback, but emits deprecation warnings when they are used. Each legacy fallback increments the `dd_legacy_input_total{source,key}` Prometheus counter.
+
+To convert your configuration in place, use the built-in migration CLI:
+
+```bash
+# Preview changes without writing
+docker exec drydock node dist/index.js config migrate --dry-run
+
+# Apply migration to a specific file
+docker exec drydock node dist/index.js config migrate --file /path/to/compose.yml
+```
+
+See the [Quick start](/docs/quickstart) for the recommended `DD_*` / `dd.*` configuration format.

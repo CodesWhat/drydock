@@ -13,11 +13,11 @@ Feature: Prometheus exposure
   Scenario Outline: Drydock must expose watched containers
     When I GET /metrics
     Then response code should be 200
-    And response body should contain name="<containerName>"
-    And response body should contain image_registry_name="<registry>"
-    And response body should contain image_registry_url="<registryUrl>"
-    And response body should contain image_name="<imageName>"
-    And response body should contain image_tag_value="<tag>"
+    And within 30 seconds response body should contain name="<containerName>"
+    And within 30 seconds response body should contain image_registry_name="<registry>"
+    And within 30 seconds response body should contain image_registry_url="<registryUrl>"
+    And within 30 seconds response body should contain image_name="<imageName>"
+    And within 30 seconds response body should contain image_tag_value="<tag>"
     Examples:
       | containerName            | registry       | registryUrl                                             | imageName                           | tag                |
       # | ecr_sub_sub_test         | ecr.private    | https://229211676173.dkr.ecr.eu-west-1.amazonaws.com/v2 | sub/sub/test                        | 1.0.0              |

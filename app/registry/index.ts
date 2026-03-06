@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import capitalize from 'capitalize';
 import logger from '../log/index.js';
+import * as securityScheduler from '../security/scheduler.js';
 import * as store from '../store/index.js';
 
 const log = logger.child({ component: 'registry' });
@@ -21,6 +22,7 @@ import {
 } from '../configuration/index.js';
 import type Registry from '../registries/Registry.js';
 import type Trigger from '../triggers/providers/Trigger.js';
+import { getErrorMessage } from '../util/error.js';
 import type Watcher from '../watchers/Watcher.js';
 import type Component from './Component.js';
 import type { ComponentConfiguration } from './Component.js';
@@ -35,6 +37,11 @@ import {
   applyTriggerGroupDefaults as applyTriggerGroupDefaultsHelper,
 } from './trigger-shared-config.js';
 
+type SharedTriggerConfigurationInput = Parameters<
+  typeof applySharedTriggerConfigurationByNameHelper
+>[0];
+type TriggerGroupConfigurationInput = Parameters<typeof applyTriggerGroupDefaultsHelper>[0];
+
 export interface RegistryState {
   trigger: { [key: string]: Trigger };
   watcher: { [key: string]: Watcher };
@@ -43,11 +50,11 @@ export interface RegistryState {
   agent: { [key: string]: Agent };
 }
 
-export interface RegistrationOptions {
+interface RegistrationOptions {
   agent?: boolean;
 }
 
-export interface RegisterComponentOptions {
+interface RegisterComponentOptions {
   kind: ComponentKind;
   provider: string;
   name: string;
@@ -55,6 +62,18 @@ export interface RegisterComponentOptions {
   componentPath: string;
   agent?: string;
 }
+
+interface ProviderConfiguration {
+  [configurationName: string]:
+    | ComponentConfiguration
+    | string
+    | number
+    | boolean
+    | null
+    | undefined;
+}
+
+type ProviderConfigurationsByProvider = Record<string, ProviderConfiguration>;
 
 type ComponentKind = keyof RegistryState;
 
@@ -139,7 +158,7 @@ export async function registerComponent(options: RegisterComponentOptions): Prom
  */
 async function registerComponents(
   kind: ComponentKind,
-  configurations: Record<string, any> | null | undefined,
+  configurations: ProviderConfigurationsByProvider | null | undefined,
   path: string,
 ) {
   if (configurations) {
@@ -152,18 +171,162 @@ async function registerComponents(
           kind,
           provider,
           name: configurationName,
-          configuration: providerConfigurations[configurationName],
+          configuration: providerConfigurations[configurationName] as ComponentConfiguration,
           componentPath: path,
         }),
       );
     });
-    return Promise.all(providerPromises);
+    const registrationResults = await Promise.allSettled(providerPromises);
+    const failures = registrationResults.filter(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+    if (failures.length > 0) {
+      const failureMessages = failures.map((failure) => getErrorMessage(failure.reason));
+      throw new Error(failureMessages.join('; '));
+    }
+    return registrationResults
+      .filter(
+        (result): result is PromiseFulfilledResult<Component> => result.status === 'fulfilled',
+      )
+      .map((result) => result.value);
   }
   return [];
 }
 
-function applySharedTriggerConfigurationByName(configurations: Record<string, any>) {
-  return applySharedTriggerConfigurationByNameHelper(configurations);
+function toNamedConfigurationMap(configuration: unknown): ProviderConfiguration {
+  if (configuration && typeof configuration === 'object' && !Array.isArray(configuration)) {
+    return configuration as ProviderConfiguration;
+  }
+  return {};
+}
+
+function mergeProviderConfigurations(
+  defaultConfiguration: ProviderConfiguration,
+  configuredConfiguration: ProviderConfiguration,
+) {
+  // Preserve user-defined component ordering first (for precedence), then fallback defaults.
+  const mergedConfiguration = { ...configuredConfiguration };
+  for (const [configurationName, configuration] of Object.entries(defaultConfiguration)) {
+    if (!(configurationName in mergedConfiguration)) {
+      mergedConfiguration[configurationName] = configuration;
+    }
+  }
+  return mergedConfiguration;
+}
+
+const LEGACY_PUBLIC_TOKEN_AUTH_PROVIDERS = ['hub', 'dhi'] as const;
+const TOKEN_AUTH_CREDENTIAL_KEYS = ['login', 'password', 'token', 'auth'] as const;
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasOwnKey(value: Record<string, unknown>, key: string): boolean {
+  return Object.hasOwn(value, key);
+}
+
+function hasNonEmptyString(value: Record<string, unknown>, key: string): boolean {
+  const candidate = value[key];
+  return typeof candidate === 'string' && candidate.trim().length > 0;
+}
+
+function shouldFallbackLegacyPublicTokenAuthConfiguration(configuration: unknown): boolean {
+  if (!isObjectRecord(configuration)) {
+    return false;
+  }
+
+  const hasAnyCredentialKey = TOKEN_AUTH_CREDENTIAL_KEYS.some((key) =>
+    hasOwnKey(configuration, key),
+  );
+  if (!hasAnyCredentialKey) {
+    return false;
+  }
+
+  const hasLoginKey = hasOwnKey(configuration, 'login');
+  const hasPasswordKey = hasOwnKey(configuration, 'password');
+  const hasTokenKey = hasOwnKey(configuration, 'token');
+  const hasAuthKey = hasOwnKey(configuration, 'auth');
+
+  const validLoginPasswordConfiguration =
+    hasLoginKey &&
+    hasPasswordKey &&
+    !hasTokenKey &&
+    !hasAuthKey &&
+    hasNonEmptyString(configuration, 'login') &&
+    hasNonEmptyString(configuration, 'password');
+
+  const validLoginTokenConfiguration =
+    hasLoginKey &&
+    hasTokenKey &&
+    !hasPasswordKey &&
+    !hasAuthKey &&
+    hasNonEmptyString(configuration, 'login') &&
+    hasNonEmptyString(configuration, 'token');
+
+  const validAuthConfiguration =
+    hasAuthKey &&
+    !hasLoginKey &&
+    !hasPasswordKey &&
+    !hasTokenKey &&
+    hasNonEmptyString(configuration, 'auth');
+
+  return !(
+    validLoginPasswordConfiguration ||
+    validLoginTokenConfiguration ||
+    validAuthConfiguration
+  );
+}
+
+function getConfiguredCredentialKeys(configuration: Record<string, unknown>): string[] {
+  return TOKEN_AUTH_CREDENTIAL_KEYS.filter((key) => hasOwnKey(configuration, key));
+}
+
+function sanitizeLegacyPublicTokenAuthConfigurations(
+  configurations: ProviderConfigurationsByProvider | null | undefined,
+) {
+  if (!configurations || typeof configurations !== 'object' || Array.isArray(configurations)) {
+    return configurations;
+  }
+
+  let sanitizedConfigurations = configurations;
+  for (const provider of LEGACY_PUBLIC_TOKEN_AUTH_PROVIDERS) {
+    const providerConfiguration = sanitizedConfigurations[provider];
+    if (!isObjectRecord(providerConfiguration)) {
+      continue;
+    }
+    if (!shouldFallbackLegacyPublicTokenAuthConfiguration(providerConfiguration.public)) {
+      continue;
+    }
+
+    const publicConfiguration = providerConfiguration.public as Record<string, unknown>;
+    const configuredCredentialKeys = getConfiguredCredentialKeys(publicConfiguration);
+    const configuredCredentialKeysSuffix = ` Configured keys: ${configuredCredentialKeys.join(', ')}.`;
+
+    log.warn(
+      `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials for ${provider}.public.${configuredCredentialKeysSuffix} Falling back to anonymous ${provider}.public registry for backward compatibility. This fallback is deprecated; migrate to LOGIN+PASSWORD, LOGIN+TOKEN, AUTH, or no credentials.`,
+    );
+
+    sanitizedConfigurations = {
+      ...sanitizedConfigurations,
+      [provider]: {
+        ...providerConfiguration,
+        public: '',
+      },
+    };
+  }
+
+  return sanitizedConfigurations;
+}
+
+function applySharedTriggerConfigurationByName(
+  configurations: ProviderConfigurationsByProvider | null | undefined,
+) {
+  if (!configurations) {
+    return configurations;
+  }
+  return applySharedTriggerConfigurationByNameHelper(
+    configurations as SharedTriggerConfigurationInput,
+  ) as ProviderConfigurationsByProvider;
 }
 
 function getKnownProviderSet(providerPath: string): Set<string> {
@@ -175,15 +338,19 @@ function getKnownProviderSet(providerPath: string): Set<string> {
 }
 
 function applyTriggerGroupDefaults(
-  configurations: Record<string, any> | null | undefined,
+  configurations: ProviderConfigurationsByProvider | null | undefined,
   providerPath: string,
-): Record<string, any> | null | undefined {
+) {
   const knownProviderSet = getKnownProviderSet(providerPath);
-  return applyTriggerGroupDefaultsHelper(configurations, knownProviderSet, (groupName, value) => {
-    log.info(
-      `Detected trigger group '${groupName}' with shared configuration: ${JSON.stringify(value)}`,
-    );
-  });
+  return applyTriggerGroupDefaultsHelper(
+    configurations as TriggerGroupConfigurationInput,
+    knownProviderSet,
+    (groupName, value) => {
+      log.info(
+        `Detected trigger group '${groupName}' with shared configuration: ${JSON.stringify(value)}`,
+      );
+    },
+  ) as ProviderConfigurationsByProvider | null | undefined;
 }
 
 /**
@@ -236,7 +403,10 @@ async function registerWatchers(options: RegistrationOptions = {}) {
  * @param options
  */
 async function registerTriggers(options: RegistrationOptions = {}) {
-  const rawConfigurations = getTriggerConfigurations();
+  const rawConfigurations = getTriggerConfigurations() as
+    | ProviderConfigurationsByProvider
+    | null
+    | undefined;
   const configurationsWithGroupDefaults = applyTriggerGroupDefaults(
     rawConfigurations,
     'triggers/providers',
@@ -245,7 +415,7 @@ async function registerTriggers(options: RegistrationOptions = {}) {
   const allowedTriggers = new Set(['docker', 'dockercompose']);
 
   if (options.agent && configurations) {
-    const filteredConfigurations: Record<string, any> = {};
+    const filteredConfigurations: ProviderConfigurationsByProvider = {};
     Object.keys(configurations).forEach((provider) => {
       if (allowedTriggers.has(provider.toLowerCase())) {
         filteredConfigurations[provider] = configurations[provider];
@@ -287,12 +457,32 @@ async function registerRegistries() {
     hub: { public: '' },
     ibmcr: { public: '' },
     lscr: { public: '' },
+    mau: { public: '' },
     ocir: { public: '' },
     quay: { public: '' },
+    trueforge: { public: '' },
   };
+  const configuredRegistries = sanitizeLegacyPublicTokenAuthConfigurations(
+    getRegistryConfigurations() as ProviderConfigurationsByProvider | null | undefined,
+  );
+  const providers = new Set([
+    ...Object.keys(defaultRegistries),
+    ...Object.keys(configuredRegistries || {}),
+  ]);
   const registriesToRegister = {
-    ...defaultRegistries,
-    ...getRegistryConfigurations(),
+    ...Array.from(providers).reduce((mergedRegistries, provider) => {
+      const defaultProviderConfiguration = toNamedConfigurationMap(
+        (defaultRegistries as Record<string, unknown>)[provider],
+      );
+      const configuredProviderConfiguration = toNamedConfigurationMap(
+        (configuredRegistries as Record<string, unknown>)?.[provider],
+      );
+      mergedRegistries[provider] = mergeProviderConfigurations(
+        defaultProviderConfiguration,
+        configuredProviderConfiguration,
+      );
+      return mergedRegistries;
+    }, {} as ProviderConfigurationsByProvider),
   };
 
   try {
@@ -307,9 +497,12 @@ async function registerRegistries() {
  * Register authentications.
  */
 async function registerAuthentications() {
-  const configurations = getAuthenticationConfigurations();
+  const configurations = getAuthenticationConfigurations() as
+    | ProviderConfigurationsByProvider
+    | null
+    | undefined;
   try {
-    if (Object.keys(configurations).length === 0) {
+    if (!configurations || Object.keys(configurations).length === 0) {
       log.info('No authentication configured => Allow anonymous access');
       await registerComponent({
         kind: 'authentication',
@@ -446,6 +639,7 @@ async function deregisterAll() {
 
 async function shutdown() {
   try {
+    securityScheduler.shutdown();
     await deregisterAll();
     await store.save();
     process.exit(0);

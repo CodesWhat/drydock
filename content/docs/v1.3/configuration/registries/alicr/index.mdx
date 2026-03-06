@@ -1,0 +1,82 @@
+---
+title: "ALICR (Alibaba Cloud Container Registry)"
+description: "The alicr registry lets you configure Alibaba Cloud Container Registry integration."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `alicr` registry lets you configure [Alibaba Cloud Container Registry](https://www.alibabacloud.com/product/container-registry) integration.
+
+Drydock automatically detects Alibaba Cloud registries by matching `registry[-intl].*.aliyuncs.com` and `*.cr.aliyuncs.com` hostnames.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_ALICR_{REGISTRY_NAME}_LOGIN` | ⚪ | Alibaba Cloud username | DD_REGISTRY_ALICR_\{REGISTRY_NAME\}_PASSWORD must be defined | |
+| `DD_REGISTRY_ALICR_{REGISTRY_NAME}_PASSWORD` | ⚪ | Registry password | DD_REGISTRY_ALICR_\{REGISTRY_NAME\}_LOGIN must be defined | |
+| `DD_REGISTRY_ALICR_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | DD_REGISTRY_ALICR_\{REGISTRY_NAME\}_LOGIN/PASSWORD must not be defined | |
+
+## Examples
+
+### Configure with login and password
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_ALICR_PRIVATE_LOGIN=user@example.com
+      - DD_REGISTRY_ALICR_PRIVATE_PASSWORD=xxxxx
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_ALICR_PRIVATE_LOGIN=user@example.com" \
+  -e "DD_REGISTRY_ALICR_PRIVATE_PASSWORD=xxxxx" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Configure with base64 auth
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_ALICR_PRIVATE_AUTH=dXNlckBleGFtcGxlLmNvbTp4eHh4eA==
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_ALICR_PRIVATE_AUTH=dXNlckBleGFtcGxlLmNvbTp4eHh4eA==" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+## How to configure registry credentials on Alibaba Cloud
+
+### Go to your Alibaba Cloud Console
+
+Navigate to **Container Registry > Instances > Access Credential**.
+
+### Set a fixed password
+
+Click **Set Password** to create a fixed password for your registry login. Use your Alibaba Cloud account or RAM user as the login and the fixed password as the password.

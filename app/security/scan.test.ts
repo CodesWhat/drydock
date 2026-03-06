@@ -2,6 +2,8 @@ import { vi } from 'vitest';
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
 
+const mockHasValidCommandPath = vi.hoisted(() => vi.fn());
+
 const childProcessControl = vi.hoisted(() => ({
   execFileImpl: null as null | ((...args: unknown[]) => unknown),
 }));
@@ -20,6 +22,10 @@ vi.mock('../log/index.js', () => ({
   default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
 }));
 
+vi.mock('./runtime.js', () => ({
+  hasValidCommandPath: (...args: unknown[]) => mockHasValidCommandPath(...args),
+}));
+
 vi.mock('node:child_process', async () => {
   const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
   return {
@@ -36,8 +42,14 @@ vi.mock('node:child_process', async () => {
 import {
   _resetTrivyQueueForTesting,
   _setTrivyQueueRejectedForTesting,
+  clearDigestScanCache,
+  DIGEST_SCAN_CACHE_MAX_ENTRIES,
   generateImageSbom,
+  getDigestScanCacheSize,
   scanImageForVulnerabilities,
+  scanImageWithDedup,
+  toPositiveInteger,
+  updateDigestScanCache,
   verifyImageSignature,
 } from './scan.js';
 
@@ -72,7 +84,13 @@ beforeEach(() => {
   vi.resetAllMocks();
   childProcessControl.execFileImpl = null;
   _resetTrivyQueueForTesting();
+  clearDigestScanCache();
+  mockHasValidCommandPath.mockReturnValue(true);
   mockGetSecurityConfiguration.mockReturnValue(createEnabledConfiguration());
+});
+
+test('toPositiveInteger should return parsed positive values', () => {
+  expect(toPositiveInteger('42', 500)).toBe(42);
 });
 
 test('scanImageForVulnerabilities should return error result when scanner disabled', async () => {
@@ -675,6 +693,18 @@ test('parseTrivyOutput should handle missing VulnerabilityID', async () => {
   expect(result.vulnerabilities[0].id).toBe('unknown-vulnerability');
 });
 
+test('scanImageForVulnerabilities should reject oversized trivy output before parsing', async () => {
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    callback(null, 'x'.repeat(21 * 1024 * 1024), '');
+    return { exitCode: 0 };
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('too large to parse');
+});
+
 test('runCommand should use process.env when no env option provided', async () => {
   const execFileMock = vi.fn((_command, _args, options, callback) => {
     callback(null, JSON.stringify({ Results: [] }), '');
@@ -758,6 +788,45 @@ test('runTrivyVulnerabilityCommand should fallback to trivy when command is empt
   expect(execFileMock.mock.calls[0][0]).toBe('trivy');
 });
 
+test('runTrivyVulnerabilityCommand should fallback to trivy when command is whitespace', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: { ...createEnabledConfiguration().trivy, command: '   ' },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, JSON.stringify({ Results: [] }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(execFileMock.mock.calls[0][0]).toBe('trivy');
+});
+
+test('scanImageForVulnerabilities should reject invalid trivy command path before execution', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: {
+      ...createEnabledConfiguration().trivy,
+      command: '../bin/trivy',
+    },
+  });
+  mockHasValidCommandPath.mockReturnValue(false);
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, JSON.stringify({ Results: [] }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(mockHasValidCommandPath).toHaveBeenCalledWith('../bin/trivy');
+  expect(execFileMock).not.toHaveBeenCalled();
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('invalid');
+});
+
 test('runTrivySbomCommand should fallback to trivy when command is empty', async () => {
   mockGetSecurityConfiguration.mockReturnValue({
     ...createEnabledConfiguration(),
@@ -772,6 +841,45 @@ test('runTrivySbomCommand should fallback to trivy when command is empty', async
   await generateImageSbom({ image: 'img:test' });
 
   expect(execFileMock.mock.calls[0][0]).toBe('trivy');
+});
+
+test('runTrivySbomCommand should fallback to trivy when command is whitespace', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: { ...createEnabledConfiguration().trivy, command: '   ' },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, JSON.stringify({ spdxVersion: 'SPDX-2.3' }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  await generateImageSbom({ image: 'img:test' });
+
+  expect(execFileMock.mock.calls[0][0]).toBe('trivy');
+});
+
+test('generateImageSbom should reject invalid trivy command path before execution', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: {
+      ...createEnabledConfiguration().trivy,
+      command: '../bin/trivy',
+    },
+  });
+  mockHasValidCommandPath.mockReturnValue(false);
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, JSON.stringify({ spdxVersion: 'SPDX-2.3' }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const result = await generateImageSbom({ image: 'img:test' });
+
+  expect(mockHasValidCommandPath).toHaveBeenCalledWith('../bin/trivy');
+  expect(execFileMock).not.toHaveBeenCalled();
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('invalid');
 });
 
 test('runCosignVerifyCommand should fallback to cosign when command is empty', async () => {
@@ -791,6 +899,51 @@ test('runCosignVerifyCommand should fallback to cosign when command is empty', a
   await verifyImageSignature({ image: 'img:test' });
 
   expect(execFileMock.mock.calls[0][0]).toBe('cosign');
+});
+
+test('runCosignVerifyCommand should fallback to cosign when command is whitespace', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    signature: {
+      ...createEnabledConfiguration().signature,
+      cosign: { ...createEnabledConfiguration().signature.cosign, command: '   ' },
+    },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, '[{"sig":1}]', '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  await verifyImageSignature({ image: 'img:test' });
+
+  expect(execFileMock.mock.calls[0][0]).toBe('cosign');
+});
+
+test('verifyImageSignature should reject invalid cosign command path before execution', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    signature: {
+      ...createEnabledConfiguration().signature,
+      cosign: {
+        ...createEnabledConfiguration().signature.cosign,
+        command: '../bin/cosign',
+      },
+    },
+  });
+  mockHasValidCommandPath.mockReturnValue(false);
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, '[{"sig":1}]', '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const result = await verifyImageSignature({ image: 'img:test' });
+
+  expect(mockHasValidCommandPath).toHaveBeenCalledWith('../bin/cosign');
+  expect(execFileMock).not.toHaveBeenCalled();
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('invalid');
 });
 
 test('parseCosignSignaturesCount should return 1 for non-array JSON object', async () => {
@@ -883,4 +1036,229 @@ test('parseCosignSignaturesCount should return 0 for JSON primitive (non-object,
   // verifyImageSignature clamps to min 1 when cosign succeeds
   expect(result.signatures).toBe(1);
   expect(result.status).toBe('verified');
+});
+
+// --- scanImageWithDedup tests ---
+
+function createMockScanResult(image = 'registry.example.com/app:1.2.3') {
+  return {
+    scanner: 'trivy' as const,
+    image,
+    scannedAt: new Date().toISOString(),
+    status: 'passed' as const,
+    blockSeverities: ['CRITICAL', 'HIGH'] as Array<'CRITICAL' | 'HIGH'>,
+    blockingCount: 0,
+    summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+    vulnerabilities: [],
+  };
+}
+
+describe('scanImageWithDedup', () => {
+  test('should run a fresh scan on cache miss when trivyDbUpdatedAt is provided', async () => {
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, JSON.stringify({ Results: [] }), '');
+      return { exitCode: 0 };
+    };
+
+    const { fromCache } = await scanImageWithDedup(
+      {
+        image: 'registry.example.com/app:1.2.3',
+        digest: 'sha256:abc123',
+        trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+      },
+      3_600_000,
+    );
+
+    expect(fromCache).toBe(false);
+  });
+
+  test('should run a fresh scan on cache miss', async () => {
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, JSON.stringify({ Results: [] }), '');
+      return { exitCode: 0 };
+    };
+
+    const { scanResult, fromCache } = await scanImageWithDedup(
+      { image: 'registry.example.com/app:1.2.3', digest: 'sha256:abc123' },
+      3_600_000,
+    );
+
+    expect(fromCache).toBe(false);
+    expect(scanResult.status).toBe('passed');
+    expect(scanResult.image).toBe('registry.example.com/app:1.2.3');
+  });
+
+  test('should return cached result when DB is unchanged and interval not expired', async () => {
+    const cachedResult = createMockScanResult();
+    updateDigestScanCache('sha256:abc123', cachedResult, '2025-01-01T00:00:00Z');
+
+    const execFileMock = vi.fn();
+    childProcessControl.execFileImpl = execFileMock;
+
+    const { scanResult, fromCache } = await scanImageWithDedup(
+      {
+        image: 'registry.example.com/app:1.2.3',
+        digest: 'sha256:abc123',
+        trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+      },
+      3_600_000,
+    );
+
+    expect(fromCache).toBe(true);
+    expect(scanResult).toBe(cachedResult);
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  test('should run fresh scan when DB has been updated since cache', async () => {
+    const cachedResult = createMockScanResult();
+    updateDigestScanCache('sha256:abc123', cachedResult, '2025-01-01T00:00:00Z');
+
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, JSON.stringify({ Results: [] }), '');
+      return { exitCode: 0 };
+    };
+
+    const { scanResult, fromCache } = await scanImageWithDedup(
+      {
+        image: 'registry.example.com/app:1.2.3',
+        digest: 'sha256:abc123',
+        trivyDbUpdatedAt: '2025-02-01T00:00:00Z',
+      },
+      3_600_000,
+    );
+
+    expect(fromCache).toBe(false);
+    expect(scanResult.status).toBe('passed');
+  });
+
+  test('should run fresh scan when trivyDbUpdatedAt is not provided', async () => {
+    const cachedResult = createMockScanResult();
+    updateDigestScanCache('sha256:abc123', cachedResult, '2025-01-01T00:00:00Z');
+
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, JSON.stringify({ Results: [] }), '');
+      return { exitCode: 0 };
+    };
+
+    const { scanResult, fromCache } = await scanImageWithDedup(
+      { image: 'registry.example.com/app:1.2.3', digest: 'sha256:abc123' },
+      3_600_000,
+    );
+
+    expect(fromCache).toBe(false);
+    expect(scanResult.status).toBe('passed');
+  });
+
+  test('should run fresh scan when cache entry has expired', async () => {
+    const cachedResult = createMockScanResult();
+    updateDigestScanCache('sha256:abc123', cachedResult, '2025-01-01T00:00:00Z');
+
+    // Use a tiny interval so the cache entry appears expired immediately
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, JSON.stringify({ Results: [] }), '');
+      return { exitCode: 0 };
+    };
+
+    const { fromCache } = await scanImageWithDedup(
+      {
+        image: 'registry.example.com/app:1.2.3',
+        digest: 'sha256:abc123',
+        trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+      },
+      0,
+    );
+
+    expect(fromCache).toBe(false);
+  });
+
+  test('should populate cache after a fresh scan', async () => {
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, JSON.stringify({ Results: [] }), '');
+      return { exitCode: 0 };
+    };
+
+    expect(getDigestScanCacheSize()).toBe(0);
+
+    await scanImageWithDedup(
+      {
+        image: 'registry.example.com/app:1.2.3',
+        digest: 'sha256:abc123',
+        trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+      },
+      3_600_000,
+    );
+
+    expect(getDigestScanCacheSize()).toBe(1);
+  });
+});
+
+describe('clearDigestScanCache', () => {
+  test('should clear all entries from the cache', () => {
+    const mockResult = createMockScanResult();
+    updateDigestScanCache('sha256:aaa', mockResult, '2025-01-01T00:00:00Z');
+    updateDigestScanCache('sha256:bbb', mockResult, '2025-01-01T00:00:00Z');
+
+    expect(getDigestScanCacheSize()).toBe(2);
+
+    clearDigestScanCache();
+
+    expect(getDigestScanCacheSize()).toBe(0);
+  });
+});
+
+describe('updateDigestScanCache', () => {
+  test('should evict oldest entries when cache size cap is exceeded', async () => {
+    const cachedResult = createMockScanResult('registry.example.com/evict:test');
+    for (let index = 0; index <= DIGEST_SCAN_CACHE_MAX_ENTRIES; index += 1) {
+      updateDigestScanCache(`sha256:${index}`, cachedResult, '2025-03-01T00:00:00Z');
+    }
+
+    expect(getDigestScanCacheSize()).toBe(DIGEST_SCAN_CACHE_MAX_ENTRIES);
+
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, JSON.stringify({ Results: [] }), '');
+      return { exitCode: 0 };
+    };
+
+    const oldestDigestResult = await scanImageWithDedup(
+      {
+        image: 'registry.example.com/evict:test',
+        digest: 'sha256:0',
+        trivyDbUpdatedAt: '2025-03-01T00:00:00Z',
+      },
+      3_600_000,
+    );
+    const newestDigestResult = await scanImageWithDedup(
+      {
+        image: 'registry.example.com/evict:test',
+        digest: `sha256:${DIGEST_SCAN_CACHE_MAX_ENTRIES}`,
+        trivyDbUpdatedAt: '2025-03-01T00:00:00Z',
+      },
+      3_600_000,
+    );
+
+    expect(oldestDigestResult.fromCache).toBe(false);
+    expect(newestDigestResult.fromCache).toBe(true);
+  });
+
+  test('should manually populate cache so scanImageWithDedup uses it', async () => {
+    const cachedResult = createMockScanResult('manual-image:latest');
+    updateDigestScanCache('sha256:manual', cachedResult, '2025-03-01T00:00:00Z');
+
+    const execFileMock = vi.fn();
+    childProcessControl.execFileImpl = execFileMock;
+
+    const { scanResult, fromCache } = await scanImageWithDedup(
+      {
+        image: 'manual-image:latest',
+        digest: 'sha256:manual',
+        trivyDbUpdatedAt: '2025-03-01T00:00:00Z',
+      },
+      3_600_000,
+    );
+
+    expect(fromCache).toBe(true);
+    expect(scanResult).toBe(cachedResult);
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
 });

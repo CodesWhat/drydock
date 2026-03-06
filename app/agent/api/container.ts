@@ -3,6 +3,21 @@ import { getServerConfiguration } from '../../configuration/index.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
 
+type AgentDockerWatcher = {
+  dockerApi: {
+    getContainer: (name: string) => {
+      logs: (options: {
+        stdout: boolean;
+        stderr: boolean;
+        tail: number;
+        since: number;
+        timestamps: boolean;
+        follow: boolean;
+      }) => Promise<Buffer | string>;
+    };
+  };
+};
+
 /**
  * Get Containers (Handshake).
  */
@@ -35,7 +50,7 @@ function demuxDockerStream(buffer: Buffer | string): string {
  * @param res
  */
 export async function getContainerLogs(req: Request, res: Response) {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const container = storeContainer.getContainer(id);
   if (!container) {
     res.sendStatus(404);
@@ -47,7 +62,7 @@ export async function getContainerLogs(req: Request, res: Response) {
   const timestamps = req.query.timestamps !== 'false';
 
   const watcherId = `docker.${container.watcher}`;
-  const watcher = (registry.getState() as any).watcher[watcherId];
+  const watcher = registry.getState().watcher[watcherId] as AgentDockerWatcher | undefined;
   if (!watcher) {
     res.status(500).json({
       error: `No watcher found for container ${id}`,
@@ -76,7 +91,7 @@ export async function getContainerLogs(req: Request, res: Response) {
 export function deleteContainer(req: Request, res: Response) {
   const serverConfiguration = getServerConfiguration();
   if (serverConfiguration.feature.delete) {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const container = storeContainer.getContainer(id);
     if (container) {
       storeContainer.deleteContainer(id);

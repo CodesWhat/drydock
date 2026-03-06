@@ -1,10 +1,17 @@
-// @ts-nocheck
-const { mockRouter } = vi.hoisted(() => ({
-  mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
-}));
+const { mockRouter, mockLokiStore, mockExpressJson, mockJsonMiddleware } = vi.hoisted(() => {
+  const jsonMiddleware = vi.fn();
+  return {
+    mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
+    mockLokiStore: vi.fn(),
+    mockJsonMiddleware: jsonMiddleware,
+    mockExpressJson: vi.fn(() => jsonMiddleware),
+  };
+});
+const mockGetServerConfiguration = vi.hoisted(() => vi.fn(() => ({ cookie: {} })));
+const mockRecordAuditEvent = vi.hoisted(() => vi.fn());
 
 vi.mock('express', () => ({
-  default: { Router: vi.fn(() => mockRouter) },
+  default: { Router: vi.fn(() => mockRouter), json: mockExpressJson },
 }));
 
 vi.mock('express-session', () => ({
@@ -12,7 +19,7 @@ vi.mock('express-session', () => ({
 }));
 
 vi.mock('connect-loki', () => ({
-  default: vi.fn(() => vi.fn()),
+  default: vi.fn(() => mockLokiStore),
 }));
 
 vi.mock('passport', () => ({
@@ -30,10 +37,6 @@ vi.mock('uuid', () => ({
   v5: vi.fn(() => 'mock-uuid-v5'),
 }));
 
-vi.mock('getmac', () => ({
-  default: vi.fn(() => '00:00:00:00:00:00'),
-}));
-
 vi.mock('../store', () => ({
   getConfiguration: vi.fn(() => ({
     path: '/test/store',
@@ -47,21 +50,26 @@ vi.mock('../registry', () => ({
   })),
 }));
 
-vi.mock('../log', () => ({ default: { warn: vi.fn(), info: vi.fn() } }));
+vi.mock('../log', () => ({ default: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
 
 vi.mock('../configuration', () => ({
   getVersion: vi.fn(() => '1.0.0'),
+  getServerConfiguration: mockGetServerConfiguration,
+}));
+vi.mock('./audit-events.js', () => ({
+  recordAuditEvent: mockRecordAuditEvent,
 }));
 
 import session from 'express-session';
-import log from '../log/index.js';
 import passport from 'passport';
+import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as auth from './auth.js';
 
 function createApp() {
   return {
     use: vi.fn(),
+    get: vi.fn(),
     set: vi.fn(),
   };
 }
@@ -71,6 +79,7 @@ function createResponse() {
     status: vi.fn().mockReturnThis(),
     json: vi.fn(),
     sendStatus: vi.fn(),
+    end: vi.fn(),
   };
 }
 
@@ -91,7 +100,31 @@ function getRouteHandler(method, path) {
   });
   auth.init(app);
   const call = mockRouter[method].mock.calls.find((c) => c[0] === path);
-  return call ? call[1] : undefined;
+  if (!call) return undefined;
+  // Return the last handler in the chain (route-level middleware precedes it)
+  return call[call.length - 1];
+}
+
+function getRouteMiddleware(method, path) {
+  const app = createApp();
+  registry.getState.mockReturnValue({
+    authentication: {
+      'oauth.provider': {
+        getId: vi.fn(() => 'oauth.provider'),
+        getStrategy: vi.fn(() => ({})),
+        getStrategyDescription: vi.fn(() => ({
+          type: 'oauth',
+          name: 'provider',
+          logoutUrl: 'https://logout.example.com',
+        })),
+      },
+    },
+  });
+  auth.init(app);
+  const call = mockRouter[method].mock.calls.find((c) => c[0] === path);
+  if (!call) return [];
+  // Return all middleware handlers (everything between route path and final handler)
+  return call.slice(1, -1);
 }
 
 describe('Auth Router', () => {
@@ -99,6 +132,7 @@ describe('Auth Router', () => {
     vi.clearAllMocks();
     // Reset the strategy IDs array between tests
     auth.getAllIds().length = 0;
+    mockGetServerConfiguration.mockReturnValue({ cookie: {} });
   });
 
   describe('getAllIds', () => {
@@ -132,6 +166,141 @@ describe('Auth Router', () => {
       expect(passport.authenticate).toHaveBeenCalledWith(auth.getAllIds(), { session: true });
       expect(authMiddleware).toHaveBeenCalledWith(req, res, next);
     });
+
+    test('should not special-case POST /login (handled by route-level middleware)', () => {
+      const authMiddleware = vi.fn();
+      passport.authenticate.mockReturnValue(authMiddleware);
+
+      const req = {
+        isAuthenticated: vi.fn(() => false),
+        method: 'POST',
+        path: '/login',
+      };
+      const res = {};
+      const next = vi.fn();
+
+      auth.requireAuthentication(req, res, next);
+
+      expect(passport.authenticate).toHaveBeenCalledWith(auth.getAllIds(), { session: true });
+      expect(authMiddleware).toHaveBeenCalledWith(req, res, next);
+    });
+  });
+
+  describe('authenticateLogin (route-level middleware)', () => {
+    function getLoginMiddleware() {
+      return getRouteMiddleware('post', '/login')[0];
+    }
+
+    test('should record failed login audit when credentials are invalid', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {};
+      const res = createResponse();
+      const next = vi.fn();
+
+      authenticateLoginFn(req, res, next);
+
+      expect(passport.authenticate).toHaveBeenCalledWith(
+        auth.getAllIds(),
+        { session: false },
+        expect.any(Function),
+      );
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auth-login',
+          status: 'error',
+        }),
+      );
+      expect(res.sendStatus).toHaveBeenCalledWith(401);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    test('should call next with login authentication errors', () => {
+      const error = new Error('auth blew up');
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(error, false, undefined, 500);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {};
+      const res = createResponse();
+      const next = vi.fn();
+
+      authenticateLoginFn(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(error);
+      expect(res.sendStatus).not.toHaveBeenCalled();
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+    });
+
+    test('should continue to login handler when credentials are valid', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, { username: 'john' }, undefined, 200);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {
+        login: vi.fn((user, options, done) => {
+          req.user = user;
+          done();
+        }),
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      authenticateLoginFn(req, res, next);
+
+      expect(req.login).toHaveBeenCalledWith(
+        { username: 'john' },
+        { session: false },
+        expect.any(Function),
+      );
+      expect(req.user).toEqual({ username: 'john' });
+      expect(next).toHaveBeenCalled();
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+      expect(res.sendStatus).not.toHaveBeenCalled();
+    });
+
+    test('should continue when credentials are valid and req.login is unavailable', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, { username: 'john' }, undefined, 200);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {};
+      const res = createResponse();
+      const next = vi.fn();
+
+      authenticateLoginFn(req, res, next);
+
+      expect(req.user).toEqual({ username: 'john' });
+      expect(next).toHaveBeenCalled();
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+      expect(res.sendStatus).not.toHaveBeenCalled();
+    });
+
+    test('should call next with req.login errors', () => {
+      const loginError = new Error('login callback failed');
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, { username: 'john' }, undefined, 200);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {
+        login: vi.fn((_user, _options, done) => done(loginError)),
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      authenticateLoginFn(req, res, next);
+
+      expect(next).toHaveBeenCalledWith(loginError);
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+      expect(res.sendStatus).not.toHaveBeenCalled();
+    });
   });
 
   describe('init', () => {
@@ -146,7 +315,7 @@ describe('Auth Router', () => {
       expect(passport.deserializeUser).toHaveBeenCalled();
     });
 
-    test('should configure session cookie with sameSite strict', () => {
+    test('should default session cookie sameSite to lax for OIDC compatibility', () => {
       const app = createApp();
       auth.init(app);
 
@@ -154,8 +323,78 @@ describe('Auth Router', () => {
       expect(sessionConfig.cookie).toEqual(
         expect.objectContaining({
           httpOnly: true,
+          sameSite: 'lax',
+          secure: 'auto',
+        }),
+      );
+    });
+
+    test('should allow overriding session cookie sameSite to strict', () => {
+      mockGetServerConfiguration.mockReturnValue({ cookie: { samesite: 'strict' } });
+      const app = createApp();
+      auth.init(app);
+
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie).toEqual(
+        expect.objectContaining({
           sameSite: 'strict',
           secure: 'auto',
+        }),
+      );
+    });
+
+    test('should force secure cookies when sameSite is none', () => {
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: true },
+      });
+      const app = createApp();
+      auth.init(app);
+
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie).toEqual(
+        expect.objectContaining({
+          sameSite: 'none',
+          secure: true,
+        }),
+      );
+      expect(log.warn).toHaveBeenCalledWith(
+        'DD_SERVER_COOKIE_SAMESITE=none requires HTTPS; forcing secure session cookie',
+      );
+    });
+
+    test('should throw when sameSite is none without HTTPS configuration', () => {
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: false },
+        trustproxy: false,
+      });
+      const app = createApp();
+
+      expect(() => auth.init(app)).toThrow(
+        'DD_SERVER_COOKIE_SAMESITE=none requires HTTPS. Enable DD_SERVER_TLS_ENABLED=true or configure DD_SERVER_TRUSTPROXY for HTTPS reverse proxies.',
+      );
+      expect(session).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['enabled boolean', true],
+      ['positive hop count', 1],
+      ['truthy string', 'true'],
+    ])('should allow sameSite none when trustproxy is an %s value', (_label, trustproxy) => {
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: false },
+        trustproxy,
+      });
+      const app = createApp();
+
+      expect(() => auth.init(app)).not.toThrow();
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie).toEqual(
+        expect.objectContaining({
+          sameSite: 'none',
+          secure: true,
         }),
       );
     });
@@ -197,11 +436,70 @@ describe('Auth Router', () => {
       auth.init(app);
     });
 
+    test('should stringify non-Error strategy registration failures', () => {
+      const mockAuth = {
+        getId: vi.fn(() => 'bad.strategy.string'),
+        getStrategy: vi.fn(() => {
+          throw 'strategy failure as string';
+        }),
+      };
+      registry.getState.mockReturnValue({
+        authentication: { 'bad.strategy.string': mockAuth },
+      });
+
+      const app = createApp();
+      auth.init(app);
+
+      expect(log.warn).toHaveBeenCalledWith(
+        'Unable to apply authentication bad.strategy.string (strategy failure as string)',
+      );
+    });
+
     test('should mount auth routes on the app', () => {
       const app = createApp();
       auth.init(app);
 
       expect(app.use).toHaveBeenCalledWith('/auth', expect.anything());
+    });
+
+    test('should register a mutation-only json parser on the auth router', () => {
+      const app = createApp();
+      auth.init(app);
+
+      expect(mockExpressJson).toHaveBeenCalledTimes(1);
+
+      const authMiddlewareIndex = mockRouter.use.mock.calls.findIndex(
+        (c) => c[0] === auth.requireAuthentication,
+      );
+      const mutationParserIndex = mockRouter.use.mock.calls.findIndex(
+        (c, index) =>
+          index > 0 && typeof c[0] === 'function' && c[0] !== auth.requireAuthentication,
+      );
+
+      expect(authMiddlewareIndex).toBeGreaterThan(0);
+      expect(mutationParserIndex).toBeGreaterThan(0);
+      expect(mutationParserIndex).toBeLessThan(authMiddlewareIndex);
+
+      const mutationParser = mockRouter.use.mock.calls[mutationParserIndex][0];
+      const next = vi.fn();
+      mockJsonMiddleware.mockClear();
+
+      mutationParser({ method: 'GET' }, {}, next);
+      expect(mockJsonMiddleware).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalledTimes(1);
+
+      mutationParser({ method: 'POST' }, {}, next);
+      mutationParser({ method: 'PUT' }, {}, next);
+      mutationParser({ method: 'PATCH' }, {}, next);
+      expect(mockJsonMiddleware).toHaveBeenCalledTimes(3);
+    });
+
+    test('should register legacy public auth methods endpoint for compatibility with rate limiting', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const authLimiter = mockRouter.use.mock.calls[0][0];
+      expect(app.get).toHaveBeenCalledWith('/api/auth/methods', authLimiter, expect.any(Function));
     });
 
     test('should configure serialize and deserialize user', () => {
@@ -221,7 +519,49 @@ describe('Auth Router', () => {
       expect(done2).toHaveBeenCalledWith(null, { username: 'test' });
     });
 
-    test('should register /strategies, /login, /logout, /user routes', () => {
+    test('should reject deserialized users when payload is not a JSON string', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const deserializeCb = passport.deserializeUser.mock.calls[0][0];
+      const done = vi.fn();
+      deserializeCb({ username: 'test' }, done);
+
+      expect(done).toHaveBeenCalledWith(null, false);
+      expect(log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Serialized user must be a JSON string'),
+      );
+    });
+
+    test('should reject deserialized users when payload JSON is malformed', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const deserializeCb = passport.deserializeUser.mock.calls[0][0];
+      const done = vi.fn();
+      deserializeCb('{"username"', done);
+
+      expect(done).toHaveBeenCalledWith(null, false);
+      expect(log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Serialized user JSON is malformed'),
+      );
+    });
+
+    test('should reject deserialized users with unexpected fields', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const deserializeCb = passport.deserializeUser.mock.calls[0][0];
+      const done = vi.fn();
+      deserializeCb(JSON.stringify({ username: 'test', role: 'admin' }), done);
+
+      expect(done).toHaveBeenCalledWith(null, false);
+      expect(log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to deserialize session user'),
+      );
+    });
+
+    test('should register /strategies, /remember, /login, /logout, /user routes', () => {
       const app = createApp();
       registry.getState.mockReturnValue({ authentication: {} });
       auth.init(app);
@@ -231,8 +571,60 @@ describe('Auth Router', () => {
 
       expect(getRoutes).toContain('/strategies');
       expect(getRoutes).toContain('/user');
+      expect(postRoutes).toContain('/remember');
       expect(postRoutes).toContain('/login');
       expect(postRoutes).toContain('/logout');
+    });
+
+    test('should register /login before authentication middleware with authenticateLogin', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const loginRouteIndex = mockRouter.post.mock.calls.findIndex((c) => c[0] === '/login');
+      const loginRouteOrder = mockRouter.post.mock.invocationCallOrder[loginRouteIndex];
+
+      const authMiddlewareIndex = mockRouter.use.mock.calls.findIndex(
+        (c) => c[0] === auth.requireAuthentication,
+      );
+      const authMiddlewareOrder = mockRouter.use.mock.invocationCallOrder[authMiddlewareIndex];
+
+      expect(loginRouteIndex).toBeGreaterThanOrEqual(0);
+      expect(authMiddlewareIndex).toBeGreaterThanOrEqual(0);
+      expect(loginRouteOrder).toBeLessThan(authMiddlewareOrder);
+
+      // Verify authenticateLogin is registered as route-level middleware
+      const loginCall = mockRouter.post.mock.calls[loginRouteIndex];
+      expect(loginCall).toHaveLength(3); // path, authenticateLogin, login
+      expect(typeof loginCall[1]).toBe('function'); // authenticateLogin middleware
+      expect(typeof loginCall[2]).toBe('function'); // login handler
+    });
+
+    test('should register /remember after authentication middleware', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const rememberRouteIndex = mockRouter.post.mock.calls.findIndex((c) => c[0] === '/remember');
+      const rememberRouteOrder = mockRouter.post.mock.invocationCallOrder[rememberRouteIndex];
+
+      const authMiddlewareIndex = mockRouter.use.mock.calls.findIndex(
+        (c) => c[0] === auth.requireAuthentication,
+      );
+      const authMiddlewareOrder = mockRouter.use.mock.invocationCallOrder[authMiddlewareIndex];
+
+      expect(rememberRouteIndex).toBeGreaterThanOrEqual(0);
+      expect(authMiddlewareIndex).toBeGreaterThanOrEqual(0);
+      expect(rememberRouteOrder).toBeGreaterThan(authMiddlewareOrder);
+    });
+
+    test('should configure store ttl for remember-me duration', () => {
+      const app = createApp();
+      auth.init(app);
+
+      expect(mockLokiStore).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ttl: 3600 * 24 * 30,
+        }),
+      );
     });
 
     test('should use DD_SESSION_SECRET when environment variable is set', () => {
@@ -257,6 +649,38 @@ describe('Auth Router', () => {
       );
       expect(log.info).toHaveBeenCalledWith(
         'Using session secret from DD_SESSION_SECRET environment variable',
+      );
+    });
+
+    test('should log an error when DD_SESSION_SECRET is missing in production', async () => {
+      const previousSessionSecret = process.env.DD_SESSION_SECRET;
+      const previousNodeEnv = process.env.NODE_ENV;
+      delete process.env.DD_SESSION_SECRET;
+      process.env.NODE_ENV = 'production';
+
+      vi.resetModules();
+      const freshAuth = await import('./auth.js');
+      const freshLog = (await import('../log/index.js')).default;
+      const app = createApp();
+
+      try {
+        freshAuth.init(app);
+      } finally {
+        if (previousSessionSecret === undefined) {
+          delete process.env.DD_SESSION_SECRET;
+        } else {
+          process.env.DD_SESSION_SECRET = previousSessionSecret;
+        }
+
+        if (previousNodeEnv === undefined) {
+          delete process.env.NODE_ENV;
+        } else {
+          process.env.NODE_ENV = previousNodeEnv;
+        }
+      }
+
+      expect(freshLog.error).toHaveBeenCalledWith(
+        'DD_SESSION_SECRET is not set; using an ephemeral session secret. Set DD_SESSION_SECRET to a strong persistent value.',
       );
     });
   });
@@ -311,6 +735,48 @@ describe('Auth Router', () => {
       ]);
     });
 
+    test('getStrategies should deduplicate with near-linear type lookups', () => {
+      let typeReads = 0;
+      const authentication = Object.fromEntries(
+        Array.from({ length: 40 }, (_, index) => {
+          const id = `oauth.${index}`;
+          return [
+            id,
+            {
+              getId: vi.fn(() => id),
+              getStrategy: vi.fn(() => ({})),
+              getStrategyDescription: vi.fn(() => {
+                const strategy = {};
+                Object.defineProperty(strategy, 'type', {
+                  enumerable: true,
+                  get: () => {
+                    typeReads += 1;
+                    return 'oauth';
+                  },
+                });
+                Object.defineProperty(strategy, 'name', {
+                  enumerable: true,
+                  value: `provider-${String(index).padStart(2, '0')}`,
+                });
+                return strategy;
+              }),
+            },
+          ];
+        }),
+      );
+      registry.getState.mockReturnValue({ authentication });
+
+      const app = createApp();
+      auth.init(app);
+      const strategiesCall = mockRouter.get.mock.calls.find((c) => c[0] === '/strategies');
+      const handler = strategiesCall[1];
+      const res = createResponse();
+      handler({}, res);
+
+      expect(res.json).toHaveBeenCalled();
+      expect(typeReads).toBeLessThanOrEqual(80);
+    });
+
     test('getUser should return req.user when present', () => {
       const handler = getRouteHandler('get', '/user');
       const res = createResponse();
@@ -330,9 +796,224 @@ describe('Auth Router', () => {
     test('login should return user info', () => {
       const handler = getRouteHandler('post', '/login');
       const res = createResponse();
-      handler({ user: { username: 'john' } }, res);
+      const req = {
+        user: { username: 'john' },
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        login: vi.fn((_user, done) => done()),
+      };
+      handler(req, res);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auth-login',
+          status: 'success',
+        }),
+      );
+    });
+
+    test('login should regenerate session and rebind authenticated user', () => {
+      const handler = getRouteHandler('post', '/login');
+      const res = createResponse();
+      const req = {
+        body: { remember: true },
+        user: { username: 'john' },
+        session: { cookie: {}, regenerate: vi.fn() },
+        login: vi.fn((_user, done) => done()),
+      };
+      req.session.regenerate.mockImplementation((done) => done());
+
+      handler(req, res);
+
+      expect(req.session.regenerate).toHaveBeenCalledTimes(1);
+      expect(req.login).toHaveBeenCalledWith({ username: 'john' }, expect.any(Function));
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+    });
+
+    test('login should return user without req.login when session is already established', () => {
+      const handler = getRouteHandler('post', '/login');
+      const res = createResponse();
+      const req = {
+        user: { username: 'john' },
+        session: { regenerate: vi.fn((done) => done()) },
+      };
+
+      handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auth-login',
+          status: 'success',
+        }),
+      );
+    });
+
+    test('setRememberMe should persist preference on session', () => {
+      const handler = getRouteHandler('post', '/remember');
+      const req = {
+        body: { remember: true },
+        session: {},
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(req.session.rememberMe).toBe(true);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ ok: true });
+    });
+
+    test('setRememberMe should return 500 when session is unavailable', () => {
+      const handler = getRouteHandler('post', '/remember');
+      const req = {
+        body: { remember: true },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to access session' });
+    });
+
+    test('login should apply remember-me cookie max age', () => {
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        body: { remember: true },
+        user: { username: 'john' },
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(req.session.rememberMe).toBe(true);
+      expect(req.session.cookie.maxAge).toBe(3600 * 1000 * 24 * 30);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+    });
+
+    test('login should convert remember-me cookie to a session cookie when remember is false', () => {
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        body: { remember: false },
+        user: { username: 'john' },
+        session: {
+          rememberMe: true,
+          cookie: { maxAge: 12345, expires: new Date() },
+          regenerate: vi.fn((done) => done()),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(req.session.rememberMe).toBe(false);
+      expect(req.session.cookie.expires).toBe(false);
+      expect(req.session.cookie.maxAge).toBeNull();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+    });
+
+    test('login should record failed login audit when session is unavailable', () => {
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        user: { username: 'john' },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auth-login',
+          status: 'error',
+          details: expect.stringContaining('session unavailable'),
+        }),
+      );
+    });
+
+    test('login should record failed login audit when session regeneration fails', () => {
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        user: { username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn((done) => done(new Error('regenerate failed'))),
+        },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auth-login',
+          status: 'error',
+          details: expect.stringContaining('regenerate failed'),
+        }),
+      );
+    });
+
+    test('login should fail when session is unavailable after regenerate callback', () => {
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        user: { username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn((done) => {
+            req.session = undefined;
+            done();
+          }),
+        },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auth-login',
+          status: 'error',
+          details: expect.stringContaining('persist session after regeneration'),
+        }),
+      );
+    });
+
+    test('login should record failed login audit when req.login fails', () => {
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        user: { username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn((done) => done()),
+        },
+        login: vi.fn((_user, done) => done(new Error('persist failed'))),
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auth-login',
+          status: 'error',
+          details: expect.stringContaining('persist failed'),
+        }),
+      );
     });
 
     test('logout should call req.logout and return logoutUrl', () => {

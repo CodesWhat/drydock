@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Custom from '../custom/Custom.js';
 
 /**
@@ -43,7 +42,10 @@ class Docr extends Custom {
   }
 
   match(image) {
-    const url = image.registry.url;
+    const url = image?.registry?.url;
+    if (typeof url !== 'string') {
+      return false;
+    }
     return (
       url === 'registry.digitalocean.com' ||
       (url.endsWith('.registry.digitalocean.com') && /^[a-zA-Z0-9.-]+$/.test(url))

@@ -1,0 +1,55 @@
+---
+title: "Discord"
+description: "The discord trigger lets you send realtime notifications using Discord bots."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/triggers/discord/discord.png)
+
+The `discord` trigger lets you send realtime notifications using [Discord](https://discord.com/) bots.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_TRIGGER_DISCORD_{trigger_name}_URL` | 🔴 | The Discord webhook URL | HTTPS URL | |
+| `DD_TRIGGER_DISCORD_{trigger_name}_BOTUSERNAME` | ⚪ | The bot username | | drydock |
+| `DD_TRIGGER_DISCORD_{trigger_name}_CARDCOLOR` | ⚪ | Color of the message card | Color in decimal base | 65280 |
+| `DD_TRIGGER_DISCORD_{trigger_name}_CARDLABEL` | ⚪ | Optional label to display in the message | String | |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+## Examples
+
+### Configuration
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_TRIGGER_DISCORD_1_URL=https://discord.com/api/webhooks/123/456
+      - DD_TRIGGER_DISCORD_1_BOTUSERNAME=drydock
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_TRIGGER_DISCORD_1_URL="https://discord.com/api/webhooks/123/456" \
+  -e DD_TRIGGER_DISCORD_1_BOTUSERNAME="drydock" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+## How to create a Discord webhook
+
+[Follow this tutorial](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks)

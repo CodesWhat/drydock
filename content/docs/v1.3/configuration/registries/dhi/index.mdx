@@ -1,0 +1,76 @@
+---
+title: "DHI (Docker Hardened Images)"
+description: "The dhi registry lets you configure Docker Hardened Images integration."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `dhi` registry lets you configure [Docker Hardened Images](https://docs.docker.com/dhi/get-started/) integration.
+
+Supported credentials:
+
+- Docker ID login + password/access token
+- Base64 auth string (`login:password`), like `.docker/config.json`
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_DHI_PUBLIC_LOGIN` | ⚪ | Docker ID login | `DD_REGISTRY_DHI_PUBLIC_PASSWORD` must be defined | |
+| `DD_REGISTRY_DHI_PUBLIC_PASSWORD` | ⚪ | Docker ID password or access token | `DD_REGISTRY_DHI_PUBLIC_LOGIN` must be defined | |
+| `DD_REGISTRY_DHI_PUBLIC_TOKEN` | ⚪ | Alias for password/access token (deprecated; replaced by `DD_REGISTRY_DHI_PUBLIC_PASSWORD`) | `DD_REGISTRY_DHI_PUBLIC_LOGIN` must be defined | |
+| `DD_REGISTRY_DHI_PUBLIC_AUTH` | ⚪ | Base64 auth string (`login:password`) | `DD_REGISTRY_DHI_PUBLIC_LOGIN/PASSWORD` must not be set | |
+
+## Examples
+
+### Configure with login/password
+
+<Tabs items={["Docker Compose (Login/Password)", "Docker (Login/Password)"]}>
+<Tab value="Docker Compose (Login/Password)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_DHI_PUBLIC_LOGIN=mydockerid
+      - DD_REGISTRY_DHI_PUBLIC_PASSWORD=my-token-or-password
+```
+
+</Tab>
+<Tab value="Docker (Login/Password)">
+```bash
+docker run \
+  -e DD_REGISTRY_DHI_PUBLIC_LOGIN="mydockerid" \
+  -e DD_REGISTRY_DHI_PUBLIC_PASSWORD="my-token-or-password" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Configure with base64 auth string
+
+<Tabs items={["Docker Compose (Base64 Auth)", "Docker (Base64 Auth)"]}>
+<Tab value="Docker Compose (Base64 Auth)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_DHI_PUBLIC_AUTH=bXlkb2NrZXJpZDpteS10b2tlbi1vci1wYXNzd29yZA==
+```
+
+</Tab>
+<Tab value="Docker (Base64 Auth)">
+```bash
+docker run \
+  -e DD_REGISTRY_DHI_PUBLIC_AUTH="bXlkb2NrZXJpZDpteS10b2tlbi1vci1wYXNzd29yZA==" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import express from 'express';
 import nocache from 'nocache';
 import passport from 'passport';

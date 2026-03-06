@@ -1,7 +1,11 @@
-// @ts-nocheck
+import { createHash, timingSafeEqual } from 'node:crypto';
 import passJs from 'pass';
 import Authentication from '../Authentication.js';
 import BasicStrategy from './BasicStrategy.js';
+
+function hashValue(value: string): Buffer {
+  return createHash('sha256').update(value, 'utf8').digest();
+}
 
 /**
  * Htpasswd authentication.
@@ -32,7 +36,7 @@ class Basic extends Authentication {
   /**
    * Return passport strategy.
    */
-  getStrategy() {
+  getStrategy(_app?: unknown) {
     return new BasicStrategy((user, pass, done) => this.authenticate(user, pass, done));
   }
 
@@ -43,9 +47,18 @@ class Basic extends Authentication {
     };
   }
 
-  authenticate(user, pass, done) {
+  authenticate(
+    user: unknown,
+    pass: string,
+    done: (error: unknown, user?: { username: string } | false) => void,
+  ): void {
+    const providedUser = typeof user === 'string' ? user : '';
+    const userMatches =
+      providedUser.length > 0 &&
+      timingSafeEqual(hashValue(providedUser), hashValue(this.configuration.user));
+
     // No user or different user? => reject
-    if (!user || user !== this.configuration.user) {
+    if (!userMatches) {
       done(null, false);
       return;
     }

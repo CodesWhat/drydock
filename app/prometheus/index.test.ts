@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as prometheus from './index.js';
 
 vi.mock('../configuration', () => ({
@@ -17,6 +16,10 @@ vi.mock('prom-client', () => ({
 
 // Mock child modules
 vi.mock('./container', () => ({
+  init: vi.fn(),
+}));
+
+vi.mock('./compatibility', () => ({
   init: vi.fn(),
 }));
 
@@ -44,6 +47,10 @@ vi.mock('./webhook', () => ({
   init: vi.fn(),
 }));
 
+vi.mock('./rollback', () => ({
+  init: vi.fn(),
+}));
+
 vi.mock('../log', () => ({ default: { child: vi.fn(() => ({ info: vi.fn() })) } }));
 
 describe('Prometheus Module', () => {
@@ -56,16 +63,19 @@ describe('Prometheus Module', () => {
   test('should initialize all prometheus components when enabled', async () => {
     const { collectDefaultMetrics } = await import('prom-client');
     const container = await import('./container.js');
+    const compatibility = await import('./compatibility.js');
     const trigger = await import('./trigger.js');
     const watcher = await import('./watcher.js');
     const registry = await import('./registry.js');
     const audit = await import('./audit.js');
     const containerActions = await import('./container-actions.js');
     const webhook = await import('./webhook.js');
+    const rollback = await import('./rollback.js');
 
     prometheus.init();
 
-    expect(collectDefaultMetrics).toHaveBeenCalled();
+    expect(collectDefaultMetrics).toHaveBeenCalledWith({ eventLoopMonitoringPrecision: 1000 });
+    expect(compatibility.init).toHaveBeenCalled();
     expect(container.init).toHaveBeenCalled();
     expect(registry.init).toHaveBeenCalled();
     expect(trigger.init).toHaveBeenCalled();
@@ -73,6 +83,7 @@ describe('Prometheus Module', () => {
     expect(audit.init).toHaveBeenCalled();
     expect(containerActions.init).toHaveBeenCalled();
     expect(webhook.init).toHaveBeenCalled();
+    expect(rollback.init).toHaveBeenCalled();
   });
 
   test('should NOT initialize metrics when disabled', async () => {
@@ -81,16 +92,19 @@ describe('Prometheus Module', () => {
 
     const { collectDefaultMetrics } = await import('prom-client');
     const container = await import('./container.js');
+    const compatibility = await import('./compatibility.js');
     const trigger = await import('./trigger.js');
     const watcher = await import('./watcher.js');
     const registry = await import('./registry.js');
     const audit = await import('./audit.js');
     const containerActions = await import('./container-actions.js');
     const webhook = await import('./webhook.js');
+    const rollback = await import('./rollback.js');
 
     prometheus.init();
 
     expect(collectDefaultMetrics).not.toHaveBeenCalled();
+    expect(compatibility.init).not.toHaveBeenCalled();
     expect(container.init).not.toHaveBeenCalled();
     expect(registry.init).not.toHaveBeenCalled();
     expect(trigger.init).not.toHaveBeenCalled();
@@ -98,6 +112,7 @@ describe('Prometheus Module', () => {
     expect(audit.init).not.toHaveBeenCalled();
     expect(containerActions.init).not.toHaveBeenCalled();
     expect(webhook.init).not.toHaveBeenCalled();
+    expect(rollback.init).not.toHaveBeenCalled();
   });
 
   test('should return metrics output', async () => {

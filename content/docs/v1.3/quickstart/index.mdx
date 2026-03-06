@@ -1,0 +1,94 @@
+---
+title: "Quick start"
+description: "Deploy Drydock with Docker in seconds using a socket proxy or direct mount."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+## Run the Docker image
+
+The easiest way to start is to deploy the official _**drydock**_ image.
+
+<Tabs items={["Socket Proxy (Recommended)", "Direct Mount", "Docker CLI"]}>
+<Tab value="Socket Proxy (Recommended)">
+Using a socket proxy is the most secure way to expose the Docker API. The proxy limits which endpoints Drydock can access.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    container_name: drydock
+    depends_on:
+      - socket-proxy
+    environment:
+      - DD_WATCHER_LOCAL_HOST=socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+    ports:
+      - 3000:3000
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: drydock-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - SERVICES=1
+      # Add POST=1 and NETWORKS=1 if using the Docker trigger for auto-updates
+    restart: unless-stopped
+```
+
+</Tab>
+<Tab value="Direct Mount">
+The simplest setup — mount the Docker socket directly. Works out of the box on most systems.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    container_name: drydock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 3000:3000
+```
+
+<Callout type="info">If you need a **read-only** socket mount (`:ro`), set `DD_RUN_AS_ROOT=true` to skip Drydock's privilege drop. See the [Docker Socket Security](/docs/configuration/watchers/#docker-socket-security) section for details.</Callout>
+</Tab>
+<Tab value="Docker CLI">
+
+```bash
+docker run -d --name drydock \
+  -v "/var/run/docker.sock:/var/run/docker.sock" \
+  -p 3000:3000 \
+  codeswhat/drydock
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">The official image is published on Github Container Registry: `codeswhat/drydock`</Callout>
+
+## Open the UI
+
+[Open the UI](http://localhost:3000) in a browser and check that everything is working as expected.
+
+## Add your first trigger
+
+<Callout type="info">Everything ok?
+It's time to [**add some triggers**](/docs/configuration/triggers)!</Callout>
+
+## Going deeper
+
+<Callout type="info">Need to fine configure how drydock must watch your containers?
+Take a look at the [**watcher documentation**](/docs/configuration/watchers)!</Callout>
+  
+<Callout type="info">Need to integrate other registries (ECR, GCR...)?
+Take a look at the [**registry documentation**](/docs/configuration/registries).</Callout>
+
+## Ready-to-go examples
+
+<Callout type="info">You can find here a **[complete configuration example](/docs/configuration/#complete-example)** illustrating some common drydock options.</Callout>

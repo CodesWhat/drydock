@@ -52,6 +52,44 @@ test('match should compare hosts and handle malformed URLs', async () => {
   ).toBeFalsy();
 });
 
+test('match should include registry port in comparison', async () => {
+  const registry = new SelfHostedBasic();
+  registry.configuration = {
+    url: 'https://registry.acme.com:5000',
+  };
+
+  expect(
+    registry.match({
+      registry: {
+        url: 'registry.acme.com:5000/library/nginx',
+      },
+    }),
+  ).toBeTruthy();
+
+  expect(
+    registry.match({
+      registry: {
+        url: 'registry.acme.com:5001/library/nginx',
+      },
+    }),
+  ).toBeFalsy();
+});
+
+test('match should treat explicit default ports as equivalent', async () => {
+  const registry = new SelfHostedBasic();
+  registry.configuration = {
+    url: 'https://registry.acme.com:443',
+  };
+
+  expect(
+    registry.match({
+      registry: {
+        url: 'registry.acme.com/library/nginx',
+      },
+    }),
+  ).toBeTruthy();
+});
+
 test('normalizeImage should point to configured v2 endpoint', async () => {
   const registry = new SelfHostedBasic();
   registry.configuration = {
@@ -71,6 +109,27 @@ test('normalizeImage should point to configured v2 endpoint', async () => {
       url: 'https://registry.acme.com/v2',
     },
   });
+});
+
+test('normalizeImage should not mutate the input image object', async () => {
+  const registry = new SelfHostedBasic();
+  registry.configuration = {
+    url: 'https://registry.acme.com',
+  };
+
+  const image = {
+    name: 'library/nginx',
+    registry: {
+      url: 'ignored.local',
+    },
+  };
+
+  const normalized = registry.normalizeImage(image);
+
+  expect(normalized).not.toBe(image);
+  expect(normalized.registry).not.toBe(image.registry);
+  expect(image.registry.url).toBe('ignored.local');
+  expect(normalized.registry.url).toBe('https://registry.acme.com/v2');
 });
 
 test('maskConfiguration should mask password and auth', async () => {

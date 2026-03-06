@@ -10,6 +10,157 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-02-28
+
+### Added
+
+#### Backend / Core
+
+- **Container recent-status API** — `GET /api/containers/recent-status` returns pre-computed update status (`updated`/`pending`/`failed`) per container, replacing the client-side audit log scan and reducing dashboard fetch payload size.
+- **Dual-slot security scanning** — "Scan Now" automatically scans both the current running image and the available update image when an update exists. Results are stored in separate slots (`scan`/`updateScan`) and the Security page shows a delta comparison badge (+N fixed, -N new) next to each image that has both scans.
+- **`DD_LOG_BUFFER_ENABLED` toggle** — Disable the in-memory log ring buffer via `DD_LOG_BUFFER_ENABLED=false` to reduce per-log processing overhead. When disabled, `/api/log/entries` returns an empty array. Defaults to `true`.
+- **Scheduled security scanning** — Set `DD_SECURITY_SCAN_CRON` to automatically scan all watched containers on a cron schedule. `DD_SECURITY_SCAN_JITTER` (default 60s) spreads load with random delay before each cycle.
+- **Security scheduler shutdown on exit** — Security scan scheduler is now explicitly shut down during graceful exit, preventing orphan timers from delaying process termination.
+- **On-demand sensitive env value reveal** — Container environment variables are redacted by default in API responses. Individual values can be revealed on-demand via `/api/containers/:id/env/reveal` with audit logging.
+- **On-demand scans populate digest cache** — Manual container scans now populate the digest-based dedup cache, preventing redundant rescans of the same image digest.
+- **Per-container webhook opt-out** — New `dd.webhook.enabled=false` container label to exclude individual containers from webhook triggers without disabling the webhook API globally.
+- **Scan cancellation and mobile scan progress** — Security batch scans can now be cancelled mid-flight. Mobile scan progress UI improved with responsive layout.
+- **Security scan coverage counts** — Security view header shows scanned/total container counts for at-a-glance scan coverage.
+- **Notification rule management API and persistence** — `/api/notifications` CRUD endpoints backed by LokiJS-persisted notification rules for `update-available`, `update-applied`, `update-failed`, `security-alert`, and `agent-disconnect` event types.
+- **Rule-aware runtime dispatch** — Trigger event dispatch resolves notification rules at runtime so per-event enable/disable and trigger assignments actively control which triggers fire.
+- **Security-alert and agent-disconnect events** — New event types with audit logging and configurable deduplication windows. Security alerts fire automatically on critical/high vulnerability scan results.
+- **Compose-native container updates** — Compose-managed containers now update via `docker compose up -d` lifecycle instead of Docker API recreate, preserving compose ownership and YAML formatting.
+- **Rename-first rollback with health gates** — Non-self container updates use a rename-first strategy (rename old → create new → health-gate → remove old) with crash-recoverable state persisted in a new `update-operation` store collection. Rollback telemetry via `dd_trigger_rollback_total{type,name,outcome,reason}` counter.
+- **Tag-family aware semver selection** — Docker watcher infers the current tag family (prefix/suffix/segment style) and keeps semver updates within that family by default, preventing cross-family downgrades like `5.1.4` → `20.04.1`. Added `dd.tag.family` label (`strict` default, `loose` opt-out) and imgset support. ([#104](https://github.com/CodesWhat/drydock/issues/104))
+- **Entrypoint/cmd drift detection** — Docker trigger detects whether entrypoint/cmd were inherited from the source image vs user-set, replacing inherited values with target image defaults during update. Adds `dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` labels.
+- **Self-update controller with SSE ack flow** — Dedicated controller container for self-update replaces the shell helper pattern. UI acknowledgment via SSE with operation ID tracking.
+- **Server-issued SSE client identity** — Replaced client-generated UUIDs with server-issued `clientId`/`clientToken` pairs for self-update ack validation, preventing spoofed acknowledgments.
+- **`config migrate` CLI** — `node dist/index.js config migrate` converts legacy `WUD_*` and Watchtower env vars/labels to `DD_*`/`dd.*` format across `.env` and compose files. Supports `--dry-run` preview and `--source` / `--file` selection.
+- **Legacy compatibility usage metric** — Prometheus counter `dd_legacy_input_total{source,key}` tracks local runtime consumption of legacy inputs (`WUD_*` env vars, `wud.*` labels) without external telemetry. Startup warns when legacy env vars are detected; watcher/trigger paths emit one-time deprecation warnings on `wud.*` label fallback.
+- **Bundled selfhst icons for offline startup** — Common container icons (Docker, Grafana, Nextcloud, etc.) bundled in the image so the UI works without internet on first boot.
+- **Runtime tool status endpoint** — `/api/server/security-tools` reports Trivy/Cosign availability for the Security view.
+- **Gzip response compression** — Configurable via `DD_SERVER_COMPRESSION_ENABLED` and `DD_SERVER_COMPRESSION_THRESHOLD` (default 1024 bytes), with automatic SSE exclusion.
+- **Container runtime details** — Ports, volumes, and environment exposed in the container model and API for the detail panel.
+- **Update detected timestamp** — `updateDetectedAt` field tracks when an update was first seen, preserved across refresh cycles.
+- **No-update reason tracking** — `result.noUpdateReason` field surfaces why tag-family or semver filtering suppressed an available update.
+- **Remove individual skip entries** — `remove-skip` policy action allows removing a single skipped tag or digest without clearing all skips.
+- **Update-operation history API** — `GET /api/containers/:id/update-operations` returns persisted update/rollback history for a container.
+- **Settings backend** — `/api/settings` endpoints with LokiJS collection for persistent UI preferences (internetless mode). Icon proxy cache with atomic file writes and manual cache clear.
+- **SSE real-time updates** — Server-Sent Events push container state changes to the UI without polling.
+- **Remember-me authentication** — Persistent login sessions via remember-me checkbox on the login form.
+- **Docker Compose trigger** — Refresh compose services via Docker Compose CLI when updates are detected.
+
+#### UI / Dashboard
+
+- **Tailwind CSS 4 UI stack** — Complete frontend migration from Vuetify 3 to Tailwind CSS 4 with custom shared components. All 13 views rebuilt with Composition API.
+- **Shared data components** — Reusable DataTable, DataCardGrid, DataListAccordion, DataFilterBar, DetailPanel, DataViewLayout, and EmptyState components used consistently across all views with table/cards/list view modes.
+- **4 color themes** — Drydock (navy tones), GitHub (clean/familiar), Dracula (bold purple), and Catppuccin (warm pastels). Each with dark and light variants. Circle-reveal transition animation between themes.
+- **7 icon libraries** — Phosphor Duotone (default), Phosphor, Lucide, Tabler, Heroicons, Iconoir, and Font Awesome. Switchable in Config > Appearance with icon size slider.
+- **6 font families** — IBM Plex Mono (default/bundled), JetBrains Mono, Source Code Pro, Inconsolata, Commit Mono, and Comic Mono. Lazy-loaded from local `/fonts/` directory with internetless fallback.
+- **Command palette** — Global Cmd/Ctrl+K search with scope filtering (`/` pages, `@` runtime, `#` config), keyboard navigation, grouped sections, and recent history.
+- **Notification rules management view** — View, toggle, and assign triggers to notification rules with direct save through `/api/notifications`.
+- **Audit history view** — Paginated audit log with filtering by container, event text, and action type. Includes security-alert and agent-disconnect event type icons.
+- **Container grouping by stack** — Collapsible sections grouping containers by compose stack with count and update badges.
+- **Container actions tab** — Detail panel tab with update preview, trigger list, backup/rollback management, and update policy controls (skip tags, skip digests, snooze).
+- **Container delete action** — Remove a container from tracking via table row or detail panel.
+- **Container ghost state during updates** — When a container is updated, stopped, or restarted, its position is held in the UI with a spinner overlay while polling for the recreated container, preventing the "disappearing container" UX issue. ([#80](https://github.com/CodesWhat/drydock/issues/80))
+- **Skip update action** — Containers with pending updates can be individually skipped, hiding the update badge for the current session without requiring a backend endpoint.
+- **Slide-in detail panels on all views** — Row-click detail panels for Watchers, Auth, Triggers, Registries, Agents, and Security views.
+- **Interactive column resizing** — Drag-to-resize column handles on all DataTable instances.
+- **Dashboard live data and drag-reorder** — Stat cards (containers, updates, security, registries) computed from real container data with drag-reorderable layout and localStorage persistence. Security donut chart, host status, and update breakdown widgets.
+- **Log viewer auto-fetch and scroll lock** — Configurable auto-fetch intervals (2s/5s/10s/30s) with scroll lock detection and resume for both ConfigView logs and container logs.
+- **Keyboard shortcuts** — Enter/Escape for confirm dialogs, Escape to close detail panels.
+- **SSE connectivity overlay** — Connection-lost overlay with self-update awareness and auto-recovery.
+- **Login page connectivity monitor** — Polls server availability and shows connection status on the login screen.
+- **Server name badge for remote watchers** — Shows the watcher name instead of "Local" for multi-host setups.
+- **Dynamic dashboard stat colors** — Color-coded update and security stats based on severity ratio.
+- **About Drydock modal** — Version info and links accessible from sidebar.
+- **View wiring** — Watcher container counts, trigger Test buttons with success/failure feedback, host images count, and registry self-hosted port matching all wired to live API data.
+
+### Changed
+
+- **Self-update controller testable entrypoint** — Extracted process-level entry logic to a separate entrypoint module, making the controller independently testable without triggering process-exit side effects.
+- **Dockercompose YAML patching simplified** — Removed redundant type guards and dead-code branches from compose file patching helpers, reducing code paths and improving maintainability.
+- **Dashboard fetches recent-status from backend** — Dashboard now fetches pre-computed container statuses from `/api/containers/recent-status` instead of scanning the raw audit log client-side.
+- **Prometheus collect() callback pattern** — Switched container gauge from interval-based polling to the Prometheus `collect()` callback, letting Prometheus control collection timing and eliminating the background 5s timer.
+- **Container security API refactored** — Container security routes refactored into a dedicated module with type-safe SecurityGate integration, concurrent scan limiting (max 1), and trivy DB status-based cache invalidation.
+- **DashboardView composable extraction** — Extracted 700+ line monolith into `useDashboardData`, `useDashboardComputed`, `useDashboardWidgetOrder`, and shared `dashboardTypes` for better testability and separation of concerns.
+- **Event-driven connectivity polling** — AppLayout SSE connectivity monitoring now starts on disconnect and stops on reconnect instead of running a fixed interval, reducing unnecessary network requests.
+- **Vulnerability loading optimized** — Vulnerability data loaded from the container list API payload (`includeVulnerabilities` flag) instead of separate per-container fetches, reducing API calls on the Security view.
+- **Default log format is JSON** — Official Docker image now defaults to `DD_LOG_FORMAT=json` for structured production logs. Override with `DD_LOG_FORMAT=text` for pretty logs.
+- **Scan endpoint rate limit reduced** — `POST /api/containers/:id/scan` rate limit lowered from 100 to 30 requests/min to prevent resource exhaustion during aggressive scanning.
+- **Single Docker image** — Removed thin/heavy image variants; all images now bundle Trivy and Cosign.
+- **Removed Vuetify dependency** — All Vuetify imports, components, and archived test files removed. Zero Vuetify references remain.
+- **Fail-closed auth enforcement** — Registry bearer-token flows error on token endpoint failures instead of falling through to anonymous. HTTP trigger auth errors on unsupported types. Docker entrypoint requires explicit `DD_RUN_AS_ROOT` + `DD_ALLOW_INSECURE_ROOT` for root mode.
+- **Dashboard streamlined** — Stat cards reduced from 7 to 4 (Containers, Updates, Security, Registries). Recent Activity widget removed to fit on single viewport. Background refresh prevents loading flicker on SSE events.
+- **Notifications view is full rule management** — Editable notification rules (enable/disable and trigger assignments) that save directly through `/api/notifications`.
+
+### Fixed
+
+- **Security scans persist across navigation** — Navigating away from the Security view no longer cancels in-flight batch scans. Module-scoped scan state survives unmount and the progress banner reappears on return.
+- **SSE stale sweep timer on re-initialization** — Stale client sweep interval now starts even when `init()` is called after a hot reload, preventing leaked SSE connections.
+- **About modal documentation icon** — Documentation link in the about modal now shows a book icon instead of the expand/maximize icon.
+- **Log auto-fetch pauses in background tabs** — `useAutoFetchLogs` now stops polling when the browser tab is hidden and automatically resumes when it becomes visible again.
+- **SBOM download DOM isolation** — Isolated DOM element creation and `URL.createObjectURL` references in the SBOM download composable, fixing potential memory leaks and test failures from uncleared object URLs. JSON serialization skipped when SBOM panel is hidden.
+- **Dashboard resource fetch error propagation** — Dashboard API fetch errors are now propagated consistently to the UI error state instead of being silently swallowed.
+- **Docker image "latest" tag restricted to stable releases** — CI release workflow no longer tags prerelease versions as `latest`, preventing unstable images from being pulled by default.
+- **Security table refreshes progressively during batch scan** — Security view table updates incrementally as each container scan completes instead of waiting for the entire batch to finish.
+- **Vulnerability data fetched from per-container endpoint** — Security view now fetches vulnerability data from the correct per-container endpoint instead of a missing bulk endpoint.
+- **OIDC callback session loss with cross-site IdPs** — Session cookies now default to `SameSite=Lax` for auth compatibility, fixing callback flows that could fail under `SameSite=Strict`. Added `DD_SERVER_COOKIE_SAMESITE` (`strict|lax|none`) for explicit control. ([#52](https://github.com/CodesWhat/drydock/issues/52))
+- **Compose trigger handles unknown update kinds** — Containers with `updateKind.kind === 'unknown'` now trigger `docker compose pull` instead of silently skipping. ([#91](https://github.com/CodesWhat/drydock/issues/91))
+- **Compose image patching uses structured YAML edits** — Replaced regex/indent heuristics with YAML parser targeting only `services.<name>.image`, preserving comments and formatting.
+- **Hub/DHI public registries preserved with legacy token envs** — Public registry fallback no longer lost when a private token is configured. Fail-closed behavior remains for private registry auth and runtime token exchange failures.
+- **GHCR retries anonymously on credential rejection** — Public image checks continue when configured credentials are rejected by GHCR/LSCR.
+- **Partial registry registration failures isolated** — `Promise.allSettled` prevents a single bad registry from taking down all registries including the public fallback.
+- **Auth-blocked remote watchers stay registered** — Remote watchers that fail auth now show as degraded instead of crashing watcher init.
+- **Docker event stream reconnects with exponential backoff** — Watcher reconnects automatically (1s doubling to 30s max) instead of staying disconnected after Docker socket interruption.
+- **SSE frames flushed immediately** — Added `X-Accel-Buffering: no` and explicit `flush()` to prevent nginx/traefik from buffering real-time events.
+- **Store flushed on graceful shutdown** — Explicit `save()` call on SIGTERM/SIGINT prevents data loss between autosave intervals.
+- **Digest value populated on registration and refresh** — Digest-watch containers no longer show undefined digest in the UI.
+- **Icon fallback for missing upstream** — Icon proxy returns bundled Docker fallback instead of 404 when upstream providers return 403/404. Fixes registry port parsing in icon URLs.
+- **Container groups route no longer shadowed** — `/containers/groups` mounted before `/containers/:id` to prevent Express treating group requests as container ID lookups.
+- **Runtime env values redacted in API responses** — Container environment variable values no longer exposed through the API.
+- **Logger init failure produces structured stderr** — Falls back to structured JSON on stderr instead of silent no-op when logger init fails.
+- **Mobile sidebar closes on route change** — Safety-net watcher ensures mobile menu closes on any navigation.
+- **Security badge counts only scan vulnerabilities** — No longer inflated by major version updates.
+- **Trigger test failure shows parsed error message** — Actionable error reason displayed below trigger card on test failure.
+- **Viewport scrollbar eliminated** — Fixed double-nested scroll contexts; long tags truncated with tooltips.
+- **Self-hosted registries ignore port when matching** — Registry matching now respects port numbers in self-hosted registry URLs, preventing mismatches between registries on different ports of the same host.
+
+### Security
+
+- **Security API error sanitization** — SBOM and scan error responses now return generic messages (`Error generating SBOM`, `Security scan failed`) instead of leaking internal error details. Detailed errors logged server-side only.
+- **Agent log query parameter validation** — Agent log level and component query parameters are validated against an allowlist and safe-character pattern, returning 400 for invalid values.
+- **TLS key/cert paths stripped from config response** — Server configuration API response no longer includes filesystem paths for TLS private key and certificate files.
+- **Type-safe store and auth modules** — Settings, notification, and auth store modules upgraded from `any` to explicit typed interfaces, preventing implicit type coercion vulnerabilities.
+- **Fail-closed auth enforcement across registries and triggers** — Bearer token, OIDC, and credential flows use `failClosedAuth` with typed `RequestOptions`, rejecting requests when required credentials are missing.
+- **Input validation hardened** — Additional input validation and error redaction across auth, API, and configuration modules.
+- **Mutation-only JSON body parser** — Express JSON body parsing restricted to mutation methods (POST/PUT/PATCH) only on both API and auth routers, reducing attack surface on read requests.
+- **CSRF Sec-Fetch-Site validation** — CSRF middleware now rejects requests with `Sec-Fetch-Site: cross-site` header, blocking cross-site state-changing requests even when the Origin header is absent.
+- **HTTPS enforcement for SameSite=none cookies** — `DD_SERVER_COOKIE_SAMESITE=none` now requires HTTPS configuration (`DD_SERVER_TLS_ENABLED=true` or `DD_SERVER_TRUSTPROXY`) and throws at startup if neither is set.
+- **Remember-me endpoint requires authentication** — `/auth/remember` POST moved after `requireAuthentication` middleware, preventing unauthenticated access.
+- **Env reveal rate limit tightened** — `/api/containers/:id/env` rate limit reduced from 100/min to 10/min to prevent credential enumeration. Server error responses return generic messages instead of internal details.
+- **Trivy command path validation** — Trivy binary paths are validated against shell metacharacters and path traversal before execution.
+- **Digest scan cache LRU eviction** — Scan result cache uses LRU eviction (max 500 entries, configurable via `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES`) to prevent unbounded memory growth. Trivy DB status lookups are deduplicated across concurrent calls.
+- **CSP configured for Iconify CDN** — Content-Security-Policy updated to allow `connect-src` for the Iconify CDN origin, preventing blocked icon fetches in the browser.
+- **CSP connect-src restricted in internetless mode** — Content-Security-Policy `connect-src` directive tightened to `'self'` when running in internetless mode, blocking outbound connections from the browser.
+- **Legacy auth methods endpoint rate-limited** — `/api/auth/methods` rate-limited to prevent enumeration of available authentication providers.
+- **Removed plaintext credentials from login request body** — The Basic auth login was redundantly sending username and password in both the Authorization header and the JSON body. The backend only reads the Authorization header via Passport, so the body credentials were unnecessary exposure.
+- **Server-issued SSE client identity** — Self-update ack requests validated against server-issued tokens, preventing spoofed acknowledgments.
+- **Fail-closed auth across watchers, registries, and triggers** — Token exchange failures no longer fall through to anonymous access.
+- **Runtime env values redacted** — Container environment variable values stripped from API responses to prevent credential leakage.
+
+### Performance
+
+- **Audit store indexed date-range queries** — Audit entries now store a pre-parsed `timestampMs` index for numeric comparisons. Date-range queries use the LokiJS chain API with indexed filtering instead of full-collection scans. Automatic 30-day retention with periodic pruning.
+- **Backup store indexed lookups** — Backup collection adds indices on `data.containerName` and `data.id`, using `findOne()` for single-document lookups and indexed `find()` for name-filtered queries instead of full scans.
+- **LokiJS autosave interval set to 60 seconds** — Fixed autosave interval at 60s instead of the LokiJS default, reducing disk I/O while maintaining acceptable data durability.
+- **SSE shared heartbeat interval** — Deduplicated per-client SSE heartbeat timers into a single shared interval that starts on first connection and stops when all clients disconnect.
+- **LoginView exponential backoff** — Login page connectivity retry uses exponential backoff (5s doubling to 30s max) instead of fixed intervals, reducing server load during outages.
+- **Gzip response compression** — API responses compressed above configurable threshold with automatic SSE exclusion.
+- **Skip connectivity polling when SSE connection is active** — Eliminates unnecessary `/auth/user` fetches every 10s during normal operation.
+- **Set-based lookups replace linear scans** — Repeated array lookups converted to Set operations in core paths.
+
 ## [1.3.9] — 2026-02-22
 
 ### Fixed
@@ -144,10 +295,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Snyk vulnerability monitoring** — Integrated Snyk for continuous dependency scanning of `app/package.json` and `ui/package.json`. Added Snyk badge to README with `targetFile` parameter for monorepo support.
-- **Update Guard (Trivy safe-pull gate)** — Added pre-update vulnerability scanning for Docker-triggered updates. Candidate images are scanned before pull/restart, updates are blocked when vulnerabilities match configured blocking severities, and latest scan data is persisted on `container.security.scan`. Added `GET /api/containers/:id/vulnerabilities` endpoint for retrieving scan results.
-- **Update Guard signature verification (cosign)** — Added optional pre-update image signature verification. When enabled, Docker-triggered updates are blocked if candidate image signatures are missing/invalid or verification fails.
-- **Update Guard SBOM generation** — Added Trivy SBOM generation (`spdx-json`, `cyclonedx-json`) for candidate images with persistence in `container.security.sbom` and a new `GET /api/containers/:id/sbom` API endpoint (with `format` query support).
-- **Container card security status chip** — Added a vulnerability chip on container cards showing Update Guard scan status (`safe`, `blocked`, `scan error`) with severity summary tooltip data from `container.security.scan`.
+- **Update Bouncer (Trivy safe-pull gate)** — Added pre-update vulnerability scanning for Docker-triggered updates. Candidate images are scanned before pull/restart, updates are blocked when vulnerabilities match configured blocking severities, and latest scan data is persisted on `container.security.scan`. Added `GET /api/containers/:id/vulnerabilities` endpoint for retrieving scan results.
+- **Update Bouncer signature verification (cosign)** — Added optional pre-update image signature verification. When enabled, Docker-triggered updates are blocked if candidate image signatures are missing/invalid or verification fails.
+- **Update Bouncer SBOM generation** — Added Trivy SBOM generation (`spdx-json`, `cyclonedx-json`) for candidate images with persistence in `container.security.sbom` and a new `GET /api/containers/:id/sbom` API endpoint (with `format` query support).
+- **Container card security status chip** — Added a vulnerability chip on container cards showing Update Bouncer scan status (`safe`, `blocked`, `scan error`) with severity summary tooltip data from `container.security.scan`.
 - **On-demand security scan** — Added `POST /api/containers/:id/scan` endpoint for triggering vulnerability scan, signature verification, and SBOM generation on demand. Broadcasts `dd:scan-started` and `dd:scan-completed` SSE events for real-time UI feedback. Added shield button to container card actions and mobile overflow menu.
 - **Direct container update from UI** — Added `POST /api/containers/:id/update` endpoint that triggers a Docker update directly without requiring trigger configuration. The "Update now" button in the UI now calls this single endpoint instead of looping through configured triggers.
 - **Trivy and cosign in official image** — The official drydock image now includes both `trivy` and `cosign` binaries, removing the need for custom images in local CLI mode.
@@ -462,7 +613,9 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.3.7...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/CodesWhat/drydock/compare/v1.3.9...v1.4.0
+[1.3.9]: https://github.com/CodesWhat/drydock/compare/v1.3.8...v1.3.9
 [1.3.8]: https://github.com/CodesWhat/drydock/compare/v1.3.7...v1.3.8
 [1.3.7]: https://github.com/CodesWhat/drydock/compare/v1.3.6...v1.3.7
 [1.3.6]: https://github.com/CodesWhat/drydock/compare/v1.3.5...v1.3.6
@@ -477,5 +630,3 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 [1.0.2]: https://github.com/CodesWhat/drydock/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/CodesWhat/drydock/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/CodesWhat/drydock/releases/tag/v1.0.0
-
-<!-- CalVer tags (2026.x.x) were erased to avoid collisions with the new semver versioning system. -->

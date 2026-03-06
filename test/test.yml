@@ -1,0 +1,139 @@
+config:
+  target: "http://localhost:3333"
+  environments:
+    smoke:
+      target: "http://localhost:3000"
+      phases:
+        - duration: 10
+          arrivalRate: 1
+          name: "Smoke warm up"
+        - duration: 20
+          arrivalRate: 2
+          name: "Smoke steady"
+        - duration: 10
+          arrivalRate: 2
+          name: "Smoke sustain"
+    ci:
+      target: "http://localhost:3000"
+      phases:
+        - duration: 10
+          arrivalRate: 2
+          name: "Warm up"
+        - duration: 20
+          arrivalRate: 4
+          name: "Ramp up"
+        - duration: 10
+          arrivalRate: 6
+          name: "Sustained load"
+    stress:
+      target: "http://localhost:3000"
+      phases:
+        - duration: 20
+          arrivalRate: 5
+          name: "Warm up"
+        - duration: 40
+          arrivalRate: 15
+          name: "Ramp up"
+        - duration: 20
+          arrivalRate: 30
+          name: "Sustained load"
+  phases:
+    - duration: 10
+      arrivalRate: 2
+      name: "Warm up"
+    - duration: 20
+      arrivalRate: 4
+      name: "Ramp up"
+    - duration: 10
+      arrivalRate: 6
+      name: "Sustained load"
+  defaults:
+    headers:
+      Accept: "application/json"
+      Authorization: "Basic YWRtaW46cGFzc3dvcmQ="
+  ensure:
+    thresholds:
+      - vusers.failed: 0
+      - http.codes.429: 0
+
+scenarios:
+  - name: "Health check"
+    weight: 10
+    flow:
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200
+
+  - name: "App info"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/app"
+          expect:
+            - statusCode: 200
+
+  - name: "Container inventory"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/containers"
+          expect:
+            - statusCode: 200
+      - think: 1
+      - get:
+          url: "/api/settings"
+          expect:
+            - statusCode: 200
+
+  - name: "Config data"
+    weight: 8
+    flow:
+      - get:
+          url: "/api/watchers"
+          expect:
+            - statusCode: 200
+      - think: 1
+      - get:
+          url: "/api/triggers"
+          expect:
+            - statusCode: 200
+
+  - name: "Registry and server"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/registries"
+          expect:
+            - statusCode: 200
+      - think: 1
+      - get:
+          url: "/api/server"
+          expect:
+            - statusCode: 200
+
+  - name: "Dashboard flow"
+    weight: 8
+    flow:
+      - get:
+          url: "/api/app"
+          expect:
+            - statusCode: 200
+      - think: 1
+      - get:
+          url: "/api/containers"
+          expect:
+            - statusCode: 200
+
+  - name: "Server log polling"
+    weight: 10
+    flow:
+      - get:
+          url: "/api/log/entries?tail=200"
+          expect:
+            - statusCode: 200
+      - think: 1
+      - get:
+          url: "/api/log/entries?level=info&tail=100&since=0"
+          expect:
+            - statusCode: 200

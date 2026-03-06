@@ -1,6 +1,6 @@
+import { snakeCase } from 'change-case';
 import { flatten as flat } from 'flat';
 import joi from 'joi';
-import { snakeCase } from 'snake-case';
 import type {
   ContainerSecuritySbom,
   ContainerSecurityScan,
@@ -39,6 +39,7 @@ export interface ContainerResult {
   digest?: string;
   created?: string;
   link?: string;
+  noUpdateReason?: string;
 }
 
 export interface ContainerUpdateKind {
@@ -58,6 +59,20 @@ export interface ContainerSecurityState {
   scan?: ContainerSecurityScan;
   signature?: ContainerSignatureVerification;
   sbom?: ContainerSecuritySbom;
+  updateScan?: ContainerSecurityScan;
+  updateSignature?: ContainerSignatureVerification;
+  updateSbom?: ContainerSecuritySbom;
+}
+
+export interface ContainerRuntimeEnv {
+  key: string;
+  value: string;
+}
+
+export interface ContainerRuntimeDetails {
+  ports: string[];
+  volumes: string[];
+  env: ContainerRuntimeEnv[];
 }
 
 export interface Container {
@@ -71,6 +86,7 @@ export interface Container {
   includeTags?: string;
   excludeTags?: string;
   transformTags?: string;
+  tagFamily?: string;
   linkTemplate?: string;
   link?: string;
   triggerInclude?: string;
@@ -84,7 +100,9 @@ export interface Container {
   };
   updateAvailable: boolean;
   updateKind: ContainerUpdateKind;
+  updateDetectedAt?: string;
   labels?: Record<string, string>;
+  details?: ContainerRuntimeDetails;
   resultChanged?: (otherContainer: Container | undefined) => boolean;
 }
 
@@ -92,6 +110,60 @@ export interface ContainerReport {
   container: Container;
   changed: boolean;
 }
+
+const containerSecurityVulnerabilitySchema = joi.object({
+  id: joi.string().required(),
+  target: joi.string(),
+  packageName: joi.string(),
+  installedVersion: joi.string(),
+  fixedVersion: joi.string(),
+  severity: joi.string().valid('UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'),
+  title: joi.string(),
+  primaryUrl: joi.string(),
+});
+
+const containerSecuritySummarySchema = joi.object({
+  unknown: joi.number().integer().min(0).required(),
+  low: joi.number().integer().min(0).required(),
+  medium: joi.number().integer().min(0).required(),
+  high: joi.number().integer().min(0).required(),
+  critical: joi.number().integer().min(0).required(),
+});
+
+const containerSecurityScanSchema = joi.object({
+  scanner: joi.string().valid('trivy').required(),
+  image: joi.string().required(),
+  scannedAt: joi.string().isoDate().required(),
+  status: joi.string().valid('passed', 'blocked', 'error').required(),
+  blockSeverities: joi
+    .array()
+    .items(joi.string().valid('UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'))
+    .required(),
+  blockingCount: joi.number().integer().min(0).required(),
+  summary: containerSecuritySummarySchema.required(),
+  vulnerabilities: joi.array().items(containerSecurityVulnerabilitySchema).required(),
+  error: joi.string(),
+});
+
+const containerSecuritySignatureSchema = joi.object({
+  verifier: joi.string().valid('cosign').required(),
+  image: joi.string().required(),
+  verifiedAt: joi.string().isoDate().required(),
+  status: joi.string().valid('verified', 'unverified', 'error').required(),
+  keyless: joi.boolean().required(),
+  signatures: joi.number().integer().min(0).required(),
+  error: joi.string(),
+});
+
+const containerSecuritySbomSchema = joi.object({
+  generator: joi.string().valid('trivy').required(),
+  image: joi.string().required(),
+  generatedAt: joi.string().isoDate().required(),
+  status: joi.string().valid('generated', 'error').required(),
+  formats: joi.array().items(joi.string().valid('spdx-json', 'cyclonedx-json')).required(),
+  documents: joi.object().required(),
+  error: joi.string(),
+});
 
 // Container data schema
 const schema = joi.object({
@@ -105,6 +177,7 @@ const schema = joi.object({
   includeTags: joi.string(),
   excludeTags: joi.string(),
   transformTags: joi.string(),
+  tagFamily: joi.string(),
   linkTemplate: joi.string(),
   link: joi.string(),
   triggerInclude: joi.string(),
@@ -115,60 +188,12 @@ const schema = joi.object({
     snoozeUntil: joi.string().isoDate(),
   }),
   security: joi.object({
-    scan: joi.object({
-      scanner: joi.string().valid('trivy').required(),
-      image: joi.string().required(),
-      scannedAt: joi.string().isoDate().required(),
-      status: joi.string().valid('passed', 'blocked', 'error').required(),
-      blockSeverities: joi
-        .array()
-        .items(joi.string().valid('UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'))
-        .required(),
-      blockingCount: joi.number().integer().min(0).required(),
-      summary: joi
-        .object({
-          unknown: joi.number().integer().min(0).required(),
-          low: joi.number().integer().min(0).required(),
-          medium: joi.number().integer().min(0).required(),
-          high: joi.number().integer().min(0).required(),
-          critical: joi.number().integer().min(0).required(),
-        })
-        .required(),
-      vulnerabilities: joi
-        .array()
-        .items(
-          joi.object({
-            id: joi.string().required(),
-            target: joi.string(),
-            packageName: joi.string(),
-            installedVersion: joi.string(),
-            fixedVersion: joi.string(),
-            severity: joi.string().valid('UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'),
-            title: joi.string(),
-            primaryUrl: joi.string(),
-          }),
-        )
-        .required(),
-      error: joi.string(),
-    }),
-    signature: joi.object({
-      verifier: joi.string().valid('cosign').required(),
-      image: joi.string().required(),
-      verifiedAt: joi.string().isoDate().required(),
-      status: joi.string().valid('verified', 'unverified', 'error').required(),
-      keyless: joi.boolean().required(),
-      signatures: joi.number().integer().min(0).required(),
-      error: joi.string(),
-    }),
-    sbom: joi.object({
-      generator: joi.string().valid('trivy').required(),
-      image: joi.string().required(),
-      generatedAt: joi.string().isoDate().required(),
-      status: joi.string().valid('generated', 'error').required(),
-      formats: joi.array().items(joi.string().valid('spdx-json', 'cyclonedx-json')).required(),
-      documents: joi.object().required(),
-      error: joi.string(),
-    }),
+    scan: containerSecurityScanSchema,
+    signature: containerSecuritySignatureSchema,
+    sbom: containerSecuritySbomSchema,
+    updateScan: containerSecurityScanSchema,
+    updateSignature: containerSecuritySignatureSchema,
+    updateSbom: containerSecuritySbomSchema,
   }),
   image: joi
     .object({
@@ -206,6 +231,7 @@ const schema = joi.object({
     digest: joi.string(),
     created: joi.string().isoDate(),
     link: joi.string(),
+    noUpdateReason: joi.string().min(1),
   }),
   error: joi.object({
     message: joi.string().min(1).required(),
@@ -219,8 +245,22 @@ const schema = joi.object({
       semverDiff: joi.string().allow('major', 'minor', 'patch', 'prerelease', 'unknown'),
     })
     .default({ kind: 'unknown' }),
+  updateDetectedAt: joi.string().isoDate(),
   resultChanged: joi.function(),
   labels: joi.object(),
+  details: joi.object({
+    ports: joi.array().items(joi.string()).required(),
+    volumes: joi.array().items(joi.string()).required(),
+    env: joi
+      .array()
+      .items(
+        joi.object({
+          key: joi.string().required(),
+          value: joi.string().required(),
+        }),
+      )
+      .required(),
+  }),
 });
 
 function getRawTagUpdate(container: Container): ContainerUpdateKind {

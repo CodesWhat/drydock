@@ -1,11 +1,10 @@
-// @ts-nocheck
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
-import mqtt from 'mqtt';
+import mqtt, { type IClientOptions, type MqttClient } from 'mqtt';
 import { registerContainerAdded, registerContainerUpdated } from '../../../event/index.js';
 import { flatten } from '../../../model/container.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
-import Trigger from '../Trigger.js';
+import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 import Hass from './Hass.js';
 
 const containerDefaultTopic = 'dd/container';
@@ -26,10 +25,55 @@ function getContainerTopic({ baseTopic, container }) {
   return `${baseTopic}/${container.watcher}/${containerName}`;
 }
 
+interface MqttConfiguration extends TriggerConfiguration {
+  url: string;
+  topic: string;
+  clientid: string;
+  user?: string;
+  password?: string;
+  hass: {
+    enabled: boolean;
+    prefix: string;
+    discovery: boolean;
+  };
+  tls: {
+    clientkey?: string;
+    clientcert?: string;
+    cachain?: string;
+    rejectunauthorized: boolean;
+  };
+}
+
 /**
  * MQTT Trigger implementation
  */
 class Mqtt extends Trigger {
+  public configuration: MqttConfiguration = {
+    url: '',
+    topic: containerDefaultTopic,
+    clientid: '',
+    hass: {
+      enabled: false,
+      prefix: hassDefaultPrefix,
+      discovery: false,
+    },
+    tls: {
+      rejectunauthorized: true,
+    },
+  };
+  private client!: MqttClient;
+  private hass?: Hass;
+  private unregisterContainerAdded?: () => void;
+  private unregisterContainerUpdated?: () => void;
+
+  private clearContainerEventSubscriptions() {
+    this.unregisterContainerAdded?.();
+    this.unregisterContainerAdded = undefined;
+
+    this.unregisterContainerUpdated?.();
+    this.unregisterContainerUpdated = undefined;
+  }
+
   handleContainerEvent(container) {
     void this.trigger(container).catch((error) => {
       this.log.warn(`Error (${error.message})`);
@@ -89,10 +133,14 @@ class Mqtt extends Trigger {
   }
 
   async initTrigger() {
+    this.clearContainerEventSubscriptions();
+    this.hass?.deregister();
+    this.hass = undefined;
+
     // Enforce simple mode
     this.configuration.mode = 'simple';
 
-    const options = {
+    const options: IClientOptions = {
       clientId: this.configuration.clientid,
     };
     if (this.configuration.user) {
@@ -135,8 +183,19 @@ class Mqtt extends Trigger {
         log: this.log,
       });
     }
-    registerContainerAdded((container) => this.handleContainerEvent(container));
-    registerContainerUpdated((container) => this.handleContainerEvent(container));
+    this.unregisterContainerAdded = registerContainerAdded((container) =>
+      this.handleContainerEvent(container),
+    );
+    this.unregisterContainerUpdated = registerContainerUpdated((container) =>
+      this.handleContainerEvent(container),
+    );
+  }
+
+  async deregisterComponent(): Promise<void> {
+    this.clearContainerEventSubscriptions();
+    this.hass?.deregister();
+    this.hass = undefined;
+    await super.deregisterComponent();
   }
 
   /**

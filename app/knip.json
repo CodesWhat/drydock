@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["index.ts"],
+  "project": ["**/*.ts"],
+  "ignore": ["**/*.typecheck.ts"],
+  "ignoreBinaries": ["biome"],
+  "ignoreDependencies": ["fast-check"],
+  "vitest": {
+    "entry": ["**/*.test.ts"]
+  }
+}

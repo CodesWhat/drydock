@@ -81,10 +81,6 @@ default = true
 name = "actionlint"
 
 [[plugin]]
-name = "biome"
-version = "2.3.15"
-
-[[plugin]]
 name = "checkov"
 
 [[plugin]]
@@ -99,7 +95,6 @@ mode = "comment"
 
 [[plugin]]
 name = "osv-scanner"
-
 
 [[plugin]]
 name = "radarlint-iac"
@@ -132,5 +127,5 @@ name = "zizmor"
 
 # Entrypoint uses su-exec for runtime privilege drop; no static USER needed
 [[triage]]
-match.rules = ["trivy:DS002"]
+match.rules = ["trivy:DS002", "trivy:DS-0002"]
 set.ignored = true

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
 
 const {
@@ -175,9 +174,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('container already started') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error performing start on container' });
     });
 
     test('should stringify non-Error Docker API failures', async () => {
@@ -193,9 +190,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('start failed as string') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error performing start on container' });
     });
 
     test('should insert audit entry on success', async () => {
@@ -258,6 +253,30 @@ describe('Container Actions Router', () => {
       expect(mockAuditInc).toHaveBeenCalledWith({ action: 'container-start' });
       expect(mockActionsInc).toHaveBeenCalledWith({ action: 'container-start' });
     });
+
+    test('should return original container when status refresh lookups are unavailable', async () => {
+      const container = { id: 'c1', name: 'nginx', image: { name: 'nginx' } };
+      mockGetContainer
+        .mockReturnValueOnce(container)
+        .mockReturnValueOnce(undefined)
+        .mockReturnValueOnce(undefined);
+      const { trigger } = createDockerTrigger();
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+
+      const handler = getHandler('post', '/:id/start');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockUpdateContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Container started successfully',
+          container,
+        }),
+      );
+    });
   });
 
   describe('stopContainer', () => {
@@ -303,9 +322,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('stop failed') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error performing stop on container' });
     });
   });
 
@@ -371,9 +388,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('restart failed') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error performing restart on container' });
     });
   });
 
@@ -487,9 +502,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('pull failed') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error updating container' });
     });
 
     test('should insert audit entry on success', async () => {
@@ -588,9 +601,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: expect.stringContaining('update failed as string') }),
-      );
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error updating container' });
     });
   });
 });

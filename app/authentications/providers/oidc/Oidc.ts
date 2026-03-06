@@ -1,16 +1,67 @@
-// @ts-nocheck
-
+import type { Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import * as openidClientLibrary from 'openid-client';
 import { v4 as uuid } from 'uuid';
-import { getPublicUrl } from '../../../configuration/index.js';
+import { ddEnvVars, getPublicUrl } from '../../../configuration/index.js';
+import { getErrorMessage } from '../../../util/error.js';
 import Authentication from '../Authentication.js';
 import OidcStrategy from './OidcStrategy.js';
 
-const OIDC_CHECKS_TTL_MS = 10 * 60 * 1000;
+const OIDC_CHECKS_TTL_MS = 5 * 60 * 1000;
 const OIDC_MAX_PENDING_CHECKS = 5;
+const OIDC_SESSION_LOCK_WAIT_TIMEOUT_MS = 10 * 1000;
+const OIDC_SESSION_LOCK_STALE_TTL_MS = 60 * 1000;
 const oidcSessionLocks = new Map<string, Promise<void>>();
-const OIDC_STATE_PATTERN = /^[A-Za-z0-9._~-]{1,256}$/;
+const OIDC_STATE_PATTERN = /^[A-Za-z0-9._~-]{8,256}$/;
+
+interface OidcAppLike {
+  use: (path: string, middleware: unknown) => void;
+  get: (path: string, handler: (req: Request, res: Response) => void) => void;
+}
+
+interface OidcPendingCheck {
+  state: string;
+  codeVerifier: string;
+  createdAt: number;
+}
+
+type OidcPendingChecks = Record<string, OidcPendingCheck>;
+
+interface OidcSessionEntry {
+  pending?: Record<string, unknown>;
+  state?: unknown;
+  codeVerifier?: unknown;
+}
+
+interface OidcSessionLike {
+  oidc?: Record<string, OidcSessionEntry>;
+  rememberMe?: boolean;
+  cookie?: {
+    maxAge?: number | null;
+    expires?: boolean | Date;
+  };
+  reload?: (callback: (error?: unknown) => void) => void;
+  regenerate?: (callback: (error?: unknown) => void) => void;
+  save?: (callback: (error?: unknown) => void) => void;
+}
+
+interface OidcAuthenticatedUser {
+  username: string;
+}
+
+type OidcVerifyDone = (error: unknown, user?: OidcAuthenticatedUser | false) => void;
+
+type OidcRedirectRequest = Request & {
+  session?: OidcSessionLike;
+  sessionID?: string;
+};
+
+type OidcCallbackRequest = Request & {
+  session?: OidcSessionLike;
+  originalUrl?: string;
+  url: string;
+  login: (user: OidcAuthenticatedUser, done: (error?: unknown) => void) => void;
+};
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
@@ -20,17 +71,22 @@ function isValidStateToken(value: unknown): value is string {
   return isNonEmptyString(value) && OIDC_STATE_PATTERN.test(value);
 }
 
-function createPendingChecksRecord() {
-  return Object.create(null) as Record<string, any>;
+function createPendingChecksRecord(): OidcPendingChecks {
+  return Object.create(null) as OidcPendingChecks;
 }
 
-function isValidCheckEntry(state: unknown, check: any): boolean {
-  return isValidStateToken(state) && !!check && isNonEmptyString(check.codeVerifier);
+function isValidCheckEntry(state: unknown, check: unknown): check is OidcPendingCheck {
+  return (
+    isValidStateToken(state) &&
+    !!check &&
+    typeof check === 'object' &&
+    isNonEmptyString((check as OidcPendingCheck).codeVerifier)
+  );
 }
 
-function collectValidChecks(pending: Record<string, any>, now: number) {
+function collectValidChecks(pending: Record<string, unknown>, now: number): OidcPendingChecks {
   const result = createPendingChecksRecord();
-  Object.entries(pending).forEach(([state, check]: any) => {
+  Object.entries(pending).forEach(([state, check]) => {
     if (!isValidCheckEntry(state, check)) {
       return;
     }
@@ -46,7 +102,7 @@ function collectValidChecks(pending: Record<string, any>, now: number) {
   return result;
 }
 
-function convertLegacyFormat(rawChecks: any, now: number) {
+function convertLegacyFormat(rawChecks: OidcSessionEntry, now: number): OidcPendingChecks {
   if (isValidStateToken(rawChecks.state) && isNonEmptyString(rawChecks.codeVerifier)) {
     return {
       [rawChecks.state]: {
@@ -59,9 +115,9 @@ function convertLegacyFormat(rawChecks: any, now: number) {
   return createPendingChecksRecord();
 }
 
-function limitToMostRecent(pendingChecks: Record<string, any>) {
+function limitToMostRecent(pendingChecks: OidcPendingChecks): OidcPendingChecks {
   const mostRecent = Object.entries(pendingChecks)
-    .sort(([, c1]: any, [, c2]: any) => c2.createdAt - c1.createdAt)
+    .sort(([, c1], [, c2]) => c2.createdAt - c1.createdAt)
     .slice(0, OIDC_MAX_PENDING_CHECKS);
   const limited = createPendingChecksRecord();
   mostRecent.forEach(([state, check]) => {
@@ -70,7 +126,7 @@ function limitToMostRecent(pendingChecks: Record<string, any>) {
   return limited;
 }
 
-function normalizePendingChecks(rawChecks) {
+function normalizePendingChecks(rawChecks: unknown): OidcPendingChecks {
   const now = Date.now();
 
   if (rawChecks === null || typeof rawChecks !== 'object') {
@@ -78,7 +134,7 @@ function normalizePendingChecks(rawChecks) {
   }
 
   let pendingChecks = createPendingChecksRecord();
-  const pendingFromSession = rawChecks.pending;
+  const pendingFromSession = (rawChecks as OidcSessionEntry).pending;
   if (pendingFromSession !== null && typeof pendingFromSession === 'object') {
     pendingChecks = collectValidChecks(pendingFromSession, now);
   }
@@ -91,26 +147,50 @@ function normalizePendingChecks(rawChecks) {
   return limitToMostRecent(pendingChecks);
 }
 
-async function withOidcSessionLock(sessionId: string, operation: any) {
+async function withOidcSessionLock<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
   const previousLock = oidcSessionLocks.get(sessionId) || Promise.resolve();
-  let releaseLock: any;
+  let releaseLock: (() => void) | undefined;
   const currentLock = new Promise<void>((resolve) => {
     releaseLock = resolve;
   });
   const nextLock = previousLock.catch(() => undefined).then(() => currentLock);
   oidcSessionLocks.set(sessionId, nextLock);
-  await previousLock.catch(() => undefined);
+
+  const staleLockCleanupTimer = setTimeout(() => {
+    /* v8 ignore start -- false branch unreachable: no concurrent lock replacement in tests */
+    if (oidcSessionLocks.get(sessionId) === nextLock) {
+      oidcSessionLocks.delete(sessionId);
+    }
+    /* v8 ignore stop */
+  }, OIDC_SESSION_LOCK_STALE_TTL_MS);
+  staleLockCleanupTimer.unref?.();
+
+  let previousLockWaitTimer: ReturnType<typeof setTimeout> | undefined;
+
   try {
+    await Promise.race([
+      previousLock.catch(() => undefined),
+      new Promise<void>((resolve) => {
+        previousLockWaitTimer = setTimeout(resolve, OIDC_SESSION_LOCK_WAIT_TIMEOUT_MS);
+        previousLockWaitTimer.unref?.();
+      }),
+    ]);
     return await operation();
   } finally {
-    releaseLock();
+    /* v8 ignore start -- always assigned: Promise executor runs synchronously */
+    if (previousLockWaitTimer !== undefined) {
+      clearTimeout(previousLockWaitTimer);
+    }
+    /* v8 ignore stop */
+    clearTimeout(staleLockCleanupTimer);
+    releaseLock?.();
     if (oidcSessionLocks.get(sessionId) === nextLock) {
       oidcSessionLocks.delete(sessionId);
     }
   }
 }
 
-async function reloadSessionIfPossible(session: any) {
+async function reloadSessionIfPossible(session: OidcSessionLike | undefined) {
   if (!session || typeof session.reload !== 'function') {
     return;
   }
@@ -134,7 +214,7 @@ async function reloadSessionIfPossible(session: any) {
   }
 }
 
-async function saveSessionIfPossible(session: any) {
+async function saveSessionIfPossible(session: OidcSessionLike | undefined) {
   if (!session || typeof session.save !== 'function') {
     return;
   }
@@ -153,7 +233,9 @@ async function saveSessionIfPossible(session: any) {
  * Htpasswd authentication.
  */
 class Oidc extends Authentication {
-  openidClient = openidClientLibrary;
+  openidClient: typeof openidClientLibrary = openidClientLibrary;
+  client!: openidClientLibrary.Configuration;
+  logoutUrl?: string;
 
   getSessionKey() {
     return this.name || 'default';
@@ -175,6 +257,15 @@ class Oidc extends Authentication {
       redirect: this.joi.boolean().default(false),
       timeout: this.joi.number().greater(500).default(5000),
     });
+  }
+
+  validateConfiguration(configuration) {
+    const validatedConfiguration = super.validateConfiguration(configuration);
+    const publicUrl = ddEnvVars.DD_PUBLIC_URL;
+    if (typeof publicUrl !== 'string' || publicUrl.trim().length === 0) {
+      throw new Error('DD_PUBLIC_URL must be set when OIDC authentication is configured');
+    }
+    return validatedConfiguration;
   }
 
   /**
@@ -208,7 +299,7 @@ class Oidc extends Authentication {
     try {
       this.logoutUrl = openidClient.buildEndSessionUrl(this.client).href;
     } catch (e) {
-      this.log.warn(` End session url is not supported (${e.message})`);
+      this.log.warn(` End session url is not supported (${getErrorMessage(e)})`);
     }
   }
 
@@ -216,7 +307,10 @@ class Oidc extends Authentication {
    * Return passport strategy.
    * @param app
    */
-  getStrategy(app) {
+  getStrategy(app?: OidcAppLike) {
+    if (!app) {
+      throw new Error('OIDC strategy requires an express app instance');
+    }
     const oidcLimiter = rateLimit({
       windowMs: 15 * 60 * 1000,
       max: 50,
@@ -254,7 +348,7 @@ class Oidc extends Authentication {
     };
   }
 
-  async redirect(req, res) {
+  async redirect(req: OidcRedirectRequest, res: Response): Promise<void> {
     const openidClient = await this.getOpenIdClient();
     const codeVerifier = openidClient.randomPKCECodeVerifier();
     const codeChallenge = await openidClient.calculatePKCECodeChallenge(codeVerifier);
@@ -303,7 +397,7 @@ class Oidc extends Authentication {
         await persistOidcChecks();
       }
     } catch (e) {
-      this.log.warn(`Unable to persist OIDC session checks (${e.message})`);
+      this.log.warn(`Unable to persist OIDC session checks (${getErrorMessage(e)})`);
       res.status(500).json({ error: 'Unable to initialize OIDC session' });
       return;
     }
@@ -313,7 +407,7 @@ class Oidc extends Authentication {
     });
   }
 
-  async callback(req, res) {
+  async callback(req: OidcCallbackRequest, res: Response): Promise<void> {
     try {
       this.log.debug('Validate callback data');
       const openidClient = await this.getOpenIdClient();
@@ -390,30 +484,39 @@ class Oidc extends Authentication {
       this.log.debug('Perform passport login');
       req.login(user, (err) => {
         if (err) {
-          this.log.warn(`Error when logging the user [${err.message}]`);
+          this.log.warn(`Error when logging the user [${getErrorMessage(err)}]`);
           res.status(401).json({ error: 'Authentication failed' });
         } else {
+          // Apply remember-me preference stored before OIDC redirect
+          if (req.session?.cookie) {
+            if (req.session.rememberMe) {
+              req.session.cookie.maxAge = 3600 * 1000 * 24 * 30;
+            } else {
+              req.session.cookie.expires = false as unknown as Date;
+              req.session.cookie.maxAge = null;
+            }
+          }
           this.log.debug('User authenticated => redirect to app');
           res.redirect(getPublicUrl(req) || '/');
         }
       });
     } catch (err) {
-      this.log.warn(`Error when logging the user [${err.message}]`);
+      this.log.warn(`Error when logging the user [${getErrorMessage(err)}]`);
       res.status(401).json({ error: 'Authentication failed' });
     }
   }
 
-  async verify(accessToken, done) {
+  async verify(accessToken: string, done: OidcVerifyDone): Promise<void> {
     try {
       const user = await this.getUserFromAccessToken(accessToken);
       done(null, user);
     } catch (e) {
-      this.log.warn(`Error when validating the user access token (${e.message})`);
+      this.log.warn(`Error when validating the user access token (${getErrorMessage(e)})`);
       done(null, false);
     }
   }
 
-  async getUserFromAccessToken(accessToken) {
+  async getUserFromAccessToken(accessToken: string): Promise<OidcAuthenticatedUser> {
     const openidClient = await this.getOpenIdClient();
     const userInfo = await openidClient.fetchUserInfo(
       this.client,

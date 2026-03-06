@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
 
 const baseContainer = {

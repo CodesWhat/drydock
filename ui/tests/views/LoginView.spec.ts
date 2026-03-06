@@ -1,289 +1,446 @@
-import { mount } from '@vue/test-utils';
-import LoginBasic from '@/components/LoginBasic.vue';
-import LoginOidc from '@/components/LoginOidc.vue';
-import { getOidcRedirection, getStrategies } from '@/services/auth';
+import fs from 'node:fs';
+import path from 'node:path';
+import { flushPromises, type VueWrapper } from '@vue/test-utils';
+import { ref } from 'vue';
 import LoginView from '@/views/LoginView.vue';
+import { mountWithPlugins } from '../helpers/mount';
 
-// Mock services
+const mockPush = vi.fn();
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: mockPush }),
+  useRoute: () => ({ query: {} }),
+}));
+
 vi.mock('@/services/auth', () => ({
   getStrategies: vi.fn(),
+  loginBasic: vi.fn(),
+  setRememberMe: vi.fn(),
   getOidcRedirection: vi.fn(),
 }));
 
-// Mock matchMedia for theme detection
-Object.defineProperty(globalThis, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation((query) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
+vi.mock('@/theme/useTheme', () => ({
+  useTheme: vi.fn(() => ({
+    isDark: ref(false),
+    themeFamily: ref('drydock'),
+    themeVariant: ref('dark'),
+    resolvedVariant: ref('dark'),
+    setThemeFamily: vi.fn(),
+    setThemeVariant: vi.fn(),
+    toggleVariant: vi.fn(),
+    transitionTheme: vi.fn(),
   })),
-});
+}));
 
-// Mock router
-const mockRouter = {
-  push: vi.fn(),
-};
-const mockRoute = {
-  query: {},
-};
+import { getOidcRedirection, getStrategies, loginBasic, setRememberMe } from '@/services/auth';
+
+const mockGetStrategies = getStrategies as ReturnType<typeof vi.fn>;
+const mockLoginBasic = loginBasic as ReturnType<typeof vi.fn>;
+const mockSetRememberMe = setRememberMe as ReturnType<typeof vi.fn>;
+const mockGetOidcRedirection = getOidcRedirection as ReturnType<typeof vi.fn>;
+const mountedWrappers: VueWrapper[] = [];
+
+function trackWrapper(wrapper: VueWrapper) {
+  mountedWrappers.push(wrapper);
+  return wrapper;
+}
+
+async function mountLogin(strategies: any[] = []) {
+  mockGetStrategies.mockResolvedValue(strategies);
+  const wrapper = trackWrapper(mountWithPlugins(LoginView));
+  await flushPromises();
+  return wrapper;
+}
 
 describe('LoginView', () => {
-  let wrapper;
-
   beforeEach(() => {
-    (getStrategies as any).mockReset();
-    (getOidcRedirection as any).mockReset();
-    mockRouter.push.mockReset();
-    localStorage.removeItem('themeMode');
-    mockRoute.query.next = undefined;
+    vi.clearAllMocks();
+    mockPush.mockClear();
   });
 
   afterEach(() => {
-    if (wrapper) {
+    for (const wrapper of mountedWrappers.splice(0)) {
       wrapper.unmount();
     }
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
-  const mountComponent = (strategies = [], mountOptions: any = {}) => {
-    const { global: extraGlobal = {}, ...restOptions } = mountOptions;
-    wrapper = mount(LoginView, {
-      global: {
-        mocks: {
-          $router: mockRouter,
-          $route: mockRoute,
-        },
-        provide: {
-          eventBus: {
-            emit: vi.fn(),
-          },
-        },
-        ...extraGlobal,
-      },
-      data() {
-        return {
-          strategies: strategies,
-        };
-      },
-      ...restOptions,
-    });
-  };
-
-  it('renders login dialog with basic strategy', () => {
-    mountComponent([{ type: 'basic', name: 'local' }]);
-    expect(wrapper.findComponent(LoginBasic).exists()).toBe(true);
-    expect(wrapper.findComponent(LoginOidc).exists()).toBe(false);
-  });
-
-  it('renders login dialog with oidc strategy', () => {
-    mountComponent([{ type: 'oidc', name: 'google' }]);
-    expect(wrapper.findComponent(LoginBasic).exists()).toBe(false);
-    expect(wrapper.findComponent(LoginOidc).exists()).toBe(true);
-  });
-
-  it('uses dark theme icon and color in dark mode', async () => {
-    mountComponent([{ type: 'basic', name: 'local' }]);
-    wrapper.vm.themeMode = 'dark';
-    await wrapper.vm.$nextTick();
-
-    expect(wrapper.vm.currentTheme).toBe('dark');
-    expect(wrapper.vm.isDark).toBe(true);
-    expect(wrapper.vm.themeIcon).toBe('fas fa-moon');
-    expect(wrapper.vm.themeIconColor).toBe('#60A5FA');
-  });
-
-  it('uses light theme icon and color in light mode', async () => {
-    mountComponent([{ type: 'basic', name: 'local' }]);
-    wrapper.vm.themeMode = 'light';
-    await wrapper.vm.$nextTick();
-
-    expect(wrapper.vm.currentTheme).toBe('light');
-    expect(wrapper.vm.isDark).toBe(false);
-    expect(wrapper.vm.themeIcon).toBe('fas fa-sun');
-    expect(wrapper.vm.themeIconColor).toBe('#F59E0B');
-  });
-
-  it('resolves system theme using prefers-color-scheme media query', async () => {
-    vi.mocked(globalThis.matchMedia).mockImplementation(
-      () =>
-        ({
-          matches: true,
-        }) as any,
-    );
-    mountComponent([{ type: 'basic', name: 'local' }]);
-    wrapper.vm.themeMode = 'system';
-    await wrapper.vm.$nextTick();
-    expect(wrapper.vm.currentTheme).toBe('dark');
-
-    vi.mocked(globalThis.matchMedia).mockImplementation(
-      () =>
-        ({
-          matches: false,
-        }) as any,
-    );
-    wrapper.vm.themeMode = 'light';
-    await wrapper.vm.$nextTick();
-    wrapper.vm.themeMode = 'system';
-    await wrapper.vm.$nextTick();
-    expect(wrapper.vm.currentTheme).toBe('light');
-  });
-
-  it('cycles theme mode and persists the selected mode', async () => {
-    mountComponent([{ type: 'basic', name: 'local' }]);
-    wrapper.vm.themeMode = 'light';
-    await wrapper.vm.$nextTick();
-
-    wrapper.vm.cycleTheme();
-    expect(wrapper.vm.themeMode).toBe('system');
-    expect(localStorage.themeMode).toBe('system');
-
-    wrapper.vm.cycleTheme();
-    expect(wrapper.vm.themeMode).toBe('dark');
-    expect(localStorage.themeMode).toBe('dark');
-
-    wrapper.vm.cycleTheme();
-    expect(wrapper.vm.themeMode).toBe('light');
-    expect(localStorage.themeMode).toBe('light');
-  });
-
-  it('renders strategy tabs and updates selected tab through v-model handlers', async () => {
-    mountComponent(
-      [
-        { type: 'basic', name: 'local' },
-        { type: 'oidc', name: 'google' },
-      ],
-      {
-        global: {
-          stubs: {
-            'v-tabs': {
-              template:
-                '<div class="v-tabs" @click="$emit(\'update:modelValue\', 1)"><slot /></div>',
-              props: ['modelValue'],
-              emits: ['update:modelValue'],
-            },
-            'v-window': {
-              template:
-                '<div class="v-window" @click="$emit(\'update:modelValue\', 0)"><slot /></div>',
-              props: ['modelValue'],
-              emits: ['update:modelValue'],
-            },
-          },
-        },
-      },
-    );
-
-    expect(wrapper.find('.v-tabs').exists()).toBe(true);
-    expect(wrapper.text()).toContain('local');
-    expect(wrapper.text()).toContain('google');
-
-    await wrapper.find('.v-tabs').trigger('click');
-    expect(wrapper.vm.strategySelected).toBe(1);
-
-    await wrapper.find('.v-window').trigger('click');
-    expect(wrapper.vm.strategySelected).toBe(0);
-  });
-
-  it('redirects to home on authentication success', () => {
-    mountComponent([{ type: 'basic' }]);
-    wrapper.vm.onAuthenticationSuccess();
-    expect(mockRouter.push).toHaveBeenCalledWith('/');
-  });
-
-  it('redirects to next url on authentication success if provided', () => {
-    mockRoute.query.next = '/foo';
-    mountComponent([{ type: 'basic' }]);
-    wrapper.vm.onAuthenticationSuccess();
-    expect(mockRouter.push).toHaveBeenCalledWith('/foo');
-    mockRoute.query.next = undefined; // reset
-  });
-
-  describe('Route Hook (beforeRouteEnter)', () => {
-    it('redirects to home if anonymous auth is enabled', async () => {
-      (getStrategies as any).mockResolvedValue([{ type: 'anonymous' }]);
-      const next = vi.fn();
-
-      await LoginView.beforeRouteEnter.call(LoginView, {}, {}, next);
-
-      expect(next).toHaveBeenCalledWith('/');
+  describe('loading state', () => {
+    it('does not show login card before strategies resolve', () => {
+      mockGetStrategies.mockReturnValue(new Promise(() => {}));
+      const wrapper = trackWrapper(mountWithPlugins(LoginView));
+      expect(wrapper.find('form').exists()).toBe(false);
+      expect(wrapper.text()).not.toContain('Sign in to Drydock');
     });
 
-    it('redirects to OIDC url if OIDC redirect is enabled', async () => {
-      (getStrategies as any).mockResolvedValue([{ type: 'oidc', redirect: true, name: 'google' }]);
-      (getOidcRedirection as any).mockResolvedValue({ url: 'http://google.com' });
+    it('shows login card after strategies resolve', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      expect(wrapper.text()).toContain('Sign in to Drydock');
+    });
+  });
 
-      // Mock window.location
-      const originalLocation = window.location;
-      delete window.location;
-      window.location = { href: '' };
-
-      const next = vi.fn();
-      await LoginView.beforeRouteEnter.call(LoginView, {}, {}, next);
-
-      expect(window.location.href).toBe('http://google.com');
-      expect(next).not.toHaveBeenCalled();
-
-      window.location = originalLocation;
+  describe('strategy fetching', () => {
+    it('calls getStrategies on mount', async () => {
+      await mountLogin([]);
+      expect(mockGetStrategies).toHaveBeenCalledOnce();
     });
 
-    it('filters supported strategies and populates vm', async () => {
-      (getStrategies as any).mockResolvedValue([
-        { type: 'basic' },
-        { type: 'oidc' },
-        { type: 'unsupported' },
-      ]);
-      const next = vi.fn();
-
-      await LoginView.beforeRouteEnter.call(LoginView, {}, {}, next);
-
-      expect(next).toHaveBeenCalledWith(expect.any(Function));
-      const vm = { strategies: [], isSupportedStrategy: LoginView.methods.isSupportedStrategy };
-      const callback = next.mock.calls[0][0];
-      await callback(vm);
-
-      expect(vm.strategies).toHaveLength(2);
-      expect(vm.strategies[0].type).toBe('basic');
-      expect(vm.strategies[1].type).toBe('oidc');
+    it('shows error when getStrategies fails', async () => {
+      mockGetStrategies.mockRejectedValue(new Error('fail'));
+      const wrapper = trackWrapper(mountWithPlugins(LoginView));
+      await flushPromises();
+      expect(wrapper.text()).toContain('Failed to load authentication methods');
     });
 
-    it('emits notify through event bus when strategy fetch fails', async () => {
-      (getStrategies as any).mockRejectedValue(new Error('fetch failed'));
-      const next = vi.fn();
+    it('shows no-methods message when no strategies are returned', async () => {
+      const wrapper = await mountLogin([]);
+      expect(wrapper.text()).toContain('No authentication methods configured');
+    });
+  });
 
-      await LoginView.beforeRouteEnter.call(LoginView, {}, {}, next);
+  describe('basic auth form', () => {
+    it('shows basic auth form when basic strategy exists', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      expect(wrapper.find('form').exists()).toBe(true);
+      expect(wrapper.find('input[type="text"]').exists()).toBe(true);
+      expect(wrapper.find('input[type="password"]').exists()).toBe(true);
+    });
 
-      expect(next).toHaveBeenCalledWith(expect.any(Function));
-      const emit = vi.fn();
-      const callback = next.mock.calls[0][0];
-      callback({ eventBus: { emit } });
+    it('hides basic auth form when no basic strategy exists', async () => {
+      const wrapper = await mountLogin([{ type: 'oidc', name: 'github' }]);
+      expect(wrapper.find('form').exists()).toBe(false);
+    });
 
-      expect(emit).toHaveBeenCalledWith(
-        'notify',
-        'Error when trying to get the authentication strategies (fetch failed)',
-        'error',
+    it('shows Sign in button', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      const btn = wrapper.find('button[type="submit"]');
+      expect(btn.exists()).toBe(true);
+      expect(btn.text()).toBe('Sign in');
+    });
+
+    it('calls loginBasic on form submit', async () => {
+      mockLoginBasic.mockResolvedValue({ name: 'admin' });
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+
+      await wrapper.find('input[type="text"]').setValue('admin');
+      await wrapper.find('input[type="password"]').setValue('secret');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      expect(mockLoginBasic).toHaveBeenCalledWith('admin', 'secret', false);
+    });
+
+    it('shows error on login failure', async () => {
+      mockLoginBasic.mockRejectedValue(new Error('bad creds'));
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+
+      await wrapper.find('input[type="text"]').setValue('admin');
+      await wrapper.find('input[type="password"]').setValue('wrong');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Invalid username or password');
+    });
+
+    it('shows Signing in... text while submitting', async () => {
+      let resolveLogin: (v: any) => void;
+      mockLoginBasic.mockReturnValue(
+        new Promise((r) => {
+          resolveLogin = r;
+        }),
       );
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+
+      await wrapper.find('input[type="text"]').setValue('admin');
+      await wrapper.find('input[type="password"]').setValue('secret');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Signing in...');
+
+      resolveLogin?.({ name: 'admin' });
+      await flushPromises();
+
+      expect(wrapper.text()).not.toContain('Signing in...');
     });
 
-    it('logs to console when strategy fetch fails without injected event bus', async () => {
-      (getStrategies as any).mockRejectedValue(new Error('fetch failed'));
-      const next = vi.fn();
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    it('navigates to / after successful login', async () => {
+      mockLoginBasic.mockResolvedValue({ name: 'admin' });
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
 
-      try {
-        await LoginView.beforeRouteEnter.call(LoginView, {}, {}, next);
-        const callback = next.mock.calls[0][0];
-        callback({});
+      await wrapper.find('input[type="text"]').setValue('admin');
+      await wrapper.find('input[type="password"]').setValue('secret');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
 
-        expect(consoleSpy).toHaveBeenCalledWith(
-          'Error when trying to get the authentication strategies (fetch failed)',
-        );
-      } finally {
-        consoleSpy.mockRestore();
-      }
+      expect(mockPush).toHaveBeenCalledWith('/');
+    });
+  });
+
+  describe('OIDC strategies', () => {
+    it('shows OIDC buttons when OIDC strategies exist', async () => {
+      const wrapper = await mountLogin([
+        { type: 'oidc', name: 'GitHub' },
+        { type: 'oidc', name: 'Google' },
+      ]);
+      const buttons = wrapper.findAll('button[type="button"]');
+      const oidcButtons = buttons.filter(
+        (b) => b.text().includes('GitHub') || b.text().includes('Google'),
+      );
+      expect(oidcButtons.length).toBe(2);
+    });
+
+    it('shows separator when both basic and OIDC strategies exist', async () => {
+      const wrapper = await mountLogin([
+        { type: 'basic', name: 'basic' },
+        { type: 'oidc', name: 'GitHub' },
+      ]);
+      expect(wrapper.text()).toContain('or continue with');
+    });
+
+    it('does not show separator when only OIDC exists', async () => {
+      const wrapper = await mountLogin([{ type: 'oidc', name: 'GitHub' }]);
+      expect(wrapper.text()).not.toContain('or continue with');
+    });
+
+    it('calls setRememberMe and getOidcRedirection on OIDC click', async () => {
+      mockSetRememberMe.mockResolvedValue(undefined);
+      mockGetOidcRedirection.mockResolvedValue({ redirect: undefined });
+      const wrapper = await mountLogin([{ type: 'oidc', name: 'GitHub' }]);
+
+      const oidcBtn = wrapper
+        .findAll('button[type="button"]')
+        .find((b) => b.text().includes('GitHub'));
+      await oidcBtn?.trigger('click');
+      await flushPromises();
+
+      expect(mockSetRememberMe).toHaveBeenCalledWith(false);
+      expect(mockGetOidcRedirection).toHaveBeenCalledWith('GitHub');
+    });
+
+    it('redirects to same-origin OIDC URL', async () => {
+      mockSetRememberMe.mockResolvedValue(undefined);
+      const redirectUrl = `${window.location.origin}/auth/oidc/GitHub/cb?code=abc`;
+      mockGetOidcRedirection.mockResolvedValue({ redirect: redirectUrl });
+      const assignSpy = vi.fn();
+      vi.stubGlobal('location', {
+        ...window.location,
+        origin: window.location.origin,
+        href: window.location.href,
+        assign: assignSpy,
+      });
+      const wrapper = await mountLogin([{ type: 'oidc', name: 'GitHub' }]);
+
+      const oidcBtn = wrapper
+        .findAll('button[type="button"]')
+        .find((b) => b.text().includes('GitHub'));
+      await oidcBtn?.trigger('click');
+      await flushPromises();
+
+      expect(assignSpy).toHaveBeenCalledWith(redirectUrl);
+      expect(wrapper.text()).not.toContain('Failed to connect to GitHub');
+    });
+
+    it('redirects to same-origin OIDC URL from url payload field', async () => {
+      mockSetRememberMe.mockResolvedValue(undefined);
+      const redirectUrl = `${window.location.origin}/auth/oidc/GitHub/cb?code=abc`;
+      mockGetOidcRedirection.mockResolvedValue({ url: redirectUrl });
+      const assignSpy = vi.fn();
+      vi.stubGlobal('location', {
+        ...window.location,
+        origin: window.location.origin,
+        href: window.location.href,
+        assign: assignSpy,
+      });
+      const wrapper = await mountLogin([{ type: 'oidc', name: 'GitHub' }]);
+
+      const oidcBtn = wrapper
+        .findAll('button[type="button"]')
+        .find((b) => b.text().includes('GitHub'));
+      await oidcBtn?.trigger('click');
+      await flushPromises();
+
+      expect(assignSpy).toHaveBeenCalledWith(redirectUrl);
+      expect(wrapper.text()).not.toContain('Failed to connect to GitHub');
+    });
+
+    it('rejects cross-origin OIDC redirect URLs', async () => {
+      mockSetRememberMe.mockResolvedValue(undefined);
+      mockGetOidcRedirection.mockResolvedValue({ redirect: 'https://evil.example/phish' });
+      const assignSpy = vi.fn();
+      vi.stubGlobal('location', {
+        ...window.location,
+        origin: window.location.origin,
+        href: window.location.href,
+        assign: assignSpy,
+      });
+      const wrapper = await mountLogin([{ type: 'oidc', name: 'GitHub' }]);
+
+      const oidcBtn = wrapper
+        .findAll('button[type="button"]')
+        .find((b) => b.text().includes('GitHub'));
+      await oidcBtn?.trigger('click');
+      await flushPromises();
+
+      expect(assignSpy).not.toHaveBeenCalled();
+      expect(wrapper.text()).toContain('Failed to connect to GitHub');
+    });
+
+    it('shows error on OIDC failure', async () => {
+      mockSetRememberMe.mockResolvedValue(undefined);
+      mockGetOidcRedirection.mockRejectedValue(new Error('fail'));
+      const wrapper = await mountLogin([{ type: 'oidc', name: 'GitHub' }]);
+
+      const oidcBtn = wrapper
+        .findAll('button[type="button"]')
+        .find((b) => b.text().includes('GitHub'));
+      await oidcBtn?.trigger('click');
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Failed to connect to GitHub');
+    });
+
+    it('uses static Tailwind classes for OIDC button layout', () => {
+      const source = fs.readFileSync(
+        path.resolve(__dirname, '../../src/views/LoginView.vue'),
+        'utf8',
+      );
+      expect(source).not.toContain('grid-cols-${');
+      expect(source).toContain('grid grid-cols-1 gap-3');
+      expect(source).toContain('grid grid-cols-2 gap-3');
+      expect(source).toContain('grid grid-cols-3 gap-3');
+    });
+  });
+
+  describe('remember me', () => {
+    it('renders remember me checkbox for basic auth', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      const checkbox = wrapper.find('input[type="checkbox"]');
+      expect(checkbox.exists()).toBe(true);
+      expect(wrapper.text()).toContain('Remember me');
+    });
+
+    it('passes rememberMe=true to loginBasic when checked', async () => {
+      mockLoginBasic.mockResolvedValue({ name: 'admin' });
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+
+      await wrapper.find('input[type="checkbox"]').setValue(true);
+      await wrapper.find('input[type="text"]').setValue('admin');
+      await wrapper.find('input[type="password"]').setValue('secret');
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+
+      expect(mockLoginBasic).toHaveBeenCalledWith('admin', 'secret', true);
+    });
+  });
+
+  describe('anonymous strategy', () => {
+    it('navigates away immediately for anonymous strategy', async () => {
+      await mountLogin([{ type: 'anonymous', name: 'anon' }]);
+      expect(mockPush).toHaveBeenCalledWith('/');
+    });
+  });
+
+  describe('connectivity monitor', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('does not show connection lost overlay initially', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      expect(wrapper.text()).not.toContain('Connection Lost');
+    });
+
+    it('does not poll when initial strategy fetch succeeds', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await flushPromises();
+
+      expect(mockGetStrategies).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).not.toHaveBeenCalled();
+      wrapper.unmount();
+    });
+
+    it('polls with backoff only after initial failure and stops after success', async () => {
+      mockGetStrategies
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockRejectedValueOnce(new Error('still offline'))
+        .mockResolvedValueOnce([{ type: 'basic', name: 'basic' }]);
+
+      const wrapper = trackWrapper(mountWithPlugins(LoginView));
+      await flushPromises();
+      expect(mockGetStrategies).toHaveBeenCalledTimes(1);
+      expect(wrapper.text()).toContain('Connection Lost');
+
+      await vi.advanceTimersByTimeAsync(4_999);
+      await flushPromises();
+      expect(mockGetStrategies).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await flushPromises();
+      expect(mockGetStrategies).toHaveBeenCalledTimes(2);
+      expect(wrapper.text()).toContain('Connection Lost');
+
+      await vi.advanceTimersByTimeAsync(9_999);
+      await flushPromises();
+      expect(mockGetStrategies).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await flushPromises();
+      expect(mockGetStrategies).toHaveBeenCalledTimes(3);
+      expect(wrapper.text()).not.toContain('Connection Lost');
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      await flushPromises();
+      expect(mockGetStrategies).toHaveBeenCalledTimes(3);
+      wrapper.unmount();
+    });
+
+    it('clears retry polling timer on unmount', async () => {
+      mockGetStrategies.mockRejectedValue(new Error('offline'));
+
+      const wrapper = trackWrapper(mountWithPlugins(LoginView));
+      await flushPromises();
+      expect(mockGetStrategies).toHaveBeenCalledTimes(1);
+
+      wrapper.unmount();
+      await vi.advanceTimersByTimeAsync(60_000);
+      await flushPromises();
+
+      expect(mockGetStrategies).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows warning icon and reconnecting text in overlay', async () => {
+      mockGetStrategies.mockRejectedValue(new Error('offline'));
+      const wrapper = trackWrapper(mountWithPlugins(LoginView));
+      await flushPromises();
+
+      expect(wrapper.find('.app-icon-stub[data-icon="warning"]').exists()).toBe(true);
+      expect(wrapper.text()).toContain('Reconnecting');
+      wrapper.unmount();
+    });
+  });
+
+  describe('OIDC icon selection', () => {
+    it('renders github icon for GitHub provider', async () => {
+      const wrapper = await mountLogin([{ type: 'oidc', name: 'GitHub' }]);
+      expect(wrapper.find('.app-icon-stub[data-icon="github"]').exists()).toBe(true);
+    });
+
+    it('renders google icon for Google provider', async () => {
+      const wrapper = await mountLogin([{ type: 'oidc', name: 'Google' }]);
+      expect(wrapper.find('.app-icon-stub[data-icon="google"]').exists()).toBe(true);
+    });
+
+    it('renders generic icon for unknown provider', async () => {
+      const wrapper = await mountLogin([{ type: 'oidc', name: 'CustomSSO' }]);
+      expect(wrapper.find('.app-icon-stub[data-icon="sign-in"]').exists()).toBe(true);
     });
   });
 });

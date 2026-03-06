@@ -1,11 +1,122 @@
+import { ApiError, errorMessage } from '../utils/error';
+
 function getContainerIcon() {
-  return 'fab fa-docker';
+  return 'sh-docker';
 }
 
-async function getAllContainers() {
-  const response = await fetch('/api/containers', { credentials: 'include' });
+interface ContainerGroupMember {
+  id: string;
+  name: string;
+  displayName: string;
+  updateAvailable: boolean;
+}
+
+interface ContainerGroup {
+  name: string | null;
+  containers: ContainerGroupMember[];
+  containerCount: number;
+  updatesAvailable: number;
+}
+
+interface ContainerSummary {
+  containers: {
+    total: number;
+    running: number;
+    stopped: number;
+  };
+  security: {
+    issues: number;
+  };
+}
+
+type ContainerRecentStatus = 'updated' | 'pending' | 'failed';
+
+interface ContainerRecentStatusResponse {
+  statuses: Record<string, ContainerRecentStatus>;
+}
+
+interface GetAllContainersOptions {
+  includeVulnerabilities?: boolean;
+  limit?: number;
+  offset?: number;
+  signal?: AbortSignal;
+}
+
+interface ContainerTriggerRequest {
+  containerId: string;
+  triggerType: string;
+  triggerName: string;
+  triggerAgent?: string;
+}
+
+function isAbortSignal(value: unknown): value is AbortSignal {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'aborted' in value &&
+    typeof (value as AbortSignal).addEventListener === 'function'
+  );
+}
+
+function toPositiveInteger(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+  return Math.floor(value);
+}
+
+function toNonNegativeInteger(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+  return Math.floor(value);
+}
+
+function buildContainerQueryString(options: GetAllContainersOptions): string {
+  const query = new URLSearchParams();
+  if (options.includeVulnerabilities) {
+    query.set('includeVulnerabilities', 'true');
+  }
+  const limit = toPositiveInteger(options.limit);
+  if (limit !== undefined) {
+    query.set('limit', `${limit}`);
+  }
+  const offset = toNonNegativeInteger(options.offset);
+  if (offset !== undefined) {
+    query.set('offset', `${offset}`);
+  }
+  const queryString = query.toString();
+  return queryString.length > 0 ? `?${queryString}` : '';
+}
+
+async function getAllContainers(optionsOrSignal: GetAllContainersOptions | AbortSignal = {}) {
+  const options = isAbortSignal(optionsOrSignal) ? { signal: optionsOrSignal } : optionsOrSignal;
+  const response = await fetch(`/api/containers${buildContainerQueryString(options)}`, {
+    credentials: 'include',
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
   if (!response.ok) {
     throw new Error(`Failed to get containers: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+async function getContainerSummary(): Promise<ContainerSummary> {
+  const response = await fetch('/api/containers/summary', {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get container summary: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+async function getContainerRecentStatus(): Promise<ContainerRecentStatusResponse> {
+  const response = await fetch('/api/containers/recent-status', {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get container recent status: ${response.statusText}`);
   }
   return response.json();
 }
@@ -21,7 +132,7 @@ async function refreshAllContainers() {
   return response.json();
 }
 
-async function refreshContainer(containerId) {
+async function refreshContainer(containerId: string) {
   const response = await fetch(`/api/containers/${containerId}/watch`, {
     method: 'POST',
     credentials: 'include',
@@ -35,7 +146,7 @@ async function refreshContainer(containerId) {
   return response.json();
 }
 
-async function deleteContainer(containerId) {
+async function deleteContainer(containerId: string) {
   const response = await fetch(`/api/containers/${containerId}`, {
     method: 'DELETE',
     credentials: 'include',
@@ -46,7 +157,7 @@ async function deleteContainer(containerId) {
   return response;
 }
 
-async function getContainerTriggers(containerId) {
+async function getContainerTriggers(containerId: string) {
   const response = await fetch(`/api/containers/${containerId}/triggers`, {
     credentials: 'include',
   });
@@ -56,7 +167,12 @@ async function getContainerTriggers(containerId) {
   return response.json();
 }
 
-async function runTrigger({ containerId, triggerType, triggerName, triggerAgent }) {
+async function runTrigger({
+  containerId,
+  triggerType,
+  triggerName,
+  triggerAgent,
+}: ContainerTriggerRequest) {
   const url = triggerAgent
     ? `/api/containers/${containerId}/triggers/${triggerAgent}/${triggerType}/${triggerName}`
     : `/api/containers/${containerId}/triggers/${triggerType}/${triggerName}`;
@@ -71,7 +187,7 @@ async function runTrigger({ containerId, triggerType, triggerName, triggerAgent 
   return response.json();
 }
 
-async function getContainerLogs(containerId, tail = 100) {
+async function getContainerLogs(containerId: string, tail: number = 100) {
   const response = await fetch(`/api/containers/${containerId}/logs?tail=${tail}`, {
     credentials: 'include',
   });
@@ -81,7 +197,48 @@ async function getContainerLogs(containerId, tail = 100) {
   return response.json();
 }
 
-async function updateContainerPolicy(containerId, action, payload = {}) {
+async function getContainerUpdateOperations(containerId: string) {
+  const response = await fetch(`/api/containers/${containerId}/update-operations`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to get update operations for container ${containerId}: ${response.statusText}`,
+    );
+  }
+  return response.json();
+}
+
+async function getContainerVulnerabilities(containerId: string) {
+  const response = await fetch(`/api/containers/${containerId}/vulnerabilities`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to get vulnerabilities for container ${containerId}: ${response.statusText}`,
+    );
+  }
+  return response.json();
+}
+
+async function getContainerSbom(containerId: string, format: string = 'spdx-json') {
+  const response = await fetch(
+    `/api/containers/${containerId}/sbom?format=${encodeURIComponent(format)}`,
+    {
+      credentials: 'include',
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to get SBOM for container ${containerId}: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+async function updateContainerPolicy(
+  containerId: string,
+  action: string,
+  payload: Record<string, unknown> = {},
+) {
   const response = await fetch(`/api/containers/${containerId}/update-policy`, {
     method: 'PATCH',
     credentials: 'include',
@@ -96,8 +253,8 @@ async function updateContainerPolicy(containerId, action, payload = {}) {
     try {
       const body = await response.json();
       details = body?.error ? ` (${body.error})` : '';
-    } catch (e: any) {
-      console.debug(`Unable to parse policy update response payload: ${e?.message || e}`);
+    } catch (e: unknown) {
+      console.debug(`Unable to parse policy update response payload: ${errorMessage(e)}`);
       // Ignore parsing error and fallback to status text.
     }
     throw new Error(
@@ -107,20 +264,43 @@ async function updateContainerPolicy(containerId, action, payload = {}) {
   return response.json();
 }
 
-async function scanContainer(containerId) {
+async function getContainerGroups(): Promise<ContainerGroup[]> {
+  const response = await fetch('/api/containers/groups', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get container groups: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+async function scanContainer(containerId: string, signal?: AbortSignal) {
   const response = await fetch(`/api/containers/${containerId}/scan`, {
     method: 'POST',
     credentials: 'include',
+    ...(signal ? { signal } : {}),
   });
   if (!response.ok) {
     let details = '';
     try {
       const body = await response.json();
       details = body?.error ? ` (${body.error})` : '';
-    } catch (e: any) {
-      console.debug(`Unable to parse scan response payload: ${e?.message || e}`);
+    } catch (e: unknown) {
+      console.debug(`Unable to parse scan response payload: ${errorMessage(e)}`);
     }
-    throw new Error(`Failed to scan container: ${response.statusText}${details}`);
+    throw new ApiError(
+      `Failed to scan container: ${response.statusText}${details}`,
+      response.status,
+    );
+  }
+  return response.json();
+}
+
+async function revealContainerEnv(containerId: string) {
+  const response = await fetch(`/api/containers/${containerId}/env/reveal`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to reveal env vars: ${response.statusText}`);
   }
   return response.json();
 }
@@ -128,12 +308,21 @@ async function scanContainer(containerId) {
 export {
   getContainerIcon,
   getAllContainers,
+  getContainerRecentStatus,
+  getContainerSummary,
+  getContainerGroups,
   refreshAllContainers,
   refreshContainer,
   deleteContainer,
   getContainerTriggers,
   getContainerLogs,
+  getContainerUpdateOperations,
+  getContainerVulnerabilities,
+  getContainerSbom,
+  revealContainerEnv,
   runTrigger,
   scanContainer,
   updateContainerPolicy,
 };
+
+export type { ContainerGroup };

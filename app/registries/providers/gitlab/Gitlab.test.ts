@@ -1,4 +1,3 @@
-// @ts-nocheck
 import axios from 'axios';
 import Gitlab from './Gitlab.js';
 
@@ -91,6 +90,45 @@ test('authenticate should perform authenticate request', async () => {
       },
     ),
   ).resolves.toEqual({ headers: { Authorization: 'Bearer token' } });
+});
+
+test('authenticate should encode scope query parameter', async () => {
+  axios.mockImplementation(() => ({
+    data: {
+      token: 'token',
+    },
+  }));
+
+  await gitlab.authenticate(
+    { name: 'group/project' },
+    {
+      headers: {},
+    },
+  );
+
+  expect(axios).toHaveBeenCalledWith({
+    method: 'GET',
+    url: 'https://gitlab.com/jwt/auth?service=container_registry&scope=repository%3Agroup%2Fproject%3Apull',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Basic ${Buffer.from(`:${TEST_TOKEN}`).toString('base64')}`,
+    },
+  });
+});
+
+test('authenticate should throw when token response is missing token', async () => {
+  axios.mockImplementation(() => ({
+    data: {},
+  }));
+
+  await expect(
+    gitlab.authenticate(
+      {},
+      {
+        headers: {},
+      },
+    ),
+  ).rejects.toThrow('GitLab token endpoint response does not contain token');
 });
 
 test('normalizeImage should return the proper registry v2 endpoint', async () => {

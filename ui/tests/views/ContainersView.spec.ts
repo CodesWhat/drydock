@@ -1,775 +1,1288 @@
-import { mount } from '@vue/test-utils';
-import { deleteContainer, getAllContainers } from '@/services/container';
+import { flushPromises } from '@vue/test-utils';
+import { computed, defineComponent, ref } from 'vue';
+import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
+import { mountWithPlugins } from '../helpers/mount';
 
-// Mock the container service
+const { mockRoute } = vi.hoisted(() => ({
+  mockRoute: { query: {} as Record<string, unknown> },
+}));
+
+vi.mock('vue-router', () => ({
+  useRoute: () => mockRoute,
+}));
+
+// --- Mock all services ---
 vi.mock('@/services/container', () => ({
-  getAllContainers: vi.fn(),
   deleteContainer: vi.fn(),
-}));
-const { mockGetAgents } = vi.hoisted(() => ({
-  mockGetAgents: vi.fn(() => Promise.resolve([])),
-}));
-vi.mock('@/services/agent', () => ({
-  default: { getAgents: mockGetAgents },
-  getAgents: mockGetAgents,
+  getAllContainers: vi.fn(),
+  getContainerGroups: vi.fn().mockResolvedValue([]),
+  getContainerLogs: vi.fn(),
+  getContainerUpdateOperations: vi.fn().mockResolvedValue([]),
+  getContainerSbom: vi.fn().mockResolvedValue({ format: 'spdx-json', document: {} }),
+  getContainerTriggers: vi.fn().mockResolvedValue([]),
+  getContainerVulnerabilities: vi.fn().mockResolvedValue({
+    status: 'not-scanned',
+    summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+    vulnerabilities: [],
+  }),
+  refreshAllContainers: vi.fn().mockResolvedValue([]),
+  scanContainer: vi.fn().mockResolvedValue({}),
+  runTrigger: vi.fn().mockResolvedValue({}),
+  updateContainerPolicy: vi.fn().mockResolvedValue({}),
 }));
 
-const mockContainers = [
-  {
-    id: '1',
-    displayName: 'Container 1',
-    agent: 'node1',
-    watcher: 'local',
-    image: { registry: { name: 'hub' }, created: '2023-01-01T00:00:00Z' },
-    updateAvailable: true,
-    updateKind: { semverDiff: 'minor' },
-    labels: { app: 'web', env: 'prod' },
+vi.mock('@/services/container-actions', () => ({
+  startContainer: vi.fn(),
+  updateContainer: vi.fn(),
+  stopContainer: vi.fn(),
+  restartContainer: vi.fn(),
+}));
+
+vi.mock('@/services/backup', () => ({
+  getBackups: vi.fn().mockResolvedValue([]),
+  rollback: vi.fn().mockResolvedValue({}),
+}));
+
+vi.mock('@/services/preview', () => ({
+  previewContainer: vi.fn().mockResolvedValue({}),
+}));
+
+vi.mock('@/utils/container-mapper', () => ({
+  mapApiContainers: vi.fn((x: any) => x),
+}));
+
+vi.mock('@/utils/display', () => ({
+  bouncerColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
+  parseServer: vi.fn((s: string) => ({ name: s, env: null })),
+  registryColorBg: vi.fn(() => 'bg'),
+  registryColorText: vi.fn(() => 'text'),
+  registryLabel: vi.fn((r: string) => r),
+  serverBadgeColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
+  updateKindColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
+}));
+
+// --- Mock composables ---
+const mockFilteredContainers = ref<Container[]>([]);
+const mockActiveFilterCount = ref(0);
+const mockShowFilters = ref(false);
+const mockClearFilters = vi.fn();
+const mockFilterSearch = ref('');
+const mockFilterStatus = ref('all');
+const mockFilterRegistry = ref('all');
+const mockFilterBouncer = ref('all');
+const mockFilterServer = ref('all');
+const mockFilterKind = ref('all');
+
+vi.mock('@/composables/useContainerFilters', () => ({
+  useContainerFilters: vi.fn(() => ({
+    filterSearch: mockFilterSearch,
+    filterStatus: mockFilterStatus,
+    filterRegistry: mockFilterRegistry,
+    filterBouncer: mockFilterBouncer,
+    filterServer: mockFilterServer,
+    filterKind: mockFilterKind,
+    showFilters: mockShowFilters,
+    activeFilterCount: mockActiveFilterCount,
+    filteredContainers: mockFilteredContainers,
+    clearFilters: mockClearFilters,
+  })),
+}));
+
+vi.mock('@/composables/useBreakpoints', () => ({
+  useBreakpoints: vi.fn(() => ({
+    isMobile: mockIsMobile,
+    windowNarrow: mockWindowNarrow,
+  })),
+}));
+
+const mockIsMobile = ref(false);
+const mockWindowNarrow = ref(false);
+
+const mockVisibleColumns = ref(
+  new Set(['icon', 'name', 'version', 'kind', 'status', 'bouncer', 'server', 'registry']),
+);
+const mockShowColumnPicker = ref(false);
+
+vi.mock('@/composables/useColumnVisibility', () => ({
+  useColumnVisibility: vi.fn(() => ({
+    allColumns: [
+      { key: 'icon', label: '', align: 'text-center', required: true },
+      { key: 'name', label: 'Container', align: 'text-left', required: true },
+      { key: 'version', label: 'Version', align: 'text-center', required: false },
+      { key: 'kind', label: 'Kind', align: 'text-center', required: false },
+      { key: 'status', label: 'Status', align: 'text-center', required: false },
+      { key: 'bouncer', label: 'Bouncer', align: 'text-center', required: false },
+      { key: 'server', label: 'Host', align: 'text-center', required: false },
+      { key: 'registry', label: 'Registry', align: 'text-center', required: false },
+    ],
+    visibleColumns: mockVisibleColumns,
+    activeColumns: computed(() => [
+      { key: 'icon', label: '', align: 'text-center' },
+      { key: 'name', label: 'Container', align: 'text-left' },
+    ]),
+    showColumnPicker: mockShowColumnPicker,
+    toggleColumn: vi.fn(),
+  })),
+}));
+
+const mockContainerScrollBlocked = ref(false);
+const mockContainerAutoFetchInterval = ref(0);
+
+vi.mock('@/composables/useLogViewerBehavior', () => ({
+  useLogViewport: () => ({
+    logContainer: ref(null),
+    scrollBlocked: mockContainerScrollBlocked,
+    scrollToBottom: vi.fn(),
+    handleLogScroll: vi.fn(),
+    resumeAutoScroll: vi.fn(),
+  }),
+  useAutoFetchLogs: () => ({ autoFetchInterval: mockContainerAutoFetchInterval }),
+  LOG_AUTO_FETCH_INTERVALS: [
+    { label: 'Off', value: 0 },
+    { label: '2s', value: 2000 },
+    { label: '5s', value: 5000 },
+    { label: '10s', value: 10000 },
+    { label: '30s', value: 30000 },
+  ],
+}));
+
+const mockSelectedContainer = ref<Container | null>(null);
+const mockDetailPanelOpen = ref(false);
+const mockContainerFullPage = ref(false);
+const mockActiveDetailTab = ref('overview');
+const mockSelectContainer = vi.fn();
+const mockDetailPanelStorageRead = vi.fn(() => null);
+
+vi.mock('@/composables/useDetailPanel', () => ({
+  useDetailPanel: vi.fn(() => ({
+    selectedContainer: mockSelectedContainer,
+    detailPanelOpen: mockDetailPanelOpen,
+    activeDetailTab: mockActiveDetailTab,
+    panelSize: ref('sm'),
+    containerFullPage: mockContainerFullPage,
+    panelFlex: computed(() => '0 0 30%'),
+    detailTabs: [
+      { id: 'overview', label: 'Overview', icon: 'info' },
+      { id: 'logs', label: 'Logs', icon: 'logs' },
+      { id: 'actions', label: 'Actions', icon: 'triggers' },
+    ],
+    selectContainer: mockSelectContainer,
+    openFullPage: vi.fn(),
+    closeFullPage: vi.fn(),
+    closePanel: vi.fn(),
+  })),
+  useDetailPanelStorage: vi.fn(() => ({
+    read: mockDetailPanelStorageRead,
+    write: vi.fn(),
+    remove: vi.fn(),
+  })),
+}));
+
+// --- Stub child components ---
+const childStubs = {
+  DataViewLayout: {
+    template: '<div class="data-view-layout"><slot /><slot name="panel" /></div>',
   },
-  {
-    id: '2',
-    displayName: 'Container 2',
-    agent: 'node2',
-    watcher: 'docker',
-    image: { registry: { name: 'ghcr' }, created: '2023-01-02T00:00:00Z' },
-    updateAvailable: false,
-    labels: { app: 'api', env: 'dev' },
+  DataFilterBar: {
+    template:
+      '<div class="data-filter-bar"><slot name="filters" /><slot name="extra-buttons" /><slot name="left" /></div>',
+    props: ['modelValue', 'showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
   },
-];
+  DataTable: defineComponent({
+    props: [
+      'columns',
+      'rows',
+      'rowKey',
+      'sortKey',
+      'sortAsc',
+      'selectedKey',
+      'showActions',
+      'virtualScroll',
+      'virtualRowHeight',
+      'virtualMaxHeight',
+    ],
+    template: `
+      <div class="data-table">
+        <div v-if="rows?.[0]" class="data-table-first-row">
+          <slot name="cell-name" :row="rows[0]" />
+          <slot name="cell-version" :row="rows[0]" />
+          <slot name="cell-status" :row="rows[0]" />
+          <slot name="cell-registry" :row="rows[0]" />
+          <slot name="actions" :row="rows[0]" />
+        </div>
+      </div>
+    `,
+  }),
+  DataCardGrid: defineComponent({
+    props: ['items', 'itemKey', 'selectedKey'],
+    template: `
+      <div class="data-card-grid">
+        <slot v-if="items?.[0]" name="card" :item="items[0]" />
+      </div>
+    `,
+  }),
+  DataListAccordion: defineComponent({
+    props: ['items', 'itemKey', 'selectedKey'],
+    template: `
+      <div class="data-list-accordion">
+        <slot v-if="items?.[0]" name="header" :item="items[0]" />
+      </div>
+    `,
+  }),
+  DetailPanel: {
+    template: '<div class="detail-panel"><slot name="header" /><slot /></div>',
+    props: ['open', 'isMobile', 'size', 'showSizeControls', 'showFullPage'],
+  },
+  EmptyState: {
+    template: '<div class="empty-state">{{ message }}</div>',
+    props: ['icon', 'message', 'showClear'],
+  },
+};
+
+import {
+  getAllContainers,
+  getContainerGroups,
+  getContainerSbom,
+  getContainerUpdateOperations,
+  getContainerVulnerabilities,
+  scanContainer,
+  updateContainerPolicy,
+} from '@/services/container';
+import { updateContainer as apiUpdateContainer } from '@/services/container-actions';
+
+const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
+const mockGetContainerGroups = getContainerGroups as ReturnType<typeof vi.fn>;
+const mockGetContainerUpdateOperations = getContainerUpdateOperations as ReturnType<typeof vi.fn>;
+const mockGetContainerVulnerabilities = getContainerVulnerabilities as ReturnType<typeof vi.fn>;
+const mockGetContainerSbom = getContainerSbom as ReturnType<typeof vi.fn>;
+const mockScanContainer = scanContainer as ReturnType<typeof vi.fn>;
+const mockUpdateContainerPolicy = updateContainerPolicy as ReturnType<typeof vi.fn>;
+const mockApiUpdate = apiUpdateContainer as ReturnType<typeof vi.fn>;
+const mountedWrappers: Array<{ unmount: () => void }> = [];
+
+function makeContainer(overrides: Partial<Container> = {}): Container {
+  return {
+    id: 'c1',
+    name: 'nginx',
+    image: 'nginx',
+    icon: 'docker',
+    currentTag: '1.0.0',
+    newTag: null,
+    status: 'running',
+    registry: 'dockerhub',
+    updateKind: null,
+    bouncer: 'safe',
+    server: 'Local',
+    details: { ports: [], volumes: [], env: [], labels: [] },
+    ...overrides,
+  };
+}
+
+async function mountContainersView(
+  containers: Container[] = [],
+  apiContainersInput?: any[],
+  options: { initialFilterKind?: string } = {},
+) {
+  // The API returns raw objects; mapApiContainers transforms them
+  const apiContainers =
+    apiContainersInput ??
+    containers.map((c) => ({
+      ...c,
+      displayName: c.name,
+    }));
+  mockGetAllContainers.mockResolvedValue(apiContainers);
+
+  const { mapApiContainers } = await import('@/utils/container-mapper');
+  (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue(containers);
+
+  // Sync the filteredContainers mock with the containers we're providing
+  mockFilteredContainers.value = containers;
+  mockActiveFilterCount.value = 0;
+  mockFilterSearch.value = '';
+  mockFilterStatus.value = 'all';
+  mockFilterRegistry.value = 'all';
+  mockFilterBouncer.value = 'all';
+  mockFilterServer.value = 'all';
+  mockFilterKind.value = options.initialFilterKind ?? 'all';
+  mockSelectedContainer.value = null;
+  mockDetailPanelOpen.value = false;
+  mockContainerFullPage.value = false;
+  mockActiveDetailTab.value = 'overview';
+
+  const wrapper = mountWithPlugins(ContainersView, {
+    global: { stubs: childStubs },
+  });
+  mountedWrappers.push(wrapper);
+  await flushPromises();
+  return wrapper;
+}
 
 describe('ContainersView', () => {
-  let wrapper;
-
-  beforeEach(() => {
-    vi.mocked(getAllContainers).mockResolvedValue(mockContainers);
-
-    wrapper = mount(ContainersView, {
-      global: {
-        stubs: {
-          'container-filter': true,
-          'container-item': true,
-        },
-      },
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockIsMobile.value = false;
+    mockWindowNarrow.value = false;
+    mockGetContainerGroups.mockResolvedValue([]);
+    mockGetContainerUpdateOperations.mockResolvedValue([]);
+    mockGetContainerVulnerabilities.mockResolvedValue({
+      status: 'not-scanned',
+      summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+      vulnerabilities: [],
     });
-    wrapper.vm.onRefreshAllContainers(mockContainers);
+    mockGetContainerSbom.mockResolvedValue({ format: 'spdx-json', document: {} });
+    mockScanContainer.mockResolvedValue({});
+    mockUpdateContainerPolicy.mockResolvedValue({});
+    mockFilteredContainers.value = [];
+    mockActiveFilterCount.value = 0;
+    mockFilterSearch.value = '';
+    mockFilterStatus.value = 'all';
+    mockFilterRegistry.value = 'all';
+    mockFilterBouncer.value = 'all';
+    mockFilterServer.value = 'all';
+    mockFilterKind.value = 'all';
+    mockContainerScrollBlocked.value = false;
+    mockContainerAutoFetchInterval.value = 0;
+    mockDetailPanelStorageRead.mockReturnValue(null);
+    mockRoute.query = {};
+    localStorage.clear();
+    sessionStorage.clear();
+    const { resetPreferences } = await import('@/preferences/store');
+    resetPreferences();
   });
 
   afterEach(() => {
-    if (wrapper) {
-      wrapper.unmount();
+    while (mountedWrappers.length > 0) {
+      const wrapper = mountedWrappers.pop();
+      wrapper?.unmount();
     }
   });
 
-  it('renders container filter and container items', () => {
-    expect(wrapper.vm.containers).toHaveLength(2);
-    expect(wrapper.vm.containersFiltered).toHaveLength(2);
-  });
-
-  it('computes registries correctly', () => {
-    expect(wrapper.vm.registries).toEqual(['ghcr', 'hub']);
-  });
-
-  it('computes watchers correctly', () => {
-    expect(wrapper.vm.watchers).toEqual(['docker', 'local']);
-  });
-
-  it('computes agents correctly', () => {
-    expect(wrapper.vm.agents).toEqual(['node1', 'node2']);
-  });
-
-  it('computes update kinds correctly', () => {
-    expect(Array.isArray(wrapper.vm.updateKinds)).toBe(true);
-  });
-
-  it('computes all container labels correctly', () => {
-    const labels = wrapper.vm.allContainerLabels;
-    expect(labels).toContain('app');
-    expect(labels).toContain('env');
-  });
-
-  it('handles containers without labels when computing allContainerLabels', async () => {
-    wrapper.vm.containers = [
-      { ...mockContainers[0], labels: null },
-      { ...mockContainers[1], labels: { team: 'platform' } },
-    ];
-    await wrapper.vm.$nextTick();
-
-    expect(wrapper.vm.allContainerLabels).toEqual(['team']);
-  });
-
-  it('filters containers by registry', async () => {
-    wrapper.vm.registrySelected = 'hub';
-    await wrapper.vm.$nextTick();
-
-    const filtered = wrapper.vm.containersFiltered;
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0].id).toBe('1');
-  });
-
-  it('filters containers by watcher', async () => {
-    wrapper.vm.watcherSelected = 'docker';
-    await wrapper.vm.$nextTick();
-
-    const filtered = wrapper.vm.containersFiltered;
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0].id).toBe('2');
-  });
-
-  it('filters containers by agent', async () => {
-    wrapper.vm.agentSelected = 'node1';
-    await wrapper.vm.$nextTick();
-
-    const filtered = wrapper.vm.containersFiltered;
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0].id).toBe('1');
-  });
-
-  it('filters containers by update available', async () => {
-    wrapper.vm.updateAvailableSelected = true;
-    await wrapper.vm.$nextTick();
-
-    const filtered = wrapper.vm.containersFiltered;
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0].updateAvailable).toBe(true);
-  });
-
-  it('sorts containers by oldest first when enabled', async () => {
-    wrapper.vm.oldestFirst = true;
-    await wrapper.vm.$nextTick();
-
-    const filtered = wrapper.vm.containersFiltered;
-    expect(filtered[0].id).toBe('1'); // Created 2023-01-01
-    expect(filtered[1].id).toBe('2'); // Created 2023-01-02
-  });
-
-  it('groups containers by label', async () => {
-    wrapper.vm.groupByLabel = 'app';
-    await wrapper.vm.$nextTick();
-
-    const filtered = wrapper.vm.containersFiltered;
-    // Should be sorted by label value
-    expect(filtered[0].labels.app).toBe('api');
-    expect(filtered[1].labels.app).toBe('web');
-  });
-
-  it('handles registry filter change', async () => {
-    await wrapper.vm.onRegistryChanged('hub');
-
-    expect(wrapper.vm.registrySelected).toBe('hub');
-  });
-
-  it('handles watcher filter change', async () => {
-    await wrapper.vm.onWatcherChanged('docker');
-
-    expect(wrapper.vm.watcherSelected).toBe('docker');
-  });
-
-  it('handles agent filter change', async () => {
-    await wrapper.vm.onAgentChanged('node1');
-
-    expect(wrapper.vm.agentSelected).toBe('node1');
-  });
-
-  it('handles update available toggle', async () => {
-    const initialValue = wrapper.vm.updateAvailableSelected;
-    await wrapper.vm.onUpdateAvailableChanged();
-
-    expect(wrapper.vm.updateAvailableSelected).toBe(!initialValue);
-  });
-
-  it('handles oldest first toggle', async () => {
-    const initialValue = wrapper.vm.oldestFirst;
-    await wrapper.vm.onOldestFirstChanged();
-
-    expect(wrapper.vm.oldestFirst).toBe(!initialValue);
-  });
-
-  it('handles group by label change', async () => {
-    await wrapper.vm.onGroupByLabelChanged('env');
-
-    expect(wrapper.vm.groupByLabel).toBe('env');
-  });
-
-  it('removes container from list when deleted', async () => {
-    const containerToDelete = mockContainers[0];
-
-    wrapper.vm.removeContainerFromList(containerToDelete);
-
-    expect(wrapper.vm.containers).toHaveLength(1);
-    expect(wrapper.vm.containers[0].id).toBe('2');
-  });
-
-  it('deletes container successfully', async () => {
-    vi.mocked(deleteContainer).mockResolvedValue();
-
-    const containerToDelete = mockContainers[0];
-    await wrapper.vm.deleteContainer(containerToDelete);
-
-    expect(deleteContainer).toHaveBeenCalledWith('1');
-    expect(wrapper.vm.containers).toHaveLength(1);
-  });
-
-  it('handles delete container error', async () => {
-    vi.mocked(deleteContainer).mockRejectedValue(new Error('Delete failed'));
-
-    const containerToDelete = mockContainers[0];
-    await wrapper.vm.deleteContainer(containerToDelete);
-
-    // Container should still be in the list
-    expect(wrapper.vm.containers).toHaveLength(2);
-  });
-
-  it('shows no containers message when list is empty', async () => {
-    wrapper.vm.containers = [];
-    await wrapper.vm.$nextTick();
-
-    expect(wrapper.vm.containersFiltered).toHaveLength(0);
-  });
-
-  it('computes isGrouped as true when groupByLabel is set', async () => {
-    wrapper.vm.groupByLabel = 'app';
-    await wrapper.vm.$nextTick();
-
-    expect(wrapper.vm.isGrouped).toBe(true);
-  });
-
-  it('computes isGrouped as false when groupByLabel is empty', () => {
-    expect(wrapper.vm.isGrouped).toBe(false);
-  });
-
-  it('computes groups by label value', async () => {
-    wrapper.vm.groupByLabel = 'app';
-    await wrapper.vm.$nextTick();
-
-    const groups = wrapper.vm.computedGroups;
-    expect(groups).toHaveLength(2);
-    expect(groups[0].name).toBe('api');
-    expect(groups[0].containers).toHaveLength(1);
-    expect(groups[1].name).toBe('web');
-    expect(groups[1].containers).toHaveLength(1);
-  });
-
-  it('puts ungrouped containers last in computedGroups', async () => {
-    const containersWithMissing = [
-      ...mockContainers,
-      {
-        id: '3',
-        displayName: 'Container 3',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-03T00:00:00Z' },
-        updateAvailable: false,
-        labels: {},
-      },
-    ];
-    wrapper.vm.containers = containersWithMissing;
-    wrapper.vm.groupByLabel = 'app';
-    await wrapper.vm.$nextTick();
-
-    const groups = wrapper.vm.computedGroups;
-    const lastGroup = groups[groups.length - 1];
-    expect(lastGroup.name).toBeNull();
-    expect(lastGroup.containers).toHaveLength(1);
-  });
-
-  it('computes smart groups using label priority', async () => {
-    const smartContainers = [
-      {
-        id: 's1',
-        displayName: 'Smart 1',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-01T00:00:00Z' },
-        updateAvailable: false,
-        labels: { 'dd.group': 'my-stack' },
-      },
-      {
-        id: 's2',
-        displayName: 'Smart 2',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-02T00:00:00Z' },
-        updateAvailable: false,
-        labels: { 'wud.group': 'wud-stack' },
-      },
-      {
-        id: 's3',
-        displayName: 'Smart 3',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-03T00:00:00Z' },
-        updateAvailable: false,
-        labels: { 'com.docker.compose.project': 'compose-proj' },
-      },
-      {
-        id: 's4',
-        displayName: 'Smart 4',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-04T00:00:00Z' },
-        updateAvailable: false,
-        labels: {},
-      },
-    ];
-    wrapper.vm.containers = smartContainers;
-    wrapper.vm.groupByLabel = '__smart__';
-    await wrapper.vm.$nextTick();
-
-    const groups = wrapper.vm.computedGroups;
-    expect(groups).toHaveLength(4);
-    // Named groups alphabetically, ungrouped last
-    expect(groups[0].name).toBe('compose-proj');
-    expect(groups[1].name).toBe('my-stack');
-    expect(groups[2].name).toBe('wud-stack');
-    expect(groups[3].name).toBeNull();
-  });
-
-  it('removes container from list by id', () => {
-    wrapper.vm.removeContainerFromListById('1');
-
-    expect(wrapper.vm.containers).toHaveLength(1);
-    expect(wrapper.vm.containers[0].id).toBe('2');
-  });
-
-  it('refreshes a single container in place', () => {
-    const updated = {
-      ...mockContainers[0],
-      displayName: 'Updated Container 1',
-    };
-    wrapper.vm.onContainerRefreshed(updated);
-
-    expect(wrapper.vm.containers[0].displayName).toBe('Updated Container 1');
-    expect(wrapper.vm.containers).toHaveLength(2);
-  });
-
-  it('handles update kind filter change', async () => {
-    await wrapper.vm.onUpdateKindChanged('minor');
-
-    expect(wrapper.vm.updateKindSelected).toBe('minor');
-  });
-
-  it('filters containers by update kind', async () => {
-    const containersWithKinds = [
-      {
-        id: '1',
-        displayName: 'A',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-01T00:00:00Z' },
-        updateAvailable: true,
-        updateKind: { kind: 'tag', semverDiff: 'minor' },
-        labels: {},
-      },
-      {
-        id: '2',
-        displayName: 'B',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-02T00:00:00Z' },
-        updateAvailable: true,
-        updateKind: { kind: 'tag', semverDiff: 'major' },
-        labels: {},
-      },
-    ];
-    wrapper.vm.containers = containersWithKinds;
-    wrapper.vm.updateKindSelected = 'minor';
-    await wrapper.vm.$nextTick();
-
-    const filtered = wrapper.vm.containersFiltered;
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0].id).toBe('1');
-  });
-
-  it('computes updateKinds from containers with tag kind', () => {
-    const containersWithKinds = [
-      {
-        id: '1',
-        displayName: 'A',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-01T00:00:00Z' },
-        updateAvailable: true,
-        updateKind: { kind: 'tag', semverDiff: 'minor' },
-        labels: {},
-      },
-      {
-        id: '2',
-        displayName: 'B',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-02T00:00:00Z' },
-        updateAvailable: true,
-        updateKind: { kind: 'tag', semverDiff: 'major' },
-        labels: {},
-      },
-      {
-        id: '3',
-        displayName: 'C',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-03T00:00:00Z' },
-        updateAvailable: false,
-        updateKind: { kind: 'tag', semverDiff: 'patch' },
-        labels: {},
-      },
-    ];
-    wrapper.vm.containers = containersWithKinds;
-
-    expect(wrapper.vm.updateKinds).toEqual(['major', 'minor']);
-  });
-
-  it('sorts grouped containers by label then oldest first', async () => {
-    const containers = [
-      {
-        id: '1',
-        displayName: 'Z',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-02T00:00:00Z' },
-        updateAvailable: false,
-        labels: { app: 'web' },
-      },
-      {
-        id: '2',
-        displayName: 'A',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-01T00:00:00Z' },
-        updateAvailable: false,
-        labels: { app: 'web' },
-      },
-    ];
-    wrapper.vm.containers = containers;
-    wrapper.vm.groupByLabel = 'app';
-    wrapper.vm.oldestFirst = true;
-    await wrapper.vm.$nextTick();
-
-    const filtered = wrapper.vm.containersFiltered;
-    expect(filtered[0].id).toBe('2'); // Older date first
-    expect(filtered[1].id).toBe('1');
-  });
-
-  it('builds query params from all filter state', async () => {
-    wrapper.vm.registrySelected = 'hub';
-    wrapper.vm.agentSelected = 'node1';
-    wrapper.vm.watcherSelected = 'local';
-    wrapper.vm.updateKindSelected = 'minor';
-    wrapper.vm.updateAvailableSelected = true;
-    wrapper.vm.oldestFirst = true;
-    wrapper.vm.groupByLabel = 'app';
-
-    wrapper.vm.updateQueryParams();
-
-    expect(wrapper.vm.$router.push).toHaveBeenCalledWith({
-      query: {
-        registry: 'hub',
-        agent: 'node1',
-        watcher: 'local',
-        'update-kind': 'minor',
-        'update-available': 'true',
-        'oldest-first': 'true',
-        'group-by-label': 'app',
-      },
+  describe('loading containers', () => {
+    it('calls getAllContainers on mount', async () => {
+      await mountContainersView([]);
+      expect(mockGetAllContainers).toHaveBeenCalledOnce();
+    });
+
+    it('passes mapped containers to filteredContainers', async () => {
+      const containers = [makeContainer(), makeContainer({ id: 'c2', name: 'redis' })];
+      await mountContainersView(containers);
+      expect(mockFilteredContainers.value).toHaveLength(2);
     });
   });
 
-  it('handles grouped delete-container event emitted from template', async () => {
-    const groupedWrapper = mount(ContainersView, {
-      global: {
-        stubs: {
-          'container-filter': true,
-          'container-item': true,
-          'container-group': {
-            template:
-              '<div class="container-group-stub" @click="$emit(\'delete-container\', containers[0])"></div>',
-            props: ['containers'],
-            emits: ['delete-container'],
-          },
-        },
-      },
+  describe('route query filters', () => {
+    it('applies search query from route query', async () => {
+      mockRoute.query = { q: 'nginx' };
+      await mountContainersView([makeContainer()]);
+      expect(mockFilterSearch.value).toBe('nginx');
     });
 
-    try {
-      groupedWrapper.vm.onRefreshAllContainers(mockContainers);
-      groupedWrapper.vm.groupByLabel = 'app';
-      await groupedWrapper.vm.$nextTick();
+    it('applies filterKind from route query', async () => {
+      mockRoute.query = { filterKind: 'any' };
+      await mountContainersView([makeContainer({ newTag: '2.0.0', updateKind: 'major' })]);
+      expect(mockFilterKind.value).toBe('any');
+    });
 
-      const deleteSpy = vi.spyOn(groupedWrapper.vm, 'deleteContainer');
-      await groupedWrapper.find('.container-group-stub').trigger('click');
+    it('falls back to all for an invalid filterKind query', async () => {
+      mockRoute.query = { filterKind: 'invalid-value' };
+      await mountContainersView([makeContainer()]);
+      expect(mockFilterKind.value).toBe('all');
+    });
 
-      expect(deleteSpy).toHaveBeenCalled();
-    } finally {
-      groupedWrapper.unmount();
-    }
+    it('preserves existing filterKind when query omits filterKind', async () => {
+      mockRoute.query = {};
+      await mountContainersView([makeContainer()], undefined, { initialFilterKind: 'major' });
+      expect(mockFilterKind.value).toBe('major');
+    });
   });
 
-  it('handles ungrouped delete-container event emitted from template', async () => {
-    const listWrapper = mount(ContainersView, {
-      global: {
-        stubs: {
-          'container-filter': true,
-          'container-group': true,
-          'container-item': {
-            template:
-              '<div class="container-item-stub" @click="$emit(\'delete-container\')"></div>',
-            emits: ['delete-container'],
-          },
-        },
-      },
+  describe('empty state', () => {
+    it('shows empty state when no containers match filters', async () => {
+      mockFilteredContainers.value = [];
+      const wrapper = await mountContainersView([]);
+      const empty = wrapper.find('.empty-state');
+      expect(empty.exists()).toBe(true);
+      expect(empty.text()).toContain('No containers match your filters');
     });
-
-    try {
-      listWrapper.vm.onRefreshAllContainers(mockContainers);
-      listWrapper.vm.groupByLabel = '';
-      await listWrapper.vm.$nextTick();
-
-      const deleteSpy = vi.spyOn(listWrapper.vm, 'deleteContainer');
-      await listWrapper.find('.container-item-stub').trigger('click');
-
-      expect(deleteSpy).toHaveBeenCalled();
-    } finally {
-      listWrapper.unmount();
-    }
   });
 
-  describe('beforeRouteEnter', () => {
-    it('loads containers and agents on route enter', async () => {
-      const agents = [{ name: 'agent1' }];
-      vi.mocked(getAllContainers).mockResolvedValue(mockContainers);
-      mockGetAgents.mockResolvedValue(agents);
-
-      const guard =
-        ContainersView.__component?.beforeRouteEnter ?? (ContainersView as any).beforeRouteEnter;
-
-      let nextCallback: ((vm: any) => void) | undefined;
-      const to = {
-        query: {
-          registry: 'hub',
-          agent: 'node1',
-          watcher: 'local',
-          'update-kind': 'minor',
-          'update-available': 'true',
-          'oldest-first': 'true',
-          'group-by-label': 'app',
-        },
-      };
-      await guard.call(undefined, to as any, {} as any, (cb: any) => {
-        nextCallback = cb;
-      });
-
-      const vm: any = {
-        containers: [],
-        agentsList: [],
-        registrySelected: '',
-        agentSelected: '',
-        watcherSelected: '',
-        updateKindSelected: '',
-        updateAvailableSelected: false,
-        oldestFirst: false,
-        groupByLabel: '',
-      };
-      nextCallback?.(vm);
-
-      expect(vm.containers).toEqual(mockContainers);
-      expect(vm.agentsList).toEqual(agents);
-      expect(vm.registrySelected).toBe('hub');
-      expect(vm.agentSelected).toBe('node1');
-      expect(vm.watcherSelected).toBe('local');
-      expect(vm.updateKindSelected).toBe('minor');
-      expect(vm.updateAvailableSelected).toBe(true);
-      expect(vm.oldestFirst).toBe(true);
-      expect(vm.groupByLabel).toBe('app');
+  describe('view mode', () => {
+    it('renders the extracted list content section component', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect(wrapper.find('[data-test="containers-list-content"]').exists()).toBe(true);
     });
 
-    it('emits error notification when beforeRouteEnter fails', async () => {
-      vi.mocked(getAllContainers).mockRejectedValue(new Error('Network fail'));
+    it('renders the extracted grouped views subsection component', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect(wrapper.find('[data-test="containers-grouped-views"]').exists()).toBe(true);
+    });
 
-      const guard =
-        ContainersView.__component?.beforeRouteEnter ?? (ContainersView as any).beforeRouteEnter;
+    it('renders the extracted side-detail tab content component when a container is selected', async () => {
+      const container = makeContainer();
+      const wrapper = await mountContainersView([container]);
 
-      let nextCallback: ((vm: any) => void) | undefined;
-      await guard.call(undefined, { query: {} } as any, {} as any, (cb: any) => {
-        nextCallback = cb;
-      });
+      mockSelectedContainer.value = container;
+      mockDetailPanelOpen.value = true;
+      await flushPromises();
 
-      const emitMock = vi.fn();
-      const vm: any = { $eventBus: { emit: emitMock } };
-      nextCallback?.(vm);
+      expect(wrapper.find('[data-test="container-side-tab-content"]').exists()).toBe(true);
+    });
 
-      expect(emitMock).toHaveBeenCalledWith(
-        'notify',
-        expect.stringContaining('Network fail'),
-        'error',
+    it('renders DataTable by default (table mode)', async () => {
+      const containers = [makeContainer()];
+      const wrapper = await mountContainersView(containers);
+      expect(wrapper.find('.data-table').exists()).toBe(true);
+    });
+
+    it('keeps DataTable actions enabled in compact mode', async () => {
+      mockWindowNarrow.value = true;
+      const wrapper = await mountContainersView([makeContainer()]);
+      const dataTable = wrapper.findComponent(childStubs.DataTable as any);
+      expect(dataTable.props('showActions')).toBe(true);
+    });
+
+    it('disables virtual scrolling so the table flows with the page', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const dataTable = wrapper.findComponent(childStubs.DataTable as any);
+      expect(dataTable.props('virtualScroll')).toBe(false);
+    });
+
+    it('renders DataFilterBar', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect(wrapper.find('.data-filter-bar').exists()).toBe(true);
+    });
+
+    it('shows registry error indicator in table rows', async () => {
+      const c = makeContainer() as Container & { registryError?: string };
+      c.registryError = 'Registry request failed: unauthorized';
+      const wrapper = await mountContainersView([c]);
+
+      expect(wrapper.find('.data-table [aria-label="Registry error"]').exists()).toBe(true);
+    });
+
+    it('shows registry error indicator in card rows', async () => {
+      const c = makeContainer() as Container & { registryError?: string };
+      c.registryError = 'Registry request failed: unauthorized';
+      const wrapper = await mountContainersView([c]);
+
+      (wrapper.vm as any).containerViewMode = 'cards';
+      await flushPromises();
+
+      expect(wrapper.find('.data-card-grid [aria-label="Registry error"]').exists()).toBe(true);
+    });
+
+    it('shows registry error indicator in list rows', async () => {
+      const c = makeContainer() as Container & { registryError?: string };
+      c.registryError = 'Registry request failed: unauthorized';
+      const wrapper = await mountContainersView([c]);
+
+      (wrapper.vm as any).containerViewMode = 'list';
+      await flushPromises();
+
+      expect(wrapper.find('.data-list-accordion [aria-label="Registry error"]').exists()).toBe(
+        true,
       );
     });
 
-    it('keeps default filter values when query params are absent', async () => {
-      vi.mocked(getAllContainers).mockResolvedValue(mockContainers);
-      mockGetAgents.mockResolvedValue([]);
+    it('shows no-update reason in table version cell', async () => {
+      const c = makeContainer({ newTag: null }) as Container & { noUpdateReason?: string };
+      c.noUpdateReason = 'All tags excluded by policy';
+      const wrapper = await mountContainersView([c]);
 
-      const guard =
-        ContainersView.__component?.beforeRouteEnter ?? (ContainersView as any).beforeRouteEnter;
+      expect(wrapper.find('.data-table').text()).toContain('All tags excluded by policy');
+    });
 
-      let nextCallback: ((vm: any) => void) | undefined;
-      await guard.call(undefined, { query: {} } as any, {} as any, (cb: any) => {
-        nextCallback = cb;
+    it('derives active list policy state from updatePolicy metadata', async () => {
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx', newTag: null, updateKind: null }),
+      ];
+      const wrapper = await mountContainersView(containers, [
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          updatePolicy: {
+            snoozeUntil: '2099-01-01T00:00:00.000Z',
+            skipTags: ['2.0.0'],
+          },
+        },
+      ]);
+      const vm = wrapper.vm as any;
+      expect(vm.getContainerListPolicyState('nginx')).toEqual({
+        snoozed: true,
+        skipped: true,
+        skipCount: 1,
+        snoozeUntil: '2099-01-01T00:00:00.000Z',
+      });
+      expect(wrapper.find('.data-table [aria-label="Snoozed updates"]').exists()).toBe(true);
+      expect(wrapper.find('.data-table [aria-label="Skipped updates"]').exists()).toBe(true);
+    });
+  });
+
+  describe('skipUpdate', () => {
+    it('masks newTag after skipUpdate is called', async () => {
+      const containers = [makeContainer({ newTag: '2.0.0', updateKind: 'major' })];
+      const wrapper = await mountContainersView(containers);
+
+      // Access the internal skippedUpdates set via the component
+      const vm = wrapper.vm as any;
+
+      // The displayContainers should initially contain the newTag
+      const before = vm.displayContainers;
+      expect(before[0].newTag).toBe('2.0.0');
+
+      // Call skipUpdate
+      vm.skipUpdate('nginx');
+
+      await flushPromises();
+
+      const after = vm.displayContainers;
+      expect(after[0].newTag).toBeUndefined();
+      expect(after[0].updateKind).toBeUndefined();
+    });
+  });
+
+  describe('advanced policy controls', () => {
+    it('removes one skipped tag via remove-skip policy action', async () => {
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' }),
+      ];
+      const wrapper = await mountContainersView(containers, [
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          updatePolicy: { skipTags: ['2.0.0', '3.0.0'] },
+        },
+      ]);
+      const vm = wrapper.vm as any;
+      mockSelectedContainer.value = containers[0];
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'actions';
+      mockUpdateContainerPolicy.mockResolvedValue({ updated: true });
+
+      await vm.removeSkipTagSelected('2.0.0');
+      await flushPromises();
+
+      expect(mockUpdateContainerPolicy).toHaveBeenCalledWith('c1', 'remove-skip', {
+        kind: 'tag',
+        value: '2.0.0',
+      });
+    });
+
+    it('removes one skipped digest via remove-skip policy action', async () => {
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' }),
+      ];
+      const wrapper = await mountContainersView(containers, [
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          updatePolicy: { skipDigests: ['sha256:abc', 'sha256:def'] },
+        },
+      ]);
+      const vm = wrapper.vm as any;
+      mockSelectedContainer.value = containers[0];
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'actions';
+      mockUpdateContainerPolicy.mockResolvedValue({ updated: true });
+
+      await vm.removeSkipDigestSelected('sha256:abc');
+      await flushPromises();
+
+      expect(mockUpdateContainerPolicy).toHaveBeenCalledWith('c1', 'remove-skip', {
+        kind: 'digest',
+        value: 'sha256:abc',
+      });
+    });
+
+    it('snoozes to a specific date via snooze policy action', async () => {
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+      mockSelectedContainer.value = containers[0];
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'actions';
+      mockUpdateContainerPolicy.mockResolvedValue({ updated: true });
+      vm.snoozeDateInput = '2030-01-10';
+
+      await vm.snoozeSelectedUntilDate();
+      await flushPromises();
+
+      expect(mockUpdateContainerPolicy).toHaveBeenCalledWith(
+        'c1',
+        'snooze',
+        expect.objectContaining({
+          snoozeUntil: expect.any(String),
+        }),
+      );
+    });
+  });
+
+  describe('actionInProgress', () => {
+    it('prevents concurrent actions', async () => {
+      const containers = [makeContainer({ newTag: '2.0.0' })];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      // Simulate first action in progress
+      vm.actionInProgress = 'nginx';
+
+      // Attempting another action should be blocked (containerIdMap needs an entry)
+      mockApiUpdate.mockResolvedValue({});
+      await vm.executeAction('other', mockApiUpdate);
+
+      // apiUpdateContainer should not be called because actionInProgress is set
+      expect(mockApiUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ghost state', () => {
+    it('holds a ghost container when it disappears during action', async () => {
+      const containers = [makeContainer({ name: 'mycontainer' })];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      // Simulate the container existing in idMap
+      vm.containerIdMap = { mycontainer: 'id-123' };
+
+      // On action completion, the container disappears from the reload
+      mockApiUpdate.mockResolvedValue({});
+      mockGetAllContainers.mockResolvedValue([]);
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue([]);
+      mockFilteredContainers.value = [];
+
+      await vm.executeAction('mycontainer', mockApiUpdate);
+      await flushPromises();
+
+      // Ghost entry should exist in actionPending
+      expect(vm.actionPending.has('mycontainer')).toBe(true);
+    });
+
+    it('uses a single poll timer for multiple pending actions', async () => {
+      const first = makeContainer({ id: 'c1', name: 'alpha' });
+      const second = makeContainer({ id: 'c2', name: 'beta' });
+      const wrapper = await mountContainersView([first, second]);
+      const vm = wrapper.vm as any;
+
+      vm.containerIdMap = { alpha: 'id-alpha', beta: 'id-beta' };
+      mockApiUpdate.mockResolvedValue({});
+
+      mockGetAllContainers
+        .mockResolvedValueOnce([{ ...second, displayName: second.name }])
+        .mockResolvedValueOnce([]);
+
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce([second])
+        .mockReturnValueOnce([]);
+
+      const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+      try {
+        await vm.executeAction('alpha', mockApiUpdate);
+        await vm.executeAction('beta', mockApiUpdate);
+        await flushPromises();
+
+        expect(vm.actionPending.has('alpha')).toBe(true);
+        expect(vm.actionPending.has('beta')).toBe(true);
+        expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        setIntervalSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('container actions', () => {
+    it('calls updateContainer with the correct container id', async () => {
+      const containers = [makeContainer({ name: 'nginx', newTag: '2.0.0' })];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      vm.containerIdMap = { nginx: 'nginx-id-1' };
+      mockApiUpdate.mockResolvedValue({});
+
+      // Re-mock so loadContainers still succeeds
+      const apiContainers = containers.map((c) => ({ ...c, displayName: c.name }));
+      mockGetAllContainers.mockResolvedValue(apiContainers);
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue(containers);
+
+      await vm.updateContainer('nginx');
+      await flushPromises();
+
+      expect(mockApiUpdate).toHaveBeenCalledWith('nginx-id-1');
+    });
+
+    it('calls scanContainer with the correct container id', async () => {
+      const containers = [makeContainer({ name: 'nginx', newTag: '2.0.0' })];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      vm.containerIdMap = { nginx: 'nginx-id-1' };
+      mockScanContainer.mockResolvedValue({});
+
+      const apiContainers = containers.map((c) => ({ ...c, displayName: c.name }));
+      mockGetAllContainers.mockResolvedValue(apiContainers);
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue(containers);
+
+      await vm.scanContainer('nginx');
+      await flushPromises();
+
+      expect(mockScanContainer).toHaveBeenCalledWith('nginx-id-1');
+    });
+  });
+
+  describe('detail panel', () => {
+    it('does not show detail panel when no container is selected', async () => {
+      mockSelectedContainer.value = null;
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect(wrapper.find('.detail-panel').exists()).toBe(false);
+    });
+
+    it('shows detail panel when a container is selected', async () => {
+      const c = makeContainer();
+      const wrapper = await mountContainersView([c]);
+      // Set after mount so the helper's reset doesn't overwrite
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      await flushPromises();
+      expect(wrapper.find('.detail-panel').exists()).toBe(true);
+      expect(wrapper.find('[data-test="container-side-detail"]').exists()).toBe(true);
+    });
+
+    it('loads vulnerabilities and sbom for selected container details', async () => {
+      const c = makeContainer({ id: 'container-1', name: 'nginx' });
+      const wrapper = await mountContainersView([c]);
+      mockGetContainerVulnerabilities.mockResolvedValue({
+        status: 'scanned',
+        summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+        vulnerabilities: [{ id: 'CVE-2026-1', severity: 'CRITICAL' }],
+      });
+      mockGetContainerSbom.mockResolvedValue({
+        format: 'spdx-json',
+        document: { spdxVersion: 'SPDX-2.3' },
       });
 
-      const vm: any = {
-        containers: [],
-        agentsList: [],
-        registrySelected: '',
-        agentSelected: '',
-        watcherSelected: '',
-        updateKindSelected: '',
-        updateAvailableSelected: false,
-        oldestFirst: false,
-        groupByLabel: '',
-      };
-      nextCallback?.(vm);
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      await flushPromises();
 
-      expect(vm.registrySelected).toBe('');
-      expect(vm.agentSelected).toBe('');
-      expect(vm.watcherSelected).toBe('');
-      expect(vm.updateKindSelected).toBe('');
-      expect(vm.updateAvailableSelected).toBe(false);
-      expect(vm.oldestFirst).toBe(false);
-      expect(vm.groupByLabel).toBe('');
+      expect(mockGetContainerVulnerabilities).toHaveBeenCalledWith('container-1');
+      expect(mockGetContainerSbom).toHaveBeenCalledWith('container-1', 'spdx-json');
+
+      wrapper.unmount();
+    });
+
+    it('loads and renders update operation history when opening actions tab', async () => {
+      const c = makeContainer({ id: 'container-1', name: 'nginx' });
+      const wrapper = await mountContainersView([c]);
+
+      mockGetContainerUpdateOperations.mockResolvedValue([
+        {
+          id: 'op-1',
+          status: 'rolled-back',
+          phase: 'rollback-failed',
+          rollbackReason: 'health_gate_failed',
+          updatedAt: '2026-02-28T10:00:00.000Z',
+        },
+      ]);
+
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'actions';
+      await flushPromises();
+
+      expect(mockGetContainerUpdateOperations).toHaveBeenCalledWith('container-1');
+      expect(wrapper.text()).toContain('Update Operation History');
+      expect(wrapper.text()).toContain('op-1');
+      expect(wrapper.text()).toContain('rolled back');
+      expect(wrapper.text()).toContain('rollback failed');
+      expect(wrapper.text()).toContain('health gate failed');
+    });
+
+    it('shows registry error message when selected container has one', async () => {
+      const c = makeContainer() as Container & { registryError?: string };
+      c.registryError = 'Registry request failed: unauthorized';
+      const wrapper = await mountContainersView([c]);
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+      expect(wrapper.text()).toContain('Registry request failed: unauthorized');
+    });
+
+    it('shows no-update reason when selected container has noUpdateReason', async () => {
+      const c = makeContainer({ newTag: null }) as Container & { noUpdateReason?: string };
+      c.noUpdateReason =
+        'Strict tag-family policy filtered out 1 higher semver tag(s) outside the inferred family.';
+      const wrapper = await mountContainersView([c]);
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+      expect(wrapper.text()).toContain('Strict tag-family policy filtered out 1 higher semver');
+    });
+
+    it('shows release notes link when selected container has releaseLink', async () => {
+      const c = makeContainer({ newTag: '2.0.0' }) as Container & { releaseLink?: string };
+      c.releaseLink = 'https://example.com/changelog';
+      const wrapper = await mountContainersView([c]);
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+      const releaseLink = wrapper.find('a[href="https://example.com/changelog"]');
+      expect(releaseLink.exists()).toBe(true);
+    });
+
+    it('shows trigger include/exclude filters in overview', async () => {
+      const c = makeContainer({
+        newTag: '2.0.0',
+      } as any) as Container & { triggerInclude?: string; triggerExclude?: string };
+      c.triggerInclude = 'slack.default:major';
+      c.triggerExclude = 'discord.default';
+      const wrapper = await mountContainersView([c]);
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('slack.default:major');
+      expect(wrapper.text()).toContain('discord.default');
+    });
+
+    it('shows image metadata in overview for selected container', async () => {
+      const c = makeContainer({ id: 'container-1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [
+          {
+            id: 'container-1',
+            name: 'nginx',
+            displayName: 'nginx',
+            image: {
+              name: 'nginx',
+              architecture: 'amd64',
+              os: 'linux',
+              created: '2026-01-02T03:04:05.000Z',
+              digest: {
+                value: 'sha256:metadata-digest',
+              },
+            },
+          },
+        ],
+      );
+
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Image Metadata');
+      expect(wrapper.text()).toContain('amd64');
+      expect(wrapper.text()).toContain('linux');
+      expect(wrapper.text()).toContain('sha256:metadata-digest');
+      expect(wrapper.text()).toContain('2026');
+    });
+
+    it('shows runtime Entrypoint/Cmd origins from container labels', async () => {
+      const c = makeContainer({ id: 'container-1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [
+          {
+            id: 'container-1',
+            name: 'nginx',
+            displayName: 'nginx',
+            watcher: 'local',
+            labels: {
+              'dd.runtime.entrypoint.origin': 'explicit',
+              'dd.runtime.cmd.origin': 'inherited',
+            },
+          },
+        ],
+      );
+
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Runtime Process');
+      expect(wrapper.text()).toContain('Entrypoint');
+      expect(wrapper.text()).toContain('Explicit');
+      expect(wrapper.text()).toContain('Cmd');
+      expect(wrapper.text()).toContain('Inherited');
+    });
+
+    it('shows lifecycle hooks from container labels in overview', async () => {
+      const c = makeContainer({ id: 'container-1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [
+          {
+            id: 'container-1',
+            name: 'nginx',
+            displayName: 'nginx',
+            watcher: 'local',
+            labels: {
+              'dd.hook.pre': 'echo before',
+              'dd.hook.post': 'echo after',
+              'dd.hook.timeout': '30000',
+            },
+          },
+        ],
+      );
+
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Lifecycle Hooks');
+      expect(wrapper.text()).toContain('echo before');
+      expect(wrapper.text()).toContain('echo after');
+      expect(wrapper.text()).toContain('30000ms');
+      expect(wrapper.text()).toContain('Template Variables');
+      expect(wrapper.text()).toContain('DD_CONTAINER_NAME');
+      expect(wrapper.text()).toContain('DD_UPDATE_TO');
+    });
+
+    it('shows auto-rollback config from container labels in overview', async () => {
+      const c = makeContainer({ id: 'container-1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [
+          {
+            id: 'container-1',
+            name: 'nginx',
+            displayName: 'nginx',
+            watcher: 'local',
+            labels: {
+              'dd.rollback.auto': 'true',
+              'dd.rollback.window': '120000',
+              'dd.rollback.interval': '5000',
+            },
+          },
+        ],
+      );
+
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Enabled');
+      expect(wrapper.text()).toContain('120000ms');
+      expect(wrapper.text()).toContain('5000ms');
+    });
+
+    it('shows runtime drift warning when origin metadata is unknown', async () => {
+      const c = makeContainer({ id: 'container-1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [
+          {
+            id: 'container-1',
+            name: 'nginx',
+            displayName: 'nginx',
+            watcher: 'local',
+            labels: {},
+          },
+        ],
+      );
+
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('Runtime origin metadata is missing');
     });
   });
 
-  it('sorts containers with groupByLabel where one has label and one does not', async () => {
-    const containers = [
-      {
-        id: '1',
-        displayName: 'A',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-01T00:00:00Z' },
-        updateAvailable: false,
-        labels: {},
-      },
-      {
-        id: '2',
-        displayName: 'B',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-02T00:00:00Z' },
-        updateAvailable: false,
-        labels: { app: 'web' },
-      },
-    ];
-    wrapper.vm.containers = containers;
-    wrapper.vm.groupByLabel = 'app';
-    await wrapper.vm.$nextTick();
-
-    const filtered = wrapper.vm.containersFiltered;
-    // Container with label should come first
-    expect(filtered[0].id).toBe('2');
-    expect(filtered[1].id).toBe('1');
-  });
-
-  it('sorts groups with null keys last when null group is inserted first', async () => {
-    wrapper.vm.containers = [
-      {
-        id: 'z0',
-        displayName: 'No label first',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-01T00:00:00Z' },
-        updateAvailable: false,
-        labels: {},
-      },
-      {
-        id: 'z1',
-        displayName: 'Named group',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-02T00:00:00Z' },
-        updateAvailable: false,
-        labels: { app: 'alpha' },
-      },
-    ];
-    wrapper.vm.groupByLabel = 'app';
-    await wrapper.vm.$nextTick();
-
-    const groups = wrapper.vm.computedGroups;
-    expect(groups[0].name).toBe('alpha');
-    expect(groups[1].name).toBeNull();
-  });
-
-  it('handles non-string sortable values in helper comparisons', async () => {
-    wrapper.vm.containers = [
-      {
-        id: 'n1',
-        displayName: 'A',
-        agent: 7,
-        watcher: true,
-        image: { registry: { name: null }, created: '2023-01-01T00:00:00Z' },
-        updateAvailable: false,
-        labels: {},
-      },
-      {
-        id: 'n2',
-        displayName: 'B',
-        agent: false,
-        watcher: {},
-        image: { registry: { name: 'hub' }, created: '2023-01-02T00:00:00Z' },
-        updateAvailable: false,
-        labels: {},
-      },
-    ];
-    await wrapper.vm.$nextTick();
-
-    expect(Array.isArray(wrapper.vm.watchers)).toBe(true);
-    expect(Array.isArray(wrapper.vm.agents)).toBe(true);
-    expect(Array.isArray(wrapper.vm.registries)).toBe(true);
-  });
-
-  it('covers null-group comparator edge paths in computedGroups sort', async () => {
-    wrapper.vm.containers = [
-      {
-        id: 'a1',
-        displayName: 'Alpha',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-01T00:00:00Z' },
-        updateAvailable: false,
-        labels: { app: 'alpha' },
-      },
-      {
-        id: 'a2',
-        displayName: 'No Label',
-        agent: '',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, created: '2023-01-02T00:00:00Z' },
-        updateAvailable: false,
-        labels: {},
-      },
-    ];
-    wrapper.vm.groupByLabel = 'app';
-    await wrapper.vm.$nextTick();
-
-    const originalSort = Array.prototype.sort;
-    const sortSpy = vi.spyOn(Array.prototype, 'sort').mockImplementation(function mockedSort(
-      this: any[],
-      compareFn?: any,
-    ) {
-      if (typeof compareFn === 'function') {
-        compareFn([null, []], [null, []]);
-        compareFn(['alpha', []], [null, []]);
-      }
-      return originalSort.call(this, compareFn);
+  describe('full page mode', () => {
+    it('hides DataViewLayout when containerFullPage is true', async () => {
+      const c = makeContainer();
+      const wrapper = await mountContainersView([c]);
+      // Set after mount so the helper's reset doesn't overwrite
+      mockContainerFullPage.value = true;
+      mockSelectedContainer.value = c;
+      await flushPromises();
+      // The v-if="!containerFullPage" should hide DataViewLayout
+      expect(wrapper.find('.data-view-layout').exists()).toBe(false);
+      expect(wrapper.find('[data-test="container-full-page-detail"]').exists()).toBe(true);
     });
 
-    try {
-      const computeGroups = wrapper.vm.$options.computed?.computedGroups as
-        | ((this: any) => any[])
-        | undefined;
-      const groups = computeGroups?.call(wrapper.vm) ?? wrapper.vm.computedGroups;
-      expect(groups.at(-1)?.name).toBeNull();
-    } finally {
-      sortSpy.mockRestore();
-    }
+    it('renders the extracted full-page tab content component', async () => {
+      const c = makeContainer();
+      const wrapper = await mountContainersView([c]);
+
+      mockContainerFullPage.value = true;
+      mockSelectedContainer.value = c;
+      mockActiveDetailTab.value = 'overview';
+      await flushPromises();
+
+      expect(wrapper.find('[data-test="container-full-page-tab-content"]').exists()).toBe(true);
+    });
+  });
+
+  describe('error handling', () => {
+    it('sets error when getAllContainers fails', async () => {
+      mockGetAllContainers.mockRejectedValue(new Error('API down'));
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue([]);
+      mockFilteredContainers.value = [];
+
+      const wrapper = mountWithPlugins(ContainersView, {
+        global: { stubs: childStubs },
+      });
+      await flushPromises();
+
+      const vm = wrapper.vm as any;
+      expect(vm.error).toBe('API down');
+    });
+  });
+
+  describe('grouping', () => {
+    beforeEach(() => {
+      localStorage.removeItem('dd-preferences');
+    });
+
+    it('groupByStack defaults to false', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+      expect(vm.groupByStack).toBe(false);
+    });
+
+    it('renderGroups returns a single flat group when groupByStack is false', async () => {
+      const containers = [makeContainer(), makeContainer({ id: 'c2', name: 'redis' })];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+      expect(vm.renderGroups).toHaveLength(1);
+      expect(vm.renderGroups[0].key).toBe('__flat__');
+      expect(vm.renderGroups[0].containers).toHaveLength(2);
+    });
+
+    it('groups containers by stack membership when enabled', async () => {
+      const containers = [
+        makeContainer({ name: 'nginx' }),
+        makeContainer({ id: 'c2', name: 'redis' }),
+        makeContainer({ id: 'c3', name: 'postgres' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      vm.groupByStack = true;
+      vm.groupMembershipMap = { nginx: 'web-stack', redis: 'web-stack', postgres: 'db-stack' };
+      await flushPromises();
+
+      const groups = vm.groupedContainers;
+      expect(groups).toHaveLength(2);
+      expect(groups[0].key).toBe('db-stack');
+      expect(groups[0].containers).toHaveLength(1);
+      expect(groups[1].key).toBe('web-stack');
+      expect(groups[1].containers).toHaveLength(2);
+    });
+
+    it('places ungrouped containers last', async () => {
+      const containers = [
+        makeContainer({ name: 'nginx' }),
+        makeContainer({ id: 'c2', name: 'solo' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      vm.groupByStack = true;
+      vm.groupMembershipMap = { nginx: 'web-stack' };
+      await flushPromises();
+
+      const groups = vm.groupedContainers;
+      expect(groups).toHaveLength(2);
+      expect(groups[0].key).toBe('web-stack');
+      expect(groups[1].key).toBe('__ungrouped__');
+      expect(groups[1].name).toBeNull();
+      expect(groups[1].containers).toHaveLength(1);
+    });
+
+    it('persists toggle state to preferences', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      vm.groupByStack = true;
+      await flushPromises();
+      const { flushPreferences } = await import('@/preferences/store');
+      flushPreferences();
+      const prefs1 = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
+      expect(prefs1.containers.groupByStack).toBe(true);
+
+      vm.groupByStack = false;
+      await flushPromises();
+      flushPreferences();
+      const prefs2 = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
+      expect(prefs2.containers.groupByStack).toBe(false);
+    });
+
+    it('toggles collapse state for groups', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      vm.toggleGroupCollapse('web-stack');
+      expect(vm.collapsedGroups.has('web-stack')).toBe(true);
+
+      vm.toggleGroupCollapse('web-stack');
+      expect(vm.collapsedGroups.has('web-stack')).toBe(false);
+    });
+
+    it('counts updates within groups from actual container data', async () => {
+      const containers = [
+        makeContainer({ name: 'nginx', newTag: '2.0.0', updateKind: 'major' }),
+        makeContainer({ id: 'c2', name: 'redis' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      vm.groupByStack = true;
+      vm.groupMembershipMap = { nginx: 'web-stack', redis: 'web-stack' };
+      await flushPromises();
+
+      const groups = vm.groupedContainers;
+      expect(groups[0].updatesAvailable).toBe(1);
+      expect(groups[0].containerCount).toBe(2);
+    });
+
+    it('shows grouped stack headers when grouping is enabled', async () => {
+      const containers = [
+        makeContainer({ name: 'nginx' }),
+        makeContainer({ id: 'c2', name: 'redis' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      expect(wrapper.text()).not.toContain('web-stack');
+
+      vm.groupByStack = true;
+      vm.groupMembershipMap = { nginx: 'web-stack', redis: 'web-stack' };
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('web-stack');
+    });
+
+    it('updates all eligible containers in a group', async () => {
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' }),
+        makeContainer({
+          id: 'c2',
+          name: 'redis',
+          newTag: '7.0.0',
+          updateKind: 'major',
+          bouncer: 'blocked',
+        }),
+        makeContainer({ id: 'c3', name: 'postgres', newTag: '15.0.0', updateKind: 'major' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+      mockApiUpdate.mockResolvedValue({});
+
+      vm.groupByStack = true;
+      vm.groupMembershipMap = { nginx: 'web-stack', redis: 'web-stack', postgres: 'web-stack' };
+      await flushPromises();
+
+      await vm.updateAllInGroup(vm.groupedContainers[0]);
+
+      expect(mockApiUpdate).toHaveBeenCalledTimes(2);
+      expect(mockApiUpdate).toHaveBeenNthCalledWith(1, 'c1');
+      expect(mockApiUpdate).toHaveBeenNthCalledWith(2, 'c3');
+    });
+
+    it('tracks group update-all loading state during execution', async () => {
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx', newTag: '2.0.0', updateKind: 'major' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+      let resolveUpdate: ((value: unknown) => void) | undefined;
+      mockApiUpdate.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveUpdate = resolve;
+          }),
+      );
+
+      vm.groupByStack = true;
+      vm.groupMembershipMap = { nginx: 'web-stack' };
+      await flushPromises();
+
+      const pending = vm.updateAllInGroup(vm.groupedContainers[0]);
+      expect(vm.groupUpdateInProgress.has('web-stack')).toBe(true);
+
+      resolveUpdate?.({});
+      await pending;
+
+      expect(vm.groupUpdateInProgress.has('web-stack')).toBe(false);
+    });
+
+    it('fetches groups when toggle is turned ON and map is empty', async () => {
+      mockGetContainerGroups.mockResolvedValue([
+        {
+          name: 'my-stack',
+          containers: [{ name: 'nginx', displayName: 'nginx' }],
+          containerCount: 1,
+          updatesAvailable: 0,
+        },
+      ]);
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      vm.groupByStack = true;
+      await flushPromises();
+
+      expect(mockGetContainerGroups).toHaveBeenCalled();
+      expect(vm.groupMembershipMap).toEqual({ nginx: 'my-stack' });
+    });
+  });
+
+  describe('container logs auto-fetch', () => {
+    it('renders auto-fetch interval selector in logs tab', async () => {
+      const c = makeContainer();
+      const { getContainerLogs } = await import('@/services/container');
+      (getContainerLogs as ReturnType<typeof vi.fn>).mockResolvedValue({ logs: 'line1\nline2' });
+
+      const wrapper = await mountContainersView([c]);
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'logs';
+      await flushPromises();
+
+      const selects = wrapper.findAll('select');
+      const autoFetchSelect = selects.find((s) => s.text().includes('Off'));
+      expect(autoFetchSelect).toBeDefined();
+    });
+
+    it('shows scroll-paused indicator when scrollBlocked and auto-fetch active', async () => {
+      const c = makeContainer();
+      const { getContainerLogs } = await import('@/services/container');
+      (getContainerLogs as ReturnType<typeof vi.fn>).mockResolvedValue({ logs: 'line1\nline2' });
+
+      const wrapper = await mountContainersView([c]);
+      mockSelectedContainer.value = c;
+      mockDetailPanelOpen.value = true;
+      mockActiveDetailTab.value = 'logs';
+      await flushPromises();
+      // Set after tab switch so the watcher reset has already fired
+      mockContainerScrollBlocked.value = true;
+      mockContainerAutoFetchInterval.value = 2000;
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.text()).toContain('Auto-scroll paused');
+      const resumeBtn = wrapper.findAll('button').find((b) => b.text().includes('Resume'));
+      expect(resumeBtn).toBeDefined();
+    });
   });
 });

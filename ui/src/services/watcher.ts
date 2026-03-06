@@ -1,15 +1,21 @@
 function getWatcherIcon() {
-  return 'fas fa-eye';
+  return 'sh-eye';
 }
 
-function getWatcherProviderIcon(type) {
+interface WatcherDetailPathOptions {
+  type: string;
+  name: string;
+  agent?: string;
+}
+
+function getWatcherProviderIcon(type: string) {
   if (type === 'docker') {
-    return 'fab fa-docker';
+    return 'sh-docker';
   }
-  return 'fas fa-eye';
+  return 'sh-eye';
 }
 
-function getWatcherProviderColor(type) {
+function getWatcherProviderColor(type: string) {
   if (type === 'docker') {
     return '#2496ED';
   }
@@ -18,7 +24,35 @@ function getWatcherProviderColor(type) {
 
 async function getAllWatchers() {
   const response = await fetch('/api/watchers', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get watchers: ${response.statusText}`);
+  }
   return response.json();
 }
 
-export { getWatcherIcon, getWatcherProviderIcon, getWatcherProviderColor, getAllWatchers };
+function buildWatcherDetailPath({ type, name, agent }: WatcherDetailPathOptions) {
+  const segments = ['/api/watchers'];
+  if (agent) {
+    segments.push(encodeURIComponent(agent));
+  }
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
+  return segments.join('/');
+}
+
+async function getWatcher({ type, name, agent }: WatcherDetailPathOptions) {
+  const response = await fetch(buildWatcherDetailPath({ type, name, agent }), {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get watcher: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export {
+  getWatcherIcon,
+  getWatcherProviderIcon,
+  getWatcherProviderColor,
+  getAllWatchers,
+  getWatcher,
+};

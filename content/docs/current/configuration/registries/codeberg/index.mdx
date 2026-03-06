@@ -1,0 +1,50 @@
+---
+title: "Codeberg"
+description: "The codeberg registry lets you configure Codeberg Container Registry integration."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `codeberg` registry lets you configure [Codeberg Container Registry](https://codeberg.org/) integration.
+
+Drydock automatically detects Codeberg registries by matching `codeberg.org` hostnames. Public images work out of the box with no configuration.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_CODEBERG_{REGISTRY_NAME}_LOGIN` | ⚪ | Codeberg username | DD_REGISTRY_CODEBERG_\{REGISTRY_NAME\}_PASSWORD must be defined | |
+| `DD_REGISTRY_CODEBERG_{REGISTRY_NAME}_PASSWORD` | ⚪ | Codeberg password or personal access token | DD_REGISTRY_CODEBERG_\{REGISTRY_NAME\}_LOGIN must be defined | |
+| `DD_REGISTRY_CODEBERG_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | DD_REGISTRY_CODEBERG_\{REGISTRY_NAME\}_LOGIN/PASSWORD must not be defined | |
+
+<Callout type="info">Codeberg public images are supported without any authentication configuration.</Callout>
+
+## Examples
+
+### Configure for private images
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_CODEBERG_PRIVATE_LOGIN=john
+      - DD_REGISTRY_CODEBERG_PRIVATE_PASSWORD=xxxxx
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_CODEBERG_PRIVATE_LOGIN=john" \
+  -e "DD_REGISTRY_CODEBERG_PRIVATE_PASSWORD=xxxxx" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

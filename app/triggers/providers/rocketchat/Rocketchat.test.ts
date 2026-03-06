@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Rocketchat from './Rocketchat.js';
 
 // Mock axios
@@ -146,6 +145,7 @@ describe('Rocketchat Trigger', () => {
           'content-type': 'application/json',
           accept: 'application/json',
         },
+        timeout: 30000,
       },
     );
   });

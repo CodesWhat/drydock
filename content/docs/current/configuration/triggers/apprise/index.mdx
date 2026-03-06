@@ -1,0 +1,113 @@
+---
+title: "Apprise"
+description: "The apprise trigger lets you send container update notifications via the Apprise API."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/triggers/apprise/apprise.png)
+
+The `apprise` trigger lets you send container update notifications via the [Apprise API](https://github.com/caronc/apprise-api).
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --------------------------------------------- | :--------------: | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| `DD_TRIGGER_APPRISE_{trigger_name}_URL` | 🔴 | The Base URL of the Apprise API | | |
+| `DD_TRIGGER_APPRISE_{trigger_name}_URLS` | ⚪ | The comma separated list of Apprise service urls | [See the list of the supported Apprise notification URLs](https://github.com/caronc/apprise#popular-notification-services) | |
+| `DD_TRIGGER_APPRISE_{trigger_name}_CONFIG` | ⚪ | The name of an Apprise yaml configuration | [See Apprise persistent configuration documentation](https://github.com/caronc/apprise/wiki/config_yaml) | |
+| `DD_TRIGGER_APPRISE_{trigger_name}_TAG` | ⚪ | The optional tags(s) to expand when using an Apprise yaml configuration | [See Apprise persistent configuration documentation](https://github.com/caronc/apprise/wiki/config_yaml) | |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+## Examples
+
+### Send a Mail & an SMS
+
+<Tabs items={["Docker Compose (Mail & SMS)", "Docker (Mail & SMS)"]}>
+<Tab value="Docker Compose (Mail & SMS)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_TRIGGER_APPRISE_LOCAL_URL=http://apprise:8000
+      - DD_TRIGGER_APPRISE_LOCAL_URLS=mailto://john.doe:secret@gmail.com,sns://AHIAJGNT76XIMXDBIJYA/bu1dHSdO22pfaaVy/wmNsdljF4C07D3bndi9PQJ9/us-east-2/+1(800)555-1223
+```
+
+</Tab>
+<Tab value="Docker (Mail & SMS)">
+```bash
+docker run \
+  -e DD_TRIGGER_APPRISE_LOCAL_URL="http://apprise:8000" \
+  -e DD_TRIGGER_APPRISE_LOCAL_URLS="mailto://john.doe:secret@gmail.com,sns://AHIAJGNT76XIMXDBIJYA/bu1dHSdO22pfaaVy/wmNsdljF4C07D3bndi9PQJ9/us-east-2/+1(800)555-1223" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Use a persistent YAML configuration
+
+Declare a YAML Apprise configuration ([see here](https://github.com/caronc/apprise/wiki/config_yaml)) ; let's call it `dd.yml` for example.
+
+```yaml
+# dd.yml example
+urls:
+  - tgram://{bot_token}/{chat_id}:
+    - tag: devops
+```
+
+<Tabs items={["Docker Compose (YAML Config)", "Docker (YAML Config)"]}>
+<Tab value="Docker Compose (YAML Config)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_TRIGGER_APPRISE_LOCAL_URL=http://apprise:8000
+      - DD_TRIGGER_APPRISE_LOCAL_CONFIG=drydock # the name of the yaml config file
+      - DD_TRIGGER_APPRISE_LOCAL_TAG=devops # the tags to use with the config (optional)
+```
+
+</Tab>
+<Tab value="Docker (YAML Config)">
+```bash
+docker run \
+  -e DD_TRIGGER_APPRISE_LOCAL_URL="http://apprise:8000" \
+  -e DD_TRIGGER_APPRISE_LOCAL_CONFIG="drydock" \
+  -e DD_TRIGGER_APPRISE_LOCAL_TAG="devops" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+## How to run the Apprise API?
+
+Just run the official [Apprise Docker image](https://hub.docker.com/r/caronc/apprise).
+
+For more information, check out the [official Apprise API documentation](https://github.com/caronc/apprise-api).
+
+<Tabs items={["Docker Compose (Apprise API)", "Docker (Apprise API)"]}>
+<Tab value="Docker Compose (Apprise API)">
+
+```yaml
+services:
+  apprise:
+    image: caronc/apprise
+    container_name: apprise
+```
+
+</Tab>
+<Tab value="Docker (Apprise API)">
+```bash
+docker run caronc/apprise
+```
+</Tab>
+</Tabs>

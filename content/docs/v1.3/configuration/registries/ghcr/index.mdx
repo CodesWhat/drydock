@@ -1,0 +1,61 @@
+---
+title: "GHCR (Github Container Registry)"
+description: "The ghcr registry lets you configure GitHub Container Registry integration."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/registries/ghcr/github.png)
+
+The `ghcr` registry lets you configure [GHCR](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-docker-registry) integration.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_GHCR_{REGISTRY_NAME}_USERNAME` | ⚪ | Github username | | |
+| `DD_REGISTRY_GHCR_{REGISTRY_NAME}_TOKEN` | ⚪ | Github token | Github password or Github Personal Token | |
+
+## Examples
+
+### Configure to access private images
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_GHCR_PRIVATE_USERNAME=john@doe
+      - DD_REGISTRY_GHCR_PRIVATE_TOKEN=xxxxx 
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_REGISTRY_GHCR_PRIVATE_USERNAME="john@doe" \
+  -e DD_REGISTRY_GHCR_PRIVATE_TOKEN="xxxxx" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+## How to create a Github Personal Token
+
+### Go to your Github settings and open the Personal Access Token tab
+
+[Open GitHub Personal Access Tokens](https://github.com/settings/tokens)
+
+### Click on `Generate new token`
+
+Choose an expiration time & appropriate scopes (`read:packages` is only needed for drydock) and generate.
+![image](/docs/assets/configuration/registries/ghcr/ghcr_01.png)
+
+### Copy the token & use it as the DD_REGISTRY_GHCR_\{REGISTRY_NAME\}_TOKEN value
+
+![image](/docs/assets/configuration/registries/ghcr/ghcr_02.png)

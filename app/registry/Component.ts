@@ -1,7 +1,7 @@
 import joi from 'joi';
 import log from '../log/index.js';
 
-export type AppLogger = typeof log;
+type AppLogger = typeof log;
 
 export interface ComponentConfiguration {
   [key: string]: any;
@@ -84,11 +84,14 @@ class Component {
    */
   validateConfiguration(configuration: ComponentConfiguration): ComponentConfiguration {
     const schema = this.getConfigurationSchema();
-    const schemaValidated = schema.validate(configuration);
-    if (schemaValidated.error) {
-      throw schemaValidated.error;
+    const schemaValidated =
+      typeof schema?.validate === 'function'
+        ? schema.validate(configuration)
+        : { value: configuration };
+    if ((schemaValidated as any).error) {
+      throw (schemaValidated as any).error;
     }
-    return schemaValidated.value ? schemaValidated.value : {};
+    return (schemaValidated as any).value ? (schemaValidated as any).value : {};
   }
 
   /**
@@ -96,7 +99,7 @@ class Component {
    * Can be overridden by the component implementation class
    * @returns {*}
    */
-  getConfigurationSchema(): joi.ObjectSchema {
+  getConfigurationSchema(): any {
     return this.joi.object();
   }
 
@@ -105,7 +108,7 @@ class Component {
    * Can be overridden by the component implementation class
    */
 
-  init(): Promise<void> {
+  init(): void | Promise<void> {
     return Promise.resolve();
   }
 

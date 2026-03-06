@@ -1,0 +1,56 @@
+---
+title: "Timezone"
+description: "drydock is running in UTC by default."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+drydock is running in UTC by default. \
+If you prefer using a local timezone, you have 2 solutions:
+
+## Solution 1: use the local time of your host machine
+
+<Tabs items={["Docker Compose (Host Localtime)", "Docker (Host Localtime)"]}>
+<Tab value="Docker Compose (Host Localtime)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+```
+
+</Tab>
+<Tab value="Docker (Host Localtime)">
+```bash
+docker run -v /etc/localtime:/etc/localtime:ro ... codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+## Solution 2: use the standard `TZ` environment variable
+
+<Tabs items={["Docker Compose (TZ Variable)", "Docker (TZ Variable)"]}>
+<Tab value="Docker Compose (TZ Variable)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - TZ=Europe/Paris
+```
+
+</Tab>
+<Tab value="Docker (TZ Variable)">
+```bash
+docker run -e "TZ=Europe/Paris" ... codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+<Callout type="info">You can find the [list of the supported values here](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).</Callout>

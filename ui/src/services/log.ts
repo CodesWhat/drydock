@@ -1,9 +1,12 @@
 function getLogIcon() {
-  return 'fas fa-scroll';
+  return 'sh-scroll';
 }
 
 async function getLog() {
   const response = await fetch('/api/log', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get log: ${response.statusText}`);
+  }
   return response.json();
 }
 

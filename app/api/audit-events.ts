@@ -2,6 +2,33 @@ import type { AuditEntry } from '../model/audit.js';
 import { getAuditCounter } from '../prometheus/audit.js';
 import * as auditStore from '../store/audit.js';
 
+type AuditContainerImage = NonNullable<AuditEntry['containerImage']>;
+
+type RecordAuditEventArgs = {
+  action: AuditEntry['action'];
+  status: AuditEntry['status'];
+  details?: AuditEntry['details'];
+  fromVersion?: AuditEntry['fromVersion'];
+  toVersion?: AuditEntry['toVersion'];
+} & (
+  | {
+      container: {
+        name: AuditEntry['containerName'];
+        image?: { name?: AuditContainerImage };
+      };
+      containerName?: AuditEntry['containerName'];
+      containerImage?: AuditEntry['containerImage'];
+    }
+  | {
+      container?: {
+        name?: AuditEntry['containerName'];
+        image?: { name?: AuditContainerImage };
+      };
+      containerName: AuditEntry['containerName'];
+      containerImage?: AuditEntry['containerImage'];
+    }
+);
+
 /**
  * Insert an audit entry and increment the shared audit counter.
  */
@@ -14,43 +41,19 @@ export function recordAuditEvent({
   details,
   fromVersion,
   toVersion,
-}: {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  action: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  status: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  container?: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  containerName?: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  containerImage?: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  details?: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  fromVersion?: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  toVersion?: any;
-}) {
-  const entry: Partial<AuditEntry> = {
+}: RecordAuditEventArgs) {
+  const entry: AuditEntry = {
     id: '',
     timestamp: new Date().toISOString(),
     action,
     containerName,
     containerImage,
     status,
+    ...(details !== undefined ? { details } : {}),
+    ...(fromVersion !== undefined ? { fromVersion } : {}),
+    ...(toVersion !== undefined ? { toVersion } : {}),
   };
 
-  if (details !== undefined) {
-    entry.details = details;
-  }
-  if (fromVersion !== undefined) {
-    entry.fromVersion = fromVersion;
-  }
-  if (toVersion !== undefined) {
-    entry.toVersion = toVersion;
-  }
-
-  auditStore.insertAudit(entry as AuditEntry);
+  auditStore.insertAudit(entry);
   getAuditCounter()?.inc({ action });
 }

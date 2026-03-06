@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { ClientSecretPost, Configuration } from 'openid-client';
 import log from '../../../log/index.js';
 import OidcStrategy from './OidcStrategy.js';
@@ -30,9 +29,10 @@ test('authenticate should return user from session if so', async () => {
 });
 
 test('authenticate should call super.authenticate when no existing session', async () => {
-  const fail = vi.spyOn(oidcStrategy, 'fail');
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, null));
   oidcStrategy.authenticate({ isAuthenticated: () => false, headers: {} });
-  expect(fail).toHaveBeenCalled();
+  expect(oidcStrategy.verify).toHaveBeenCalledWith('', expect.any(Function));
+  expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
 });
 
 test('authenticate should get & validate Bearer token', async () => {
@@ -78,4 +78,79 @@ test('authenticate should succeed when bearer token verify returns valid user', 
     },
   });
   expect(oidcStrategy.success).toHaveBeenCalledWith(user);
+});
+
+test('constructor should normalize missing access token to empty string in verify bridge', async () => {
+  const verify = vi.fn();
+  const strategy = new OidcStrategy(
+    {
+      config: oidcConfig,
+      scope: 'openid email profile',
+      name: 'oidc',
+    },
+    verify,
+    log,
+  );
+  const internalVerify = (
+    strategy as unknown as { _verify: (tokens: unknown, done: unknown) => void }
+  )._verify;
+  const done = vi.fn();
+
+  internalVerify({ access_token: 'bridge-token' }, done);
+  internalVerify({}, done);
+
+  expect(verify).toHaveBeenNthCalledWith(1, 'bridge-token', done);
+  expect(verify).toHaveBeenNthCalledWith(2, '', done);
+});
+
+test('authenticate should parse bearer token from authorization header array', async () => {
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, { username: 'array-user' }));
+  oidcStrategy.authenticate({
+    isAuthenticated: () => false,
+    headers: {
+      authorization: ['Bearer array-token'],
+    },
+  });
+
+  expect(oidcStrategy.verify).toHaveBeenCalledWith('array-token', expect.any(Function));
+  expect(oidcStrategy.success).toHaveBeenCalledWith({ username: 'array-user' });
+});
+
+test('authenticate should fail when authorization header array is empty', async () => {
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, null));
+  oidcStrategy.authenticate({
+    isAuthenticated: () => false,
+    headers: {
+      authorization: [],
+    },
+  });
+
+  expect(oidcStrategy.verify).toHaveBeenCalledWith('', expect.any(Function));
+  expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
+});
+
+test('authenticate should fail when bearer token contains trailing whitespace', async () => {
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, null));
+  oidcStrategy.authenticate({
+    isAuthenticated: () => false,
+    headers: {
+      authorization: 'Bearer token-with-space ',
+    },
+  });
+
+  expect(oidcStrategy.verify).toHaveBeenCalledWith('', expect.any(Function));
+  expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
+});
+
+test('authenticate should fail when bearer token has extra authorization segments', async () => {
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, null));
+  oidcStrategy.authenticate({
+    isAuthenticated: () => false,
+    headers: {
+      authorization: 'Bearer token extra',
+    },
+  });
+
+  expect(oidcStrategy.verify).toHaveBeenCalledWith('', expect.any(Function));
+  expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
 });

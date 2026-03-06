@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { collectDefaultMetrics, register } from 'prom-client';
 
 import logger from '../log/index.js';
@@ -7,9 +6,11 @@ const log = logger.child({ component: 'prometheus' });
 
 import { getPrometheusConfiguration } from '../configuration/index.js';
 import * as audit from './audit.js';
+import * as compatibility from './compatibility.js';
 import * as container from './container.js';
 import * as containerActions from './container-actions.js';
 import * as registry from './registry.js';
+import * as rollback from './rollback.js';
 import * as trigger from './trigger.js';
 import * as watcher from './watcher.js';
 import * as webhook from './webhook.js';
@@ -24,7 +25,8 @@ export function init() {
     return;
   }
   log.info('Init Prometheus module');
-  collectDefaultMetrics();
+  collectDefaultMetrics({ eventLoopMonitoringPrecision: 1000 });
+  compatibility.init();
   container.init();
   registry.init();
   trigger.init();
@@ -32,6 +34,7 @@ export function init() {
   audit.init();
   containerActions.init();
   webhook.init();
+  rollback.init();
 }
 
 /**

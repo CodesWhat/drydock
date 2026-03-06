@@ -1,0 +1,77 @@
+---
+title: "Lifecycle Hooks"
+description: "Run custom commands before or after container updates."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+## Overview
+
+Lifecycle hooks let you run shell commands before or after a container is updated. Common use cases:
+
+- Stop dependent services before updating
+- Run database migrations after updating
+- Send custom notifications
+- Create network resources or volumes
+
+## Container labels
+
+| Label | Type | Default | Description |
+| --- | --- | --- | --- |
+| `dd.hook.pre` | string | — | Shell command to execute before the update |
+| `dd.hook.post` | string | — | Shell command to execute after the update |
+| `dd.hook.pre.abort` | boolean | `true` | Abort the update if the pre-hook exits with a non-zero code |
+| `dd.hook.timeout` | number (ms) | `60000` | Maximum execution time for each hook |
+
+<Callout type="info">Legacy `wud.hook.*` labels are also supported for backward compatibility.</Callout>
+
+## Hook environment variables
+
+When a hook runs, drydock injects environment variables describing the update:
+
+| Variable | Description | Example |
+| --- | --- | --- |
+| `DD_CONTAINER_NAME` | Container name | `myapp` |
+| `DD_CONTAINER_ID` | Container ID | `abc123def456` |
+| `DD_IMAGE_NAME` | Image name (without registry prefix) | `myorg/myapp` |
+| `DD_IMAGE_TAG` | Current image tag | `1.2.3` |
+| `DD_UPDATE_KIND` | Update type | `tag` or `digest` |
+| `DD_UPDATE_FROM` | Current tag or digest | `1.2.3` |
+| `DD_UPDATE_TO` | New tag or digest | `1.3.0` |
+
+## Execution details
+
+- Hooks run inside the drydock container using `/bin/sh -c`
+- Combined stdout and stderr output is capped at **10 KB**
+- An exit code of `0` is treated as success; any non-zero code is a failure
+- If a hook exceeds its timeout, it is killed and treated as a failure (exit code 1)
+- Hooks are NOT executed during [self-update](/docs/configuration/self-update)
+
+## Pre-hook abort behavior
+
+When `dd.hook.pre.abort` is `true` (the default), a failed pre-hook cancels the update entirely. Set it to `false` if you want the update to proceed regardless of hook outcome.
+
+## Audit events
+
+| Event | Description |
+| --- | --- |
+| `hook-pre-success` | Pre-hook completed successfully |
+| `hook-pre-failed` | Pre-hook exited non-zero or timed out |
+| `hook-post-success` | Post-hook completed successfully |
+| `hook-post-failed` | Post-hook exited non-zero or timed out |
+
+## Example
+
+```yaml
+services:
+  myapp:
+    image: myapp:latest
+    labels:
+      - dd.watch=true
+      - dd.hook.pre=docker exec mydb pg_dump -U postgres mydb > /backup/pre-update.sql
+      - dd.hook.post=curl -X POST https://hooks.slack.com/services/xxx -d '{"text":"myapp updated"}'
+      - dd.hook.pre.abort=true
+      - dd.hook.timeout=120000
+```
+
+<Callout type="warn">Hooks run with the permissions of the drydock process. Ensure the Docker socket is mounted if your hooks need to interact with Docker.</Callout>

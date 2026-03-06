@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as semver from './index.js';
 
 describe('parse', () => {

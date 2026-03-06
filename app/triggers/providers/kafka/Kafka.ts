@@ -1,11 +1,28 @@
-// @ts-nocheck
-import { Kafka as KafkaClient } from 'kafkajs';
+import { Kafka as KafkaClient, type KafkaConfig, type Producer, type SASLOptions } from 'kafkajs';
 import Trigger from '../Trigger.js';
+
+type UserPasswordSaslMechanism = 'plain' | 'scram-sha-256' | 'scram-sha-512';
+type UserPasswordSaslOptions = Extract<SASLOptions, { username: string; password: string }>;
+
+const AUTH_TYPE_TO_SASL_MECHANISM = {
+  PLAIN: 'plain',
+  'SCRAM-SHA-256': 'scram-sha-256',
+  'SCRAM-SHA-512': 'scram-sha-512',
+} as const;
+
+function toSaslMechanism(authType: string): UserPasswordSaslMechanism {
+  return (
+    AUTH_TYPE_TO_SASL_MECHANISM[authType as keyof typeof AUTH_TYPE_TO_SASL_MECHANISM] ?? 'plain'
+  );
+}
 
 /**
  * Kafka Trigger implementation
  */
 class Kafka extends Trigger {
+  private kafka!: KafkaClient;
+  private producer?: Producer;
+
   /**
    * Get the Trigger configuration schema.
    * @returns {*}
@@ -53,21 +70,40 @@ class Kafka extends Trigger {
   /**
    * Init trigger.
    */
-  initTrigger() {
+  async initTrigger() {
     const brokers = this.configuration.brokers.split(',').map((broker) => broker.trim());
-    const clientConfiguration = {
+    const clientConfiguration: KafkaConfig = {
       clientId: this.configuration.clientId,
       brokers,
       ssl: this.configuration.ssl,
     };
     if (this.configuration.authentication) {
-      clientConfiguration.sasl = {
-        mechanism: this.configuration.authentication.type,
+      const sasl: UserPasswordSaslOptions = {
+        mechanism: toSaslMechanism(this.configuration.authentication.type),
         username: this.configuration.authentication.user,
         password: this.configuration.authentication.password,
       };
+      clientConfiguration.sasl = sasl;
     }
     this.kafka = new KafkaClient(clientConfiguration);
+    this.producer = this.kafka.producer();
+    await this.producer.connect();
+  }
+
+  async deregisterComponent(): Promise<void> {
+    await super.deregisterComponent();
+    if (!this.producer) {
+      return;
+    }
+    await this.producer.disconnect();
+    this.producer = undefined;
+  }
+
+  private getProducer(): Producer {
+    if (!this.producer) {
+      throw new Error('Kafka producer is not initialized');
+    }
+    return this.producer;
   }
 
   /**
@@ -77,16 +113,10 @@ class Kafka extends Trigger {
    * @returns {Promise<void>}
    */
   async trigger(container) {
-    const producer = this.kafka.producer();
-    try {
-      await producer.connect();
-      return await producer.send({
-        topic: this.configuration.topic,
-        messages: [{ value: JSON.stringify(container) }],
-      });
-    } finally {
-      await producer.disconnect();
-    }
+    return await this.getProducer().send({
+      topic: this.configuration.topic,
+      messages: [{ value: JSON.stringify(container) }],
+    });
   }
 
   /**
@@ -95,18 +125,12 @@ class Kafka extends Trigger {
    * @returns {Promise<RecordMetadata[]>}
    */
   async triggerBatch(containers) {
-    const producer = this.kafka.producer();
-    try {
-      await producer.connect();
-      return await producer.send({
-        topic: this.configuration.topic,
-        messages: containers.map((container) => ({
-          value: JSON.stringify(container),
-        })),
-      });
-    } finally {
-      await producer.disconnect();
-    }
+    return await this.getProducer().send({
+      topic: this.configuration.topic,
+      messages: containers.map((container) => ({
+        value: JSON.stringify(container),
+      })),
+    });
   }
 }
 

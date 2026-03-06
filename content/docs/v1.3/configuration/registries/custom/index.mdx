@@ -1,0 +1,110 @@
+---
+title: "CUSTOM (Self-hosted Docker Registry)"
+description: "The custom registry lets you configure a self-hosted Docker Registry integration."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/registries/custom/custom.png)
+
+The `custom` registry lets you configure a self-hosted [Docker Registry](https://docs.docker.com/registry/) integration.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_URL` | 🔴 | Registry URL (e.g. `http://localhost:5000`) | | |
+| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_LOGIN` | ⚪ | Login (when htpasswd auth is enabled on the registry) | DD_REGISTRY_CUSTOM_\{REGISTRY_NAME\}_PASSWORD must be defined | |
+| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_PASSWORD` | ⚪ | Password (when htpasswd auth is enabled on the registry) | DD_REGISTRY_CUSTOM_\{REGISTRY_NAME\}_LOGIN must be defined | |
+| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_AUTH` | ⚪ | Htpasswd string (when htpasswd auth is enabled on the registry) | DD_REGISTRY_CUSTOM_\{REGISTRY_NAME\}_LOGIN/TOKEN  must not be defined | |
+
+## Examples
+
+### Configure for anonymous access
+
+<Tabs items={["Docker Compose (Anonymous)", "Docker (Anonymous)"]}>
+<Tab value="Docker Compose (Anonymous)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_CUSTOM_PRIVATE_URL=http://localhost:5000
+```
+
+</Tab>
+<Tab value="Docker (Anonymous)">
+```bash
+docker run \
+  -e "DD_REGISTRY_CUSTOM_PRIVATE_URL=http://localhost:5000" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Configure [for Basic Auth](https://docs.docker.com/registry/configuration/#htpasswd)
+
+<Tabs items={["Docker Compose (Basic Auth)", "Docker (Basic Auth)"]}>
+<Tab value="Docker Compose (Basic Auth)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_CUSTOM_PRIVATE_URL=http://localhost:5000
+      - DD_REGISTRY_CUSTOM_PRIVATE_LOGIN=john
+      - DD_REGISTRY_CUSTOM_PRIVATE_PASSWORD=doe
+```
+
+</Tab>
+<Tab value="Docker (Basic Auth)">
+```bash
+docker run \
+  -e "DD_REGISTRY_CUSTOM_PRIVATE_URL=http://localhost:5000" \
+  -e "DD_REGISTRY_CUSTOM_PRIVATE_LOGIN=john" \
+  -e "DD_REGISTRY_CUSTOM_PRIVATE_PASSWORD=doe" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Configure multiple custom registries
+
+<Tabs items={["Docker Compose (Multiple Registries)", "Docker (Multiple Registries)"]}>
+<Tab value="Docker Compose (Multiple Registries)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_CUSTOM_PRIVATE1_URL=http://localhost:5000
+      - DD_REGISTRY_CUSTOM_PRIVATE1_LOGIN=john
+      - DD_REGISTRY_CUSTOM_PRIVATE1_PASSWORD=doe
+      - DD_REGISTRY_CUSTOM_PRIVATE2_URL=http://localhost:5001
+      - DD_REGISTRY_CUSTOM_PRIVATE2_LOGIN=jane
+      - DD_REGISTRY_CUSTOM_PRIVATE2_PASSWORD=doe
+```
+
+</Tab>
+<Tab value="Docker (Multiple Registries)">
+```bash
+docker run \
+  -e "DD_REGISTRY_CUSTOM_PRIVATE1_URL=http://localhost:5000" \
+  -e "DD_REGISTRY_CUSTOM_PRIVATE1_LOGIN=john" \
+  -e "DD_REGISTRY_CUSTOM_PRIVATE1_PASSWORD=doe" \
+  -e "DD_REGISTRY_CUSTOM_PRIVATE2_URL=http://localhost:5001" \
+  -e "DD_REGISTRY_CUSTOM_PRIVATE2_LOGIN=jane" \
+  -e "DD_REGISTRY_CUSTOM_PRIVATE2_PASSWORD=doe" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

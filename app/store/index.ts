@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import fs from 'node:fs';
 import path from 'node:path';
 import joi from 'joi';
@@ -15,6 +13,9 @@ import * as app from './app.js';
 import * as audit from './audit.js';
 import * as backup from './backup.js';
 import * as container from './container.js';
+import * as notification from './notification.js';
+import * as settings from './settings.js';
+import * as updateOperation from './update-operation.js';
 
 // Store Configuration Schema
 const configurationSchema = joi.object().keys({
@@ -30,14 +31,18 @@ if (configurationToValidate.error) {
 const configuration = configurationToValidate.value;
 
 // Loki DB
-let db;
-let isMemoryStore = false;
+type LokiDatabase = InstanceType<typeof Loki>;
+let db: LokiDatabase | undefined;
+let isMemoryMode = false;
 
 function createCollections() {
   app.createCollections(db);
   audit.createCollections(db);
   backup.createCollections(db);
   container.createCollections(db);
+  notification.createCollections(db);
+  settings.createCollections(db);
+  updateOperation.createCollections(db);
 }
 
 /**
@@ -47,7 +52,11 @@ function createCollections() {
  * @param reject
  * @returns {Promise<void>}
  */
-async function loadDb(err, resolve, reject) {
+async function loadDb(
+  err: unknown,
+  resolve: () => void,
+  reject: (reason?: unknown) => void,
+): Promise<void> {
   if (err) {
     reject(err);
   } else {
@@ -62,9 +71,8 @@ async function loadDb(err, resolve, reject) {
  * @param options
  * @returns {Promise<unknown>}
  */
-export async function init(options = {}) {
-  const isMemory = options.memory || false;
-  isMemoryStore = isMemory;
+export async function init(options: { memory?: boolean } = {}) {
+  isMemoryMode = options.memory || false;
   const storeDirectory = resolveConfiguredPath(configuration.path, {
     label: 'DD_STORE_PATH',
   });
@@ -76,10 +84,11 @@ export async function init(options = {}) {
   }
 
   db = new Loki(storePath, {
-    autosave: !isMemory,
+    autosave: !isMemoryMode,
+    autosaveInterval: 60000,
   });
 
-  if (isMemory) {
+  if (isMemoryMode) {
     log.info('Init store in memory mode');
     createCollections();
     return;
@@ -97,25 +106,26 @@ export async function init(options = {}) {
     log.info(`Create folder ${storeDirectory}`);
     fs.mkdirSync(storeDirectory);
   }
-  return new Promise((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     db.loadDatabase({}, (err) => loadDb(err, resolve, reject));
   });
 }
 
 /**
- * Persist current DB state to disk.
- * In memory mode this is a no-op.
+ * Explicitly flush DB to disk.
+ * No-op in memory mode.
+ * @returns {Promise<void>}
  */
 export async function save() {
-  if (isMemoryStore || !db) {
+  if (!db || isMemoryMode) {
     return;
   }
-  return new Promise((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     db.saveDatabase((err) => {
       if (err) {
         reject(err);
       } else {
-        resolve(undefined);
+        resolve();
       }
     });
   });

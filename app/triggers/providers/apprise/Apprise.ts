@@ -1,7 +1,16 @@
-// @ts-nocheck
 import axios from 'axios';
+import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 
 import Trigger from '../Trigger.js';
+
+interface AppriseNotifyBody {
+  title: string;
+  body: string;
+  format: 'text';
+  type: 'info';
+  tag?: string;
+  urls?: string;
+}
 
 /**
  * Apprise Trigger implementation
@@ -40,9 +49,9 @@ class Apprise extends Trigger {
    */
   async trigger(container) {
     let uri = `${this.configuration.url}/notify`;
-    const body = {
+    const body: AppriseNotifyBody = {
       title: this.renderSimpleTitle(container),
-      data: this.renderSimpleBody(container),
+      body: this.renderSimpleBody(container),
       format: 'text',
       type: 'info',
     };
@@ -62,7 +71,7 @@ class Apprise extends Trigger {
       method: 'POST',
       url: uri,
       data: body,
-      timeout: 30000,
+      timeout: getOutboundHttpTimeoutMs(),
     };
     const response = await axios(options);
     return response.data;
@@ -74,17 +83,31 @@ class Apprise extends Trigger {
    * @returns {Promise<*>}
    */
   async triggerBatch(containers) {
+    let uri = `${this.configuration.url}/notify`;
+    const body: AppriseNotifyBody = {
+      title: this.renderBatchTitle(containers),
+      body: this.renderBatchBody(containers),
+      format: 'text',
+      type: 'info',
+    };
+
+    // Persistent storage usage (target apprise yml config file and tags)
+    if (this.configuration.config) {
+      uri += `/${this.configuration.config}`;
+      if (this.configuration.tag) {
+        body.tag = this.configuration.tag;
+      }
+
+      // Standard usage
+    } else {
+      body.urls = this.configuration.urls;
+    }
+
     const options = {
       method: 'POST',
-      url: `${this.configuration.url}/notify`,
-      data: {
-        urls: this.configuration.urls,
-        title: this.renderBatchTitle(containers),
-        data: this.renderBatchBody(containers),
-        format: 'text',
-        type: 'info',
-      },
-      timeout: 30000,
+      url: uri,
+      data: body,
+      timeout: getOutboundHttpTimeoutMs(),
     };
     const response = await axios(options);
     return response.data;

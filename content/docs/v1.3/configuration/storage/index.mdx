@@ -1,0 +1,33 @@
+---
+title: "Storage"
+description: "Persist drydock state by mounting /store as a volume."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+If you want the state to persist after the container removal, you need to mount  ```/store``` as a volume.
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    volumes:
+      - /path-on-my-host:/store
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -v /path-on-my-host:/store
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>

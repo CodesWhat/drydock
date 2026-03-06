@@ -1,4 +1,4 @@
-// @ts-nocheck
+import type { Request, Response } from 'express';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import * as agentRouter from './agent.js';
@@ -9,22 +9,30 @@ import * as authenticationRouter from './authentication.js';
 import * as backupRouter from './backup.js';
 import * as containerRouter from './container.js';
 import * as containerActionsRouter from './container-actions.js';
+import { requireSameOriginForMutations } from './csrf.js';
 import * as groupRouter from './group.js';
+import * as iconsRouter from './icons.js';
 import * as logRouter from './log.js';
+import * as notificationRouter from './notification.js';
 import * as previewRouter from './preview.js';
 import * as registryRouter from './registry.js';
 import * as serverRouter from './server.js';
+import * as settingsRouter from './settings.js';
 import * as sseRouter from './sse.js';
 import * as storeRouter from './store.js';
 import * as triggerRouter from './trigger.js';
 import * as watcherRouter from './watcher.js';
 import * as webhookRouter from './webhook.js';
 
+function shouldParseJsonBody(method: string): boolean {
+  return method === 'POST' || method === 'PUT' || method === 'PATCH';
+}
+
 /**
  * Init the API router.
  * @returns {*|Router}
  */
-export function init() {
+export function init(): express.Router {
   const router = express.Router();
 
   const apiLimiter = rateLimit({
@@ -36,6 +44,14 @@ export function init() {
   });
   router.use(apiLimiter);
 
+  const mutationJsonBodyParser = express.json();
+  router.use((req, res, next) => {
+    if (shouldParseJsonBody(req.method)) {
+      return mutationJsonBodyParser(req, res, next);
+    }
+    return next();
+  });
+
   // Mount app router
   router.use('/app', appRouter.init());
 
@@ -44,6 +60,7 @@ export function init() {
 
   // Routes to protect after this line
   router.use(requireAuthentication);
+  router.use(requireSameOriginForMutations);
 
   // Mount SSE events endpoint (authenticated — UI sends session cookie)
   router.use('/events/ui', sseRouter.init());
@@ -57,6 +74,9 @@ export function init() {
   // Mount server router
   router.use('/server', serverRouter.init());
 
+  // Mount container groups router BEFORE container router (/:id would shadow /groups)
+  router.use('/containers', groupRouter.init());
+
   // Mount container router
   router.use('/containers', containerRouter.init());
 
@@ -69,11 +89,11 @@ export function init() {
   // Mount container actions router (start/stop/restart)
   router.use('/containers', containerActionsRouter.init());
 
-  // Mount container groups router (grouping / stack views)
-  router.use('/containers', groupRouter.init());
-
   // Mount trigger router
   router.use('/triggers', triggerRouter.init());
+
+  // Mount notification rules router
+  router.use('/notifications', notificationRouter.init());
 
   // Mount watcher router
   router.use('/watchers', watcherRouter.init());
@@ -90,8 +110,16 @@ export function init() {
   // Mount audit log
   router.use('/audit', auditRouter.init());
 
+  // Mount icons proxy (CDN cache)
+  router.use('/icons', iconsRouter.init());
+
+  // Mount settings
+  router.use('/settings', settingsRouter.init());
+
   // All other API routes => 404
-  router.get('/{*path}', (req, res) => res.sendStatus(404));
+  router.get('/{*path}', (_req: Request, res: Response) => {
+    res.sendStatus(404);
+  });
 
   return router;
 }

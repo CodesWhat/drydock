@@ -1,0 +1,44 @@
+config:
+  target: "http://localhost:3333"
+  environments:
+    ratelimit:
+      target: "http://localhost:3000"
+      phases:
+        - duration: 1
+          arrivalCount: 1
+          name: "Rate-limit burst"
+  phases:
+    - duration: 1
+      arrivalCount: 1
+      name: "Rate-limit burst"
+  defaults:
+    headers:
+      Accept: "application/json"
+      Authorization: "Basic YWRtaW46cGFzc3dvcmQ="
+  processor: "./test/load-test.processor.cjs"
+  ensure:
+    thresholds:
+      - vusers.failed: 0
+
+scenarios:
+  - name: "Scan endpoint rate-limit burst"
+    flow:
+      # Resolve a container id outside measured HTTP steps so scan latency
+      # reflects rate-limit behavior instead of watch setup cost.
+      - function: "ensureContainerId"
+      # In the CI/local test stack the scanner is typically disabled, so
+      # pre-limit requests can be 400. The rate limiter is set to max=30
+      # per minute; this burst of 6 validates the middleware is active
+      # without hitting the limit ceiling.
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"
+      - post:
+          url: "/api/containers/{{ containerId }}/scan"

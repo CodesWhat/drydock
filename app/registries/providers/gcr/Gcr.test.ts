@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Gcr from './Gcr.js';
 
 // Test fixture credentials - not real secrets
@@ -112,6 +111,17 @@ test('authenticate should return unchanged options when no clientemail configure
   gcrAnon.configuration = {};
   const result = await gcrAnon.authenticate({}, { headers: {} });
   expect(result).toEqual({ headers: {} });
+});
+
+test('authenticate should throw when gcr token is missing', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockImplementationOnce(() => ({
+    data: {},
+  }));
+
+  await expect(gcr.authenticate({}, { headers: {} })).rejects.toThrow(
+    'GCR token endpoint response does not contain token',
+  );
 });
 
 test('getAuthPull should return credentials', async () => {

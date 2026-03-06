@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Ecr from './Ecr.js';
 
 vi.mock('@aws-sdk/client-ecr', () => ({
@@ -126,8 +125,42 @@ test('normalizeImage should keep already-https urls unchanged', async () => {
   });
 });
 
+test('normalizeImage should not mutate the input image object', async () => {
+  const image = {
+    name: 'test/image',
+    registry: {
+      url: '123456789.dkr.ecr.eu-west-1.amazonaws.com/test/image',
+    },
+  };
+
+  const normalized = ecr.normalizeImage(image);
+
+  expect(normalized).not.toBe(image);
+  expect(normalized.registry).not.toBe(image.registry);
+  expect(image.registry.url).toBe('123456789.dkr.ecr.eu-west-1.amazonaws.com/test/image');
+  expect(normalized.registry.url).toBe(
+    'https://123456789.dkr.ecr.eu-west-1.amazonaws.com/test/image/v2',
+  );
+});
+
 test('authenticate should call ecr auth endpoint', async () => {
   await expect(ecr.authenticate(undefined, { headers: {} })).resolves.toEqual({
+    headers: {
+      Authorization: 'Basic QVdTOnh4eHg=',
+    },
+  });
+});
+
+test('authenticate should handle missing request options object', async () => {
+  const ecrPrivate = new Ecr();
+  ecrPrivate.configuration = {
+    accesskeyid: 'accesskeyid',
+    secretaccesskey: 'secretaccesskey',
+    region: 'region',
+  };
+  ecrPrivate.fetchPrivateEcrAuthToken = vi.fn().mockResolvedValue('QVdTOnh4eHg=');
+
+  await expect(ecrPrivate.authenticate(undefined, undefined)).resolves.toEqual({
     headers: {
       Authorization: 'Basic QVdTOnh4eHg=',
     },
@@ -157,6 +190,32 @@ test('authenticate should fetch public ECR gallery token for public images', asy
       Authorization: 'Bearer public-token-123',
     },
   });
+});
+
+test('authenticate should throw when public ECR token is missing', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValueOnce({ data: {} });
+
+  const ecrPublic = new Ecr();
+  ecrPublic.configuration = {};
+
+  await expect(
+    ecrPublic.authenticate({ registry: { url: 'https://public.ecr.aws/v2' } }, { headers: {} }),
+  ).rejects.toThrow('public ECR token endpoint response does not contain token');
+});
+
+test('authenticate should throw when private ECR authorization token is missing', async () => {
+  const ecrPrivate = new Ecr();
+  ecrPrivate.configuration = {
+    accesskeyid: 'accesskeyid',
+    secretaccesskey: 'secretaccesskey',
+    region: 'region',
+  };
+  ecrPrivate.fetchPrivateEcrAuthToken = vi.fn().mockResolvedValue(undefined);
+
+  await expect(ecrPrivate.authenticate(undefined, { headers: {} })).rejects.toThrow(
+    'ECR authorization token is missing',
+  );
 });
 
 test('authenticate should return unchanged options when neither private nor public ECR', async () => {

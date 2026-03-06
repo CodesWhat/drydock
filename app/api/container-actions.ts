@@ -2,6 +2,7 @@ import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
+import type { AuditEntry } from '../model/audit.js';
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
@@ -23,15 +24,37 @@ const ACTION_MESSAGES = {
 };
 
 type ContainerAction = keyof typeof ACTION_MESSAGES;
+type ContainerAuditAction = Extract<
+  AuditEntry['action'],
+  'container-start' | 'container-stop' | 'container-restart'
+>;
 
-async function executeAction(req: Request, res: Response, action: string, method: ContainerAction) {
+type DockerContainerHandle = {
+  start: () => Promise<void>;
+  stop: () => Promise<void>;
+  restart: () => Promise<void>;
+  inspect: () => Promise<{ State?: { Status?: string } }>;
+};
+
+type DockerWatcher = {
+  dockerApi: {
+    getContainer: (id: string) => DockerContainerHandle;
+  };
+};
+
+async function executeAction(
+  req: Request,
+  res: Response,
+  action: ContainerAuditAction,
+  method: ContainerAction,
+) {
   const serverConfiguration = getServerConfiguration();
   if (!serverConfiguration.feature.containeractions) {
     res.sendStatus(403);
     return;
   }
 
-  const { id } = req.params;
+  const id = req.params.id as string;
 
   const container = storeContainer.getContainer(id);
   if (!container) {
@@ -46,7 +69,7 @@ async function executeAction(req: Request, res: Response, action: string, method
   }
 
   try {
-    const watcher = trigger.getWatcher(container);
+    const watcher = trigger.getWatcher(container) as DockerWatcher;
     const { dockerApi } = watcher;
     const dockerContainer = dockerApi.getContainer(container.id);
     await dockerContainer[method]();
@@ -56,8 +79,15 @@ async function executeAction(req: Request, res: Response, action: string, method
     const newStatus = inspectResult?.State?.Status;
     let updatedContainer = container;
     if (newStatus) {
-      updatedContainer = storeContainer.updateContainer({ ...container, status: newStatus });
+      const containerForUpdate = storeContainer.getContainer(id);
+      if (containerForUpdate) {
+        updatedContainer = storeContainer.updateContainer({
+          ...containerForUpdate,
+          status: newStatus,
+        });
+      }
     }
+    const responseContainer = storeContainer.getContainer(id) || updatedContainer;
 
     recordAuditEvent({
       action,
@@ -66,7 +96,7 @@ async function executeAction(req: Request, res: Response, action: string, method
     });
     getContainerActionsCounter()?.inc({ action });
 
-    res.status(200).json({ message: ACTION_MESSAGES[method], container: updatedContainer });
+    res.status(200).json({ message: ACTION_MESSAGES[method], container: responseContainer });
   } catch (e: unknown) {
     handleContainerActionError({
       error: e,
@@ -112,7 +142,7 @@ async function updateContainer(req: Request, res: Response) {
     return;
   }
 
-  const { id } = req.params;
+  const id = req.params.id as string;
   const container = storeContainer.getContainer(id);
   if (!container) {
     res.sendStatus(404);

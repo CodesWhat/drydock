@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { resolveConfiguredPathWithinBase, resolveRuntimeRoot } from '../runtime/paths.js';
 
-export type RegistryComponentKind = 'trigger' | 'watcher' | 'registry' | 'authentication' | 'agent';
+type RegistryComponentKind = 'trigger' | 'watcher' | 'registry' | 'authentication' | 'agent';
 
 const DOCUMENTATION_LINKS: Record<RegistryComponentKind, string> = {
   trigger: 'https://github.com/CodesWhat/drydock/tree/main/docs/configuration/triggers',

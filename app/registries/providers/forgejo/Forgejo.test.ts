@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Force v8 coverage to pick up the Forgejo module by importing directly
 import Forgejo from './Forgejo.js';
 

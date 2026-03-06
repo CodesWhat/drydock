@@ -1,5 +1,5 @@
-// @ts-nocheck
-import axios from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
+import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 import Trigger from '../Trigger.js';
 
 /**
@@ -80,13 +80,14 @@ class Ntfy extends Trigger {
    */
   async sendHttpRequest(body) {
     const auth = this.configuration.auth;
-    const options = {
+    const options: AxiosRequestConfig = {
       method: 'POST',
       url: this.configuration.url,
       headers: {
         'Content-Type': 'application/json',
       },
       data: body,
+      timeout: getOutboundHttpTimeoutMs(),
     };
     if (auth?.user && auth?.password) {
       options.auth = {

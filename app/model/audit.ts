@@ -5,6 +5,9 @@ export interface AuditEntry {
     | 'update-available'
     | 'update-applied'
     | 'update-failed'
+    | 'container-update'
+    | 'security-alert'
+    | 'agent-disconnect'
     | 'container-added'
     | 'container-removed'
     | 'rollback'
@@ -15,11 +18,14 @@ export interface AuditEntry {
     | 'webhook-watch'
     | 'webhook-watch-container'
     | 'webhook-update'
+    | 'hook-configured'
     | 'hook-pre-success'
     | 'hook-pre-failed'
     | 'hook-post-success'
     | 'hook-post-failed'
-    | 'auto-rollback';
+    | 'auto-rollback'
+    | 'auth-login'
+    | 'env-reveal';
   containerName: string;
   containerImage?: string;
   fromVersion?: string;

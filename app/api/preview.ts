@@ -15,7 +15,7 @@ const router = express.Router();
  * Preview what an update would do for a container.
  */
 async function previewContainer(req: Request, res: Response) {
-  const { id } = req.params;
+  const id = req.params.id as string;
 
   const container = storeContainer.getContainer(id);
   if (!container) {

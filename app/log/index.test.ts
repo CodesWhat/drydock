@@ -1,10 +1,10 @@
-// @ts-nocheck
 import log from './index.js';
 
 // Mock the configuration module
 vi.mock('../configuration', () => ({
   getLogLevel: vi.fn(() => 'info'),
   getLogFormat: vi.fn(() => 'json'),
+  getLogBufferEnabled: vi.fn(() => true),
 }));
 
 describe('Logger', () => {

@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import axios from 'axios';
 import joi from 'joi';
 import Ntfy from './Ntfy.js';
@@ -85,6 +83,7 @@ test('trigger should call http client', async () => {
     },
     method: 'POST',
 
+    timeout: 30000,
     url: 'http://xxx.com',
   });
 });
@@ -116,6 +115,7 @@ test('trigger should use basic auth when configured like that', async () => {
     },
     method: 'POST',
 
+    timeout: 30000,
     url: 'http://xxx.com',
     auth: { username: 'user', password: 'pass' },
   });
@@ -149,6 +149,7 @@ test('trigger should use bearer auth when configured like that', async () => {
     },
     method: 'POST',
 
+    timeout: 30000,
     url: 'http://xxx.com',
   });
 });
@@ -173,6 +174,7 @@ test('triggerBatch should call http client with batch body', async () => {
         topic: 'xxx',
         priority: 2,
       }),
+      timeout: 30000,
     }),
   );
 });

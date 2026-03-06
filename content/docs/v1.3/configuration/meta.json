@@ -1,0 +1,16 @@
+{
+  "title": "Configuration",
+  "pages": [
+    "index",
+    "agents",
+    "authentications",
+    "logs",
+    "registries",
+    "security",
+    "server",
+    "storage",
+    "timezone",
+    "triggers",
+    "watchers"
+  ]
+}

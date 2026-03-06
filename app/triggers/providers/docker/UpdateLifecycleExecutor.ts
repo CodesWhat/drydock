@@ -1,0 +1,319 @@
+import crypto from 'node:crypto';
+import {
+  assertRequiredFunctionDependencies,
+  resolveFunctionDependencies,
+} from './dependency-constructor.js';
+
+type UpdateLifecycleOperationLogger = {
+  info?: (message: string) => void;
+  warn?: (message: string) => void;
+  debug?: (message: string) => void;
+};
+
+type UpdateLifecycleRootLogger = {
+  child?: (bindings: Record<string, unknown>) => UpdateLifecycleOperationLogger;
+};
+
+type UpdateLifecycleContainer = {
+  name: string;
+  [key: string]: unknown;
+};
+
+type UpdateLifecycleContext = {
+  dockerApi: unknown;
+  registry: unknown;
+  [key: string]: unknown;
+};
+
+type UpdateLifecycleExecutorCallbacks = {
+  getLogger: () => UpdateLifecycleRootLogger | undefined;
+  getContainerFullName: (container: UpdateLifecycleContainer) => string;
+  createTriggerContext: (
+    container: UpdateLifecycleContainer,
+    logger: UpdateLifecycleOperationLogger,
+    runtimeContext?: unknown,
+  ) => Promise<UpdateLifecycleContext | undefined>;
+  maybeScanAndGateUpdate: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logger: UpdateLifecycleOperationLogger,
+  ) => Promise<void>;
+  buildHookConfig: (container: UpdateLifecycleContainer) => Record<string, unknown>;
+  recordHookConfigurationAudit: (
+    container: UpdateLifecycleContainer,
+    hookConfig: Record<string, unknown>,
+  ) => void;
+  runPreUpdateHook: (
+    container: UpdateLifecycleContainer,
+    hookConfig: Record<string, unknown>,
+    logger: UpdateLifecycleOperationLogger,
+  ) => Promise<void>;
+  isSelfUpdate: (container: UpdateLifecycleContainer) => boolean;
+  maybeNotifySelfUpdate: (
+    container: UpdateLifecycleContainer,
+    logger: UpdateLifecycleOperationLogger,
+    operationId: string,
+  ) => Promise<void>;
+  executeSelfUpdate: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logger: UpdateLifecycleOperationLogger,
+    operationId: string,
+    runtimeContext?: unknown,
+  ) => Promise<boolean>;
+  runPreRuntimeUpdateLifecycle: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logger: UpdateLifecycleOperationLogger,
+    runtimeContext?: unknown,
+  ) => Promise<void>;
+  performContainerUpdate: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logger: UpdateLifecycleOperationLogger,
+    runtimeContext?: unknown,
+  ) => Promise<boolean>;
+  runPostUpdateHook: (
+    container: UpdateLifecycleContainer,
+    hookConfig: Record<string, unknown>,
+    logger: UpdateLifecycleOperationLogger,
+  ) => Promise<void>;
+  cleanupOldImages: (
+    dockerApi: unknown,
+    registry: unknown,
+    container: UpdateLifecycleContainer,
+    logger: UpdateLifecycleOperationLogger,
+  ) => Promise<void>;
+  getRollbackConfig: (container: UpdateLifecycleContainer) => Record<string, unknown>;
+  maybeStartAutoRollbackMonitor: (
+    dockerApi: unknown,
+    container: UpdateLifecycleContainer,
+    rollbackConfig: Record<string, unknown>,
+    logger: UpdateLifecycleOperationLogger,
+  ) => Promise<void>;
+  emitContainerUpdateApplied: (containerName: string) => Promise<void>;
+  emitContainerUpdateFailed: (payload: { containerName: string; error: string }) => Promise<void>;
+  pruneOldBackups: (containerName: string, backupCount: number | undefined) => void;
+  getBackupCount: () => number | undefined;
+};
+
+type UpdateLifecycleLoggerServices = Pick<UpdateLifecycleExecutorCallbacks, 'getLogger'>;
+
+type UpdateLifecycleContextServices = Pick<
+  UpdateLifecycleExecutorCallbacks,
+  'getContainerFullName' | 'createTriggerContext'
+>;
+
+type UpdateLifecycleSecurityServices = Pick<
+  UpdateLifecycleExecutorCallbacks,
+  'maybeScanAndGateUpdate'
+>;
+
+type UpdateLifecycleHookServices = Pick<
+  UpdateLifecycleExecutorCallbacks,
+  'buildHookConfig' | 'recordHookConfigurationAudit' | 'runPreUpdateHook' | 'runPostUpdateHook'
+>;
+
+type UpdateLifecycleSelfUpdateServices = Pick<
+  UpdateLifecycleExecutorCallbacks,
+  'isSelfUpdate' | 'maybeNotifySelfUpdate' | 'executeSelfUpdate'
+>;
+
+type UpdateLifecycleRuntimeUpdateServices = Pick<
+  UpdateLifecycleExecutorCallbacks,
+  'runPreRuntimeUpdateLifecycle' | 'performContainerUpdate'
+>;
+
+type UpdateLifecyclePostUpdateServices = Pick<
+  UpdateLifecycleExecutorCallbacks,
+  'cleanupOldImages' | 'getRollbackConfig' | 'maybeStartAutoRollbackMonitor'
+> &
+  Partial<Pick<UpdateLifecycleExecutorCallbacks, 'pruneOldBackups' | 'getBackupCount'>>;
+
+type ResolvedUpdateLifecyclePostUpdateServices = Pick<
+  UpdateLifecycleExecutorCallbacks,
+  | 'cleanupOldImages'
+  | 'getRollbackConfig'
+  | 'maybeStartAutoRollbackMonitor'
+  | 'pruneOldBackups'
+  | 'getBackupCount'
+>;
+
+type UpdateLifecycleTelemetryServices = Pick<
+  UpdateLifecycleExecutorCallbacks,
+  'emitContainerUpdateApplied' | 'emitContainerUpdateFailed'
+>;
+
+type UpdateLifecycleExecutorConstructorOptions = {
+  logger?: UpdateLifecycleLoggerServices;
+  context: UpdateLifecycleContextServices;
+  security: UpdateLifecycleSecurityServices;
+  hooks: UpdateLifecycleHookServices;
+  selfUpdate: UpdateLifecycleSelfUpdateServices;
+  runtimeUpdate: UpdateLifecycleRuntimeUpdateServices;
+  postUpdate: UpdateLifecyclePostUpdateServices;
+  telemetry: UpdateLifecycleTelemetryServices;
+};
+
+const REQUIRED_UPDATE_LIFECYCLE_EXECUTOR_DEPENDENCY_KEYS = {
+  context: ['getContainerFullName', 'createTriggerContext'],
+  security: ['maybeScanAndGateUpdate'],
+  hooks: [
+    'buildHookConfig',
+    'recordHookConfigurationAudit',
+    'runPreUpdateHook',
+    'runPostUpdateHook',
+  ],
+  selfUpdate: ['isSelfUpdate', 'maybeNotifySelfUpdate', 'executeSelfUpdate'],
+  runtimeUpdate: ['runPreRuntimeUpdateLifecycle', 'performContainerUpdate'],
+  postUpdate: ['cleanupOldImages', 'getRollbackConfig', 'maybeStartAutoRollbackMonitor'],
+  telemetry: ['emitContainerUpdateApplied', 'emitContainerUpdateFailed'],
+} as const;
+
+function assertRequiredDependencies(
+  options: unknown,
+): asserts options is UpdateLifecycleExecutorConstructorOptions {
+  for (const [serviceGroup, dependencyKeys] of Object.entries(
+    REQUIRED_UPDATE_LIFECYCLE_EXECUTOR_DEPENDENCY_KEYS,
+  )) {
+    const group = (options as Record<string, unknown>)?.[serviceGroup] as
+      | Record<string, unknown>
+      | undefined;
+    assertRequiredFunctionDependencies(
+      group || {},
+      dependencyKeys as readonly string[],
+      'UpdateLifecycleExecutor',
+      serviceGroup,
+    );
+  }
+}
+
+class UpdateLifecycleExecutor {
+  logger: UpdateLifecycleLoggerServices;
+
+  context: UpdateLifecycleContextServices;
+
+  security: UpdateLifecycleSecurityServices;
+
+  hooks: UpdateLifecycleHookServices;
+
+  selfUpdate: UpdateLifecycleSelfUpdateServices;
+
+  runtimeUpdate: UpdateLifecycleRuntimeUpdateServices;
+
+  postUpdate: ResolvedUpdateLifecyclePostUpdateServices;
+
+  telemetry: UpdateLifecycleTelemetryServices;
+
+  constructor(options: UpdateLifecycleExecutorConstructorOptions) {
+    assertRequiredDependencies(options);
+    this.logger = resolveFunctionDependencies<UpdateLifecycleLoggerServices>(options.logger || {}, {
+      defaults: {
+        getLogger: () => undefined,
+      },
+      componentName: 'UpdateLifecycleExecutor',
+    });
+    this.context = options.context;
+    this.security = options.security;
+    this.hooks = options.hooks;
+    this.selfUpdate = options.selfUpdate;
+    this.runtimeUpdate = options.runtimeUpdate;
+    this.postUpdate = resolveFunctionDependencies<ResolvedUpdateLifecyclePostUpdateServices>(
+      options.postUpdate,
+      {
+        defaults: {
+          pruneOldBackups: () => undefined,
+          getBackupCount: () => undefined,
+        },
+        componentName: 'UpdateLifecycleExecutor',
+      },
+    );
+    this.telemetry = options.telemetry;
+  }
+
+  async run(container: UpdateLifecycleContainer, runtimeContext?: unknown) {
+    const rootLogger = this.logger.getLogger();
+    const containerLogger =
+      rootLogger?.child?.({ container: this.context.getContainerFullName(container) }) ?? {};
+
+    try {
+      const context = await this.context.createTriggerContext(
+        container,
+        containerLogger,
+        runtimeContext,
+      );
+      if (!context) {
+        return;
+      }
+
+      await this.security.maybeScanAndGateUpdate(context, container, containerLogger);
+
+      const hookConfig = this.hooks.buildHookConfig(container);
+      this.hooks.recordHookConfigurationAudit(container, hookConfig);
+      await this.hooks.runPreUpdateHook(container, hookConfig, containerLogger);
+
+      if (this.selfUpdate.isSelfUpdate(container)) {
+        const selfUpdateOperationId = crypto.randomUUID();
+        await this.selfUpdate.maybeNotifySelfUpdate(
+          container,
+          containerLogger,
+          selfUpdateOperationId,
+        );
+        const updated = await this.selfUpdate.executeSelfUpdate(
+          context,
+          container,
+          containerLogger,
+          selfUpdateOperationId,
+          runtimeContext,
+        );
+        if (!updated) {
+          return;
+        }
+        return;
+      }
+
+      await this.runtimeUpdate.runPreRuntimeUpdateLifecycle(
+        context,
+        container,
+        containerLogger,
+        runtimeContext,
+      );
+      const updated = await this.runtimeUpdate.performContainerUpdate(
+        context,
+        container,
+        containerLogger,
+        runtimeContext,
+      );
+      if (!updated) {
+        return;
+      }
+
+      await this.hooks.runPostUpdateHook(container, hookConfig, containerLogger);
+      await this.postUpdate.cleanupOldImages(
+        context.dockerApi,
+        context.registry,
+        container,
+        containerLogger,
+      );
+      const rollbackConfig = this.postUpdate.getRollbackConfig(container);
+      await this.postUpdate.maybeStartAutoRollbackMonitor(
+        context.dockerApi,
+        container,
+        rollbackConfig,
+        containerLogger,
+      );
+
+      await this.telemetry.emitContainerUpdateApplied(this.context.getContainerFullName(container));
+      this.postUpdate.pruneOldBackups(container.name, this.postUpdate.getBackupCount());
+    } catch (e: unknown) {
+      const errorMessage = String((e as Error)?.message ?? e);
+      await this.telemetry.emitContainerUpdateFailed({
+        containerName: this.context.getContainerFullName(container),
+        error: errorMessage,
+      });
+      throw e;
+    }
+  }
+}
+
+export default UpdateLifecycleExecutor;

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import BaseRegistry from '../../BaseRegistry.js';
 
 /**
@@ -38,18 +37,6 @@ class Ibmcr extends BaseRegistry {
 
   maskConfiguration() {
     return this.maskSensitiveFields(['password', 'auth', 'apikey']);
-  }
-
-  private getRegistryHostname(value: string): string {
-    const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-    try {
-      return new URL(withProtocol).hostname.toLowerCase();
-    } catch {
-      return value
-        .replace(/^https?:\/\//i, '')
-        .split('/')[0]
-        .toLowerCase();
-    }
   }
 
   match(image) {

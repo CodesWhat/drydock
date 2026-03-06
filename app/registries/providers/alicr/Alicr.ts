@@ -1,43 +1,16 @@
-// @ts-nocheck
 import BaseRegistry from '../../BaseRegistry.js';
+import { getBasicAuthConfigurationSchema } from '../shared/basicAuthConfigurationSchema.js';
 
 /**
  * Alibaba Cloud Container Registry integration.
  */
 class Alicr extends BaseRegistry {
   getConfigurationSchema() {
-    const authSchema = this.joi
-      .alternatives()
-      .try(this.joi.string().base64(), this.joi.string().valid(''));
-
-    const credentialsSchema = this.joi
-      .object()
-      .keys({
-        login: this.joi.string(),
-        password: this.joi.string(),
-        auth: authSchema,
-      })
-      .and('login', 'password')
-      .without('login', 'auth')
-      .without('password', 'auth');
-
-    return this.joi.alternatives().try(this.joi.string().allow(''), credentialsSchema);
+    return getBasicAuthConfigurationSchema(this.joi);
   }
 
   maskConfiguration() {
     return this.maskSensitiveFields(['password', 'auth']);
-  }
-
-  private getRegistryHostname(value: string): string {
-    const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-    try {
-      return new URL(withProtocol).hostname.toLowerCase();
-    } catch {
-      return value
-        .replace(/^https?:\/\//i, '')
-        .split('/')[0]
-        .toLowerCase();
-    }
   }
 
   match(image) {

@@ -1,5 +1,4 @@
-// @ts-nocheck
-
+import type { Request, Response } from 'express';
 import * as agent from '../agent/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
@@ -8,10 +7,26 @@ import * as component from './component.js';
 
 const log = logger.child({ component: 'trigger' });
 
+interface RunTriggerParams {
+  type: string;
+  name: string;
+}
+
+interface RunRemoteTriggerParams extends RunTriggerParams {
+  agent: string;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 /**
  * Run a specific trigger on a specific container provided in the payload.
  */
-export async function runTrigger(req, res) {
+export async function runTrigger(req: Request<RunTriggerParams>, res: Response) {
   const triggerType = req.params.type;
   const triggerName = req.params.name;
   const containerToTrigger = req.body;
@@ -69,11 +84,12 @@ export async function runTrigger(req, res) {
     );
     res.status(200).json({});
   } catch (e) {
+    const errorMessage = getErrorMessage(e);
     log.warn(
-      `Error when running trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (${sanitizeLogParam(e.message)})`,
+      `Error when running trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (${sanitizeLogParam(errorMessage)})`,
     );
     res.status(500).json({
-      error: `Error when running trigger ${triggerType}.${triggerName} (${e.message})`,
+      error: `Error when running trigger ${triggerType}.${triggerName}`,
     });
   }
 }
@@ -81,7 +97,7 @@ export async function runTrigger(req, res) {
 /**
  * Run a specifically targeted remote trigger.
  */
-async function runRemoteTrigger(req, res) {
+async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Response) {
   const { agent: agentName, type: triggerType, name: triggerName } = req.params;
   const containerToTrigger = req.body;
 
@@ -105,11 +121,12 @@ async function runRemoteTrigger(req, res) {
     );
     res.status(200).json({});
   } catch (e) {
+    const errorMessage = getErrorMessage(e);
     log.warn(
-      `Error when running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} on agent ${sanitizeLogParam(agentName)} (${sanitizeLogParam(e.message)})`,
+      `Error when running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} on agent ${sanitizeLogParam(agentName)} (${sanitizeLogParam(errorMessage)})`,
     );
     res.status(500).json({
-      error: `Error when running remote trigger ${triggerType}.${triggerName} on agent ${agentName} (${e.message})`,
+      error: `Error when running remote trigger ${triggerType}.${triggerName} on agent ${agentName}`,
     });
   }
 }

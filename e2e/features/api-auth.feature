@@ -12,13 +12,13 @@ Feature: Drydock auth API Exposure
     When I POST to /auth/login
     Then response code should be 200
     And response body should be valid json
-    And response body path $.username should be john
+    And response body path $.username should be `username`
 
   Scenario: Drydock must allow to get current user
     When I GET /auth/user
     Then response code should be 200
     And response body should be valid json
-    And response body path $.username should be john
+    And response body path $.username should be `username`
 
   Scenario: Drydock must allow to logout
     When I POST to /auth/logout

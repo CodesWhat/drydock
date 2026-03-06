@@ -1,17 +1,33 @@
-// @ts-nocheck
-
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { byString, byValues } from 'sort-es';
+import type { RegistryState } from '../registry/index.js';
 import * as registry from '../registry/index.js';
 
 export interface ApiComponent {
   id: string;
   type: string;
   name: string;
-  configuration: any;
+  configuration: unknown;
   agent?: string;
 }
+
+interface ComponentLike {
+  type: string;
+  name: string;
+  agent?: string;
+  configuration?: unknown;
+  maskConfiguration?: () => unknown;
+}
+
+interface ComponentRouteParams {
+  agent?: string;
+  type: string;
+  name: string;
+}
+
+type ComponentKind = keyof RegistryState;
+type ComponentMap = Record<string, ComponentLike>;
 
 /**
  * Map a Component to a displayable (api/ui) item.
@@ -19,12 +35,17 @@ export interface ApiComponent {
  * @param component
  * @returns {{id: *}}
  */
-export function mapComponentToItem(key, component): ApiComponent {
+export function mapComponentToItem(key: string, component: ComponentLike): ApiComponent {
+  const configuration =
+    typeof component.maskConfiguration === 'function'
+      ? component.maskConfiguration()
+      : component.configuration;
+
   return {
     id: key,
     type: component.type,
     name: component.name,
-    configuration: component.maskConfiguration(),
+    configuration,
     agent: component.agent,
   };
 }
@@ -34,7 +55,7 @@ export function mapComponentToItem(key, component): ApiComponent {
  * @param listFunction
  * @returns {{id: string}[]}
  */
-export function mapComponentsToList(components) {
+export function mapComponentsToList(components: ComponentMap): ApiComponent[] {
   return Object.keys(components)
     .map((key) => mapComponentToItem(key, components[key]))
     .sort(
@@ -50,8 +71,9 @@ export function mapComponentsToList(components) {
  * @param req
  * @param res
  */
-function getAll(req, res, kind) {
-  res.status(200).json(mapComponentsToList(registry.getState()[kind]));
+function getAll(_req: Request, res: Response, kind: ComponentKind): void {
+  const components = registry.getState()[kind] as unknown as ComponentMap;
+  res.status(200).json(mapComponentsToList(components));
 }
 
 /**
@@ -60,10 +82,11 @@ function getAll(req, res, kind) {
  * @param res
  * @param listFunction
  */
-export function getById(req, res, kind) {
+export function getById(req: Request<ComponentRouteParams>, res: Response, kind: ComponentKind) {
   const { agent, type, name } = req.params;
   const id = agent ? `${agent}.${type}.${name}` : `${type}.${name}`;
-  const component = registry.getState()[kind][id];
+  const components = registry.getState()[kind] as unknown as ComponentMap;
+  const component = components[id];
   if (component) {
     res.status(200).json(mapComponentToItem(id, component));
   } else {
@@ -76,11 +99,15 @@ export function getById(req, res, kind) {
  * @param kind
  * @returns {*|Router}
  */
-export function init(kind) {
+export function init(kind: ComponentKind) {
   const router = express.Router();
   router.use(nocache());
-  router.get('/', (req, res) => getAll(req, res, kind));
-  router.get('/:type/:name', (req, res) => getById(req, res, kind));
-  router.get('/:agent/:type/:name', (req, res) => getById(req, res, kind));
+  router.get('/', (req: Request, res: Response) => getAll(req, res, kind));
+  router.get('/:type/:name', (req: Request<ComponentRouteParams>, res: Response) =>
+    getById(req, res, kind),
+  );
+  router.get('/:agent/:type/:name', (req: Request<ComponentRouteParams>, res: Response) =>
+    getById(req, res, kind),
+  );
   return router;
 }

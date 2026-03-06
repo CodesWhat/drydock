@@ -1,12 +1,16 @@
-// @ts-nocheck
 import fs from 'node:fs';
+import type { Request } from 'express';
 import joi from 'joi';
 import setValue from 'set-value';
+import { logWarn } from '../log/warn.js';
+import { recordLegacyInput } from '../prometheus/compatibility.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
+const MAX_SECRET_FILE_SIZE_BYTES = 1024 * 1024;
 export const SECURITY_SEVERITY_VALUES = ['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 export const SECURITY_SBOM_FORMAT_VALUES = ['spdx-json', 'cyclonedx-json'] as const;
+const SERVER_COOKIE_SAMESITE_VALUES = ['strict', 'lax', 'none'] as const;
 const DEFAULT_SECURITY_BLOCK_SEVERITY = 'CRITICAL,HIGH';
 const DEFAULT_SECURITY_SBOM_FORMATS = 'spdx-json';
 
@@ -18,8 +22,8 @@ export type SecuritySbomFormat = (typeof SECURITY_SBOM_FORMAT_VALUES)[number];
  * @param prop
  * @returns {{}}
  */
-export function get(prop, env = process.env) {
-  const object = {};
+export function get(prop: string, env: Record<string, string | undefined> = process.env) {
+  const object: Record<string, unknown> = {};
   const envVarPattern = prop.replaceAll('.', '_').toUpperCase();
   const matchingEnvVars = Object.keys(env).filter((envKey) => envKey.startsWith(envVarPattern));
   matchingEnvVars.forEach((matchingEnvVar) => {
@@ -35,7 +39,7 @@ export function get(prop, env = process.env) {
  * Lookup external secrets defined in files.
  * @param ddEnvVars
  */
-export function replaceSecrets(ddEnvVars) {
+export function replaceSecrets(ddEnvVars: Record<string, string | undefined>) {
   const secretFileEnvVars = Object.keys(ddEnvVars).filter((ddEnvVar) =>
     ddEnvVar.toUpperCase().endsWith(VAR_FILE_SUFFIX),
   );
@@ -44,14 +48,26 @@ export function replaceSecrets(ddEnvVars) {
     const secretFilePath = resolveConfiguredPath(ddEnvVars[secretFileEnvVar], {
       label: `${secretFileEnvVar} path`,
     });
-    const secretFileValue = fs.readFileSync(secretFilePath, 'utf-8');
-    delete ddEnvVars[secretFileEnvVar];
-    ddEnvVars[secretKey] = secretFileValue;
+    const fd = fs.openSync(secretFilePath, 'r');
+    try {
+      const secretFileStats = fs.fstatSync(fd);
+      if (secretFileStats.size > MAX_SECRET_FILE_SIZE_BYTES) {
+        throw new Error(
+          `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
+        );
+      }
+      const secretFileValue = fs.readFileSync(fd, 'utf-8');
+      delete ddEnvVars[secretFileEnvVar];
+      ddEnvVars[secretKey] = secretFileValue;
+    } finally {
+      fs.closeSync(fd);
+    }
   });
 }
 
 // 1. Get a copy of all dd-related env vars (DD_ primary, WUD_ legacy fallback)
-export const ddEnvVars = {};
+export const ddEnvVars: Record<string, string | undefined> = {};
+const mappedLegacyEnvVars = new Set<string>();
 
 // First, collect legacy WUD_ vars and remap to DD_ keys
 Object.keys(process.env)
@@ -59,7 +75,21 @@ Object.keys(process.env)
   .forEach((envVar) => {
     const ddKey = `DD_${envVar.substring(4)}`; // WUD_FOO → DD_FOO
     ddEnvVars[ddKey] = process.env[envVar];
+    const envVarUpper = envVar.toUpperCase();
+    mappedLegacyEnvVars.add(envVarUpper);
+    recordLegacyInput('env', envVarUpper);
   });
+
+if (mappedLegacyEnvVars.size > 0) {
+  const legacyEnvVarNames = Array.from(mappedLegacyEnvVars).sort();
+  const MAX_LEGACY_ENV_WARNING_KEYS = 10;
+  const envVarPreview = legacyEnvVarNames.slice(0, MAX_LEGACY_ENV_WARNING_KEYS).join(', ');
+  const additionalCount = legacyEnvVarNames.length - MAX_LEGACY_ENV_WARNING_KEYS;
+  const suffix = additionalCount > 0 ? ` (+${additionalCount} more)` : '';
+  console.warn(
+    `Detected legacy WUD_* environment variables. Please migrate to DD_* equivalents: ${envVarPreview}${suffix}`,
+  );
+}
 
 // Then, collect DD_ vars (overrides WUD_ if both set)
 Object.keys(process.env)
@@ -81,6 +111,10 @@ export function getLogLevel() {
 
 export function getLogFormat() {
   return ddEnvVars.DD_LOG_FORMAT?.toLowerCase() === 'json' ? 'json' : 'text';
+}
+
+export function getLogBufferEnabled() {
+  return ddEnvVars.DD_LOG_BUFFER_ENABLED?.trim().toLowerCase() !== 'false';
 }
 
 function parseWatcherMaintenanceEnvAlias(envKey: string) {
@@ -112,7 +146,9 @@ function parseWatcherMaintenanceEnvAlias(envKey: string) {
   return undefined;
 }
 
-function normalizeWatcherMaintenanceEnvAliases(watcherConfigurations: Record<string, any>) {
+function normalizeWatcherMaintenanceEnvAliases(
+  watcherConfigurations: Record<string, Record<string, unknown>>,
+) {
   Object.entries(ddEnvVars).forEach(([envKey, envValue]) => {
     const parsedEnvAlias = parseWatcherMaintenanceEnvAlias(envKey);
     if (!parsedEnvAlias || envValue === undefined) {
@@ -138,7 +174,10 @@ function normalizeWatcherMaintenanceEnvAliases(watcherConfigurations: Record<str
  * Get watcher configuration.
  */
 export function getWatcherConfigurations() {
-  const watcherConfigurations = get('dd.watcher', ddEnvVars);
+  const watcherConfigurations = get('dd.watcher', ddEnvVars) as Record<
+    string,
+    Record<string, unknown>
+  >;
   normalizeWatcherMaintenanceEnvAliases(watcherConfigurations);
   return watcherConfigurations;
 }
@@ -211,17 +250,31 @@ export function getServerConfiguration() {
         methods: joi.string().default('GET,HEAD,PUT,PATCH,POST,DELETE'),
       })
       .default({}),
+    compression: joi
+      .object({
+        enabled: joi.boolean().default(true),
+        threshold: joi.number().integer().min(0).default(1024),
+      })
+      .default({}),
     feature: joi
       .object({
         delete: joi.boolean().default(true),
         containeractions: joi.boolean().default(true),
-        webhook: joi.boolean().default(true),
       })
       .default({
         delete: true,
         containeractions: true,
-        webhook: true,
       }),
+    cookie: joi
+      .object({
+        samesite: joi
+          .string()
+          .trim()
+          .lowercase()
+          .valid(...SERVER_COOKIE_SAMESITE_VALUES)
+          .default('lax'),
+      })
+      .default({}),
     trustproxy: joi
       .alternatives()
       .try(joi.boolean(), joi.number().integer().min(0), joi.string())
@@ -281,51 +334,116 @@ export function getWebhookConfiguration() {
 }
 
 function parseSecuritySeverityList(rawValue: string | undefined): SecuritySeverity[] {
-  const defaultBlockSeverities = DEFAULT_SECURITY_BLOCK_SEVERITY.split(',').map(
-    (severity) => severity.trim() as SecuritySeverity,
+  return parseDelimitedEnumList(
+    rawValue,
+    DEFAULT_SECURITY_BLOCK_SEVERITY,
+    (value) => value.toUpperCase(),
+    (severity): severity is SecuritySeverity =>
+      SECURITY_SEVERITY_VALUES.includes(severity as SecuritySeverity),
+    {
+      onInvalidValues: ({ invalidValues, parsedValues, defaultValues }) => {
+        const warningBase = `Invalid DD_SECURITY_BLOCK_SEVERITY values: ${invalidValues.join(', ')}. Allowed values: ${SECURITY_SEVERITY_VALUES.join(', ')}.`;
+        if (parsedValues.length === 0) {
+          console.warn(`${warningBase} Falling back to defaults: ${defaultValues.join(', ')}.`);
+        } else {
+          console.warn(`${warningBase} Invalid values were ignored.`);
+        }
+      },
+    },
   );
-  if (!rawValue) {
-    return defaultBlockSeverities;
-  }
-  const configuredSeverities = rawValue
-    .split(',')
-    .map((severity) => severity.trim().toUpperCase())
-    .filter((severity) => severity !== '');
-  if (configuredSeverities.length === 0) {
-    return defaultBlockSeverities;
-  }
-  const deduplicated = Array.from(new Set(configuredSeverities));
-  const severitiesParsed = deduplicated.filter((severity): severity is SecuritySeverity =>
-    SECURITY_SEVERITY_VALUES.includes(severity as SecuritySeverity),
-  );
-  if (severitiesParsed.length === 0) {
-    return defaultBlockSeverities;
-  }
-  return severitiesParsed;
 }
 
 function parseSecuritySbomFormatList(rawValue: string | undefined): SecuritySbomFormat[] {
-  const defaultSbomFormats = DEFAULT_SECURITY_SBOM_FORMATS.split(',').map(
-    (format) => format.trim() as SecuritySbomFormat,
+  return parseDelimitedEnumList(
+    rawValue,
+    DEFAULT_SECURITY_SBOM_FORMATS,
+    (format) => format.toLowerCase(),
+    (format): format is SecuritySbomFormat =>
+      SECURITY_SBOM_FORMAT_VALUES.includes(format as SecuritySbomFormat),
+    {
+      onInvalidValues: ({ invalidValues, parsedValues, defaultValues }) => {
+        const warningBase = `Invalid DD_SECURITY_SBOM_FORMATS values: ${invalidValues.join(', ')}. Allowed values: ${SECURITY_SBOM_FORMAT_VALUES.join(', ')}.`;
+        if (parsedValues.length === 0) {
+          logWarn(`${warningBase} Falling back to defaults: ${defaultValues.join(', ')}.`);
+        } else {
+          logWarn(`${warningBase} Invalid values were ignored.`);
+        }
+      },
+    },
   );
-  if (!rawValue) {
-    return defaultSbomFormats;
-  }
-  const configuredFormats = rawValue
+}
+
+function parseDelimitedEnumList<T extends string>(
+  rawValue: string | undefined,
+  defaultRawValue: string,
+  normalizeValue: (value: string) => string,
+  isAllowedValue: (value: string) => value is T,
+  options?: {
+    onInvalidValues?: (context: {
+      defaultValues: T[];
+      parsedValues: T[];
+      invalidValues: string[];
+    }) => void;
+  },
+): T[] {
+  const defaultValues = defaultRawValue
     .split(',')
-    .map((format) => format.trim().toLowerCase())
-    .filter((format) => format !== '');
-  if (configuredFormats.length === 0) {
-    return defaultSbomFormats;
+    .map((value) => value.trim())
+    .filter((value) => value !== '')
+    .filter(isAllowedValue);
+  if (!rawValue) {
+    return defaultValues;
   }
-  const deduplicated = Array.from(new Set(configuredFormats));
-  const formatsParsed = deduplicated.filter((format): format is SecuritySbomFormat =>
-    SECURITY_SBOM_FORMAT_VALUES.includes(format as SecuritySbomFormat),
-  );
-  if (formatsParsed.length === 0) {
-    return defaultSbomFormats;
+
+  const configuredValues = rawValue
+    .split(',')
+    .map((value) => normalizeValue(value.trim()))
+    .filter((value) => value !== '');
+  if (configuredValues.length === 0) {
+    return defaultValues;
   }
-  return formatsParsed;
+
+  const deduplicatedValues = Array.from(new Set(configuredValues));
+  const parsedValues = deduplicatedValues.filter(isAllowedValue);
+  const invalidValues = deduplicatedValues.filter((value) => !isAllowedValue(value));
+  if (invalidValues.length > 0) {
+    options?.onInvalidValues?.({
+      defaultValues,
+      parsedValues,
+      invalidValues,
+    });
+  }
+  if (parsedValues.length === 0) {
+    return defaultValues;
+  }
+  return parsedValues;
+}
+
+function validateCosignKeyPath(rawKeyPath: string): string {
+  if (!rawKeyPath) {
+    return '';
+  }
+
+  const resolvedKeyPath = resolveConfiguredPath(rawKeyPath, {
+    label: 'DD_SECURITY_COSIGN_KEY',
+  });
+
+  try {
+    const keyStats = fs.statSync(resolvedKeyPath);
+    if (!keyStats.isFile()) {
+      throw new Error('DD_SECURITY_COSIGN_KEY must reference an existing regular file');
+    }
+  } catch (e) {
+    if (
+      e instanceof Error &&
+      e.message === 'DD_SECURITY_COSIGN_KEY must reference an existing regular file'
+    ) {
+      throw e;
+    }
+    throw new Error('DD_SECURITY_COSIGN_KEY must reference an existing regular file');
+  }
+
+  return resolvedKeyPath;
 }
 
 export function getSecurityConfiguration() {
@@ -368,6 +486,18 @@ export function getSecurityConfiguration() {
         formats: joi.string().allow('').default(DEFAULT_SECURITY_SBOM_FORMATS),
       })
       .default({}),
+    scan: joi
+      .object({
+        cron: joi.string().allow('').default(''),
+        jitter: joi.number().integer().min(0).default(60000),
+        concurrency: joi.number().integer().min(1).default(4),
+        batch: joi
+          .object({
+            timeout: joi.number().integer().min(0).default(1800000),
+          })
+          .default({}),
+      })
+      .default({}),
   });
 
   const configurationToValidate = configurationSchema.validate(configurationFromEnv, {
@@ -382,6 +512,7 @@ export function getSecurityConfiguration() {
   const scanner = configuration.scanner ? configuration.scanner.toLowerCase() : '';
   const blockSeverities = parseSecuritySeverityList(configuration.block?.severity);
   const sbomFormats = parseSecuritySbomFormatList(configuration.sbom?.formats);
+  const cosignKey = validateCosignKeyPath(configuration.cosign?.key || '');
 
   return {
     enabled: scanner !== '',
@@ -397,7 +528,7 @@ export function getSecurityConfiguration() {
       cosign: {
         command: configuration.cosign?.command || 'cosign',
         timeout: configuration.cosign?.timeout || 60000,
-        key: configuration.cosign?.key || '',
+        key: cosignKey,
         identity: configuration.cosign?.identity || '',
         issuer: configuration.cosign?.issuer || '',
       },
@@ -406,23 +537,67 @@ export function getSecurityConfiguration() {
       enabled: Boolean(configuration.sbom?.enabled),
       formats: sbomFormats,
     },
+    scan: {
+      cron: configuration.scan?.cron || '',
+      jitter: configuration.scan?.jitter ?? 60000,
+      concurrency: configuration.scan?.concurrency ?? 4,
+      batchTimeout: configuration.scan?.batch?.timeout ?? 1800000,
+    },
   };
 }
 
-export function getPublicUrl(req) {
-  const publicUrl = ddEnvVars.DD_PUBLIC_URL;
-  if (publicUrl) {
-    return publicUrl;
+export type SecurityConfiguration = Pick<
+  ReturnType<typeof getSecurityConfiguration>,
+  'enabled' | 'scanner' | 'sbom'
+> & {
+  signature: Pick<ReturnType<typeof getSecurityConfiguration>['signature'], 'verify'>;
+};
+
+function parseSafePublicUrlCandidate(value: unknown): URL | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
   }
-  // Try to guess from request, with validation to prevent open redirect
+  const trimmedValue = value.trim();
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional control character detection for input validation
+  if (trimmedValue.length === 0 || /[\u0000-\u001F\u007F]/.test(trimmedValue)) {
+    return undefined;
+  }
+
+  let parsedUrl: URL;
   try {
-    const candidate = `${req.protocol}://${req.hostname}`;
-    const parsed = new URL(candidate);
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return candidate;
-    }
-    return '/';
+    parsedUrl = new URL(trimmedValue);
   } catch {
+    return undefined;
+  }
+
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    return undefined;
+  }
+  if (parsedUrl.username !== '' || parsedUrl.password !== '') {
+    return undefined;
+  }
+  return parsedUrl;
+}
+
+export function getPublicUrl(req: Request) {
+  const publicUrl = ddEnvVars.DD_PUBLIC_URL;
+  const configuredPublicUrl = parseSafePublicUrlCandidate(publicUrl);
+  if (configuredPublicUrl) {
+    return configuredPublicUrl.origin;
+  }
+  if (typeof publicUrl === 'string' && publicUrl.trim().length > 0) {
     return '/';
   }
+
+  // Try to infer from request, with strict validation to prevent host/header injection.
+  const protocol = typeof req.protocol === 'string' ? req.protocol : '';
+  const hostname = typeof req.hostname === 'string' ? req.hostname : '';
+  const inferredPublicUrl = parseSafePublicUrlCandidate(`${protocol}://${hostname}`);
+  if (!inferredPublicUrl) {
+    return '/';
+  }
+  if (inferredPublicUrl.hostname !== hostname.toLowerCase()) {
+    return '/';
+  }
+  return inferredPublicUrl.origin;
 }

@@ -1,0 +1,66 @@
+---
+title: "Smtp"
+description: "The smtp trigger lets you send emails with smtp."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `smtp` trigger lets you send emails with smtp.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | :--- | --- | --- |
+| `DD_TRIGGER_SMTP_{trigger_name}_HOST` | 🔴 | Smtp server host | Valid hostname or IP address | |
+| `DD_TRIGGER_SMTP_{trigger_name}_PORT` | 🔴 | Smtp server port | Valid smtp port | |
+| `DD_TRIGGER_SMTP_{trigger_name}_FROM` | 🔴 | Email from address | Valid email address | |
+| `DD_TRIGGER_SMTP_{trigger_name}_TO` | 🔴 | Email to address | Valid email address | |
+| `DD_TRIGGER_SMTP_{trigger_name}_USER` | ⚪ | Smtp user | | |
+| `DD_TRIGGER_SMTP_{trigger_name}_PASS` | ⚪ | Smtp password | | |
+| `DD_TRIGGER_SMTP_{trigger_name}_TLS_ENABLED` | ⚪ | Use TLS | `true`, `false` | `false` |
+| `DD_TRIGGER_SMTP_{trigger_name}_TLS_VERIFY` | ⚪ | Verify server TLS certificate | `true`, `false` | `true` |
+| `DD_TRIGGER_SMTP_{trigger_name}_ALLOWCUSTOMTLD` | ⚪ | Allow custom tlds for the email addresses | `true`, `false` | `false` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+## Examples
+
+### Send an email with Gmail
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+        - DD_TRIGGER_SMTP_GMAIL_HOST=smtp.gmail.com
+        - DD_TRIGGER_SMTP_GMAIL_PORT=465
+        - DD_TRIGGER_SMTP_GMAIL_USER=john.doe@gmail.com
+        - DD_TRIGGER_SMTP_GMAIL_PASS=mysecretpass
+        - DD_TRIGGER_SMTP_GMAIL_FROM=john.doe@gmail.com
+        - DD_TRIGGER_SMTP_GMAIL_TO=jane.doe@gmail.com
+        - DD_TRIGGER_SMTP_GMAIL_TLS_ENABLED=true 
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+    -e DD_TRIGGER_SMTP_GMAIL_HOST="smtp.gmail.com" \
+    -e DD_TRIGGER_SMTP_GMAIL_PORT="465" \
+    -e DD_TRIGGER_SMTP_GMAIL_USER="john.doe@gmail.com" \
+    -e DD_TRIGGER_SMTP_GMAIL_PASS="mysecretpass" \
+    -e DD_TRIGGER_SMTP_GMAIL_FROM="john.doe@gmail.com" \
+    -e DD_TRIGGER_SMTP_GMAIL_TO="jane.doe@gmail.com" \
+    -e DD_TRIGGER_SMTP_GMAIL_TLS_ENABLED="true" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+<Callout type="warn">For Gmail, you need to create an application specific password first ([See gmail documentation](https://security.google.com/settings/security/apppasswords)).</Callout>

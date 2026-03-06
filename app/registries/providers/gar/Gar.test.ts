@@ -155,10 +155,39 @@ test('authenticate should use access_token and create headers when missing', asy
   });
 });
 
+test('authenticate should throw when token response is missing token fields', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValueOnce({
+    data: {},
+  });
+
+  await expect(
+    gar.authenticate(
+      {
+        name: 'project/repository/image',
+        registry: { url: 'us-central1-docker.pkg.dev' },
+      },
+      { headers: {} },
+    ),
+  ).rejects.toThrow('GAR token endpoint response does not contain token');
+});
+
 test('match should gracefully handle missing registry URL', async () => {
   expect(
     gar.match({
       registry: {},
     }),
   ).toBeFalsy();
+});
+
+test('authenticate should throw a URL error when registry URL is missing', async () => {
+  await expect(
+    gar.authenticate(
+      {
+        name: 'project/repository/image',
+        registry: {},
+      },
+      { headers: {} },
+    ),
+  ).rejects.toThrow('Invalid URL');
 });

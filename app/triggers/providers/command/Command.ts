@@ -1,9 +1,4 @@
-// @ts-nocheck
-
-import child_process from 'node:child_process';
-import util from 'node:util';
-
-const exec = util.promisify(child_process.exec);
+import { execFile } from 'node:child_process';
 
 import { flatten } from '../../../model/container.js';
 import Trigger from '../Trigger.js';
@@ -58,11 +53,28 @@ class Command extends Trigger {
         ...process.env,
         ...extraEnvVars,
       },
-      shell: this.configuration.shell,
       timeout: this.configuration.timeout,
     };
     try {
-      const { stdout, stderr } = await exec(this.configuration.cmd, commandOptions);
+      const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>(
+        (resolve, reject) => {
+          execFile(
+            this.configuration.shell,
+            ['-c', this.configuration.cmd],
+            commandOptions,
+            (error, stdoutOutput, stderrOutput) => {
+              if (error) {
+                reject(error);
+                return;
+              }
+              resolve({
+                stdout: typeof stdoutOutput === 'string' ? stdoutOutput : '',
+                stderr: typeof stderrOutput === 'string' ? stderrOutput : '',
+              });
+            },
+          );
+        },
+      );
       if (stdout) {
         this.log.info(`Command ${this.configuration.cmd} \nstdout ${stdout}`);
       }

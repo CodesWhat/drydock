@@ -1,154 +1,329 @@
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import whaleLogo from '../assets/whale-logo.png';
+import { getOidcRedirection, getStrategies, loginBasic, setRememberMe } from '../services/auth';
+import { useTheme } from '../theme/useTheme';
+
+const router = useRouter();
+const route = useRoute();
+const { isDark } = useTheme();
+
+interface Strategy {
+  type: string;
+  name: string;
+  redirect?: boolean;
+}
+
+const strategies = ref<Strategy[]>([]);
+const loading = ref(true);
+const error = ref('');
+const username = ref('');
+const password = ref('');
+const submitting = ref(false);
+const rememberMe = ref(false);
+
+const hasBasic = ref(false);
+const oidcStrategies = ref<Strategy[]>([]);
+const connectionLost = ref(false);
+
+const INITIAL_RETRY_DELAY_MS = 5_000;
+const MAX_RETRY_DELAY_MS = 30_000;
+
+let retryDelayMs = INITIAL_RETRY_DELAY_MS;
+let connectivityTimer: ReturnType<typeof setTimeout> | undefined;
+const oidcLayoutClass = computed(() => {
+  const count = oidcStrategies.value.length;
+  if (count <= 1) {
+    return 'grid grid-cols-1 gap-3';
+  }
+  if (count === 2) {
+    return 'grid grid-cols-2 gap-3';
+  }
+  if (count === 3) {
+    return 'grid grid-cols-3 gap-3';
+  }
+  return 'flex flex-col gap-3';
+});
+
+onMounted(async () => {
+  try {
+    await loadStrategies();
+  } catch {
+    error.value = 'Failed to load authentication methods';
+    connectionLost.value = true;
+    scheduleConnectivityRetry();
+  } finally {
+    loading.value = false;
+  }
+});
+
+function navigateAfterLogin() {
+  const next = route.query.next;
+  if (next && typeof next === 'string' && next.startsWith('/') && !next.startsWith('//')) {
+    router.push(next);
+  } else {
+    router.push('/');
+  }
+}
+
+async function handleBasicLogin() {
+  error.value = '';
+  submitting.value = true;
+  try {
+    await loginBasic(username.value, password.value, rememberMe.value);
+    navigateAfterLogin();
+  } catch {
+    error.value = 'Invalid username or password';
+  } finally {
+    submitting.value = false;
+  }
+}
+
+async function handleOidc(name: string) {
+  try {
+    await setRememberMe(rememberMe.value);
+    const result = await getOidcRedirection(name);
+    const redirect =
+      result && typeof result === 'object'
+        ? ((result as { redirect?: unknown; url?: unknown }).redirect ??
+          (result as { redirect?: unknown; url?: unknown }).url)
+        : undefined;
+
+    if (typeof redirect === 'string') {
+      const parsedUrl = new URL(redirect, globalThis.location.origin);
+      const isHttp = parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+      const isSameOrigin = parsedUrl.origin === globalThis.location.origin;
+      if (isHttp && isSameOrigin) {
+        globalThis.location.assign(parsedUrl.toString());
+        return;
+      }
+    }
+    error.value = `Failed to connect to ${name}`;
+  } catch {
+    error.value = `Failed to connect to ${name}`;
+  }
+}
+
+function oidcIcon(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.includes('github')) return 'github';
+  if (lower.includes('gitlab')) return 'gitlab';
+  if (lower.includes('google')) return 'google';
+  if (lower.includes('microsoft') || lower.includes('azure')) return 'microsoft';
+  if (lower.includes('okta')) return 'key';
+  return 'sign-in';
+}
+
+async function loadStrategies() {
+  const data = await getStrategies();
+  strategies.value = data;
+  hasBasic.value = data.some((s: Strategy) => s.type === 'basic');
+  oidcStrategies.value = data.filter((s: Strategy) => s.type === 'oidc');
+  error.value = '';
+  connectionLost.value = false;
+  retryDelayMs = INITIAL_RETRY_DELAY_MS;
+  clearConnectivityRetry();
+
+  // If anonymous strategy exists, skip login entirely
+  if (data.some((s: Strategy) => s.type === 'anonymous')) {
+    navigateAfterLogin();
+    return;
+  }
+
+  // If only one OIDC provider with auto-redirect, go straight there
+  if (!hasBasic.value && oidcStrategies.value.length === 1 && oidcStrategies.value[0].redirect) {
+    await handleOidc(oidcStrategies.value[0].name);
+  }
+}
+
+async function checkConnectivity() {
+  try {
+    await loadStrategies();
+  } catch {
+    connectionLost.value = true;
+    scheduleConnectivityRetry();
+  }
+}
+
+function scheduleConnectivityRetry() {
+  clearConnectivityRetry();
+  connectivityTimer = setTimeout(checkConnectivity, retryDelayMs);
+  retryDelayMs = Math.min(retryDelayMs * 2, MAX_RETRY_DELAY_MS);
+}
+
+function clearConnectivityRetry() {
+  if (connectivityTimer) {
+    clearTimeout(connectivityTimer);
+    connectivityTimer = undefined;
+  }
+}
+
+onUnmounted(() => {
+  clearConnectivityRetry();
+});
+</script>
+
 <template>
-  <v-app :theme="currentTheme">
-    <div class="login-wrapper" :class="{ 'login-dark': isDark }">
-      <div class="theme-toggle">
-        <v-btn
-          icon
-          variant="text"
-          size="small"
-          @click="cycleTheme"
-        >
-          <v-icon :color="themeIconColor" size="small">{{ themeIcon }}</v-icon>
-        </v-btn>
-      </div>
-      <div class="login-card-container">
-        <div class="logo-section">
-          <img
-            :src="logo"
-            alt="drydock"
-            class="logo-bounce"
-            :class="{ 'logo-invert': isDark }"
-          />
-          <h1 class="app-title" :class="{ 'text-white': isDark }">drydock</h1>
-          <p class="app-subtitle" :class="{ 'text-grey-lighten-1': isDark, 'text-grey-darken-1': !isDark }">
-            Container update monitoring
-          </p>
+  <div class="min-h-screen flex items-center justify-center px-4 py-8 dd-bg">
+    <!-- Login card — starts invisible, fades in once strategies are loaded -->
+    <Transition name="login-card">
+      <div
+        v-if="!loading"
+        class="w-full dd-rounded-lg overflow-hidden"
+        style="max-width: 420px; background-color: var(--dd-bg-card); border: 1px solid var(--dd-border-strong); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);"
+      >
+      <div class="p-8">
+        <!-- Logo -->
+        <div class="flex justify-center mb-5">
+          <img :src="whaleLogo" alt="Drydock" class="h-20 w-auto login-logo" :style="isDark ? { filter: 'invert(1)' } : {}" />
         </div>
 
-        <v-card class="login-card" elevation="1" rounded="lg">
-          <v-tabs
-            v-if="strategies.length > 1"
-            v-model="strategySelected"
-            color="secondary"
-            grow
+        <!-- Heading -->
+        <h1 class="text-lg font-semibold text-center mb-6 dd-text">
+          Sign in to Drydock
+        </h1>
+
+        <!-- Error message -->
+        <div
+          v-if="error"
+          class="mb-4 px-3 py-2 text-xs dd-rounded dd-bg-danger-muted dd-text-danger"
+        >
+          {{ error }}
+        </div>
+
+        <!-- Basic auth form -->
+        <form v-if="hasBasic" @submit.prevent="handleBasicLogin" class="space-y-4">
+          <div>
+            <label class="block text-[11px] font-medium uppercase tracking-wider mb-1.5 dd-text-muted">
+              Username
+            </label>
+            <input
+              v-model="username"
+              type="text"
+              autocomplete="username"
+              required
+              class="w-full px-3 py-2 text-sm dd-rounded dd-text dd-placeholder outline-none transition-colors"
+              style="background-color: var(--dd-bg-inset); border: 1px solid var(--dd-border-strong);"
+              placeholder="Enter your username"
+            />
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-medium uppercase tracking-wider mb-1.5 dd-text-muted">
+              Password
+            </label>
+            <input
+              v-model="password"
+              type="password"
+              autocomplete="current-password"
+              required
+              class="w-full px-3 py-2 text-sm dd-rounded dd-text dd-placeholder outline-none transition-colors"
+              style="background-color: var(--dd-bg-inset); border: 1px solid var(--dd-border-strong);"
+              placeholder="Enter your password"
+            />
+          </div>
+
+          <button
+            type="submit"
+            :disabled="submitting"
+            class="w-full py-2.5 text-sm font-semibold dd-rounded transition-colors cursor-pointer"
+            style="background-color: var(--dd-primary); color: #fff;"
           >
-            <v-tab
-              v-for="strategy in strategies"
-              :key="strategy.name"
-              class="text-body-2"
-            >
-              {{ strategy.name }}
-            </v-tab>
-          </v-tabs>
+            <template v-if="submitting">
+              <AppIcon name="spinner" :size="14" class="dd-spin mr-2" />
+              Signing in...
+            </template>
+            <template v-else>Sign in</template>
+          </button>
+        </form>
 
-          <v-window v-model="strategySelected">
-            <v-window-item
-              v-for="strategy in strategies"
-              :key="strategy.type + strategy.name"
-            >
-              <login-basic
-                v-if="strategy.type === 'basic'"
-                :dark="isDark"
-                @authentication-success="onAuthenticationSuccess"
-              />
-              <login-oidc
-                v-if="strategy.type === 'oidc'"
-                :name="strategy.name"
-                :dark="isDark"
-                @authentication-success="onAuthenticationSuccess"
-              />
-            </v-window-item>
-          </v-window>
-        </v-card>
+        <!-- OIDC separator (only if both basic and OIDC exist) -->
+        <div v-if="hasBasic && oidcStrategies.length > 0" class="flex items-center gap-3 my-6">
+          <div class="flex-1 h-px" style="background-color: var(--dd-border-strong);" />
+          <span class="text-[11px] dd-text-muted">or continue with</span>
+          <div class="flex-1 h-px" style="background-color: var(--dd-border-strong);" />
+        </div>
 
+        <!-- OIDC provider buttons -->
+        <div v-if="oidcStrategies.length > 0" :class="oidcLayoutClass">
+          <button
+            v-for="strategy in oidcStrategies"
+            :key="strategy.name"
+            type="button"
+            class="flex items-center justify-center gap-2 py-2 text-xs font-medium dd-rounded dd-text-secondary transition-colors hover:dd-bg-elevated cursor-pointer"
+            style="background-color: var(--dd-bg-inset); border: 1px solid var(--dd-border-strong);"
+            @click="handleOidc(strategy.name)"
+          >
+            <AppIcon :name="oidcIcon(strategy.name)" :size="13" />
+            {{ strategy.name }}
+          </button>
+        </div>
+
+        <!-- Remember me (shown for any auth method) -->
+        <label v-if="hasBasic || oidcStrategies.length > 0"
+               class="flex items-center gap-2 mt-4 cursor-pointer select-none">
+          <input
+            v-model="rememberMe"
+            type="checkbox"
+            class="w-3.5 h-3.5 dd-rounded-sm accent-[var(--dd-primary)]"
+          />
+          <span class="text-[11px] dd-text-muted">Remember me</span>
+        </label>
+
+        <!-- No strategies available -->
+        <div v-if="!hasBasic && oidcStrategies.length === 0" class="text-center dd-text-muted text-sm">
+          No authentication methods configured.
+        </div>
       </div>
-    </div>
-  </v-app>
+      </div>
+    </Transition>
+
+    <!-- Connection Lost Overlay -->
+    <Transition name="fade">
+      <div v-if="connectionLost"
+           class="fixed inset-0 z-[200] bg-black/70 backdrop-blur-sm flex items-center justify-center">
+        <div class="w-full max-w-[320px] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
+             :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+          <div class="flex flex-col items-center px-6 py-8 gap-3">
+            <div class="w-10 h-10 rounded-full flex items-center justify-center mb-1"
+                 :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
+              <AppIcon name="warning" :size="18" :style="{ color: 'var(--dd-danger)' }" />
+            </div>
+            <h2 class="text-sm font-bold dd-text">Connection Lost</h2>
+            <p class="text-[11px] dd-text-muted leading-relaxed">
+              The server is unreachable. Waiting for it to come back online...
+            </p>
+            <div class="flex items-center gap-2 mt-1">
+              <AppIcon name="spinner" :size="12" class="dd-spin dd-text-muted" />
+              <span class="text-[10px] dd-text-muted">Reconnecting</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+  </div>
 </template>
 
-<script lang="ts" src="./LoginView.ts"></script>
-
 <style scoped>
-.login-wrapper {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f5f5f5;
-  padding: 16px;
-  transition: background 0.3s ease;
-  overflow-y: auto;
+.login-logo {
+  animation: bounce 2s ease-in-out infinite;
 }
-
-.login-dark {
-  background: #121212;
-}
-
-.login-card-container {
-  width: 100%;
-  max-width: 400px;
-}
-
-.logo-section {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.logo-bounce {
-  width: 120px;
-  height: auto;
-  animation: gentle-bounce 3s ease-in-out infinite;
-  transition: filter 0.3s ease;
-}
-
-.logo-invert {
-  filter: invert(1);
-}
-
-@keyframes gentle-bounce {
+@keyframes bounce {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-8px); }
 }
-
-.app-title {
-
-  font-size: 2rem;
-  font-weight: 700;
-  color: #1a1a1a;
-  margin-top: 16px;
-  letter-spacing: -1px;
-  transition: color 0.3s ease;
+.login-card-enter-active {
+  transition: opacity 0.35s ease, transform 0.35s ease;
 }
-
-.app-subtitle {
-
-  font-size: 0.8rem;
-  font-weight: 400;
-  margin-top: 4px;
-  letter-spacing: -0.3px;
-  transition: color 0.3s ease;
+.login-card-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
 }
-
-.login-card {
-  overflow: hidden;
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease;
 }
-
-.theme-toggle {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-}
-
-@media (max-height: 600px) {
-  .logo-bounce {
-    width: 72px;
-  }
-  .logo-section {
-    margin-bottom: 16px;
-  }
-  .app-title {
-    font-size: 1.5rem;
-    margin-top: 8px;
-  }
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
 }
 </style>

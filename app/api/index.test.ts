@@ -1,4 +1,3 @@
-// @ts-nocheck
 const { mockApp, mockFs, mockHttps, mockGetServerConfiguration } = vi.hoisted(() => ({
   mockApp: {
     disable: vi.fn(),
@@ -21,6 +20,8 @@ const { mockApp, mockFs, mockHttps, mockGetServerConfiguration } = vi.hoisted(()
     tls: {},
   })),
 }));
+const mockHelmet = vi.hoisted(() => vi.fn(() => 'helmet-middleware'));
+const mockIsInternetlessModeEnabled = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('node:fs', () => ({
   default: mockFs,
@@ -41,6 +42,16 @@ vi.mock('express', () => ({
 
 vi.mock('cors', () => ({
   default: vi.fn(() => 'cors-middleware'),
+}));
+
+vi.mock('compression', () => {
+  const compression = vi.fn(() => 'compression-middleware');
+  compression.filter = vi.fn(() => true);
+  return { default: compression };
+});
+
+vi.mock('helmet', () => ({
+  default: mockHelmet,
 }));
 
 vi.mock('../log', () => ({
@@ -73,6 +84,10 @@ vi.mock('../configuration', () => ({
   getServerConfiguration: mockGetServerConfiguration,
 }));
 
+vi.mock('../store/settings', () => ({
+  isInternetlessModeEnabled: mockIsInternetlessModeEnabled,
+}));
+
 // The index module reads configuration at module level, so we must
 // re-import after setting the desired mock return value.
 describe('API Index', () => {
@@ -82,6 +97,8 @@ describe('API Index', () => {
     mockApp.set.mockClear();
     mockApp.use.mockClear();
     mockApp.listen.mockClear();
+    mockHelmet.mockClear();
+    mockIsInternetlessModeEnabled.mockReturnValue(false);
   });
 
   test('should not start server when disabled', async () => {
@@ -153,6 +170,162 @@ describe('API Index', () => {
     expect(mockApp.use).toHaveBeenCalledWith('/api', 'api-router');
     expect(mockApp.use).toHaveBeenCalledWith('/metrics', 'prometheus-router');
     expect(mockApp.use).toHaveBeenCalledWith('/', 'ui-router');
+  });
+
+  test('should enable helmet security headers with CSP allowing Iconify CDN', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockHelmet).toHaveBeenCalledWith({
+      contentSecurityPolicy: {
+        directives: {
+          'default-src': ["'self'"],
+          'script-src': ["'self'"],
+          'style-src': ["'self'", "'unsafe-inline'"],
+          'img-src': ["'self'", 'data:'],
+          'connect-src': [
+            "'self'",
+            'https://api.iconify.design',
+            'https://api.simplesvg.com',
+            'https://api.unisvg.com',
+          ],
+        },
+      },
+    });
+    expect(mockApp.use).toHaveBeenCalledWith('helmet-middleware');
+  });
+
+  test('should not allow Iconify CDN in CSP connect-src when internetless mode is enabled', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockIsInternetlessModeEnabled.mockReturnValue(true);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockHelmet).toHaveBeenCalledWith({
+      contentSecurityPolicy: {
+        directives: {
+          'default-src': ["'self'"],
+          'script-src': ["'self'"],
+          'style-src': ["'self'", "'unsafe-inline'"],
+          'img-src': ["'self'", 'data:'],
+          'connect-src': ["'self'"],
+        },
+      },
+    });
+  });
+
+  test('should enable compression by default', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      compression: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockApp.use).toHaveBeenCalledWith('compression-middleware');
+  });
+
+  test('compression filter should skip SSE routes and defer to default filter otherwise', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      compression: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    const compressionModule = await import('compression');
+    await indexRouter.init();
+
+    const compressionOptions = compressionModule.default.mock.calls[0][0];
+    expect(compressionOptions.filter({ path: '/api/events/stream', headers: {} }, {})).toBe(false);
+    expect(compressionOptions.filter({ path: '/events/ui', headers: {} }, {})).toBe(false);
+    expect(
+      compressionOptions.filter(
+        { path: '/api/containers', headers: { accept: 'text/event-stream' } },
+        {},
+      ),
+    ).toBe(false);
+    expect(compressionOptions.filter({ path: '/api/containers', headers: {} }, {})).toBe(true);
+    expect(compressionModule.default.filter).toHaveBeenCalledWith(
+      { path: '/api/containers', headers: {} },
+      {},
+    );
+  });
+
+  test('should disable compression when configured', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      compression: { enabled: false },
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const compressionCall = mockApp.use.mock.calls.find((c) => c[0] === 'compression-middleware');
+    expect(compressionCall).toBeUndefined();
+  });
+
+  test('should not register a global json parser middleware', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockApp.use).not.toHaveBeenCalledWith('json-middleware');
+  });
+
+  test('should register helmet middleware before auth init', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    const freshAuth = await import('./auth.js');
+    await indexRouter.init();
+
+    const helmetCallIndex = mockApp.use.mock.calls.findIndex((c) => c[0] === 'helmet-middleware');
+    expect(helmetCallIndex).toBeGreaterThanOrEqual(0);
+
+    const helmetCallOrder = mockApp.use.mock.invocationCallOrder[helmetCallIndex];
+    const authInitCallOrder = freshAuth.init.mock.invocationCallOrder[0];
+    expect(helmetCallOrder).toBeLessThan(authInitCallOrder);
   });
 
   test('should not set trust proxy when default (false)', async () => {

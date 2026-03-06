@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Trigger from '../Trigger.js';
 
 /**

@@ -1,5 +1,5 @@
-// @ts-nocheck
 import axios from 'axios';
+import { withAuthorizationHeader } from '../../../security/auth.js';
 import BaseRegistry from '../../BaseRegistry.js';
 
 /**
@@ -52,18 +52,22 @@ class Gitlab extends BaseRegistry {
    * @returns {Promise<*>}
    */
   async authenticate(image, requestOptions) {
+    const scope = encodeURIComponent(`repository:${image.name}:pull`);
     const request = {
       method: 'GET',
-      url: `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=repository:${image.name}:pull`,
+      url: `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=${scope}`,
       headers: {
         Accept: 'application/json',
         Authorization: `Basic ${Gitlab.base64Encode('', this.configuration.token)}`,
       },
     };
     const response = await axios(request);
-    const requestOptionsWithAuth = requestOptions;
-    requestOptionsWithAuth.headers.Authorization = `Bearer ${response.data.token}`;
-    return requestOptionsWithAuth;
+    return withAuthorizationHeader(
+      requestOptions,
+      'Bearer',
+      response.data.token,
+      `Unable to authenticate registry ${this.getId()}: GitLab token endpoint response does not contain token`,
+    );
   }
 
   /**

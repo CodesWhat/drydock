@@ -3,7 +3,7 @@
  * @returns {string}
  */
 function getRegistryIcon() {
-  return 'fas fa-database';
+  return 'sh-docker';
 }
 
 /**
@@ -12,32 +12,38 @@ function getRegistryIcon() {
  * @returns {string}
  */
 const REGISTRY_PROVIDER_ICONS = {
-  acr: 'fab fa-microsoft',
-  alicr: 'fas fa-cloud',
-  artifactory: 'fas fa-frog',
-  custom: 'fas fa-cubes',
-  ecr: 'fab fa-aws',
-  forgejo: 'fas fa-code-branch',
-  gar: 'fab fa-google',
-  gcr: 'fab fa-google',
-  ghcr: 'fab fa-github',
-  gitea: 'fas fa-code-branch',
-  gitlab: 'fab fa-gitlab',
-  harbor: 'fas fa-anchor',
-  hub: 'fab fa-docker',
-  ibmcr: 'fas fa-cloud',
-  nexus: 'fas fa-box',
-  ocir: 'fas fa-cloud',
-  quay: 'fab fa-redhat',
-  lscr: 'fab fa-linux',
-  codeberg: 'fas fa-mountain',
-  dhi: 'fab fa-docker',
-  docr: 'fab fa-digital-ocean',
+  acr: 'sh-microsoft',
+  alicr: 'sh-alibaba-cloud',
+  artifactory: 'sh-jfrog-artifactory',
+  custom: 'sh-docker',
+  ecr: 'sh-amazon-web-services',
+  forgejo: 'sh-forgejo',
+  gar: 'sh-google',
+  gcr: 'sh-google',
+  ghcr: 'sh-github',
+  gitea: 'sh-gitea',
+  gitlab: 'sh-gitlab',
+  harbor: 'sh-harbor',
+  hub: 'sh-docker',
+  ibmcr: 'sh-ibm',
+  nexus: 'sh-sonatype-nexus-repository',
+  ocir: 'sh-oracle-cloud',
+  quay: 'sh-quay',
+  lscr: 'sh-linux',
+  codeberg: 'sh-codeberg',
+  dhi: 'sh-docker',
+  docr: 'sh-digitalocean',
 };
 
-function getRegistryProviderIcon(provider) {
+interface RegistryDetailPathOptions {
+  type: string;
+  name: string;
+  agent?: string;
+}
+
+function getRegistryProviderIcon(provider: string) {
   const providerName = `${provider || ''}`.split('.')[0];
-  return REGISTRY_PROVIDER_ICONS[providerName] || 'fas fa-cube';
+  return REGISTRY_PROVIDER_ICONS[providerName] || 'sh-docker';
 }
 
 /**
@@ -70,17 +76,45 @@ const REGISTRY_PROVIDER_COLORS = {
   trueforge: '#6B7280',
 };
 
-function getRegistryProviderColor(provider) {
+function getRegistryProviderColor(provider: string) {
   return REGISTRY_PROVIDER_COLORS[provider.split('.')[0]] || '#6B7280';
 }
 
 /**
  * get all registries.
- * @returns {Promise<any>}
+ * @returns {Promise<unknown>}
  */
 async function getAllRegistries() {
   const response = await fetch('/api/registries', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get registries: ${response.statusText}`);
+  }
   return response.json();
 }
 
-export { getRegistryIcon, getRegistryProviderIcon, getRegistryProviderColor, getAllRegistries };
+function buildRegistryDetailPath({ type, name, agent }: RegistryDetailPathOptions) {
+  const segments = ['/api/registries'];
+  if (agent) {
+    segments.push(encodeURIComponent(agent));
+  }
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
+  return segments.join('/');
+}
+
+async function getRegistry({ type, name, agent }: RegistryDetailPathOptions) {
+  const response = await fetch(buildRegistryDetailPath({ type, name, agent }), {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get registry: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export {
+  getRegistryIcon,
+  getRegistryProviderIcon,
+  getRegistryProviderColor,
+  getAllRegistries,
+  getRegistry,
+};

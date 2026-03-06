@@ -1,0 +1,31 @@
+# CPU idle benchmark: WUD latest vs Drydock dev (with all optimizations)
+#
+# Both configured identically where possible:
+# - cron-only (hourly), no watchbydefault
+# - Drydock dev uses new optimization toggles
+
+services:
+  wud-latest:
+    image: ghcr.io/getwud/wud:latest
+    container_name: cpu-wud-latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WUD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+      - WUD_WATCHER_LOCAL_CRON=0 * * * *
+
+  drydock-dev:
+    image: drydock:dev
+    container_name: cpu-drydock-dev
+    user: root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
+      - DD_LOG_FORMAT=json
+      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+      - DD_WATCHER_LOCAL_CRON=0 * * * *
+      - DD_WATCHER_LOCAL_WATCHEVENTS=false
+      - DD_LOG_BUFFER_ENABLED=false
+      - DD_SESSION_SECRET=bench-dev

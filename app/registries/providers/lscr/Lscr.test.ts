@@ -1,4 +1,3 @@
-// @ts-nocheck
 import Lscr from './Lscr.js';
 
 vi.mock('axios', () =>

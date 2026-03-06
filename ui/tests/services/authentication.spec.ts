@@ -1,5 +1,6 @@
 import {
   getAllAuthentications,
+  getAuthentication,
   getAuthenticationIcon,
   getAuthProviderColor,
   getAuthProviderIcon,
@@ -13,18 +14,18 @@ describe('Authentication Service', () => {
   });
 
   it('returns the default authentication icon', () => {
-    expect(getAuthenticationIcon()).toBe('fas fa-lock');
+    expect(getAuthenticationIcon()).toBe('sh-lock');
   });
 
   it('returns provider icon for known authentication types', () => {
-    expect(getAuthProviderIcon('basic')).toBe('fas fa-key');
-    expect(getAuthProviderIcon('oidc')).toBe('fas fa-openid');
-    expect(getAuthProviderIcon('anonymous')).toBe('fas fa-user-secret');
+    expect(getAuthProviderIcon('basic')).toBe('sh-key');
+    expect(getAuthProviderIcon('oidc')).toBe('sh-openid');
+    expect(getAuthProviderIcon('anonymous')).toBe('sh-user-secret');
   });
 
   it('falls back to lock icon for unknown authentication types', () => {
-    expect(getAuthProviderIcon('unsupported')).toBe('fas fa-lock');
-    expect(getAuthProviderIcon(undefined)).toBe('fas fa-lock');
+    expect(getAuthProviderIcon('unsupported')).toBe('sh-lock');
+    expect(getAuthProviderIcon(undefined)).toBe('sh-lock');
   });
 
   it('returns provider color for known authentication types', () => {
@@ -51,5 +52,64 @@ describe('Authentication Service', () => {
       credentials: 'include',
     });
     expect(result).toEqual(mockAuthentications);
+  });
+
+  it('throws when fetching all authentications fails', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      statusText: 'Internal Server Error',
+      json: async () => ({}),
+    } as any);
+
+    await expect(getAllAuthentications()).rejects.toThrow(
+      'Failed to get authentications: Internal Server Error',
+    );
+  });
+
+  it('fetches a specific authentication provider by type and name', async () => {
+    const mockAuthentication = { id: 'basic.local', type: 'basic', name: 'local' };
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockAuthentication,
+    } as any);
+
+    const result = await getAuthentication({ type: 'basic', name: 'local' });
+
+    expect(fetch).toHaveBeenCalledWith('/api/authentications/basic/local', {
+      credentials: 'include',
+    });
+    expect(result).toEqual(mockAuthentication);
+  });
+
+  it('throws when fetching a specific authentication provider fails', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      statusText: 'Not Found',
+      json: async () => ({}),
+    } as any);
+
+    await expect(getAuthentication({ type: 'basic', name: 'local' })).rejects.toThrow(
+      'Failed to get authentication: Not Found',
+    );
+  });
+
+  it('fetches an agent-scoped authentication provider when agent is provided', async () => {
+    const mockAuthentication = {
+      id: 'edge.basic.local',
+      type: 'basic',
+      name: 'local',
+      agent: 'edge',
+    };
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockAuthentication,
+    } as any);
+
+    const result = await getAuthentication({ agent: 'edge', type: 'basic', name: 'local' });
+
+    expect(fetch).toHaveBeenCalledWith('/api/authentications/edge/basic/local', {
+      credentials: 'include',
+    });
+    expect(result).toEqual(mockAuthentication);
   });
 });

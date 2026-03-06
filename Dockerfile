@@ -1,6 +1,6 @@
 # checkov:skip=CKV_DOCKER_3: entrypoint uses su-exec for runtime privilege drop
 # Common Stage
-FROM node:24-alpine@sha256:4f696fbf39f383c1e486030ba6b289a5d9af541642fc78ab197e584a113b9c03 AS base
+FROM node:24-alpine@sha256:7fddd9ddeae8196abf4a3ef2de34e11f7b1a722119f91f28ddf1e99dcafdf114 AS base
 WORKDIR /home/node/app
 
 LABEL maintainer="CodesWhat"
@@ -25,8 +25,7 @@ RUN apk add --no-cache \
     su-exec \
     tini \
     tzdata \
-    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing cosign \
-    && curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/75c4dc0f45c5d7ffd05ae26df1e0c666787bdf2a/contrib/install.sh | sh -s -- -b /usr/local/bin v0.69.1 \
+    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing cosign trivy \
     && mkdir /store && chown node:node /store
 
 # Build stage for backend app
@@ -61,6 +60,7 @@ RUN npm run build
 
 # Release stage
 FROM base AS release
+ENV DD_LOG_FORMAT=json
 
 # Default entrypoint
 COPY --chmod=755 Docker.entrypoint.sh /usr/bin/entrypoint.sh

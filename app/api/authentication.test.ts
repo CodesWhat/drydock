@@ -1,4 +1,3 @@
-// @ts-nocheck
 vi.mock('./component', () => ({
   init: vi.fn(() => 'authentication-router'),
 }));

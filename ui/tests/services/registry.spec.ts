@@ -1,5 +1,6 @@
 import {
   getAllRegistries,
+  getRegistry,
   getRegistryIcon,
   getRegistryProviderColor,
   getRegistryProviderIcon,
@@ -15,47 +16,47 @@ describe('Registry Service', () => {
 
   describe('getRegistryIcon', () => {
     it('returns the registry icon', () => {
-      expect(getRegistryIcon()).toBe('fas fa-database');
+      expect(getRegistryIcon()).toBe('sh-docker');
     });
   });
 
   describe('getRegistryProviderIcon', () => {
     it('returns correct icons for different providers', () => {
-      expect(getRegistryProviderIcon('acr.example.com')).toBe('fab fa-microsoft');
-      expect(getRegistryProviderIcon('custom.registry.com')).toBe('fas fa-cubes');
-      expect(getRegistryProviderIcon('ecr.amazonaws.com')).toBe('fab fa-aws');
-      expect(getRegistryProviderIcon('forgejo.example.com')).toBe('fas fa-code-branch');
-      expect(getRegistryProviderIcon('gcr.io')).toBe('fab fa-google');
-      expect(getRegistryProviderIcon('ghcr.io')).toBe('fab fa-github');
-      expect(getRegistryProviderIcon('gitea.example.com')).toBe('fas fa-code-branch');
-      expect(getRegistryProviderIcon('gitlab.com')).toBe('fab fa-gitlab');
-      expect(getRegistryProviderIcon('hub.docker.com')).toBe('fab fa-docker');
-      expect(getRegistryProviderIcon('quay.io')).toBe('fab fa-redhat');
-      expect(getRegistryProviderIcon('lscr.io')).toBe('fab fa-linux');
-      expect(getRegistryProviderIcon('codeberg.org')).toBe('fas fa-mountain');
-      expect(getRegistryProviderIcon('dhi.example.com')).toBe('fab fa-docker');
-      expect(getRegistryProviderIcon('docr.digitalocean.com')).toBe('fab fa-digital-ocean');
-      expect(getRegistryProviderIcon('alicr.aliyuncs.com')).toBe('fas fa-cloud');
-      expect(getRegistryProviderIcon('artifactory.acme.com')).toBe('fas fa-frog');
-      expect(getRegistryProviderIcon('gar.pkg.dev')).toBe('fab fa-google');
-      expect(getRegistryProviderIcon('harbor.acme.com')).toBe('fas fa-anchor');
-      expect(getRegistryProviderIcon('ibmcr.icr.io')).toBe('fas fa-cloud');
-      expect(getRegistryProviderIcon('nexus.acme.com')).toBe('fas fa-box');
-      expect(getRegistryProviderIcon('ocir.io')).toBe('fas fa-cloud');
-      expect(getRegistryProviderIcon('trueforge.example')).toBe('fas fa-cube');
+      expect(getRegistryProviderIcon('acr.example.com')).toBe('sh-microsoft');
+      expect(getRegistryProviderIcon('custom.registry.com')).toBe('sh-docker');
+      expect(getRegistryProviderIcon('ecr.amazonaws.com')).toBe('sh-amazon-web-services');
+      expect(getRegistryProviderIcon('forgejo.example.com')).toBe('sh-forgejo');
+      expect(getRegistryProviderIcon('gcr.io')).toBe('sh-google');
+      expect(getRegistryProviderIcon('ghcr.io')).toBe('sh-github');
+      expect(getRegistryProviderIcon('gitea.example.com')).toBe('sh-gitea');
+      expect(getRegistryProviderIcon('gitlab.com')).toBe('sh-gitlab');
+      expect(getRegistryProviderIcon('hub.docker.com')).toBe('sh-docker');
+      expect(getRegistryProviderIcon('quay.io')).toBe('sh-quay');
+      expect(getRegistryProviderIcon('lscr.io')).toBe('sh-linux');
+      expect(getRegistryProviderIcon('codeberg.org')).toBe('sh-codeberg');
+      expect(getRegistryProviderIcon('dhi.example.com')).toBe('sh-docker');
+      expect(getRegistryProviderIcon('docr.digitalocean.com')).toBe('sh-digitalocean');
+      expect(getRegistryProviderIcon('alicr.aliyuncs.com')).toBe('sh-alibaba-cloud');
+      expect(getRegistryProviderIcon('artifactory.acme.com')).toBe('sh-jfrog-artifactory');
+      expect(getRegistryProviderIcon('gar.pkg.dev')).toBe('sh-google');
+      expect(getRegistryProviderIcon('harbor.acme.com')).toBe('sh-harbor');
+      expect(getRegistryProviderIcon('ibmcr.icr.io')).toBe('sh-ibm');
+      expect(getRegistryProviderIcon('nexus.acme.com')).toBe('sh-sonatype-nexus-repository');
+      expect(getRegistryProviderIcon('ocir.io')).toBe('sh-oracle-cloud');
+      expect(getRegistryProviderIcon('trueforge.example')).toBe('sh-docker');
     });
 
     it('returns default icon for unknown providers', () => {
-      expect(getRegistryProviderIcon('unknown.registry')).toBe('fas fa-cube');
+      expect(getRegistryProviderIcon('unknown.registry')).toBe('sh-docker');
     });
 
     it('returns default icon when provider is missing', () => {
-      expect(getRegistryProviderIcon(undefined)).toBe('fas fa-cube');
+      expect(getRegistryProviderIcon(undefined)).toBe('sh-docker');
     });
 
     it('handles provider names with dots correctly', () => {
-      expect(getRegistryProviderIcon('hub.docker.com')).toBe('fab fa-docker');
-      expect(getRegistryProviderIcon('gcr.io')).toBe('fab fa-google');
+      expect(getRegistryProviderIcon('hub.docker.com')).toBe('sh-docker');
+      expect(getRegistryProviderIcon('gcr.io')).toBe('sh-google');
     });
   });
 
@@ -106,6 +107,62 @@ describe('Registry Service', () => {
         credentials: 'include',
       });
       expect(registries).toEqual(mockRegistries);
+    });
+
+    it('throws when fetching registries fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Internal Server Error',
+        json: async () => ({}),
+      } as any);
+
+      await expect(getAllRegistries()).rejects.toThrow(
+        'Failed to get registries: Internal Server Error',
+      );
+    });
+  });
+
+  describe('getRegistry', () => {
+    it('fetches a specific registry by type and name', async () => {
+      const mockRegistry = { id: 'hub.private', type: 'hub', name: 'private' };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockRegistry,
+      } as any);
+
+      const result = await getRegistry({ type: 'hub', name: 'private' });
+
+      expect(fetch).toHaveBeenCalledWith('/api/registries/hub/private', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockRegistry);
+    });
+
+    it('throws when fetching a specific registry fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Not Found',
+        json: async () => ({}),
+      } as any);
+
+      await expect(getRegistry({ type: 'hub', name: 'private' })).rejects.toThrow(
+        'Failed to get registry: Not Found',
+      );
+    });
+
+    it('fetches an agent-scoped registry when agent is provided', async () => {
+      const mockRegistry = { id: 'edge.hub.private', type: 'hub', name: 'private', agent: 'edge' };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockRegistry,
+      } as any);
+
+      const result = await getRegistry({ agent: 'edge', type: 'hub', name: 'private' });
+
+      expect(fetch).toHaveBeenCalledWith('/api/registries/edge/hub/private', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockRegistry);
     });
   });
 });

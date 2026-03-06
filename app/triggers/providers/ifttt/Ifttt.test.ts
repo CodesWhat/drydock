@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import axios from 'axios';
 import joi from 'joi';
 
@@ -84,6 +82,32 @@ test('trigger should send http request to IFTTT', async () => {
     },
     method: 'POST',
 
+    url: 'https://maker.ifttt.com/trigger/event/with/key/key',
+  });
+});
+
+test('trigger should not throw when container result is missing', async () => {
+  ifttt.configuration = {
+    key: 'key',
+    event: 'event',
+  };
+  const container = {
+    name: 'container-without-result',
+  };
+  axios.mockResolvedValue({ data: {} });
+
+  await ifttt.trigger(container);
+
+  expect(axios).toHaveBeenCalledWith({
+    data: {
+      value1: 'container-without-result',
+      value2: undefined,
+      value3: '{"name":"container-without-result"}',
+    },
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
     url: 'https://maker.ifttt.com/trigger/event/with/key/key',
   });
 });

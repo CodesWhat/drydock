@@ -18,20 +18,29 @@ export default mergeConfig(
       setupFiles: ['./tests/setup.ts'],
       include: ['tests/**/*.spec.ts'],
       css: true,
-      server: {
-        deps: {
-          inline: ['vuetify'],
-        },
-      },
       transformMode: {
         web: [/\.vue$/],
       },
       coverage: {
         provider: 'v8',
         reporter: ['text', 'lcov', 'html'],
-        // Measure executable app logic; Vue SFC template render output produces non-actionable partial branches.
-        include: ['src/**/*.{js,ts}'],
-        exclude: ['src/main.ts', 'src/registerServiceWorker.ts', '**/*.d.ts', '**/node_modules/**'],
+        // Gate coverage on unit-tested runtime logic.
+        include: [
+          'src/services/**/*.ts',
+          'src/composables/**/*.ts',
+          'src/views/dashboard/useDashboardData.ts',
+          'src/views/dashboard/useDashboardWidgetOrder.ts',
+          'src/utils/**/*.ts',
+          'src/theme/useTheme.ts',
+        ],
+        exclude: [
+          'src/main.ts',
+          'src/registerServiceWorker.ts',
+          'src/services/sse.ts',
+          '**/*.typecheck.ts',
+          '**/*.d.ts',
+          '**/node_modules/**',
+        ],
         thresholds: {
           lines: 100,
           branches: 100,

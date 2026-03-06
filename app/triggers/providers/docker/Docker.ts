@@ -1,14 +1,17 @@
-// @ts-nocheck
 import crypto from 'node:crypto';
+import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
 import { getSecurityConfiguration } from '../../../configuration/index.js';
+import { getPreferredLabelValue as resolvePreferredLabelValue } from '../../../docker/legacy-label.js';
 import {
   emitContainerUpdateApplied,
   emitContainerUpdateFailed,
+  emitSecurityAlert,
   emitSelfUpdateStarting,
 } from '../../../event/index.js';
 import { fullName } from '../../../model/container.js';
 import { getAuditCounter } from '../../../prometheus/audit.js';
+import { getRollbackCounter } from '../../../prometheus/rollback.js';
 import { getState } from '../../../registry/index.js';
 import {
   generateImageSbom,
@@ -21,9 +24,28 @@ import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
 import { runHook } from '../../hooks/HookRunner.js';
 import Trigger from '../Trigger.js';
+import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
+import ContainerUpdateExecutor from './ContainerUpdateExecutor.js';
 import { startHealthMonitor } from './HealthMonitor.js';
+import HookExecutor from './HookExecutor.js';
+import RegistryResolver from './RegistryResolver.js';
+import RollbackMonitor from './RollbackMonitor.js';
+import SecurityGate from './SecurityGate.js';
+import SelfUpdateOrchestrator from './SelfUpdateOrchestrator.js';
+import UpdateLifecycleExecutor from './UpdateLifecycleExecutor.js';
 
 const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
+const NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
+const NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS = 1_000;
+const TRIGGER_BATCH_CONCURRENCY = 3;
+const warnedLegacyTriggerLabelFallbacks = new Set<string>();
+
+function getPreferredLabelValue(labels, ddKey, wudKey, logger) {
+  return resolvePreferredLabelValue(labels, ddKey, wudKey, {
+    warnedFallbacks: warnedLegacyTriggerLabelFallbacks,
+    warn: (message) => logger?.warn?.(message),
+  });
+}
 
 function hasRepoTags(image) {
   return Array.isArray(image.RepoTags) && image.RepoTags.length > 0;
@@ -64,46 +86,214 @@ function shouldKeepImage(imageNormalized, container) {
   return false;
 }
 
+const HOOK_EXECUTOR_ORCHESTRATOR_METHODS = ['recordHookAudit'] as const;
+const SELF_UPDATE_ORCHESTRATOR_METHODS = [
+  'pullImage',
+  'cloneContainer',
+  'createContainer',
+  'insertContainerImageBackup',
+] as const;
+const CONTAINER_UPDATE_ORCHESTRATOR_METHODS = [
+  'stopContainer',
+  'waitContainerRemoved',
+  'removeContainer',
+  'createContainer',
+  'startContainer',
+  'pullImage',
+  'cloneContainer',
+  'isContainerNotFoundError',
+  'recordRollbackTelemetry',
+  'hasHealthcheckConfigured',
+  'waitForContainerHealthy',
+] as const;
+const ROLLBACK_MONITOR_ORCHESTRATOR_METHODS = ['getCurrentContainer', 'inspectContainer'] as const;
+const UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS = [
+  'createTriggerContext',
+  'maybeScanAndGateUpdate',
+  'buildHookConfig',
+  'recordHookConfigurationAudit',
+  'runPreUpdateHook',
+  'isSelfUpdate',
+  'maybeNotifySelfUpdate',
+  'executeSelfUpdate',
+  'runPreRuntimeUpdateLifecycle',
+  'performContainerUpdate',
+  'runPostUpdateHook',
+  'cleanupOldImages',
+  'getRollbackConfig',
+  'maybeStartAutoRollbackMonitor',
+] as const;
+const SECURITY_GATE_ORCHESTRATOR_METHODS = ['recordSecurityAudit'] as const;
+
+type DockerTriggerCallbackName =
+  | (typeof HOOK_EXECUTOR_ORCHESTRATOR_METHODS)[number]
+  | (typeof SELF_UPDATE_ORCHESTRATOR_METHODS)[number]
+  | (typeof CONTAINER_UPDATE_ORCHESTRATOR_METHODS)[number]
+  | (typeof ROLLBACK_MONITOR_ORCHESTRATOR_METHODS)[number]
+  | (typeof UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS)[number]
+  | (typeof SECURITY_GATE_ORCHESTRATOR_METHODS)[number];
+
+type DockerTriggerOrchestrator = Pick<Docker, DockerTriggerCallbackName>;
+
+function buildOrchestratorCallback<K extends keyof DockerTriggerOrchestrator>(
+  orchestrator: DockerTriggerOrchestrator,
+  callbackName: K,
+): DockerTriggerOrchestrator[K] {
+  return ((...args: Parameters<DockerTriggerOrchestrator[K]>) =>
+    (
+      orchestrator[callbackName] as (
+        ...callbackArgs: Parameters<DockerTriggerOrchestrator[K]>
+      ) => ReturnType<DockerTriggerOrchestrator[K]>
+    ).apply(orchestrator, args)) as DockerTriggerOrchestrator[K];
+}
+
+function pickOrchestratorCallbacks<K extends keyof DockerTriggerOrchestrator>(
+  orchestrator: DockerTriggerOrchestrator,
+  callbackNames: readonly K[],
+): Pick<DockerTriggerOrchestrator, K> {
+  const callbacks = {} as Pick<DockerTriggerOrchestrator, K>;
+  for (const callbackName of callbackNames) {
+    callbacks[callbackName] = buildOrchestratorCallback(orchestrator, callbackName);
+  }
+  return callbacks;
+}
+
 /**
  * Replace a Docker container with an updated one.
  */
 class Docker extends Trigger {
   public strictAgentMatch = true;
 
-  sanitizeEndpointConfig(endpointConfig, currentContainerId) {
-    if (!endpointConfig) {
-      return {};
-    }
+  registryResolver: RegistryResolver;
 
-    const sanitizedEndpointConfig: Record<string, any> = {};
+  runtimeConfigManager: ContainerRuntimeConfigManager;
 
-    if (endpointConfig.IPAMConfig) {
-      sanitizedEndpointConfig.IPAMConfig = endpointConfig.IPAMConfig;
-    }
-    if (endpointConfig.Links) {
-      sanitizedEndpointConfig.Links = endpointConfig.Links;
-    }
-    if (endpointConfig.DriverOpts) {
-      sanitizedEndpointConfig.DriverOpts = endpointConfig.DriverOpts;
-    }
-    if (endpointConfig.MacAddress) {
-      sanitizedEndpointConfig.MacAddress = endpointConfig.MacAddress;
-    }
-    if (endpointConfig.Aliases?.length > 0) {
-      sanitizedEndpointConfig.Aliases = endpointConfig.Aliases.filter(
-        (alias) => !currentContainerId.startsWith(alias),
+  securityGate?: SecurityGate;
+
+  hookExecutor: HookExecutor;
+
+  selfUpdateOrchestrator: SelfUpdateOrchestrator;
+
+  containerUpdateExecutor: ContainerUpdateExecutor;
+
+  updateLifecycleExecutor: UpdateLifecycleExecutor;
+
+  rollbackMonitor: RollbackMonitor;
+
+  constructor() {
+    super();
+
+    this.registryResolver = new RegistryResolver();
+    this.runtimeConfigManager = new ContainerRuntimeConfigManager({
+      getPreferredLabelValue,
+      getLogger: () => this.log,
+    });
+    const getCloneRuntimeConfigOptions =
+      this.runtimeConfigManager.getCloneRuntimeConfigOptions.bind(this.runtimeConfigManager);
+    const buildRuntimeConfigCompatibilityError =
+      this.runtimeConfigManager.buildRuntimeConfigCompatibilityError.bind(
+        this.runtimeConfigManager,
       );
-    }
-
-    return sanitizedEndpointConfig;
+    this.hookExecutor = new HookExecutor({
+      runHook,
+      getPreferredLabelValue,
+      getLogger: () => this.log,
+      ...pickOrchestratorCallbacks(this, HOOK_EXECUTOR_ORCHESTRATOR_METHODS),
+    });
+    this.selfUpdateOrchestrator = new SelfUpdateOrchestrator({
+      getConfiguration: () => this.configuration,
+      runtimeConfigManager: this.runtimeConfigManager,
+      ...pickOrchestratorCallbacks(this, SELF_UPDATE_ORCHESTRATOR_METHODS),
+      emitSelfUpdateStarting,
+    });
+    this.containerUpdateExecutor = new ContainerUpdateExecutor({
+      getConfiguration: () => this.configuration,
+      getTriggerId: () => this.getId(),
+      ...pickOrchestratorCallbacks(this, CONTAINER_UPDATE_ORCHESTRATOR_METHODS),
+      getCloneRuntimeConfigOptions,
+      buildRuntimeConfigCompatibilityError,
+    });
+    this.rollbackMonitor = new RollbackMonitor({
+      getPreferredLabelValue,
+      getLogger: () => this.log,
+      ...pickOrchestratorCallbacks(this, ROLLBACK_MONITOR_ORCHESTRATOR_METHODS),
+      startHealthMonitor,
+      getTriggerInstance: () => this,
+    });
+    const updateLifecycleCallbacks = pickOrchestratorCallbacks(
+      this,
+      UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS,
+    );
+    this.updateLifecycleExecutor = new UpdateLifecycleExecutor({
+      logger: {
+        getLogger: () => this.log,
+      },
+      context: {
+        getContainerFullName: (container) => fullName(container as any),
+        createTriggerContext: updateLifecycleCallbacks.createTriggerContext,
+      },
+      security: {
+        maybeScanAndGateUpdate: updateLifecycleCallbacks.maybeScanAndGateUpdate,
+      },
+      hooks: {
+        buildHookConfig: updateLifecycleCallbacks.buildHookConfig,
+        recordHookConfigurationAudit: updateLifecycleCallbacks.recordHookConfigurationAudit,
+        runPreUpdateHook: updateLifecycleCallbacks.runPreUpdateHook,
+        runPostUpdateHook: updateLifecycleCallbacks.runPostUpdateHook,
+      },
+      selfUpdate: {
+        isSelfUpdate: updateLifecycleCallbacks.isSelfUpdate,
+        maybeNotifySelfUpdate: updateLifecycleCallbacks.maybeNotifySelfUpdate,
+        executeSelfUpdate: updateLifecycleCallbacks.executeSelfUpdate,
+      },
+      runtimeUpdate: {
+        runPreRuntimeUpdateLifecycle: updateLifecycleCallbacks.runPreRuntimeUpdateLifecycle,
+        performContainerUpdate: updateLifecycleCallbacks.performContainerUpdate,
+      },
+      postUpdate: {
+        cleanupOldImages: updateLifecycleCallbacks.cleanupOldImages,
+        getRollbackConfig: updateLifecycleCallbacks.getRollbackConfig,
+        maybeStartAutoRollbackMonitor: updateLifecycleCallbacks.maybeStartAutoRollbackMonitor,
+        pruneOldBackups: backupStore.pruneOldBackups,
+        getBackupCount: () => this.configuration?.backupcount,
+      },
+      telemetry: {
+        emitContainerUpdateApplied,
+        emitContainerUpdateFailed,
+      },
+    });
   }
 
-  getPrimaryNetworkName(containerToCreate, networkNames) {
-    const networkMode = containerToCreate?.HostConfig?.NetworkMode;
-    if (networkMode && networkNames.includes(networkMode)) {
-      return networkMode;
+  getSecurityGate() {
+    if (!this.securityGate) {
+      this.securityGate = new SecurityGate({
+        getSecurityConfiguration,
+        verifyImageSignature,
+        scanImageForVulnerabilities,
+        generateImageSbom,
+        getContainer: (id) => storeContainer.getContainer(id),
+        updateContainer: storeContainer.updateContainer,
+        cacheSecurityState,
+        emitSecurityAlert,
+        fullName,
+        ...pickOrchestratorCallbacks(this, SECURITY_GATE_ORCHESTRATOR_METHODS),
+      });
     }
-    return networkNames[0];
+    return this.securityGate;
+  }
+
+  isContainerNotFoundError(error) {
+    if (!error) {
+      return false;
+    }
+
+    const statusCode = error?.statusCode ?? error?.status;
+    if (statusCode === 404) {
+      return true;
+    }
+
+    const errorMessage = `${error?.message ?? ''} ${error?.reason ?? ''} ${error?.json?.message ?? ''}`;
+    return errorMessage.toLowerCase().includes('no such container');
   }
 
   /**
@@ -127,6 +317,34 @@ class Docker extends Trigger {
 
   getWatcher(container) {
     return getState().watcher[`docker.${container.watcher}`];
+  }
+
+  normalizeRegistryHost(registryUrlOrName) {
+    return this.registryResolver.normalizeRegistryHost(registryUrlOrName);
+  }
+
+  buildRegistryLookupCandidates(image) {
+    return this.registryResolver.buildRegistryLookupCandidates(image);
+  }
+
+  isRegistryManagerCompatible(registry, options = {}) {
+    return this.registryResolver.isRegistryManagerCompatible(registry, options);
+  }
+
+  createAnonymousRegistryManager(container, logContainer) {
+    return this.registryResolver.createAnonymousRegistryManager(container, logContainer);
+  }
+
+  resolveRegistryManager(container, logContainer, options = {}) {
+    const registryName = container?.image?.registry?.name;
+    const registryState = getState().registry || {};
+    const requireNormalizeImage =
+      this.configuration.prune === true && !this.isSelfUpdate(container);
+    return this.registryResolver.resolveRegistryManager(container, logContainer, registryState, {
+      ...options,
+      requireNormalizeImage,
+      registryName,
+    });
   }
 
   /**
@@ -371,7 +589,7 @@ class Docker extends Trigger {
       const additionalNetworkNames = [];
 
       if (endpointNetworkNames.length > 1) {
-        const primaryNetworkName = this.getPrimaryNetworkName(
+        const primaryNetworkName = this.runtimeConfigManager.getPrimaryNetworkName(
           containerToCreate,
           endpointNetworkNames,
         );
@@ -454,19 +672,47 @@ class Docker extends Trigger {
    * @param newImage
    * @returns {*}
    */
-  cloneContainer(currentContainer, newImage) {
+  cloneContainer(currentContainer, newImage, runtimeOptionsOrLogContainer = {}) {
+    const { sourceImageConfig, targetImageConfig, runtimeFieldOrigins, logContainer } =
+      this.runtimeConfigManager.buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer);
     const containerName = currentContainer.Name.replace('/', '');
     const currentContainerNetworks = currentContainer.NetworkSettings?.Networks || {};
     const endpointsConfig = Object.entries(currentContainerNetworks).reduce(
-      (acc: Record<string, any>, [networkName, endpointConfig]) => {
-        acc[networkName] = this.sanitizeEndpointConfig(endpointConfig, currentContainer.Id);
+      (acc: Record<string, unknown>, [networkName, endpointConfig]) => {
+        acc[networkName] = this.runtimeConfigManager.sanitizeEndpointConfig(
+          endpointConfig as Record<string, unknown> | null | undefined,
+          currentContainer.Id,
+        );
         return acc;
       },
       {},
     );
+    const sanitizedContainerConfig = this.runtimeConfigManager.sanitizeClonedRuntimeConfig(
+      currentContainer.Config,
+      sourceImageConfig,
+      targetImageConfig,
+      runtimeFieldOrigins,
+      logContainer,
+    );
+    const shouldAnnotateRuntimeFieldOrigins =
+      sourceImageConfig !== undefined ||
+      targetImageConfig !== undefined ||
+      runtimeFieldOrigins !== undefined;
+    const clonedContainerConfig = shouldAnnotateRuntimeFieldOrigins
+      ? this.runtimeConfigManager.annotateClonedRuntimeFieldOrigins(
+          sanitizedContainerConfig,
+          runtimeFieldOrigins,
+          targetImageConfig,
+        )
+      : sanitizedContainerConfig;
 
-    const containerClone = {
-      ...currentContainer.Config,
+    const containerClone: {
+      HostConfig?: { NetworkMode?: string };
+      Hostname?: unknown;
+      ExposedPorts?: unknown;
+      [key: string]: unknown;
+    } = {
+      ...clonedContainerConfig,
       name: containerName,
       Image: newImage,
       HostConfig: currentContainer.HostConfig,
@@ -575,7 +821,9 @@ class Docker extends Trigger {
     const logContainer = this.log.child({ container: fullName(container) });
     const watcher = this.getWatcher(container);
     const { dockerApi } = watcher;
-    const registry = getState().registry[container.image.registry.name];
+    const registry = this.resolveRegistryManager(container, logContainer, {
+      allowAnonymousFallback: true,
+    });
     const newImage = this.getNewImageFullName(registry, container);
 
     const currentContainer = await this.getCurrentContainer(dockerApi, container);
@@ -595,29 +843,7 @@ class Docker extends Trigger {
   }
 
   buildHookConfig(container) {
-    return {
-      hookPre: container.labels?.['dd.hook.pre'] ?? container.labels?.['wud.hook.pre'],
-      hookPost: container.labels?.['dd.hook.post'] ?? container.labels?.['wud.hook.post'],
-      hookPreAbort:
-        (
-          container.labels?.['dd.hook.pre.abort'] ??
-          container.labels?.['wud.hook.pre.abort'] ??
-          'true'
-        ).toLowerCase() === 'true',
-      hookTimeout: Number.parseInt(
-        container.labels?.['dd.hook.timeout'] ?? container.labels?.['wud.hook.timeout'] ?? '60000',
-        10,
-      ),
-      hookEnv: {
-        DD_CONTAINER_NAME: container.name,
-        DD_CONTAINER_ID: container.id,
-        DD_IMAGE_NAME: container.image.name,
-        DD_IMAGE_TAG: container.image.tag.value,
-        DD_UPDATE_KIND: container.updateKind.kind,
-        DD_UPDATE_FROM: container.updateKind.localValue ?? '',
-        DD_UPDATE_TO: container.updateKind.remoteValue ?? '',
-      },
-    };
+    return this.hookExecutor.buildHookConfig(container);
   }
 
   recordAudit(action, container, status, details) {
@@ -633,8 +859,109 @@ class Docker extends Trigger {
     getAuditCounter()?.inc({ action });
   }
 
+  recordRollbackAudit(container, status, details, fromVersion?: string, toVersion?: string) {
+    auditStore.insertAudit({
+      id: '',
+      timestamp: new Date().toISOString(),
+      action: 'rollback',
+      containerName: fullName(container),
+      containerImage: container.image.name,
+      status,
+      details,
+      fromVersion,
+      toVersion,
+    });
+    getAuditCounter()?.inc({ action: 'rollback' });
+  }
+
+  recordRollbackTelemetry(
+    container,
+    outcome: 'success' | 'error' | 'info',
+    reason: string,
+    details: string,
+    fromVersion?: string,
+    toVersion?: string,
+  ) {
+    const reasonLabel = String(reason || 'unspecified')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 63);
+
+    getRollbackCounter()?.inc({
+      type: this.type || 'docker',
+      name: this.name || 'update',
+      outcome,
+      reason: reasonLabel || 'unspecified',
+    });
+
+    const auditStatus = outcome === 'error' ? 'error' : outcome === 'success' ? 'success' : 'info';
+    this.recordRollbackAudit(container, auditStatus, details, fromVersion, toVersion);
+  }
+
+  hasHealthcheckConfigured(containerSpec) {
+    return !!(containerSpec?.Config?.Healthcheck || containerSpec?.State?.Health);
+  }
+
+  async waitForContainerHealthy(containerToCheck, containerName, logContainer) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < NON_SELF_UPDATE_HEALTH_TIMEOUT_MS) {
+      const inspection = await containerToCheck.inspect();
+      const healthState = inspection?.State?.Health;
+      const healthStatus = healthState?.Status;
+
+      if (!healthState) {
+        logContainer.debug?.(
+          `Container ${containerName} health state not yet available — waiting for health gate`,
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS),
+        );
+        continue;
+      }
+
+      if (healthStatus === 'healthy') {
+        logContainer.info(`Container ${containerName} passed health gate`);
+        return;
+      }
+
+      if (healthStatus === 'unhealthy') {
+        throw new Error(`Health gate failed: container ${containerName} reported unhealthy`);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS));
+    }
+
+    throw new Error(
+      `Health gate timed out after ${NON_SELF_UPDATE_HEALTH_TIMEOUT_MS}ms for container ${containerName}`,
+    );
+  }
+
+  async reconcileInProgressContainerUpdateOperation(dockerApi, container, logContainer) {
+    return this.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation(
+      dockerApi,
+      container,
+      logContainer,
+    );
+  }
+
   recordHookAudit(action, container, status, details) {
     this.recordAudit(action, container, status, details);
+  }
+
+  recordHookConfigurationAudit(container, hookConfig) {
+    const hasPreHook = Boolean(hookConfig.hookPre);
+    const hasPostHook = Boolean(hookConfig.hookPost);
+    if (!hasPreHook && !hasPostHook) {
+      return;
+    }
+
+    this.recordHookAudit(
+      'hook-configured',
+      container,
+      'info',
+      `Lifecycle hooks configured from labels (pre=${hasPreHook}, post=${hasPostHook}, preAbort=${hookConfig.hookPreAbort}, timeout=${hookConfig.hookTimeout}ms)`,
+    );
   }
 
   recordSecurityAudit(action, container, status, details) {
@@ -642,333 +969,59 @@ class Docker extends Trigger {
   }
 
   isHookFailure(hookResult) {
-    return hookResult.exitCode !== 0 || hookResult.timedOut;
+    return this.hookExecutor.isHookFailure(hookResult);
   }
 
   getHookFailureDetails(prefix, hookResult, hookTimeout) {
-    if (hookResult.timedOut) {
-      return `${prefix} hook timed out after ${hookTimeout}ms`;
-    }
-    return `${prefix} hook exited with code ${hookResult.exitCode}: ${hookResult.stderr}`;
+    return this.hookExecutor.getHookFailureDetails(prefix, hookResult, hookTimeout);
   }
 
   async runPreUpdateHook(container, hookConfig, logContainer) {
-    if (!hookConfig.hookPre) {
-      return;
-    }
-
-    const preResult = await runHook(hookConfig.hookPre, {
-      timeout: hookConfig.hookTimeout,
-      env: hookConfig.hookEnv,
-      label: 'pre-update',
-    });
-
-    if (this.isHookFailure(preResult)) {
-      const details = this.getHookFailureDetails('Pre-update', preResult, hookConfig.hookTimeout);
-      this.recordHookAudit('hook-pre-failed', container, 'error', details);
-      logContainer.warn(details);
-      if (hookConfig.hookPreAbort) {
-        throw new Error(details);
-      }
-      return;
-    }
-
-    this.recordHookAudit(
-      'hook-pre-success',
-      container,
-      'success',
-      `Pre-update hook completed: ${preResult.stdout}`.trim(),
-    );
+    await this.hookExecutor.runPreUpdateHook(container, hookConfig, logContainer);
   }
 
   async runPostUpdateHook(container, hookConfig, logContainer) {
-    if (!hookConfig.hookPost) {
-      return;
-    }
-
-    const postResult = await runHook(hookConfig.hookPost, {
-      timeout: hookConfig.hookTimeout,
-      env: hookConfig.hookEnv,
-      label: 'post-update',
-    });
-
-    if (this.isHookFailure(postResult)) {
-      const details = this.getHookFailureDetails('Post-update', postResult, hookConfig.hookTimeout);
-      this.recordHookAudit('hook-post-failed', container, 'error', details);
-      logContainer.warn(details);
-      return;
-    }
-
-    this.recordHookAudit(
-      'hook-post-success',
-      container,
-      'success',
-      `Post-update hook completed: ${postResult.stdout}`.trim(),
-    );
+    await this.hookExecutor.runPostUpdateHook(container, hookConfig, logContainer);
   }
 
   isSelfUpdate(container) {
-    return container.image.name === 'drydock' || container.image.name.endsWith('/drydock');
+    return this.selfUpdateOrchestrator.isSelfUpdate(container);
   }
 
   findDockerSocketBind(spec) {
-    const binds = spec?.HostConfig?.Binds;
-    if (!Array.isArray(binds)) return undefined;
-    for (const bind of binds) {
-      const parts = bind.split(':');
-      if (parts.length >= 2 && parts[1] === '/var/run/docker.sock') {
-        return parts[0];
-      }
-    }
-    return undefined;
+    return this.selfUpdateOrchestrator.findDockerSocketBind(spec);
   }
 
-  async executeSelfUpdate(context, container, logContainer) {
-    const { dockerApi, registry, auth, newImage, currentContainer, currentContainerSpec } = context;
-
-    if (this.configuration.dryrun) {
-      logContainer.info('Do not replace the existing container because dry-run mode is enabled');
-      return false;
-    }
-
-    const socketPath = this.findDockerSocketBind(currentContainerSpec);
-    if (!socketPath) {
-      throw new Error(
-        'Self-update requires the Docker socket to be bind-mounted (e.g. /var/run/docker.sock:/var/run/docker.sock)',
-      );
-    }
-
-    // Insert backup before starting the update (store the Docker-pullable
-    // base image name, not the internal registry-prefixed name)
-    const baseImageName = registry
-      .getImageFullName(container.image, '__TAG__')
-      .replace(/:__TAG__$/, '');
-    backupStore.insertBackup({
-      id: crypto.randomUUID(),
-      containerId: container.id,
-      containerName: container.name,
-      imageName: baseImageName,
-      imageTag: container.image.tag.value,
-      imageDigest: container.image.digest?.repo,
-      timestamp: new Date().toISOString(),
-      triggerName: this.getId(),
-    });
-
-    // Pull the new image while we're still alive
-    await this.pullImage(dockerApi, auth, newImage, logContainer);
-
-    const oldName = currentContainerSpec.Name.replace(/^\//, '');
-    const tempName = `drydock-old-${Date.now()}`;
-
-    // Rename old container to free the name
-    logContainer.info(`Rename container ${oldName} to ${tempName}`);
-    await currentContainer.rename({ name: tempName });
-
-    let newContainer;
-    try {
-      // Create new container with original name (don't start — port conflict)
-      const containerToCreateInspect = this.cloneContainer(
-        currentContainerSpec,
-        newImage,
-        logContainer,
-      );
-      newContainer = await this.createContainer(
-        dockerApi,
-        containerToCreateInspect,
-        oldName,
-        logContainer,
-      );
-    } catch (e) {
-      // Rollback: rename old container back to original name
-      logContainer.warn(`Failed to create new container, rolling back rename: ${e.message}`);
-      await currentContainer.rename({ name: oldName });
-      throw e;
-    }
-
-    // Spawn a helper container to orchestrate the stop/start/cleanup
-    let newContainerId;
-    try {
-      newContainerId = (await newContainer.inspect()).Id;
-    } catch (e) {
-      logContainer.warn(`Failed to inspect new container, rolling back: ${e.message}`);
-      try {
-        await newContainer.remove({ force: true });
-      } catch {
-        /* best effort */
-      }
-      await currentContainer.rename({ name: oldName });
-      throw e;
-    }
-    const oldContainerId = currentContainerSpec.Id;
-    const socketMount = `${socketPath}:/var/run/docker.sock`;
-    const apiBase = 'http://localhost';
-
-    const curlSocket = `curl -sf --unix-socket /var/run/docker.sock`;
-    const stopOld = `${curlSocket} -X POST ${apiBase}/containers/${oldContainerId}/stop`;
-    const startNew = `${curlSocket} -X POST ${apiBase}/containers/${newContainerId}/start`;
-    const startOld = `${curlSocket} -X POST ${apiBase}/containers/${oldContainerId}/start`;
-    const removeOld = `${curlSocket} -X DELETE ${apiBase}/containers/${oldContainerId}`;
-
-    // Stop old, then start new — if new fails, restart old as fallback
-    // Only remove old after a successful startNew (not after fallback to startOld)
-    const script = `${stopOld} && (${startNew} && ${removeOld} || ${startOld})`;
-
-    logContainer.info('Spawning helper container for self-update transition');
-    try {
-      await dockerApi
-        .createContainer({
-          Image: currentContainerSpec.Config.Image,
-          Cmd: ['sh', '-c', script],
-          HostConfig: {
-            AutoRemove: true,
-            Binds: [socketMount],
-          },
-          name: `drydock-self-update-${Date.now()}`,
-        })
-        .then((helperContainer) => helperContainer.start());
-    } catch (e) {
-      // Rollback: remove new container, rename old back
-      logContainer.warn(`Failed to spawn helper container, rolling back: ${e.message}`);
-      try {
-        await newContainer.remove({ force: true });
-      } catch {
-        /* best effort */
-      }
-      await currentContainer.rename({ name: oldName });
-      throw e;
-    }
-
-    logContainer.info('Helper container started — process will terminate when old container stops');
-    return true;
+  async executeSelfUpdate(
+    context,
+    container,
+    logContainer,
+    operationId?: string,
+    _runtimeContext?: unknown,
+  ) {
+    return this.selfUpdateOrchestrator.execute(context, container, logContainer, operationId);
   }
 
-  async maybeNotifySelfUpdate(container, logContainer) {
-    if (!this.isSelfUpdate(container)) {
-      return;
-    }
-
-    logContainer.info('Self-update detected — notifying UI before proceeding');
-    emitSelfUpdateStarting();
-    // Brief delay to allow SSE to deliver the event to connected clients
-    await new Promise((resolve) => setTimeout(resolve, 500));
+  async maybeNotifySelfUpdate(container, logContainer, operationId?: string) {
+    await this.selfUpdateOrchestrator.maybeNotify(container, logContainer, operationId);
   }
 
   async persistSecurityState(container, securityPatch, logContainer) {
-    try {
-      const containerCurrent = storeContainer.getContainer(container.id);
-      const containerWithSecurity = {
-        ...(containerCurrent || container),
-        security: {
-          ...((containerCurrent || container).security || {}),
-          ...securityPatch,
-        },
-      };
-      storeContainer.updateContainer(containerWithSecurity);
-      cacheSecurityState(container.watcher, container.name, containerWithSecurity.security);
-    } catch (e: any) {
-      logContainer.warn(`Unable to persist security state (${e.message})`);
-    }
+    await this.getSecurityGate().persistSecurityState(container, securityPatch, logContainer);
   }
 
   async maybeScanAndGateUpdate(context, container, logContainer) {
-    const securityConfiguration = getSecurityConfiguration();
-    if (!securityConfiguration.enabled || securityConfiguration.scanner !== 'trivy') {
-      return;
-    }
-
-    if (securityConfiguration.signature.verify) {
-      logContainer.info(`Verifying image signature for candidate image ${context.newImage}`);
-      const signatureResult = await verifyImageSignature({
-        image: context.newImage,
-        auth: context.auth,
-      });
-      await this.persistSecurityState(container, { signature: signatureResult }, logContainer);
-
-      if (signatureResult.status !== 'verified') {
-        const details = `Image signature verification failed: ${
-          signatureResult.error || 'no valid signatures found'
-        }`;
-        this.recordSecurityAudit(
-          signatureResult.status === 'unverified'
-            ? 'security-signature-blocked'
-            : 'security-signature-failed',
-          container,
-          'error',
-          details,
-        );
-        throw new Error(details);
-      }
-
-      this.recordSecurityAudit(
-        'security-signature-verified',
-        container,
-        'success',
-        `Image signature verified (${signatureResult.signatures} signatures)`,
-      );
-    }
-
-    logContainer.info(`Running security scan for candidate image ${context.newImage}`);
-    const scanResult = await scanImageForVulnerabilities({
-      image: context.newImage,
-      auth: context.auth,
-    });
-    await this.persistSecurityState(container, { scan: scanResult }, logContainer);
-
-    if (securityConfiguration.sbom.enabled) {
-      logContainer.info(`Generating SBOM for candidate image ${context.newImage}`);
-      const sbomResult = await generateImageSbom({
-        image: context.newImage,
-        auth: context.auth,
-        formats: securityConfiguration.sbom.formats,
-      });
-      await this.persistSecurityState(container, { sbom: sbomResult }, logContainer);
-
-      if (sbomResult.status === 'error') {
-        this.recordSecurityAudit(
-          'security-sbom-failed',
-          container,
-          'error',
-          `SBOM generation failed: ${sbomResult.error || 'unknown SBOM error'}`,
-        );
-      } else {
-        this.recordSecurityAudit(
-          'security-sbom-generated',
-          container,
-          'success',
-          `SBOM generated (${sbomResult.formats.join(', ')})`,
-        );
-      }
-    }
-
-    if (scanResult.status === 'error') {
-      const details = `Security scan failed: ${scanResult.error || 'unknown scanner error'}`;
-      this.recordSecurityAudit('security-scan-failed', container, 'error', details);
-      throw new Error(details);
-    }
-
-    const summary = scanResult.summary;
-    const details = `critical=${summary.critical}, high=${summary.high}, medium=${summary.medium}, low=${summary.low}, unknown=${summary.unknown}`;
-
-    if (scanResult.status === 'blocked') {
-      const blockedDetails = `Security scan blocked update (${scanResult.blockingCount} vulnerabilities matched block severities: ${scanResult.blockSeverities.join(', ')}). Summary: ${details}`;
-      this.recordSecurityAudit('security-scan-blocked', container, 'error', blockedDetails);
-      throw new Error(blockedDetails);
-    }
-
-    this.recordSecurityAudit(
-      'security-scan-passed',
-      container,
-      'success',
-      `Security scan passed. Summary: ${details}`,
-    );
+    await this.getSecurityGate().maybeScanAndGateUpdate(context, container, logContainer);
   }
 
-  async createTriggerContext(container, logContainer) {
+  async createTriggerContext(container, logContainer, _runtimeContext?: unknown) {
     const watcher = this.getWatcher(container);
     const { dockerApi } = watcher;
 
     logContainer.debug(`Get ${container.image.registry.name} registry manager`);
-    const registry = getState().registry[container.image.registry.name];
+    const registry = this.resolveRegistryManager(container, logContainer, {
+      allowAnonymousFallback: true,
+    });
 
     logContainer.debug(`Get ${container.image.registry.name} registry credentials`);
     const auth = await registry.getAuthPull();
@@ -992,13 +1045,8 @@ class Docker extends Trigger {
     };
   }
 
-  async executeContainerUpdate(context, container, logContainer) {
-    const { dockerApi, registry, auth, newImage, currentContainer, currentContainerSpec } = context;
-
-    if (this.configuration.prune) {
-      await this.pruneImages(dockerApi, registry, container, logContainer);
-    }
-
+  insertContainerImageBackup(context, container) {
+    const { registry } = context;
     // Store the Docker-pullable image reference (e.g. "nginx") not the
     // internal registry-prefixed name (e.g. "hub.public/library/nginx").
     // Use a sentinel tag to extract just the base name, since
@@ -1016,121 +1064,47 @@ class Docker extends Trigger {
       timestamp: new Date().toISOString(),
       triggerName: this.getId(),
     });
+  }
 
-    await this.pullImage(dockerApi, auth, newImage, logContainer);
+  async runPreRuntimeUpdateLifecycle(context, container, logContainer, _runtimeContext?: unknown) {
+    const { dockerApi, registry } = context;
 
-    if (this.configuration.dryrun) {
-      logContainer.info('Do not replace the existing container because dry-run mode is enabled');
-      return false;
+    if (this.configuration.prune) {
+      await this.pruneImages(dockerApi, registry, container, logContainer);
     }
 
-    await this.stopAndRemoveContainer(
-      currentContainer,
-      currentContainerSpec,
-      container,
-      logContainer,
-    );
+    this.insertContainerImageBackup(context, container);
+  }
 
-    await this.recreateContainer(
-      dockerApi,
-      currentContainerSpec,
-      newImage,
-      container,
-      logContainer,
-    );
+  async executeContainerUpdate(context, container, logContainer) {
+    return this.containerUpdateExecutor.execute(context, container, logContainer);
+  }
 
-    return true;
+  /**
+   * Perform the container update (pull, stop, recreate).
+   * Subclasses (e.g. Dockercompose) override this to use their own runtime
+   * mechanics while reusing the shared lifecycle orchestrator.
+   */
+  async performContainerUpdate(context, container, logContainer, _runtimeContext?: unknown) {
+    return this.executeContainerUpdate(context, container, logContainer);
   }
 
   getRollbackConfig(container) {
-    const DEFAULT_ROLLBACK_WINDOW = 300000;
-    const DEFAULT_ROLLBACK_INTERVAL = 10000;
-
-    const parsedWindow = Number.parseInt(
-      container.labels?.['dd.rollback.window'] ??
-        container.labels?.['wud.rollback.window'] ??
-        String(DEFAULT_ROLLBACK_WINDOW),
-      10,
-    );
-    const parsedInterval = Number.parseInt(
-      container.labels?.['dd.rollback.interval'] ??
-        container.labels?.['wud.rollback.interval'] ??
-        String(DEFAULT_ROLLBACK_INTERVAL),
-      10,
-    );
-
-    const rollbackWindow =
-      Number.isFinite(parsedWindow) && parsedWindow > 0 ? parsedWindow : DEFAULT_ROLLBACK_WINDOW;
-    const rollbackInterval =
-      Number.isFinite(parsedInterval) && parsedInterval > 0
-        ? parsedInterval
-        : DEFAULT_ROLLBACK_INTERVAL;
-
-    if (rollbackWindow !== parsedWindow) {
-      this.log
-        ?.child?.({})
-        ?.warn?.(
-          `Invalid rollback window label value — using default ${DEFAULT_ROLLBACK_WINDOW}ms`,
-        );
-    }
-    if (rollbackInterval !== parsedInterval) {
-      this.log
-        ?.child?.({})
-        ?.warn?.(
-          `Invalid rollback interval label value — using default ${DEFAULT_ROLLBACK_INTERVAL}ms`,
-        );
-    }
-
-    return {
-      autoRollback:
-        (
-          container.labels?.['dd.rollback.auto'] ??
-          container.labels?.['wud.rollback.auto'] ??
-          'false'
-        ).toLowerCase() === 'true',
-      rollbackWindow,
-      rollbackInterval,
-    };
+    return this.rollbackMonitor.getConfig(container);
   }
 
   async maybeStartAutoRollbackMonitor(dockerApi, container, rollbackConfig, logContainer) {
-    if (!rollbackConfig.autoRollback) {
-      return;
-    }
+    return this.rollbackMonitor.start(dockerApi, container, rollbackConfig, logContainer);
+  }
 
-    // Look up the newly-recreated container by name (the old container.id
-    // no longer exists after executeContainerUpdate recreated it).
-    const newContainer = await this.getCurrentContainer(dockerApi, { id: container.name });
-    if (newContainer == null) {
-      logContainer.warn('Cannot find recreated container by name — skipping health monitoring');
-      return;
-    }
-
-    const newContainerSpec = await this.inspectContainer(newContainer, logContainer);
-    const hasHealthcheck = !!newContainerSpec?.State?.Health;
-    if (!hasHealthcheck) {
-      logContainer.warn(
-        'Auto-rollback enabled but container has no HEALTHCHECK defined — skipping health monitoring',
-      );
-      return;
-    }
-
-    const newContainerId = newContainerSpec.Id;
-
-    logContainer.info(
-      `Starting health monitor (window=${rollbackConfig.rollbackWindow}ms, interval=${rollbackConfig.rollbackInterval}ms)`,
-    );
-    startHealthMonitor({
-      dockerApi,
-      containerId: newContainerId,
-      containerName: container.name,
-      backupImageTag: container.image.tag.value,
-      backupImageDigest: container.image.digest?.repo,
-      window: rollbackConfig.rollbackWindow,
-      interval: rollbackConfig.rollbackInterval,
-      triggerInstance: this,
-      log: logContainer,
-    });
+  /**
+   * Shared per-container update lifecycle. Handles security scanning, hooks,
+   * prune/backup preparation, backup pruning, rollback monitoring, and events.
+   * Delegates the actual runtime update to `performContainerUpdate()` which
+   * subclasses can override.
+   */
+  async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
+    return this.updateLifecycleExecutor.run(container, runtimeContext);
   }
 
   /**
@@ -1138,59 +1112,8 @@ class Docker extends Trigger {
    * @param container the container
    * @returns {Promise<void>}
    */
-  async trigger(container) {
-    // Child logger for the container to process
-    const logContainer = this.log.child({ container: fullName(container) });
-
-    try {
-      const context = await this.createTriggerContext(container, logContainer);
-      if (!context) {
-        return;
-      }
-
-      await this.maybeScanAndGateUpdate(context, container, logContainer);
-
-      const hookConfig = this.buildHookConfig(container);
-      await this.runPreUpdateHook(container, hookConfig, logContainer);
-
-      if (this.isSelfUpdate(container)) {
-        await this.maybeNotifySelfUpdate(container, logContainer);
-        const updated = await this.executeSelfUpdate(context, container, logContainer);
-        if (!updated) {
-          return;
-        }
-        // Process will die when helper stops old container — skip post-update steps
-        return;
-      }
-
-      const updated = await this.executeContainerUpdate(context, container, logContainer);
-      if (!updated) {
-        return;
-      }
-
-      await this.runPostUpdateHook(container, hookConfig, logContainer);
-      await this.cleanupOldImages(context.dockerApi, context.registry, container, logContainer);
-      const rollbackConfig = this.getRollbackConfig(container);
-      await this.maybeStartAutoRollbackMonitor(
-        context.dockerApi,
-        container,
-        rollbackConfig,
-        logContainer,
-      );
-
-      // Notify that this container has been updated so notification
-      // triggers can dismiss previously sent messages.
-      await emitContainerUpdateApplied(fullName(container));
-
-      // Prune old backups, keeping only the configured number
-      backupStore.pruneOldBackups(container.name, this.configuration.backupcount);
-    } catch (e: any) {
-      await emitContainerUpdateFailed({
-        containerName: fullName(container),
-        error: e.message,
-      });
-      throw e;
-    }
+  async trigger(container, runtimeContext?: unknown) {
+    await this.runContainerUpdateLifecycle(container, runtimeContext);
   }
 
   /**
@@ -1198,8 +1121,9 @@ class Docker extends Trigger {
    * @param containers
    * @returns {Promise<unknown[]>}
    */
-  async triggerBatch(containers) {
-    return Promise.all(containers.map((container) => this.trigger(container)));
+  async triggerBatch(containers): Promise<unknown[]> {
+    const limit = pLimit(TRIGGER_BATCH_CONCURRENCY);
+    return Promise.all(containers.map((container) => limit(() => this.trigger(container))));
   }
 }
 

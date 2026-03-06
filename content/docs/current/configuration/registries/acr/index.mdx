@@ -1,0 +1,63 @@
+---
+title: "ACR (Azure Container Registry)"
+description: "The acrregistry lets you configure ACR integration."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/registries/acr/azure.png)
+
+The `acr`registry lets you configure [ACR](https://azure.microsoft.com/services/container-registry/) integration.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_ACR_{REGISTRY_NAME}_CLIENTID` | 🔴 | Service Principal Client ID | See [Service Principal Auth](https://docs.microsoft.com/en-us/azure/container-registry/container-registry-auth-service-principal) | |
+| `DD_REGISTRY_ACR_{REGISTRY_NAME}_CLIENTSECRET` | 🔴 | Service Principal Secret | See [Service Principal Auth](https://docs.microsoft.com/en-us/azure/container-registry/container-registry-auth-service-principal) | |
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_ACR_PRIVATE_CLIENTID=7c0195aa-112d-4ac3-be24-6664a13f3d2b
+      - DD_REGISTRY_ACR_PRIVATE_CLIENTSECRET=SBgHNi3zA5K.f9.f9ft~_hpqbS~.pk.t_i
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_REGISTRY_ACR_PRIVATE_CLIENTID=7c0195aa-112d-4ac3-be24-6664a13f3d2b \
+  -e DD_REGISTRY_ACR_PRIVATE_CLIENTSECRET=SBgHNi3zA5K.f9.f9ft~_hpqbS~.pk.t_i \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+## How to create Registry credentials on Microsoft Azure Platform
+
+### Create a Service Principal
+
+Follow the [official Azure documentation](https://docs.microsoft.com/azure/active-directory/develop/howto-create-service-principal-portal).
+
+### Get the Client Id and the Client Secret of the created Service Principal
+
+![image](/docs/assets/configuration/registries/acr/acr_01.png)
+
+### Go to your Container Registry and click on the Access Control (IAM) Menu
+
+![image](/docs/assets/configuration/registries/acr/acr_02.png)
+
+### Click to Add a role assignment
+
+Select the `AcrPull` role and assign to your Service Principal
+![image](/docs/assets/configuration/registries/acr/acr_03.png)

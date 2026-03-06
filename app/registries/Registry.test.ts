@@ -1,5 +1,5 @@
-// @ts-nocheck
 import log from '../log/index.js';
+import { getRegistryRequestTimeoutMs } from './configuration.js';
 
 vi.mock('axios');
 vi.mock('../prometheus/registry', () => ({
@@ -254,6 +254,16 @@ describe('getImageManifestDigest', () => {
     });
   });
 
+  test('should reject for schemaVersion 1 when history is an empty array', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = () => ({
+      schemaVersion: 1,
+      history: [],
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow();
+  });
+
   test('should use digest parameter when provided', async () => {
     const registryMocked = createMockedRegistry();
     registryMocked.callRegistry = headDigestThenBody('digest-result', {
@@ -419,12 +429,69 @@ describe('callRegistry', () => {
     ).rejects.toThrow('network error');
   });
 
-  test('should include 30s timeout in axios options', async () => {
+  test('should include configured timeout in axios options', async () => {
     const { default: axios } = await import('axios');
     axios.mockResolvedValue({ data: {} });
     const registryMocked = createMockedRegistry();
     await registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' });
-    expect(axios).toHaveBeenCalledWith(expect.objectContaining({ timeout: 30000 }));
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({ timeout: getRegistryRequestTimeoutMs() }),
+    );
+  });
+
+  test('should use centralized outbound timeout when env override is set', async () => {
+    const previousTimeout = process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+    process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = '2345';
+
+    try {
+      const { default: axios } = await import('axios');
+      axios.mockResolvedValue({ data: {} });
+      const registryMocked = createMockedRegistry();
+
+      await registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' });
+
+      expect(axios).toHaveBeenCalledWith(expect.objectContaining({ timeout: 2345 }));
+    } finally {
+      if (previousTimeout === undefined) {
+        delete process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+      } else {
+        process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = previousTimeout;
+      }
+    }
+  });
+
+  test('should set keep-alive http and https agents when authenticate does not provide them', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    axios.mockClear();
+    const registryMocked = createMockedRegistry();
+
+    await registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' });
+
+    const requestOptions = axios.mock.calls.at(-1)[0];
+    expect(requestOptions.httpAgent).toBeDefined();
+    expect(requestOptions.httpAgent.options.keepAlive).toBe(true);
+    expect(requestOptions.httpsAgent).toBeDefined();
+    expect(requestOptions.httpsAgent.options.keepAlive).toBe(true);
+  });
+
+  test('should keep custom httpsAgent from authenticate while still setting default http keep-alive agent', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    axios.mockClear();
+    const registryMocked = createMockedRegistry();
+    const customHttpsAgent = { custom: true };
+    vi.spyOn(registryMocked, 'authenticate').mockImplementation(async (_image, requestOptions) => ({
+      ...requestOptions,
+      httpsAgent: customHttpsAgent,
+    }));
+
+    await registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' });
+
+    const requestOptions = axios.mock.calls.at(-1)[0];
+    expect(requestOptions.httpAgent).toBeDefined();
+    expect(requestOptions.httpAgent.options.keepAlive).toBe(true);
+    expect(requestOptions.httpsAgent).toBe(customHttpsAgent);
   });
 
   test('should return full response when resolveWithFullResponse is true', async () => {

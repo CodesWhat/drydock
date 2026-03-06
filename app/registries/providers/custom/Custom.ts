@@ -1,4 +1,3 @@
-// @ts-nocheck
 import BaseRegistry from '../../BaseRegistry.js';
 
 /**
@@ -46,7 +45,12 @@ class Custom extends BaseRegistry {
    * @returns {*}
    */
   normalizeImage(image) {
-    const imageNormalized = image;
+    const imageNormalized = {
+      ...image,
+      registry: {
+        ...image.registry,
+      },
+    };
     imageNormalized.registry.url = `${this.configuration.url}/v2`;
     return imageNormalized;
   }

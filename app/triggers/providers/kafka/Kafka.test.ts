@@ -1,4 +1,3 @@
-// @ts-nocheck
 import joi from 'joi';
 import { Kafka as KafkaClient } from 'kafkajs';
 
@@ -29,6 +28,16 @@ const configurationValid = {
 
 beforeEach(async () => {
   vi.resetAllMocks();
+  (kafka as any).producer = undefined;
+  (KafkaClient as any).mockImplementation(function mockedKafkaClient() {
+    return {
+      producer: () => ({
+        connect: vi.fn(),
+        send: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    };
+  });
 });
 
 test('validateConfiguration should return validated configuration when valid', async () => {
@@ -111,6 +120,16 @@ test('maskConfiguration should not fail if no auth provided', async () => {
 });
 
 test('initTrigger should init kafka client', async () => {
+  const connectMock = vi.fn();
+  (KafkaClient as any).mockImplementation(function mockedKafkaClient() {
+    return {
+      producer: () => ({
+        connect: connectMock,
+        send: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    };
+  });
   kafka.configuration = {
     brokers: 'broker1:9000, broker2:9000',
     topic: 'drydock-container',
@@ -123,9 +142,20 @@ test('initTrigger should init kafka client', async () => {
     clientId: 'drydock',
     ssl: false,
   });
+  expect(connectMock).toHaveBeenCalledTimes(1);
 });
 
 test('initTrigger should init kafka client with auth when configured', async () => {
+  const connectMock = vi.fn();
+  (KafkaClient as any).mockImplementation(function mockedKafkaClient() {
+    return {
+      producer: () => ({
+        connect: connectMock,
+        send: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    };
+  });
   kafka.configuration = {
     brokers: 'broker1:9000, broker2:9000',
     topic: 'drydock-container',
@@ -143,22 +173,56 @@ test('initTrigger should init kafka client with auth when configured', async () 
     clientId: 'drydock',
     ssl: false,
     sasl: {
-      mechanism: 'PLAIN',
+      mechanism: 'plain',
       password: 'password',
       username: 'user',
     },
   });
+  expect(connectMock).toHaveBeenCalledTimes(1);
+});
+
+test('initTrigger should fallback to plain mechanism for unknown auth type', async () => {
+  const connectMock = vi.fn();
+  (KafkaClient as any).mockImplementation(function mockedKafkaClient() {
+    return {
+      producer: () => ({
+        connect: connectMock,
+        send: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    };
+  });
+  kafka.configuration = {
+    brokers: 'broker1:9000, broker2:9000',
+    topic: 'drydock-container',
+    clientId: 'drydock',
+    ssl: false,
+    authentication: {
+      type: 'UNKNOWN',
+      user: 'user',
+      password: 'password',
+    },
+  };
+
+  await kafka.initTrigger();
+
+  expect(KafkaClient).toHaveBeenCalledWith({
+    brokers: ['broker1:9000', 'broker2:9000'],
+    clientId: 'drydock',
+    ssl: false,
+    sasl: {
+      mechanism: 'plain',
+      password: 'password',
+      username: 'user',
+    },
+  });
+  expect(connectMock).toHaveBeenCalledTimes(1);
 });
 
 test('trigger should post message to kafka', async () => {
-  const disconnectMock = vi.fn();
-  const producer = () => ({
-    connect: () => ({}),
-    send: (params) => params,
-    disconnect: disconnectMock,
-  });
-  kafka.kafka = {
-    producer,
+  const sendMock = vi.fn((params) => params);
+  kafka.producer = {
+    send: sendMock,
   };
   kafka.configuration = {
     topic: 'topic',
@@ -171,27 +235,22 @@ test('trigger should post message to kafka', async () => {
     messages: [{ value: '{"name":"container1"}' }],
     topic: 'topic',
   });
-  expect(disconnectMock).toHaveBeenCalled();
+  expect(sendMock).toHaveBeenCalledWith({
+    topic: 'topic',
+    messages: [{ value: '{"name":"container1"}' }],
+  });
 });
 
 test('triggerBatch should post multiple messages to kafka', async () => {
   const sendMock = vi.fn((params) => params);
-  const connectMock = vi.fn();
-  const disconnectMock = vi.fn();
-  const producer = () => ({
-    connect: connectMock,
+  kafka.producer = {
     send: sendMock,
-    disconnect: disconnectMock,
-  });
-  kafka.kafka = {
-    producer,
   };
   kafka.configuration = {
     topic: 'my-topic',
   };
   const containers = [{ name: 'container1' }, { name: 'container2' }];
   const result = await kafka.triggerBatch(containers);
-  expect(connectMock).toHaveBeenCalled();
   expect(sendMock).toHaveBeenCalledWith({
     topic: 'my-topic',
     messages: [{ value: '{"name":"container1"}' }, { value: '{"name":"container2"}' }],
@@ -200,5 +259,53 @@ test('triggerBatch should post multiple messages to kafka', async () => {
     topic: 'my-topic',
     messages: [{ value: '{"name":"container1"}' }, { value: '{"name":"container2"}' }],
   });
-  expect(disconnectMock).toHaveBeenCalled();
+});
+
+test('producer lifecycle should connect on init and disconnect on deregister', async () => {
+  const connectMock = vi.fn();
+  const disconnectMock = vi.fn();
+  const sendMock = vi.fn((params) => params);
+  const producerMock = vi.fn(() => ({
+    connect: connectMock,
+    disconnect: disconnectMock,
+    send: sendMock,
+  }));
+
+  (KafkaClient as any).mockImplementation(function mockedKafkaClient() {
+    return {
+      producer: producerMock,
+    };
+  });
+  kafka.configuration = {
+    brokers: 'broker1:9000, broker2:9000',
+    clientId: 'drydock',
+    ssl: false,
+    topic: 'lifecycle-topic',
+  };
+
+  await kafka.initTrigger();
+  await kafka.trigger({ name: 'container1' });
+  await kafka.triggerBatch([{ name: 'container2' }]);
+
+  expect(connectMock).toHaveBeenCalledTimes(1);
+  expect(disconnectMock).toHaveBeenCalledTimes(0);
+  expect(producerMock).toHaveBeenCalledTimes(1);
+
+  await kafka.deregister();
+
+  expect(disconnectMock).toHaveBeenCalledTimes(1);
+});
+
+test('deregisterComponent should be a no-op when producer was never initialized', async () => {
+  await expect(kafka.deregister()).resolves.toBe(kafka);
+});
+
+test('trigger should throw when producer is not initialized', async () => {
+  kafka.configuration = {
+    topic: 'topic',
+  };
+
+  await expect(kafka.trigger({ name: 'container1' })).rejects.toThrow(
+    'Kafka producer is not initialized',
+  );
 });
