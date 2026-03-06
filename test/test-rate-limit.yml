@@ -15,6 +15,8 @@ config:
     headers:
       Accept: "application/json"
       Authorization: "Basic YWRtaW46cGFzc3dvcmQ="
+  http:
+    cookieJar: false
   processor: "./load-test.processor.cjs"
   ensure:
     thresholds:
