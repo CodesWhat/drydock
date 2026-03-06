@@ -76,7 +76,12 @@ jobs:
         uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899  # v2.2.0
 
       - name: Qlty check (all plugins)
-        run: qlty check --all --no-progress
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08  # v3.0.2
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_on: error
+          command: qlty check --all --no-progress
 
   test:
     name: Test & Coverage
