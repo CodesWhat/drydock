@@ -6,13 +6,13 @@
  */
 
 import javascript
-import semmle.javascript.security.dataflow.HttpToFileAccessQuery as HttpToFileAccess
+import semmle.javascript.security.dataflow.HttpToFileAccessCustomizations::HttpToFileAccess
 
 /**
  * A call to `validateFetchedIconPayload(value, extension)` is a barrier for
  * network-data-to-file taint flow.
  */
-class ValidateFetchedIconPayloadBarrier extends HttpToFileAccess::Sanitizer {
+class ValidateFetchedIconPayloadBarrier extends Sanitizer {
   ValidateFetchedIconPayloadBarrier() {
     exists(DataFlow::CallNode call |
       call.getCalleeName() = "validateFetchedIconPayload" and
