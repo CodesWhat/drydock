@@ -7,7 +7,7 @@ interface UpdatePolicyStoreContainerApi {
   updateContainer: (container: Container) => Container;
 }
 
-interface UpdatePolicyHandlerDependencies {
+export interface UpdatePolicyHandlerDependencies {
   storeContainer: UpdatePolicyStoreContainerApi;
   uniqStrings: (values: string[]) => string[];
   getErrorMessage: (error: unknown) => string;

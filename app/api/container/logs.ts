@@ -28,7 +28,7 @@ interface LocalDockerWatcherApi {
   };
 }
 
-interface LogHandlerDependencies {
+export interface LogHandlerDependencies {
   storeContainer: LogStoreContainerApi;
   getAgent: (name: string) => AgentClient | undefined;
   getWatchers: () => Record<string, unknown>;

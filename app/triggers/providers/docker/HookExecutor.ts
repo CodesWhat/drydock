@@ -36,7 +36,7 @@ type HookConfig = {
   hookEnv: Record<string, string>;
 };
 
-type HookExecutorDependencies = {
+export type HookExecutorDependencies = {
   runHook: (
     command: string,
     options: { timeout: number; env: Record<string, string>; label: string },

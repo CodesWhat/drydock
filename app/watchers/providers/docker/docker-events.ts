@@ -31,12 +31,12 @@ interface DockerEventsState {
   };
 }
 
-interface DockerEventsReconnectDependencies {
+export interface DockerEventsReconnectDependencies {
   cleanupDockerEventsStream: (destroy?: boolean) => void;
   listenDockerEvents: () => Promise<void>;
 }
 
-interface DockerEventsStreamFailureDependencies {
+export interface DockerEventsStreamFailureDependencies {
   scheduleDockerEventsReconnect: (reason: string, err?: any) => void;
 }
 

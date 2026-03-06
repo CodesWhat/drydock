@@ -24,7 +24,7 @@ type RollbackConfig = {
   rollbackInterval: number;
 };
 
-type RollbackMonitorDependencies = {
+export type RollbackMonitorDependencies = {
   getPreferredLabelValue: (
     labels: Record<string, string> | undefined,
     ddKey: string,

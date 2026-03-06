@@ -30,7 +30,7 @@ interface TriggerStaticApi {
   doesReferenceMatchId: (triggerReference: string, triggerId: string) => boolean;
 }
 
-interface TriggerHandlerDependencies {
+export interface TriggerHandlerDependencies {
   storeContainer: TriggerStoreContainerApi;
   mapComponentsToList: (components: Record<string, TriggerRuntimeComponent>) => ApiComponent[];
   getTriggers: () => Record<string, TriggerRuntimeComponent>;

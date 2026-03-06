@@ -62,7 +62,7 @@ type SecurityAlertPayload = {
   container: SecurityContainer;
 };
 
-type SecurityGateDependencies = {
+export type SecurityGateDependencies = {
   getSecurityConfiguration: () => SecurityConfiguration;
   verifyImageSignature: (request: SecurityScannerRequest) => Promise<SignatureScanResult>;
   scanImageForVulnerabilities: (

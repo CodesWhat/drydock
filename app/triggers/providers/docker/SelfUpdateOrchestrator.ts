@@ -23,7 +23,7 @@ interface SelfUpdateStartingPayload {
   startedAt: string;
 }
 
-interface SelfUpdateOrchestratorDependencies {
+export interface SelfUpdateOrchestratorDependencies {
   getConfiguration: () => SelfUpdateConfiguration;
   runtimeConfigManager: SelfUpdateRuntimeConfigManager;
   pullImage: (

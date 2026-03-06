@@ -88,7 +88,7 @@ type ContainerUpdateAttemptState = {
   failureReason: string;
 };
 
-type ContainerUpdateExecutorDependencies = {
+export type ContainerUpdateExecutorDependencies = {
   getConfiguration: () => { dryrun?: boolean; [key: string]: unknown };
   getTriggerId: () => string;
   stopContainer: (

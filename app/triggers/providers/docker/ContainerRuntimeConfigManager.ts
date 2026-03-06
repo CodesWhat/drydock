@@ -33,7 +33,7 @@ type RuntimeConfigOptions = {
   logContainer?: RuntimeConfigLogger;
 };
 
-type RuntimeConfigManagerDependencies = {
+export type RuntimeConfigManagerDependencies = {
   getPreferredLabelValue: (
     labels: Record<string, string> | undefined,
     ddKey: string,
