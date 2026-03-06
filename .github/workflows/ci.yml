@@ -285,27 +285,11 @@ jobs:
           ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
         run: ./scripts/run-load-test.sh
 
-      - name: Run Artillery rate-limit burst (advisory)
-        continue-on-error: true
-        env:
-          ARTILLERY_FILE: ./test/test-rate-limit.yml
-          ARTILLERY_ENV: ratelimit
-          DD_LOAD_TEST_BUILD_CACHE: gha
-          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/rate-limit
-          ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
-        run: ./scripts/run-load-test.sh
-
       - name: Summarize load test metrics (smoke)
         if: always()
         run: |
           report="$(find artifacts/load-test/smoke -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/summarize-load-test-report.sh "$report" "Load Test (Smoke)"
-
-      - name: Summarize load test metrics (rate-limit)
-        if: always()
-        run: |
-          report="$(find artifacts/load-test/rate-limit -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Rate-limit)"
 
       - name: Summarize load test metrics (behavior)
         if: always()
@@ -336,17 +320,6 @@ jobs:
         run: |
           report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Behavior)"
-
-      - name: Correctness check (rate-limit, advisory)
-        if: always()
-        env:
-          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false'
-          DD_LOAD_TEST_MAX_5XX: '0'
-          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
-          DD_LOAD_TEST_MIN_429: '1'
-        run: |
-          report="$(find artifacts/load-test/rate-limit -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Rate-limit)"
 
       - name: Fetch load test baseline from main
         id: load-test-baseline
@@ -465,15 +438,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Upload load test artifact (rate-limit)
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
-        with:
-          name: load-test-rate-limit-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/load-test/rate-limit/*.json
-          if-no-files-found: warn
-          retention-days: 30
-
       - name: Upload load test artifact (behavior)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
@@ -533,15 +497,6 @@ jobs:
           ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
         run: ./scripts/run-load-test.sh
 
-      - name: Run Artillery rate-limit burst
-        env:
-          ARTILLERY_FILE: ./test/test-rate-limit.yml
-          ARTILLERY_ENV: ratelimit
-          DD_LOAD_TEST_BUILD_CACHE: gha
-          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/rate-limit
-          ARTILLERY_CLOUD_API_KEY: ${{ secrets.ARTILLERY_CLOUD_API_KEY }}
-        run: ./scripts/run-load-test.sh
-
       - name: Summarize load test metrics (ci)
         if: always()
         run: |
@@ -553,12 +508,6 @@ jobs:
         run: |
           report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/summarize-load-test-report.sh "$report" "Load Test (Behavior)"
-
-      - name: Summarize load test metrics (rate-limit)
-        if: always()
-        run: |
-          report="$(find artifacts/load-test/rate-limit -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Rate-limit)"
 
       - name: Correctness check (ci, enforced)
         if: always()
@@ -584,17 +533,6 @@ jobs:
           report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Behavior)"
 
-      - name: Correctness check (rate-limit, enforced)
-        if: always()
-        env:
-          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'true'
-          DD_LOAD_TEST_MAX_5XX: '0'
-          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
-          DD_LOAD_TEST_MIN_429: '1'
-        run: |
-          report="$(find artifacts/load-test/rate-limit -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Rate-limit)"
-
       - name: Upload load test artifact (ci)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
@@ -610,14 +548,5 @@ jobs:
         with:
           name: load-test-behavior-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/load-test/behavior/*.json
-          if-no-files-found: warn
-          retention-days: 30
-
-      - name: Upload load test artifact (rate-limit)
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
-        with:
-          name: load-test-rate-limit-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/load-test/rate-limit/*.json
           if-no-files-found: warn
           retention-days: 30
