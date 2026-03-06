@@ -45,31 +45,65 @@ build_drydock_image() {
 # Build drydock docker image
 build_drydock_image
 
-# Use a random host port to avoid conflicts with local dev tools.
-# The actual port is queried after startup and exported as DD_PORT.
-docker run -d \
-	--name drydock \
-	--publish "${DD_E2E_PORT}:3000" \
-	--volume /var/run/docker.sock:/var/run/docker.sock \
-	--env DD_TRIGGER_MOCK_EXAMPLE_MOCK=mock \
-	--env DD_WATCHER_LOCAL_WATCHBYDEFAULT=false \
-	--env DD_REGISTRY_ECR_PRIVATE_ACCESSKEYID="${AWS_ACCESSKEY_ID:-dummy}" \
-	--env DD_REGISTRY_ECR_PRIVATE_SECRETACCESSKEY="${AWS_SECRET_ACCESSKEY:-dummy}" \
-	--env DD_REGISTRY_ECR_PRIVATE_REGION=eu-west-1 \
-	--env DD_REGISTRY_GHCR_PRIVATE_USERNAME="${GITHUB_USERNAME:-dummy}" \
-	--env DD_REGISTRY_GHCR_PRIVATE_TOKEN="${GITHUB_TOKEN:-dummy}" \
-	--env DD_REGISTRY_GITLAB_PRIVATE_TOKEN="${GITLAB_TOKEN:-dummy}" \
-	--env DD_REGISTRY_LSCR_PRIVATE_USERNAME="${GITHUB_USERNAME:-dummy}" \
-	--env DD_REGISTRY_LSCR_PRIVATE_TOKEN="${GITHUB_TOKEN:-dummy}" \
-	--env DD_REGISTRY_ACR_PRIVATE_CLIENTID="${ACR_CLIENT_ID:-89dcf54b-ef99-4dc1-bebb-8e0eacafdac8}" \
-	--env DD_REGISTRY_ACR_PRIVATE_CLIENTSECRET="${ACR_CLIENT_SECRET:-dummy}" \
-	--env DD_REGISTRY_TRUEFORGE_PRIVATE_USERNAME="${TRUEFORGE_USERNAME:-dummy}" \
-	--env DD_REGISTRY_TRUEFORGE_PRIVATE_TOKEN="${TRUEFORGE_TOKEN:-dummy}" \
-	--env DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL="${GCR_CLIENT_EMAIL:-gcr@drydock-test.iam.gserviceaccount.com}" \
-	--env DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY="${GCR_PRIVATE_KEY:------BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDZ\n-----END PRIVATE KEY-----}" \
-	--env DD_AUTH_BASIC_JOHN_USER="john" \
-	--env DD_AUTH_BASIC_JOHN_HASH='{SHA}1rToTufzHYhhemtgQhRRJy6/Gjo=' \
+# Build docker run args. Registries without real credentials are registered
+# with an empty-string config (anonymous mode) to avoid failed-auth-then-retry
+# delays that make the E2E startup time unpredictable.
+DOCKER_ARGS=(
+	run -d
+	--name drydock
+	--publish "${DD_E2E_PORT}:3000"
+	--volume /var/run/docker.sock:/var/run/docker.sock
+	--env DD_TRIGGER_MOCK_EXAMPLE_MOCK=mock
+	--env DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+)
+
+# ECR — dummy credentials are fine (no retry logic, fast 401)
+DOCKER_ARGS+=(--env DD_REGISTRY_ECR_PRIVATE_ACCESSKEYID="${AWS_ACCESSKEY_ID:-dummy}")
+DOCKER_ARGS+=(--env DD_REGISTRY_ECR_PRIVATE_SECRETACCESSKEY="${AWS_SECRET_ACCESSKEY:-dummy}")
+DOCKER_ARGS+=(--env DD_REGISTRY_ECR_PRIVATE_REGION=eu-west-1)
+
+# GHCR — use real credentials or register anonymously
+if [ -n "${GITHUB_USERNAME:-}" ]; then
+	DOCKER_ARGS+=(--env DD_REGISTRY_GHCR_PRIVATE_USERNAME="$GITHUB_USERNAME")
+	DOCKER_ARGS+=(--env DD_REGISTRY_GHCR_PRIVATE_TOKEN="$GITHUB_TOKEN")
+else
+	DOCKER_ARGS+=(--env "DD_REGISTRY_GHCR_PRIVATE=")
+fi
+
+# GitLab — token always required by schema; dummy token causes one fast 401
+DOCKER_ARGS+=(--env DD_REGISTRY_GITLAB_PRIVATE_TOKEN="${GITLAB_TOKEN:-dummy}")
+
+# LSCR — use real credentials or register anonymously
+if [ -n "${GITHUB_USERNAME:-}" ]; then
+	DOCKER_ARGS+=(--env DD_REGISTRY_LSCR_PRIVATE_USERNAME="$GITHUB_USERNAME")
+	DOCKER_ARGS+=(--env DD_REGISTRY_LSCR_PRIVATE_TOKEN="$GITHUB_TOKEN")
+else
+	DOCKER_ARGS+=(--env "DD_REGISTRY_LSCR_PRIVATE=")
+fi
+
+# ACR — dummy credentials are fine (no matching test container)
+DOCKER_ARGS+=(--env DD_REGISTRY_ACR_PRIVATE_CLIENTID="${ACR_CLIENT_ID:-89dcf54b-ef99-4dc1-bebb-8e0eacafdac8}")
+DOCKER_ARGS+=(--env DD_REGISTRY_ACR_PRIVATE_CLIENTSECRET="${ACR_CLIENT_SECRET:-dummy}")
+
+# TrueForge — use real credentials or register anonymously
+if [ -n "${TRUEFORGE_USERNAME:-}" ]; then
+	DOCKER_ARGS+=(--env DD_REGISTRY_TRUEFORGE_PRIVATE_USERNAME="$TRUEFORGE_USERNAME")
+	DOCKER_ARGS+=(--env DD_REGISTRY_TRUEFORGE_PRIVATE_TOKEN="$TRUEFORGE_TOKEN")
+else
+	DOCKER_ARGS+=(--env "DD_REGISTRY_TRUEFORGE_PRIVATE=")
+fi
+
+# GCR — dummy credentials are fine (no matching test container)
+DOCKER_ARGS+=(--env DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL="${GCR_CLIENT_EMAIL:-gcr@drydock-test.iam.gserviceaccount.com}")
+DOCKER_ARGS+=(--env "DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=${GCR_PRIVATE_KEY:------BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDZ\n-----END PRIVATE KEY-----}")
+
+DOCKER_ARGS+=(
+	--env DD_AUTH_BASIC_JOHN_USER="john"
+	--env DD_AUTH_BASIC_JOHN_HASH='{SHA}1rToTufzHYhhemtgQhRRJy6/Gjo='
 	drydock
+)
+
+docker "${DOCKER_ARGS[@]}"
 
 # Query the randomly assigned host port
 E2E_PORT=$(docker port drydock 3000/tcp | head -1 | cut -d: -f2)
@@ -99,6 +133,23 @@ for i in $(seq 1 30); do
 	sleep 2
 done
 
-echo "Waiting 15 seconds for drydock to fetch updates..."
-sleep 15
+# Wait until drydock has discovered enough containers (max 60s).
+# With anonymous registries this is fast; with real credentials even faster.
+AUTH_HEADER="Basic $(echo -n 'john:doe' | base64)"
+EXPECTED_CONTAINERS=${DD_EXPECTED_CONTAINERS:-10}
+echo "Waiting for drydock to discover ${EXPECTED_CONTAINERS}+ containers (max 60s)..."
+for i in $(seq 1 30); do
+	COUNT=$(curl -sf -H "Authorization: ${AUTH_HEADER}" "http://localhost:${E2E_PORT}/api/containers" |
+		python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo 0)
+	if [ "$COUNT" -ge "$EXPECTED_CONTAINERS" ]; then
+		echo "✅ drydock discovered ${COUNT} containers"
+		break
+	fi
+	if [ "$i" -eq 30 ]; then
+		echo "❌ drydock only discovered ${COUNT}/${EXPECTED_CONTAINERS} containers after 60s"
+		docker logs drydock --tail 50
+		exit 1
+	fi
+	sleep 2
+done
 echo "Ready for e2e tests!"
