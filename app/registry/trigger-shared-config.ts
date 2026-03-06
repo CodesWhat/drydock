@@ -1,4 +1,4 @@
-export const SHARED_TRIGGER_CONFIGURATION_KEYS = ['threshold', 'once', 'mode', 'order'];
+const SHARED_TRIGGER_CONFIGURATION_KEYS = ['threshold', 'once', 'mode', 'order'];
 const SHARED_TRIGGER_CONFIGURATION_KEY_SET = new Set(SHARED_TRIGGER_CONFIGURATION_KEYS);
 
 function isRecord(value: unknown): value is Record<string, any> {

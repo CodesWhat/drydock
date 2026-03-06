@@ -29,7 +29,7 @@ export interface ImageSummaryWithVulns extends ImageSummary {
   vulns: Vulnerability[];
 }
 
-export const securitySortFields = [
+const securitySortFields = [
   'image',
   'critical',
   'high',
@@ -39,7 +39,7 @@ export const securitySortFields = [
   'total',
 ] as const;
 
-export type SecuritySortField = (typeof securitySortFields)[number];
+type SecuritySortField = (typeof securitySortFields)[number];
 type SecurityNumericSortField = Exclude<SecuritySortField, 'image'>;
 
 function isSecuritySortField(value: string): value is SecuritySortField {

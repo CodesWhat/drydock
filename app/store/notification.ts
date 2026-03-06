@@ -23,7 +23,7 @@ interface NotificationStoreDb {
 let notifications: NotificationCollection | undefined;
 let notificationRulesCache: NotificationRule[] | null = null;
 
-export interface NotificationRule {
+interface NotificationRule {
   id: string;
   name: string;
   description: string;

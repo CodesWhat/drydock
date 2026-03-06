@@ -95,7 +95,7 @@ export class ActiveSseClientRegistry {
   }
 }
 
-export interface ActiveSseClientRegistryTestAdapter {
+interface ActiveSseClientRegistryTestAdapter {
   clear(): void;
   hasByResponse(response: FlushableResponse): boolean;
   getByResponse(response: FlushableResponse): ActiveSseClient | undefined;

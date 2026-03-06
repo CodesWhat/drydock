@@ -33,20 +33,6 @@ export interface ApiAgentLogEntry {
   message?: string;
 }
 
-/** Single audit entry from GET /api/audit. */
-export interface ApiAuditEntry {
-  id: string;
-  timestamp: string;
-  action: string;
-  containerName: string;
-  containerImage?: string;
-  fromVersion?: string;
-  toVersion?: string;
-  triggerName?: string;
-  status: 'success' | 'error' | 'info';
-  details?: string;
-}
-
 /** Watcher configuration subset used by DashboardView. */
 export interface ApiWatcherConfiguration {
   maintenanceWindow?: string;

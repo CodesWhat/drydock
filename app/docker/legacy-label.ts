@@ -1,6 +1,6 @@
 import { recordLegacyInput } from '../prometheus/compatibility.js';
 
-export interface PreferredLabelValueOptions {
+interface PreferredLabelValueOptions {
   warnedFallbacks?: Set<string>;
   warn?: (message: string) => void;
 }

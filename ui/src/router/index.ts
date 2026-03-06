@@ -2,7 +2,7 @@ import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vu
 import AppLayout from '@/layouts/AppLayout.vue';
 import { getUser } from '@/services/auth';
 
-export const viewLoaders = {
+const viewLoaders = {
   dashboard: () => import('../views/DashboardView.vue'),
   login: () => import('../views/LoginView.vue'),
   containers: () => import('../views/ContainersView.vue'),
@@ -18,7 +18,7 @@ export const viewLoaders = {
   audit: () => import('../views/AuditView.vue'),
 };
 
-export function createLazyRoute(path: string, name: keyof typeof viewLoaders) {
+function createLazyRoute(path: string, name: keyof typeof viewLoaders) {
   return { path, name, component: viewLoaders[name] };
 }
 
@@ -54,7 +54,7 @@ const router = createRouter({
  * Validate and return the `next` query parameter as a safe redirect path.
  * Returns the path string if valid, or `true` to proceed to the current route.
  */
-export function validateAndGetNextRoute(to: RouteLocationNormalized): string | boolean {
+function validateAndGetNextRoute(to: RouteLocationNormalized): string | boolean {
   if (to.query.next) {
     const next = String(to.query.next);
     if (next.startsWith('/') && !next.startsWith('//')) {
@@ -68,7 +68,7 @@ export function validateAndGetNextRoute(to: RouteLocationNormalized): string | b
  * Create a redirect object that sends the user to the login page,
  * preserving the original destination as the `next` query parameter.
  */
-export function createLoginRedirect(to: RouteLocationNormalized) {
+function createLoginRedirect(to: RouteLocationNormalized) {
   return {
     name: 'login',
     query: {
@@ -80,7 +80,7 @@ export function createLoginRedirect(to: RouteLocationNormalized) {
 /**
  * Apply authentication navigation guard.
  */
-export async function applyAuthNavigationGuard(to: RouteLocationNormalized) {
+async function applyAuthNavigationGuard(to: RouteLocationNormalized) {
   if (to.name === 'login') {
     return true;
   }

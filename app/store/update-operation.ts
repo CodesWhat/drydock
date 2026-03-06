@@ -3,14 +3,9 @@ import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js'
 import { toPositiveInteger } from '../util/parse.js';
 import { initCollection } from './util.js';
 
-export type UpdateOperationStatus =
-  | 'in-progress'
-  | 'succeeded'
-  | 'rolled-back'
-  | 'failed'
-  | (string & {});
+type UpdateOperationStatus = 'in-progress' | 'succeeded' | 'rolled-back' | 'failed' | (string & {});
 
-export type UpdateOperationPhase =
+type UpdateOperationPhase =
   | 'prepare'
   | 'renamed'
   | 'new-created'
@@ -24,7 +19,7 @@ export type UpdateOperationPhase =
   | 'rollback-failed'
   | (string & {});
 
-export interface UpdateOperation {
+interface UpdateOperation {
   id: string;
   containerName: string;
   status: UpdateOperationStatus;
@@ -47,7 +42,7 @@ export interface UpdateOperation {
   [key: string]: unknown;
 }
 
-export interface InsertUpdateOperationInput
+interface InsertUpdateOperationInput
   extends Partial<Pick<UpdateOperation, 'id' | 'status' | 'phase' | 'createdAt' | 'updatedAt'>> {
   containerName: string;
   [key: string]: unknown;
@@ -91,11 +86,11 @@ const DEFAULT_UPDATE_OPERATION_RETENTION_DAYS = 30;
 const UPDATE_OPERATION_PRUNE_MUTATION_INTERVAL = 100;
 let updateOperationMutationsSincePrune = 0;
 
-export const UPDATE_OPERATION_MAX_ENTRIES = toPositiveInteger(
+const UPDATE_OPERATION_MAX_ENTRIES = toPositiveInteger(
   process.env.DD_UPDATE_OPERATION_MAX_ENTRIES,
   DEFAULT_UPDATE_OPERATION_MAX_ENTRIES,
 );
-export const UPDATE_OPERATION_RETENTION_DAYS = toPositiveInteger(
+const UPDATE_OPERATION_RETENTION_DAYS = toPositiveInteger(
   process.env.DD_UPDATE_OPERATION_RETENTION_DAYS,
   DEFAULT_UPDATE_OPERATION_RETENTION_DAYS,
 );

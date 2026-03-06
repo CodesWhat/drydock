@@ -20,7 +20,7 @@ export interface AgentClientConfig {
   keyfile?: string;
 }
 
-export interface AgentClientRuntimeInfo {
+interface AgentClientRuntimeInfo {
   version?: string;
   os?: string;
   arch?: string;

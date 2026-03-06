@@ -5,7 +5,7 @@ import { preferences } from '../preferences/store';
 const DEFAULT_ICON_LIBRARY: IconLibrary = 'ph-duotone';
 const ICON_LIBRARIES = new Set<IconLibrary>(Object.keys(libraryLabels) as IconLibrary[]);
 
-export function isIconLibrary(value: unknown): value is IconLibrary {
+function isIconLibrary(value: unknown): value is IconLibrary {
   return typeof value === 'string' && ICON_LIBRARIES.has(value as IconLibrary);
 }
 

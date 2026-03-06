@@ -11,7 +11,3 @@ export async function getAgents() {
   }
   return response.json();
 }
-
-export default {
-  getAgents,
-};

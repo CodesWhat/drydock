@@ -1,4 +1,4 @@
-export interface LogEntry {
+interface LogEntry {
   timestamp: number;
   level: string;
   component: string;

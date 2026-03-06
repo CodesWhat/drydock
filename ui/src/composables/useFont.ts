@@ -9,7 +9,7 @@ export type FontId =
   | 'commit-mono'
   | 'comic-mono';
 
-export interface FontOption {
+interface FontOption {
   id: FontId;
   label: string;
   family: string;
@@ -65,7 +65,7 @@ export const fontOptions: FontOption[] = [
 const DEFAULT_FONT_ID: FontId = 'ibm-plex-mono';
 const FONT_IDS = new Set<FontId>(fontOptions.map((option) => option.id));
 
-export function isFontId(value: unknown): value is FontId {
+function isFontId(value: unknown): value is FontId {
   return typeof value === 'string' && FONT_IDS.has(value as FontId);
 }
 

@@ -50,11 +50,11 @@ export interface RegistryState {
   agent: { [key: string]: Agent };
 }
 
-export interface RegistrationOptions {
+interface RegistrationOptions {
   agent?: boolean;
 }
 
-export interface RegisterComponentOptions {
+interface RegisterComponentOptions {
   kind: ComponentKind;
   provider: string;
   name: string;
@@ -63,7 +63,7 @@ export interface RegisterComponentOptions {
   agent?: string;
 }
 
-export interface ProviderConfiguration {
+interface ProviderConfiguration {
   [configurationName: string]:
     | ComponentConfiguration
     | string

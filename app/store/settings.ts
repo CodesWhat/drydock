@@ -4,7 +4,7 @@
 import joi from 'joi';
 import { initCollection } from './util.js';
 
-export interface Settings {
+interface Settings {
   internetlessMode: boolean;
 }
 

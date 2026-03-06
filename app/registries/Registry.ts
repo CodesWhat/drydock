@@ -7,22 +7,22 @@ import { getSummaryTags } from '../prometheus/registry.js';
 import Component from '../registry/Component.js';
 import { getRegistryRequestTimeoutMs } from './configuration.js';
 
-export interface RegistryImage extends ContainerImage {
+interface RegistryImage extends ContainerImage {
   // Add any registry specific properties if needed
 }
 
-export interface RegistryManifest {
+interface RegistryManifest {
   digest?: string;
   version?: number;
   created?: string;
 }
 
-export interface RegistryTagsList {
+interface RegistryTagsList {
   name: string;
   tags: string[];
 }
 
-export interface ManifestEntry {
+interface ManifestEntry {
   digest: string;
   mediaType: string;
   platform: {
@@ -32,7 +32,7 @@ export interface ManifestEntry {
   };
 }
 
-export interface RegistryManifestResponse {
+interface RegistryManifestResponse {
   schemaVersion: number;
   mediaType?: string;
   manifests?: ManifestEntry[];

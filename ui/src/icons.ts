@@ -712,6 +712,3 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     iconoir: 'iconoir:windows',
   },
 };
-
-/** All semantic icon names */
-export const allIconNames = Object.keys(iconMap);

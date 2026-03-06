@@ -45,7 +45,7 @@ interface AuditStoreApi {
   }) => unknown;
 }
 
-export interface CrudHandlerDependencies {
+interface CrudHandlerDependencies {
   getContainersFromStore: (
     query: Request['query'],
     pagination?: ContainerListPagination,

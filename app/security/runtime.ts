@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { isAbsolute as isAbsolutePath, win32 as win32Path } from 'node:path';
 import { getSecurityConfiguration, type SecuritySbomFormat } from '../configuration/index.js';
 
-export type SecurityRuntimeToolStatus = {
+type SecurityRuntimeToolStatus = {
   enabled: boolean;
   command: string;
   commandAvailable: boolean | null;
@@ -10,7 +10,7 @@ export type SecurityRuntimeToolStatus = {
   message: string;
 };
 
-export interface SecurityRuntimeStatus {
+interface SecurityRuntimeStatus {
   checkedAt: string;
   ready: boolean;
   scanner: SecurityRuntimeToolStatus & {

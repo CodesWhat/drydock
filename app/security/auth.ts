@@ -2,13 +2,13 @@ export interface AuthLogger {
   warn?: (message: string) => void;
 }
 
-export interface FailClosedAuthOptions {
+interface FailClosedAuthOptions {
   allowInsecure?: boolean;
   logger?: AuthLogger;
   insecureFlagName?: string;
 }
 
-export interface RequestOptions {
+interface RequestOptions {
   headers?: Record<string, unknown>;
 }
 

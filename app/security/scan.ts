@@ -12,13 +12,7 @@ import { sanitizeLogParam } from '../log/sanitize.js';
 import { toPositiveInteger } from '../util/parse.js';
 import { hasValidCommandPath } from './runtime.js';
 
-export {
-  SECURITY_SEVERITIES,
-  SECURITY_SBOM_FORMATS,
-  toPositiveInteger,
-  type SecuritySeverity,
-  type SecuritySbomFormat,
-};
+export { SECURITY_SBOM_FORMATS, toPositiveInteger, type SecuritySeverity, type SecuritySbomFormat };
 export type SecurityScanStatus = 'passed' | 'blocked' | 'error';
 export type SecuritySignatureStatus = 'verified' | 'unverified' | 'error';
 export type SecuritySbomStatus = 'generated' | 'error';
@@ -74,7 +68,7 @@ export interface ContainerSecuritySbom {
   error?: string;
 }
 
-export interface ScanImageOptions {
+interface ScanImageOptions {
   image: string;
   auth?: {
     username?: string;
@@ -680,7 +674,7 @@ export async function generateImageSbom(
 
 // --- Digest-based scan dedup cache ---
 
-export interface DigestScanCacheEntry {
+interface DigestScanCacheEntry {
   digest: string;
   scanResult: ContainerSecurityScan;
   trivyDbUpdatedAt: string;

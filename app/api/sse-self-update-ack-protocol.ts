@@ -8,7 +8,7 @@ import type {
   FlushableResponse,
 } from './sse-active-client-registry.js';
 
-export interface PendingSelfUpdateAck {
+interface PendingSelfUpdateAck {
   operationId: string;
   requiresAck: boolean;
   ackTimeoutMs: number;
@@ -33,7 +33,7 @@ interface SelfUpdateAckSweepOptions {
   staleEntryTtlMs: number;
 }
 
-export interface SelfUpdateAckProtocol {
+interface SelfUpdateAckProtocol {
   pendingSelfUpdateAcks: Map<string, PendingSelfUpdateAck>;
   broadcastSelfUpdate(payload: SelfUpdateStartingEventPayload): Promise<void>;
   acknowledgeSelfUpdate(req: Request, res: Response): void;

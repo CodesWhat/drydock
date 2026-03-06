@@ -201,8 +201,6 @@ function deriveSecurityScanState(apiContainer: ApiContainerInput): 'scanned' | '
   return 'scanned';
 }
 
-export { normalizeSeverityCount };
-
 function deriveSecuritySummary(
   apiContainer: ApiContainerInput,
 ): ContainerSecuritySummary | undefined {
