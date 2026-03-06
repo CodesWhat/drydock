@@ -37,10 +37,6 @@ vi.mock('uuid', () => ({
   v5: vi.fn(() => 'mock-uuid-v5'),
 }));
 
-vi.mock('getmac', () => ({
-  default: vi.fn(() => '00:00:00:00:00:00'),
-}));
-
 vi.mock('../store', () => ({
   getConfiguration: vi.fn(() => ({
     path: '/test/store',

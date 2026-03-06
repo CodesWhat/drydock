@@ -33,7 +33,6 @@
     "express-rate-limit": "^8.2.1",
     "express-session": "1.19.0",
     "flat": "^6.0.1",
-    "getmac": "6.6.0",
     "gotify-client": "0.4.2",
     "helmet": "^8.1.0",
     "joi": "18.0.2",
