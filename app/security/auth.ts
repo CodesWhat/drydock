@@ -8,7 +8,7 @@ interface FailClosedAuthOptions {
   insecureFlagName?: string;
 }
 
-interface RequestOptions {
+export interface RequestOptions {
   headers?: Record<string, unknown>;
 }
 

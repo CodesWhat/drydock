@@ -114,7 +114,7 @@ import {
   getTagCandidates,
 } from './tag-candidates.js';
 
-interface DockerWatcherConfiguration extends ComponentConfiguration {
+export interface DockerWatcherConfiguration extends ComponentConfiguration {
   socket: string;
   host?: string;
   protocol?: 'http' | 'https' | 'ssh';
