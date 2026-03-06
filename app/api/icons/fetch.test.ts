@@ -87,17 +87,35 @@ describe('icons/fetch', () => {
     });
   });
 
-  test('rejects upstream payload when bytes do not match provider format', async () => {
+  test('rejects upstream payload when png bytes are invalid', async () => {
+    mockAxiosGet.mockResolvedValue({ data: Buffer.from('not-a-png') });
+
     await expect(
       fetchAndCacheIconOnce({
         provider: 'homarr',
         slug: 'docker',
         cachePath: '/store/icons/homarr/docker.png',
       }),
-    ).rejects.toThrow(/Invalid icon payload/i);
+    ).rejects.toThrow(/expected png bytes/i);
 
     expect(mockWriteIconAtomically).not.toHaveBeenCalled();
     expect(mockEnforceIconCacheLimits).not.toHaveBeenCalled();
+  });
+
+  test('accepts png payloads with a valid png signature', async () => {
+    const validPngPayload = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
+    mockAxiosGet.mockResolvedValue({ data: validPngPayload });
+
+    await fetchAndCacheIconOnce({
+      provider: 'homarr',
+      slug: 'valid-png',
+      cachePath: '/store/icons/homarr/valid-png.png',
+    });
+
+    expect(mockWriteIconAtomically).toHaveBeenCalledWith(
+      '/store/icons/homarr/valid-png.png',
+      validPngPayload,
+    );
   });
 
   test('rejects upstream payload when icon size exceeds limit', async () => {
