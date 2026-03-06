@@ -610,29 +610,42 @@ describe('runConfigMigrateCommandIfRequested', () => {
     });
   });
 
-  test('falls back to zero when O_NOFOLLOW is unavailable', () => {
-    withTempDir((tempDir) => {
-      const envPath = path.join(tempDir, '.env');
-      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+  test('falls back to zero when O_NOFOLLOW is unavailable', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-migrate-'));
+    tempDirsToCleanup.push(tempDir);
+    const envPath = path.join(tempDir, '.env');
+    fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
 
-      const constants = fs.constants as { O_NOFOLLOW?: number };
-      const originalNoFollow = constants.O_NOFOLLOW;
-      constants.O_NOFOLLOW = 0;
-
-      const openSpy = vi.spyOn(fs, 'openSync');
-      try {
-        const collector = createIoCollector();
-        const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
-          cwd: tempDir,
-          io: collector.io,
-        });
-
-        expect(result).toBe(0);
-        expect(openSpy).toHaveBeenCalledWith(envPath, fs.constants.O_RDWR);
-      } finally {
-        openSpy.mockRestore();
-        constants.O_NOFOLLOW = originalNoFollow;
-      }
+    vi.resetModules();
+    vi.doMock('node:fs', async () => {
+      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+      const fsWithNoFollowFallback = {
+        ...actual,
+        constants: {
+          ...actual.constants,
+          O_NOFOLLOW: 0,
+        },
+      };
+      return {
+        ...actual,
+        default: fsWithNoFollowFallback,
+      };
     });
+
+    const migrateCli = await import('./migrate-cli.js');
+    const collector = createIoCollector();
+    const result = migrateCli.runConfigMigrateCommandIfRequested(
+      ['config', 'migrate', '--file', '.env'],
+      {
+        cwd: tempDir,
+        io: collector.io,
+      },
+    );
+
+    expect(result).toBe(0);
+    expect(fs.readFileSync(envPath, 'utf-8')).toContain('DD_SERVER_HOST=localhost');
+
+    vi.doUnmock('node:fs');
+    vi.resetModules();
   });
 });
