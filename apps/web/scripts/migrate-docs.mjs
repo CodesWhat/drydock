@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { basename, dirname, join, relative } from "path";
 import { fileURLToPath } from "url";
+import { writeFileIfMissing } from "./write-file-if-missing.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(scriptDir, "..", "..", "..");
@@ -238,6 +239,11 @@ function removeFirstHeading(content) {
   return content.replace(/^#\s+.+\n/, "");
 }
 
+// Serialize as a YAML-compatible double-quoted scalar.
+function quoteYamlScalar(value) {
+  return JSON.stringify(String(value));
+}
+
 // Process a single markdown file
 function processFile(srcPath, relPath) {
   let content = readFileSync(srcPath, "utf-8");
@@ -266,10 +272,10 @@ function processFile(srcPath, relPath) {
   }
 
   // Build frontmatter
-  // Escape quotes in title and description for YAML
-  const safeTitle = title.replace(/"/g, '\\"');
-  const safeDesc = description.replace(/"/g, '\\"');
-  let frontmatter = `---\ntitle: "${safeTitle}"\ndescription: "${safeDesc}"\n---\n`;
+  // Serialize title/description with safe escaping for frontmatter values.
+  const safeTitle = quoteYamlScalar(title);
+  const safeDesc = quoteYamlScalar(description);
+  let frontmatter = `---\ntitle: ${safeTitle}\ndescription: ${safeDesc}\n---\n`;
 
   if (imports.length > 0) {
     frontmatter += "\n" + imports.join("\n") + "\n";
@@ -446,16 +452,16 @@ function writeMeta() {
     const outDir = join(DEST, dir);
     mkdirSync(outDir, { recursive: true });
     const metaPath = join(outDir, "meta.json");
-    // Only write if not already written by META_FILES
-    if (!existsSync(metaPath)) {
-      writeFileSync(metaPath, JSON.stringify({ title, pages: ["index"] }, null, 2) + "\n");
+    // Only write if not already written by META_FILES (atomically).
+    const wasWritten = writeFileIfMissing(
+      metaPath,
+      JSON.stringify({ title, pages: ["index"] }, null, 2) + "\n",
+    );
+    if (wasWritten) {
       console.log(`  meta.json -> ${dir}/meta.json`);
     }
   }
 }
-
-// Non-README .md files to skip (excluded globally)
-const SKIP_EXTENSIONS = [".html", ".css", ".json"];
 
 console.log("Migrating Docsify docs to Fumadocs MDX...\n");
 
