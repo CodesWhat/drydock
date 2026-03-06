@@ -175,8 +175,6 @@ const logHandlers = createLogHandlers({
 
 export const deleteContainer = crudHandlers.deleteContainer;
 export const getContainerTriggers = triggerHandlers.getContainerTriggers;
-export const getContainerVulnerabilities = securityHandlers.getContainerVulnerabilities;
-export const getContainerSbom = securityHandlers.getContainerSbom;
 
 /**
  * Init Router.

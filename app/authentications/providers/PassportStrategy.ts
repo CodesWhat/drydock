@@ -6,4 +6,3 @@ interface PassportStrategy {
 const asPassportStrategy = (strategy: unknown): PassportStrategy => strategy as PassportStrategy;
 
 export { asPassportStrategy };
-export default PassportStrategy;

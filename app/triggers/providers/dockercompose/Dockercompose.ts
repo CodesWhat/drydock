@@ -1083,7 +1083,6 @@ class Dockercompose extends Docker {
 export default Dockercompose;
 
 export {
-  getServiceKey as testable_getServiceKey,
   normalizeImplicitLatest as testable_normalizeImplicitLatest,
   normalizePostStartHooks as testable_normalizePostStartHooks,
   normalizePostStartEnvironmentValue as testable_normalizePostStartEnvironmentValue,
