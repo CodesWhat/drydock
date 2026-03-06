@@ -617,35 +617,37 @@ describe('runConfigMigrateCommandIfRequested', () => {
     fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
 
     vi.resetModules();
-    vi.doMock('node:fs', async () => {
-      const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
-      const fsWithNoFollowFallback = {
-        ...actual,
-        constants: {
-          ...actual.constants,
-          O_NOFOLLOW: 0,
+    try {
+      vi.doMock('node:fs', async () => {
+        const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+        const fsWithNoFollowFallback = {
+          ...actual,
+          constants: {
+            ...actual.constants,
+            O_NOFOLLOW: 0,
+          },
+        };
+        return {
+          ...actual,
+          default: fsWithNoFollowFallback,
+        };
+      });
+
+      const migrateCli = await import('./migrate-cli.js');
+      const collector = createIoCollector();
+      const result = migrateCli.runConfigMigrateCommandIfRequested(
+        ['config', 'migrate', '--file', '.env'],
+        {
+          cwd: tempDir,
+          io: collector.io,
         },
-      };
-      return {
-        ...actual,
-        default: fsWithNoFollowFallback,
-      };
-    });
+      );
 
-    const migrateCli = await import('./migrate-cli.js');
-    const collector = createIoCollector();
-    const result = migrateCli.runConfigMigrateCommandIfRequested(
-      ['config', 'migrate', '--file', '.env'],
-      {
-        cwd: tempDir,
-        io: collector.io,
-      },
-    );
-
-    expect(result).toBe(0);
-    expect(fs.readFileSync(envPath, 'utf-8')).toContain('DD_SERVER_HOST=localhost');
-
-    vi.doUnmock('node:fs');
-    vi.resetModules();
+      expect(result).toBe(0);
+      expect(fs.readFileSync(envPath, 'utf-8')).toContain('DD_SERVER_HOST=localhost');
+    } finally {
+      vi.doUnmock('node:fs');
+      vi.resetModules();
+    }
   });
 });
