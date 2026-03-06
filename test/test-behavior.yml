@@ -17,7 +17,7 @@ config:
     - duration: 20
       arrivalRate: 2
       name: "Behavior steady"
-  processor: "./test/load-test.processor.cjs"
+  processor: "./load-test.processor.cjs"
   defaults:
     headers:
       Accept: "application/json"
