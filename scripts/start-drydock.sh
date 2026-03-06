@@ -133,20 +133,31 @@ for i in $(seq 1 30); do
 	sleep 2
 done
 
-# Wait until drydock has discovered enough containers (max 60s).
-# With anonymous registries this is fast; with real credentials even faster.
+# Wait until drydock has discovered enough containers with fully resolved
+# image data (max 90s).  Container count alone is not sufficient — image
+# name, registry URL, and tag fields are populated asynchronously after
+# discovery and the E2E assertions depend on them.
 AUTH_HEADER="Basic $(echo -n 'john:doe' | base64)"
 EXPECTED_CONTAINERS=${DD_EXPECTED_CONTAINERS:-10}
-echo "Waiting for drydock to discover ${EXPECTED_CONTAINERS}+ containers (max 60s)..."
-for i in $(seq 1 30); do
-	COUNT=$(curl -sf -H "Authorization: ${AUTH_HEADER}" "http://localhost:${E2E_PORT}/api/containers" |
-		python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo 0)
-	if [ "$COUNT" -ge "$EXPECTED_CONTAINERS" ]; then
-		echo "✅ drydock discovered ${COUNT} containers"
+echo "Waiting for drydock to discover ${EXPECTED_CONTAINERS}+ containers with image data (max 90s)..."
+for i in $(seq 1 45); do
+	# Count containers that have a populated image.name (not just discovered)
+	READY=$(curl -sf -H "Authorization: ${AUTH_HEADER}" "http://localhost:${E2E_PORT}/api/containers" |
+		python3 -c "
+import sys, json
+containers = json.load(sys.stdin)
+ready = sum(1 for c in containers
+  if c.get('image', {}).get('name')
+  and c.get('image', {}).get('registry', {}).get('name')
+  and c.get('image', {}).get('tag', {}).get('value'))
+print(ready)
+" 2>/dev/null || echo 0)
+	if [ "$READY" -ge "$EXPECTED_CONTAINERS" ]; then
+		echo "✅ drydock has ${READY} containers with resolved image data"
 		break
 	fi
-	if [ "$i" -eq 30 ]; then
-		echo "❌ drydock only discovered ${COUNT}/${EXPECTED_CONTAINERS} containers after 60s"
+	if [ "$i" -eq 45 ]; then
+		echo "❌ drydock only has ${READY}/${EXPECTED_CONTAINERS} ready containers after 90s"
 		docker logs drydock --tail 50
 		exit 1
 	fi

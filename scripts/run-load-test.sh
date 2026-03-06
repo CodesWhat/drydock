@@ -135,6 +135,21 @@ if ! curl -sf "${DD_LOAD_TEST_TARGET}/health" >/dev/null 2>&1; then
 	exit 1
 fi
 
+# Wait for at least one watched container to appear (max 30s).
+# The rate-limit test needs a valid container ID and some tests
+# depend on containers being discovered before Artillery starts.
+AUTH_HEADER="Basic $(echo -n 'admin:password' | base64)"
+echo "Waiting for drydock to discover watched containers..."
+for _ in $(seq 1 15); do
+	COUNT=$(curl -sf -H "Authorization: ${AUTH_HEADER}" "${DD_LOAD_TEST_TARGET}/api/containers" |
+		python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo 0)
+	if [ "${COUNT}" -gt 0 ]; then
+		echo "Drydock discovered ${COUNT} container(s)"
+		break
+	fi
+	sleep 2
+done
+
 ARTILLERY_ARGS=(run "${ARTILLERY_FILE}" -e "${ARTILLERY_ENV}" --target "${DD_LOAD_TEST_TARGET}")
 
 if [ -n "${ARTILLERY_CLOUD_API_KEY:-}" ]; then
