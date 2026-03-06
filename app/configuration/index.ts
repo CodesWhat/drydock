@@ -48,15 +48,20 @@ export function replaceSecrets(ddEnvVars: Record<string, string | undefined>) {
     const secretFilePath = resolveConfiguredPath(ddEnvVars[secretFileEnvVar], {
       label: `${secretFileEnvVar} path`,
     });
-    const secretFileStats = fs.statSync(secretFilePath);
-    if (secretFileStats.size > MAX_SECRET_FILE_SIZE_BYTES) {
-      throw new Error(
-        `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
-      );
+    const fd = fs.openSync(secretFilePath, 'r');
+    try {
+      const secretFileStats = fs.fstatSync(fd);
+      if (secretFileStats.size > MAX_SECRET_FILE_SIZE_BYTES) {
+        throw new Error(
+          `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
+        );
+      }
+      const secretFileValue = fs.readFileSync(fd, 'utf-8');
+      delete ddEnvVars[secretFileEnvVar];
+      ddEnvVars[secretKey] = secretFileValue;
+    } finally {
+      fs.closeSync(fd);
     }
-    const secretFileValue = fs.readFileSync(secretFilePath, 'utf-8');
-    delete ddEnvVars[secretFileEnvVar];
-    ddEnvVars[secretKey] = secretFileValue;
   });
 }
 

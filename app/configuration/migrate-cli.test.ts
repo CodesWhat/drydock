@@ -275,6 +275,31 @@ describe('runConfigMigrateCommandIfRequested', () => {
     });
   });
 
+  test('does not use existsSync pre-checks before migrating files', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      const existsSpy = vi.spyOn(fs, 'existsSync').mockImplementation(() => {
+        throw new Error('existsSync should not be called');
+      });
+
+      const collector = createIoCollector();
+      let result: number | null;
+      try {
+        result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+          cwd: tempDir,
+          io: collector.io,
+        });
+      } finally {
+        existsSpy.mockRestore();
+      }
+
+      expect(result).toBe(0);
+      expect(fs.readFileSync(envPath, 'utf-8')).toContain('DD_SERVER_HOST=localhost');
+    });
+  });
+
   test('rejects --file paths that escape the current working directory', () => {
     withTempDir((tempDir) => {
       const workspaceDir = path.join(tempDir, 'workspace');
@@ -495,7 +520,7 @@ describe('runConfigMigrateCommandIfRequested', () => {
       const envPath = path.join(tempDir, '.env');
       fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
 
-      const statSpy = vi.spyOn(fs, 'lstatSync').mockImplementationOnce(() => {
+      const openSpy = vi.spyOn(fs, 'openSync').mockImplementationOnce(() => {
         throw 'metadata unavailable';
       });
 
@@ -505,7 +530,7 @@ describe('runConfigMigrateCommandIfRequested', () => {
         io: collector.io,
       });
 
-      statSpy.mockRestore();
+      openSpy.mockRestore();
 
       expect(result).toBe(1);
       expect(collector.err.join('\n')).toContain('Failed to inspect');
@@ -518,7 +543,7 @@ describe('runConfigMigrateCommandIfRequested', () => {
       const envPath = path.join(tempDir, '.env');
       fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
 
-      const writeSpy = vi.spyOn(fs, 'writeFileSync').mockImplementationOnce(() => {
+      const writeSpy = vi.spyOn(fs, 'writeSync').mockImplementationOnce(() => {
         const error = new Error('no space left on device');
         (error as NodeJS.ErrnoException).code = 'ENOSPC';
         throw error;

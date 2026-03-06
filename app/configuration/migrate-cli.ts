@@ -258,6 +258,42 @@ function formatCliErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function isMissingPathError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const errorCode = (error as NodeJS.ErrnoException).code;
+  return errorCode === 'ENOENT' || errorCode === 'ENOTDIR';
+}
+
+function isSymlinkPathError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const errorCode = (error as NodeJS.ErrnoException).code;
+  return errorCode === 'ELOOP';
+}
+
+function writeContentToOpenFile(fileDescriptor: number, content: string) {
+  const payload = Buffer.from(content, 'utf-8');
+  fs.ftruncateSync(fileDescriptor, 0);
+
+  let bytesWritten = 0;
+  while (bytesWritten < payload.length) {
+    const written = fs.writeSync(
+      fileDescriptor,
+      payload,
+      bytesWritten,
+      payload.length - bytesWritten,
+      bytesWritten,
+    );
+    if (written <= 0) {
+      throw new Error('write failed');
+    }
+    bytesWritten += written;
+  }
+}
+
 export function runConfigMigrateCommandIfRequested(
   argv: string[],
   options: RunMigrateCliOptions = {},
@@ -306,55 +342,67 @@ export function runConfigMigrateCommandIfRequested(
   let missingFiles = 0;
   let envReplacements = 0;
   let labelReplacements = 0;
+  const noFollowFlag = fs.constants.O_NOFOLLOW || 0;
 
   for (const candidate of uniqueCandidates) {
-    if (!fs.existsSync(candidate)) {
-      missingFiles += 1;
-      continue;
-    }
-    let candidateMetadata: fs.Stats;
+    let candidateFileDescriptor: number | null = null;
     try {
-      candidateMetadata = fs.lstatSync(candidate);
-    } catch (error) {
-      io.err(`Error: Failed to inspect "${candidate}": ${formatCliErrorMessage(error)}`);
-      return 1;
-    }
-    if (candidateMetadata.isSymbolicLink()) {
-      io.err(`Refusing to process symlink: ${candidate}`);
-      continue;
-    }
-
-    scannedFiles += 1;
-    let originalContent: string;
-    try {
-      originalContent = fs.readFileSync(candidate, 'utf-8');
-    } catch (error) {
-      io.err(`Error: Failed to read "${candidate}": ${formatCliErrorMessage(error)}`);
-      return 1;
-    }
-
-    const migrated = migrateLegacyConfigContent(originalContent, migrateOptions.source);
-    envReplacements += migrated.envReplacements;
-    labelReplacements += migrated.labelReplacements;
-
-    if (migrated.content === originalContent) {
-      io.out(`UNCHANGED ${candidate}`);
-      continue;
-    }
-
-    updatedFiles += 1;
-    if (!migrateOptions.dryRun) {
       try {
-        fs.writeFileSync(candidate, migrated.content, 'utf-8');
+        const openFlags = migrateOptions.dryRun ? fs.constants.O_RDONLY : fs.constants.O_RDWR;
+        candidateFileDescriptor = fs.openSync(candidate, openFlags | noFollowFlag);
       } catch (error) {
-        io.err(`Error: Failed to write "${candidate}": ${formatCliErrorMessage(error)}`);
+        if (isMissingPathError(error)) {
+          missingFiles += 1;
+          continue;
+        }
+        if (isSymlinkPathError(error)) {
+          io.err(`Refusing to process symlink: ${candidate}`);
+          continue;
+        }
+        io.err(`Error: Failed to inspect "${candidate}": ${formatCliErrorMessage(error)}`);
         return 1;
       }
+
+      let originalContent: string;
+      try {
+        originalContent = fs.readFileSync(candidateFileDescriptor, 'utf-8');
+      } catch (error) {
+        if (isMissingPathError(error)) {
+          missingFiles += 1;
+          continue;
+        }
+        io.err(`Error: Failed to read "${candidate}": ${formatCliErrorMessage(error)}`);
+        return 1;
+      }
+      scannedFiles += 1;
+
+      const migrated = migrateLegacyConfigContent(originalContent, migrateOptions.source);
+      envReplacements += migrated.envReplacements;
+      labelReplacements += migrated.labelReplacements;
+
+      if (migrated.content === originalContent) {
+        io.out(`UNCHANGED ${candidate}`);
+        continue;
+      }
+
+      updatedFiles += 1;
+      if (!migrateOptions.dryRun) {
+        try {
+          writeContentToOpenFile(candidateFileDescriptor, migrated.content);
+        } catch (error) {
+          io.err(`Error: Failed to write "${candidate}": ${formatCliErrorMessage(error)}`);
+          return 1;
+        }
+      }
+      const status = migrateOptions.dryRun ? 'DRY-RUN' : 'UPDATED';
+      io.out(
+        `${status} ${candidate} (env=${migrated.envReplacements}, labels=${migrated.labelReplacements})`,
+      );
+    } finally {
+      if (candidateFileDescriptor !== null) {
+        fs.closeSync(candidateFileDescriptor);
+      }
     }
-    const status = migrateOptions.dryRun ? 'DRY-RUN' : 'UPDATED';
-    io.out(
-      `${status} ${candidate} (env=${migrated.envReplacements}, labels=${migrated.labelReplacements})`,
-    );
   }
 
   if (scannedFiles === 0) {
