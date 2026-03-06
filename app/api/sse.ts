@@ -229,7 +229,7 @@ function clearPendingSelfUpdateAcks(): void {
   selfUpdateAckProtocol.clearPendingSelfUpdateAcks();
 }
 
-function trackEventListenerDeregistration(maybeDeregister: void | (() => void)): void {
+function trackEventListenerDeregistration(maybeDeregister: undefined | (() => void)): void {
   if (typeof maybeDeregister === 'function') {
     eventListenerDeregistrations.push(maybeDeregister);
   }

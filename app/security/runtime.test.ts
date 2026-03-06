@@ -478,7 +478,12 @@ describe('getTrivyDatabaseStatus', () => {
 
   function mockExecFileSuccess(stdout: string) {
     const mock = vi.fn(
-      (_command: unknown, _args: unknown, _options: unknown, callback: Function) => {
+      (
+        _command: unknown,
+        _args: unknown,
+        _options: unknown,
+        callback: (...args: unknown[]) => void,
+      ) => {
         callback(null, stdout, '');
         return { exitCode: 0 };
       },
@@ -489,7 +494,12 @@ describe('getTrivyDatabaseStatus', () => {
 
   function mockExecFileError() {
     const mock = vi.fn(
-      (_command: unknown, _args: unknown, _options: unknown, callback: Function) => {
+      (
+        _command: unknown,
+        _args: unknown,
+        _options: unknown,
+        callback: (...args: unknown[]) => void,
+      ) => {
         const error = new Error('command failed') as NodeJS.ErrnoException;
         error.code = 'ENOENT';
         callback(error, '', '');
@@ -519,7 +529,12 @@ describe('getTrivyDatabaseStatus', () => {
 
   test('should treat undefined stdout as empty output', async () => {
     const execFileMock = vi.fn(
-      (_command: unknown, _args: unknown, _options: unknown, callback: Function) => {
+      (
+        _command: unknown,
+        _args: unknown,
+        _options: unknown,
+        callback: (...args: unknown[]) => void,
+      ) => {
         callback(null, undefined, '');
         return { exitCode: 0 };
       },
@@ -544,7 +559,12 @@ describe('getTrivyDatabaseStatus', () => {
 
   test('should deduplicate concurrent status lookups while request is in flight', async () => {
     const execFileMock = vi.fn(
-      (_command: unknown, _args: unknown, _options: unknown, callback: Function) => {
+      (
+        _command: unknown,
+        _args: unknown,
+        _options: unknown,
+        callback: (...args: unknown[]) => void,
+      ) => {
         setTimeout(() => {
           callback(null, validTrivyVersionOutput, '');
         }, 5);
@@ -565,7 +585,12 @@ describe('getTrivyDatabaseStatus', () => {
 
   test('should still resolve in-flight lookup if cache is cleared before completion', async () => {
     const execFileMock = vi.fn(
-      (_command: unknown, _args: unknown, _options: unknown, callback: Function) => {
+      (
+        _command: unknown,
+        _args: unknown,
+        _options: unknown,
+        callback: (...args: unknown[]) => void,
+      ) => {
         setTimeout(() => {
           callback(null, validTrivyVersionOutput, '');
         }, 5);

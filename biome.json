@@ -19,7 +19,8 @@
     "rules": {
       "recommended": true,
       "style": {
-        "useNodejsImportProtocol": "off"
+        "useNodejsImportProtocol": "off",
+        "noNonNullAssertion": "off"
       },
       "correctness": {
         "noUnusedFunctionParameters": "off",

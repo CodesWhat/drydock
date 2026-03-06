@@ -1,13 +1,15 @@
-import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const SOURCE_SCRIPT_PATH = fileURLToPath(new URL("./migrate-docs.mjs", import.meta.url));
-const WRITE_IF_MISSING_SCRIPT_PATH = fileURLToPath(new URL("./write-file-if-missing.mjs", import.meta.url));
+const WRITE_IF_MISSING_SCRIPT_PATH = fileURLToPath(
+  new URL("./write-file-if-missing.mjs", import.meta.url),
+);
 
 test("migrate-docs escapes backslashes and quotes in YAML frontmatter", () => {
   const tempRoot = mkdtempSync(join(tmpdir(), "migrate-docs-"));
@@ -27,9 +29,9 @@ test("migrate-docs escapes backslashes and quotes in YAML frontmatter", () => {
     writeFileSync(
       join(docsDir, "README.md"),
       [
-        "# Path \\ docs and \"quotes\"",
+        '# Path \\ docs and "quotes"',
         "",
-        "Use C:\\Users\\tester and \"double quotes\" safely.",
+        'Use C:\\Users\\tester and "double quotes" safely.',
         "",
       ].join("\n"),
       "utf-8",
@@ -41,10 +43,17 @@ test("migrate-docs escapes backslashes and quotes in YAML frontmatter", () => {
       stdio: "pipe",
     });
 
-    const generated = readFileSync(join(tempRoot, "content", "docs", "current", "index.mdx"), "utf-8");
+    const generated = readFileSync(
+      join(tempRoot, "content", "docs", "current", "index.mdx"),
+      "utf-8",
+    );
 
     assert.ok(generated.includes('title: "Path \\\\ docs and \\"quotes\\""'));
-    assert.ok(generated.includes('description: "Use C:\\\\Users\\\\tester and \\"double quotes\\" safely."'));
+    assert.ok(
+      generated.includes(
+        'description: "Use C:\\\\Users\\\\tester and \\"double quotes\\" safely."',
+      ),
+    );
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

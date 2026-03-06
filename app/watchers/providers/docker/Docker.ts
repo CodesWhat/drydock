@@ -752,6 +752,7 @@ class Docker extends Watcher {
     });
   }
 
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: called via docker-event-orchestration through `this as any`
   private getOidcContext() {
     return {
       watcherName: this.name,
@@ -809,6 +810,7 @@ class Docker extends Watcher {
     this.clearMaintenanceWindowQueue();
   }
 
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: called via docker-event-orchestration through `this as any`
   private resetDockerEventsReconnectBackoff() {
     resetDockerEventsReconnectBackoffState(this);
   }
@@ -830,6 +832,7 @@ class Docker extends Watcher {
     );
   }
 
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: called via docker-event-orchestration through `this as any`
   private onDockerEventsStreamFailure(stream: any, reason: string, err?: any) {
     onDockerEventsStreamFailureHelper(
       this,
@@ -870,6 +873,7 @@ class Docker extends Watcher {
     await processDockerEventOrchestration(this as any, dockerEvent);
   }
 
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: called via docker-event-orchestration through `this as any`
   private updateContainerFromInspect(containerFound: Container, containerInspect: any) {
     const logContainer = this.log.child({
       container: fullName(containerFound),
