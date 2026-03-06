@@ -33,6 +33,7 @@ vi.mock('./settings.js', async () => {
 });
 
 import { clearInFlightIconFetchesForTests, fetchAndCacheIconOnce } from './fetch.js';
+import { providers } from './providers.js';
 
 describe('icons/fetch', () => {
   beforeEach(() => {
@@ -44,6 +45,7 @@ describe('icons/fetch', () => {
     mockWriteIconAtomically.mockResolvedValue(undefined);
     mockEnforceIconCacheLimits.mockResolvedValue(undefined);
     mockAxiosGet.mockResolvedValue({ data: Buffer.from('<svg />') });
+    delete (providers as Record<string, unknown>).custom;
   });
 
   test('skips upstream fetch when cached icon is already usable', async () => {
@@ -111,6 +113,54 @@ describe('icons/fetch', () => {
 
     expect(mockWriteIconAtomically).not.toHaveBeenCalled();
     expect(mockEnforceIconCacheLimits).not.toHaveBeenCalled();
+  });
+
+  test('accepts XML-prefixed svg payloads', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from('<?xml version="1.0" encoding="UTF-8"?><svg viewBox="0 0 1 1"></svg>'),
+    });
+
+    await fetchAndCacheIconOnce({
+      provider: 'simple',
+      slug: 'xml-svg',
+      cachePath: '/store/icons/simple/xml-svg.svg',
+    });
+
+    expect(mockWriteIconAtomically).toHaveBeenCalledWith(
+      '/store/icons/simple/xml-svg.svg',
+      expect.any(Buffer),
+    );
+  });
+
+  test('rejects upstream payload when response cannot be converted to a buffer', async () => {
+    mockAxiosGet.mockResolvedValue({ data: Symbol('not-binary') });
+
+    await expect(
+      fetchAndCacheIconOnce({
+        provider: 'simple',
+        slug: 'bad-buffer',
+        cachePath: '/store/icons/simple/bad-buffer.svg',
+      }),
+    ).rejects.toThrow(/not binary/i);
+  });
+
+  test('rejects upstream payload for unsupported provider extension', async () => {
+    (
+      providers as unknown as Record<string, { extension: string; url: (slug: string) => string }>
+    ).custom = {
+      extension: 'gif',
+      url: (slug: string) => `https://example.invalid/${slug}.gif`,
+    };
+
+    await expect(
+      fetchAndCacheIconOnce({
+        provider: 'custom',
+        slug: 'unsupported',
+        cachePath: '/store/icons/custom/unsupported.gif',
+      }),
+    ).rejects.toThrow(/unsupported icon extension/i);
+
+    expect(mockWriteIconAtomically).not.toHaveBeenCalled();
   });
 
   test('deduplicates concurrent fetches for the same provider and slug', async () => {
