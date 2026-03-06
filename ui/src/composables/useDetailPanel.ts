@@ -2,7 +2,7 @@ import { computed, ref, watch } from 'vue';
 import type { Container } from '../types/container';
 import { useSessionStorageItem } from './useSessionStorageItem';
 
-export interface DetailPanelState {
+interface DetailPanelState {
   name: string;
   tab: string;
   panel: boolean;

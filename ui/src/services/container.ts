@@ -325,4 +325,4 @@ export {
   updateContainerPolicy,
 };
 
-export type { ContainerGroup, ContainerGroupMember, ContainerSummary };
+export type { ContainerGroup };

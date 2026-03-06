@@ -1,9 +1,9 @@
-export interface StoreConfiguration {
+interface StoreConfiguration {
   path: string;
   file: string;
 }
 
-export interface StoreResponse {
+interface StoreResponse {
   configuration: StoreConfiguration;
 }
 

@@ -1,4 +1,4 @@
-export interface SessionStorageItem<T> {
+interface SessionStorageItem<T> {
   read: () => T | null;
   write: (value: T) => void;
   remove: () => void;

@@ -61,7 +61,7 @@ async function scanContainerWithRetry(containerId: string, signal?: AbortSignal,
   }
 }
 
-export interface ScanAllContainersOptions {
+interface ScanAllContainersOptions {
   scannerReady: boolean;
   runtimeLoading: boolean;
 }

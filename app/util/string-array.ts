@@ -1,4 +1,4 @@
-export interface UniqStringsOptions {
+interface UniqStringsOptions {
   trim?: boolean;
   removeEmpty?: boolean;
   sortComparator?: (left: string, right: string) => number;

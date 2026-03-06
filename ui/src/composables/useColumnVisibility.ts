@@ -1,7 +1,7 @@
 import { computed, ref, watch } from 'vue';
 import { preferences } from '../preferences/store';
 
-export interface ColumnDef {
+interface ColumnDef {
   key: string;
   label: string;
   align?: string;

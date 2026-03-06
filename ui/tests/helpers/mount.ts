@@ -60,5 +60,3 @@ export function mountWithPlugins<T extends Component>(
     },
   });
 }
-
-export { routerStub, routeStub, confirmStub };

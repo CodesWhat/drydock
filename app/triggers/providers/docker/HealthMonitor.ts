@@ -3,7 +3,7 @@ import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
 import { getErrorMessage } from '../../../util/error.js';
 
-export interface HealthMonitorOptions {
+interface HealthMonitorOptions {
   dockerApi: any;
   containerId: string;
   containerName: string;

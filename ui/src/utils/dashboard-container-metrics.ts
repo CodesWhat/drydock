@@ -13,7 +13,7 @@ export interface ImageSecurityAggregate {
   };
 }
 
-export interface DashboardContainerMetrics {
+interface DashboardContainerMetrics {
   totalContainers: number;
   runningContainers: number;
   updatesAvailable: number;

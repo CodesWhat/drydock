@@ -5,8 +5,6 @@ import type { SbomFormat } from '../views/security/securityViewTypes';
 import { severityOrder, toSafeFileName } from '../views/security/securityViewUtils';
 import type { ImageSummaryWithVulns } from './useVulnerabilities';
 
-export type { SbomFormat } from '../views/security/securityViewTypes';
-
 interface UseSbomDetailOptions {
   containerIdsByImage: Ref<Record<string, string[]>>;
 }

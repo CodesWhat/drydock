@@ -129,7 +129,7 @@ interface SemverCandidateFilterStats {
   greaterSkipped: boolean;
 }
 
-export interface TagCandidatesResult {
+interface TagCandidatesResult {
   tags: string[];
   noUpdateReason?: string;
 }

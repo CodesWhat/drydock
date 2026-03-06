@@ -1,6 +1,6 @@
 import { ref } from 'vue';
 
-export interface ConfirmOptions {
+interface ConfirmOptions {
   header: string;
   message: string;
   acceptLabel?: string;

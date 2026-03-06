@@ -147,11 +147,11 @@ type ContainerActionsContext = Pick<
   | 'clearPolicySelected'
 >;
 
-export interface ContainersViewDisplayContainer extends Container {
+interface ContainersViewDisplayContainer extends Container {
   _pending?: true;
 }
 
-export interface ContainersViewRenderGroup {
+interface ContainersViewRenderGroup {
   key: string;
   name: string | null;
   containers: ContainersViewDisplayContainer[];
@@ -160,7 +160,7 @@ export interface ContainersViewRenderGroup {
   updatableCount: number;
 }
 
-export interface ContainersViewTableColumn {
+interface ContainersViewTableColumn {
   key: string;
   label: string;
   align?: string;

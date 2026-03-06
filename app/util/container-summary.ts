@@ -2,7 +2,7 @@ interface ContainerStatusLike {
   status?: unknown;
 }
 
-export interface ContainerStatusSummary {
+interface ContainerStatusSummary {
   total: number;
   running: number;
   stopped: number;

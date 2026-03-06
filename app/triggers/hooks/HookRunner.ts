@@ -7,13 +7,13 @@ const DEFAULT_TIMEOUT_MS = 60_000; // 1 minute
 const HOOKS_DISABLED_MESSAGE =
   'Lifecycle hooks are disabled. Set DD_HOOKS_ENABLED=true to enable execution.';
 
-export interface HookRunnerOptions {
+interface HookRunnerOptions {
   timeout?: number;
   env?: Record<string, string>;
   label: string;
 }
 
-export interface HookResult {
+interface HookResult {
   exitCode: number;
   stdout: string;
   stderr: string;

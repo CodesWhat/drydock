@@ -18,7 +18,7 @@ export interface SeveritySummaryCounts {
   low: number;
 }
 
-export interface SecurityDelta {
+interface SecurityDelta {
   fixed: number;
   new: number;
   fixedCritical: number;
@@ -27,7 +27,7 @@ export interface SecurityDelta {
   newHigh: number;
 }
 
-export interface ImageSummary extends SeveritySummaryCounts {
+interface ImageSummary extends SeveritySummaryCounts {
   image: string;
   total: number;
   fixable: number;
@@ -59,7 +59,7 @@ export interface SecurityRuntimeStatus {
   requirements: string[];
 }
 
-export interface UpdateScanSummary extends SeveritySummaryCounts {
+interface UpdateScanSummary extends SeveritySummaryCounts {
   unknown: number;
 }
 

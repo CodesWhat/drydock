@@ -1,7 +1,7 @@
 export type ThemeFamily = 'drydock' | 'github' | 'dracula' | 'catppuccin';
 export type ThemeVariant = 'dark' | 'light' | 'system';
 
-export interface ThemeFamilyMeta {
+interface ThemeFamilyMeta {
   id: ThemeFamily;
   label: string;
   description: string;

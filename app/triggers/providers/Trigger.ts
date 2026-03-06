@@ -105,7 +105,7 @@ export interface TriggerConfiguration extends ComponentConfiguration {
   resolvenotifications?: boolean;
 }
 
-export interface ContainerReport {
+interface ContainerReport {
   container: Container;
   changed: boolean;
 }

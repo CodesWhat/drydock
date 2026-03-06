@@ -1,4 +1,4 @@
-export type AuditViewMode = 'table' | 'cards' | 'list';
+type AuditViewMode = 'table' | 'cards' | 'list';
 
 function firstQueryValue(value: unknown): string | undefined {
   const raw = Array.isArray(value) ? value[0] : value;

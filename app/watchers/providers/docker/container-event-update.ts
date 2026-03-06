@@ -6,7 +6,7 @@ import {
 } from './docker-helpers.js';
 import { areRuntimeDetailsEqual, getRuntimeDetailsFromInspect } from './runtime-details.js';
 
-export interface ProcessDockerEventDependencies {
+interface ProcessDockerEventDependencies {
   watchCronDebounced: () => Promise<void>;
   ensureRemoteAuthHeaders: () => Promise<void>;
   inspectContainer: (containerId: string) => Promise<any>;
@@ -42,7 +42,7 @@ export async function processDockerEvent(
   }
 }
 
-export interface UpdateContainerFromInspectDependencies {
+interface UpdateContainerFromInspectDependencies {
   getCustomDisplayNameFromLabels: (labels: Record<string, string>) => string | undefined;
   updateContainer: (container: Container) => void;
   logInfo?: (message: string) => void;

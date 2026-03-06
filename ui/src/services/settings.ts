@@ -1,4 +1,4 @@
-export interface Settings {
+interface Settings {
   internetlessMode: boolean;
 }
 
