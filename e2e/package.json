@@ -30,6 +30,6 @@
   },
   "overrides": {
     "fast-xml-parser": "5.3.8",
-    "minimatch": "^10.2.1"
+    "minimatch": "10.2.3"
   }
 }
