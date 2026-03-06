@@ -117,6 +117,19 @@ describe('container-mapper', () => {
       expect(c.registry).toBe('ghcr');
     });
 
+    it('detects ghcr from scheme-less registry urls', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'other', url: 'ghcr.io/v2' },
+            name: 'img',
+            tag: { value: 'latest' },
+          },
+        }),
+      );
+      expect(c.registry).toBe('ghcr');
+    });
+
     it('does not treat ghcr subdomains as ghcr', () => {
       const c = mapApiContainer(
         makeApiContainer({

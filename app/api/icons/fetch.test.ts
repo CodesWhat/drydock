@@ -144,6 +144,18 @@ describe('icons/fetch', () => {
     ).rejects.toThrow(/not binary/i);
   });
 
+  test('rejects upstream payload when svg bytes are invalid', async () => {
+    mockAxiosGet.mockResolvedValue({ data: Buffer.from('not-an-svg') });
+
+    await expect(
+      fetchAndCacheIconOnce({
+        provider: 'simple',
+        slug: 'invalid-svg',
+        cachePath: '/store/icons/simple/invalid-svg.svg',
+      }),
+    ).rejects.toThrow(/expected svg bytes/i);
+  });
+
   test('rejects upstream payload for unsupported provider extension', async () => {
     (
       providers as unknown as Record<string, { extension: string; url: (slug: string) => string }>

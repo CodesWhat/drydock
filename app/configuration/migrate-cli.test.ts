@@ -609,4 +609,30 @@ describe('runConfigMigrateCommandIfRequested', () => {
       expect(collector.out.join('\n')).toContain('Checked files: .env');
     });
   });
+
+  test('falls back to zero when O_NOFOLLOW is unavailable', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      const constants = fs.constants as { O_NOFOLLOW?: number };
+      const originalNoFollow = constants.O_NOFOLLOW;
+      constants.O_NOFOLLOW = 0;
+
+      const openSpy = vi.spyOn(fs, 'openSync');
+      try {
+        const collector = createIoCollector();
+        const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+          cwd: tempDir,
+          io: collector.io,
+        });
+
+        expect(result).toBe(0);
+        expect(openSpy).toHaveBeenCalledWith(envPath, fs.constants.O_RDWR);
+      } finally {
+        openSpy.mockRestore();
+        constants.O_NOFOLLOW = originalNoFollow;
+      }
+    });
+  });
 });
