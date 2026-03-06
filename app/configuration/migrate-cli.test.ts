@@ -563,4 +563,50 @@ describe('runConfigMigrateCommandIfRequested', () => {
       expect(collector.err.join('\n')).toContain('no space left on device');
     });
   });
+
+  test('returns write failed when writeSync reports zero bytes written', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      const writeSpy = vi.spyOn(fs, 'writeSync').mockImplementationOnce(() => 0);
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      writeSpy.mockRestore();
+
+      expect(result).toBe(1);
+      expect(collector.err.join('\n')).toContain('Failed to write');
+      expect(collector.err.join('\n')).toContain('write failed');
+    });
+  });
+
+  test('treats ENOENT while reading an opened file as missing and continues', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      const readSpy = vi.spyOn(fs, 'readFileSync').mockImplementationOnce(() => {
+        const error = new Error('file disappeared');
+        (error as NodeJS.ErrnoException).code = 'ENOENT';
+        throw error;
+      });
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      readSpy.mockRestore();
+
+      expect(result).toBe(0);
+      expect(collector.out.join('\n')).toContain('No config files found to migrate.');
+      expect(collector.out.join('\n')).toContain('Checked files: .env');
+    });
+  });
 });
