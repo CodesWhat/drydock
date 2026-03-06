@@ -96,7 +96,6 @@ mode = "comment"
 [[plugin]]
 name = "osv-scanner"
 
-
 [[plugin]]
 name = "radarlint-iac"
 mode = "monitor"
