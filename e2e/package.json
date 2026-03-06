@@ -25,7 +25,7 @@
     "@cucumber/cucumber": "^12.7.0"
   },
   "devDependencies": {
-    "@dotenvx/dotenvx": "1.52.0",
+    "@dotenvx/dotenvx": "1.53.0",
     "artillery": "2.0.30"
   },
   "overrides": {
