@@ -54,23 +54,16 @@ class OidcStrategy extends Strategy {
         ? req.headers.authorization[0] || ''
         : (req.headers.authorization ?? '');
       const bearerTokenMatch = authorization.match(/^Bearer\s+(\S+)$/);
-      if (bearerTokenMatch) {
-        this.log.debug('Bearer token found => validate it');
-        const accessToken = bearerTokenMatch[1];
-        this.verify(accessToken, (err, user) => {
-          if (err || !user) {
-            this.log.warn('Bearer token is invalid');
-            passportStrategy.fail(401);
-          } else {
-            this.log.debug('Bearer token is valid');
-            passportStrategy.success(user);
-          }
-        });
-        // Fail if no bearer token
-      } else {
-        this.log.debug('No bearer token found in the request');
-        passportStrategy.fail(401);
-      }
+      const accessToken = bearerTokenMatch?.[1] ?? '';
+      this.verify(accessToken, (err, user) => {
+        if (err || !user) {
+          this.log.warn('Bearer token validation failed');
+          passportStrategy.fail(401);
+        } else {
+          this.log.debug('Bearer token validated');
+          passportStrategy.success(user);
+        }
+      });
     }
   }
 }

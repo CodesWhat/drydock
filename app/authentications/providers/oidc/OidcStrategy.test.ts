@@ -29,9 +29,10 @@ test('authenticate should return user from session if so', async () => {
 });
 
 test('authenticate should call super.authenticate when no existing session', async () => {
-  const fail = vi.spyOn(oidcStrategy, 'fail');
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, null));
   oidcStrategy.authenticate({ isAuthenticated: () => false, headers: {} });
-  expect(fail).toHaveBeenCalled();
+  expect(oidcStrategy.verify).toHaveBeenCalledWith('', expect.any(Function));
+  expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
 });
 
 test('authenticate should get & validate Bearer token', async () => {
@@ -116,7 +117,7 @@ test('authenticate should parse bearer token from authorization header array', a
 });
 
 test('authenticate should fail when authorization header array is empty', async () => {
-  const fail = vi.spyOn(oidcStrategy, 'fail');
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, null));
   oidcStrategy.authenticate({
     isAuthenticated: () => false,
     headers: {
@@ -124,14 +125,12 @@ test('authenticate should fail when authorization header array is empty', async 
     },
   });
 
-  expect(fail).toHaveBeenCalledWith(401);
+  expect(oidcStrategy.verify).toHaveBeenCalledWith('', expect.any(Function));
+  expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
 });
 
 test('authenticate should fail when bearer token contains trailing whitespace', async () => {
-  const fail = vi.spyOn(oidcStrategy, 'fail');
-  const verify = vi.fn();
-  oidcStrategy.verify = verify;
-
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, null));
   oidcStrategy.authenticate({
     isAuthenticated: () => false,
     headers: {
@@ -139,15 +138,12 @@ test('authenticate should fail when bearer token contains trailing whitespace', 
     },
   });
 
-  expect(verify).not.toHaveBeenCalled();
-  expect(fail).toHaveBeenCalledWith(401);
+  expect(oidcStrategy.verify).toHaveBeenCalledWith('', expect.any(Function));
+  expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
 });
 
 test('authenticate should fail when bearer token has extra authorization segments', async () => {
-  const fail = vi.spyOn(oidcStrategy, 'fail');
-  const verify = vi.fn();
-  oidcStrategy.verify = verify;
-
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, null));
   oidcStrategy.authenticate({
     isAuthenticated: () => false,
     headers: {
@@ -155,6 +151,6 @@ test('authenticate should fail when bearer token has extra authorization segment
     },
   });
 
-  expect(verify).not.toHaveBeenCalled();
-  expect(fail).toHaveBeenCalledWith(401);
+  expect(oidcStrategy.verify).toHaveBeenCalledWith('', expect.any(Function));
+  expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
 });
