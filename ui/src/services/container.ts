@@ -186,6 +186,9 @@ async function deleteContainer(containerId: string) {
   const response = await fetch(`/api/containers/${containerId}`, {
     method: 'DELETE',
     credentials: 'include',
+    headers: {
+      'X-DD-Confirm-Action': 'container-delete',
+    },
   });
   if (!response.ok) {
     throw new Error(`Failed to delete container ${containerId}: ${response.statusText}`);

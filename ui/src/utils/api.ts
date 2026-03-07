@@ -1,15 +1,15 @@
-import { z } from 'zod';
+type CollectionEnvelope = { data?: unknown; items?: unknown };
+type ItemValidator<T> = (item: unknown) => item is T;
 
-const collectionItemSchema = z.object({}).catchall(z.unknown());
-const collectionSchema = z.array(collectionItemSchema);
-
-function extractCollectionData<T>(payload: unknown): T[] {
-  let collection: unknown;
+function extractCollectionData(payload: unknown): unknown[];
+function extractCollectionData<T>(payload: unknown, validateItem: ItemValidator<T>): T[];
+function extractCollectionData<T>(payload: unknown, validateItem?: ItemValidator<T>) {
+  let collection: unknown[] | undefined;
 
   if (Array.isArray(payload)) {
     collection = payload;
   } else if (payload && typeof payload === 'object') {
-    const envelope = payload as { data?: unknown; items?: unknown };
+    const envelope = payload as CollectionEnvelope;
     if (Array.isArray(envelope.data)) {
       collection = envelope.data;
     } else if (Array.isArray(envelope.items)) {
@@ -21,12 +21,11 @@ function extractCollectionData<T>(payload: unknown): T[] {
     return [];
   }
 
-  const parsedCollection = collectionSchema.safeParse(collection);
-  if (!parsedCollection.success) {
+  if (validateItem && !collection.every((item) => validateItem(item))) {
     return [];
   }
 
-  return parsedCollection.data as T[];
+  return collection;
 }
 
 export { extractCollectionData };

@@ -296,7 +296,7 @@ describe('useVulnerabilities', () => {
     expect(state.vulnerabilitiesByImage.value.nginx.map((v) => v.id)).toEqual(['CVE-1', 'CVE-2']);
   });
 
-  it('groups vulnerabilities in severity order without a post-group sort pass', () => {
+  it('groups vulnerabilities by image then sorts each group by severity', () => {
     const state = useVulnerabilities({
       securitySortField: ref('critical'),
       securitySortAsc: ref(false),
@@ -307,6 +307,18 @@ describe('useVulnerabilities', () => {
         id: 'CVE-LOW',
         severity: 'LOW',
         package: 'pkg-low',
+        version: '1.0.0',
+        fixedIn: null,
+        title: '',
+        target: '',
+        primaryUrl: '',
+        image: 'ordered-image',
+        publishedDate: '',
+      },
+      {
+        id: 'CVE-UNKNOWN',
+        severity: 'UNKNOWN',
+        package: 'pkg-unknown',
         version: '1.0.0',
         fixedIn: null,
         title: '',
@@ -339,6 +351,30 @@ describe('useVulnerabilities', () => {
         image: 'ordered-image',
         publishedDate: '',
       },
+      {
+        id: 'CVE-HIGH-OTHER',
+        severity: 'HIGH',
+        package: 'pkg-high-other',
+        version: '1.0.0',
+        fixedIn: null,
+        title: '',
+        target: '',
+        primaryUrl: '',
+        image: 'other-image',
+        publishedDate: '',
+      },
+      {
+        id: 'CVE-LOW-OTHER',
+        severity: 'LOW',
+        package: 'pkg-low-other',
+        version: '1.0.0',
+        fixedIn: null,
+        title: '',
+        target: '',
+        primaryUrl: '',
+        image: 'other-image',
+        publishedDate: '',
+      },
     ];
 
     const sortSpy = vi.spyOn(Array.prototype, 'sort');
@@ -347,8 +383,13 @@ describe('useVulnerabilities', () => {
         'CVE-CRITICAL',
         'CVE-MEDIUM',
         'CVE-LOW',
+        'CVE-UNKNOWN',
       ]);
-      expect(sortSpy).not.toHaveBeenCalled();
+      expect(state.vulnerabilitiesByImage.value['other-image'].map((v) => v.id)).toEqual([
+        'CVE-HIGH-OTHER',
+        'CVE-LOW-OTHER',
+      ]);
+      expect(sortSpy).toHaveBeenCalled();
     } finally {
       sortSpy.mockRestore();
     }

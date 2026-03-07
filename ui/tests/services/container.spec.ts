@@ -298,6 +298,7 @@ describe('Container Service', () => {
       expect(fetch).toHaveBeenCalledWith('/api/containers/container1', {
         method: 'DELETE',
         credentials: 'include',
+        headers: { 'X-DD-Confirm-Action': 'container-delete' },
       });
       expect(result).toBeDefined();
     });

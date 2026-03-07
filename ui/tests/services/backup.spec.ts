@@ -51,7 +51,10 @@ describe('Backup Service', () => {
       expect(fetch).toHaveBeenCalledWith('/api/containers/container-1/rollback', {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-DD-Confirm-Action': 'container-rollback',
+        },
         body: JSON.stringify({ backupId: 'backup-1' }),
       });
       expect(result).toEqual(mockResult);
@@ -69,7 +72,10 @@ describe('Backup Service', () => {
       expect(fetch).toHaveBeenCalledWith('/api/containers/container-1/rollback', {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-DD-Confirm-Action': 'container-rollback',
+        },
       });
       expect(result).toEqual(mockResult);
     });
