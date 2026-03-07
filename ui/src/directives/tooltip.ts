@@ -115,8 +115,8 @@ function bind(el: HTMLElement, binding: DirectiveBinding<BindingValue>) {
     timer: null,
     text,
     delay,
-    show: () => {},
-    hide: () => {},
+    show: undefined as unknown as () => void,
+    hide: undefined as unknown as () => void,
   };
   state.show = makeShow(state);
   state.hide = makeHide(state);
