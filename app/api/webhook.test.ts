@@ -13,6 +13,7 @@ const {
   mockGetWebhookCounter,
   mockCreateHash,
   mockTimingSafeEqual,
+  mockLogWarn,
 } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), post: vi.fn() },
   mockGetWebhookConfiguration: vi.fn(() => ({
@@ -29,6 +30,7 @@ const {
   mockInsertAudit: vi.fn(),
   mockGetAuditCounter: vi.fn(),
   mockGetWebhookCounter: vi.fn(),
+  mockLogWarn: vi.fn(),
   mockCreateHash: vi.fn(() => {
     const chunks: Buffer[] = [];
     const hash = {
@@ -95,7 +97,7 @@ vi.mock('../prometheus/webhook.js', () => ({
 
 vi.mock('../log/index.js', () => ({
   default: {
-    child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() })),
+    child: vi.fn(() => ({ info: vi.fn(), warn: mockLogWarn, debug: vi.fn(), error: vi.fn() })),
   },
 }));
 
@@ -519,6 +521,26 @@ describe('Webhook Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Error triggering watch cycle' });
       expect(mockInsertAudit).toHaveBeenCalledWith(
         expect.objectContaining({ details: 'watch failed as string' }),
+      );
+    });
+
+    test('should sanitize watch-all failure details in warning logs', async () => {
+      const rawErrorMessage = '\u001b[31mwatch failed\u001b[0m\nnext';
+      const sanitizedErrorMessage = sanitizeLogParam(rawErrorMessage);
+      mockGetState.mockReturnValue({
+        watcher: {
+          'docker.local': { watch: vi.fn().mockRejectedValue(new Error(rawErrorMessage)) },
+        },
+        trigger: {},
+      });
+
+      const handler = getHandler('post', '/watch');
+      const req = createMockRequest();
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        `Error triggering watch cycle (${sanitizedErrorMessage})`,
       );
     });
 

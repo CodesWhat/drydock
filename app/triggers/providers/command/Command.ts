@@ -7,6 +7,19 @@ import Trigger from '../Trigger.js';
  * Command Trigger implementation
  */
 class Command extends Trigger {
+  private static hasLoggedShellExecutionWarning = false;
+
+  private logShellExecutionWarningOnce() {
+    if (Command.hasLoggedShellExecutionWarning) {
+      return;
+    }
+
+    Command.hasLoggedShellExecutionWarning = true;
+    this.log.warn(
+      `Security: Command trigger executes DD_TRIGGER_COMMAND_* cmd using ${this.configuration.shell} -c with drydock process privileges. Use only trusted command strings and interpolated values.`,
+    );
+  }
+
   /**
    * Get the Trigger configuration schema.
    * @returns {*}
@@ -48,6 +61,8 @@ class Command extends Trigger {
    * @param {*} extraEnvVars
    */
   async runCommand(extraEnvVars) {
+    this.logShellExecutionWarningOnce();
+
     const commandOptions = {
       env: {
         ...process.env,

@@ -62,6 +62,9 @@ beforeEach(async () => {
   childProcessMockControl.execFileCalls = 0;
   childProcessMockControl.execImpl = null;
   childProcessMockControl.execFileImpl = null;
+  (
+    Command as unknown as { hasLoggedShellExecutionWarning: boolean }
+  ).hasLoggedShellExecutionWarning = false;
 });
 
 test('validateConfiguration should return validated configuration when valid', async () => {
@@ -83,6 +86,23 @@ test('validateConfiguration should throw error when invalid', async () => {
   expect(() => {
     command.validateConfiguration(configuration);
   }).toThrowError(joi.ValidationError);
+});
+
+test('should log shell execution security warning once on first command trigger execution', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', {
+    cmd: 'echo test',
+    shell: '/bin/sh',
+  });
+  const warnSpy = vi.spyOn(cmd.log, 'warn');
+
+  await cmd.trigger({ name: 'test', id: '1' });
+  await cmd.trigger({ name: 'test', id: '2' });
+
+  const securityWarningCalls = warnSpy.mock.calls.filter(([message]) =>
+    String(message).includes('Security: Command trigger executes DD_TRIGGER_COMMAND_* cmd'),
+  );
+  expect(securityWarningCalls).toHaveLength(1);
 });
 
 test('should trigger with container', async () => {

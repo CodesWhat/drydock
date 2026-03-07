@@ -158,6 +158,21 @@ function handleContainerActionError(
   sendErrorResponse(res, 500, `Error ${context.actionVerb} container ${safeContainerName}`);
 }
 
+function handleWatchAllError(error: unknown, res: Response) {
+  const message = getErrorMessage(error);
+  log.warn(`Error triggering watch cycle (${sanitizeLogParam(message)})`);
+
+  recordAuditEvent({
+    action: 'webhook-watch',
+    containerName: '*',
+    status: 'error',
+    details: message,
+  });
+  getWebhookCounter()?.inc({ action: 'watch-all' });
+
+  sendErrorResponse(res, 500, 'Error triggering watch cycle');
+}
+
 /**
  * POST /watch — trigger full watch cycle on ALL watchers.
  */
@@ -181,18 +196,7 @@ async function watchAll(req: Request, res: Response) {
       result: { watchers: watcherEntries.length },
     });
   } catch (e: unknown) {
-    const message = getErrorMessage(e);
-    log.warn(`Error triggering watch cycle (${message})`);
-
-    recordAuditEvent({
-      action: 'webhook-watch',
-      containerName: '*',
-      status: 'error',
-      details: message,
-    });
-    getWebhookCounter()?.inc({ action: 'watch-all' });
-
-    sendErrorResponse(res, 500, 'Error triggering watch cycle');
+    handleWatchAllError(e, res);
   }
 }
 
