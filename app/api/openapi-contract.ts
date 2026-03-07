@@ -1,6 +1,6 @@
 import { openApiDocument } from './openapi.js';
 
-type JsonSchema = Record<string, unknown> | { $ref: string };
+type JsonSchema = Record<string, unknown>;
 type OpenApiMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
 
 interface ContractValidationResult {
