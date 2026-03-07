@@ -73,6 +73,17 @@ describe('Trigger Service', () => {
       expect(result).toEqual(mockTriggers);
     });
 
+    it('unwraps collection envelope with items array', async () => {
+      const mockTriggers = [{ type: 'webhook', name: 'item-shape' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: mockTriggers, total: 1 }),
+      } as any);
+
+      const result = await getAllTriggers();
+      expect(result).toEqual(mockTriggers);
+    });
+
     it('returns empty array for non-array non-object payload', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
