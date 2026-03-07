@@ -291,6 +291,17 @@ curl -X PATCH http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7e
   -d '{"action":"snooze","days":7}'
 ```
 
+## Get security vulnerability overview
+
+This operation returns pre-aggregated vulnerability data grouped by image across all scanned containers.
+Used by the Security view to display vulnerability summaries without loading every container individually.
+
+```bash
+curl http://drydock:3000/api/containers/security/vulnerabilities
+```
+
+The response includes total and scanned container counts, the latest scan timestamp, and an `images` array where each entry groups vulnerabilities by image name with container IDs and an optional update severity summary.
+
 ## Get latest vulnerability scan result
 
 This operation returns the latest persisted vulnerability scan (safe-pull gate result) for a container.

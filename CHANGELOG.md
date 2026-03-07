@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Announcement banner** — Dismissible banner component for surfacing release notes and important notices in the dashboard.
 - **Dashboard vulnerability sort by severity** — Top-5 vulnerability list on the dashboard now sorted by total count descending with critical count as tiebreaker, so the most severe containers appear first.
 - **Watcher agent support initialization** — Watchers now initialize agent support on startup for distributed monitoring readiness.
+- **Security vulnerability overview endpoint** — New `GET /api/containers/security/vulnerabilities` returns pre-aggregated vulnerability data grouped by image with severity summaries, so the Security view no longer needs to load all containers.
 
 ### Changed
 
