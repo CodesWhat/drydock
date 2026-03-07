@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import ToggleSwitch from '../components/ToggleSwitch.vue';
 import { useViewMode } from '../preferences/useViewMode';
 import type { NotificationRule, NotificationRuleUpdate } from '../services/notification';
 import { getAllNotificationRules, updateNotificationRule } from '../services/notification';
@@ -322,13 +323,17 @@ onMounted(async () => {
       :active-row="selectedRule?.id"
       @row-click="openDetail($event)">
       <template #cell-enabled="{ row }">
-        <button class="w-8 h-4 dd-rounded-lg relative shrink-0 transition-colors mx-auto disabled:opacity-40"
-                :style="{ backgroundColor: row.enabled ? 'var(--dd-success)' : 'var(--dd-border-strong)' }"
-                :disabled="savingRuleId === row.id"
-                @click.stop="toggleNotification(row.id)">
-          <div class="absolute top-0.5 w-3 h-3 dd-rounded shadow-sm transition-transform"
-               :style="{ backgroundColor: 'var(--dd-bg)', left: row.enabled ? '17px' : '2px' }" />
-        </button>
+        <ToggleSwitch
+          :model-value="row.enabled"
+          size="sm"
+          class="mx-auto shrink-0"
+          :disabled="savingRuleId === row.id"
+          aria-label="Toggle notification rule"
+          on-color="var(--dd-success)"
+          off-color="var(--dd-border-strong)"
+          @click.stop
+          @update:model-value="toggleNotification(row.id)"
+        />
       </template>
       <template #cell-name="{ row }">
         <div class="font-medium dd-text">{{ row.name }}</div>
@@ -364,13 +369,17 @@ onMounted(async () => {
             <div class="text-[15px] font-semibold truncate dd-text">{{ notif.name }}</div>
             <div class="text-[11px] mt-0.5 dd-text-muted">{{ notif.description }}</div>
           </div>
-          <button class="w-8 h-4 dd-rounded-lg relative shrink-0 transition-colors disabled:opacity-40"
-                  :style="{ backgroundColor: notif.enabled ? 'var(--dd-success)' : 'var(--dd-border-strong)' }"
-                  :disabled="savingRuleId === notif.id"
-                  @click.stop="toggleNotification(notif.id)">
-            <div class="absolute top-0.5 w-3 h-3 dd-rounded shadow-sm transition-transform"
-                 :style="{ backgroundColor: 'var(--dd-bg)', left: notif.enabled ? '17px' : '2px' }" />
-          </button>
+          <ToggleSwitch
+            :model-value="notif.enabled"
+            size="sm"
+            class="shrink-0"
+            :disabled="savingRuleId === notif.id"
+            aria-label="Toggle notification rule"
+            on-color="var(--dd-success)"
+            off-color="var(--dd-border-strong)"
+            @click.stop
+            @update:model-value="toggleNotification(notif.id)"
+          />
         </div>
         <div class="px-4 py-2.5 flex flex-wrap gap-1.5 mt-auto"
              :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
@@ -393,13 +402,17 @@ onMounted(async () => {
       :selected-key="selectedRule?.id"
       @item-click="openDetail($event)">
       <template #header="{ item: notif }">
-        <button class="w-8 h-4 dd-rounded-lg relative shrink-0 transition-colors disabled:opacity-40"
-                :style="{ backgroundColor: notif.enabled ? 'var(--dd-success)' : 'var(--dd-border-strong)' }"
-                :disabled="savingRuleId === notif.id"
-                @click.stop="toggleNotification(notif.id)">
-          <div class="absolute top-0.5 w-3 h-3 dd-rounded shadow-sm transition-transform"
-               :style="{ backgroundColor: 'var(--dd-bg)', left: notif.enabled ? '17px' : '2px' }" />
-        </button>
+        <ToggleSwitch
+          :model-value="notif.enabled"
+          size="sm"
+          class="shrink-0"
+          :disabled="savingRuleId === notif.id"
+          aria-label="Toggle notification rule"
+          on-color="var(--dd-success)"
+          off-color="var(--dd-border-strong)"
+          @click.stop
+          @update:model-value="toggleNotification(notif.id)"
+        />
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ notif.name }}</span>
         <div class="flex flex-wrap gap-1.5 shrink-0 max-w-[320px] justify-end">
           <span v-for="triggerId in notif.triggers" :key="triggerId"
@@ -454,13 +467,14 @@ onMounted(async () => {
 
             <div>
               <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Rule status</div>
-              <button class="w-10 h-5 dd-rounded-lg relative transition-colors"
-                      :style="{ backgroundColor: detailEnabled ? 'var(--dd-success)' : 'var(--dd-border-strong)' }"
-                      :disabled="detailSaving"
-                      @click="detailEnabled = !detailEnabled">
-                <div class="absolute top-0.5 w-4 h-4 dd-rounded shadow-sm transition-transform"
-                     :style="{ backgroundColor: 'var(--dd-bg)', left: detailEnabled ? '20px' : '2px' }" />
-              </button>
+              <ToggleSwitch
+                :model-value="detailEnabled"
+                :disabled="detailSaving"
+                aria-label="Rule status"
+                on-color="var(--dd-success)"
+                off-color="var(--dd-border-strong)"
+                @update:model-value="detailEnabled = $event"
+              />
               <div class="text-[10px] mt-1 dd-text-muted">
                 {{ detailEnabled ? 'Enabled: notifications can fire for this event.' : 'Disabled: notifications are suppressed for this event.' }}
               </div>
