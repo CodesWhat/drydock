@@ -22,8 +22,9 @@ defineEmits<{
     @click="$emit('update:modelValue', !modelValue)"
   >
     <span
-      class="absolute top-0.5 left-0.5 w-4 h-4 bg-white dd-rounded transition-transform"
+      class="absolute top-0.5 left-0.5 w-4 h-4 dd-rounded transition-transform"
       :class="modelValue ? 'translate-x-5' : 'translate-x-0'"
+      :style="{ backgroundColor: 'var(--dd-bg)' }"
     />
   </button>
 </template>

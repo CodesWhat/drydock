@@ -327,7 +327,7 @@ onMounted(async () => {
                 :disabled="savingRuleId === row.id"
                 @click.stop="toggleNotification(row.id)">
           <div class="absolute top-0.5 w-3 h-3 dd-rounded shadow-sm transition-transform"
-               :style="{ backgroundColor: 'var(--dd-text)', left: row.enabled ? '17px' : '2px' }" />
+               :style="{ backgroundColor: 'var(--dd-bg)', left: row.enabled ? '17px' : '2px' }" />
         </button>
       </template>
       <template #cell-name="{ row }">
@@ -369,7 +369,7 @@ onMounted(async () => {
                   :disabled="savingRuleId === notif.id"
                   @click.stop="toggleNotification(notif.id)">
             <div class="absolute top-0.5 w-3 h-3 dd-rounded shadow-sm transition-transform"
-                 :style="{ backgroundColor: 'var(--dd-text)', left: notif.enabled ? '17px' : '2px' }" />
+                 :style="{ backgroundColor: 'var(--dd-bg)', left: notif.enabled ? '17px' : '2px' }" />
           </button>
         </div>
         <div class="px-4 py-2.5 flex flex-wrap gap-1.5 mt-auto"
@@ -398,7 +398,7 @@ onMounted(async () => {
                 :disabled="savingRuleId === notif.id"
                 @click.stop="toggleNotification(notif.id)">
           <div class="absolute top-0.5 w-3 h-3 dd-rounded shadow-sm transition-transform"
-               :style="{ backgroundColor: 'var(--dd-text)', left: notif.enabled ? '17px' : '2px' }" />
+               :style="{ backgroundColor: 'var(--dd-bg)', left: notif.enabled ? '17px' : '2px' }" />
         </button>
         <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ notif.name }}</span>
         <div class="flex flex-wrap gap-1.5 shrink-0 max-w-[320px] justify-end">
@@ -459,7 +459,7 @@ onMounted(async () => {
                       :disabled="detailSaving"
                       @click="detailEnabled = !detailEnabled">
                 <div class="absolute top-0.5 w-4 h-4 dd-rounded shadow-sm transition-transform"
-                     :style="{ backgroundColor: 'var(--dd-text)', left: detailEnabled ? '20px' : '2px' }" />
+                     :style="{ backgroundColor: 'var(--dd-bg)', left: detailEnabled ? '20px' : '2px' }" />
               </button>
               <div class="text-[10px] mt-1 dd-text-muted">
                 {{ detailEnabled ? 'Enabled: notifications can fire for this event.' : 'Disabled: notifications are suppressed for this event.' }}
