@@ -3261,7 +3261,7 @@ describe('Docker Watcher', () => {
       });
     });
 
-    test('should default display name to drydock for drydock image', async () => {
+    test('should default display name to container name for drydock image', async () => {
       const container = await setupContainerDetailTest(docker, {
         container: {
           Image: 'ghcr.io/codeswhat/drydock:latest',
@@ -3278,7 +3278,7 @@ describe('Docker Watcher', () => {
 
       const result = await docker.addImageDetailsToContainer(container);
 
-      expect(result.displayName).toBe('drydock');
+      expect(result.displayName).toBe('dd');
     });
 
     test('should keep custom display name when provided', async () => {

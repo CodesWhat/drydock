@@ -82,11 +82,6 @@ export function getContainerDisplayName(
     return displayName;
   }
 
-  const normalizedImagePath = (parsedImagePath || '').toLowerCase();
-  if (normalizedImagePath === 'drydock' || normalizedImagePath.endsWith('/drydock')) {
-    return 'drydock';
-  }
-
   return containerName;
 }
 
