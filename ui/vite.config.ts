@@ -42,6 +42,26 @@ export default defineConfig({
     outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.replaceAll('\\', '/');
+          if (!normalizedId.includes('/node_modules/')) {
+            return undefined;
+          }
+
+          if (normalizedId.includes('/vue/') || normalizedId.includes('/vue-router/')) {
+            return 'framework';
+          }
+
+          if (normalizedId.includes('/iconify-icon/')) {
+            return 'icons';
+          }
+
+          return 'vendor';
+        },
+      },
+    },
   },
 
   define: {
