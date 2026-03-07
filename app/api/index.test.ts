@@ -204,6 +204,7 @@ describe('API Index', () => {
     await indexRouter.init();
 
     expect(mockApp.use).toHaveBeenCalledWith('/health', 'health-router');
+    expect(mockApp.use).toHaveBeenCalledWith('/api/v1', 'api-router');
     expect(mockApp.use).toHaveBeenCalledWith('/api', 'api-router');
     expect(mockApp.use).toHaveBeenCalledWith('/metrics', 'prometheus-router');
     expect(mockApp.use).toHaveBeenCalledWith('/', 'ui-router');
@@ -335,6 +336,9 @@ describe('API Index', () => {
 
     const compressionOptions = compressionModule.default.mock.calls[0][0];
     expect(compressionOptions.filter({ path: '/api/events/stream', headers: {} }, {})).toBe(false);
+    expect(compressionOptions.filter({ path: '/api/v1/events/stream', headers: {} }, {})).toBe(
+      false,
+    );
     expect(compressionOptions.filter({ path: '/events/ui', headers: {} }, {})).toBe(false);
     expect(
       compressionOptions.filter(

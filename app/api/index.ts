@@ -14,6 +14,7 @@ import { getServerConfiguration } from '../configuration/index.js';
 import * as settingsStore from '../store/settings.js';
 import * as apiRouter from './api.js';
 import * as auth from './auth.js';
+import { normalizeErrorResponsePayload, sendErrorResponse } from './error-response.js';
 import * as healthRouter from './health.js';
 import * as prometheusRouter from './prometheus.js';
 import * as uiRouter from './ui.js';
@@ -24,7 +25,10 @@ function shouldSkipCompression(req) {
   const acceptsEventStream =
     typeof req.headers?.accept === 'string' && req.headers.accept.includes('text/event-stream');
   return (
-    acceptsEventStream || req.path.startsWith('/api/events/') || req.path.startsWith('/events/')
+    acceptsEventStream ||
+    req.path.startsWith('/api/events/') ||
+    req.path.startsWith('/api/v1/events/') ||
+    req.path.startsWith('/events/')
   );
 }
 
@@ -90,6 +94,7 @@ function configureSecurityHeaders(app) {
 function registerRoutes(app) {
   auth.init(app);
   app.use('/health', healthRouter.init());
+  app.use('/api/v1', apiRouter.init());
   app.use('/api', apiRouter.init());
   app.use('/metrics', prometheusRouter.init());
   app.use('/', uiRouter.init());
@@ -99,7 +104,7 @@ function registerErrorHandler(app) {
   // Global JSON error handler — ensures unhandled exceptions return JSON instead of HTML
   app.use((err, _req, res, _next) => {
     log.error(`Unhandled error: ${getErrorMessage(err)}`);
-    res.status(err.status || 500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, err.status || 500, 'Internal server error');
   });
 }
 
@@ -162,6 +167,7 @@ function createApp() {
   }
 
   configureCors(app);
+  app.use(normalizeErrorResponsePayload);
   registerRoutes(app);
   registerErrorHandler(app);
   return app;
