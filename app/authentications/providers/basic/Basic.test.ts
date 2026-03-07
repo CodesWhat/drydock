@@ -1,4 +1,5 @@
-var { mockTimingSafeEqual } = vi.hoisted(() => ({
+var { mockScryptSync, mockTimingSafeEqual } = vi.hoisted(() => ({
+  mockScryptSync: vi.fn(),
   mockTimingSafeEqual: vi.fn(
     (left: Buffer, right: Buffer) => left.length === right.length && left.equals(right),
   ),
@@ -6,19 +7,37 @@ var { mockTimingSafeEqual } = vi.hoisted(() => ({
 
 vi.mock('node:crypto', async () => {
   const actual = await vi.importActual<typeof import('node:crypto')>('node:crypto');
+  mockScryptSync.mockImplementation((password, salt, keylen, options) =>
+    actual.scryptSync(password, salt, keylen, options),
+  );
   return {
     ...actual,
+    scryptSync: mockScryptSync,
     timingSafeEqual: mockTimingSafeEqual,
   };
 });
 
+import { scryptSync } from 'node:crypto';
 import Basic from './Basic.js';
+
+function createScryptHash(
+  password: string,
+  params: { N: number; r: number; p: number } = { N: 16384, r: 8, p: 1 },
+) {
+  const salt = Buffer.from('drydock-basic-auth-salt');
+  const derived = scryptSync(password, salt, 64, params);
+  return `scrypt$${params.N}$${params.r}$${params.p}$${salt.toString('base64')}$${derived.toString('base64')}`;
+}
+
+const VALID_SALT_BASE64 = Buffer.from('1234567890abcdef').toString('base64');
+const VALID_HASH_BASE64 = Buffer.alloc(32, 1).toString('base64');
 
 describe('Basic Authentication', () => {
   let basic;
 
   beforeEach(async () => {
     basic = new Basic();
+    mockScryptSync.mockClear();
     mockTimingSafeEqual.mockClear();
   });
 
@@ -31,7 +50,7 @@ describe('Basic Authentication', () => {
     // Mock configuration to avoid validation errors
     basic.configuration = {
       user: 'testuser',
-      hash: '$2b$10$test.hash.value',
+      hash: createScryptHash('password'),
     };
 
     const strategy = basic.getStrategy();
@@ -50,23 +69,18 @@ describe('Basic Authentication', () => {
   test('should mask configuration hash', async () => {
     basic.configuration = {
       user: 'testuser',
-      hash: '$2b$10$test.hash.value',
+      hash: createScryptHash('password'),
     };
     const masked = basic.maskConfiguration();
     expect(masked.user).toBe('testuser');
-    expect(masked.hash).toBe('$********************e');
+    expect(masked.hash).toBe('[REDACTED]');
   });
 
   test('should authenticate valid user', async () => {
-    const { default: passJs } = await import('pass');
     basic.configuration = {
       user: 'testuser',
-      hash: '$2b$10$test.hash.value',
+      hash: createScryptHash('password'),
     };
-
-    passJs.validate = vi.fn((pass, hash, callback) => {
-      callback(null, true);
-    });
 
     await new Promise<void>((resolve) => {
       basic.authenticate('testuser', 'password', (err, result) => {
@@ -79,7 +93,7 @@ describe('Basic Authentication', () => {
   test('should reject invalid user', async () => {
     basic.configuration = {
       user: 'testuser',
-      hash: '$2b$10$test.hash.value',
+      hash: createScryptHash('password'),
     };
 
     await new Promise<void>((resolve) => {
@@ -91,12 +105,10 @@ describe('Basic Authentication', () => {
   });
 
   test('should compare usernames with timingSafeEqual', async () => {
-    const { default: passJs } = await import('pass');
     basic.configuration = {
       user: 'testuser',
-      hash: '$2b$10$test.hash.value',
+      hash: createScryptHash('password'),
     };
-    passJs.validate = vi.fn();
 
     await new Promise<void>((resolve) => {
       basic.authenticate('wronguser', 'password', (err, result) => {
@@ -106,19 +118,13 @@ describe('Basic Authentication', () => {
     });
 
     expect(mockTimingSafeEqual).toHaveBeenCalledTimes(1);
-    expect(passJs.validate).not.toHaveBeenCalled();
   });
 
   test('should reject invalid password', async () => {
-    const { default: passJs } = await import('pass');
     basic.configuration = {
       user: 'testuser',
-      hash: '$2b$10$test.hash.value',
+      hash: createScryptHash('password'),
     };
-
-    passJs.validate = vi.fn((pass, hash, callback) => {
-      callback(null, false);
-    });
 
     await new Promise<void>((resolve) => {
       basic.authenticate('testuser', 'wrongpassword', (err, result) => {
@@ -131,7 +137,7 @@ describe('Basic Authentication', () => {
   test('should reject null user', async () => {
     basic.configuration = {
       user: 'testuser',
-      hash: '$2b$10$test.hash.value',
+      hash: createScryptHash('password'),
     };
 
     await new Promise<void>((resolve) => {
@@ -146,11 +152,11 @@ describe('Basic Authentication', () => {
     expect(
       basic.validateConfiguration({
         user: 'testuser',
-        hash: 'somehash',
+        hash: createScryptHash('password'),
       }),
     ).toEqual({
       user: 'testuser',
-      hash: 'somehash',
+      hash: createScryptHash('password'),
     });
   });
 
@@ -159,21 +165,92 @@ describe('Basic Authentication', () => {
   });
 
   test('should delegate authentication through strategy callback', async () => {
-    const { default: passJs } = await import('pass');
     basic.configuration = {
       user: 'testuser',
-      hash: '$2b$10$test.hash.value',
+      hash: createScryptHash('password'),
     };
-
-    passJs.validate = vi.fn((pass, hash, callback) => {
-      callback(null, true);
-    });
 
     const strategy = basic.getStrategy();
     // The strategy stores the verify callback; invoke it to cover line 37
     await new Promise<void>((resolve) => {
       strategy._verify('testuser', 'password', (err, result) => {
         expect(result).toEqual({ username: 'testuser' });
+        resolve();
+      });
+    });
+  });
+
+  test('should reject legacy SHA-1 hash format', async () => {
+    basic.configuration = {
+      user: 'testuser',
+      hash: '{SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g=',
+    };
+
+    await new Promise<void>((resolve) => {
+      basic.authenticate('testuser', 'password', (err, result) => {
+        expect(result).toBe(false);
+        resolve();
+      });
+    });
+  });
+
+  test('should reject scrypt hashes with empty base64 segments', async () => {
+    expect(() =>
+      basic.validateConfiguration({
+        user: 'testuser',
+        hash: `scrypt$16384$8$1$$${VALID_HASH_BASE64}`,
+      }),
+    ).toThrow('must be a scrypt hash');
+  });
+
+  test('should reject scrypt hashes with malformed base64 segments', async () => {
+    expect(() =>
+      basic.validateConfiguration({
+        user: 'testuser',
+        hash: `scrypt$16384$8$1$not*base64$${VALID_HASH_BASE64}`,
+      }),
+    ).toThrow('must be a scrypt hash');
+  });
+
+  test('should reject scrypt hashes with invalid parameter ranges', async () => {
+    expect(() =>
+      basic.validateConfiguration({
+        user: 'testuser',
+        hash: `scrypt$1024$8$1$${VALID_SALT_BASE64}$${VALID_HASH_BASE64}`,
+      }),
+    ).toThrow('must be a scrypt hash');
+  });
+
+  test('should reject scrypt hashes with non-numeric parameters', async () => {
+    expect(() =>
+      basic.validateConfiguration({
+        user: 'testuser',
+        hash: `scrypt$NaN$8$1$${VALID_SALT_BASE64}$${VALID_HASH_BASE64}`,
+      }),
+    ).toThrow('must be a scrypt hash');
+  });
+
+  test('should reject scrypt hashes with non-positive parameters', async () => {
+    expect(() =>
+      basic.validateConfiguration({
+        user: 'testuser',
+        hash: `scrypt$16384$0$1$${VALID_SALT_BASE64}$${VALID_HASH_BASE64}`,
+      }),
+    ).toThrow('must be a scrypt hash');
+  });
+
+  test('should reject authentication when scrypt derivation fails', async () => {
+    basic.configuration = {
+      user: 'testuser',
+      hash: createScryptHash('password'),
+    };
+    mockScryptSync.mockImplementationOnce(() => {
+      throw new Error('scrypt unavailable');
+    });
+
+    await new Promise<void>((resolve) => {
+      basic.authenticate('testuser', 'password', (_err, result) => {
+        expect(result).toBe(false);
         resolve();
       });
     });
