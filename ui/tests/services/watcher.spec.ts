@@ -132,7 +132,7 @@ describe('Watcher Service', () => {
 
     const result = await getWatcher({ agent: 'edge', type: 'docker', name: 'local' });
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/watchers/edge/docker/local', {
+    expect(global.fetch).toHaveBeenCalledWith('/api/watchers/docker/local/edge', {
       credentials: 'include',
     });
     expect(result).toEqual(mockWatcher);

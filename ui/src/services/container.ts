@@ -285,7 +285,8 @@ async function getContainerGroups(): Promise<ContainerGroup[]> {
   if (!response.ok) {
     throw new Error(`Failed to get container groups: ${response.statusText}`);
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData<ContainerGroup>(payload);
 }
 
 async function scanContainer(containerId: string, signal?: AbortSignal) {

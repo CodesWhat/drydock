@@ -60,10 +60,10 @@ async function getAllAuthentications() {
 
 function buildAuthenticationDetailPath({ type, name, agent }: AuthenticationDetailPathOptions) {
   const segments = ['/api/authentications'];
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
   if (agent) {
     segments.push(encodeURIComponent(agent));
   }
-  segments.push(encodeURIComponent(type), encodeURIComponent(name));
   return segments.join('/');
 }
 

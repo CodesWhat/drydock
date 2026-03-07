@@ -110,10 +110,10 @@ async function getAllRegistries() {
 
 function buildRegistryDetailPath({ type, name, agent }: RegistryDetailPathOptions) {
   const segments = ['/api/registries'];
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
   if (agent) {
     segments.push(encodeURIComponent(agent));
   }
-  segments.push(encodeURIComponent(type), encodeURIComponent(name));
   return segments.join('/');
 }
 

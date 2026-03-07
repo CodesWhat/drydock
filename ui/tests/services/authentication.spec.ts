@@ -149,7 +149,7 @@ describe('Authentication Service', () => {
 
     const result = await getAuthentication({ agent: 'edge', type: 'basic', name: 'local' });
 
-    expect(fetch).toHaveBeenCalledWith('/api/authentications/edge/basic/local', {
+    expect(fetch).toHaveBeenCalledWith('/api/authentications/basic/local/edge', {
       credentials: 'include',
     });
     expect(result).toEqual(mockAuthentication);

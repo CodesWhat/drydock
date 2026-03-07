@@ -201,7 +201,7 @@ describe('Registry Service', () => {
 
       const result = await getRegistry({ agent: 'edge', type: 'hub', name: 'private' });
 
-      expect(fetch).toHaveBeenCalledWith('/api/registries/edge/hub/private', {
+      expect(fetch).toHaveBeenCalledWith('/api/registries/hub/private/edge', {
         credentials: 'include',
       });
       expect(result).toEqual(mockRegistry);

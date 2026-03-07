@@ -108,12 +108,25 @@ function getTriggerProviderColor(type: string) {
   }
 }
 
+function extractCollectionData<T>(payload: unknown): T[] {
+  if (Array.isArray(payload)) {
+    return payload as T[];
+  }
+  if (payload && typeof payload === 'object') {
+    if (Array.isArray((payload as { data?: unknown }).data)) {
+      return (payload as { data: T[] }).data;
+    }
+  }
+  return [];
+}
+
 async function getAllTriggers() {
   const response = await fetch('/api/triggers', { credentials: 'include' });
   if (!response.ok) {
     throw new Error(`Failed to get triggers: ${response.statusText}`);
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData(payload);
 }
 
 function buildTriggerDetailPath({ type, name, agent }: TriggerDetailPathOptions) {

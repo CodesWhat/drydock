@@ -48,10 +48,10 @@ async function getAllWatchers() {
 
 function buildWatcherDetailPath({ type, name, agent }: WatcherDetailPathOptions) {
   const segments = ['/api/watchers'];
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
   if (agent) {
     segments.push(encodeURIComponent(agent));
   }
-  segments.push(encodeURIComponent(type), encodeURIComponent(name));
   return segments.join('/');
 }
 
