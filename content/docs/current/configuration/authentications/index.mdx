@@ -22,34 +22,34 @@ Currently, the following strategies are supported:
 
 On previous versions of drydock (and upstream WUD), the dashboard was accessible without any login. Starting with v1.4.0, anonymous access must be explicitly opted into on fresh installs.
 
-### `DD_AUTH_ANONYMOUS_CONFIRM`
+### `DD_ANONYMOUS_AUTH_CONFIRM`
 
-Set `DD_AUTH_ANONYMOUS_CONFIRM=true` to explicitly allow anonymous (unauthenticated) access to the dashboard and API.
+Set `DD_ANONYMOUS_AUTH_CONFIRM=true` to explicitly allow anonymous (unauthenticated) access to the dashboard and API.
 
 ```yaml
 environment:
-  - DD_AUTH_ANONYMOUS_CONFIRM=true
+  - DD_ANONYMOUS_AUTH_CONFIRM=true
 ```
 
 ### Behavior matrix
 
 | Scenario | Result |
 | --- | --- |
-| Fresh install, no auth configured, no `DD_AUTH_ANONYMOUS_CONFIRM` | Fails closed — all API calls return `401` |
-| Fresh install, `DD_AUTH_ANONYMOUS_CONFIRM=true` | Anonymous access allowed |
+| Fresh install, no auth configured, no `DD_ANONYMOUS_AUTH_CONFIRM` | Fails closed — all API calls return `401` |
+| Fresh install, `DD_ANONYMOUS_AUTH_CONFIRM=true` | Anonymous access allowed |
 | Upgrade from v1.3.x, no auth configured | Anonymous access allowed with a warning logged at startup |
-| Upgrade from v1.3.x, `DD_AUTH_ANONYMOUS_CONFIRM=true` | Anonymous access allowed, no warning |
+| Upgrade from v1.3.x, `DD_ANONYMOUS_AUTH_CONFIRM=true` | Anonymous access allowed, no warning |
 
 <Callout type="info">drydock detects an upgrade by the presence of an existing store file (`/store/dd.json`). If the file exists, the install is treated as an upgrade; if it does not, it is treated as a fresh install.</Callout>
 
 ### Upgrading from v1.3.x
 
-<Callout type="warn">If you are upgrading from v1.3.x and have no authentication configured, drydock will **not** lock you out. Anonymous access continues to work, but a warning is logged at startup urging you to configure authentication or set `DD_AUTH_ANONYMOUS_CONFIRM=true` to acknowledge the risk and silence the warning.</Callout>
+<Callout type="warn">If you are upgrading from v1.3.x and have no authentication configured, drydock will **not** lock you out. Anonymous access continues to work, but a warning is logged at startup urging you to configure authentication or set `DD_ANONYMOUS_AUTH_CONFIRM=true` to acknowledge the risk and silence the warning.</Callout>
 
 To resolve the warning, either:
 
 1. **Configure authentication** — set `DD_AUTH_BASIC_<name>_USER` and `DD_AUTH_BASIC_<name>_HASH` (or use [OIDC](/docs/configuration/authentications/oidc)).
-2. **Explicitly opt in to anonymous access** — set `DD_AUTH_ANONYMOUS_CONFIRM=true`.
+2. **Explicitly opt in to anonymous access** — set `DD_ANONYMOUS_AUTH_CONFIRM=true`.
 
 ## Fail-closed auth enforcement
 
