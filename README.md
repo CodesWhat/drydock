@@ -73,6 +73,7 @@ docker run -d \
 
 > The example hash above is for the password `password` — generate your own with `htpasswd -nbs admin yourpassword`.
 > Authentication is **required by default**. See the [auth docs](https://drydock.codeswhat.com/docs/configuration/authentications) for OIDC, anonymous access, and other options.
+> To explicitly allow anonymous access on fresh installs, set `DD_ANONYMOUS_AUTH_CONFIRM=true`.
 
 The image includes `trivy` and `cosign` binaries for local vulnerability scanning and image verification.
 
