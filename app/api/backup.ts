@@ -5,6 +5,7 @@ import * as registry from '../registry/index.js';
 import * as storeBackup from '../store/backup.js';
 import * as storeContainer from '../store/container.js';
 import { recordAuditEvent } from './audit-events.js';
+import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
 import { sendErrorResponse } from './error-response.js';
 import { handleContainerActionError } from './helpers.js';
@@ -137,6 +138,10 @@ export function init() {
   router.use(nocache());
   router.get('/', getBackups);
   router.get('/:id/backups', getContainerBackups);
-  router.post('/:id/rollback', rollbackContainer);
+  router.post(
+    '/:id/rollback',
+    requireDestructiveActionConfirmation('container-rollback'),
+    rollbackContainer,
+  );
   return router;
 }

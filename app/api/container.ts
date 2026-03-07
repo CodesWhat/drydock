@@ -35,6 +35,7 @@ import {
 } from './container/shared.js';
 import { createTriggerHandlers } from './container/triggers.js';
 import { createUpdatePolicyHandlers } from './container/update-policy.js';
+import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import { broadcastScanCompleted, broadcastScanStarted } from './sse.js';
 
 const log = logger.child({ component: 'container' });
@@ -150,7 +151,7 @@ const crudHandlers = createCrudHandlers({
 
 const triggerHandlers = createTriggerHandlers({
   storeContainer,
-  mapComponentsToList,
+  mapComponentsToList: (components) => mapComponentsToList(components, 'trigger'),
   getTriggers,
   Trigger,
   sanitizeLogParam,
@@ -207,7 +208,11 @@ export function init() {
   router.get('/security/vulnerabilities', crudHandlers.getContainerSecurityVulnerabilities);
   router.get('/:id', crudHandlers.getContainer);
   router.get('/:id/update-operations', crudHandlers.getContainerUpdateOperations);
-  router.delete('/:id', crudHandlers.deleteContainer);
+  router.delete(
+    '/:id',
+    requireDestructiveActionConfirmation('container-delete'),
+    crudHandlers.deleteContainer,
+  );
   router.get('/:id/triggers', triggerHandlers.getContainerTriggers);
   router.post('/:id/triggers/:triggerType/:triggerName', triggerHandlers.runTrigger);
   router.post('/:id/triggers/:triggerType/:triggerName/:triggerAgent', triggerHandlers.runTrigger);

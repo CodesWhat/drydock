@@ -64,6 +64,10 @@ interface SecurityVulnerabilityOverviewResponse {
   images: SecurityImageVulnerabilityGroup[];
 }
 
+interface WatchContainersBody {
+  containerIds?: string[];
+}
+
 interface UpdateOperationStoreApi {
   getOperationsByContainerName: (containerName: string) => unknown[];
 }
@@ -118,6 +122,7 @@ export interface CrudHandlerDependencies {
 }
 
 const CONTAINER_LIST_MAX_LIMIT = 200;
+const WATCH_CONTAINERS_MAX_IDS = 200;
 
 function removeContainerListControlParams(query: Request['query']): Request['query'] {
   const filteredQuery: Record<string, unknown> = {};
@@ -137,6 +142,64 @@ function normalizeContainerListPagination(query: Request['query']) {
     limit: Math.min(CONTAINER_LIST_MAX_LIMIT, Math.max(0, parsedLimit)),
     offset: Math.max(0, parsedOffset),
   };
+}
+
+function parseWatchContainersBody(body: unknown): { body?: WatchContainersBody; error?: string } {
+  if (body === undefined || body === null) {
+    return { body: {} };
+  }
+
+  if (typeof body !== 'object' || Array.isArray(body)) {
+    return { error: 'Request body must be an object' };
+  }
+
+  const requestBody = body as Record<string, unknown>;
+  const unknownKeys = Object.keys(requestBody).filter((key) => key !== 'containerIds');
+  if (unknownKeys.length > 0) {
+    return { error: `Unknown request properties: ${unknownKeys.join(', ')}` };
+  }
+
+  const { containerIds } = requestBody;
+  if (containerIds === undefined) {
+    return { body: {} };
+  }
+  if (!Array.isArray(containerIds)) {
+    return { error: 'containerIds must be an array of non-empty strings' };
+  }
+  if (containerIds.length === 0) {
+    return { error: 'containerIds must not be empty' };
+  }
+  if (containerIds.length > WATCH_CONTAINERS_MAX_IDS) {
+    return { error: `containerIds must contain at most ${WATCH_CONTAINERS_MAX_IDS} entries` };
+  }
+
+  const normalizedIds: string[] = [];
+  const seenIds = new Set<string>();
+  for (const containerId of containerIds) {
+    if (typeof containerId !== 'string' || containerId.trim() === '') {
+      return { error: 'containerIds must be an array of non-empty strings' };
+    }
+    const normalizedId = containerId.trim();
+    if (seenIds.has(normalizedId)) {
+      continue;
+    }
+    seenIds.add(normalizedId);
+    normalizedIds.push(normalizedId);
+  }
+
+  return {
+    body: {
+      containerIds: normalizedIds,
+    },
+  };
+}
+
+function resolveWatcherIdForContainer(container: Container): string {
+  let watcherId = `docker.${container.watcher}`;
+  if (container.agent) {
+    watcherId = `${container.agent}.${watcherId}`;
+  }
+  return watcherId;
 }
 
 function stripContainerVulnerabilityArrays(container: Container): Container {
@@ -470,8 +533,50 @@ export function createCrudHandlers({
    * @returns {Promise<void>}
    */
   async function watchContainers(req: Request, res: Response) {
+    const parsedBody = parseWatchContainersBody(req.body);
+    if (parsedBody.error) {
+      sendErrorResponse(res, 400, parsedBody.error);
+      return;
+    }
+
+    const watcherMap = getWatchers();
+    const containerIds = parsedBody.body?.containerIds;
     try {
-      await Promise.all(Object.values(getWatchers()).map((watcher) => watcher.watch()));
+      if (Array.isArray(containerIds) && containerIds.length > 0) {
+        const selectedTargets: Array<{
+          container: Container;
+          watcher: LocalContainerWatcher;
+        }> = [];
+
+        for (const containerId of containerIds) {
+          const container = storeContainer.getContainer(containerId);
+          if (!container) {
+            sendErrorResponse(res, 404, 'Container not found');
+            return;
+          }
+
+          const watcherId = resolveWatcherIdForContainer(container);
+          const watcher = watcherMap[watcherId];
+          if (!watcher) {
+            res.status(500).json({
+              error: `No provider found for container ${container.id} and provider ${watcherId}`,
+            });
+            return;
+          }
+
+          selectedTargets.push({
+            container,
+            watcher,
+          });
+        }
+
+        await Promise.all(
+          selectedTargets.map((target) => target.watcher.watchContainer(target.container)),
+        );
+      } else {
+        await Promise.all(Object.values(watcherMap).map((watcher) => watcher.watch()));
+      }
+
       res.status(200).json(buildContainerListResponse(req.query, '/api/containers/watch'));
     } catch (error: unknown) {
       res.status(500).json({
@@ -495,10 +600,7 @@ export function createCrudHandlers({
       return;
     }
 
-    let watcherId = `docker.${container.watcher}`;
-    if (container.agent) {
-      watcherId = `${container.agent}.${watcherId}`;
-    }
+    const watcherId = resolveWatcherIdForContainer(container);
     const watcher = getWatchers()[watcherId];
     if (!watcher) {
       res.status(500).json({

@@ -2,6 +2,24 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createMockResponse } from '../../test/helpers.js';
 import { createCrudHandlers } from './crud.js';
 
+type CrudDependencies = Parameters<typeof createCrudHandlers>[0];
+
+type GroupedCrudDepsInput = {
+  getContainersFromStore: CrudDependencies['storeApi']['getContainersFromStore'];
+  getContainerCountFromStore: CrudDependencies['storeApi']['getContainerCountFromStore'];
+  storeContainer: CrudDependencies['storeApi']['storeContainer'];
+  updateOperationStore: CrudDependencies['storeApi']['updateOperationStore'];
+  getContainerRaw: NonNullable<CrudDependencies['storeApi']['getContainerRaw']>;
+  getServerConfiguration: CrudDependencies['agentApi']['getServerConfiguration'];
+  getAgent: CrudDependencies['agentApi']['getAgent'];
+  getWatchers: CrudDependencies['agentApi']['getWatchers'];
+  getErrorMessage: CrudDependencies['errorApi']['getErrorMessage'];
+  getErrorStatusCode: CrudDependencies['errorApi']['getErrorStatusCode'];
+  redactContainerRuntimeEnv: CrudDependencies['securityApi']['redactContainerRuntimeEnv'];
+  redactContainersRuntimeEnv: CrudDependencies['securityApi']['redactContainersRuntimeEnv'];
+  auditStore: NonNullable<CrudDependencies['securityApi']['auditStore']>;
+};
+
 function createContainer(overrides: Record<string, unknown> = {}) {
   return {
     id: 'c1',
@@ -20,7 +38,7 @@ function createContainer(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function groupCrudDeps(deps: any): Parameters<typeof createCrudHandlers>[0] {
+function groupCrudDeps(deps: GroupedCrudDepsInput): CrudDependencies {
   return {
     storeApi: {
       getContainersFromStore: deps.getContainersFromStore,
@@ -158,10 +176,19 @@ async function callDeleteContainer(
 
 async function callWatchContainers(
   handlers: ReturnType<typeof createCrudHandlers>,
-  query: Record<string, unknown> = {},
+  options: {
+    query?: Record<string, unknown>;
+    body?: unknown;
+  } = {},
 ) {
   const res = createMockResponse();
-  await handlers.watchContainers({ query } as any, res as any);
+  await handlers.watchContainers(
+    {
+      query: options.query ?? {},
+      body: options.body,
+    } as any,
+    res as any,
+  );
   return res;
 }
 
@@ -1079,7 +1106,7 @@ describe('api/container/crud', () => {
         'docker.remote': watcherB,
       });
 
-      const res = await callWatchContainers(harness.handlers, { watcher: 'docker' });
+      const res = await callWatchContainers(harness.handlers, { query: { watcher: 'docker' } });
 
       expect(watcherA.watch).toHaveBeenCalledTimes(1);
       expect(watcherB.watch).toHaveBeenCalledTimes(1);
@@ -1108,6 +1135,201 @@ describe('api/container/crud', () => {
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
         error: 'Error when watching images (watch failed)',
+      });
+    });
+
+    test('watchContainers validates request payload and rejects unknown properties', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+      const watcher = {
+        watch: vi.fn().mockResolvedValue(undefined),
+        watchContainer: vi.fn().mockResolvedValue({ container: createContainer({ id: 'c1' }) }),
+      };
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': watcher,
+      });
+
+      const res = await callWatchContainers(harness.handlers, {
+        body: {
+          containerIds: ['c1'],
+          unexpected: true,
+        },
+      });
+
+      expect(watcher.watch).not.toHaveBeenCalled();
+      expect(watcher.watchContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Unknown request properties: unexpected',
+      });
+    });
+
+    test('watchContainers treats an empty payload object as watch-all', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+      const watcher = {
+        watch: vi.fn().mockResolvedValue(undefined),
+        watchContainer: vi.fn(),
+      };
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': watcher,
+      });
+
+      const res = await callWatchContainers(harness.handlers, {
+        body: {},
+      });
+
+      expect(watcher.watch).toHaveBeenCalledTimes(1);
+      expect(watcher.watchContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('watchContainers validates payload types and containerIds constraints', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+
+      const invalidBodyRes = await callWatchContainers(harness.handlers, {
+        body: ['c1'],
+      });
+      expect(invalidBodyRes.status).toHaveBeenCalledWith(400);
+      expect(invalidBodyRes.json).toHaveBeenCalledWith({
+        error: 'Request body must be an object',
+      });
+
+      const nonArrayIdsRes = await callWatchContainers(harness.handlers, {
+        body: { containerIds: 'c1' },
+      });
+      expect(nonArrayIdsRes.status).toHaveBeenCalledWith(400);
+      expect(nonArrayIdsRes.json).toHaveBeenCalledWith({
+        error: 'containerIds must be an array of non-empty strings',
+      });
+
+      const emptyIdsRes = await callWatchContainers(harness.handlers, {
+        body: { containerIds: [] },
+      });
+      expect(emptyIdsRes.status).toHaveBeenCalledWith(400);
+      expect(emptyIdsRes.json).toHaveBeenCalledWith({
+        error: 'containerIds must not be empty',
+      });
+
+      const tooManyIdsRes = await callWatchContainers(harness.handlers, {
+        body: { containerIds: Array.from({ length: 201 }, (_, index) => `c${index}`) },
+      });
+      expect(tooManyIdsRes.status).toHaveBeenCalledWith(400);
+      expect(tooManyIdsRes.json).toHaveBeenCalledWith({
+        error: 'containerIds must contain at most 200 entries',
+      });
+
+      const invalidIdRes = await callWatchContainers(harness.handlers, {
+        body: { containerIds: ['c1', '   '] },
+      });
+      expect(invalidIdRes.status).toHaveBeenCalledWith(400);
+      expect(invalidIdRes.json).toHaveBeenCalledWith({
+        error: 'containerIds must be an array of non-empty strings',
+      });
+    });
+
+    test('watchContainers honors containerIds payload for targeted batch watch', async () => {
+      const c1 = createContainer({ id: 'c1', watcher: 'local', agent: undefined });
+      const c2 = createContainer({ id: 'c2', watcher: 'remote', agent: undefined });
+      const harness = createHarness({
+        containers: [c1, c2],
+      });
+      const watcherLocal = {
+        watch: vi.fn().mockResolvedValue(undefined),
+        watchContainer: vi.fn().mockResolvedValue({ container: c1 }),
+      };
+      const watcherRemote = {
+        watch: vi.fn().mockResolvedValue(undefined),
+        watchContainer: vi.fn().mockResolvedValue({ container: c2 }),
+      };
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': watcherLocal,
+        'docker.remote': watcherRemote,
+      });
+
+      const res = await callWatchContainers(harness.handlers, {
+        body: { containerIds: ['c1'] },
+      });
+
+      expect(watcherLocal.watch).not.toHaveBeenCalled();
+      expect(watcherRemote.watch).not.toHaveBeenCalled();
+      expect(watcherLocal.watchContainer).toHaveBeenCalledTimes(1);
+      expect(watcherLocal.watchContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }),
+      );
+      expect(watcherRemote.watchContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c1' }), expect.objectContaining({ id: 'c2' })],
+        total: 2,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
+    });
+
+    test('watchContainers de-duplicates targeted container ids before dispatching', async () => {
+      const c1 = createContainer({ id: 'c1', watcher: 'local', agent: undefined });
+      const c2 = createContainer({ id: 'c2', watcher: 'remote', agent: undefined });
+      const harness = createHarness({
+        containers: [c1, c2],
+      });
+      const watcherLocal = {
+        watch: vi.fn().mockResolvedValue(undefined),
+        watchContainer: vi.fn().mockResolvedValue({ container: c1 }),
+      };
+      const watcherRemote = {
+        watch: vi.fn().mockResolvedValue(undefined),
+        watchContainer: vi.fn().mockResolvedValue({ container: c2 }),
+      };
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': watcherLocal,
+        'docker.remote': watcherRemote,
+      });
+
+      const res = await callWatchContainers(harness.handlers, {
+        body: { containerIds: ['c1', ' c1 ', 'c2', 'c2'] },
+      });
+
+      expect(watcherLocal.watchContainer).toHaveBeenCalledTimes(1);
+      expect(watcherRemote.watchContainer).toHaveBeenCalledTimes(1);
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('watchContainers returns 404 when targeted container is missing', async () => {
+      const harness = createHarness();
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': {
+          watch: vi.fn(),
+          watchContainer: vi.fn(),
+        },
+      });
+
+      const res = await callWatchContainers(harness.handlers, {
+        body: { containerIds: ['missing'] },
+      });
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+    });
+
+    test('watchContainers returns 500 when targeted watcher provider is missing', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', watcher: 'local' })],
+      });
+      harness.deps.getWatchers.mockReturnValue({});
+
+      const res = await callWatchContainers(harness.handlers, {
+        body: { containerIds: ['c1'] },
+      });
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'No provider found for container c1 and provider docker.local',
       });
     });
 

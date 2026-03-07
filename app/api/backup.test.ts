@@ -46,7 +46,7 @@ import * as backupRouter from './backup.js';
 function getHandler(method, path) {
   backupRouter.init();
   const call = mockRouter[method].mock.calls.find((c) => c[0] === path);
-  return call[1];
+  return call[call.length - 1];
 }
 
 describe('Backup Router', () => {
@@ -60,7 +60,11 @@ describe('Backup Router', () => {
       expect(mockRouter.use).toHaveBeenCalledWith('nocache-middleware');
       expect(mockRouter.get).toHaveBeenCalledWith('/', expect.any(Function));
       expect(mockRouter.get).toHaveBeenCalledWith('/:id/backups', expect.any(Function));
-      expect(mockRouter.post).toHaveBeenCalledWith('/:id/rollback', expect.any(Function));
+      expect(mockRouter.post).toHaveBeenCalledWith(
+        '/:id/rollback',
+        expect.any(Function),
+        expect.any(Function),
+      );
     });
   });
 
@@ -154,6 +158,27 @@ describe('Backup Router', () => {
   });
 
   describe('rollbackContainer', () => {
+    test('should require destructive confirmation header', async () => {
+      backupRouter.init();
+      const call = mockRouter.post.mock.calls.find((c) => c[0] === '/:id/rollback');
+      const confirmationMiddleware = call?.[1];
+
+      const req = createMockRequest({
+        params: { id: 'c1' },
+        headers: {},
+      });
+      const res = createMockResponse();
+      const next = vi.fn();
+
+      confirmationMiddleware(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(428);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Confirmation required: X-DD-Confirm-Action=container-rollback',
+      });
+    });
+
     test('should return 404 when container not found', async () => {
       const handler = getHandler('post', '/:id/rollback');
       mockGetContainer.mockReturnValue(undefined);

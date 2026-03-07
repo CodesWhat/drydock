@@ -205,7 +205,11 @@ describe('Container Router', () => {
       expect(router.get).toHaveBeenCalledWith('/recent-status', expect.any(Function));
       expect(router.post).toHaveBeenCalledWith('/watch', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id', expect.any(Function));
-      expect(router.delete).toHaveBeenCalledWith('/:id', expect.any(Function));
+      expect(router.delete).toHaveBeenCalledWith(
+        '/:id',
+        expect.any(Function),
+        expect.any(Function),
+      );
       expect(router.get).toHaveBeenCalledWith('/:id/triggers', expect.any(Function));
       expect(router.post).toHaveBeenCalledWith(
         '/:id/triggers/:triggerType/:triggerName',
@@ -231,6 +235,23 @@ describe('Container Router', () => {
         expect.any(Function),
       );
       expect(router.get).toHaveBeenCalledWith('/:id/logs', expect.any(Function));
+    });
+
+    test('should require destructive confirmation header on delete route', () => {
+      containerRouter.init();
+      const deleteRoute = mockRouter.delete.mock.calls.find((c) => c[0] === '/:id');
+      const confirmationMiddleware = deleteRoute?.[1];
+
+      const req = { headers: {} };
+      const res = createResponse();
+      const next = vi.fn();
+      confirmationMiddleware(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(428);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Confirmation required: X-DD-Confirm-Action=container-delete',
+      });
     });
 
     test('should disable xForwardedForHeader validation on scan rate-limiter', () => {
