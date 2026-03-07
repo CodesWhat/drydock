@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Empty env var values rejected during container validation** — Joi schema on `details.env[].value` used `.string().required()` which implicitly disallows empty strings. Containers with empty environment variable values (e.g. `FOO=`) were silently skipped during watch cycles. Fixed with `.allow('')`. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+- **OIDC login broken by same-origin redirect check** — `LoginView.vue` restricted OIDC redirects to same-origin URLs, but OIDC Identity Provider URLs are always cross-origin (Authentik, Keycloak, etc.). Removed the same-origin check, keeping only HTTP/HTTPS protocol validation.
+- **Blank white screen on plain HTTP deployments** — Helmet.js defaults enabled HSTS and `upgrade-insecure-requests` CSP even when TLS was not configured, causing browsers to block sub-resource loads on plain HTTP. Now conditionally omits `upgrade-insecure-requests` and HSTS when TLS is off. Strict boolean check on `tls.enabled` prevents string coercion. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+- **Stale theme preferences after upgrade from v1.3** — Preferences migration `deepMerge` overwrote defaults with persisted values unconditionally, so invalid enum values (e.g. removed `drydock` theme family) survived migration and caused rendering failures. Added `sanitize()` pass that strips invalid theme families, variants, font families, icon libraries, scales, radius presets, view modes, and table actions before merge.
+
 ## [1.4.0] — 2026-02-28
 
 ### Added
