@@ -1,0 +1,428 @@
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { openApiDocument } from './openapi.js';
+import { validateOpenApiJsonResponse } from './openapi-contract.js';
+
+type MutableOpenApiDocument = {
+  paths: Record<string, unknown>;
+  components: {
+    schemas: Record<string, unknown>;
+  };
+};
+
+const mutableOpenApiDocument = openApiDocument as unknown as MutableOpenApiDocument;
+const originalPaths = structuredClone(mutableOpenApiDocument.paths);
+const originalSchemas = structuredClone(mutableOpenApiDocument.components.schemas);
+
+function setJsonContractSchema(
+  schema: unknown,
+  options: {
+    path?: string;
+    method?: 'get' | 'post' | 'put' | 'patch' | 'delete';
+    statusCode?: string;
+    schemas?: Record<string, unknown>;
+  } = {},
+) {
+  const path = options.path ?? '/contract';
+  const method = options.method ?? 'get';
+  const statusCode = options.statusCode ?? '200';
+
+  mutableOpenApiDocument.paths = {
+    [path]: {
+      [method]: {
+        responses: {
+          [statusCode]: {
+            content: {
+              'application/json': {
+                schema,
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+  mutableOpenApiDocument.components.schemas = options.schemas ?? {};
+}
+
+beforeEach(() => {
+  mutableOpenApiDocument.paths = structuredClone(originalPaths);
+  mutableOpenApiDocument.components.schemas = structuredClone(originalSchemas);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('validateOpenApiJsonResponse', () => {
+  test('returns descriptive errors for unknown path, operation, status, and missing json schema', () => {
+    mutableOpenApiDocument.paths = {};
+
+    const unknownPath = validateOpenApiJsonResponse({
+      path: '/missing',
+      method: 'get',
+      statusCode: '200',
+      payload: {},
+    });
+    expect(unknownPath).toEqual({
+      valid: false,
+      errors: ['Unknown OpenAPI path: /missing'],
+    });
+
+    mutableOpenApiDocument.paths = {
+      '/only-post': {
+        post: {
+          responses: {
+            '200': {
+              content: {
+                'application/json': {
+                  schema: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const unknownOperation = validateOpenApiJsonResponse({
+      path: '/only-post',
+      method: 'get',
+      statusCode: '200',
+      payload: {},
+    });
+    expect(unknownOperation).toEqual({
+      valid: false,
+      errors: ['Unknown operation: GET /only-post'],
+    });
+
+    setJsonContractSchema({ type: 'string' }, { statusCode: '201' });
+    const unknownStatus = validateOpenApiJsonResponse({
+      path: '/contract',
+      method: 'get',
+      statusCode: '200',
+      payload: {},
+    });
+    expect(unknownStatus).toEqual({
+      valid: false,
+      errors: ['Unknown response status 200 for GET /contract'],
+    });
+
+    mutableOpenApiDocument.paths = {
+      '/contract': {
+        get: {
+          responses: {
+            '200': {
+              content: {
+                'text/plain': { schema: { type: 'string' } },
+              },
+            },
+          },
+        },
+      },
+    };
+    const missingJsonSchema = validateOpenApiJsonResponse({
+      path: '/contract',
+      method: 'get',
+      statusCode: '200',
+      payload: {},
+    });
+    expect(missingJsonSchema).toEqual({
+      valid: false,
+      errors: ['No application/json schema for GET /contract 200'],
+    });
+  });
+
+  test('validates refs, recursive refs, allOf, enums, and additionalProperties variants', () => {
+    setJsonContractSchema({ $ref: 'https://example.com/schema' });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: {},
+      }),
+    ).toEqual({
+      valid: false,
+      errors: ['$: unresolved schema reference https://example.com/schema'],
+    });
+
+    setJsonContractSchema(
+      { $ref: '#/components/schemas/Node' },
+      {
+        schemas: {
+          Node: {
+            type: 'object',
+            properties: {
+              next: { $ref: '#/components/schemas/Node' },
+            },
+          },
+        },
+      },
+    );
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: { next: { next: {} } },
+      }),
+    ).toEqual({
+      valid: true,
+      errors: [],
+    });
+
+    setJsonContractSchema({
+      allOf: [{ type: 'string' }, { enum: ['ok'] }],
+    });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: 'nope',
+      }),
+    ).toEqual({
+      valid: false,
+      errors: ['$: expected one of ["ok"]'],
+    });
+
+    setJsonContractSchema({
+      type: 'object',
+      properties: {
+        known: { type: 'string' },
+      },
+      required: ['known'],
+      additionalProperties: false,
+    });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: { extra: 'x' },
+      }),
+    ).toEqual({
+      valid: false,
+      errors: ['$.known: is required', '$.extra: is not allowed by schema'],
+    });
+
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: { known: 'ok' },
+      }),
+    ).toEqual({
+      valid: true,
+      errors: [],
+    });
+
+    setJsonContractSchema({
+      type: 'object',
+      additionalProperties: { type: 'integer' },
+    });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: { answer: '42' },
+      }),
+    ).toEqual({
+      valid: false,
+      errors: ['$.answer: expected integer, got string'],
+    });
+  });
+
+  test('validates primitive mismatch messages, union types, and array item schemas', () => {
+    setJsonContractSchema({ type: 'null' });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: null,
+      }),
+    ).toEqual({
+      valid: true,
+      errors: [],
+    });
+
+    setJsonContractSchema({ enum: ['ok'] });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: 'ok',
+      }),
+    ).toEqual({
+      valid: true,
+      errors: [],
+    });
+
+    setJsonContractSchema({ type: 'string' });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: null,
+      }),
+    ).toEqual({
+      valid: false,
+      errors: ['$: expected string, got null'],
+    });
+
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: [],
+      }),
+    ).toEqual({
+      valid: false,
+      errors: ['$: expected string, got array'],
+    });
+
+    setJsonContractSchema({ type: ['string', 'boolean'] });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: 123,
+      }),
+    ).toEqual({
+      valid: false,
+      errors: ['$: expected one of string, boolean, got number'],
+    });
+
+    setJsonContractSchema({ type: [1, 2] });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: 123,
+      }),
+    ).toEqual({
+      valid: true,
+      errors: [],
+    });
+
+    setJsonContractSchema({ properties: { name: { type: 'string' } } });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: 'not-an-object',
+      }),
+    ).toEqual({
+      valid: false,
+      errors: ['$: expected object, got string'],
+    });
+
+    setJsonContractSchema({ type: 'array' });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: [1],
+      }),
+    ).toEqual({
+      valid: false,
+      errors: ['$[0]: schema is missing'],
+    });
+
+    setJsonContractSchema({ type: 'array', items: { type: 'integer' } });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: [1, '2'],
+      }),
+    ).toEqual({
+      valid: false,
+      errors: ['$[1]: expected integer, got string'],
+    });
+
+    setJsonContractSchema({
+      type: 'object',
+      additionalProperties: true,
+    });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: { passthrough: 'ok' },
+      }),
+    ).toEqual({
+      valid: true,
+      errors: [],
+    });
+  });
+
+  test('returns accumulated errors when object schemas fail the late object-shape check', () => {
+    const originalIsArray = Array.isArray;
+    const payload = ['value'];
+    let payloadChecks = 0;
+    const isArraySpy = vi.spyOn(Array, 'isArray').mockImplementation((candidate: unknown) => {
+      if (candidate === payload) {
+        payloadChecks += 1;
+        return payloadChecks > 1;
+      }
+      return originalIsArray(candidate);
+    });
+    setJsonContractSchema({
+      type: 'object',
+      enum: [{ kind: 'object' }],
+    });
+
+    const result = validateOpenApiJsonResponse({
+      path: '/contract',
+      method: 'get',
+      statusCode: '200',
+      payload,
+    });
+
+    expect(result).toEqual({
+      valid: false,
+      errors: ['$: expected one of [{"kind":"object"}]'],
+    });
+    isArraySpy.mockRestore();
+  });
+
+  test('covers defensive array type guard when Array.isArray behavior is inconsistent', () => {
+    const originalIsArray = Array.isArray;
+    const payload = ['value'];
+    let payloadChecks = 0;
+    const isArraySpy = vi.spyOn(Array, 'isArray').mockImplementation((candidate: unknown) => {
+      if (candidate === payload) {
+        payloadChecks += 1;
+        return payloadChecks === 1;
+      }
+      return originalIsArray(candidate);
+    });
+    setJsonContractSchema({ type: 'array', items: { type: 'string' } });
+
+    const result = validateOpenApiJsonResponse({
+      path: '/contract',
+      method: 'get',
+      statusCode: '200',
+      payload,
+    });
+
+    expect(result).toEqual({
+      valid: true,
+      errors: [],
+    });
+    isArraySpy.mockRestore();
+  });
+});

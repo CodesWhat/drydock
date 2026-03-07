@@ -1152,5 +1152,37 @@ describe('Auth Router', () => {
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Unable to clear session' });
     });
+
+    test('logout should return 500 when req.logout fails', () => {
+      const handler = getRouteHandler('post', '/logout');
+      const req = {
+        logout: vi.fn((done) => done(new Error('logout failed'))),
+        session: {
+          regenerate: vi.fn((done) => done()),
+        },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(req.logout).toHaveBeenCalled();
+      expect(req.session.regenerate).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to clear session' });
+    });
+
+    test('logout should return 500 when session regenerate is unavailable', () => {
+      const handler = getRouteHandler('post', '/logout');
+      const req = {
+        logout: vi.fn((done) => done()),
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(req.logout).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to clear session' });
+    });
   });
 });

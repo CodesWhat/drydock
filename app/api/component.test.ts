@@ -274,6 +274,63 @@ describe('Component Router', () => {
       });
     });
 
+    test('getAll handler should return an empty page when offset exceeds available components', () => {
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.alpha': { type: 'docker', name: 'alpha', maskConfiguration: vi.fn(() => ({})) },
+          'docker.beta': { type: 'docker', name: 'beta', maskConfiguration: vi.fn(() => ({})) },
+        },
+      });
+
+      component.init('watcher');
+      const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+      const res = createResponse();
+      getAllHandler({ query: { limit: '1', offset: '99' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [],
+        total: 2,
+        limit: 1,
+        offset: 99,
+        hasMore: false,
+      });
+    });
+
+    test('getAll handler should fallback when pagination values are non-numeric or query is missing', () => {
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.alpha': { type: 'docker', name: 'alpha', maskConfiguration: vi.fn(() => ({})) },
+        },
+      });
+
+      component.init('watcher');
+      const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const resWithInvalid = createResponse();
+      const resWithUndefinedQuery = createResponse();
+
+      getAllHandler({ query: { limit: 'oops', offset: 'oops' } }, resWithInvalid);
+      getAllHandler({}, resWithUndefinedQuery);
+
+      expect(resWithInvalid.status).toHaveBeenCalledWith(200);
+      expect(resWithInvalid.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'docker.alpha' })],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
+      expect(resWithUndefinedQuery.status).toHaveBeenCalledWith(200);
+      expect(resWithUndefinedQuery.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'docker.alpha' })],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
+    });
+
     test('getById handler via /:type/:name should work', () => {
       const comp = {
         type: 'docker',

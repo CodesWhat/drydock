@@ -17,6 +17,7 @@ vi.mock('../store/audit', () => ({
 }));
 
 import * as auditRouter from './audit.js';
+import * as paginationLinks from './pagination-links.js';
 
 describe('Audit Router', () => {
   beforeEach(() => {
@@ -205,6 +206,34 @@ describe('Audit Router', () => {
         next: '/api/audit?limit=2&offset=12',
       },
     });
+  });
+
+  test('should omit _links when pagination link builder returns undefined', () => {
+    const paginationSpy = vi
+      .spyOn(paginationLinks, 'buildPaginationLinks')
+      .mockReturnValue(undefined);
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+    mockGetAuditEntries.mockReturnValue({
+      entries: [{ id: 'a-1' }],
+      total: 1,
+    });
+
+    const req = createMockRequest({ query: {} });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      data: [{ id: 'a-1' }],
+      total: 1,
+      limit: 50,
+      offset: 0,
+      hasMore: false,
+    });
+    paginationSpy.mockRestore();
   });
 
   test('should return 400 when action query parameter is not a string', () => {

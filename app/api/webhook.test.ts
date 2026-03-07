@@ -281,6 +281,29 @@ describe('Webhook Router', () => {
       expect(next).not.toHaveBeenCalled();
     });
 
+    test('should normalize trailing slash paths when selecting endpoint tokens', () => {
+      mockGetWebhookConfiguration.mockReturnValue({
+        enabled: true,
+        token: 'shared-token',
+        tokens: {
+          watchall: 'watchall-token',
+          watch: 'watch-token',
+          update: '',
+        },
+      });
+      const middleware = getAuthMiddleware();
+      const req = createMockRequest({
+        path: '/watch/',
+        headers: { authorization: 'Bearer watchall-token' },
+      });
+      const res = createMockResponse();
+      const next = vi.fn();
+      middleware(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
     test('should use watch token for /watch/:containerName', () => {
       mockGetWebhookConfiguration.mockReturnValue({
         enabled: true,
@@ -340,6 +363,31 @@ describe('Webhook Router', () => {
       const middleware = getAuthMiddleware();
       const req = createMockRequest({
         path: '/update/my-nginx',
+        headers: { authorization: 'Bearer shared-token' },
+      });
+      const res = createMockResponse();
+      const next = vi.fn();
+      middleware(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('should fall back to shared token when request path is empty', () => {
+      mockGetWebhookConfiguration.mockReturnValue({
+        enabled: true,
+        token: 'shared-token',
+        tokens: {
+          watchall: 'watchall-token',
+          watch: 'watch-token',
+          update: 'update-token',
+        },
+      });
+      const middleware = getAuthMiddleware();
+      const req = createMockRequest({
+        path: '',
+        originalUrl: '',
+        url: '',
         headers: { authorization: 'Bearer shared-token' },
       });
       const res = createMockResponse();

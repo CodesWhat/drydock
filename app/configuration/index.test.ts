@@ -830,6 +830,7 @@ describe('getWebhookConfiguration', () => {
   beforeEach(() => {
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_UPDATE;
@@ -950,6 +951,13 @@ describe('getWebhookConfiguration', () => {
     } else {
       configuration.ddEnvVars.dd = originalDd;
     }
+  });
+
+  test('should throw when webhook tokens payload is not an object', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN = 'shared-token';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS = 'invalid';
+    expect(() => configuration.getWebhookConfiguration()).toThrow();
   });
 });
 

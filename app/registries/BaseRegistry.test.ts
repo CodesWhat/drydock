@@ -242,6 +242,36 @@ test('authenticateBearerFromAuthUrl should reject token endpoint host that does 
   expect(axios).not.toHaveBeenCalled();
 });
 
+test('authenticateBearerFromAuthUrl should trust host from configured registry url when request url is absent', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  baseRegistry.configuration = { url: 'https://auth.example.com/v2' };
+
+  const result = await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {} },
+    'https://auth.example.com/token',
+    undefined,
+  );
+
+  expect(axios).toHaveBeenCalledTimes(1);
+  expect(result.headers.Authorization).toBe('Bearer abc123');
+});
+
+test('authenticateBearerFromAuthUrl should fail closed when registry host cannot be inferred', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {} },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token endpoint host auth.example.com cannot be validated');
+
+  expect(axios).not.toHaveBeenCalled();
+});
+
 test('authenticateBearerFromAuthUrl should add basic auth header when credentials are provided without headers', async () => {
   const { default: axios } = await import('axios');
   axios.mockResolvedValue({ data: { token: 'abc123' } });
