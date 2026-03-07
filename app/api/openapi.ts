@@ -8,14 +8,11 @@ const genericArraySchema = {
 const emptyObjectSchema = { type: 'object', additionalProperties: false };
 type JsonSchema = { $ref: string } | Record<string, unknown>;
 
-const jsonContent = (schema: JsonSchema = { $ref: '#/components/schemas/GenericObject' }) => ({
+const jsonContent = (schema: JsonSchema) => ({
   'application/json': { schema },
 });
 
-const jsonResponse = (
-  description: string,
-  schema: JsonSchema = { $ref: '#/components/schemas/GenericObject' },
-) => ({
+const jsonResponse = (description: string, schema: JsonSchema) => ({
   description,
   content: jsonContent(schema),
 });
@@ -133,7 +130,7 @@ const notificationRuleIdPathParam = {
   schema: { type: 'string' },
 };
 
-const componentListQueryParams = [
+const paginationQueryParams = [
   {
     name: 'limit',
     in: 'query',
@@ -148,6 +145,10 @@ const componentListQueryParams = [
     description: 'Offset into results list',
     schema: { type: 'integer', minimum: 0 },
   },
+];
+
+const containerListQueryParams = [
+  ...paginationQueryParams,
   {
     name: 'includeVulnerabilities',
     in: 'query',
@@ -171,9 +172,10 @@ function createComponentReadOperations(options: {
         tags: [tag],
         summary: `List ${nounPlural}`,
         operationId: `${operationPrefix}List`,
+        parameters: paginationQueryParams,
         responses: {
           200: jsonResponse(`List of ${nounPlural}`, {
-            $ref: '#/components/schemas/CollectionResult',
+            $ref: '#/components/schemas/PaginatedResult',
           }),
           401: errorResponse('Authentication required'),
         },
@@ -186,20 +188,24 @@ function createComponentReadOperations(options: {
         operationId: `${operationPrefix}GetByTypeAndName`,
         parameters: [componentTypePathParam, componentNamePathParam],
         responses: {
-          200: jsonResponse(`${nounSingular} details`),
+          200: jsonResponse(`${nounSingular} details`, {
+            $ref: '#/components/schemas/ComponentItem',
+          }),
           401: errorResponse('Authentication required'),
           404: errorResponse(`${nounSingular} not found`),
         },
       },
     },
-    [`${basePath}/{agent}/{type}/{name}`]: {
+    [`${basePath}/{type}/{name}/{agent}`]: {
       get: {
         tags: [tag],
-        summary: `Get remote ${nounSingular} by agent, type, and name`,
-        operationId: `${operationPrefix}GetByAgentTypeAndName`,
-        parameters: [componentAgentPathParam, componentTypePathParam, componentNamePathParam],
+        summary: `Get remote ${nounSingular} by type, name, and agent`,
+        operationId: `${operationPrefix}GetByTypeAndNameAndAgent`,
+        parameters: [componentTypePathParam, componentNamePathParam, componentAgentPathParam],
         responses: {
-          200: jsonResponse(`${nounSingular} details`),
+          200: jsonResponse(`${nounSingular} details`, {
+            $ref: '#/components/schemas/ComponentItem',
+          }),
           401: errorResponse('Authentication required'),
           404: errorResponse(`${nounSingular} not found`),
         },
@@ -238,7 +244,7 @@ export const openApiDocument = {
     title: 'Drydock API',
     version: getVersion(),
     description:
-      'Machine-readable API specification for Drydock. Authentication defaults to session cookie auth. Mutating requests using session auth must also satisfy same-origin CSRF checks.',
+      'Machine-readable API specification for Drydock. Canonical API base path is /api/v1, with /api available as a compatibility alias. Authentication defaults to session cookie auth. Mutating requests using session auth must also satisfy same-origin CSRF checks.',
   },
   servers: [
     {
@@ -278,7 +284,8 @@ export const openApiDocument = {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'Token',
-        description: 'Bearer token configured via webhook settings.',
+        description:
+          'Bearer token configured via webhook settings (shared token or endpoint-specific webhook tokens).',
       },
     },
     schemas: {
@@ -286,12 +293,24 @@ export const openApiDocument = {
         type: 'object',
         properties: {
           error: { type: 'string' },
+          code: { type: 'string' },
           message: { type: 'string' },
+          details: { ...genericObjectSchema },
         },
+        required: ['error', 'code', 'message'],
         additionalProperties: true,
       },
       GenericObject: genericObjectSchema,
       GenericArray: genericArraySchema,
+      PaginationLinks: {
+        type: 'object',
+        properties: {
+          self: { type: 'string' },
+          next: { type: 'string' },
+        },
+        required: ['self'],
+        additionalProperties: false,
+      },
       PaginatedResult: {
         type: 'object',
         properties: {
@@ -303,6 +322,7 @@ export const openApiDocument = {
           limit: { type: 'integer', minimum: 0 },
           offset: { type: 'integer', minimum: 0 },
           hasMore: { type: 'boolean' },
+          _links: { $ref: '#/components/schemas/PaginationLinks' },
         },
         required: ['data', 'total', 'limit', 'offset', 'hasMore'],
         additionalProperties: true,
@@ -319,7 +339,445 @@ export const openApiDocument = {
         required: ['data', 'total'],
         additionalProperties: true,
       },
+      ActionResult: {
+        type: 'object',
+        properties: {
+          message: { type: 'string' },
+          result: {},
+        },
+        required: ['message', 'result'],
+        additionalProperties: true,
+      },
       EmptyObject: emptyObjectSchema,
+      HealthResponse: {
+        type: 'object',
+        properties: {
+          uptime: { type: 'number' },
+          message: { type: 'string' },
+          timestamp: { type: 'number' },
+        },
+        required: ['message'],
+        additionalProperties: true,
+      },
+      AppInfo: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          version: { type: 'string' },
+        },
+        required: ['name', 'version'],
+        additionalProperties: true,
+      },
+      WebhookWatchAllResponse: {
+        type: 'object',
+        properties: {
+          message: { type: 'string' },
+          watchers: { type: 'integer', minimum: 0 },
+        },
+        required: ['message', 'watchers'],
+        additionalProperties: true,
+      },
+      WebhookContainerActionResponse: {
+        type: 'object',
+        properties: {
+          message: { type: 'string' },
+          container: { type: 'string' },
+        },
+        required: ['message', 'container'],
+        additionalProperties: true,
+      },
+      AuthUser: {
+        type: 'object',
+        properties: {
+          username: { type: 'string' },
+        },
+        required: ['username'],
+        additionalProperties: true,
+      },
+      RememberMeResponse: {
+        type: 'object',
+        properties: {
+          ok: { type: 'boolean' },
+        },
+        required: ['ok'],
+        additionalProperties: false,
+      },
+      LogoutResponse: {
+        type: 'object',
+        properties: {
+          logoutUrl: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+      SelfUpdateAckResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['accepted', 'ignored', 'rejected'] },
+          operationId: { type: 'string' },
+          reason: { type: 'string' },
+          ackedClients: { type: 'integer', minimum: 0 },
+          clientsAtEmit: { type: 'integer', minimum: 0 },
+        },
+        required: ['status', 'operationId'],
+        additionalProperties: false,
+      },
+      LogSettings: {
+        type: 'object',
+        properties: {
+          level: { type: 'string' },
+        },
+        required: ['level'],
+        additionalProperties: true,
+      },
+      StoreConfigurationResponse: {
+        type: 'object',
+        properties: {
+          configuration: {
+            type: 'object',
+            properties: {
+              path: { type: 'string' },
+              file: { type: 'string' },
+            },
+            required: ['path', 'file'],
+            additionalProperties: true,
+          },
+        },
+        required: ['configuration'],
+        additionalProperties: true,
+      },
+      LegacyInputSourceSummary: {
+        type: 'object',
+        properties: {
+          total: { type: 'integer', minimum: 0 },
+          keys: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+        },
+        required: ['total', 'keys'],
+        additionalProperties: false,
+      },
+      LegacyInputSummary: {
+        type: 'object',
+        properties: {
+          total: { type: 'integer', minimum: 0 },
+          env: { $ref: '#/components/schemas/LegacyInputSourceSummary' },
+          label: { $ref: '#/components/schemas/LegacyInputSourceSummary' },
+        },
+        required: ['total', 'env', 'label'],
+        additionalProperties: false,
+      },
+      ServerInfoResponse: {
+        type: 'object',
+        properties: {
+          configuration: {
+            type: 'object',
+            properties: {
+              webhook: {
+                type: 'object',
+                properties: {
+                  enabled: { type: 'boolean' },
+                },
+                required: ['enabled'],
+                additionalProperties: true,
+              },
+            },
+            required: ['webhook'],
+            additionalProperties: true,
+          },
+          compatibility: {
+            type: 'object',
+            properties: {
+              legacyInputs: { $ref: '#/components/schemas/LegacyInputSummary' },
+            },
+            required: ['legacyInputs'],
+            additionalProperties: true,
+          },
+        },
+        required: ['configuration', 'compatibility'],
+        additionalProperties: true,
+      },
+      SecurityRuntimeToolStatus: {
+        type: 'object',
+        properties: {
+          enabled: { type: 'boolean' },
+          command: { type: 'string' },
+          commandAvailable: { type: ['boolean', 'null'] },
+          status: { type: 'string', enum: ['ready', 'missing', 'disabled'] },
+          message: { type: 'string' },
+        },
+        required: ['enabled', 'command', 'commandAvailable', 'status', 'message'],
+        additionalProperties: true,
+      },
+      SecurityRuntimeStatusResponse: {
+        type: 'object',
+        properties: {
+          checkedAt: { type: 'string', format: 'date-time' },
+          ready: { type: 'boolean' },
+          scanner: {
+            type: 'object',
+            allOf: [
+              { $ref: '#/components/schemas/SecurityRuntimeToolStatus' },
+              {
+                type: 'object',
+                properties: {
+                  scanner: { type: 'string' },
+                  server: { type: 'string' },
+                },
+                required: ['scanner', 'server'],
+                additionalProperties: true,
+              },
+            ],
+          },
+          signature: { $ref: '#/components/schemas/SecurityRuntimeToolStatus' },
+          sbom: {
+            type: 'object',
+            properties: {
+              enabled: { type: 'boolean' },
+              formats: {
+                type: 'array',
+                items: { type: 'string', enum: ['spdx-json', 'cyclonedx-json'] },
+              },
+            },
+            required: ['enabled', 'formats'],
+            additionalProperties: true,
+          },
+          requirements: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+        },
+        required: ['checkedAt', 'ready', 'scanner', 'signature', 'sbom', 'requirements'],
+        additionalProperties: true,
+      },
+      ContainerSummaryResponse: {
+        type: 'object',
+        properties: {
+          containers: {
+            type: 'object',
+            properties: {
+              total: { type: 'integer', minimum: 0 },
+              running: { type: 'integer', minimum: 0 },
+              stopped: { type: 'integer', minimum: 0 },
+            },
+            required: ['total', 'running', 'stopped'],
+            additionalProperties: false,
+          },
+          security: {
+            type: 'object',
+            properties: {
+              issues: { type: 'integer', minimum: 0 },
+            },
+            required: ['issues'],
+            additionalProperties: false,
+          },
+        },
+        required: ['containers', 'security'],
+        additionalProperties: false,
+      },
+      ContainerRecentStatusResponse: {
+        type: 'object',
+        properties: {
+          statuses: {
+            type: 'object',
+            additionalProperties: {
+              type: 'string',
+              enum: ['updated', 'pending', 'failed'],
+            },
+          },
+        },
+        required: ['statuses'],
+        additionalProperties: false,
+      },
+      ContainerResource: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+          status: { type: 'string' },
+          watcher: { type: 'string' },
+          agent: { type: 'string' },
+          updateAvailable: { type: 'boolean' },
+          image: { ...genericObjectSchema },
+        },
+        required: ['id', 'name'],
+        additionalProperties: true,
+      },
+      VulnerabilitySummary: {
+        type: 'object',
+        properties: {
+          unknown: { type: 'integer', minimum: 0 },
+          low: { type: 'integer', minimum: 0 },
+          medium: { type: 'integer', minimum: 0 },
+          high: { type: 'integer', minimum: 0 },
+          critical: { type: 'integer', minimum: 0 },
+        },
+        required: ['unknown', 'low', 'medium', 'high', 'critical'],
+        additionalProperties: false,
+      },
+      VulnerabilityScanResult: {
+        type: 'object',
+        properties: {
+          scanner: { type: 'string' },
+          image: { type: 'string' },
+          scannedAt: { type: 'string', format: 'date-time' },
+          status: { type: 'string', enum: ['not-scanned', 'passed', 'blocked', 'error'] },
+          blockSeverities: {
+            type: 'array',
+            items: { type: 'string', enum: ['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
+          },
+          blockingCount: { type: 'integer', minimum: 0 },
+          summary: { $ref: '#/components/schemas/VulnerabilitySummary' },
+          vulnerabilities: {
+            type: 'array',
+            items: { ...genericObjectSchema },
+          },
+          error: { type: 'string' },
+        },
+        required: ['status', 'blockSeverities', 'blockingCount', 'summary', 'vulnerabilities'],
+        additionalProperties: true,
+      },
+      SbomDocumentResponse: {
+        type: 'object',
+        properties: {
+          generator: { type: 'string' },
+          image: { type: 'string' },
+          generatedAt: { type: 'string', format: 'date-time' },
+          format: { type: 'string', enum: ['spdx-json', 'cyclonedx-json'] },
+          document: { ...genericObjectSchema },
+          error: { type: 'string' },
+        },
+        required: ['generator', 'image', 'generatedAt', 'format', 'document'],
+        additionalProperties: true,
+      },
+      ContainerEnvEntry: {
+        type: 'object',
+        properties: {
+          key: { type: 'string' },
+          value: { type: 'string' },
+          sensitive: { type: 'boolean' },
+        },
+        required: ['key', 'value', 'sensitive'],
+        additionalProperties: false,
+      },
+      ContainerEnvResponse: {
+        type: 'object',
+        properties: {
+          env: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/ContainerEnvEntry' },
+          },
+        },
+        required: ['env'],
+        additionalProperties: false,
+      },
+      ContainerLogsResponse: {
+        type: 'object',
+        properties: {
+          logs: { type: 'string' },
+        },
+        required: ['logs'],
+        additionalProperties: true,
+      },
+      PreviewResponse: {
+        type: 'object',
+        properties: {
+          containerName: { type: 'string' },
+          currentImage: { type: 'string' },
+          newImage: { type: 'string' },
+          updateKind: { ...genericObjectSchema },
+          isRunning: { type: 'boolean' },
+          networks: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+        },
+        additionalProperties: true,
+      },
+      ImageBackup: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          containerId: { type: 'string' },
+          containerName: { type: 'string' },
+          imageName: { type: 'string' },
+          imageTag: { type: 'string' },
+          imageDigest: { type: 'string' },
+          timestamp: { type: 'string', format: 'date-time' },
+          triggerName: { type: 'string' },
+        },
+        required: [
+          'id',
+          'containerId',
+          'containerName',
+          'imageName',
+          'imageTag',
+          'timestamp',
+          'triggerName',
+        ],
+        additionalProperties: false,
+      },
+      ContainerRollbackResponse: {
+        type: 'object',
+        properties: {
+          message: { type: 'string' },
+          backup: { $ref: '#/components/schemas/ImageBackup' },
+        },
+        required: ['message', 'backup'],
+        additionalProperties: true,
+      },
+      ContainerActionResponse: {
+        type: 'object',
+        properties: {
+          message: { type: 'string' },
+          container: { $ref: '#/components/schemas/ContainerResource' },
+        },
+        required: ['message'],
+        additionalProperties: true,
+      },
+      ComponentItem: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          type: { type: 'string' },
+          name: { type: 'string' },
+          configuration: { ...genericObjectSchema },
+          agent: { type: 'string' },
+        },
+        required: ['id', 'type', 'name'],
+        additionalProperties: true,
+      },
+      IconCacheClearResponse: {
+        type: 'object',
+        properties: {
+          cleared: { type: 'integer', minimum: 0 },
+        },
+        required: ['cleared'],
+        additionalProperties: false,
+      },
+      Settings: {
+        type: 'object',
+        properties: {
+          internetlessMode: { type: 'boolean' },
+        },
+        required: ['internetlessMode'],
+        additionalProperties: false,
+      },
+      NotificationRule: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+          description: { type: 'string' },
+          enabled: { type: 'boolean' },
+          triggers: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+        },
+        required: ['id', 'name', 'description', 'enabled', 'triggers'],
+        additionalProperties: false,
+      },
     },
   },
   paths: {
@@ -330,7 +788,9 @@ export const openApiDocument = {
         operationId: 'getHealth',
         security: [],
         responses: {
-          200: jsonResponse('Health check response'),
+          200: jsonResponse('Health check response', {
+            $ref: '#/components/schemas/HealthResponse',
+          }),
         },
       },
     },
@@ -352,7 +812,7 @@ export const openApiDocument = {
         operationId: 'getAppInfo',
         security: [],
         responses: {
-          200: jsonResponse('Application metadata'),
+          200: jsonResponse('Application metadata', { $ref: '#/components/schemas/AppInfo' }),
         },
       },
     },
@@ -363,7 +823,9 @@ export const openApiDocument = {
         operationId: 'webhookWatchAll',
         security: [{ webhookBearerAuth: [] }],
         responses: {
-          200: jsonResponse('Watch cycle triggered'),
+          200: jsonResponse('Watch cycle triggered', {
+            $ref: '#/components/schemas/WebhookWatchAllResponse',
+          }),
           401: errorResponse('Missing or invalid webhook authorization header'),
           403: errorResponse('Webhooks are disabled'),
           500: errorResponse('Webhook execution failed'),
@@ -378,7 +840,9 @@ export const openApiDocument = {
         security: [{ webhookBearerAuth: [] }],
         parameters: [containerNamePathParam],
         responses: {
-          200: jsonResponse('Container watch triggered'),
+          200: jsonResponse('Container watch triggered', {
+            $ref: '#/components/schemas/WebhookContainerActionResponse',
+          }),
           401: errorResponse('Missing or invalid webhook authorization header'),
           403: errorResponse('Webhooks are disabled for container'),
           404: errorResponse('Container not found'),
@@ -394,7 +858,9 @@ export const openApiDocument = {
         security: [{ webhookBearerAuth: [] }],
         parameters: [containerNamePathParam],
         responses: {
-          200: jsonResponse('Container update triggered'),
+          200: jsonResponse('Container update triggered', {
+            $ref: '#/components/schemas/WebhookContainerActionResponse',
+          }),
           401: errorResponse('Missing or invalid webhook authorization header'),
           403: errorResponse('Webhooks are disabled for container'),
           404: errorResponse('Container or docker trigger not found'),
@@ -449,7 +915,7 @@ export const openApiDocument = {
           },
         },
         responses: {
-          200: jsonResponse('Authenticated user'),
+          200: jsonResponse('Authenticated user', { $ref: '#/components/schemas/AuthUser' }),
           401: errorResponse('Authentication failed'),
           500: errorResponse('Unable to establish session'),
         },
@@ -475,7 +941,9 @@ export const openApiDocument = {
           },
         },
         responses: {
-          200: jsonResponse('Remember-me preference saved'),
+          200: jsonResponse('Remember-me preference saved', {
+            $ref: '#/components/schemas/RememberMeResponse',
+          }),
           401: errorResponse('Authentication required'),
           500: errorResponse('Session is unavailable'),
         },
@@ -487,7 +955,7 @@ export const openApiDocument = {
         summary: 'Get current authenticated user',
         operationId: 'getCurrentUser',
         responses: {
-          200: jsonResponse('Current user'),
+          200: jsonResponse('Current user', { $ref: '#/components/schemas/AuthUser' }),
           401: errorResponse('Authentication required'),
         },
       },
@@ -498,8 +966,9 @@ export const openApiDocument = {
         summary: 'Logout current user',
         operationId: 'logout',
         responses: {
-          200: jsonResponse('Logout response'),
+          200: jsonResponse('Logout response', { $ref: '#/components/schemas/LogoutResponse' }),
           401: errorResponse('Authentication required'),
+          500: errorResponse('Unable to clear session'),
         },
       },
     },
@@ -545,7 +1014,9 @@ export const openApiDocument = {
           },
         },
         responses: {
-          202: jsonResponse('Acknowledgement processed'),
+          202: jsonResponse('Acknowledgement processed', {
+            $ref: '#/components/schemas/SelfUpdateAckResponse',
+          }),
           400: errorResponse('Missing required fields'),
           401: errorResponse('Authentication required'),
           403: errorResponse('Client token rejected'),
@@ -558,7 +1029,7 @@ export const openApiDocument = {
         summary: 'Get current log settings',
         operationId: 'getLogSettings',
         responses: {
-          200: jsonResponse('Log settings'),
+          200: jsonResponse('Log settings', { $ref: '#/components/schemas/LogSettings' }),
           401: errorResponse('Authentication required'),
         },
       },
@@ -607,7 +1078,9 @@ export const openApiDocument = {
         summary: 'Get storage configuration',
         operationId: 'getStoreConfig',
         responses: {
-          200: jsonResponse('Store configuration'),
+          200: jsonResponse('Store configuration', {
+            $ref: '#/components/schemas/StoreConfigurationResponse',
+          }),
           401: errorResponse('Authentication required'),
         },
       },
@@ -618,7 +1091,7 @@ export const openApiDocument = {
         summary: 'Get server configuration and compatibility details',
         operationId: 'getServerInfo',
         responses: {
-          200: jsonResponse('Server details'),
+          200: jsonResponse('Server details', { $ref: '#/components/schemas/ServerInfoResponse' }),
           401: errorResponse('Authentication required'),
         },
       },
@@ -629,7 +1102,9 @@ export const openApiDocument = {
         summary: 'Get runtime status of security tooling',
         operationId: 'getSecurityRuntimeStatus',
         responses: {
-          200: jsonResponse('Security runtime status'),
+          200: jsonResponse('Security runtime status', {
+            $ref: '#/components/schemas/SecurityRuntimeStatusResponse',
+          }),
           401: errorResponse('Authentication required'),
           500: errorResponse('Runtime status lookup failed'),
         },
@@ -641,7 +1116,9 @@ export const openApiDocument = {
         summary: 'Get containers grouped by stack/group label',
         operationId: 'getContainerGroups',
         responses: {
-          200: jsonResponse('Container groups', { $ref: '#/components/schemas/GenericArray' }),
+          200: jsonResponse('Container groups', {
+            $ref: '#/components/schemas/CollectionResult',
+          }),
           401: errorResponse('Authentication required'),
         },
       },
@@ -651,7 +1128,7 @@ export const openApiDocument = {
         tags: ['Containers'],
         summary: 'List containers',
         operationId: 'listContainers',
-        parameters: componentListQueryParams,
+        parameters: containerListQueryParams,
         responses: {
           200: jsonResponse('Containers', { $ref: '#/components/schemas/PaginatedResult' }),
           401: errorResponse('Authentication required'),
@@ -676,7 +1153,9 @@ export const openApiDocument = {
         summary: 'Get lightweight container/security summary',
         operationId: 'getContainerSummary',
         responses: {
-          200: jsonResponse('Container summary'),
+          200: jsonResponse('Container summary', {
+            $ref: '#/components/schemas/ContainerSummaryResponse',
+          }),
           401: errorResponse('Authentication required'),
         },
       },
@@ -687,7 +1166,9 @@ export const openApiDocument = {
         summary: 'Get recent update status by container',
         operationId: 'getContainerRecentStatus',
         responses: {
-          200: jsonResponse('Recent container statuses'),
+          200: jsonResponse('Recent container statuses', {
+            $ref: '#/components/schemas/ContainerRecentStatusResponse',
+          }),
           401: errorResponse('Authentication required'),
         },
       },
@@ -699,7 +1180,9 @@ export const openApiDocument = {
         operationId: 'getContainerById',
         parameters: [containerIdPathParam],
         responses: {
-          200: jsonResponse('Container details'),
+          200: jsonResponse('Container details', {
+            $ref: '#/components/schemas/ContainerResource',
+          }),
           401: errorResponse('Authentication required'),
           404: errorResponse('Container not found'),
         },
@@ -759,16 +1242,16 @@ export const openApiDocument = {
         },
       },
     },
-    '/api/containers/{id}/triggers/{triggerAgent}/{triggerType}/{triggerName}': {
+    '/api/containers/{id}/triggers/{triggerType}/{triggerName}/{triggerAgent}': {
       post: {
         tags: ['Containers'],
         summary: 'Run a remote trigger for a container',
         operationId: 'runRemoteContainerTrigger',
         parameters: [
           containerIdPathParam,
-          triggerAgentPathParam,
           triggerTypePathParam,
           triggerNamePathParam,
+          triggerAgentPathParam,
         ],
         responses: {
           200: jsonResponse('Trigger executed', { $ref: '#/components/schemas/EmptyObject' }),
@@ -815,7 +1298,9 @@ export const openApiDocument = {
           },
         },
         responses: {
-          200: jsonResponse('Updated container'),
+          200: jsonResponse('Updated container', {
+            $ref: '#/components/schemas/ContainerResource',
+          }),
           400: errorResponse('Invalid update policy request'),
           401: errorResponse('Authentication required'),
           404: errorResponse('Container not found'),
@@ -829,7 +1314,9 @@ export const openApiDocument = {
         operationId: 'watchContainerById',
         parameters: [containerIdPathParam],
         responses: {
-          200: jsonResponse('Updated container'),
+          200: jsonResponse('Updated container', {
+            $ref: '#/components/schemas/ContainerResource',
+          }),
           401: errorResponse('Authentication required'),
           404: errorResponse('Container not found'),
           500: errorResponse('Watch operation failed'),
@@ -843,7 +1330,9 @@ export const openApiDocument = {
         operationId: 'getContainerVulnerabilities',
         parameters: [containerIdPathParam],
         responses: {
-          200: jsonResponse('Vulnerability scan result'),
+          200: jsonResponse('Vulnerability scan result', {
+            $ref: '#/components/schemas/VulnerabilityScanResult',
+          }),
           401: errorResponse('Authentication required'),
           404: errorResponse('Container not found'),
         },
@@ -868,7 +1357,9 @@ export const openApiDocument = {
           },
         ],
         responses: {
-          200: jsonResponse('SBOM document'),
+          200: jsonResponse('SBOM document', {
+            $ref: '#/components/schemas/SbomDocumentResponse',
+          }),
           400: errorResponse('Unsupported SBOM format'),
           401: errorResponse('Authentication required'),
           404: errorResponse('Container not found'),
@@ -883,7 +1374,9 @@ export const openApiDocument = {
         operationId: 'revealContainerEnv',
         parameters: [containerIdPathParam],
         responses: {
-          200: jsonResponse('Container environment variables'),
+          200: jsonResponse('Container environment variables', {
+            $ref: '#/components/schemas/ContainerEnvResponse',
+          }),
           401: errorResponse('Authentication required'),
           404: errorResponse('Container not found'),
           429: errorResponse('Too many requests'),
@@ -898,7 +1391,9 @@ export const openApiDocument = {
         operationId: 'scanContainer',
         parameters: [containerIdPathParam],
         responses: {
-          200: jsonResponse('Updated container with security state'),
+          200: jsonResponse('Updated container with security state', {
+            $ref: '#/components/schemas/ContainerResource',
+          }),
           400: errorResponse('Security scanner is not configured'),
           401: errorResponse('Authentication required'),
           404: errorResponse('Container not found'),
@@ -934,7 +1429,9 @@ export const openApiDocument = {
           },
         ],
         responses: {
-          200: jsonResponse('Container logs'),
+          200: jsonResponse('Container logs', {
+            $ref: '#/components/schemas/ContainerLogsResponse',
+          }),
           401: errorResponse('Authentication required'),
           404: errorResponse('Container not found'),
           500: errorResponse('Unable to fetch logs'),
@@ -948,7 +1445,9 @@ export const openApiDocument = {
         operationId: 'previewContainerUpdate',
         parameters: [containerIdPathParam],
         responses: {
-          200: jsonResponse('Preview result'),
+          200: jsonResponse('Preview result', {
+            $ref: '#/components/schemas/PreviewResponse',
+          }),
           401: errorResponse('Authentication required'),
           404: errorResponse('Container or docker trigger not found'),
           500: errorResponse('Preview failed'),
@@ -989,7 +1488,9 @@ export const openApiDocument = {
           },
         },
         responses: {
-          200: jsonResponse('Rollback successful'),
+          200: jsonResponse('Rollback successful', {
+            $ref: '#/components/schemas/ContainerRollbackResponse',
+          }),
           401: errorResponse('Authentication required'),
           404: errorResponse('Container, backup, or trigger not found'),
           500: errorResponse('Rollback failed'),
@@ -1003,7 +1504,9 @@ export const openApiDocument = {
         operationId: 'startContainer',
         parameters: [containerIdPathParam],
         responses: {
-          200: jsonResponse('Container started'),
+          200: jsonResponse('Container started', {
+            $ref: '#/components/schemas/ContainerActionResponse',
+          }),
           401: errorResponse('Authentication required'),
           403: errorResponse('Container actions feature disabled'),
           404: errorResponse('Container or docker trigger not found'),
@@ -1018,7 +1521,9 @@ export const openApiDocument = {
         operationId: 'stopContainer',
         parameters: [containerIdPathParam],
         responses: {
-          200: jsonResponse('Container stopped'),
+          200: jsonResponse('Container stopped', {
+            $ref: '#/components/schemas/ContainerActionResponse',
+          }),
           401: errorResponse('Authentication required'),
           403: errorResponse('Container actions feature disabled'),
           404: errorResponse('Container or docker trigger not found'),
@@ -1033,7 +1538,9 @@ export const openApiDocument = {
         operationId: 'restartContainer',
         parameters: [containerIdPathParam],
         responses: {
-          200: jsonResponse('Container restarted'),
+          200: jsonResponse('Container restarted', {
+            $ref: '#/components/schemas/ContainerActionResponse',
+          }),
           401: errorResponse('Authentication required'),
           403: errorResponse('Container actions feature disabled'),
           404: errorResponse('Container or docker trigger not found'),
@@ -1048,7 +1555,9 @@ export const openApiDocument = {
         operationId: 'updateContainer',
         parameters: [containerIdPathParam],
         responses: {
-          200: jsonResponse('Container updated'),
+          200: jsonResponse('Container updated', {
+            $ref: '#/components/schemas/ContainerActionResponse',
+          }),
           400: errorResponse('No update available for container'),
           401: errorResponse('Authentication required'),
           403: errorResponse('Container actions feature disabled'),
@@ -1062,8 +1571,9 @@ export const openApiDocument = {
         tags: ['Triggers'],
         summary: 'List triggers',
         operationId: 'listTriggers',
+        parameters: paginationQueryParams,
         responses: {
-          200: jsonResponse('Triggers', { $ref: '#/components/schemas/GenericArray' }),
+          200: jsonResponse('Triggers', { $ref: '#/components/schemas/PaginatedResult' }),
           401: errorResponse('Authentication required'),
         },
       },
@@ -1075,7 +1585,7 @@ export const openApiDocument = {
         operationId: 'getTriggerByTypeAndName',
         parameters: [componentTypePathParam, componentNamePathParam],
         responses: {
-          200: jsonResponse('Trigger details'),
+          200: jsonResponse('Trigger details', { $ref: '#/components/schemas/ComponentItem' }),
           401: errorResponse('Authentication required'),
           404: errorResponse('Trigger not found'),
         },
@@ -1106,14 +1616,14 @@ export const openApiDocument = {
         },
       },
     },
-    '/api/triggers/{agent}/{type}/{name}': {
+    '/api/triggers/{type}/{name}/{agent}': {
       get: {
         tags: ['Triggers'],
-        summary: 'Get remote trigger by agent, type, and name',
-        operationId: 'getTriggerByAgentTypeAndName',
-        parameters: [componentAgentPathParam, componentTypePathParam, componentNamePathParam],
+        summary: 'Get remote trigger by type, name, and agent',
+        operationId: 'getTriggerByTypeAndNameAndAgent',
+        parameters: [componentTypePathParam, componentNamePathParam, componentAgentPathParam],
         responses: {
-          200: jsonResponse('Trigger details'),
+          200: jsonResponse('Trigger details', { $ref: '#/components/schemas/ComponentItem' }),
           401: errorResponse('Authentication required'),
           404: errorResponse('Trigger not found'),
         },
@@ -1122,7 +1632,7 @@ export const openApiDocument = {
         tags: ['Triggers'],
         summary: 'Run remote trigger for a provided container payload',
         operationId: 'runRemoteTrigger',
-        parameters: [componentAgentPathParam, componentTypePathParam, componentNamePathParam],
+        parameters: [componentTypePathParam, componentNamePathParam, componentAgentPathParam],
         requestBody: {
           required: true,
           content: {
@@ -1248,7 +1758,6 @@ export const openApiDocument = {
             content: {
               'image/svg+xml': { schema: { type: 'string', format: 'binary' } },
               'image/png': { schema: { type: 'string', format: 'binary' } },
-              'application/json': { schema: { $ref: '#/components/schemas/GenericObject' } },
             },
           },
           400: errorResponse('Invalid icon request'),
@@ -1265,7 +1774,9 @@ export const openApiDocument = {
         summary: 'Clear icon cache',
         operationId: 'clearIconCache',
         responses: {
-          200: jsonResponse('Cache clear result'),
+          200: jsonResponse('Cache clear result', {
+            $ref: '#/components/schemas/IconCacheClearResponse',
+          }),
           401: errorResponse('Authentication required'),
           500: errorResponse('Failed to clear icon cache'),
         },
@@ -1277,7 +1788,7 @@ export const openApiDocument = {
         summary: 'Get API settings',
         operationId: 'getSettings',
         responses: {
-          200: jsonResponse('Settings payload'),
+          200: jsonResponse('Settings payload', { $ref: '#/components/schemas/Settings' }),
           401: errorResponse('Authentication required'),
         },
       },
@@ -1301,7 +1812,7 @@ export const openApiDocument = {
           },
         },
         responses: {
-          200: jsonResponse('Updated settings'),
+          200: jsonResponse('Updated settings', { $ref: '#/components/schemas/Settings' }),
           400: errorResponse('Invalid settings payload'),
           401: errorResponse('Authentication required'),
         },
@@ -1327,7 +1838,7 @@ export const openApiDocument = {
           },
         },
         responses: {
-          200: jsonResponse('Updated settings'),
+          200: jsonResponse('Updated settings', { $ref: '#/components/schemas/Settings' }),
           400: errorResponse('Invalid settings payload'),
           401: errorResponse('Authentication required'),
         },
@@ -1371,7 +1882,9 @@ export const openApiDocument = {
           },
         },
         responses: {
-          200: jsonResponse('Updated notification rule'),
+          200: jsonResponse('Updated notification rule', {
+            $ref: '#/components/schemas/NotificationRule',
+          }),
           400: errorResponse('Invalid notification rule update'),
           401: errorResponse('Authentication required'),
           404: errorResponse('Notification rule not found'),

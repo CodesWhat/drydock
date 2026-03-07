@@ -1,4 +1,5 @@
 import { createMockResponse } from '../test/helpers.js';
+import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 const { mockRouter, mockGetSettings, mockUpdateSettings } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), put: vi.fn(), patch: vi.fn() },
@@ -45,6 +46,14 @@ describe('Settings Router', () => {
     expect(res.json).toHaveBeenCalledWith({
       internetlessMode: false,
     });
+    const contractValidation = validateOpenApiJsonResponse({
+      path: '/api/settings',
+      method: 'get',
+      statusCode: '200',
+      payload: res.json.mock.calls[0][0],
+    });
+    expect(contractValidation.valid).toBe(true);
+    expect(contractValidation.errors).toStrictEqual([]);
   });
 
   test('should update settings when payload is valid', () => {
@@ -68,6 +77,14 @@ describe('Settings Router', () => {
     expect(res.json).toHaveBeenCalledWith({
       internetlessMode: true,
     });
+    const contractValidation = validateOpenApiJsonResponse({
+      path: '/api/settings',
+      method: 'patch',
+      statusCode: '200',
+      payload: res.json.mock.calls[0][0],
+    });
+    expect(contractValidation.valid).toBe(true);
+    expect(contractValidation.errors).toStrictEqual([]);
   });
 
   test('should reject invalid settings payload', () => {

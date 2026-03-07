@@ -1,6 +1,6 @@
 import type { Response } from 'express';
 import { describe, expect, test, vi } from 'vitest';
-import { sendErrorResponse } from './error-response.js';
+import { normalizeErrorResponsePayload, sendErrorResponse } from './error-response.js';
 
 function createResponse(): Response {
   return {
@@ -35,5 +35,46 @@ describe('sendErrorResponse', () => {
 
     expect(res.status).toHaveBeenCalledWith(799);
     expect(res.json).toHaveBeenCalledWith({ error: 'Error' });
+  });
+});
+
+describe('normalizeErrorResponsePayload', () => {
+  test('expands legacy string error payloads with code and message fields', () => {
+    const jsonSpy = vi.fn();
+    const res = {
+      statusCode: 404,
+      json: jsonSpy,
+    } as unknown as Response;
+
+    normalizeErrorResponsePayload({} as never, res, vi.fn());
+    res.json({ error: 'Container not found' });
+
+    expect(jsonSpy).toHaveBeenCalledWith({
+      error: 'Container not found',
+      code: 'CONTAINER_NOT_FOUND',
+      message: 'Container not found',
+    });
+  });
+
+  test('preserves explicit error code and details fields when present', () => {
+    const jsonSpy = vi.fn();
+    const res = {
+      statusCode: 422,
+      json: jsonSpy,
+    } as unknown as Response;
+
+    normalizeErrorResponsePayload({} as never, res, vi.fn());
+    res.json({
+      error: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+      details: { field: 'name' },
+    });
+
+    expect(jsonSpy).toHaveBeenCalledWith({
+      error: 'Validation failed',
+      code: 'VALIDATION_ERROR',
+      message: 'Validation failed',
+      details: { field: 'name' },
+    });
   });
 });
