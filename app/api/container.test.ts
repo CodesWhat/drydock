@@ -21,6 +21,7 @@ vi.mock('express-rate-limit', () => ({ default: vi.fn(() => 'rate-limit-middlewa
 
 vi.mock('../store/container', () => ({
   getContainers: vi.fn(() => []),
+  getContainerCount: vi.fn(() => 0),
   getContainer: vi.fn(),
   getContainerRaw: vi.fn(),
   updateContainer: vi.fn((container) => container),
@@ -404,6 +405,7 @@ describe('Container Router', () => {
 
     test('should apply limit and offset pagination and ignore control params in store query', () => {
       const containers = [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }];
+      storeContainer.getContainerCount.mockReturnValue(containers.length);
       storeContainer.getContainers.mockImplementation((_query, pagination) => {
         if (!pagination) {
           return containers;
@@ -433,6 +435,7 @@ describe('Container Router', () => {
         { watcher: 'docker' },
         { limit: 1, offset: 1 },
       );
+      expect(storeContainer.getContainerCount).toHaveBeenCalledWith({ watcher: 'docker' });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [{ id: 'c2' }],
@@ -449,6 +452,7 @@ describe('Container Router', () => {
 
     test('should apply offset when limit is zero', () => {
       const containers = [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }, { id: 'c4' }];
+      storeContainer.getContainerCount.mockReturnValue(containers.length);
       storeContainer.getContainers.mockImplementation((_query, pagination) => {
         if (!pagination) {
           return containers;
@@ -477,6 +481,7 @@ describe('Container Router', () => {
         { watcher: 'docker' },
         { limit: 0, offset: 2 },
       );
+      expect(storeContainer.getContainerCount).toHaveBeenCalledWith({ watcher: 'docker' });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [{ id: 'c3' }, { id: 'c4' }],
@@ -693,6 +698,15 @@ describe('Container Router', () => {
         { limit: 10, offset: 20 },
       );
       expect(result).toEqual([{ id: 'c1' }]);
+    });
+  });
+
+  describe('getContainerCountFromStore', () => {
+    test('should delegate to store getContainerCount', () => {
+      storeContainer.getContainerCount.mockReturnValue(7);
+      const result = containerRouter.getContainerCountFromStore({ watcher: 'docker' });
+      expect(storeContainer.getContainerCount).toHaveBeenCalledWith({ watcher: 'docker' });
+      expect(result).toBe(7);
     });
   });
 
@@ -1246,6 +1260,7 @@ describe('Container Router', () => {
     test('revealContainerEnv should return 501 when raw-env dependencies are unavailable', () => {
       const handlers = createCrudHandlers({
         getContainersFromStore: vi.fn(() => []),
+        getContainerCountFromStore: vi.fn(() => 0),
         storeContainer: {
           getContainer: vi.fn(),
           deleteContainer: vi.fn(),

@@ -9,6 +9,7 @@ import {
   getContainerTriggers,
   getContainerUpdateOperations,
   getContainerVulnerabilities,
+  getSecurityVulnerabilityOverview,
   refreshAllContainers,
   refreshContainer,
   revealContainerEnv,
@@ -767,6 +768,45 @@ describe('Container Service', () => {
 
       await expect(getContainerVulnerabilities('c1')).rejects.toThrow(
         'Failed to get vulnerabilities for container c1: Internal Server Error',
+      );
+    });
+  });
+
+  describe('getSecurityVulnerabilityOverview', () => {
+    it('fetches aggregated vulnerabilities successfully', async () => {
+      const mockResult = {
+        totalContainers: 2,
+        scannedContainers: 1,
+        latestScannedAt: '2026-03-01T10:00:00.000Z',
+        images: [
+          {
+            image: 'nginx',
+            containerIds: ['c1'],
+            vulnerabilities: [{ id: 'CVE-2026-1', severity: 'CRITICAL' }],
+          },
+        ],
+      };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResult,
+      } as any);
+
+      const result = await getSecurityVulnerabilityOverview();
+
+      expect(fetch).toHaveBeenCalledWith('/api/containers/security/vulnerabilities', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockResult);
+    });
+
+    it('throws when fetching aggregated vulnerabilities fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Internal Server Error',
+      } as any);
+
+      await expect(getSecurityVulnerabilityOverview()).rejects.toThrow(
+        'Failed to get aggregated vulnerabilities: Internal Server Error',
       );
     });
   });

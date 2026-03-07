@@ -104,6 +104,15 @@ export function getContainersFromStore(
   return storeContainer.getContainers(query);
 }
 
+/**
+ * Get filtered container count from store.
+ * @param query
+ * @returns {number}
+ */
+export function getContainerCountFromStore(query: Record<string, unknown>) {
+  return storeContainer.getContainerCount(query);
+}
+
 function getContainerImageFullName(container, tagOverride?: string) {
   return resolveContainerImageFullName(container, registry.getState().registry || {}, tagOverride);
 }
@@ -117,6 +126,7 @@ async function getContainerRegistryAuth(container) {
 
 const crudHandlers = createCrudHandlers({
   getContainersFromStore,
+  getContainerCountFromStore,
   storeContainer,
   updateOperationStore,
   getServerConfiguration,
@@ -186,6 +196,7 @@ export function init() {
   router.post('/watch', crudHandlers.watchContainers);
   router.get('/summary', crudHandlers.getContainerSummary);
   router.get('/recent-status', getContainerRecentStatus);
+  router.get('/security/vulnerabilities', crudHandlers.getContainerSecurityVulnerabilities);
   router.get('/:id', crudHandlers.getContainer);
   router.get('/:id/update-operations', crudHandlers.getContainerUpdateOperations);
   router.delete('/:id', crudHandlers.deleteContainer);

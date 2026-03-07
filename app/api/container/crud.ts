@@ -30,6 +30,40 @@ interface ContainerListResponse {
   _links?: PaginationLinks;
 }
 
+interface ContainerSecuritySummary {
+  unknown: number;
+  low: number;
+  medium: number;
+  high: number;
+  critical: number;
+}
+
+interface SecurityViewVulnerability {
+  id: string;
+  severity: string;
+  package: string;
+  version: string;
+  fixedIn: string | null;
+  title: string;
+  target: string;
+  primaryUrl: string;
+  publishedDate: string;
+}
+
+interface SecurityImageVulnerabilityGroup {
+  image: string;
+  containerIds: string[];
+  updateSummary?: ContainerSecuritySummary;
+  vulnerabilities: SecurityViewVulnerability[];
+}
+
+interface SecurityVulnerabilityOverviewResponse {
+  totalContainers: number;
+  scannedContainers: number;
+  latestScannedAt: string | null;
+  images: SecurityImageVulnerabilityGroup[];
+}
+
 interface UpdateOperationStoreApi {
   getOperationsByContainerName: (containerName: string) => unknown[];
 }
@@ -61,6 +95,7 @@ export interface CrudHandlerDependencies {
     query: Request['query'],
     pagination?: ContainerListPagination,
   ) => Container[];
+  getContainerCountFromStore: (query: Request['query']) => number;
   storeContainer: CrudStoreContainerApi;
   updateOperationStore: UpdateOperationStoreApi;
   getServerConfiguration: () => ServerConfiguration;
@@ -127,8 +162,91 @@ function getSecurityIssueCount(containers: Container[]): number {
   }).length;
 }
 
+function toNonNegativeInteger(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return Math.floor(value);
+}
+
+function chooseLatestScannedAt(current: string | null, candidate: unknown): string | null {
+  if (typeof candidate !== 'string' || candidate.length === 0) {
+    return current;
+  }
+  if (current === null) {
+    return candidate;
+  }
+  const currentTime = Date.parse(current);
+  const candidateTime = Date.parse(candidate);
+  if (Number.isFinite(currentTime) && Number.isFinite(candidateTime)) {
+    return candidateTime > currentTime ? candidate : current;
+  }
+  return candidate > current ? candidate : current;
+}
+
+function readStringField(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function readVulnerabilityString(vulnerability: unknown, fields: string[], fallback = ''): string {
+  if (!vulnerability || typeof vulnerability !== 'object') {
+    return fallback;
+  }
+  const record = vulnerability as Record<string, unknown>;
+  for (const field of fields) {
+    const value = readStringField(record[field]);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return fallback;
+}
+
+function readVulnerabilityFixedIn(vulnerability: unknown): string | null {
+  const fixedIn = readVulnerabilityString(vulnerability, ['fixedVersion', 'fixedIn']);
+  return fixedIn.length > 0 ? fixedIn : null;
+}
+
+function normalizeUpdateSummary(summary: unknown): ContainerSecuritySummary {
+  const record = summary && typeof summary === 'object' ? (summary as Record<string, unknown>) : {};
+  return {
+    unknown: toNonNegativeInteger(record.unknown),
+    low: toNonNegativeInteger(record.low),
+    medium: toNonNegativeInteger(record.medium),
+    high: toNonNegativeInteger(record.high),
+    critical: toNonNegativeInteger(record.critical),
+  };
+}
+
+function normalizeSecurityVulnerability(vulnerability: unknown): SecurityViewVulnerability {
+  return {
+    id: readVulnerabilityString(vulnerability, ['id'], 'unknown'),
+    severity: readVulnerabilityString(vulnerability, ['severity'], 'UNKNOWN'),
+    package: readVulnerabilityString(vulnerability, ['packageName', 'package'], 'unknown'),
+    version: readVulnerabilityString(vulnerability, ['installedVersion', 'version'], ''),
+    fixedIn: readVulnerabilityFixedIn(vulnerability),
+    title: readVulnerabilityString(vulnerability, ['title', 'Title'], ''),
+    target: readVulnerabilityString(vulnerability, ['target', 'Target'], ''),
+    primaryUrl: readVulnerabilityString(vulnerability, ['primaryUrl', 'PrimaryURL'], ''),
+    publishedDate: readVulnerabilityString(vulnerability, ['publishedDate'], ''),
+  };
+}
+
+function resolveSecurityImageName(container: Container): string {
+  const displayName = readStringField(container.displayName)?.trim();
+  if (displayName) {
+    return displayName;
+  }
+  const name = readStringField(container.name)?.trim();
+  if (name) {
+    return name;
+  }
+  return 'unknown';
+}
+
 export function createCrudHandlers({
   getContainersFromStore,
+  getContainerCountFromStore,
   storeContainer,
   updateOperationStore,
   getServerConfiguration,
@@ -152,7 +270,7 @@ export function createCrudHandlers({
     const total =
       pagination.limit === 0 && pagination.offset === 0
         ? pagedContainers.length
-        : getContainersFromStore(filteredQuery).length;
+        : getContainerCountFromStore(filteredQuery);
     const redactedContainers = redactContainersRuntimeEnv(pagedContainers);
     const data = includeVulnerabilities
       ? redactedContainers
@@ -198,6 +316,64 @@ export function createCrudHandlers({
       security: {
         issues: getSecurityIssueCount(containers),
       },
+    });
+  }
+
+  /**
+   * Get an aggregated vulnerability payload for the security view.
+   * @param _req
+   * @param res
+   */
+  function getContainerSecurityVulnerabilities(
+    _req: Request,
+    res: Response<SecurityVulnerabilityOverviewResponse>,
+  ) {
+    const containers = getContainersFromStore({});
+    const images = new Map<string, SecurityImageVulnerabilityGroup>();
+    let scannedContainers = 0;
+    let latestScannedAt: string | null = null;
+
+    for (const container of containers) {
+      const scan = container.security?.scan;
+      if (!scan) {
+        continue;
+      }
+      scannedContainers += 1;
+      latestScannedAt = chooseLatestScannedAt(latestScannedAt, scan.scannedAt);
+
+      const image = resolveSecurityImageName(container);
+      const existingGroup = images.get(image) || {
+        image,
+        containerIds: [],
+        vulnerabilities: [],
+      };
+
+      if (
+        typeof container.id === 'string' &&
+        container.id.length > 0 &&
+        !existingGroup.containerIds.includes(container.id)
+      ) {
+        existingGroup.containerIds.push(container.id);
+      }
+
+      const updateSummary = container.security?.updateScan?.summary;
+      if (updateSummary) {
+        existingGroup.updateSummary = normalizeUpdateSummary(updateSummary);
+      }
+
+      const vulnerabilityList = Array.isArray(scan.vulnerabilities) ? scan.vulnerabilities : [];
+      for (const vulnerability of vulnerabilityList) {
+        existingGroup.vulnerabilities.push(normalizeSecurityVulnerability(vulnerability));
+      }
+
+      images.set(image, existingGroup);
+    }
+
+    res.status(200).json({
+      totalContainers: containers.length,
+      scannedContainers,
+      latestScannedAt,
+      images: [...images.values()],
     });
   }
 
@@ -402,6 +578,7 @@ export function createCrudHandlers({
   return {
     getContainers,
     getContainerSummary,
+    getContainerSecurityVulnerabilities,
     getContainer,
     getContainerUpdateOperations,
     deleteContainer,

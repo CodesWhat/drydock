@@ -1,5 +1,5 @@
 import { computed, type Ref, ref } from 'vue';
-import { getAllContainers } from '../services/container';
+import { getSecurityVulnerabilityOverview } from '../services/container';
 import type { ContainerSecurityDelta, ContainerSecuritySummary } from '../types/container';
 import { computeSecurityDelta } from '../utils/container-mapper';
 import { errorMessage } from '../utils/error';
@@ -210,59 +210,63 @@ export function useVulnerabilities({
     error.value = null;
 
     try {
-      const containers = await getAllContainers({ includeVulnerabilities: true });
-      totalContainerCount.value = containers.length;
+      const overview = await getSecurityVulnerabilityOverview();
+      totalContainerCount.value = normalizeSeverityCount(overview.totalContainers);
       const vulnerabilities: Vulnerability[] = [];
       const imageContainerMap: Record<string, string[]> = {};
       const updateSummaryMap: Record<string, UpdateScanSummary> = {};
-      let latestScanAt: string | null = null;
-      let scannedCount = 0;
+      const latestScanAt = chooseLatestTimestamp(null, overview.latestScannedAt);
 
-      for (const container of containers) {
-        const scan = container.security?.scan;
-        if (!scan) continue;
-        scannedCount += 1;
+      for (const imageOverview of Array.isArray(overview.images) ? overview.images : []) {
+        const imageName = `${imageOverview.image || 'unknown'}` || 'unknown';
 
-        const imageName = container.displayName || container.name || 'unknown';
-        latestScanAt = chooseLatestTimestamp(latestScanAt, scan.scannedAt);
-
-        if (typeof container.id === 'string' && container.id.length > 0) {
-          const containerIds = imageContainerMap[imageName] || [];
-          if (!containerIds.includes(container.id)) {
-            containerIds.push(container.id);
-            imageContainerMap[imageName] = containerIds;
+        const rawContainerIds = Array.isArray(imageOverview.containerIds)
+          ? imageOverview.containerIds
+          : [];
+        const imageContainerIds: string[] = [];
+        for (const containerId of rawContainerIds) {
+          if (
+            typeof containerId === 'string' &&
+            containerId.length > 0 &&
+            !imageContainerIds.includes(containerId)
+          ) {
+            imageContainerIds.push(containerId);
           }
         }
+        if (imageContainerIds.length > 0) {
+          imageContainerMap[imageName] = imageContainerIds;
+        }
 
-        const updateScan = container.security?.updateScan;
-        if (updateScan?.summary) {
+        if (imageOverview.updateSummary) {
           updateSummaryMap[imageName] = {
-            unknown: normalizeSeverityCount(updateScan.summary.unknown),
-            low: normalizeSeverityCount(updateScan.summary.low),
-            medium: normalizeSeverityCount(updateScan.summary.medium),
-            high: normalizeSeverityCount(updateScan.summary.high),
-            critical: normalizeSeverityCount(updateScan.summary.critical),
+            unknown: normalizeSeverityCount(imageOverview.updateSummary.unknown),
+            low: normalizeSeverityCount(imageOverview.updateSummary.low),
+            medium: normalizeSeverityCount(imageOverview.updateSummary.medium),
+            high: normalizeSeverityCount(imageOverview.updateSummary.high),
+            critical: normalizeSeverityCount(imageOverview.updateSummary.critical),
           };
         }
 
-        const vulnList = Array.isArray(scan.vulnerabilities) ? scan.vulnerabilities : [];
+        const vulnList = Array.isArray(imageOverview.vulnerabilities)
+          ? imageOverview.vulnerabilities
+          : [];
         for (const vulnerability of vulnList) {
           vulnerabilities.push({
             id: vulnerability.id ?? 'unknown',
             severity: normalizeSeverity(vulnerability.severity),
-            package: vulnerability.packageName ?? vulnerability.package ?? 'unknown',
-            version: vulnerability.installedVersion ?? vulnerability.version ?? '',
-            fixedIn: vulnerability.fixedVersion ?? vulnerability.fixedIn ?? null,
-            title: vulnerability.title ?? vulnerability.Title ?? '',
-            target: vulnerability.target ?? vulnerability.Target ?? '',
-            primaryUrl: vulnerability.primaryUrl ?? vulnerability.PrimaryURL ?? '',
+            package: vulnerability.package ?? 'unknown',
+            version: vulnerability.version ?? '',
+            fixedIn: vulnerability.fixedIn ?? null,
+            title: vulnerability.title ?? '',
+            target: vulnerability.target ?? '',
+            primaryUrl: vulnerability.primaryUrl ?? '',
             image: imageName,
             publishedDate: vulnerability.publishedDate ?? '',
           });
         }
       }
 
-      scannedContainerCount.value = scannedCount;
+      scannedContainerCount.value = normalizeSeverityCount(overview.scannedContainers);
 
       securityVulnerabilities.value = vulnerabilities;
       containerIdsByImage.value = imageContainerMap;

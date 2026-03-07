@@ -1,15 +1,16 @@
 import { ref } from 'vue';
 
-const { mockGetAllContainers, mockGetContainerVulnerabilities, mockComputeSecurityDelta } =
+const { mockGetAllContainers, mockGetSecurityVulnerabilityOverview, mockComputeSecurityDelta } =
   vi.hoisted(() => ({
     mockGetAllContainers: vi.fn(),
-    mockGetContainerVulnerabilities: vi.fn(),
+    mockGetSecurityVulnerabilityOverview: vi.fn(),
     mockComputeSecurityDelta: vi.fn(),
   }));
 
 vi.mock('@/services/container', () => ({
   getAllContainers: (...args: any[]) => mockGetAllContainers(...args),
-  getContainerVulnerabilities: (...args: any[]) => mockGetContainerVulnerabilities(...args),
+  getSecurityVulnerabilityOverview: (...args: any[]) =>
+    mockGetSecurityVulnerabilityOverview(...args),
 }));
 
 vi.mock('@/utils/container-mapper', async () => {
@@ -25,17 +26,80 @@ vi.mock('@/utils/container-mapper', async () => {
 
 import { useVulnerabilities } from '@/composables/useVulnerabilities';
 
-/** Set up mockGetContainerVulnerabilities to return scan data matching the container list. */
-function setupVulnMocks(containers: any[]) {
-  const scanByContainerId = new Map<string, any>();
-  for (const c of containers) {
-    if (c.id && c.security?.scan) {
-      scanByContainerId.set(c.id, c.security.scan);
-    }
+function normalizeSeverityCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  if (value <= 0) return 0;
+  return Math.floor(value);
+}
+
+function chooseLatestTimestamp(current: string | null, candidate: unknown): string | null {
+  if (typeof candidate !== 'string' || candidate.length === 0) {
+    return current;
   }
-  mockGetContainerVulnerabilities.mockImplementation((id: string) => {
-    const scan = scanByContainerId.get(id);
-    return Promise.resolve(scan ?? { vulnerabilities: [] });
+  if (current === null) {
+    return candidate;
+  }
+  return candidate > current ? candidate : current;
+}
+
+/** Build the aggregated API response from a container fixture list. */
+function setupVulnMocks(containers: any[]) {
+  const images = new Map<string, any>();
+  let scannedContainers = 0;
+  let latestScannedAt: string | null = null;
+
+  for (const c of containers) {
+    const scan = c.security?.scan;
+    if (!scan) continue;
+    scannedContainers += 1;
+
+    const image = c.displayName || c.name || 'unknown';
+    const entry = images.get(image) || {
+      image,
+      containerIds: [] as string[],
+      vulnerabilities: [] as any[],
+    };
+
+    if (typeof c.id === 'string' && c.id.length > 0 && !entry.containerIds.includes(c.id)) {
+      entry.containerIds.push(c.id);
+    }
+
+    const updateSummary = c.security?.updateScan?.summary;
+    if (updateSummary) {
+      entry.updateSummary = {
+        unknown: normalizeSeverityCount(updateSummary.unknown),
+        low: normalizeSeverityCount(updateSummary.low),
+        medium: normalizeSeverityCount(updateSummary.medium),
+        high: normalizeSeverityCount(updateSummary.high),
+        critical: normalizeSeverityCount(updateSummary.critical),
+      };
+    }
+
+    latestScannedAt = chooseLatestTimestamp(latestScannedAt, scan.scannedAt);
+
+    const vulnList = Array.isArray(scan.vulnerabilities) ? scan.vulnerabilities : [];
+    for (const vulnerability of vulnList) {
+      entry.vulnerabilities.push({
+        id: vulnerability.id ?? 'unknown',
+        severity: vulnerability.severity ?? 'UNKNOWN',
+        package: vulnerability.packageName ?? vulnerability.package ?? 'unknown',
+        version: vulnerability.installedVersion ?? vulnerability.version ?? '',
+        fixedIn: vulnerability.fixedVersion ?? vulnerability.fixedIn ?? null,
+        title: vulnerability.title ?? vulnerability.Title ?? '',
+        target: vulnerability.target ?? vulnerability.Target ?? '',
+        primaryUrl: vulnerability.primaryUrl ?? vulnerability.PrimaryURL ?? '',
+        publishedDate: vulnerability.publishedDate ?? '',
+      });
+    }
+
+    images.set(image, entry);
+  }
+
+  mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+    totalContainers: containers.length,
+    scannedContainers,
+    latestScannedAt,
+    images: [...images.values()],
   });
 }
 
@@ -81,7 +145,6 @@ describe('useVulnerabilities', () => {
         },
       },
     ];
-    mockGetAllContainers.mockResolvedValue(containers);
     setupVulnMocks(containers);
 
     const securitySortField = ref('critical');
@@ -134,7 +197,6 @@ describe('useVulnerabilities', () => {
         },
       },
     ];
-    mockGetAllContainers.mockResolvedValue(containers);
     setupVulnMocks(containers);
 
     const state = useVulnerabilities({
@@ -185,7 +247,6 @@ describe('useVulnerabilities', () => {
         },
       },
     ];
-    mockGetAllContainers.mockResolvedValue(containers);
     setupVulnMocks(containers);
 
     const state = useVulnerabilities({
@@ -242,7 +303,6 @@ describe('useVulnerabilities', () => {
         },
       },
     ];
-    mockGetAllContainers.mockResolvedValue(containers);
     setupVulnMocks(containers);
 
     const securitySortField = ref('critical');
@@ -298,7 +358,6 @@ describe('useVulnerabilities', () => {
         security: { scan: null },
       },
     ];
-    mockGetAllContainers.mockResolvedValue(containers);
     setupVulnMocks(containers);
 
     const state = useVulnerabilities({
@@ -331,7 +390,6 @@ describe('useVulnerabilities', () => {
       },
     }));
 
-    mockGetAllContainers.mockResolvedValue(containers);
     setupVulnMocks(containers);
 
     const state = useVulnerabilities({
@@ -340,8 +398,8 @@ describe('useVulnerabilities', () => {
     });
     await state.fetchVulnerabilities();
 
-    expect(mockGetAllContainers).toHaveBeenCalledWith({ includeVulnerabilities: true });
-    expect(mockGetContainerVulnerabilities).not.toHaveBeenCalled();
+    expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledWith();
+    expect(mockGetAllContainers).not.toHaveBeenCalled();
     expect(state.securityVulnerabilities.value).toHaveLength(50);
   });
 
@@ -463,7 +521,6 @@ describe('useVulnerabilities', () => {
         },
       },
     ];
-    mockGetAllContainers.mockResolvedValue(containers);
     setupVulnMocks(containers);
 
     const securitySortField = ref('critical');
@@ -553,13 +610,13 @@ describe('useVulnerabilities', () => {
       'CVE-UNEXPECTED-SECOND',
     ]);
 
-    mockGetAllContainers.mockResolvedValueOnce(containers);
+    setupVulnMocks(containers);
     await state.fetchVulnerabilities();
     expect(state.loading.value).toBe(false);
   });
 
   it('sets an error and clears derived state when loading fails', async () => {
-    mockGetAllContainers.mockRejectedValue({ bad: true });
+    mockGetSecurityVulnerabilityOverview.mockRejectedValue({ bad: true });
 
     const state = useVulnerabilities({
       securitySortField: ref('critical'),

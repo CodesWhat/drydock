@@ -42,6 +42,7 @@ function createHarness(options: { containers?: any[] } = {}) {
       }
       return containers.slice(offset, offset + limit);
     }),
+    getContainerCountFromStore: vi.fn((_query: Record<string, unknown>) => containers.length),
     storeContainer: {
       getContainer: vi.fn((id: string) => byId.get(id)),
       deleteContainer: vi.fn((id: string) => {
@@ -84,6 +85,12 @@ function callGetContainers(
 function callGetContainerSummary(handlers: ReturnType<typeof createCrudHandlers>) {
   const res = createMockResponse();
   handlers.getContainerSummary({} as any, res as any);
+  return res;
+}
+
+function callGetContainerSecurityVulnerabilities(handlers: ReturnType<typeof createCrudHandlers>) {
+  const res = createMockResponse();
+  handlers.getContainerSecurityVulnerabilities({} as any, res as any);
   return res;
 }
 
@@ -244,6 +251,42 @@ describe('api/container/crud', () => {
         { watcher: 'docker' },
         { limit: 1, offset: 1 },
       );
+    });
+
+    test('uses container count dependency for paginated totals without a second list query', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1' }),
+          createContainer({ id: 'c2' }),
+          createContainer({ id: 'c3' }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, {
+        watcher: 'docker',
+        limit: '1',
+        offset: '1',
+      });
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledTimes(1);
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        { watcher: 'docker' },
+        { limit: 1, offset: 1 },
+      );
+      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledTimes(1);
+      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith({ watcher: 'docker' });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c2' })],
+        total: 3,
+        limit: 1,
+        offset: 1,
+        hasMore: true,
+        _links: {
+          self: '/api/containers?watcher=docker&limit=1&offset=1',
+          next: '/api/containers?watcher=docker&limit=1&offset=2',
+        },
+      });
     });
 
     test('caps limit at 200 items', () => {
@@ -479,6 +522,116 @@ describe('api/container/crud', () => {
       });
     });
 
+    test('returns aggregated vulnerabilities grouped by image for the security view', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            name: 'nginx',
+            displayName: 'nginx',
+            security: {
+              scan: {
+                scannedAt: '2026-02-01T10:00:00.000Z',
+                vulnerabilities: [
+                  {
+                    id: 'CVE-2026-0001',
+                    severity: 'CRITICAL',
+                    packageName: 'openssl',
+                    installedVersion: '3.0.0',
+                    fixedVersion: '3.0.1',
+                    title: 'openssl issue',
+                    target: 'usr/lib/libssl.so',
+                    primaryUrl: 'https://example.com/CVE-2026-0001',
+                    publishedDate: '2026-01-01T00:00:00.000Z',
+                  },
+                ],
+              },
+              updateScan: {
+                summary: {
+                  critical: 0,
+                  high: 0,
+                  medium: 0,
+                  low: 0,
+                  unknown: 2,
+                },
+              },
+            },
+          }),
+          createContainer({
+            id: 'c2',
+            name: 'nginx',
+            displayName: 'nginx',
+            security: {
+              scan: {
+                scannedAt: '2026-02-02T10:00:00.000Z',
+                vulnerabilities: [
+                  {
+                    id: 'CVE-2026-0002',
+                    severity: 'HIGH',
+                    package: 'zlib',
+                    version: '1.2.10',
+                  },
+                ],
+              },
+            },
+          }),
+          createContainer({
+            id: 'c3',
+            name: 'redis',
+            displayName: 'redis',
+            security: {},
+          }),
+        ],
+      });
+
+      const res = callGetContainerSecurityVulnerabilities(harness.handlers);
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({});
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        totalContainers: 3,
+        scannedContainers: 2,
+        latestScannedAt: '2026-02-02T10:00:00.000Z',
+        images: [
+          {
+            image: 'nginx',
+            containerIds: ['c1', 'c2'],
+            updateSummary: {
+              critical: 0,
+              high: 0,
+              medium: 0,
+              low: 0,
+              unknown: 2,
+            },
+            vulnerabilities: [
+              {
+                id: 'CVE-2026-0001',
+                severity: 'CRITICAL',
+                package: 'openssl',
+                version: '3.0.0',
+                fixedIn: '3.0.1',
+                title: 'openssl issue',
+                target: 'usr/lib/libssl.so',
+                primaryUrl: 'https://example.com/CVE-2026-0001',
+                publishedDate: '2026-01-01T00:00:00.000Z',
+              },
+              {
+                id: 'CVE-2026-0002',
+                severity: 'HIGH',
+                package: 'zlib',
+                version: '1.2.10',
+                fixedIn: null,
+                title: '',
+                target: '',
+                primaryUrl: '',
+                publishedDate: '',
+              },
+            ],
+          },
+        ],
+      });
+    });
+
     test('returns redacted container when id exists', () => {
       const redacted = { id: 'c1', details: { env: [{ key: 'TOKEN', value: '[REDACTED]' }] } };
       const harness = createHarness({
@@ -538,6 +691,7 @@ describe('api/container/crud', () => {
     test('returns 501 when raw env dependencies are not provided', () => {
       const handlers = createCrudHandlers({
         getContainersFromStore: vi.fn(() => []),
+        getContainerCountFromStore: vi.fn(() => 0),
         storeContainer: {
           getContainer: vi.fn(),
           deleteContainer: vi.fn(),

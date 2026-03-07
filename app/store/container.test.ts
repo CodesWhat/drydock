@@ -859,6 +859,49 @@ test('getContainers should support offset-only pagination when limit is zero', a
   expect(results[1].name).toEqual('container3');
 });
 
+test('getContainerCount should return filtered totals and reuse cached query results', async () => {
+  const collection = createFilterableCollection([
+    {
+      data: createContainerFixture({
+        id: 'watcher-a-1',
+        name: 'watcher-a-1',
+        watcher: 'watcher-a',
+      }),
+    },
+    {
+      data: createContainerFixture({
+        id: 'watcher-a-2',
+        name: 'watcher-a-2',
+        watcher: 'watcher-a',
+      }),
+    },
+    {
+      data: createContainerFixture({
+        id: 'watcher-b-1',
+        name: 'watcher-b-1',
+        watcher: 'watcher-b',
+      }),
+    },
+  ]);
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+
+  const total = container.getContainerCount({ watcher: 'watcher-a' });
+  expect(total).toBe(2);
+  expect(collection.find).toHaveBeenCalledTimes(1);
+
+  const pagedResults = container.getContainers({ watcher: 'watcher-a' }, { limit: 1, offset: 0 });
+  expect(pagedResults).toHaveLength(1);
+  expect(collection.find).toHaveBeenCalledTimes(1);
+
+  const cachedTotal = container.getContainerCount({ watcher: 'watcher-a' });
+  expect(cachedTotal).toBe(2);
+  expect(collection.find).toHaveBeenCalledTimes(1);
+});
+
 test('getContainers should redact sensitive env values by default', async () => {
   const containerExample = createContainerFixture({
     details: {

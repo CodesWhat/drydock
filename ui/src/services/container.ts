@@ -1,3 +1,4 @@
+import { extractCollectionData } from '../utils/api';
 import { ApiError, errorMessage } from '../utils/error';
 
 function getContainerIcon() {
@@ -42,26 +43,45 @@ interface GetAllContainersOptions {
   signal?: AbortSignal;
 }
 
+interface AggregatedSecuritySummary {
+  unknown: number;
+  low: number;
+  medium: number;
+  high: number;
+  critical: number;
+}
+
+interface AggregatedSecurityVulnerability {
+  id: string;
+  severity: string;
+  package: string;
+  version: string;
+  fixedIn: string | null;
+  title: string;
+  target: string;
+  primaryUrl: string;
+  publishedDate: string;
+}
+
+interface AggregatedSecurityImage {
+  image: string;
+  containerIds: string[];
+  updateSummary?: AggregatedSecuritySummary;
+  vulnerabilities: AggregatedSecurityVulnerability[];
+}
+
+interface SecurityVulnerabilityOverview {
+  totalContainers: number;
+  scannedContainers: number;
+  latestScannedAt: string | null;
+  images: AggregatedSecurityImage[];
+}
+
 interface ContainerTriggerRequest {
   containerId: string;
   triggerType: string;
   triggerName: string;
   triggerAgent?: string;
-}
-
-function extractCollectionData<T>(payload: unknown): T[] {
-  if (Array.isArray(payload)) {
-    return payload as T[];
-  }
-  if (payload && typeof payload === 'object') {
-    if (Array.isArray((payload as { data?: unknown }).data)) {
-      return (payload as { data: T[] }).data;
-    }
-    if (Array.isArray((payload as { items?: unknown }).items)) {
-      return (payload as { items: T[] }).items;
-    }
-  }
-  return [];
 }
 
 function isAbortSignal(value: unknown): value is AbortSignal {
@@ -237,6 +257,16 @@ async function getContainerVulnerabilities(containerId: string) {
   return response.json();
 }
 
+async function getSecurityVulnerabilityOverview(): Promise<SecurityVulnerabilityOverview> {
+  const response = await fetch('/api/containers/security/vulnerabilities', {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get aggregated vulnerabilities: ${response.statusText}`);
+  }
+  return response.json();
+}
+
 async function getContainerSbom(containerId: string, format: string = 'spdx-json') {
   const response = await fetch(
     `/api/containers/${containerId}/sbom?format=${encodeURIComponent(format)}`,
@@ -335,6 +365,7 @@ export {
   getContainerLogs,
   getContainerUpdateOperations,
   getContainerVulnerabilities,
+  getSecurityVulnerabilityOverview,
   getContainerSbom,
   revealContainerEnv,
   runTrigger,
@@ -343,3 +374,9 @@ export {
 };
 
 export type { ContainerGroup };
+export type {
+  AggregatedSecurityImage,
+  AggregatedSecuritySummary,
+  AggregatedSecurityVulnerability,
+  SecurityVulnerabilityOverview,
+};
