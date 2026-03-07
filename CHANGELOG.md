@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dashboard vulnerability sort by severity** — Top-5 vulnerability list on the dashboard now sorted by total count descending with critical count as tiebreaker, so the most severe containers appear first.
 - **Watcher agent support initialization** — Watchers now initialize agent support on startup for distributed monitoring readiness.
 - **Security vulnerability overview endpoint** — New `GET /api/containers/security/vulnerabilities` returns pre-aggregated vulnerability data grouped by image with severity summaries, so the Security view no longer needs to load all containers.
+- **Rollback confirmation dialog** — Container rollback actions now require explicit confirmation through a danger-severity dialog before restoring from backup.
 
 ### Changed
 
@@ -50,6 +51,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **OIDC authorization redirect URL validation** — Added allowlist-based validation for OIDC authorization redirect URLs, preventing open redirect attacks through crafted callback parameters.
 - **Auth, registry token, and log sanitization hardening** — Consolidated security pass hardening authentication flows, registry token validation, and log output sanitization.
 - **Command trigger shell execution warning** — Command trigger now logs a one-time security warning on first execution, reminding operators that commands run with drydock process privileges.
+- **Login brute-force lockout** — Per-account and per-IP lockout after configurable failed login attempts (`DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS`, `DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS`) with configurable window and duration.
+- **Concurrent session limits** — Maximum authenticated sessions per user (default 5, configurable via `DD_SERVER_SESSION_MAXCONCURRENTSESSIONS`). Oldest sessions are revoked first when the limit is reached.
+- **Destructive action confirmation header** — Dangerous operations (delete container, restore backup, delete all containers) now require an `X-DD-Confirm-Action` header, returning 428 when missing.
+- **Native scrypt password hashing** — Replaced abandoned `pass` package with `node:crypto` scryptSync for Basic auth. Supports configurable N/r/p parameters with timing-safe comparison.
+- **Full credential redaction** — `Component.mask()` now returns `[REDACTED]` instead of leaking prefix/suffix characters in logs and API responses.
+- **Trigger infrastructure config redaction** — Webhook URLs, hostnames, channels, and usernames are redacted from trigger configuration in API responses.
+- **Website SRI integrity hashes** — Post-build script injects subresource integrity hashes for static assets on the documentation website.
 
 ## [1.4.0] — 2026-02-28
 
