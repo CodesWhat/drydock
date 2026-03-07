@@ -62,6 +62,37 @@ describe('Trigger Service', () => {
       expect(result).toEqual(mockTriggers);
     });
 
+    it('unwraps collection envelope with data array', async () => {
+      const mockTriggers = [{ type: 'slack', name: 'alerts' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: mockTriggers, total: 1 }),
+      } as any);
+
+      const result = await getAllTriggers();
+      expect(result).toEqual(mockTriggers);
+    });
+
+    it('returns empty array for non-array non-object payload', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => null,
+      } as any);
+
+      const result = await getAllTriggers();
+      expect(result).toEqual([]);
+    });
+
+    it('returns empty array for object without data array', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ total: 0 }),
+      } as any);
+
+      const result = await getAllTriggers();
+      expect(result).toEqual([]);
+    });
+
     it('throws when fetching triggers fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
