@@ -62,8 +62,14 @@ function configureSecurityHeaders(app) {
     );
   }
 
+  const tlsEnabled = configuration.tls.enabled === true;
+
   app.use(
     helmet({
+      // Disable HSTS when not serving over TLS — browsers would otherwise
+      // try to upgrade all future requests to HTTPS, breaking plain-HTTP
+      // deployments (see #105).
+      strictTransportSecurity: tlsEnabled,
       contentSecurityPolicy: {
         directives: {
           'default-src': ["'self'"],
@@ -71,6 +77,9 @@ function configureSecurityHeaders(app) {
           'style-src': ["'self'", "'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
           'connect-src': connectSources,
+          // Prevent browsers from upgrading HTTP sub-resource requests to
+          // HTTPS when TLS is not configured (#105).
+          'upgrade-insecure-requests': tlsEnabled ? [] : null,
         },
       },
     }),
