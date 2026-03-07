@@ -672,3 +672,93 @@ describe('useDashboardComputed recent updates', () => {
     expect(state.securityNotScannedArcLength.value).toBe(0);
   });
 });
+
+describe('useDashboardComputed vulnerabilities', () => {
+  it('sorts by total vulnerability count descending and limits to five', () => {
+    const containers: Container[] = [
+      makeBaseContainer({
+        id: 'low-vulns',
+        name: 'low-vulns',
+        bouncer: 'unsafe',
+        securitySummary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+      }),
+      makeBaseContainer({
+        id: 'high-vulns',
+        name: 'high-vulns',
+        bouncer: 'blocked',
+        securitySummary: { critical: 10, high: 20, medium: 5, low: 2, unknown: 0 },
+      }),
+      makeBaseContainer({
+        id: 'mid-vulns',
+        name: 'mid-vulns',
+        bouncer: 'unsafe',
+        securitySummary: { critical: 0, high: 3, medium: 2, low: 1, unknown: 0 },
+      }),
+    ];
+    const state = createState({ containers });
+
+    expect(state.vulnerabilities.value.map((v) => v.id)).toEqual([
+      'high-vulns',
+      'mid-vulns',
+      'low-vulns',
+    ]);
+  });
+
+  it('breaks ties by critical count descending', () => {
+    const containers: Container[] = [
+      makeBaseContainer({
+        id: 'fewer-critical',
+        name: 'fewer-critical',
+        bouncer: 'blocked',
+        securitySummary: { critical: 1, high: 4, medium: 0, low: 0, unknown: 0 },
+      }),
+      makeBaseContainer({
+        id: 'more-critical',
+        name: 'more-critical',
+        bouncer: 'blocked',
+        securitySummary: { critical: 3, high: 2, medium: 0, low: 0, unknown: 0 },
+      }),
+    ];
+    const state = createState({ containers });
+
+    expect(state.vulnerabilities.value.map((v) => v.id)).toEqual([
+      'more-critical',
+      'fewer-critical',
+    ]);
+  });
+
+  it('excludes safe containers and limits to five entries', () => {
+    const containers: Container[] = Array.from({ length: 7 }, (_, index) =>
+      makeBaseContainer({
+        id: `vuln-${index}`,
+        name: `vuln-${index}`,
+        bouncer: index % 2 === 0 ? 'blocked' : 'unsafe',
+        securitySummary: { critical: 7 - index, high: 0, medium: 0, low: 0, unknown: 0 },
+      }),
+    );
+    containers.push(makeBaseContainer({ id: 'safe-one', name: 'safe-one', bouncer: 'safe' }));
+    const state = createState({ containers });
+
+    expect(state.vulnerabilities.value).toHaveLength(5);
+    expect(state.vulnerabilities.value.every((v) => v.id !== 'safe-one')).toBe(true);
+  });
+
+  it('handles containers without securitySummary', () => {
+    const containers: Container[] = [
+      makeBaseContainer({
+        id: 'with-summary',
+        name: 'with-summary',
+        bouncer: 'blocked',
+        securitySummary: { critical: 5, high: 0, medium: 0, low: 0, unknown: 0 },
+      }),
+      makeBaseContainer({
+        id: 'no-summary',
+        name: 'no-summary',
+        bouncer: 'unsafe',
+      }),
+    ];
+    const state = createState({ containers });
+
+    expect(state.vulnerabilities.value.map((v) => v.id)).toEqual(['with-summary', 'no-summary']);
+  });
+});
