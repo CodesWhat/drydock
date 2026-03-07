@@ -287,13 +287,17 @@ class Oidc extends Authentication {
     this.log.debug(`Discovering configuration from ${this.configuration.discovery}`);
     const openidClient = await this.getOpenIdClient();
     const timeoutSeconds = Math.ceil(this.configuration.timeout / 1000);
+    const discoveryUrl = new URL(this.configuration.discovery);
+    const execute: Array<typeof openidClient.allowInsecureRequests> =
+      discoveryUrl.protocol === 'http:' ? [openidClient.allowInsecureRequests] : [];
     this.client = await openidClient.discovery(
-      new URL(this.configuration.discovery),
+      discoveryUrl,
       this.configuration.clientid,
       this.configuration.clientsecret,
       openidClient.ClientSecretPost(this.configuration.clientsecret),
       {
         timeout: timeoutSeconds,
+        execute,
       },
     );
     try {
