@@ -66,8 +66,13 @@ docker run -d \
   --name drydock \
   -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -e DD_AUTH_BASIC_ADMIN_USER=admin \
+  -e "DD_AUTH_BASIC_ADMIN_HASH={SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g=" \
   codeswhat/drydock:latest
 ```
+
+> The example hash above is for the password `password` — generate your own with `htpasswd -nbs admin yourpassword`.
+> Authentication is **required by default**. See the [auth docs](https://drydock.codeswhat.com/docs/configuration/authentications) for OIDC, anonymous access, and other options.
 
 The image includes `trivy` and `cosign` binaries for local vulnerability scanning and image verification.
 
