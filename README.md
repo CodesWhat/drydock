@@ -280,7 +280,9 @@ Anonymous (opt-in via `DD_ANONYMOUS_AUTH_CONFIRM=true`) · Basic (username + pas
 
 API note: `POST /api/containers/:id/env/reveal` is currently scoped to authentication only (no per-container RBAC yet), so any authenticated user is treated as a trusted operator for secret reveal actions.
 
-OpenAPI note: machine-readable API docs are available at `GET /api/openapi.json`.
+OpenAPI note: machine-readable API docs are available at `GET /api/v1/openapi.json` (canonical) and `GET /api/openapi.json` (compatibility alias during transition).
+
+API versioning note: third-party integrations should migrate to `/api/v1/*`. The unversioned `/api/*` alias is planned for removal in a future major release (target: v2.0.0).
 
 ### 🥊 Update Bouncer
 
@@ -357,13 +359,13 @@ Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully suppo
 | --- | --- | --- |
 | **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Bouncer, SBOM, 7 new registries, 4 new triggers, rollback fixes, GHCR auth, self-hosted TLS, re2js regex engine, compose trigger fixes, DB persistence on shutdown |
 | **v1.4.0** ✅ | UI Modernization & Hardening | Tailwind CSS 4 + custom component library, 6 themes, 7 icon libraries, font size preference, Cmd/K command palette, OpenAPI 3.1.0 endpoint, standardized API responses with pagination, compose-native YAML-preserving updates, rename-first rollback with health gates, self-update controller with SSE ack, fail-closed auth enforcement, OIDC redirect URL validation, tag-family semver, notification rules, container grouping by stack, audit history view, dual-slot security scanning, scheduled scans, WUD migration CLI, bundled offline icons, dashboard drag-reorder, gzip compression, API error sanitization, agent log validation, TLS path redaction, audit store indexing with 30-day retention, type-safe store modules, durable batch scans, recent-status API |
-| **v1.4.1** | Reliability & Resilience | Deferred hardening/reliability: API error sanitization follow-ups, trigger schema validation, shared-proxy rate limiter key strategy, settings PATCH semantics cleanup (deprecated PUT alias removal target v1.5.0), action-endpoint convention docs, compose trigger validation/reconciliation, auth schema validation, UI resilience audit |
+| **v1.4.1** | Reliability & Resilience | Deferred hardening/reliability: API error sanitization follow-ups, trigger schema validation, shared-proxy rate limiter key strategy, settings PATCH semantics cleanup (deprecated PUT alias removal target v1.5.0), action-endpoint convention docs, staged CORS explicit-origin deprecation plan, compose trigger validation/reconciliation, auth schema validation, UI resilience audit |
 | **v1.5.0** | Observability | Real-time log viewer, container resource monitoring, registry webhooks |
 | **v1.5.1** | Scanner Decoupling | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers |
 | **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring, dashboard customization |
 | **v1.8.0** | Fleet Management & Live Config | YAML config, live UI config panels, volume browser, parallel updates, SQLite store migration, i18n framework |
-| **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers, basic GitOps |
+| **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers, basic GitOps, remove legacy unversioned `/api/*` alias (use `/api/vN/*`) |
 | **v2.1.0** | Advanced Deployment Patterns | Health check gates, canary deployments, durable self-update controller |
 | **v2.2.0** | Container Operations | Web terminal, file browser, image building, basic Podman support |
 | **v2.3.0** | Automation & Developer Experience | API keys, passkey auth, TOTP 2FA, TypeScript actions, CLI |

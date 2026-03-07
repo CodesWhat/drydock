@@ -19,7 +19,7 @@ You can adjust the server configuration with the following environment variables
 | `DD_SERVER_TLS_KEY` | ⚪ | TLS server key (required when `DD_SERVER_TLS_ENABLED` is enabled) | File path to the key file | |
 | `DD_SERVER_TLS_CERT` | ⚪ | TLS server certificate (required when `DD_SERVER_TLS_ENABLED` is enabled) | File path to the cert file | |
 | `DD_SERVER_CORS_ENABLED` | ⚪ | Enable [CORS](https://developer.mozilla.org/fr/docs/Web/HTTP/CORS) Requests | `true`, `false` | `false` |
-| `DD_SERVER_CORS_ORIGIN` | ⚪ | Supported CORS origin | | `*` |
+| `DD_SERVER_CORS_ORIGIN` | ⚪ | Allowed CORS origin (prefer an explicit origin in production) | `*` or a single origin URL (for example `https://drydock.example.com`) | `*` |
 | `DD_SERVER_CORS_METHODS` | ⚪ | Supported CORS methods | Comma separated list of valid HTTP verbs | `GET,HEAD,PUT,PATCH,POST,DELETE` |
 | `DD_SERVER_COMPRESSION_ENABLED` | ⚪ | Enable gzip response compression (SSE responses are excluded automatically) | `true`, `false` | `true` |
 | `DD_SERVER_COMPRESSION_THRESHOLD` | ⚪ | Minimum response size in bytes before compression is applied | integer (`>=0`) | `1024` |
@@ -32,6 +32,15 @@ You can adjust the server configuration with the following environment variables
 | `DD_ALLOW_INSECURE_ROOT` | ⚪ | Explicit acknowledgment for break-glass root mode | `true`, `false` | `false` |
 
 For log output configuration (`DD_LOG_LEVEL`, `DD_LOG_FORMAT`), see [Logs configuration](/docs/configuration/logs).
+
+## CORS Security Guidance
+
+When `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` is not set, drydock uses `*` (all origins). This is convenient for local testing, but broad for production.
+
+For production deployments, set an explicit trusted origin:
+
+- `DD_SERVER_CORS_ORIGIN=https://drydock.example.com`
+- `DD_SERVER_CORS_ORIGIN=https://ops.example.com`
 
 ## Plain HTTP Deployments
 
@@ -178,12 +187,16 @@ services:
     ...
     environment:
       - DD_SERVER_WEBHOOK_TOKEN__FILE=/run/secrets/webhook_token
+      - DD_SERVER_WEBHOOK_TOKENS_UPDATE__FILE=/run/secrets/webhook_update_token
     secrets:
       - webhook_token
+      - webhook_update_token
 
 secrets:
   webhook_token:
     file: ./webhook_token.txt
+  webhook_update_token:
+    file: ./webhook_update_token.txt
 ```
 
 </Tab>
@@ -191,7 +204,9 @@ secrets:
 ```bash
 docker run \
   -e DD_SERVER_WEBHOOK_TOKEN__FILE=/run/secrets/webhook_token \
+  -e DD_SERVER_WEBHOOK_TOKENS_UPDATE__FILE=/run/secrets/webhook_update_token \
   -v ./webhook_token.txt:/run/secrets/webhook_token:ro \
+  -v ./webhook_update_token.txt:/run/secrets/webhook_update_token:ro \
   ...
   codeswhat/drydock
 ```

@@ -22,6 +22,8 @@ The `command` trigger lets you run arbitrary commands upon container update noti
 
 <Callout type="info">Update informations are passed as environment variables (see below).</Callout>
 
+<Callout type="warn">Security: `DD_TRIGGER_COMMAND_{trigger_name}_CMD` is executed as `{shell} -c {cmd}` with drydock process privileges. This is an intentional admin-only feature configured through environment variables (not API-exposed). Use only trusted command strings and validate any interpolated values.</Callout>
+
 ## Environment variables passed to the executed command
 
 ### In simple mode (execution per container to update)

@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Standardized API responses with collection pattern** — All collection endpoints (`/api/containers`, `/api/registries`, `/api/watchers`, `/api/authentications`, `/api/audit`) now return `{ data: [...], total }` instead of raw arrays. Supports pagination via `offset`/`limit` query parameters.
+- **Paginated API discoverability links** — Paginated collection responses now include `_links.self` and `_links.next` where applicable (for example `/api/containers` and `/api/audit`) to make page traversal explicit for API consumers.
+- **Versioned API base path with transition alias** — `/api/v1/*` is now the canonical API path for integrations. `/api/*` remains as a backward-compatible alias during migration and is planned for removal in a future major release (target: v2.0.0).
+- **Machine-readable API error contract** — Error responses now include top-level `code` and `message` fields while preserving legacy `error` string compatibility; optional `details` may be included for contextual metadata.
 - **6 color themes** — Replaced original Drydock theme with popular editor palettes: One Dark, GitHub, Dracula, Catppuccin, Gruvbox, and Ayu. Each with dark and light variants.
 
 ### Fixed

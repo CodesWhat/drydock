@@ -211,7 +211,8 @@ const emit = defineEmits<{
         </p>
         <p v-if="!props.webhookEnabled" class="text-[11px] dd-text-muted">
           Webhook API is disabled. Set <code class="font-mono">DD_SERVER_WEBHOOK_ENABLED=true</code> and
-          <code class="font-mono">DD_SERVER_WEBHOOK_TOKEN</code> to enable it.
+          configure at least one token (<code class="font-mono">DD_SERVER_WEBHOOK_TOKEN</code> or
+          <code class="font-mono">DD_SERVER_WEBHOOK_TOKENS_*</code>) to enable it.
         </p>
         <div class="overflow-x-auto dd-rounded" :style="{ border: '1px solid var(--dd-border-strong)' }">
           <table class="w-full text-left text-[11px]">
