@@ -15,6 +15,8 @@ const COMPOSE_FILE_LOCK_SUFFIX = '.drydock.lock';
 const COMPOSE_FILE_LOCK_RETRY_MS = 100;
 const COMPOSE_FILE_LOCK_MAX_WAIT_MS = 10_000;
 const COMPOSE_FILE_LOCK_STALE_MS = 120_000;
+const COMPOSE_RENAME_MAX_RETRIES = 5;
+const COMPOSE_RENAME_RETRY_MS = 200;
 const ROOT_MODE_BREAK_GLASS_HINT =
   'use socket proxy or adjust file permissions/group_add; break-glass root mode requires DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true';
 
@@ -423,15 +425,44 @@ class Dockercompose extends Docker {
       `.${composeFileName}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     );
     await fs.writeFile(temporaryFilePath, data);
-    try {
-      await fs.rename(temporaryFilePath, filePath);
-    } catch (e) {
+    for (let attempt = 0; ; attempt++) {
       try {
-        await fs.unlink(temporaryFilePath);
-      } catch {
-        // ignore temp cleanup errors to preserve the original write error
+        await fs.rename(temporaryFilePath, filePath);
+        return;
+      } catch (e) {
+        if (e?.code === 'EBUSY' && attempt < COMPOSE_RENAME_MAX_RETRIES) {
+          this.log.warn(
+            `Compose file ${filePath} is busy (EBUSY); retry ${attempt + 1}/${COMPOSE_RENAME_MAX_RETRIES}`,
+          );
+          await sleep(COMPOSE_RENAME_RETRY_MS);
+          continue;
+        }
+        // Rename exhausted or non-EBUSY — fall back to direct overwrite so
+        // the update is not lost.  This sacrifices crash-atomicity but
+        // guarantees the compose file is written (common on Docker bind
+        // mounts where rename can fail persistently with EBUSY).
+        if (e?.code === 'EBUSY') {
+          this.log.warn(
+            `Atomic rename to ${filePath} failed after ${COMPOSE_RENAME_MAX_RETRIES} retries; falling back to direct write`,
+          );
+          try {
+            await fs.writeFile(filePath, data);
+          } finally {
+            try {
+              await fs.unlink(temporaryFilePath);
+            } catch {
+              // best-effort temp cleanup
+            }
+          }
+          return;
+        }
+        try {
+          await fs.unlink(temporaryFilePath);
+        } catch {
+          // ignore temp cleanup errors to preserve the original write error
+        }
+        throw e;
       }
-      throw e;
     }
   }
 
