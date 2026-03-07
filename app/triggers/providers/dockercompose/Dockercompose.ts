@@ -417,6 +417,49 @@ class Dockercompose extends Docker {
     }
   }
 
+  async tryRenameComposeFile(temporaryFilePath, filePath) {
+    try {
+      await fs.rename(temporaryFilePath, filePath);
+      return undefined;
+    } catch (error) {
+      return error;
+    }
+  }
+
+  async handleBusyComposeRenameRetry(error, filePath, attempt) {
+    if (error?.code !== 'EBUSY' || attempt >= COMPOSE_RENAME_MAX_RETRIES) {
+      return false;
+    }
+    this.log.warn(
+      `Compose file ${filePath} is busy (EBUSY); retry ${attempt + 1}/${COMPOSE_RENAME_MAX_RETRIES}`,
+    );
+    await sleep(COMPOSE_RENAME_RETRY_MS);
+    return true;
+  }
+
+  async cleanupComposeTemporaryFile(temporaryFilePath) {
+    try {
+      await fs.unlink(temporaryFilePath);
+    } catch {
+      // best-effort temp cleanup
+    }
+  }
+
+  async handleBusyComposeRenameFallback(error, filePath, data, temporaryFilePath) {
+    if (error?.code !== 'EBUSY') {
+      return false;
+    }
+    this.log.warn(
+      `Atomic rename to ${filePath} failed after ${COMPOSE_RENAME_MAX_RETRIES} retries; falling back to direct write`,
+    );
+    try {
+      await fs.writeFile(filePath, data);
+    } finally {
+      await this.cleanupComposeTemporaryFile(temporaryFilePath);
+    }
+    return true;
+  }
+
   async writeComposeFileAtomic(filePath, data) {
     const composeDirectory = path.dirname(filePath);
     const composeFileName = path.basename(filePath);
@@ -426,43 +469,24 @@ class Dockercompose extends Docker {
     );
     await fs.writeFile(temporaryFilePath, data);
     for (let attempt = 0; ; attempt++) {
-      try {
-        await fs.rename(temporaryFilePath, filePath);
+      const renameError = await this.tryRenameComposeFile(temporaryFilePath, filePath);
+      if (!renameError) {
         return;
-      } catch (e) {
-        if (e?.code === 'EBUSY' && attempt < COMPOSE_RENAME_MAX_RETRIES) {
-          this.log.warn(
-            `Compose file ${filePath} is busy (EBUSY); retry ${attempt + 1}/${COMPOSE_RENAME_MAX_RETRIES}`,
-          );
-          await sleep(COMPOSE_RENAME_RETRY_MS);
-          continue;
-        }
-        // Rename exhausted or non-EBUSY — fall back to direct overwrite so
-        // the update is not lost.  This sacrifices crash-atomicity but
-        // guarantees the compose file is written (common on Docker bind
-        // mounts where rename can fail persistently with EBUSY).
-        if (e?.code === 'EBUSY') {
-          this.log.warn(
-            `Atomic rename to ${filePath} failed after ${COMPOSE_RENAME_MAX_RETRIES} retries; falling back to direct write`,
-          );
-          try {
-            await fs.writeFile(filePath, data);
-          } finally {
-            try {
-              await fs.unlink(temporaryFilePath);
-            } catch {
-              // best-effort temp cleanup
-            }
-          }
-          return;
-        }
-        try {
-          await fs.unlink(temporaryFilePath);
-        } catch {
-          // ignore temp cleanup errors to preserve the original write error
-        }
-        throw e;
       }
+      if (await this.handleBusyComposeRenameRetry(renameError, filePath, attempt)) {
+        continue;
+      }
+      // Rename exhausted or non-EBUSY — fall back to direct overwrite so
+      // the update is not lost.  This sacrifices crash-atomicity but
+      // guarantees the compose file is written (common on Docker bind
+      // mounts where rename can fail persistently with EBUSY).
+      if (
+        await this.handleBusyComposeRenameFallback(renameError, filePath, data, temporaryFilePath)
+      ) {
+        return;
+      }
+      await this.cleanupComposeTemporaryFile(temporaryFilePath);
+      throw renameError;
     }
   }
 
