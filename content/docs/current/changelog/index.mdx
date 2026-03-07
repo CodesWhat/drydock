@@ -13,13 +13,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **OpenAPI 3.1.0 specification and endpoint** — Machine-readable API documentation available at `GET /api/openapi.json`, covering all v1.4 endpoints with request/response schemas.
+- **Font size preference** — Adjustable font size slider in Config > Appearance for UI-wide text scaling.
+- **Announcement banner** — Dismissible banner component for surfacing release notes and important notices in the dashboard.
+
+### Changed
+
+- **Standardized API responses with collection pattern** — All collection endpoints (`/api/containers`, `/api/registries`, `/api/watchers`, `/api/authentications`, `/api/audit`) now return `{ data: [...], total }` instead of raw arrays. Supports pagination via `offset`/`limit` query parameters.
+- **6 color themes** — Replaced original Drydock theme with popular editor palettes: One Dark, GitHub, Dracula, Catppuccin, Gruvbox, and Ayu. Each with dark and light variants.
+
 ### Fixed
 
+- **Apprise trigger missing Content-Type header** — Apprise notify requests now set explicit `Content-Type: application/json` header, fixing failures with Apprise servers that require it.
+- **Toggle switch contrast** — Improved toggle thumb contrast across all themes for better visibility.
 - **Empty env var values rejected during container validation** — Joi schema on `details.env[].value` used `.string().required()` which implicitly disallows empty strings. Containers with empty environment variable values (e.g. `FOO=`) were silently skipped during watch cycles. Fixed with `.allow('')`. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
 - **OIDC login broken by same-origin redirect check** — `LoginView.vue` restricted OIDC redirects to same-origin URLs, but OIDC Identity Provider URLs are always cross-origin (Authentik, Keycloak, etc.). Removed the same-origin check, keeping only HTTP/HTTPS protocol validation.
 - **Blank white screen on plain HTTP deployments** — Helmet.js defaults enabled HSTS and `upgrade-insecure-requests` CSP even when TLS was not configured, causing browsers to block sub-resource loads on plain HTTP. Now conditionally omits `upgrade-insecure-requests` and HSTS when TLS is off. Strict boolean check on `tls.enabled` prevents string coercion. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
 - **Stale theme preferences after upgrade from v1.3** — Preferences migration `deepMerge` overwrote defaults with persisted values unconditionally, so invalid enum values (e.g. removed `drydock` theme family) survived migration and caused rendering failures. Added `sanitize()` pass that strips invalid theme families, variants, font families, icon libraries, scales, radius presets, view modes, and table actions before merge.
-- **OIDC discovery fails on HTTP IdP URLs** — openid-client v6 enforces HTTPS by default for all OIDC requests. Users running IdPs behind reverse proxies or on private networks with HTTP discovery URLs got "only requests to HTTPS are allowed" errors. Now temporarily allows `http://` discovery in compatibility mode (with warnings), supports explicit override via `DD_OIDC_ALLOW_HTTP=true|false`, and surfaces a dismissible UI banner when HTTP discovery is detected.
+- **OIDC discovery fails on HTTP IdP URLs** — openid-client v6 enforces HTTPS by default for all OIDC requests. Users running IdPs behind reverse proxies or on private networks with HTTP discovery URLs got "only requests to HTTPS are allowed" errors. Now passes `allowInsecureRequests` when the discovery URL protocol is `http:`.
+- **Docker Compose trigger fails with EBUSY on bind-mounted stacks** — `writeComposeFileAtomic()` used a single `fs.rename()` call that failed permanently when another process (e.g. Dockge) held the file or when Docker bind-mount overlay contention blocked the rename. Now retries up to 5 times with 200ms backoff, then falls back to a direct `writeFile` if rename remains blocked. ([#84](https://github.com/CodesWhat/drydock/discussions/84))
+
+### Security
+
+- **OIDC authorization redirect URL validation** — Added allowlist-based validation for OIDC authorization redirect URLs, preventing open redirect attacks through crafted callback parameters.
 
 ## [1.4.0] — 2026-02-28
 
@@ -49,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`config migrate` CLI** — `node dist/index.js config migrate` converts legacy `WUD_*` and Watchtower env vars/labels to `DD_*`/`dd.*` format across `.env` and compose files. Supports `--dry-run` preview and `--source` / `--file` selection.
 - **Legacy compatibility usage metric** — Prometheus counter `dd_legacy_input_total{source,key}` tracks local runtime consumption of legacy inputs (`WUD_*` env vars, `wud.*` labels) without external telemetry. Startup warns when legacy env vars are detected; watcher/trigger paths emit one-time deprecation warnings on `wud.*` label fallback.
 - **Bundled selfhst icons for offline startup** — Common container icons (Docker, Grafana, Nextcloud, etc.) bundled in the image so the UI works without internet on first boot.
-- **Runtime tool status endpoint** — `/api/server/security-tools` reports Trivy/Cosign availability for the Security view.
+- **Runtime tool status endpoint** — `/api/server/security/runtime` reports Trivy/Cosign availability for the Security view.
 - **Gzip response compression** — Configurable via `DD_SERVER_COMPRESSION_ENABLED` and `DD_SERVER_COMPRESSION_THRESHOLD` (default 1024 bytes), with automatic SSE exclusion.
 - **Container runtime details** — Ports, volumes, and environment exposed in the container model and API for the detail panel.
 - **Update detected timestamp** — `updateDetectedAt` field tracks when an update was first seen, preserved across refresh cycles.
@@ -65,7 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Tailwind CSS 4 UI stack** — Complete frontend migration from Vuetify 3 to Tailwind CSS 4 with custom shared components. All 13 views rebuilt with Composition API.
 - **Shared data components** — Reusable DataTable, DataCardGrid, DataListAccordion, DataFilterBar, DetailPanel, DataViewLayout, and EmptyState components used consistently across all views with table/cards/list view modes.
-- **4 color themes** — Drydock (navy tones), GitHub (clean/familiar), Dracula (bold purple), and Catppuccin (warm pastels). Each with dark and light variants. Circle-reveal transition animation between themes.
+- **6 color themes** — One Dark (clean/balanced), GitHub (clean/familiar), Dracula (bold purple), Catppuccin (warm pastels), Gruvbox (retro earthy warmth), and Ayu (soft golden tones). Each with dark and light variants. Circle-reveal transition animation between themes.
 - **7 icon libraries** — Phosphor Duotone (default), Phosphor, Lucide, Tabler, Heroicons, Iconoir, and Font Awesome. Switchable in Config > Appearance with icon size slider.
 - **6 font families** — IBM Plex Mono (default/bundled), JetBrains Mono, Source Code Pro, Inconsolata, Commit Mono, and Comic Mono. Lazy-loaded from local `/fonts/` directory with internetless fallback.
 - **Command palette** — Global Cmd/Ctrl+K search with scope filtering (`/` pages, `@` runtime, `#` config), keyboard navigation, grouped sections, and recent history.
@@ -637,7 +655,7 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 [1.3.2]: https://github.com/CodesWhat/drydock/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/CodesWhat/drydock/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/CodesWhat/drydock/compare/v1.2.0...v1.3.0
-[1.1.1]: https://github.com/CodesWhat/drydock/compare/v1.1.0...1.1.1
+[1.1.1]: https://github.com/CodesWhat/drydock/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/CodesWhat/drydock/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/CodesWhat/drydock/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/CodesWhat/drydock/compare/v1.0.0...v1.0.1

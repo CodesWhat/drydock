@@ -33,6 +33,7 @@ The [webhook endpoints](/docs/configuration/webhooks) use a separate Bearer toke
 
 | Endpoint | Method | Description |
 | --- | --- | --- |
+| `/api/openapi.json` | `GET` | [OpenAPI 3.1.0 specification](#openapi) (machine-readable API docs) |
 | `/health` | `GET` | Health check (returns 200 when healthy) |
 | `/metrics` | `GET` | Prometheus metrics (optional auth via `DD_SERVER_METRICS_AUTH`) |
 | `/api/events/ui` | `GET` | [Server-Sent Events](#server-sent-events-sse) for real-time UI updates |
@@ -352,3 +353,13 @@ curl -X POST http://drydock:3000/auth/remember \
   -H 'Content-Type: application/json' \
   -d '{"remember": true}'
 ```
+
+## OpenAPI
+
+Machine-readable API documentation is available as an OpenAPI 3.1.0 specification.
+
+```bash
+curl http://drydock:3000/api/openapi.json
+```
+
+The spec covers all API endpoints with request/response schemas. You can import the URL into tools like Swagger UI, Redoc, or Postman for interactive exploration.

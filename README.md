@@ -276,7 +276,7 @@ Apprise · Command · Discord · Docker · Docker Compose · Google Chat · Goti
 
 ### 🔐 Authentication
 
-Anonymous (default) · Basic (username + password hash) · OIDC (Authelia, Auth0, Authentik). All auth flows fail closed by default.
+Anonymous (opt-in via `DD_ANONYMOUS_AUTH_CONFIRM=true`) · Basic (username + password hash) · OIDC (Authelia, Auth0, Authentik). All auth flows fail closed by default.
 
 API note: `POST /api/containers/:id/env/reveal` is currently scoped to authentication only (no per-container RBAC yet), so any authenticated user is treated as a trusted operator for secret reveal actions.
 
@@ -356,7 +356,7 @@ Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully suppo
 | Version | Theme | Highlights |
 | --- | --- | --- |
 | **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Bouncer, SBOM, 7 new registries, 4 new triggers, rollback fixes, GHCR auth, self-hosted TLS, re2js regex engine, compose trigger fixes, DB persistence on shutdown |
-| **v1.4.0** ✅ | UI Modernization & Hardening | Tailwind CSS 4 + custom component library, 4 themes, 7 icon libraries, Cmd/K command palette, compose-native YAML-preserving updates, rename-first rollback with health gates, self-update controller with SSE ack, fail-closed auth enforcement, tag-family semver, notification rules, container grouping by stack, audit history view, dual-slot security scanning, scheduled scans, WUD migration CLI, bundled offline icons, dashboard drag-reorder, gzip compression, API error sanitization, agent log validation, TLS path redaction, audit store indexing with 30-day retention, type-safe store modules, durable batch scans, recent-status API |
+| **v1.4.0** ✅ | UI Modernization & Hardening | Tailwind CSS 4 + custom component library, 6 themes, 7 icon libraries, font size preference, Cmd/K command palette, OpenAPI 3.1.0 endpoint, standardized API responses with pagination, compose-native YAML-preserving updates, rename-first rollback with health gates, self-update controller with SSE ack, fail-closed auth enforcement, OIDC redirect URL validation, tag-family semver, notification rules, container grouping by stack, audit history view, dual-slot security scanning, scheduled scans, WUD migration CLI, bundled offline icons, dashboard drag-reorder, gzip compression, API error sanitization, agent log validation, TLS path redaction, audit store indexing with 30-day retention, type-safe store modules, durable batch scans, recent-status API |
 | **v1.4.1** | Reliability & Resilience | Deferred hardening/reliability: API error sanitization follow-ups, trigger schema validation, shared-proxy rate limiter key strategy, settings PATCH semantics cleanup (deprecated PUT alias removal target v1.5.0), action-endpoint convention docs, compose trigger validation/reconciliation, auth schema validation, UI resilience audit |
 | **v1.5.0** | Observability | Real-time log viewer, container resource monitoring, registry webhooks |
 | **v1.5.1** | Scanner Decoupling | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle |
@@ -366,7 +366,7 @@ Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully suppo
 | **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers, basic GitOps |
 | **v2.1.0** | Advanced Deployment Patterns | Health check gates, canary deployments, durable self-update controller |
 | **v2.2.0** | Container Operations | Web terminal, file browser, image building, basic Podman support |
-| **v2.3.0** | Automation & Developer Experience | API keys, passkey auth, TOTP 2FA, OpenAPI docs, TypeScript actions, CLI |
+| **v2.3.0** | Automation & Developer Experience | API keys, passkey auth, TOTP 2FA, TypeScript actions, CLI |
 | **v2.4.0** | Data Safety & Templates | Scheduled backups (S3, SFTP), compose templates, secret management |
 | **v3.0.0** | Advanced Platform | Network topology, GPU monitoring, full i18n translations |
 | **v3.1.0** | Enterprise Access & Compliance | RBAC, LDAP/AD, environment-scoped permissions, audit logging, Wolfi hardened image |
