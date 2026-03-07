@@ -24,6 +24,8 @@ services:
     environment:
       - DD_WATCHER_LOCAL_HOST=socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - "DD_AUTH_BASIC_ADMIN_HASH={SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g="
     ports:
       - 3000:3000
 
@@ -52,6 +54,9 @@ services:
     container_name: drydock
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - "DD_AUTH_BASIC_ADMIN_HASH={SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g="
     ports:
       - 3000:3000
 ```
@@ -63,6 +68,8 @@ services:
 ```bash
 docker run -d --name drydock \
   -v "/var/run/docker.sock:/var/run/docker.sock" \
+  -e DD_AUTH_BASIC_ADMIN_USER=admin \
+  -e "DD_AUTH_BASIC_ADMIN_HASH={SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g=" \
   -p 3000:3000 \
   codeswhat/drydock
 ```
@@ -71,6 +78,8 @@ docker run -d --name drydock \
 </Tabs>
 
 <Callout type="info">The official image is published on Github Container Registry: `codeswhat/drydock`</Callout>
+
+<Callout type="warn">Authentication is **required by default** on fresh installs. The examples above use Basic auth with username `admin` and password `password`. See the [auth docs](/docs/configuration/authentications) for OIDC, anonymous access, and other options.</Callout>
 
 ## Migrating from WUD
 
