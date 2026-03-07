@@ -83,7 +83,7 @@ test('trigger should send POST http request to notify endpoint', async () => {
       format: 'text',
       type: 'info',
     },
-
+    headers: { 'Content-Type': 'application/json' },
     method: 'POST',
     url: 'http://xxx.com/notify',
     timeout: 30000,
@@ -112,7 +112,7 @@ test('trigger should use config and tag when configured', async () => {
       type: 'info',
       tag: 'mytag',
     },
-
+    headers: { 'Content-Type': 'application/json' },
     method: 'POST',
     url: 'http://xxx.com/notify/myconfig',
     timeout: 30000,
@@ -139,7 +139,7 @@ test('trigger should use config without tag', async () => {
       format: 'text',
       type: 'info',
     },
-
+    headers: { 'Content-Type': 'application/json' },
     method: 'POST',
     url: 'http://xxx.com/notify/myconfig',
     timeout: 30000,
@@ -174,7 +174,7 @@ test('triggerBatch should send batch notification', async () => {
       format: 'text',
       type: 'info',
     },
-
+    headers: { 'Content-Type': 'application/json' },
     method: 'POST',
     url: 'http://xxx.com/notify',
     timeout: 30000,
@@ -206,7 +206,7 @@ test('triggerBatch should use config and tag when configured', async () => {
       type: 'info',
       tag: 'mytag',
     },
-
+    headers: { 'Content-Type': 'application/json' },
     method: 'POST',
     url: 'http://xxx.com/notify/myconfig',
     timeout: 30000,
@@ -236,7 +236,7 @@ test('triggerBatch should use config without tag', async () => {
       format: 'text',
       type: 'info',
     },
-
+    headers: { 'Content-Type': 'application/json' },
     method: 'POST',
     url: 'http://xxx.com/notify/myconfig',
     timeout: 30000,

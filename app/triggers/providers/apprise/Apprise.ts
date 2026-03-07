@@ -70,6 +70,7 @@ class Apprise extends Trigger {
     const options = {
       method: 'POST',
       url: uri,
+      headers: { 'Content-Type': 'application/json' },
       data: body,
       timeout: getOutboundHttpTimeoutMs(),
     };
@@ -106,6 +107,7 @@ class Apprise extends Trigger {
     const options = {
       method: 'POST',
       url: uri,
+      headers: { 'Content-Type': 'application/json' },
       data: body,
       timeout: getOutboundHttpTimeoutMs(),
     };
