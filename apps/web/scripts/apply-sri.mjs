@@ -41,9 +41,8 @@ export function applySriToHtml(html, manifest) {
     return result.tag;
   };
 
-  const withScriptSri = html.replace(
-    /<script\b[^>]*\bsrc="([^"]+)"[^>]*>/g,
-    (tag, assetUrl) => patch(tag, assetUrl),
+  const withScriptSri = html.replace(/<script\b[^>]*\bsrc="([^"]+)"[^>]*>/g, (tag, assetUrl) =>
+    patch(tag, assetUrl),
   );
   const withLinkSri = withScriptSri.replace(
     /<link\b(?=[^>]*\brel="stylesheet")[^>]*\bhref="([^"]+)"[^>]*>/g,
@@ -90,5 +89,7 @@ export function applySriToBuild({
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = applySriToBuild();
-  console.log(`Applied SRI to ${result.updatedTags} tag(s) across ${result.updatedFiles} HTML file(s).`);
+  console.log(
+    `Applied SRI to ${result.updatedTags} tag(s) across ${result.updatedFiles} HTML file(s).`,
+  );
 }
