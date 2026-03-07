@@ -116,8 +116,8 @@ dist/
 .playwright-cli/
 output/
 
-# Generated screenshots
-screenshots/
+# Generated screenshots (root only, not apps/web/public/screenshots)
+/screenshots/
 
 # qlty config (track qlty.toml, ignore cache/outputs)
 .qlty/*

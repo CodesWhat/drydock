@@ -427,7 +427,7 @@ export default function Home() {
 
         <div className="relative z-10">
           {/* RC Banner */}
-          <div className="relative z-20 border-b border-amber-200 bg-amber-50/80 backdrop-blur-sm dark:border-amber-900 dark:bg-amber-950/80">
+          <div className="sticky top-0 z-20 border-b border-amber-200 bg-amber-50/80 backdrop-blur-sm dark:border-amber-900 dark:bg-amber-950/80">
             <div className="mx-auto flex max-w-6xl items-center justify-center gap-2 px-4 py-2 text-sm">
               <span className="inline-flex items-center rounded-full bg-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900 dark:text-amber-200">
                 RC
