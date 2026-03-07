@@ -26,7 +26,7 @@ async function previewContainer(req: Request, res: Response) {
 
   const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
   if (!trigger) {
-    res.status(404).json({ error: NO_DOCKER_TRIGGER_FOUND_ERROR });
+    sendErrorResponse(res, 404, NO_DOCKER_TRIGGER_FOUND_ERROR);
     return;
   }
 

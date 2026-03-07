@@ -65,7 +65,7 @@ async function executeAction(
 
   const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
   if (!trigger) {
-    res.status(404).json({ error: NO_DOCKER_TRIGGER_FOUND_ERROR });
+    sendErrorResponse(res, 404, NO_DOCKER_TRIGGER_FOUND_ERROR);
     return;
   }
 
@@ -151,13 +151,13 @@ async function updateContainer(req: Request, res: Response) {
   }
 
   if (!container.updateAvailable) {
-    res.status(400).json({ error: 'No update available for this container' });
+    sendErrorResponse(res, 400, 'No update available for this container');
     return;
   }
 
   const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
   if (!trigger) {
-    res.status(404).json({ error: NO_DOCKER_TRIGGER_FOUND_ERROR });
+    sendErrorResponse(res, 404, NO_DOCKER_TRIGGER_FOUND_ERROR);
     return;
   }
 

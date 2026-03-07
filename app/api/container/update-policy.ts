@@ -179,7 +179,7 @@ export function createUpdatePolicyHandlers({
     }
 
     if (!action) {
-      res.status(400).json({ error: 'Action is required' });
+      sendErrorResponse(res, 400, 'Action is required');
       return;
     }
 
@@ -190,7 +190,7 @@ export function createUpdatePolicyHandlers({
       const result = applyPolicyAction(action, container, updatePolicy, actionBody);
 
       if ('error' in result) {
-        res.status(400).json({ error: result.error });
+        sendErrorResponse(res, 400, result.error);
         return;
       }
 
@@ -201,10 +201,10 @@ export function createUpdatePolicyHandlers({
     } catch (error: unknown) {
       const errorMessage = getErrorMessage(error);
       if (SAFE_CLIENT_ERRORS.has(errorMessage)) {
-        res.status(400).json({ error: errorMessage });
+        sendErrorResponse(res, 400, errorMessage);
         return;
       }
-      res.status(400).json({ error: GENERIC_UPDATE_POLICY_ERROR });
+      sendErrorResponse(res, 400, GENERIC_UPDATE_POLICY_ERROR);
     }
   }
 

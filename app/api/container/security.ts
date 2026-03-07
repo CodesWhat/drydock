@@ -141,9 +141,11 @@ export function createSecurityHandlers({
     const id = getPathParamValue(req.params.id);
     const sbomFormat = resolveSbomFormat(req.query.format);
     if (!sbomFormat) {
-      res.status(400).json({
-        error: `Unsupported SBOM format. Supported values: ${SECURITY_SBOM_FORMATS.join(', ')}`,
-      });
+      sendErrorResponse(
+        res,
+        400,
+        `Unsupported SBOM format. Supported values: ${SECURITY_SBOM_FORMATS.join(', ')}`,
+      );
       return;
     }
 
@@ -197,9 +199,7 @@ export function createSecurityHandlers({
         log.info(
           `SBOM generation failed for ${image} (${sbomResult.error || 'unknown SBOM error'})`,
         );
-        res.status(500).json({
-          error: GENERIC_SBOM_ERROR_MESSAGE,
-        });
+        sendErrorResponse(res, 500, GENERIC_SBOM_ERROR_MESSAGE);
         return;
       }
 
@@ -213,9 +213,7 @@ export function createSecurityHandlers({
       });
     } catch (error: unknown) {
       log.info(`SBOM generation failed (${getErrorMessage(error)})`);
-      res.status(500).json({
-        error: GENERIC_SBOM_ERROR_MESSAGE,
-      });
+      sendErrorResponse(res, 500, GENERIC_SBOM_ERROR_MESSAGE);
     }
   }
 
@@ -350,12 +348,12 @@ export function createSecurityHandlers({
 
     const securityConfiguration = getSecurityConfiguration();
     if (!securityConfiguration.enabled || securityConfiguration.scanner !== 'trivy') {
-      res.status(400).json({ error: 'Security scanner is not configured' });
+      sendErrorResponse(res, 400, 'Security scanner is not configured');
       return;
     }
 
     if (inFlightOnDemandScans >= MAX_CONCURRENT_ON_DEMAND_SCANS) {
-      res.status(429).json({ error: 'Too many concurrent security scans in progress' });
+      sendErrorResponse(res, 429, 'Too many concurrent security scans in progress');
       return;
     }
 
@@ -383,9 +381,7 @@ export function createSecurityHandlers({
     } catch (error: unknown) {
       log.info(`Security scan failed (${getErrorMessage(error)})`);
       broadcastScanCompleted(id, 'error');
-      res.status(500).json({
-        error: GENERIC_SCAN_ERROR_MESSAGE,
-      });
+      sendErrorResponse(res, 500, GENERIC_SCAN_ERROR_MESSAGE);
     } finally {
       inFlightOnDemandScans = Math.max(0, inFlightOnDemandScans - 1);
     }

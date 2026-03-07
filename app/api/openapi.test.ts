@@ -1,6 +1,11 @@
+import { openApiDocument as openApiDocumentFromIndex } from './openapi/index.js';
 import { openApiDocument } from './openapi.js';
 
 describe('OpenAPI document', () => {
+  test('should expose the same OpenAPI document through the decomposed module entrypoint', () => {
+    expect(openApiDocumentFromIndex).toBe(openApiDocument);
+  });
+
   test('should declare OpenAPI 3.1 and include representative API paths', () => {
     expect(openApiDocument.openapi).toBe('3.1.0');
     expect(openApiDocument.paths['/api/openapi.json']?.get).toBeDefined();
@@ -18,6 +23,51 @@ describe('OpenAPI document', () => {
     expect(openApiDocument.paths['/api/webhook/watch']?.post?.security).toStrictEqual([
       { webhookBearerAuth: [] },
     ]);
+  });
+
+  test('should model action and webhook success payloads with a result envelope', () => {
+    expect(openApiDocument.components.schemas.ContainerActionResponse).toMatchObject({
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        result: { $ref: '#/components/schemas/ContainerResource' },
+      },
+    });
+    expect(
+      openApiDocument.components.schemas.ContainerActionResponse.properties.container,
+    ).toBeUndefined();
+
+    expect(openApiDocument.components.schemas.WebhookWatchAllResponse).toMatchObject({
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        result: {
+          type: 'object',
+          properties: {
+            watchers: { type: 'integer', minimum: 0 },
+          },
+          required: ['watchers'],
+          additionalProperties: false,
+        },
+      },
+      required: ['message', 'result'],
+    });
+
+    expect(openApiDocument.components.schemas.WebhookContainerActionResponse).toMatchObject({
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        result: {
+          type: 'object',
+          properties: {
+            container: { type: 'string' },
+          },
+          required: ['container'],
+          additionalProperties: false,
+        },
+      },
+      required: ['message', 'result'],
+    });
   });
 
   test('should expose PATCH /api/settings and keep PUT as deprecated compatibility alias', () => {

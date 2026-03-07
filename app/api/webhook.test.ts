@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { sanitizeLogParam } from '../log/sanitize.js';
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
+import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 const {
   mockRouter,
@@ -68,6 +70,7 @@ vi.mock('node:crypto', () => ({
 vi.mock('../configuration/index.js', () => ({
   getWebhookConfiguration: mockGetWebhookConfiguration,
   getServerConfiguration: vi.fn(() => ({ feature: {} })),
+  getVersion: vi.fn(() => 'test-version'),
 }));
 
 vi.mock('../store/container.js', () => ({
@@ -449,6 +452,14 @@ describe('Webhook Router', () => {
         message: 'Watch cycle triggered',
         result: { watchers: 2 },
       });
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/api/webhook/watch',
+        method: 'post',
+        statusCode: '200',
+        payload: res.json.mock.calls[0][0],
+      });
+      expect(contractValidation.valid).toBe(true);
+      expect(contractValidation.errors).toStrictEqual([]);
     });
 
     test('should return 200 with zero watchers', async () => {
@@ -464,6 +475,14 @@ describe('Webhook Router', () => {
         message: 'Watch cycle triggered',
         result: { watchers: 0 },
       });
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/api/webhook/watch',
+        method: 'post',
+        statusCode: '200',
+        payload: res.json.mock.calls[0][0],
+      });
+      expect(contractValidation.valid).toBe(true);
+      expect(contractValidation.errors).toStrictEqual([]);
     });
 
     test('should return 500 on watcher error without leaking internal details', async () => {
@@ -691,6 +710,29 @@ describe('Webhook Router', () => {
       });
     });
 
+    test('should sanitize reflected containerName in successful watch response', async () => {
+      const containerName = '\u001b[31mmy-nginx\u001b[0m\nnext';
+      const container = { name: containerName, image: { name: 'nginx' } };
+      const sanitizedName = sanitizeLogParam(containerName);
+      mockGetContainers.mockReturnValue([container]);
+      const mockWatchContainer = vi.fn().mockResolvedValue(undefined);
+      mockGetState.mockReturnValue({
+        watcher: { 'docker.local': { watchContainer: mockWatchContainer } },
+        trigger: {},
+      });
+
+      const handler = getHandler('post', '/watch/:containerName');
+      const req = createMockRequest({ params: { containerName } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: `Watch triggered for container ${sanitizedName}`,
+        result: { container: sanitizedName },
+      });
+    });
+
     test('should return 500 on watch error without leaking internal details', async () => {
       const container = { name: 'my-nginx', image: { name: 'nginx' } };
       mockGetContainers.mockReturnValue([container]);
@@ -710,6 +752,31 @@ describe('Webhook Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Error watching container my-nginx' });
+    });
+
+    test('should sanitize reflected containerName in watch error response', async () => {
+      const containerName = '\u001b[31mmy-nginx\u001b[0m\nnext';
+      const container = { name: containerName, image: { name: 'nginx' } };
+      const sanitizedName = sanitizeLogParam(containerName);
+      mockGetContainers.mockReturnValue([container]);
+      mockGetState.mockReturnValue({
+        watcher: {
+          'docker.local': {
+            watchContainer: vi.fn().mockRejectedValue(new Error('Container watch failed')),
+          },
+        },
+        trigger: {},
+      });
+
+      const handler = getHandler('post', '/watch/:containerName');
+      const req = createMockRequest({ params: { containerName } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: `Error watching container ${sanitizedName}`,
+      });
     });
 
     test('should stringify non-Error watch-container failures for audit details', async () => {
@@ -881,6 +948,29 @@ describe('Webhook Router', () => {
       expect(res.json).toHaveBeenCalledWith({
         message: 'Update triggered for container my-nginx',
         result: { container: 'my-nginx' },
+      });
+    });
+
+    test('should sanitize reflected containerName in successful update response', async () => {
+      const containerName = '\u001b[31mmy-nginx\u001b[0m\nnext';
+      const container = { name: containerName, image: { name: 'nginx' } };
+      const sanitizedName = sanitizeLogParam(containerName);
+      mockGetContainers.mockReturnValue([container]);
+      const mockTrigger = vi.fn().mockResolvedValue(undefined);
+      mockGetState.mockReturnValue({
+        watcher: {},
+        trigger: { 'docker.default': { type: 'docker', trigger: mockTrigger } },
+      });
+
+      const handler = getHandler('post', '/update/:containerName');
+      const req = createMockRequest({ params: { containerName } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: `Update triggered for container ${sanitizedName}`,
+        result: { container: sanitizedName },
       });
     });
 

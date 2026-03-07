@@ -58,13 +58,13 @@ async function rollbackContainer(req: Request, res: Response) {
   if (backupId) {
     backup = storeBackup.getBackup(backupId);
     if (!backup || backup.containerName !== container.name) {
-      res.status(404).json({ error: 'Backup not found for this container' });
+      sendErrorResponse(res, 404, 'Backup not found for this container');
       return;
     }
   } else {
     const backups = storeBackup.getBackupsByName(container.name);
     if (backups.length === 0) {
-      res.status(404).json({ error: 'No backups found for this container' });
+      sendErrorResponse(res, 404, 'No backups found for this container');
       return;
     }
     backup = backups[0];
@@ -72,7 +72,7 @@ async function rollbackContainer(req: Request, res: Response) {
 
   const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
   if (!trigger) {
-    res.status(404).json({ error: NO_DOCKER_TRIGGER_FOUND_ERROR });
+    sendErrorResponse(res, 404, NO_DOCKER_TRIGGER_FOUND_ERROR);
     return;
   }
 
@@ -92,7 +92,7 @@ async function rollbackContainer(req: Request, res: Response) {
     // changed after the most recent update recreated the container)
     const currentContainer = await trigger.getCurrentContainer(dockerApi, { id: container.name });
     if (!currentContainer) {
-      res.status(500).json({ error: 'Container not found in Docker' });
+      sendErrorResponse(res, 500, 'Container not found in Docker');
       return;
     }
 

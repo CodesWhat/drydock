@@ -3,6 +3,7 @@ import nocache from 'nocache';
 import { byString, byValues } from 'sort-es';
 import type { RegistryState } from '../registry/index.js';
 import * as registry from '../registry/index.js';
+import { parseIntegerQueryParam } from './container/request-helpers.js';
 import { sendErrorResponse } from './error-response.js';
 
 export interface ApiComponent {
@@ -35,15 +36,6 @@ type ComponentListPagination = {
 };
 
 const COMPONENT_LIST_MAX_LIMIT = 200;
-
-function parseIntegerQueryParam(rawValue: unknown, fallback: number): number {
-  const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
-  if (typeof value !== 'string') {
-    return fallback;
-  }
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
 
 function normalizeComponentListPagination(
   query: Request['query'] | undefined,

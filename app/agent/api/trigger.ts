@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { mapComponentsToList } from '../../api/component.js';
+import { sendErrorResponse } from '../../api/error-response.js';
 import * as triggerApi from '../../api/trigger.js';
 import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
@@ -40,14 +41,16 @@ export async function runTriggerBatch(req: Request, res: Response) {
   const containers = req.body;
 
   if (!Array.isArray(containers)) {
-    return res.status(400).json({ error: 'Body must be an array of containers' });
+    sendErrorResponse(res, 400, 'Body must be an array of containers');
+    return;
   }
 
   const triggerId = `${type}.${name}`;
   const trigger = registry.getState().trigger[triggerId];
 
   if (!trigger) {
-    return res.status(404).json({ error: `Trigger ${name} not found` });
+    sendErrorResponse(res, 404, `Trigger ${name} not found`);
+    return;
   }
 
   try {
@@ -63,6 +66,6 @@ export async function runTriggerBatch(req: Request, res: Response) {
     log.error(
       `Error running batch trigger ${sanitizeLogParam(name)}: ${sanitizeLogParam(e.message)}`,
     );
-    res.status(500).json({ error: e.message });
+    sendErrorResponse(res, 500, e.message);
   }
 }

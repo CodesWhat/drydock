@@ -1,4 +1,5 @@
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
+import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 const {
   mockRouter,
@@ -49,6 +50,7 @@ vi.mock('../prometheus/container-actions', () => ({
 
 vi.mock('../configuration', () => ({
   getServerConfiguration: mockGetServerConfiguration,
+  getVersion: vi.fn(() => 'test-version'),
 }));
 
 vi.mock('../log', () => ({
@@ -125,6 +127,14 @@ describe('Container Actions Router', () => {
           result: expect.any(Object),
         }),
       );
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/api/containers/{id}/start',
+        method: 'post',
+        statusCode: '200',
+        payload: res.json.mock.calls[0][0],
+      });
+      expect(contractValidation.valid).toBe(true);
+      expect(contractValidation.errors).toStrictEqual([]);
     });
 
     test('should return 404 when container not found', async () => {

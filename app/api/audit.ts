@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import * as storeAudit from '../store/audit.js';
+import { sendErrorResponse } from './error-response.js';
 import { buildPaginationLinks } from './pagination-links.js';
 
 const router = express.Router();
@@ -59,12 +60,14 @@ function getAuditEntries(req: Request, res: Response) {
 
   const action = getValidatedAuditFilter(req.query.action);
   if (action === null) {
-    return res.status(400).json({ error: 'Invalid action query parameter' });
+    sendErrorResponse(res, 400, 'Invalid action query parameter');
+    return;
   }
 
   const container = getValidatedAuditFilter(req.query.container);
   if (container === null) {
-    return res.status(400).json({ error: 'Invalid container query parameter' });
+    sendErrorResponse(res, 400, 'Invalid container query parameter');
+    return;
   }
 
   const query: AuditEntriesQuery = { skip, limit };

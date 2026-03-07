@@ -14,7 +14,7 @@ import { getServerConfiguration } from '../configuration/index.js';
 import * as settingsStore from '../store/settings.js';
 import * as apiRouter from './api.js';
 import * as auth from './auth.js';
-import { normalizeErrorResponsePayload, sendErrorResponse } from './error-response.js';
+import { sendErrorResponse } from './error-response.js';
 import * as healthRouter from './health.js';
 import * as prometheusRouter from './prometheus.js';
 import * as uiRouter from './ui.js';
@@ -167,7 +167,6 @@ function createApp() {
   }
 
   configureCors(app);
-  app.use(normalizeErrorResponsePayload);
   registerRoutes(app);
   registerErrorHandler(app);
   return app;

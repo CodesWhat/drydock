@@ -309,8 +309,8 @@ describe('validateOpenApiJsonResponse', () => {
         payload: 123,
       }),
     ).toEqual({
-      valid: true,
-      errors: [],
+      valid: false,
+      errors: expect.arrayContaining([expect.stringContaining('schema is invalid')]),
     });
 
     setJsonContractSchema({ properties: { name: { type: 'string' } } });
@@ -322,8 +322,8 @@ describe('validateOpenApiJsonResponse', () => {
         payload: 'not-an-object',
       }),
     ).toEqual({
-      valid: false,
-      errors: ['$: expected object, got string'],
+      valid: true,
+      errors: [],
     });
 
     setJsonContractSchema({ type: 'array' });
@@ -335,8 +335,8 @@ describe('validateOpenApiJsonResponse', () => {
         payload: [1],
       }),
     ).toEqual({
-      valid: false,
-      errors: ['$[0]: schema is missing'],
+      valid: true,
+      errors: [],
     });
 
     setJsonContractSchema({ type: 'array', items: { type: 'integer' } });
@@ -366,6 +366,64 @@ describe('validateOpenApiJsonResponse', () => {
     ).toEqual({
       valid: true,
       errors: [],
+    });
+  });
+
+  test('validates oneOf, anyOf, pattern, and format constraints', () => {
+    setJsonContractSchema({
+      oneOf: [{ type: 'string' }, { type: 'integer' }],
+    });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: true,
+      }),
+    ).toEqual({
+      valid: false,
+      errors: expect.arrayContaining([expect.stringContaining('oneOf')]),
+    });
+
+    setJsonContractSchema({
+      anyOf: [{ type: 'string', pattern: '^ok-' }, { type: 'integer' }],
+    });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: false,
+      }),
+    ).toEqual({
+      valid: false,
+      errors: expect.arrayContaining([expect.stringContaining('anyOf')]),
+    });
+
+    setJsonContractSchema({ type: 'string', pattern: '^ok-' });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: 'nope',
+      }),
+    ).toEqual({
+      valid: false,
+      errors: expect.arrayContaining([expect.stringContaining('pattern')]),
+    });
+
+    setJsonContractSchema({ type: 'string', format: 'date-time' });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: 'not-a-date',
+      }),
+    ).toEqual({
+      valid: false,
+      errors: expect.arrayContaining([expect.stringContaining('format')]),
     });
   });
 

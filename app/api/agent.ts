@@ -3,6 +3,7 @@ import { getAgent, getAgents } from '../agent/index.js';
 import type { Container } from '../model/container.js';
 import * as storeContainer from '../store/container.js';
 import { getContainerStatusSummary } from '../util/container-summary.js';
+import { sendErrorResponse } from './error-response.js';
 
 const router = express.Router();
 const ALLOWED_LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
@@ -105,20 +106,24 @@ async function getAgentLogEntries(
 ) {
   const agent = getAgent(req.params.name);
   if (!agent) {
-    return res.status(404).json({ error: 'Agent not found' });
+    sendErrorResponse(res, 404, 'Agent not found');
+    return;
   }
   if (!agent.isConnected) {
-    return res.status(503).json({ error: 'Agent is not connected' });
+    sendErrorResponse(res, 503, 'Agent is not connected');
+    return;
   }
   try {
     const level = getValidatedLogLevel(req.query.level);
     if (level === null) {
-      return res.status(400).json({ error: 'Invalid level query parameter' });
+      sendErrorResponse(res, 400, 'Invalid level query parameter');
+      return;
     }
 
     const component = getValidatedLogComponent(req.query.component);
     if (component === null) {
-      return res.status(400).json({ error: 'Invalid component query parameter' });
+      sendErrorResponse(res, 400, 'Invalid component query parameter');
+      return;
     }
 
     const tail = req.query.tail ? Number.parseInt(req.query.tail, 10) : undefined;
@@ -126,7 +131,7 @@ async function getAgentLogEntries(
     const entries = await agent.getLogEntries({ level, component, tail, since });
     res.json(entries);
   } catch (error: unknown) {
-    res.status(502).json({ error: AGENT_LOG_FETCH_ERROR_MESSAGE });
+    sendErrorResponse(res, 502, AGENT_LOG_FETCH_ERROR_MESSAGE);
   }
 }
 

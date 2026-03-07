@@ -210,6 +210,24 @@ describe('API Index', () => {
     expect(mockApp.use).toHaveBeenCalledWith('/', 'ui-router');
   });
 
+  test('should not mount legacy error-response normalization middleware', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const functionMiddlewareNames = mockApp.use.mock.calls
+      .filter((call) => typeof call[0] === 'function')
+      .map((call) => call[0].name);
+    expect(functionMiddlewareNames).not.toContain('normalizeErrorResponsePayload');
+  });
+
   test('should enable helmet security headers with CSP allowing Iconify CDN', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,

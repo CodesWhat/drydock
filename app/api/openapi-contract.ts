@@ -1,4 +1,10 @@
+import { createRequire } from 'node:module';
+import type { ErrorObject } from 'ajv';
 import { openApiDocument } from './openapi.js';
+
+const require = createRequire(import.meta.url);
+const Ajv2020 = require('ajv/dist/2020.js') as typeof import('ajv/dist/2020.js').default;
+const addFormats = require('ajv-formats') as typeof import('ajv-formats').default;
 
 type JsonSchema = Record<string, unknown>;
 type OpenApiMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
@@ -15,163 +21,198 @@ interface OpenApiJsonResponseInput {
   payload: unknown;
 }
 
-type SchemaValidationContext = {
-  path: string;
-  visitedRefs: Set<string>;
-};
-
 function describeType(value: unknown): string {
   if (value === null) return 'null';
   if (Array.isArray(value)) return 'array';
   return typeof value;
 }
 
-function isObjectLike(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function decodeJsonPointerToken(token: string): string {
+  return token.replaceAll('~1', '/').replaceAll('~0', '~');
 }
 
-function resolveSchemaRef(ref: string): JsonSchema | undefined {
-  const refPrefix = '#/components/schemas/';
-  if (!ref.startsWith(refPrefix)) {
-    return undefined;
+function escapeJsonPointerToken(token: string): string {
+  return token.replaceAll('~', '~0').replaceAll('/', '~1');
+}
+
+function stripPayloadPrefix(instancePath: string): string {
+  if (instancePath === '/payload') {
+    return '';
   }
-  const schemaName = ref.slice(refPrefix.length);
-  return openApiDocument.components.schemas[schemaName] as JsonSchema | undefined;
+  if (instancePath.startsWith('/payload/')) {
+    return instancePath.slice('/payload'.length);
+  }
+  return instancePath;
 }
 
-function validatePrimitiveType(expectedType: string, value: unknown): boolean {
-  if (expectedType === 'null') return value === null;
-  if (expectedType === 'array') return Array.isArray(value);
-  if (expectedType === 'object') return isObjectLike(value);
-  if (expectedType === 'integer') return typeof value === 'number' && Number.isInteger(value);
-  return typeof value === expectedType;
+function toContractPath(instancePath: string): string {
+  if (!instancePath) {
+    return '$';
+  }
+  const segments = instancePath
+    .split('/')
+    .slice(1)
+    .map((segment) => decodeJsonPointerToken(segment))
+    .map((segment) => (/^\d+$/.test(segment) ? `[${segment}]` : `.${segment}`));
+  return `$${segments.join('')}`;
 }
 
-function validateSchema(
-  schema: JsonSchema | undefined,
-  value: unknown,
-  context: SchemaValidationContext,
-): string[] {
+function getValueAtPointer(root: unknown, instancePath: string): unknown {
+  if (!instancePath) {
+    return root;
+  }
+  const segments = instancePath
+    .split('/')
+    .slice(1)
+    .map((segment) => decodeJsonPointerToken(segment));
+  let current: unknown = root;
+  for (const segment of segments) {
+    if (typeof current !== 'object' || current === null) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
+function missingRefFromError(error: unknown): string | undefined {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'missingRef' in error &&
+    typeof (error as { missingRef?: unknown }).missingRef === 'string'
+  ) {
+    return (error as { missingRef: string }).missingRef;
+  }
+
+  if (error instanceof Error) {
+    const referenceMatch = error.message.match(/reference\s+(.+?)\s+from\b/i);
+    if (referenceMatch?.[1]) {
+      return referenceMatch[1];
+    }
+  }
+
+  return undefined;
+}
+
+function formatValidationError(error: ErrorObject, payload: unknown): string {
+  const payloadPath = stripPayloadPrefix(error.instancePath);
+  const path = toContractPath(payloadPath);
+
+  if (error.keyword === 'required') {
+    const missingProperty = (error.params as { missingProperty?: unknown }).missingProperty;
+    if (typeof missingProperty === 'string') {
+      const missingPropertyPath = payloadPath
+        ? `${payloadPath}/${escapeJsonPointerToken(missingProperty)}`
+        : `/${escapeJsonPointerToken(missingProperty)}`;
+      return `${toContractPath(missingPropertyPath)}: is required`;
+    }
+  }
+
+  if (error.keyword === 'additionalProperties') {
+    const additionalProperty = (error.params as { additionalProperty?: unknown })
+      .additionalProperty;
+    if (typeof additionalProperty === 'string') {
+      const additionalPropertyPath = payloadPath
+        ? `${payloadPath}/${escapeJsonPointerToken(additionalProperty)}`
+        : `/${escapeJsonPointerToken(additionalProperty)}`;
+      return `${toContractPath(additionalPropertyPath)}: is not allowed by schema`;
+    }
+  }
+
+  if (error.keyword === 'type') {
+    const expectedType = (error.params as { type?: unknown }).type;
+    const actualType = describeType(getValueAtPointer(payload, payloadPath));
+    if (typeof expectedType === 'string') {
+      if (expectedType.includes(',')) {
+        const expectedTypes = expectedType
+          .split(',')
+          .map((entry) => entry.trim())
+          .join(', ');
+        return `${path}: expected one of ${expectedTypes}, got ${actualType}`;
+      }
+      return `${path}: expected ${expectedType}, got ${actualType}`;
+    }
+    if (Array.isArray(expectedType)) {
+      const expectedTypes = expectedType
+        .filter((entry): entry is string => typeof entry === 'string')
+        .join(', ');
+      if (expectedTypes.length > 0) {
+        return `${path}: expected one of ${expectedTypes}, got ${actualType}`;
+      }
+    }
+  }
+
+  if (error.keyword === 'enum') {
+    const allowedValues = (error.params as { allowedValues?: unknown }).allowedValues;
+    if (Array.isArray(allowedValues)) {
+      return `${path}: expected one of ${JSON.stringify(allowedValues)}`;
+    }
+  }
+
+  if (error.keyword === 'oneOf' || error.keyword === 'anyOf') {
+    return `${path}: failed ${error.keyword}`;
+  }
+
+  if (error.keyword === 'pattern') {
+    const pattern = (error.params as { pattern?: unknown }).pattern;
+    if (typeof pattern === 'string') {
+      return `${path}: must match pattern ${JSON.stringify(pattern)}`;
+    }
+  }
+
+  if (error.keyword === 'format') {
+    const format = (error.params as { format?: unknown }).format;
+    if (typeof format === 'string') {
+      return `${path}: must match format ${JSON.stringify(format)}`;
+    }
+  }
+
+  const message = error.message ?? 'schema validation failed';
+  return `${path}: ${message}`;
+}
+
+function validateSchema(schema: JsonSchema | undefined, payload: unknown): string[] {
   if (!schema) {
-    return [`${context.path}: schema is missing`];
+    return ['$: schema is missing'];
   }
 
-  if ('$ref' in schema && typeof schema.$ref === 'string') {
-    if (context.visitedRefs.has(schema.$ref)) {
-      return [];
+  const ajv = new Ajv2020({
+    allErrors: true,
+    allowUnionTypes: true,
+    strict: false,
+  });
+  addFormats(ajv);
+
+  const wrappedSchema: JsonSchema = {
+    type: 'object',
+    properties: {
+      payload: schema,
+    },
+    required: ['payload'],
+    additionalProperties: false,
+    components: openApiDocument.components,
+  };
+
+  let validate: ReturnType<typeof ajv.compile>;
+  try {
+    validate = ajv.compile(wrappedSchema);
+  } catch (error) {
+    const missingRef = missingRefFromError(error);
+    if (missingRef) {
+      return [`$: unresolved schema reference ${missingRef}`];
     }
-    const resolvedSchema = resolveSchemaRef(schema.$ref);
-    if (!resolvedSchema) {
-      return [`${context.path}: unresolved schema reference ${schema.$ref}`];
-    }
-    const nextVisitedRefs = new Set(context.visitedRefs);
-    nextVisitedRefs.add(schema.$ref);
-    return validateSchema(resolvedSchema, value, { ...context, visitedRefs: nextVisitedRefs });
+    const message = error instanceof Error ? error.message : String(error);
+    return [`$: ${message}`];
   }
 
-  const errors: string[] = [];
-
-  if (Array.isArray(schema.allOf)) {
-    for (const memberSchema of schema.allOf) {
-      errors.push(
-        ...validateSchema(memberSchema as JsonSchema, value, {
-          ...context,
-          visitedRefs: new Set(context.visitedRefs),
-        }),
-      );
-    }
+  const isValid = validate({ payload });
+  if (isValid) {
+    return [];
   }
 
-  if (Array.isArray(schema.enum)) {
-    const isAllowedValue = schema.enum.some((entry) => Object.is(entry, value));
-    if (!isAllowedValue) {
-      errors.push(`${context.path}: expected one of ${JSON.stringify(schema.enum)}`);
-    }
-  }
-
-  const schemaType = schema.type;
-  if (typeof schemaType === 'string') {
-    if (!validatePrimitiveType(schemaType, value)) {
-      errors.push(`${context.path}: expected ${schemaType}, got ${describeType(value)}`);
-      return errors;
-    }
-  } else if (Array.isArray(schemaType)) {
-    const types = schemaType.filter((entry): entry is string => typeof entry === 'string');
-    if (types.length > 0 && !types.some((entry) => validatePrimitiveType(entry, value))) {
-      errors.push(
-        `${context.path}: expected one of ${types.join(', ')}, got ${describeType(value)}`,
-      );
-      return errors;
-    }
-  }
-
-  if (schemaType === 'object' || (schemaType === undefined && isObjectLike(schema.properties))) {
-    if (!isObjectLike(value)) {
-      if (schemaType !== undefined) {
-        return errors;
-      }
-      errors.push(`${context.path}: expected object, got ${describeType(value)}`);
-      return errors;
-    }
-
-    const properties = isObjectLike(schema.properties) ? schema.properties : {};
-    const required = Array.isArray(schema.required)
-      ? schema.required.filter((entry): entry is string => typeof entry === 'string')
-      : [];
-
-    for (const propertyName of required) {
-      if (!(propertyName in value)) {
-        errors.push(`${context.path}.${propertyName}: is required`);
-      }
-    }
-
-    for (const [propertyName, propertyValue] of Object.entries(value)) {
-      const propertySchema = properties[propertyName] as JsonSchema | undefined;
-      if (propertySchema) {
-        errors.push(
-          ...validateSchema(propertySchema, propertyValue, {
-            ...context,
-            path: `${context.path}.${propertyName}`,
-            visitedRefs: new Set(context.visitedRefs),
-          }),
-        );
-        continue;
-      }
-
-      if (schema.additionalProperties === false) {
-        errors.push(`${context.path}.${propertyName}: is not allowed by schema`);
-        continue;
-      }
-
-      if (isObjectLike(schema.additionalProperties)) {
-        errors.push(
-          ...validateSchema(schema.additionalProperties as JsonSchema, propertyValue, {
-            ...context,
-            path: `${context.path}.${propertyName}`,
-            visitedRefs: new Set(context.visitedRefs),
-          }),
-        );
-      }
-    }
-  }
-
-  if (schemaType === 'array') {
-    if (!Array.isArray(value)) {
-      return errors;
-    }
-    const itemSchema = schema.items as JsonSchema | undefined;
-    for (let index = 0; index < value.length; index += 1) {
-      errors.push(
-        ...validateSchema(itemSchema, value[index], {
-          ...context,
-          path: `${context.path}[${index}]`,
-          visitedRefs: new Set(context.visitedRefs),
-        }),
-      );
-    }
-  }
-
-  return errors;
+  const errors = validate.errors ?? [];
+  return errors.map((error) => formatValidationError(error, payload));
 }
 
 export function validateOpenApiJsonResponse(
@@ -212,10 +253,7 @@ export function validateOpenApiJsonResponse(
     };
   }
 
-  const errors = validateSchema(jsonContent.schema, payload, {
-    path: '$',
-    visitedRefs: new Set<string>(),
-  });
+  const errors = validateSchema(jsonContent.schema, payload);
   return {
     valid: errors.length === 0,
     errors,

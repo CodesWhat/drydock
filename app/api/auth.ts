@@ -266,7 +266,7 @@ function applyRememberMe(req: AuthRequest): void {
  */
 function setRememberMe(req: AuthRequest, res: Response): void {
   if (!req.session) {
-    res.status(500).json({ error: 'Unable to access session' });
+    sendErrorResponse(res, 500, 'Unable to access session');
     return;
   }
   req.session.rememberMe = req.body?.remember === true;
@@ -288,7 +288,7 @@ function login(req: AuthRequest, res: Response): void {
     const errorMessage = 'Unable to regenerate session during login (session unavailable)';
     log.warn(errorMessage);
     recordLoginAuditEvent(req, 'error', errorMessage);
-    res.status(500).json({ error: 'Unable to establish session' });
+    sendErrorResponse(res, 500, 'Unable to establish session');
     return;
   }
 
@@ -297,7 +297,7 @@ function login(req: AuthRequest, res: Response): void {
       const errorMessage = `Unable to regenerate session during login (${getErrorMessage(regenerateError)})`;
       log.warn(errorMessage);
       recordLoginAuditEvent(req, 'error', errorMessage);
-      res.status(500).json({ error: 'Unable to establish session' });
+      sendErrorResponse(res, 500, 'Unable to establish session');
       return;
     }
 
@@ -305,7 +305,7 @@ function login(req: AuthRequest, res: Response): void {
       const errorMessage = 'Unable to persist session after regeneration';
       log.warn(errorMessage);
       recordLoginAuditEvent(req, 'error', errorMessage);
-      res.status(500).json({ error: 'Unable to establish session' });
+      sendErrorResponse(res, 500, 'Unable to establish session');
       return;
     }
 
@@ -323,7 +323,7 @@ function login(req: AuthRequest, res: Response): void {
         const errorMessage = `Unable to persist login session (${getErrorMessage(loginError)})`;
         log.warn(errorMessage);
         recordLoginAuditEvent(req, 'error', errorMessage);
-        res.status(500).json({ error: 'Unable to establish session' });
+        sendErrorResponse(res, 500, 'Unable to establish session');
         return;
       }
 
@@ -344,14 +344,14 @@ function logout(req: AuthRequest, res: Response): void {
       log.warn(
         `Unable to clear authentication state during logout (${getErrorMessage(logoutError)})`,
       );
-      res.status(500).json({ error: 'Unable to clear session' });
+      sendErrorResponse(res, 500, 'Unable to clear session');
       return;
     }
 
     if (!req.session || typeof req.session.regenerate !== 'function') {
       const errorMessage = 'Unable to regenerate session during logout (session unavailable)';
       log.warn(errorMessage);
-      res.status(500).json({ error: 'Unable to clear session' });
+      sendErrorResponse(res, 500, 'Unable to clear session');
       return;
     }
 
@@ -359,7 +359,7 @@ function logout(req: AuthRequest, res: Response): void {
       if (regenerateError) {
         const errorMessage = `Unable to regenerate session during logout (${getErrorMessage(regenerateError)})`;
         log.warn(errorMessage);
-        res.status(500).json({ error: 'Unable to clear session' });
+        sendErrorResponse(res, 500, 'Unable to clear session');
         return;
       }
 
