@@ -279,6 +279,11 @@ export function getServerConfiguration() {
       .alternatives()
       .try(joi.boolean(), joi.number().integer().min(0), joi.string())
       .default(false),
+    session: joi
+      .object({
+        maxconcurrentsessions: joi.number().integer().min(1).default(5),
+      })
+      .default({}),
     metrics: joi
       .object({
         auth: joi.boolean().default(true),

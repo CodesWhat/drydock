@@ -18,7 +18,7 @@ interface TriggerRouteParams {
  */
 export function getTriggers(req: Request, res: Response) {
   const localTriggers = registry.getState().trigger;
-  const items = mapComponentsToList(localTriggers);
+  const items = mapComponentsToList(localTriggers, 'trigger');
   res.json(items);
 }
 

@@ -544,6 +544,30 @@ describe('Webhook Router', () => {
       );
     });
 
+    test('should sanitize watch-all failure details in audit events', async () => {
+      const rawErrorMessage = '\u001b[31mwatch failed\u001b[0m\nnext';
+      const sanitizedErrorMessage = sanitizeLogParam(rawErrorMessage);
+      mockGetState.mockReturnValue({
+        watcher: {
+          'docker.local': { watch: vi.fn().mockRejectedValue(new Error(rawErrorMessage)) },
+        },
+        trigger: {},
+      });
+
+      const handler = getHandler('post', '/watch');
+      const req = createMockRequest();
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'webhook-watch',
+          status: 'error',
+          details: sanitizedErrorMessage,
+        }),
+      );
+    });
+
     test('should insert audit entry on successful watch', async () => {
       mockGetState.mockReturnValue({
         watcher: { 'docker.local': { watch: vi.fn().mockResolvedValue(undefined) } },
@@ -822,6 +846,34 @@ describe('Webhook Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Error watching container my-nginx' });
       expect(mockInsertAudit).toHaveBeenCalledWith(
         expect.objectContaining({ details: 'container watch failed as string' }),
+      );
+    });
+
+    test('should sanitize watch-container failure details in audit events', async () => {
+      const rawErrorMessage = '\u001b[31mcontainer watch failed\u001b[0m\nnext';
+      const sanitizedErrorMessage = sanitizeLogParam(rawErrorMessage);
+      const container = { name: 'my-nginx', image: { name: 'nginx' } };
+      mockGetContainers.mockReturnValue([container]);
+      mockGetState.mockReturnValue({
+        watcher: {
+          'docker.local': {
+            watchContainer: vi.fn().mockRejectedValue(new Error(rawErrorMessage)),
+          },
+        },
+        trigger: {},
+      });
+
+      const handler = getHandler('post', '/watch/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'webhook-watch-container',
+          status: 'error',
+          details: sanitizedErrorMessage,
+        }),
       );
     });
 

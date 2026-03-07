@@ -151,7 +151,7 @@ function handleContainerActionError(
     action: context.auditAction,
     container,
     status: 'error',
-    details: message,
+    details: sanitizeLogParam(message),
   });
   getWebhookCounter()?.inc({ action: context.webhookAction });
 
@@ -166,7 +166,7 @@ function handleWatchAllError(error: unknown, res: Response) {
     action: 'webhook-watch',
     containerName: '*',
     status: 'error',
-    details: message,
+    details: sanitizeLogParam(message),
   });
   getWebhookCounter()?.inc({ action: 'watch-all' });
 

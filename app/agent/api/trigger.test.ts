@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from 'vitest';
+import { mapComponentsToList } from '../../api/component.js';
 import * as apiTrigger from '../../api/trigger.js';
 import * as registry from '../../registry/index.js';
 import * as triggerApi from './trigger.js';
@@ -37,6 +38,7 @@ describe('agent API trigger', () => {
       const triggers = { 'docker.update': {} };
       registry.getState.mockReturnValue({ trigger: triggers });
       triggerApi.getTriggers(req, res);
+      expect(mapComponentsToList).toHaveBeenCalledWith(triggers, 'trigger');
       expect(res.json).toHaveBeenCalled();
     });
   });

@@ -3,18 +3,22 @@ import { execFile } from 'node:child_process';
 import { flatten } from '../../../model/container.js';
 import Trigger from '../Trigger.js';
 
+let hasLoggedShellExecutionWarning = false;
+
+export function resetShellExecutionWarningStateForTests() {
+  hasLoggedShellExecutionWarning = false;
+}
+
 /**
  * Command Trigger implementation
  */
 class Command extends Trigger {
-  private static hasLoggedShellExecutionWarning = false;
-
   private logShellExecutionWarningOnce() {
-    if (Command.hasLoggedShellExecutionWarning) {
+    if (hasLoggedShellExecutionWarning) {
       return;
     }
 
-    Command.hasLoggedShellExecutionWarning = true;
+    hasLoggedShellExecutionWarning = true;
     this.log.warn(
       `Security: Command trigger executes DD_TRIGGER_COMMAND_* cmd using ${this.configuration.shell} -c with drydock process privileges. Use only trusted command strings and interpolated values.`,
     );

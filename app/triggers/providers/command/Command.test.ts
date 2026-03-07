@@ -36,7 +36,7 @@ vi.mock('node:child_process', async () => {
   };
 });
 
-import Command from './Command.js';
+import Command, { resetShellExecutionWarningStateForTests } from './Command.js';
 
 const command = new Command();
 
@@ -62,9 +62,7 @@ beforeEach(async () => {
   childProcessMockControl.execFileCalls = 0;
   childProcessMockControl.execImpl = null;
   childProcessMockControl.execFileImpl = null;
-  (
-    Command as unknown as { hasLoggedShellExecutionWarning: boolean }
-  ).hasLoggedShellExecutionWarning = false;
+  resetShellExecutionWarningStateForTests();
 });
 
 test('validateConfiguration should return validated configuration when valid', async () => {

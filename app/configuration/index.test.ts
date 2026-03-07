@@ -248,6 +248,7 @@ test('getServerConfiguration should return configured api (new vars)', async () 
     },
     metrics: {},
     port: 4000,
+    session: {},
     tls: {},
     trustproxy: false,
   });
@@ -269,6 +270,7 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
       auth: false,
     },
     port: 3000,
+    session: {},
     tls: {},
     trustproxy: false,
   });
@@ -316,6 +318,15 @@ test('getServerConfiguration should normalize session cookie sameSite casing', a
     samesite: 'strict',
   });
   delete configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE;
+});
+
+test('getServerConfiguration should allow overriding max concurrent sessions per user', async () => {
+  configuration.ddEnvVars.DD_SERVER_SESSION_MAXCONCURRENTSESSIONS = '3';
+  const config = configuration.getServerConfiguration();
+  expect(config.session).toStrictEqual({
+    maxconcurrentsessions: 3,
+  });
+  delete configuration.ddEnvVars.DD_SERVER_SESSION_MAXCONCURRENTSESSIONS;
 });
 
 test('getPrometheusConfiguration should result in enabled by default', async () => {
@@ -777,6 +788,12 @@ describe('getServerConfiguration errors', () => {
     configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE = 'invalid';
     expect(() => configuration.getServerConfiguration()).toThrow();
     delete configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE;
+  });
+
+  test('should throw when max concurrent sessions is lower than 1', () => {
+    configuration.ddEnvVars.DD_SERVER_SESSION_MAXCONCURRENTSESSIONS = '0';
+    expect(() => configuration.getServerConfiguration()).toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_SESSION_MAXCONCURRENTSESSIONS;
   });
 
   test('should fallback to defaults when nested server config is null', () => {
