@@ -155,3 +155,16 @@ export const containerListQueryParams = [
     schema: { type: 'boolean' },
   },
 ];
+
+export function destructiveConfirmationHeaderParam(actionToken: string) {
+  return {
+    name: 'X-DD-Confirm-Action',
+    in: 'header',
+    required: true,
+    description: `Confirmation token for destructive action (${actionToken})`,
+    schema: {
+      type: 'string',
+      enum: [actionToken],
+    },
+  };
+}

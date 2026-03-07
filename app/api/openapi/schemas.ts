@@ -315,6 +315,18 @@ export const openApiSchemas = {
     required: ['statuses'],
     additionalProperties: false,
   },
+  WatchContainersRequest: {
+    type: 'object',
+    properties: {
+      containerIds: {
+        type: 'array',
+        items: { type: 'string' },
+        minItems: 1,
+        maxItems: 200,
+      },
+    },
+    additionalProperties: false,
+  },
   ContainerResource: {
     type: 'object',
     properties: {

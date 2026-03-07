@@ -6,6 +6,7 @@ import {
   containerIdPathParam,
   containerListQueryParams,
   containerNamePathParam,
+  destructiveConfirmationHeaderParam,
   errorResponse,
   genericObjectSchema,
   iconProviderPathParam,
@@ -158,6 +159,7 @@ export const openApiPaths = {
       responses: {
         200: jsonResponse('Authenticated user', { $ref: '#/components/schemas/AuthUser' }),
         401: errorResponse('Authentication failed'),
+        423: errorResponse('Account temporarily locked after repeated failed logins'),
         500: errorResponse('Unable to establish session'),
       },
     },
@@ -381,9 +383,19 @@ export const openApiPaths = {
       tags: ['Containers'],
       summary: 'Trigger watch cycle for all watchers and return containers',
       operationId: 'watchAllContainers',
+      requestBody: {
+        required: false,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/WatchContainersRequest' },
+          },
+        },
+      },
       responses: {
         200: jsonResponse('Updated containers', { $ref: '#/components/schemas/PaginatedResult' }),
+        400: errorResponse('Invalid watch request payload'),
         401: errorResponse('Authentication required'),
+        404: errorResponse('Container not found'),
         500: errorResponse('Watch operation failed'),
       },
     },
@@ -432,10 +444,11 @@ export const openApiPaths = {
       tags: ['Containers'],
       summary: 'Delete a container by id',
       operationId: 'deleteContainerById',
-      parameters: [containerIdPathParam],
+      parameters: [containerIdPathParam, destructiveConfirmationHeaderParam('container-delete')],
       responses: {
         204: noContentResponse,
         401: errorResponse('Authentication required'),
+        428: errorResponse('Destructive confirmation header is required'),
         403: errorResponse('Delete feature disabled'),
         404: errorResponse('Container not found'),
         500: errorResponse('Delete operation failed'),
@@ -713,7 +726,7 @@ export const openApiPaths = {
       tags: ['Containers'],
       summary: 'Rollback container to backup image',
       operationId: 'rollbackContainer',
-      parameters: [containerIdPathParam],
+      parameters: [containerIdPathParam, destructiveConfirmationHeaderParam('container-rollback')],
       requestBody: {
         required: false,
         content: {
@@ -733,6 +746,7 @@ export const openApiPaths = {
           $ref: '#/components/schemas/ContainerRollbackResponse',
         }),
         401: errorResponse('Authentication required'),
+        428: errorResponse('Destructive confirmation header is required'),
         404: errorResponse('Container, backup, or trigger not found'),
         500: errorResponse('Rollback failed'),
       },
