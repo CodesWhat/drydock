@@ -1,4 +1,4 @@
-export type ThemeFamily = 'drydock' | 'github' | 'dracula' | 'catppuccin';
+export type ThemeFamily = 'one-dark' | 'github' | 'dracula' | 'catppuccin' | 'gruvbox' | 'ayu';
 export type ThemeVariant = 'dark' | 'light' | 'system';
 
 interface ThemeFamilyMeta {
@@ -12,12 +12,12 @@ interface ThemeFamilyMeta {
 
 export const themeFamilies: ThemeFamilyMeta[] = [
   {
-    id: 'drydock',
-    label: 'Drydock',
-    description: 'Navy and slate tones',
-    swatchDark: '#0f172a',
-    swatchLight: '#f8fafc',
-    accent: '#0096C7',
+    id: 'one-dark',
+    label: 'One Dark',
+    description: 'Clean and balanced',
+    swatchDark: '#282c34',
+    swatchLight: '#fafafa',
+    accent: '#528bff',
   },
   {
     id: 'github',
@@ -42,5 +42,21 @@ export const themeFamilies: ThemeFamilyMeta[] = [
     swatchDark: '#1e1e2e',
     swatchLight: '#eff1f5',
     accent: '#89dceb',
+  },
+  {
+    id: 'gruvbox',
+    label: 'Gruvbox',
+    description: 'Retro earthy warmth',
+    swatchDark: '#282828',
+    swatchLight: '#fbf1c7',
+    accent: '#fe8019',
+  },
+  {
+    id: 'ayu',
+    label: 'Ayu',
+    description: 'Soft golden tones',
+    swatchDark: '#242936',
+    swatchLight: '#fcfcfc',
+    accent: '#ffcc66',
   },
 ];

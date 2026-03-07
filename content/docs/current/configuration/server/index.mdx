@@ -33,6 +33,15 @@ You can adjust the server configuration with the following environment variables
 
 For log output configuration (`DD_LOG_LEVEL`, `DD_LOG_FORMAT`), see [Logs configuration](/docs/configuration/logs).
 
+## Plain HTTP Deployments
+
+When `DD_SERVER_TLS_ENABLED` is not set or is `false`, drydock automatically adjusts its security headers for plain HTTP:
+
+- **HSTS** is omitted (since the browser is not on HTTPS)
+- **`upgrade-insecure-requests`** CSP directive is omitted (prevents browsers from blocking sub-resource loads)
+
+No additional configuration is required — drydock detects the TLS state and adapts automatically. If you run drydock behind a TLS-terminating reverse proxy, set `DD_SERVER_TRUSTPROXY=true` (or a hop count) so drydock sees the correct protocol from `X-Forwarded-Proto`.
+
 ## Session Cookie SameSite Guidance
 
 - Use `lax` (default) for typical web + OIDC setups.

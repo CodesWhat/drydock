@@ -876,11 +876,30 @@ test('initAuthentication should discover and configure client', async () => {
   const mockClient = {};
   openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
   openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
+  openidClientMock.allowInsecureRequests = Symbol('allowInsecureRequests');
 
   await oidc.initAuthentication();
 
-  expect(openidClientMock.discovery).toHaveBeenCalled();
+  const callArgs = openidClientMock.discovery.mock.calls[0];
+  expect(callArgs[4].execute).toEqual([]);
   expect(oidc.logoutUrl).toBe('https://idp/logout');
+});
+
+test('initAuthentication should pass allowInsecureRequests for HTTP discovery URLs', async () => {
+  oidc.configuration = {
+    ...configurationValid,
+    discovery: 'http://dex:5556/dex/.well-known/openid-configuration',
+  };
+  const mockClient = {};
+  openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
+  openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
+  const insecureSymbol = Symbol('allowInsecureRequests');
+  openidClientMock.allowInsecureRequests = insecureSymbol;
+
+  await oidc.initAuthentication();
+
+  const callArgs = openidClientMock.discovery.mock.calls[0];
+  expect(callArgs[4].execute).toEqual([insecureSymbol]);
 });
 
 test('initAuthentication should handle missing end session url', async () => {

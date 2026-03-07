@@ -16,9 +16,9 @@ describe('useTheme', () => {
   }
 
   describe('themeFamily', () => {
-    it('should default to drydock', async () => {
+    it('should default to one-dark', async () => {
       const { themeFamily } = await loadUseTheme();
-      expect(themeFamily.value).toBe('drydock');
+      expect(themeFamily.value).toBe('one-dark');
     });
 
     it('should load saved family from preferences', async () => {
@@ -28,9 +28,10 @@ describe('useTheme', () => {
     });
 
     it('should use default for invalid preference values', async () => {
-      setTestPreferences({ theme: { family: 'nonexistent' } });
       const { themeFamily } = await loadUseTheme();
-      expect(themeFamily.value).toBe('drydock');
+      const { preferences } = await import('@/preferences/store');
+      (preferences.theme as Record<string, unknown>).family = 'nonexistent';
+      expect(themeFamily.value).toBe('one-dark');
     });
   });
 
@@ -47,8 +48,9 @@ describe('useTheme', () => {
     });
 
     it('should use default for invalid variant values from preferences', async () => {
-      setTestPreferences({ theme: { variant: 'midnight' } });
       const { themeVariant } = await loadUseTheme();
+      const { preferences } = await import('@/preferences/store');
+      (preferences.theme as Record<string, unknown>).variant = 'midnight';
       expect(themeVariant.value).toBe('dark');
     });
   });
@@ -244,13 +246,13 @@ describe('useTheme', () => {
       expect(document.documentElement.classList.contains('light')).toBe(true);
     });
 
-    it('should add theme-{family} class for non-drydock families', async () => {
+    it('should add theme-{family} class for non-default families', async () => {
       setTestPreferences({ theme: { family: 'github' } });
       await loadUseTheme();
       expect(document.documentElement.classList.contains('theme-github')).toBe(true);
     });
 
-    it('should not add theme- class for drydock family', async () => {
+    it('should not add theme- class for one-dark family', async () => {
       await loadUseTheme();
       const classes = Array.from(document.documentElement.classList);
       expect(classes.some((c) => c.startsWith('theme-'))).toBe(false);

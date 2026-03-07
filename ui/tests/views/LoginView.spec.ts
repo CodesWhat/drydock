@@ -265,9 +265,11 @@ describe('LoginView', () => {
       expect(wrapper.text()).not.toContain('Failed to connect to GitHub');
     });
 
-    it('rejects cross-origin OIDC redirect URLs', async () => {
+    it('allows cross-origin OIDC redirect URLs from the backend', async () => {
       mockSetRememberMe.mockResolvedValue(undefined);
-      mockGetOidcRedirection.mockResolvedValue({ redirect: 'https://evil.example/phish' });
+      mockGetOidcRedirection.mockResolvedValue({
+        redirect: 'https://idp.example.com/authorize?client_id=abc',
+      });
       const assignSpy = vi.fn();
       vi.stubGlobal('location', {
         ...window.location,
@@ -283,8 +285,8 @@ describe('LoginView', () => {
       await oidcBtn?.trigger('click');
       await flushPromises();
 
-      expect(assignSpy).not.toHaveBeenCalled();
-      expect(wrapper.text()).toContain('Failed to connect to GitHub');
+      expect(assignSpy).toHaveBeenCalledWith('https://idp.example.com/authorize?client_id=abc');
+      expect(wrapper.text()).not.toContain('Failed to connect to GitHub');
     });
 
     it('shows error on OIDC failure', async () => {

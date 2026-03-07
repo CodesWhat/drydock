@@ -29,6 +29,18 @@ describe('useIcons', () => {
       const { iconLibrary } = await loadUseIcons();
       expect(iconLibrary.value).toBe('ph-duotone');
     });
+
+    it('should fall back to default when persisted library is not a string', async () => {
+      localStorage.setItem(
+        'dd-preferences',
+        JSON.stringify({
+          schemaVersion: 1,
+          icons: { library: 123 },
+        }),
+      );
+      const { iconLibrary } = await loadUseIcons();
+      expect(iconLibrary.value).toBe('ph-duotone');
+    });
   });
 
   describe('setIconLibrary', () => {
@@ -57,16 +69,16 @@ describe('useIcons', () => {
       expect(iconScale.value).toBe(1.2);
     });
 
-    it('should pass through out-of-range scale values from preferences', async () => {
+    it('should replace out-of-range scale with default during migration', async () => {
       setTestPreferences({ icons: { scale: 5.0 } });
       const { iconScale } = await loadUseIcons();
-      expect(iconScale.value).toBe(5.0);
+      expect(iconScale.value).toBe(1);
     });
 
-    it('should pass through below-minimum scale values from preferences', async () => {
+    it('should replace below-minimum scale with default during migration', async () => {
       setTestPreferences({ icons: { scale: 0.5 } });
       const { iconScale } = await loadUseIcons();
-      expect(iconScale.value).toBe(0.5);
+      expect(iconScale.value).toBe(1);
     });
   });
 

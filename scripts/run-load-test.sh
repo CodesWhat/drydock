@@ -141,8 +141,15 @@ fi
 AUTH_HEADER="Basic $(echo -n 'admin:password' | base64)"
 echo "Waiting for drydock to discover watched containers..."
 for _ in $(seq 1 15); do
-	COUNT=$(curl -sf -H "Authorization: ${AUTH_HEADER}" "${DD_LOAD_TEST_TARGET}/api/containers" |
-		python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo 0)
+	CONTAINERS_JSON=""
+	if CONTAINERS_JSON=$(curl -sf -H "Authorization: ${AUTH_HEADER}" "${DD_LOAD_TEST_TARGET}/api/containers" 2>/dev/null); then
+		:
+	fi
+	COUNT=0
+	if [ -n "${CONTAINERS_JSON}" ]; then
+		COUNT=$(jq 'length' <<<"${CONTAINERS_JSON}" 2>/dev/null || echo 0)
+	fi
+	COUNT=${COUNT:-0}
 	if [ "${COUNT}" -gt 0 ]; then
 		echo "Drydock discovered ${COUNT} container(s)"
 		break

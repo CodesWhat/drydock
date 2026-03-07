@@ -135,6 +135,43 @@ describe('API Index', () => {
     expect(mockApp.listen).toHaveBeenCalledWith(3000, expect.any(Function));
   });
 
+  test('should start HTTP server when TLS is explicitly disabled', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: { enabled: false },
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockApp.listen).toHaveBeenCalledWith(3000, expect.any(Function));
+    expect(mockHttps.createServer).not.toHaveBeenCalled();
+  });
+
+  test('should not start HTTPS server when tls.enabled is truthy but not boolean true', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {
+        enabled: 'true' as unknown as boolean,
+        key: '/path/to/key',
+        cert: '/path/to/cert',
+      },
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockApp.listen).toHaveBeenCalledWith(3000, expect.any(Function));
+    expect(mockFs.readFileSync).not.toHaveBeenCalled();
+    expect(mockHttps.createServer).not.toHaveBeenCalled();
+  });
+
   test('should enable CORS when configured', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
@@ -185,6 +222,7 @@ describe('API Index', () => {
     await indexRouter.init();
 
     expect(mockHelmet).toHaveBeenCalledWith({
+      strictTransportSecurity: false,
       contentSecurityPolicy: {
         directives: {
           'default-src': ["'self'"],
@@ -197,6 +235,7 @@ describe('API Index', () => {
             'https://api.simplesvg.com',
             'https://api.unisvg.com',
           ],
+          'upgrade-insecure-requests': null,
         },
       },
     });
@@ -217,6 +256,7 @@ describe('API Index', () => {
     await indexRouter.init();
 
     expect(mockHelmet).toHaveBeenCalledWith({
+      strictTransportSecurity: false,
       contentSecurityPolicy: {
         directives: {
           'default-src': ["'self'"],
@@ -224,6 +264,40 @@ describe('API Index', () => {
           'style-src': ["'self'", "'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
           'connect-src': ["'self'"],
+          'upgrade-insecure-requests': null,
+        },
+      },
+    });
+  });
+
+  test('should enable HSTS and upgrade-insecure-requests when TLS is enabled', async () => {
+    mockFs.readFileSync.mockReturnValueOnce('key-content').mockReturnValueOnce('cert-content');
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: { enabled: true, key: '/path/to/key', cert: '/path/to/cert' },
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockHelmet).toHaveBeenCalledWith({
+      strictTransportSecurity: true,
+      contentSecurityPolicy: {
+        directives: {
+          'default-src': ["'self'"],
+          'script-src': ["'self'"],
+          'style-src': ["'self'", "'unsafe-inline'"],
+          'img-src': ["'self'", 'data:'],
+          'connect-src': [
+            "'self'",
+            'https://api.iconify.design',
+            'https://api.simplesvg.com',
+            'https://api.unisvg.com',
+          ],
+          'upgrade-insecure-requests': [],
         },
       },
     });

@@ -27,6 +27,8 @@ If it fails (irregular reverse proxy configuration...), you can enforce the valu
 
 <Callout type="info">If your IdP is on a different domain and callback fails with `OIDC session is missing or expired`, check `DD_SERVER_COOKIE_SAMESITE` (server config). Default is `lax` for OIDC compatibility; `strict` can break cross-site callbacks. Use `none` only for explicit cross-site/embed cases over HTTPS.</Callout>
 
+<Callout type="info">Both `http://` and `https://` discovery URLs are supported. If your IdP runs behind a reverse proxy that terminates TLS, or on a private network without TLS, you can use an `http://` discovery URL. drydock automatically handles the insecure transport for the entire OIDC flow (discovery, token exchange, userinfo).</Callout>
+
 ## How to integrate with&nbsp;[Authelia](https://www.authelia.com)
 
 ![logo](/docs/assets/configuration/authentications/oidc/authelia.png)

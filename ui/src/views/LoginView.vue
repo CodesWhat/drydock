@@ -93,8 +93,7 @@ async function handleOidc(name: string) {
     if (typeof redirect === 'string') {
       const parsedUrl = new URL(redirect, globalThis.location.origin);
       const isHttp = parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
-      const isSameOrigin = parsedUrl.origin === globalThis.location.origin;
-      if (isHttp && isSameOrigin) {
+      if (isHttp) {
         globalThis.location.assign(parsedUrl.toString());
         return;
       }

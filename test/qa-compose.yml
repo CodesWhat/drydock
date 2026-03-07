@@ -23,6 +23,11 @@ services:
       - DD_SERVER_WEBHOOK_ENABLED=true
       - DD_SERVER_WEBHOOK_TOKEN=test-token-12345
       - DD_SESSION_SECRET=qa-test-session-secret
+      - DD_PUBLIC_URL=http://localhost:3333
+      # --- OIDC (Dex) ---
+      - DD_AUTH_OIDC_DEX_DISCOVERY=http://dex:5556/dex/.well-known/openid-configuration
+      - DD_AUTH_OIDC_DEX_CLIENTID=drydock
+      - DD_AUTH_OIDC_DEX_CLIENTSECRET=drydock-qa-secret
       # --- Slack trigger ---
       - DD_TRIGGER_SLACK_MYSLACK_TOKEN=xoxb-fake-slack-token-for-testing
       - DD_TRIGGER_SLACK_MYSLACK_CHANNEL=C01FAKECHANNEL
@@ -61,6 +66,16 @@ services:
     depends_on:
       docker-remote:
         condition: service_healthy
+
+  # ── OIDC Identity Provider (Dex) ─────────────────────
+  dex:
+    image: dexidp/dex:latest
+    container_name: dex-oidc
+    ports:
+      - "5556:5556"
+    volumes:
+      - ./dex-config.yaml:/etc/dex/config.yaml:ro
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
 
   # ── Trivy vulnerability scanner (client-server mode) ──
   trivy-server:

@@ -39,7 +39,7 @@ export interface PreferencesSchema {
 
 export const DEFAULTS: PreferencesSchema = {
   schemaVersion: 1,
-  theme: { family: 'drydock', variant: 'dark' },
+  theme: { family: 'one-dark', variant: 'dark' },
   font: { family: 'ibm-plex-mono' },
   icons: { library: 'ph-duotone', scale: 1 },
   appearance: { radius: 'sharp' },
