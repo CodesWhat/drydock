@@ -125,19 +125,27 @@ async function getContainerRegistryAuth(container) {
 }
 
 const crudHandlers = createCrudHandlers({
-  getContainersFromStore,
-  getContainerCountFromStore,
-  storeContainer,
-  updateOperationStore,
-  getServerConfiguration,
-  getAgent,
-  getErrorMessage,
-  getErrorStatusCode,
-  getWatchers,
-  redactContainerRuntimeEnv,
-  redactContainersRuntimeEnv,
-  getContainerRaw: storeContainer.getContainerRaw,
-  auditStore,
+  storeApi: {
+    getContainersFromStore,
+    getContainerCountFromStore,
+    storeContainer,
+    updateOperationStore,
+    getContainerRaw: storeContainer.getContainerRaw,
+  },
+  agentApi: {
+    getServerConfiguration,
+    getAgent,
+    getWatchers,
+  },
+  errorApi: {
+    getErrorMessage,
+    getErrorStatusCode,
+  },
+  securityApi: {
+    redactContainerRuntimeEnv,
+    redactContainersRuntimeEnv,
+    auditStore,
+  },
 });
 
 const triggerHandlers = createTriggerHandlers({

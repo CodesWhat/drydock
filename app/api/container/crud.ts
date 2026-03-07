@@ -91,22 +91,30 @@ interface AuditStoreApi {
 }
 
 export interface CrudHandlerDependencies {
-  getContainersFromStore: (
-    query: Request['query'],
-    pagination?: ContainerListPagination,
-  ) => Container[];
-  getContainerCountFromStore: (query: Request['query']) => number;
-  storeContainer: CrudStoreContainerApi;
-  updateOperationStore: UpdateOperationStoreApi;
-  getServerConfiguration: () => ServerConfiguration;
-  getAgent: (name: string) => AgentClient | undefined;
-  getErrorMessage: (error: unknown) => string;
-  getErrorStatusCode: (error: unknown) => number | undefined;
-  getWatchers: () => Record<string, LocalContainerWatcher>;
-  redactContainerRuntimeEnv: (container: Container) => Container;
-  redactContainersRuntimeEnv: (containers: Container[]) => Container[];
-  getContainerRaw?: (id: string) => Container | undefined;
-  auditStore?: AuditStoreApi;
+  storeApi: {
+    getContainersFromStore: (
+      query: Request['query'],
+      pagination?: ContainerListPagination,
+    ) => Container[];
+    getContainerCountFromStore: (query: Request['query']) => number;
+    storeContainer: CrudStoreContainerApi;
+    updateOperationStore: UpdateOperationStoreApi;
+    getContainerRaw?: (id: string) => Container | undefined;
+  };
+  agentApi: {
+    getServerConfiguration: () => ServerConfiguration;
+    getAgent: (name: string) => AgentClient | undefined;
+    getWatchers: () => Record<string, LocalContainerWatcher>;
+  };
+  errorApi: {
+    getErrorMessage: (error: unknown) => string;
+    getErrorStatusCode: (error: unknown) => number | undefined;
+  };
+  securityApi: {
+    redactContainerRuntimeEnv: (container: Container) => Container;
+    redactContainersRuntimeEnv: (containers: Container[]) => Container[];
+    auditStore?: AuditStoreApi;
+  };
 }
 
 const CONTAINER_LIST_MAX_LIMIT = 200;
@@ -245,19 +253,16 @@ function resolveSecurityImageName(container: Container): string {
 }
 
 export function createCrudHandlers({
-  getContainersFromStore,
-  getContainerCountFromStore,
-  storeContainer,
-  updateOperationStore,
-  getServerConfiguration,
-  getAgent,
-  getErrorMessage,
-  getErrorStatusCode,
-  getWatchers,
-  redactContainerRuntimeEnv,
-  redactContainersRuntimeEnv,
-  getContainerRaw,
-  auditStore,
+  storeApi: {
+    getContainersFromStore,
+    getContainerCountFromStore,
+    storeContainer,
+    updateOperationStore,
+    getContainerRaw,
+  },
+  agentApi: { getServerConfiguration, getAgent, getWatchers },
+  errorApi: { getErrorMessage, getErrorStatusCode },
+  securityApi: { redactContainerRuntimeEnv, redactContainersRuntimeEnv, auditStore },
 }: CrudHandlerDependencies) {
   function buildContainerListResponse(
     query: Request['query'],

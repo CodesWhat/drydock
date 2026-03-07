@@ -20,6 +20,32 @@ function createContainer(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function groupCrudDeps(deps: any): Parameters<typeof createCrudHandlers>[0] {
+  return {
+    storeApi: {
+      getContainersFromStore: deps.getContainersFromStore,
+      getContainerCountFromStore: deps.getContainerCountFromStore,
+      storeContainer: deps.storeContainer,
+      updateOperationStore: deps.updateOperationStore,
+      getContainerRaw: deps.getContainerRaw,
+    },
+    agentApi: {
+      getServerConfiguration: deps.getServerConfiguration,
+      getAgent: deps.getAgent,
+      getWatchers: deps.getWatchers,
+    },
+    errorApi: {
+      getErrorMessage: deps.getErrorMessage,
+      getErrorStatusCode: deps.getErrorStatusCode,
+    },
+    securityApi: {
+      redactContainerRuntimeEnv: deps.redactContainerRuntimeEnv,
+      redactContainersRuntimeEnv: deps.redactContainersRuntimeEnv,
+      auditStore: deps.auditStore,
+    },
+  };
+}
+
 function createHarness(options: { containers?: any[] } = {}) {
   const containers = options.containers ?? [];
   const byId = new Map(containers.map((container) => [container.id, container]));
@@ -69,7 +95,7 @@ function createHarness(options: { containers?: any[] } = {}) {
 
   return {
     deps,
-    handlers: createCrudHandlers(deps),
+    handlers: createCrudHandlers(groupCrudDeps(deps)),
   };
 }
 
@@ -151,6 +177,29 @@ async function callWatchContainer(
 describe('api/container/crud', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('createCrudHandlers dependency grouping', () => {
+    test('accepts grouped dependency objects', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+      const handlers = createCrudHandlers(groupCrudDeps(harness.deps));
+
+      const res = callGetContainerSummary(handlers);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          containers: expect.objectContaining({
+            total: 1,
+            running: 1,
+            stopped: 0,
+          }),
+          security: { issues: 0 },
+        }),
+      );
+    });
   });
 
   describe('getContainers pagination normalization', () => {
@@ -809,22 +858,30 @@ describe('api/container/crud', () => {
   describe('revealContainerEnv', () => {
     test('returns 501 when raw env dependencies are not provided', () => {
       const handlers = createCrudHandlers({
-        getContainersFromStore: vi.fn(() => []),
-        getContainerCountFromStore: vi.fn(() => 0),
-        storeContainer: {
-          getContainer: vi.fn(),
-          deleteContainer: vi.fn(),
+        storeApi: {
+          getContainersFromStore: vi.fn(() => []),
+          getContainerCountFromStore: vi.fn(() => 0),
+          storeContainer: {
+            getContainer: vi.fn(),
+            deleteContainer: vi.fn(),
+          },
+          updateOperationStore: {
+            getOperationsByContainerName: vi.fn(() => []),
+          },
         },
-        updateOperationStore: {
-          getOperationsByContainerName: vi.fn(() => []),
+        agentApi: {
+          getServerConfiguration: vi.fn(() => ({ feature: { delete: true } })),
+          getAgent: vi.fn(),
+          getWatchers: vi.fn(() => ({})),
         },
-        getServerConfiguration: vi.fn(() => ({ feature: { delete: true } })),
-        getAgent: vi.fn(),
-        getErrorMessage: vi.fn(() => 'error'),
-        getErrorStatusCode: vi.fn(() => undefined),
-        getWatchers: vi.fn(() => ({})),
-        redactContainerRuntimeEnv: vi.fn((container) => container),
-        redactContainersRuntimeEnv: vi.fn((value) => value),
+        errorApi: {
+          getErrorMessage: vi.fn(() => 'error'),
+          getErrorStatusCode: vi.fn(() => undefined),
+        },
+        securityApi: {
+          redactContainerRuntimeEnv: vi.fn((container) => container),
+          redactContainersRuntimeEnv: vi.fn((value) => value),
+        },
       });
 
       const res = callRevealContainerEnv(handlers);

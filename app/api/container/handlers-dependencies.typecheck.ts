@@ -10,8 +10,14 @@ const securityDeps = {} as Parameters<typeof createSecurityHandlers>[0];
 const triggerDeps = {} as Parameters<typeof createTriggerHandlers>[0];
 const updatePolicyDeps = {} as Parameters<typeof createUpdatePolicyHandlers>[0];
 
-// @ts-expect-error getErrorMessage must be a function
-createCrudHandlers({ ...crudDeps, getErrorMessage: 123 });
+createCrudHandlers({
+  ...crudDeps,
+  errorApi: {
+    ...crudDeps.errorApi,
+    // @ts-expect-error errorApi.getErrorMessage must be a function
+    getErrorMessage: 123,
+  },
+});
 
 // @ts-expect-error getErrorMessage must be a function
 createLogHandlers({ ...logDeps, getErrorMessage: 123 });

@@ -1259,22 +1259,30 @@ describe('Container Router', () => {
   describe('createCrudHandlers', () => {
     test('revealContainerEnv should return 501 when raw-env dependencies are unavailable', () => {
       const handlers = createCrudHandlers({
-        getContainersFromStore: vi.fn(() => []),
-        getContainerCountFromStore: vi.fn(() => 0),
-        storeContainer: {
-          getContainer: vi.fn(),
-          deleteContainer: vi.fn(),
+        storeApi: {
+          getContainersFromStore: vi.fn(() => []),
+          getContainerCountFromStore: vi.fn(() => 0),
+          storeContainer: {
+            getContainer: vi.fn(),
+            deleteContainer: vi.fn(),
+          },
+          updateOperationStore: {
+            getOperationsByContainerName: vi.fn(() => []),
+          },
         },
-        updateOperationStore: {
-          getOperationsByContainerName: vi.fn(() => []),
+        agentApi: {
+          getServerConfiguration: vi.fn(() => ({ feature: { delete: true } })),
+          getAgent: vi.fn(),
+          getWatchers: vi.fn(() => ({})),
         },
-        getServerConfiguration: vi.fn(() => ({ feature: { delete: true } })),
-        getAgent: vi.fn(),
-        getErrorMessage: vi.fn(() => 'error'),
-        getErrorStatusCode: vi.fn(() => undefined),
-        getWatchers: vi.fn(() => ({})),
-        redactContainerRuntimeEnv: vi.fn((container) => container),
-        redactContainersRuntimeEnv: vi.fn((containers) => containers),
+        errorApi: {
+          getErrorMessage: vi.fn(() => 'error'),
+          getErrorStatusCode: vi.fn(() => undefined),
+        },
+        securityApi: {
+          redactContainerRuntimeEnv: vi.fn((container) => container),
+          redactContainersRuntimeEnv: vi.fn((containers) => containers),
+        },
       });
 
       const res = createResponse();
