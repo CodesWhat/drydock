@@ -120,6 +120,7 @@ function mountLayout() {
         RouterView: true,
         NotificationBell: true,
         ThemeToggle: true,
+        AnnouncementBanner: false,
       },
     },
   });
@@ -131,6 +132,7 @@ describe('AppLayout', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockFetch = vi.fn();
     vi.stubGlobal('fetch', mockFetch);
     mockGetAllContainers.mockResolvedValue([]);
@@ -304,5 +306,95 @@ describe('AppLayout', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('shows an OIDC HTTP compatibility banner when an OIDC provider uses HTTP discovery', async () => {
+    mockGetAllAuthentications.mockResolvedValue([
+      {
+        id: 'oidc.local-idp',
+        type: 'oidc',
+        name: 'local-idp',
+        configuration: {
+          discovery: 'http://dex:5556/.well-known/openid-configuration',
+        },
+      },
+    ]);
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    const banner = wrapper.find('[data-testid="oidc-http-compat-banner"]');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('DD_OIDC_ALLOW_HTTP=true');
+  });
+
+  it('supports dismissing OIDC HTTP compatibility banner for current session', async () => {
+    mockGetAllAuthentications.mockResolvedValue([
+      {
+        id: 'oidc.local-idp',
+        type: 'oidc',
+        name: 'local-idp',
+        configuration: {
+          discovery: 'http://dex:5556/.well-known/openid-configuration',
+        },
+      },
+    ]);
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(true);
+
+    await wrapper.find('[data-testid="oidc-http-compat-banner-dismiss-session"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(false);
+  });
+
+  it('supports permanently dismissing OIDC HTTP compatibility banner', async () => {
+    mockGetAllAuthentications.mockResolvedValue([
+      {
+        id: 'oidc.local-idp',
+        type: 'oidc',
+        name: 'local-idp',
+        configuration: {
+          discovery: 'http://dex:5556/.well-known/openid-configuration',
+        },
+      },
+    ]);
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(true);
+
+    await wrapper.find('[data-testid="oidc-http-compat-banner-dismiss-forever"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(false);
+    expect(localStorage.getItem('dd-banner-oidc-http-discovery-v1')).toBe('true');
+  });
+
+  it('does not show OIDC HTTP compatibility banner after permanent dismissal is persisted', async () => {
+    localStorage.setItem('dd-banner-oidc-http-discovery-v1', 'true');
+    mockGetAllAuthentications.mockResolvedValue([
+      {
+        id: 'oidc.local-idp',
+        type: 'oidc',
+        name: 'local-idp',
+        configuration: {
+          discovery: 'http://dex:5556/.well-known/openid-configuration',
+        },
+      },
+    ]);
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(false);
   });
 });
