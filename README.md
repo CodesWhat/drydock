@@ -362,7 +362,7 @@ Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully suppo
 | **v1.4.1** | Reliability & Resilience | Deferred hardening/reliability: API error sanitization follow-ups, trigger schema validation, shared-proxy rate limiter key strategy, settings PATCH semantics cleanup (deprecated PUT alias removal target v1.5.0), action-endpoint convention docs, staged CORS explicit-origin deprecation plan, compose trigger validation/reconciliation, auth schema validation, UI resilience audit |
 | **v1.5.0** | Observability | Real-time log viewer, container resource monitoring, registry webhooks |
 | **v1.5.1** | Scanner Decoupling | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle |
-| **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers |
+| **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers, remove HTTP OIDC discovery support, enforce CORS explicit-origin requirement |
 | **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring, dashboard customization |
 | **v1.8.0** | Fleet Management & Live Config | YAML config, live UI config panels, volume browser, parallel updates, SQLite store migration, i18n framework |
 | **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers, basic GitOps, remove legacy unversioned `/api/*` alias (use `/api/vN/*`) |
@@ -384,6 +384,7 @@ Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully suppo
 | Configuration | [Configuration](https://drydock.codeswhat.com/docs/configuration) |
 | Quick Start | [Quick Start](https://drydock.codeswhat.com/docs/quickstart) |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
+| Deprecations | [`DEPRECATIONS.md`](DEPRECATIONS.md) |
 | Roadmap | See [Roadmap](#roadmap) section above |
 | Contributing | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Issues | [GitHub Issues](https://github.com/CodesWhat/drydock/issues) |
