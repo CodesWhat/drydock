@@ -326,7 +326,7 @@ describe('AppLayout', () => {
 
     const banner = wrapper.find('[data-testid="oidc-http-compat-banner"]');
     expect(banner.exists()).toBe(true);
-    expect(banner.text()).toContain('DD_OIDC_ALLOW_HTTP=true');
+    expect(banner.text()).toContain('Migrate your IdP to HTTPS');
   });
 
   it('supports dismissing OIDC HTTP compatibility banner for current session', async () => {

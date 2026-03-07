@@ -1270,9 +1270,8 @@ onUnmounted(() => {
         @dismiss-permanent="dismissOidcHttpBannerPermanently">
         One or more OIDC providers use an insecure
         <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">http://</code>
-        discovery URL. This is temporarily allowed for upgrade compatibility. Set
-        <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_OIDC_ALLOW_HTTP=true</code>
-        now and migrate your IdP to HTTPS.
+        discovery URL. HTTP discovery is supported but not recommended for production.
+        Migrate your IdP to HTTPS when possible.
       </AnnouncementBanner>
 
       <!-- MAIN CONTENT -->
