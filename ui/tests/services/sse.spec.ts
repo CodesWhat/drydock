@@ -93,6 +93,28 @@ describe('SseService', () => {
     expect(mockEventBus.emit).toHaveBeenCalledWith('sse:connected');
   });
 
+  it('handles dd:connected with non-object JSON payload gracefully', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:connected']({ data: '"not-an-object"' });
+    eventListeners['dd:self-update']({ data: '{"opId":"op-123"}' });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('handles dd:connected with invalid JSON payload gracefully', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:connected']({ data: '{broken' });
+    eventListeners['dd:self-update']({ data: '{"opId":"op-123"}' });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('ignores non-string dd:connected credential fields', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:connected']({ data: '{"clientId":123,"clientToken":false}' });
+    eventListeners['dd:self-update']({ data: '{"opId":"op-123"}' });
+
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it('emits self-update payload on dd:self-update event and acknowledges operation', () => {
     sseService.connect(mockEventBus);
     eventListeners['dd:connected']({ data: JSON.stringify(connectedPayload) });
@@ -117,6 +139,22 @@ describe('SseService', () => {
           clientId: connectedPayload.clientId,
           clientToken: connectedPayload.clientToken,
           lastEventId: 'evt-1',
+        }),
+      }),
+    );
+  });
+
+  it('acknowledges self-update without lastEventId when not provided', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:connected']({ data: JSON.stringify(connectedPayload) });
+    eventListeners['dd:self-update']({ data: '{"opId":"op-456"}' });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/events/ui/self-update/op-456/ack',
+      expect.objectContaining({
+        body: JSON.stringify({
+          clientId: connectedPayload.clientId,
+          clientToken: connectedPayload.clientToken,
         }),
       }),
     );

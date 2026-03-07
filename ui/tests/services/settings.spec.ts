@@ -35,7 +35,7 @@ describe('Settings Service', () => {
   });
 
   describe('updateSettings', () => {
-    it('should send PUT request with settings payload', async () => {
+    it('should send PATCH request with settings payload', async () => {
       const updated = { internetlessMode: true };
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: true,
@@ -45,7 +45,7 @@ describe('Settings Service', () => {
       const result = await updateSettings({ internetlessMode: true });
 
       expect(global.fetch).toHaveBeenCalledWith('/api/settings', {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ internetlessMode: true }),

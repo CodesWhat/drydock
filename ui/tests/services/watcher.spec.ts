@@ -32,16 +32,58 @@ describe('Watcher Service', () => {
   });
 
   it('should get all watchers', async () => {
-    const mockResponse = { watchers: [] };
+    const mockWatchers = [{ id: 'docker.local' }];
     global.fetch.mockResolvedValue({
       ok: true,
-      json: vi.fn().mockResolvedValue(mockResponse),
+      json: vi.fn().mockResolvedValue({ data: mockWatchers, total: 1 }),
     });
 
     const result = await getAllWatchers();
 
     expect(global.fetch).toHaveBeenCalledWith('/api/watchers', { credentials: 'include' });
-    expect(result).toEqual(mockResponse);
+    expect(result).toEqual(mockWatchers);
+  });
+
+  it('supports array payload shape when listing watchers', async () => {
+    const mockWatchers = [{ id: 'array-shape' }];
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue(mockWatchers),
+    });
+
+    const result = await getAllWatchers();
+    expect(result).toEqual(mockWatchers);
+  });
+
+  it('supports items payload shape when listing watchers', async () => {
+    const mockWatchers = [{ id: 'items-shape' }];
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ items: mockWatchers }),
+    });
+
+    const result = await getAllWatchers();
+    expect(result).toEqual(mockWatchers);
+  });
+
+  it('returns empty array for unknown watcher collection payload shape', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ entries: [{ id: 'ignored' }] }),
+    });
+
+    const result = await getAllWatchers();
+    expect(result).toEqual([]);
+  });
+
+  it('returns empty array when watcher payload is not an object', async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue('not-an-object'),
+    });
+
+    const result = await getAllWatchers();
+    expect(result).toEqual([]);
   });
 
   it('throws when fetching all watchers fails', async () => {

@@ -98,7 +98,7 @@ describe('Registry Service', () => {
       ];
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockRegistries,
+        json: async () => ({ data: mockRegistries, total: 2 }),
       } as any);
 
       const registries = await getAllRegistries();
@@ -107,6 +107,48 @@ describe('Registry Service', () => {
         credentials: 'include',
       });
       expect(registries).toEqual(mockRegistries);
+    });
+
+    it('supports array payload shape', async () => {
+      const mockRegistries = [{ name: 'array-shape', type: 'hub' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockRegistries,
+      } as any);
+
+      const registries = await getAllRegistries();
+      expect(registries).toEqual(mockRegistries);
+    });
+
+    it('supports items payload shape', async () => {
+      const mockRegistries = [{ name: 'items-shape', type: 'ghcr' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: mockRegistries }),
+      } as any);
+
+      const registries = await getAllRegistries();
+      expect(registries).toEqual(mockRegistries);
+    });
+
+    it('returns empty array for unknown collection payload shape', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ entries: [{ name: 'ignored' }] }),
+      } as any);
+
+      const registries = await getAllRegistries();
+      expect(registries).toEqual([]);
+    });
+
+    it('returns empty array when payload is not an object', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => 'not-an-object',
+      } as any);
+
+      const registries = await getAllRegistries();
+      expect(registries).toEqual([]);
     });
 
     it('throws when fetching registries fails', async () => {

@@ -40,7 +40,7 @@ describe('Container Service', () => {
       ];
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockContainers,
+        json: async () => ({ data: mockContainers, total: 2 }),
       } as any);
 
       const containers = await getAllContainers();
@@ -55,7 +55,7 @@ describe('Container Service', () => {
       const mockContainers = [{ id: '1', name: 'container1' }];
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockContainers,
+        json: async () => ({ data: mockContainers, total: 1 }),
       } as any);
 
       const containers = await getAllContainers({ includeVulnerabilities: true });
@@ -70,7 +70,7 @@ describe('Container Service', () => {
       const mockContainers = [{ id: '2', name: 'container2' }];
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockContainers,
+        json: async () => ({ data: mockContainers, total: 1 }),
       } as any);
 
       const containers = await getAllContainers({ limit: 10, offset: 20 });
@@ -81,12 +81,54 @@ describe('Container Service', () => {
       expect(containers).toEqual(mockContainers);
     });
 
+    it('supports array payload shape', async () => {
+      const mockContainers = [{ id: '3', name: 'container3' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockContainers,
+      } as any);
+
+      const containers = await getAllContainers();
+      expect(containers).toEqual(mockContainers);
+    });
+
+    it('supports items payload shape', async () => {
+      const mockContainers = [{ id: '4', name: 'container4' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: mockContainers }),
+      } as any);
+
+      const containers = await getAllContainers();
+      expect(containers).toEqual(mockContainers);
+    });
+
+    it('returns empty array for unknown collection payload shape', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ entries: [{ id: 'ignored' }] }),
+      } as any);
+
+      const containers = await getAllContainers();
+      expect(containers).toEqual([]);
+    });
+
+    it('returns empty array when payload is not an object', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => 'not-an-object',
+      } as any);
+
+      const containers = await getAllContainers();
+      expect(containers).toEqual([]);
+    });
+
     it('accepts AbortSignal as the first argument for backward compatibility', async () => {
       const controller = new AbortController();
       const mockContainers = [{ id: '1', name: 'container1' }];
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockContainers,
+        json: async () => ({ data: mockContainers, total: 1 }),
       } as any);
 
       const containers = await getAllContainers(controller.signal);

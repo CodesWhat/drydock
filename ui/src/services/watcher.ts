@@ -22,12 +22,28 @@ function getWatcherProviderColor(type: string) {
   return '#6B7280';
 }
 
+function extractCollectionData<T>(payload: unknown): T[] {
+  if (Array.isArray(payload)) {
+    return payload as T[];
+  }
+  if (payload && typeof payload === 'object') {
+    if (Array.isArray((payload as { data?: unknown }).data)) {
+      return (payload as { data: T[] }).data;
+    }
+    if (Array.isArray((payload as { items?: unknown }).items)) {
+      return (payload as { items: T[] }).items;
+    }
+  }
+  return [];
+}
+
 async function getAllWatchers() {
   const response = await fetch('/api/watchers', { credentials: 'include' });
   if (!response.ok) {
     throw new Error(`Failed to get watchers: ${response.statusText}`);
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData(payload);
 }
 
 function buildWatcherDetailPath({ type, name, agent }: WatcherDetailPathOptions) {
