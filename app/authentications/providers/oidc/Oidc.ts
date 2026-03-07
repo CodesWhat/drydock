@@ -71,6 +71,30 @@ function isValidStateToken(value: unknown): value is string {
   return isNonEmptyString(value) && OIDC_STATE_PATTERN.test(value);
 }
 
+function parseHttpUrl(value: unknown): URL | undefined {
+  if (!isNonEmptyString(value)) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return undefined;
+    }
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizePathname(pathname: string): string {
+  const normalized = pathname.replace(/\/+$/, '');
+  return normalized.length > 0 ? normalized : '/';
+}
+
+function toEndpointKey(url: URL): string {
+  return `${url.origin}${normalizePathname(url.pathname)}`;
+}
+
 function createPendingChecksRecord(): OidcPendingChecks {
   return Object.create(null) as OidcPendingChecks;
 }
@@ -352,6 +376,42 @@ class Oidc extends Authentication {
     };
   }
 
+  getAllowedAuthorizationRedirects() {
+    const strictEndpoints = new Set<string>();
+    const allowedOrigins = new Set<string>();
+
+    const discoveryUrl = parseHttpUrl(this.configuration.discovery);
+    if (discoveryUrl) {
+      allowedOrigins.add(discoveryUrl.origin);
+    }
+
+    if (this.client && typeof this.client.serverMetadata === 'function') {
+      const serverMetadata = this.client.serverMetadata();
+      const authorizationEndpoint = parseHttpUrl(serverMetadata.authorization_endpoint);
+      if (authorizationEndpoint) {
+        strictEndpoints.add(toEndpointKey(authorizationEndpoint));
+        allowedOrigins.add(authorizationEndpoint.origin);
+      }
+      const issuerUrl = parseHttpUrl(serverMetadata.issuer);
+      if (issuerUrl) {
+        allowedOrigins.add(issuerUrl.origin);
+      }
+    }
+
+    return { strictEndpoints, allowedOrigins };
+  }
+
+  isAllowedAuthorizationRedirect(authUrl: URL) {
+    if (authUrl.protocol !== 'http:' && authUrl.protocol !== 'https:') {
+      return false;
+    }
+    const { strictEndpoints, allowedOrigins } = this.getAllowedAuthorizationRedirects();
+    if (strictEndpoints.size > 0) {
+      return strictEndpoints.has(toEndpointKey(authUrl));
+    }
+    return allowedOrigins.has(authUrl.origin);
+  }
+
   async redirect(req: OidcRedirectRequest, res: Response): Promise<void> {
     const openidClient = await this.getOpenIdClient();
     const codeVerifier = openidClient.randomPKCECodeVerifier();
@@ -374,6 +434,14 @@ class Oidc extends Authentication {
       state,
     }).href;
     this.log.debug(`Build redirection url [${authUrl}]`);
+    const parsedAuthUrl = parseHttpUrl(authUrl);
+    if (!parsedAuthUrl || !this.isAllowedAuthorizationRedirect(parsedAuthUrl)) {
+      this.log.warn(
+        `OIDC authorization redirect URL is not allowed for strategy ${sessionKey} (${authUrl})`,
+      );
+      res.status(500).json({ error: 'Unable to initialize OIDC session' });
+      return;
+    }
 
     try {
       const persistOidcChecks = async () => {

@@ -106,7 +106,10 @@ beforeEach(() => {
   };
   oidc.openidClient = openidClientMock;
   oidc.client = new Configuration(
-    { issuer: 'https://idp.example.com' },
+    {
+      issuer: 'https://idp.example.com',
+      authorization_endpoint: 'https://idp/auth',
+    },
     'dd-client',
     'dd-secret',
     ClientSecretPost('dd-secret'),
@@ -263,6 +266,42 @@ test('getStrategyDescription should return strategy description', async () => {
   });
 });
 
+test('getAllowedAuthorizationRedirects should tolerate malformed urls and normalize root endpoint path', () => {
+  oidc.configuration = {
+    ...configurationValid,
+    discovery: 'not-a-valid-url',
+  };
+  oidc.client = {
+    serverMetadata: () => ({
+      authorization_endpoint: 'https://idp.example.com/',
+      issuer: 'not-a-valid-issuer-url',
+    }),
+  } as any;
+
+  const redirects = oidc.getAllowedAuthorizationRedirects();
+
+  expect(redirects.strictEndpoints.has('https://idp.example.com/')).toBe(true);
+  expect(redirects.allowedOrigins.has('https://idp.example.com')).toBe(true);
+});
+
+test('getAllowedAuthorizationRedirects should return empty allowlists when metadata client is unavailable', () => {
+  oidc.configuration = {
+    ...configurationValid,
+    discovery: 'not-a-valid-url',
+  };
+  oidc.client = undefined as any;
+
+  const redirects = oidc.getAllowedAuthorizationRedirects();
+
+  expect(redirects.strictEndpoints.size).toBe(0);
+  expect(redirects.allowedOrigins.size).toBe(0);
+});
+
+test('isAllowedAuthorizationRedirect should reject non-http protocols', () => {
+  const allowed = oidc.isAllowedAuthorizationRedirect(new URL('javascript:alert(1)'));
+  expect(allowed).toBe(false);
+});
+
 test('verify should return user on valid token', async () => {
   openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'test@example.com' });
 
@@ -346,6 +385,49 @@ test('redirect should preserve pending checks from concurrent requests on the sa
   expect(Object.keys(persistedOidcState.oidc.default.pending)).toHaveLength(2);
   expect(res1.status).not.toHaveBeenCalled();
   expect(res2.status).not.toHaveBeenCalled();
+});
+
+test('redirect should reject unexpected authorization redirect host', async () => {
+  openidClientMock.buildAuthorizationUrl = vi
+    .fn()
+    .mockReturnValue(new URL('https://evil.example.com/auth'));
+  const req = createReq({ session: { save: vi.fn((cb) => cb()) } });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  expect(res.status).toHaveBeenCalledWith(500);
+  expect(res.json).toHaveBeenCalledWith({ error: 'Unable to initialize OIDC session' });
+});
+
+test('redirect should reject non-http authorization redirect urls', async () => {
+  openidClientMock.buildAuthorizationUrl = vi.fn().mockReturnValue(new URL('javascript:alert(1)'));
+  const req = createReq({ session: { save: vi.fn((cb) => cb()) } });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  expect(res.status).toHaveBeenCalledWith(500);
+  expect(res.json).toHaveBeenCalledWith({ error: 'Unable to initialize OIDC session' });
+});
+
+test('redirect should allow discovery-origin redirects when authorization endpoint metadata is missing', async () => {
+  oidc.client = new Configuration(
+    {
+      issuer: 'https://issuer.example.com',
+    },
+    'dd-client',
+    'dd-secret',
+    ClientSecretPost('dd-secret'),
+  );
+  openidClientMock.buildAuthorizationUrl = vi.fn().mockReturnValue(new URL('https://idp/auth'));
+  const req = createReq({ session: { save: vi.fn((cb) => cb()) } });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  expect(res.json).toHaveBeenCalledWith({ url: 'https://idp/auth' });
+  expect(res.status).not.toHaveBeenCalled();
 });
 
 test('callback should fail with explicit message when callback state is missing', async () => {
