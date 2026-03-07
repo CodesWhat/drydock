@@ -135,6 +135,43 @@ describe('API Index', () => {
     expect(mockApp.listen).toHaveBeenCalledWith(3000, expect.any(Function));
   });
 
+  test('should start HTTP server when TLS is explicitly disabled', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: { enabled: false },
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockApp.listen).toHaveBeenCalledWith(3000, expect.any(Function));
+    expect(mockHttps.createServer).not.toHaveBeenCalled();
+  });
+
+  test('should not start HTTPS server when tls.enabled is truthy but not boolean true', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {
+        enabled: 'true' as unknown as boolean,
+        key: '/path/to/key',
+        cert: '/path/to/cert',
+      },
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockApp.listen).toHaveBeenCalledWith(3000, expect.any(Function));
+    expect(mockFs.readFileSync).not.toHaveBeenCalled();
+    expect(mockHttps.createServer).not.toHaveBeenCalled();
+  });
+
   test('should enable CORS when configured', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,

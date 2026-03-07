@@ -79,6 +79,7 @@ function configureSecurityHeaders(app) {
           'connect-src': connectSources,
           // Prevent browsers from upgrading HTTP sub-resource requests to
           // HTTPS when TLS is not configured (#105).
+          // [] = include directive with no value; null = omit directive.
           'upgrade-insecure-requests': tlsEnabled ? [] : null,
         },
       },
@@ -133,7 +134,7 @@ function startHttpServer(app) {
 }
 
 function startServer(app) {
-  if (configuration.tls.enabled) {
+  if (configuration.tls.enabled === true) {
     startHttpsServer(app);
     return;
   }
