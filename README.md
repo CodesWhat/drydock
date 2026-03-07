@@ -280,6 +280,8 @@ Anonymous (default) · Basic (username + password hash) · OIDC (Authelia, Auth0
 
 API note: `POST /api/containers/:id/env/reveal` is currently scoped to authentication only (no per-container RBAC yet), so any authenticated user is treated as a trusted operator for secret reveal actions.
 
+OpenAPI note: machine-readable API docs are available at `GET /api/openapi.json`.
+
 ### 🥊 Update Bouncer
 
 Trivy-powered vulnerability scanning blocks unsafe updates before they deploy. Includes cosign signature verification and SBOM generation (CycloneDX & SPDX).
@@ -355,6 +357,7 @@ Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully suppo
 | --- | --- | --- |
 | **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Bouncer, SBOM, 7 new registries, 4 new triggers, rollback fixes, GHCR auth, self-hosted TLS, re2js regex engine, compose trigger fixes, DB persistence on shutdown |
 | **v1.4.0** ✅ | UI Modernization & Hardening | Tailwind CSS 4 + custom component library, 4 themes, 7 icon libraries, Cmd/K command palette, compose-native YAML-preserving updates, rename-first rollback with health gates, self-update controller with SSE ack, fail-closed auth enforcement, tag-family semver, notification rules, container grouping by stack, audit history view, dual-slot security scanning, scheduled scans, WUD migration CLI, bundled offline icons, dashboard drag-reorder, gzip compression, API error sanitization, agent log validation, TLS path redaction, audit store indexing with 30-day retention, type-safe store modules, durable batch scans, recent-status API |
+| **v1.4.1** | Reliability & Resilience | Deferred hardening/reliability: API error sanitization follow-ups, trigger schema validation, shared-proxy rate limiter key strategy, settings PATCH semantics cleanup (deprecated PUT alias removal target v1.5.0), action-endpoint convention docs, compose trigger validation/reconciliation, auth schema validation, UI resilience audit |
 | **v1.5.0** | Observability | Real-time log viewer, container resource monitoring, registry webhooks |
 | **v1.5.1** | Scanner Decoupling | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle |
 | **v1.6.0** | Notifications & Release Intel | Notification templates, release notes in notifications, MS Teams & Matrix triggers |
