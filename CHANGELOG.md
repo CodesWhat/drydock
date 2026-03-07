@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **OpenAPI 3.1.0 specification and endpoint** — Machine-readable API documentation available at `GET /api/openapi.json`, covering all v1.4 endpoints with request/response schemas.
 - **Font size preference** — Adjustable font size slider in Config > Appearance for UI-wide text scaling.
 - **Announcement banner** — Dismissible banner component for surfacing release notes and important notices in the dashboard.
+- **Dashboard vulnerability sort by severity** — Top-5 vulnerability list on the dashboard now sorted by total count descending with critical count as tiebreaker, so the most severe containers appear first.
+- **Watcher agent support initialization** — Watchers now initialize agent support on startup for distributed monitoring readiness.
 
 ### Changed
 
@@ -31,6 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Stale theme preferences after upgrade from v1.3** — Preferences migration `deepMerge` overwrote defaults with persisted values unconditionally, so invalid enum values (e.g. removed `drydock` theme family) survived migration and caused rendering failures. Added `sanitize()` pass that strips invalid theme families, variants, font families, icon libraries, scales, radius presets, view modes, and table actions before merge.
 - **OIDC discovery fails on HTTP IdP URLs** — openid-client v6 enforces HTTPS by default for all OIDC requests. Users running IdPs behind reverse proxies or on private networks with HTTP discovery URLs got "only requests to HTTPS are allowed" errors. Now passes `allowInsecureRequests` when the discovery URL protocol is `http:`.
 - **Docker Compose trigger fails with EBUSY on bind-mounted stacks** — `writeComposeFileAtomic()` used a single `fs.rename()` call that failed permanently when another process (e.g. Dockge) held the file or when Docker bind-mount overlay contention blocked the rename. Now retries up to 5 times with 200ms backoff, then falls back to a direct `writeFile` if rename remains blocked. ([#84](https://github.com/CodesWhat/drydock/discussions/84))
+- **Drydock container display name hardcoded** — The Docker watcher hardcoded `drydock` as the display name for drydock's own container instead of using the actual container name like every other container.
+- **Non-existent DD_OIDC_ALLOW_HTTP env var referenced in UI** — The UI OIDC HTTP banner referenced a `DD_OIDC_ALLOW_HTTP` env var that does not exist — the backend auto-detects `http://` discovery URLs and passes `allowInsecureRequests` automatically. Removed the misleading reference.
+- **Load test and start scripts broken by standardized API responses** — `jq` queries in `run-load-test.sh` and `start-drydock.sh` used raw array syntax instead of `.data[]` to match the new collection response pattern.
 
 ### Security
 

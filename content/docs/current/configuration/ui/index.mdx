@@ -9,14 +9,16 @@ All UI preferences are configured in **Config > Appearance** and persisted in th
 
 ## Themes
 
-Drydock ships with 4 color themes, each available in dark and light variants:
+Drydock ships with 6 color themes, each available in dark and light variants:
 
 | Theme | Style |
 | --- | --- |
-| **Drydock** (default) | Navy tones |
+| **One Dark** (default) | Clean and balanced |
 | **GitHub** | Clean, familiar |
 | **Dracula** | Bold purple |
 | **Catppuccin** | Warm pastels |
+| **Gruvbox** | Retro earthy warmth |
+| **Ayu** | Soft golden tones |
 
 Switch themes in **Config > Appearance**. A circle-reveal transition animation plays when changing themes.
 
@@ -50,6 +52,10 @@ An icon size slider in **Config > Appearance** adjusts icon scale across the UI.
 | **Comic Mono** | Lazy-loaded from local `/fonts/` |
 
 All non-default fonts are served locally from the container's `/fonts/` directory — no external network requests are made. In internetless mode, all fonts fall back to IBM Plex Mono which is bundled in the image.
+
+## Font Size
+
+An adjustable font size slider in **Config > Appearance** scales text across the entire UI. The setting is persisted in localStorage.
 
 ## Command Palette
 
