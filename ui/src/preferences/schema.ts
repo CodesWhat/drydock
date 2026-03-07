@@ -1,4 +1,5 @@
 import type { ThemeFamily } from '../theme/palettes';
+import type { RadiusPresetId } from './radius';
 
 export type ViewMode = 'table' | 'cards' | 'list';
 
@@ -7,7 +8,7 @@ export interface PreferencesSchema {
   theme: { family: ThemeFamily; variant: string };
   font: { family: string };
   icons: { library: string; scale: number };
-  appearance: { radius: string; fontSize: number };
+  appearance: { radius: RadiusPresetId; fontSize: number };
   layout: { sidebarCollapsed: boolean };
   containers: {
     viewMode: ViewMode;

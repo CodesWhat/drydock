@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { RadiusPreset, RadiusPresetId } from '../../preferences/radius';
+
 interface ThemeFamilyOption {
   id: string;
   label: string;
@@ -15,14 +17,6 @@ interface FontOption {
   bundled?: boolean;
 }
 
-interface RadiusPreset {
-  id: string;
-  label: string;
-  sm: number;
-  md: number;
-  lg: number;
-}
-
 const props = withDefaults(
   defineProps<{
     themeFamilies: ThemeFamilyOption[];
@@ -37,14 +31,14 @@ const props = withDefaults(
     iconMap: Record<string, Record<string, string>>;
     iconScale?: number;
     fontSize?: number;
-    activeRadius?: string;
+    activeRadius?: RadiusPresetId;
     radiusPresets: RadiusPreset[];
     onSelectThemeFamily: (familyId: string, event: Event) => void;
     onSelectFont: (fontId: string) => void;
     onSelectIconLibrary: (library: string) => void;
     onChangeIconScale: (value: number) => void;
     onChangeFontSize: (value: number) => void;
-    onSelectRadius: (id: string) => void;
+    onSelectRadius: (id: RadiusPresetId) => void;
   }>(),
   {
     themeFamily: '',

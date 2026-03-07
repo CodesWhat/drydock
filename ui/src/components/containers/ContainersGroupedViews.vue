@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+import { getContainerViewKey } from '../../utils/container-view-key';
 
 const {
   filteredContainers,
@@ -96,10 +97,10 @@ const {
       <DataTable v-if="containerViewMode === 'table'"
                  :columns="tableColumns"
                  :rows="group.containers"
-                 row-key="name"
+                 :row-key="getContainerViewKey"
                  :sort-key="containerSortKey"
                  :sort-asc="containerSortAsc"
-                 :selected-key="selectedContainer?.name"
+                 :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
                  :show-actions="true"
                  :virtual-scroll="false"
                  @update:sort-key="containerSortKey = $event"
@@ -363,7 +364,7 @@ const {
 
       <!-- Actions dropdown (teleported to body so it renders in all view modes) -->
       <Teleport to="body">
-        <template v-for="c in displayContainers" :key="'menu-' + c.name">
+        <template v-for="c in displayContainers" :key="'menu-' + getContainerViewKey(c)">
           <div v-if="openActionsMenu === c.name"
                class="z-[200] min-w-[160px] py-1 dd-rounded shadow-lg"
                :style="{
@@ -430,8 +431,8 @@ const {
       <!-- CONTAINER CARD GRID -->
       <DataCardGrid v-if="containerViewMode === 'cards'"
                     :items="group.containers"
-                    item-key="name"
-                    :selected-key="selectedContainer?.name"
+                    :item-key="getContainerViewKey"
+                    :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
                     @item-click="selectContainer($event)">
         <template #card="{ item: c }">
           <!-- Card header -->
@@ -569,8 +570,8 @@ const {
       <!-- LIST VIEW -->
       <DataListAccordion v-if="containerViewMode === 'list'"
                          :items="group.containers"
-                         item-key="name"
-                         :selected-key="selectedContainer?.name"
+                         :item-key="getContainerViewKey"
+                         :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
                          @item-click="selectContainer($event)">
         <template #header="{ item: c }">
           <AppIcon v-if="c._pending" name="spinner" :size="14" class="dd-spin dd-text-muted shrink-0" />

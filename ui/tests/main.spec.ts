@@ -111,4 +111,17 @@ describe('main bootstrap', () => {
     expect(setPropertySpy).toHaveBeenCalledWith('--dd-font-size', '1.25');
     setPropertySpy.mockRestore();
   });
+
+  it('applies persisted non-sharp radius before mount', async () => {
+    const setPropertySpy = vi.spyOn(document.documentElement.style, 'setProperty');
+    mocks.getSettings.mockResolvedValueOnce({ internetlessMode: false });
+    localStorage.setItem('dd-preferences', JSON.stringify({ appearance: { radius: 'soft' } }));
+
+    await importMain();
+
+    expect(setPropertySpy).toHaveBeenCalledWith('--dd-radius', '12px');
+    expect(setPropertySpy).toHaveBeenCalledWith('--dd-radius-sm', '6px');
+    expect(setPropertySpy).toHaveBeenCalledWith('--dd-radius-lg', '16px');
+    setPropertySpy.mockRestore();
+  });
 });
