@@ -56,6 +56,14 @@ This operation triggers a manual watch on all containers.
 
 ```bash
 curl -X POST http://drydock:3000/api/containers/watch
+```
+
+You can also target a specific batch of containers by ID:
+
+```bash
+curl -X POST http://drydock:3000/api/containers/watch \
+  -H 'Content-Type: application/json' \
+  -d '{"containerIds":["31a61a...","f82cb2..."]}'
 
 {
   "data": [{
@@ -336,9 +344,11 @@ curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32
 ## Rollback a container
 
 This operation rolls back a container to a previously backed-up image. If no `backupId` is provided, the most recent backup is used.
+Rollback is destructive and requires explicit confirmation via `X-DD-Confirm-Action: container-rollback`.
 
 ```bash
 curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/rollback \
+  -H 'X-DD-Confirm-Action: container-rollback' \
   -H 'Content-Type: application/json' \
   -d '{"backupId": "abc123"}'
 ```
@@ -346,7 +356,9 @@ curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec
 ## Delete a Container
 
 This operation lets you delete a container by id. Requires `DD_SERVER_FEATURE_DELETE` to be enabled.
+Delete is destructive and requires explicit confirmation via `X-DD-Confirm-Action: container-delete`.
 
 ```bash
-curl -X DELETE http://drydock:3000/api/containers/ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72
+curl -X DELETE http://drydock:3000/api/containers/ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72 \
+  -H 'X-DD-Confirm-Action: container-delete'
 ```

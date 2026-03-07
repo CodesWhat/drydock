@@ -67,11 +67,17 @@ docker run -d \
   -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e DD_AUTH_BASIC_ADMIN_USER=admin \
-  -e "DD_AUTH_BASIC_ADMIN_HASH={SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g=" \
+  -e "DD_AUTH_BASIC_ADMIN_HASH=<paste-scrypt-hash>" \
   codeswhat/drydock:latest
 ```
 
-> The example hash above is for the password `password` — generate your own with `htpasswd -nbs admin yourpassword`.
+> Generate a secure hash with Node.js scrypt (replace `yourpassword`):
+>
+> ```bash
+> node -e 'const c=require("node:crypto");const N=16384,r=8,p=1,s=c.randomBytes(16),h=c.scryptSync(process.argv[1],s,64,{N,r,p});console.log(["scrypt",N,r,p,s.toString("base64"),h.toString("base64")].join("$"));' "yourpassword"
+> ```
+>
+> SHA-1/MD5/crypt/plain htpasswd hashes are not supported.
 > Authentication is **required by default**. See the [auth docs](https://drydock.codeswhat.com/docs/configuration/authentications) for OIDC, anonymous access, and other options.
 > To explicitly allow anonymous access on fresh installs, set `DD_ANONYMOUS_AUTH_CONFIRM=true`.
 
