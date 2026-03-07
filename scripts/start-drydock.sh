@@ -142,16 +142,15 @@ EXPECTED_CONTAINERS=${DD_EXPECTED_CONTAINERS:-10}
 echo "Waiting for drydock to discover ${EXPECTED_CONTAINERS}+ containers with image data (max 90s)..."
 for i in $(seq 1 45); do
 	# Count containers that have a populated image.name (not just discovered)
-	READY=$(curl -sf -H "Authorization: ${AUTH_HEADER}" "http://localhost:${E2E_PORT}/api/containers" |
-		python3 -c "
-import sys, json
-containers = json.load(sys.stdin)
-ready = sum(1 for c in containers
-  if c.get('image', {}).get('name')
-  and c.get('image', {}).get('registry', {}).get('name')
-  and c.get('image', {}).get('tag', {}).get('value'))
-print(ready)
-" 2>/dev/null || echo 0)
+	CONTAINERS_JSON=""
+	if CONTAINERS_JSON=$(curl -sf -H "Authorization: ${AUTH_HEADER}" "http://localhost:${E2E_PORT}/api/containers" 2>/dev/null); then
+		:
+	fi
+	READY=0
+	if [ -n "${CONTAINERS_JSON}" ]; then
+		READY=$(jq '[.[] | select((.image.name // "" | length > 0) and (.image.registry.name // "" | length > 0) and (.image.tag.value // "" | length > 0))] | length' <<<"${CONTAINERS_JSON}" 2>/dev/null || echo 0)
+	fi
+	READY=${READY:-0}
 	if [ "$READY" -ge "$EXPECTED_CONTAINERS" ]; then
 		echo "✅ drydock has ${READY} containers with resolved image data"
 		break
