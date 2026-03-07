@@ -58,6 +58,7 @@ class Command extends Trigger {
     try {
       const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>(
         (resolve, reject) => {
+          // Intentional admin-controlled shell execution from DD_TRIGGER_COMMAND_* env configuration.
           execFile(
             this.configuration.shell,
             ['-c', this.configuration.cmd],

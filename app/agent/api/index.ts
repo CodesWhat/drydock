@@ -6,6 +6,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { getServerConfiguration } from '../../configuration/index.js';
 import { getEntries } from '../../log/buffer.js';
 import logger from '../../log/index.js';
+import { sanitizeLogParam } from '../../log/sanitize.js';
 import { hashToken } from '../../util/crypto.js';
 import * as containerApi from './container.js';
 import * as eventApi from './event.js';
@@ -79,7 +80,7 @@ export async function init() {
     try {
       cachedSecret = fs.readFileSync(agentSecretFile, 'utf-8').trim();
     } catch (e: any) {
-      log.error(`Error reading secret file: ${e.message}`);
+      log.error(`Error reading secret file: ${sanitizeLogParam(e.message)}`);
       throw new Error(`Error reading secret file: ${e.message}`);
     }
   }

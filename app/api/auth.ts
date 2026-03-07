@@ -339,9 +339,34 @@ function login(req: AuthRequest, res: Response): void {
  * @param res
  */
 function logout(req: AuthRequest, res: Response): void {
-  req.logout(() => {});
-  res.status(200).json({
-    logoutUrl: getLogoutRedirectUrl(),
+  req.logout((logoutError: unknown) => {
+    if (logoutError) {
+      log.warn(
+        `Unable to clear authentication state during logout (${getErrorMessage(logoutError)})`,
+      );
+      res.status(500).json({ error: 'Unable to clear session' });
+      return;
+    }
+
+    if (!req.session || typeof req.session.regenerate !== 'function') {
+      const errorMessage = 'Unable to regenerate session during logout (session unavailable)';
+      log.warn(errorMessage);
+      res.status(500).json({ error: 'Unable to clear session' });
+      return;
+    }
+
+    req.session.regenerate((regenerateError: unknown) => {
+      if (regenerateError) {
+        const errorMessage = `Unable to regenerate session during logout (${getErrorMessage(regenerateError)})`;
+        log.warn(errorMessage);
+        res.status(500).json({ error: 'Unable to clear session' });
+        return;
+      }
+
+      res.status(200).json({
+        logoutUrl: getLogoutRedirectUrl(),
+      });
+    });
   });
 }
 
@@ -366,9 +391,9 @@ function isTrustProxyEnabled(trustproxy: boolean | number | string): boolean {
 export function init(app: Application): void {
   const serverConfiguration = getServerConfiguration();
   const sessionCookieSameSite = serverConfiguration.cookie?.samesite || 'lax';
+  const hasTlsEnabled = serverConfiguration.tls?.enabled === true;
   const hasHttpsConfiguration =
-    serverConfiguration.tls?.enabled === true ||
-    isTrustProxyEnabled(serverConfiguration.trustproxy);
+    hasTlsEnabled || isTrustProxyEnabled(serverConfiguration.trustproxy);
 
   if (sessionCookieSameSite === 'none' && !hasHttpsConfiguration) {
     throw new Error(
@@ -376,7 +401,7 @@ export function init(app: Application): void {
     );
   }
 
-  const sessionCookieSecure = sessionCookieSameSite === 'none' ? true : 'auto';
+  const sessionCookieSecure = hasTlsEnabled || sessionCookieSameSite === 'none' ? true : 'auto';
   if (sessionCookieSameSite === 'none') {
     log.warn('DD_SERVER_COOKIE_SAMESITE=none requires HTTPS; forcing secure session cookie');
   }

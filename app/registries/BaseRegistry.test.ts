@@ -211,7 +211,7 @@ test('authenticateBearerFromAuthUrl should set bearer token using default extrac
   axios.mockResolvedValue({ data: { token: 'abc123' } });
 
   const result = await baseRegistry.authenticateBearerFromAuthUrl(
-    { headers: {} },
+    { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
     'https://auth.example.com/token',
     'dXNlcjpwYXNz',
   );
@@ -227,12 +227,27 @@ test('authenticateBearerFromAuthUrl should set bearer token using default extrac
   expect(result.headers.Authorization).toBe('Bearer abc123');
 });
 
+test('authenticateBearerFromAuthUrl should reject token endpoint host that does not match registry host', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+      'https://attacker.internal/token',
+      'dXNlcjpwYXNz',
+    ),
+  ).rejects.toThrow('token endpoint host attacker.internal is not trusted');
+
+  expect(axios).not.toHaveBeenCalled();
+});
+
 test('authenticateBearerFromAuthUrl should add basic auth header when credentials are provided without headers', async () => {
   const { default: axios } = await import('axios');
   axios.mockResolvedValue({ data: { token: 'abc123' } });
 
   const result = await baseRegistry.authenticateBearerFromAuthUrl(
-    {},
+    { url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
     'https://auth.example.com/token',
     'dXNlcjpwYXNz',
   );
@@ -265,7 +280,7 @@ test('authenticateBearerFromAuthUrl should create headers object when token requ
 
   try {
     const result = await baseRegistry.authenticateBearerFromAuthUrl(
-      {},
+      { url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
       'https://auth.example.com/no-headers',
       'dXNlcjpwYXNz',
     );
@@ -288,7 +303,7 @@ test('authenticateBearerFromAuthUrl should set bearer token when request headers
   axios.mockResolvedValue({ data: { token: 'abc123' } });
 
   const result = await baseRegistry.authenticateBearerFromAuthUrl(
-    {},
+    { url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
     'https://auth.example.com/token',
     undefined,
   );
@@ -302,7 +317,7 @@ test('authenticateBearerFromAuthUrl should throw when token is missing', async (
 
   await expect(
     baseRegistry.authenticateBearerFromAuthUrl(
-      { headers: {} },
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
       'https://auth.example.com/token',
       undefined,
       (response) => response.data.accessToken,
@@ -315,7 +330,7 @@ test('authenticateBearerFromAuthUrl should set bearer token using custom tokenEx
   axios.mockResolvedValue({ data: { access_token: 'custom-token-123' } });
 
   const result = await baseRegistry.authenticateBearerFromAuthUrl(
-    { headers: {} },
+    { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
     'https://auth.example.com/token',
     undefined,
     (response) => response.data.access_token,
@@ -330,7 +345,7 @@ test('authenticateBearerFromAuthUrl should throw when token request fails', asyn
 
   await expect(
     baseRegistry.authenticateBearerFromAuthUrl(
-      { headers: {} },
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
       'https://auth.example.com/token',
       undefined,
     ),
@@ -343,7 +358,7 @@ test('authenticateBearerFromAuthUrl should apply tls options to token request', 
   baseRegistry.configuration = { insecure: true };
 
   const result = await baseRegistry.authenticateBearerFromAuthUrl(
-    { headers: {} },
+    { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
     'https://auth.example.com/token',
     'dXNlcjpwYXNz',
   );
@@ -368,14 +383,14 @@ test('authenticateBearerFromAuthUrl should reuse cached token within configured 
 
   vi.setSystemTime(startedAtMs);
   const firstResult = await baseRegistry.authenticateBearerFromAuthUrl(
-    { headers: {} },
+    { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
     'https://auth.example.com/token',
     'dXNlcjpwYXNz',
   );
 
   vi.setSystemTime(startedAtMs + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS - 1);
   const secondResult = await baseRegistry.authenticateBearerFromAuthUrl(
-    { headers: {} },
+    { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
     'https://auth.example.com/token',
     'dXNlcjpwYXNz',
   );
@@ -396,14 +411,14 @@ test('authenticateBearerFromAuthUrl should refresh cached token after configured
 
   vi.setSystemTime(startedAtMs);
   const firstResult = await baseRegistry.authenticateBearerFromAuthUrl(
-    { headers: {} },
+    { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
     'https://auth.example.com/token',
     'dXNlcjpwYXNz',
   );
 
   vi.setSystemTime(startedAtMs + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS + 1);
   const secondResult = await baseRegistry.authenticateBearerFromAuthUrl(
-    { headers: {} },
+    { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
     'https://auth.example.com/token',
     'dXNlcjpwYXNz',
   );
@@ -426,21 +441,21 @@ test('authenticateBearerFromAuthUrl should evict expired cache entries from othe
   try {
     vi.setSystemTime(startedAtMs);
     await baseRegistry.authenticateBearerFromAuthUrl(
-      { headers: {} },
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
       'https://auth.example.com/token-1',
       'dXNlcjE6cGFzczE=',
     );
 
     vi.setSystemTime(startedAtMs + 1000);
     await baseRegistry.authenticateBearerFromAuthUrl(
-      { headers: {} },
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
       'https://auth.example.com/token-2',
       'dXNlcjI6cGFzczI=',
     );
 
     vi.setSystemTime(startedAtMs + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS + 1001);
     await baseRegistry.authenticateBearerFromAuthUrl(
-      { headers: {} },
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
       'https://auth.example.com/token-3',
       'dXNlcjM6cGFzczM=',
     );

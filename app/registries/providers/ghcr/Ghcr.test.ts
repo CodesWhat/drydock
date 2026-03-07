@@ -67,7 +67,10 @@ describe('GitHub Container Registry', () => {
   test('should authenticate with token', async () => {
     ghcr.configuration = { username: 'test-user', token: 'test-token' };
     const image = { name: 'user/repo' };
-    const requestOptions = { headers: {} };
+    const requestOptions = {
+      headers: {},
+      url: 'https://ghcr.io/v2/user/repo/manifests/latest',
+    };
 
     const result = await ghcr.authenticate(image, requestOptions);
 
@@ -88,7 +91,10 @@ describe('GitHub Container Registry', () => {
     axios.mockRejectedValueOnce(new Error('Request failed with status code 403'));
     axios.mockResolvedValueOnce({ data: { token: 'anon-token' } });
     const image = { name: 'user/repo' };
-    const requestOptions = { headers: {} };
+    const requestOptions = {
+      headers: {},
+      url: 'https://ghcr.io/v2/user/repo/manifests/latest',
+    };
     const warnSpy = vi.spyOn(ghcr.log, 'warn');
 
     const result = await ghcr.authenticate(image, requestOptions);
@@ -119,7 +125,10 @@ describe('GitHub Container Registry', () => {
     ghcr.configuration = {};
     axios.mockRejectedValueOnce(new Error('Request failed with status code 403'));
     const image = { name: 'user/repo' };
-    const requestOptions = { headers: {} };
+    const requestOptions = {
+      headers: {},
+      url: 'https://ghcr.io/v2/user/repo/manifests/latest',
+    };
 
     await expect(ghcr.authenticate(image, requestOptions)).rejects.toThrow('status code 403');
     expect(axios).toHaveBeenCalledTimes(1);
@@ -129,7 +138,10 @@ describe('GitHub Container Registry', () => {
     ghcr.configuration = { username: 'test-user', token: 'test-token' };
     axios.mockRejectedValueOnce(new Error('Request failed with status code 500'));
     const image = { name: 'user/repo' };
-    const requestOptions = { headers: {} };
+    const requestOptions = {
+      headers: {},
+      url: 'https://ghcr.io/v2/user/repo/manifests/latest',
+    };
 
     await expect(ghcr.authenticate(image, requestOptions)).rejects.toThrow('status code 500');
     expect(axios).toHaveBeenCalledTimes(1);
@@ -139,7 +151,10 @@ describe('GitHub Container Registry', () => {
     ghcr.configuration = { username: 'test-user', token: 'test-token' };
     axios.mockRejectedValueOnce('raw failure');
     const image = { name: 'user/repo' };
-    const requestOptions = { headers: {} };
+    const requestOptions = {
+      headers: {},
+      url: 'https://ghcr.io/v2/user/repo/manifests/latest',
+    };
 
     await expect(ghcr.authenticate(image, requestOptions)).rejects.toThrow(
       'token request failed (undefined)',
@@ -150,7 +165,10 @@ describe('GitHub Container Registry', () => {
   test('should authenticate without token', async () => {
     ghcr.configuration = {};
     const image = { name: 'user/repo' };
-    const requestOptions = { headers: {} };
+    const requestOptions = {
+      headers: {},
+      url: 'https://ghcr.io/v2/user/repo/manifests/latest',
+    };
 
     const result = await ghcr.authenticate(image, requestOptions);
 
@@ -168,7 +186,10 @@ describe('GitHub Container Registry', () => {
     ghcr.configuration = {};
     axios.mockResolvedValueOnce({ data: { access_token: 'access-token' } });
     const image = { name: 'user/repo' };
-    const requestOptions = { headers: {} };
+    const requestOptions = {
+      headers: {},
+      url: 'https://ghcr.io/v2/user/repo/manifests/latest',
+    };
 
     const result = await ghcr.authenticate(image, requestOptions);
 

@@ -1,10 +1,25 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import * as event from '../../event/index.js';
+import { sanitizeLogParam } from '../../log/sanitize.js';
 import * as storeContainer from '../../store/container.js';
 import * as eventApi from './event.js';
 
+const { mockLogInfo, mockLogWarn, mockLogError, mockLogDebug } = vi.hoisted(() => ({
+  mockLogInfo: vi.fn(),
+  mockLogWarn: vi.fn(),
+  mockLogError: vi.fn(),
+  mockLogDebug: vi.fn(),
+}));
+
 vi.mock('../../log/index.js', () => ({
-  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
+  default: {
+    child: () => ({
+      info: mockLogInfo,
+      warn: mockLogWarn,
+      error: mockLogError,
+      debug: mockLogDebug,
+    }),
+  },
 }));
 
 vi.mock('../../event/index.js', () => ({
@@ -119,6 +134,24 @@ describe('agent API event', () => {
     test('should register close handler', () => {
       eventApi.subscribeEvents(req, res);
       expect(req.on).toHaveBeenCalledWith('close', expect.any(Function));
+    });
+
+    test('should sanitize controller ip in connect/disconnect logs', () => {
+      const maliciousIp = '198.51.100.42\x1b[31m\r\nspoofed-ip';
+      req.ip = maliciousIp;
+
+      eventApi.subscribeEvents(req, res);
+
+      expect(mockLogInfo).toHaveBeenCalledWith(
+        `Controller drydock with ip ${sanitizeLogParam(maliciousIp)} connected.`,
+      );
+
+      const closeHandler = req.on.mock.calls[0][1];
+      closeHandler();
+
+      expect(mockLogInfo).toHaveBeenCalledWith(
+        `Controller drydock with ip ${sanitizeLogParam(maliciousIp)} disconnected.`,
+      );
     });
 
     test('close handler should remove client from list', () => {

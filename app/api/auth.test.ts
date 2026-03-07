@@ -65,6 +65,7 @@ import passport from 'passport';
 import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as auth from './auth.js';
+import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 function createApp() {
   return {
@@ -340,6 +341,23 @@ describe('Auth Router', () => {
         expect.objectContaining({
           sameSite: 'strict',
           secure: 'auto',
+        }),
+      );
+    });
+
+    test('should force secure cookies when TLS is enabled', () => {
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'strict' },
+        tls: { enabled: true },
+      });
+      const app = createApp();
+      auth.init(app);
+
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie).toEqual(
+        expect.objectContaining({
+          sameSite: 'strict',
+          secure: true,
         }),
       );
     });
@@ -836,6 +854,14 @@ describe('Auth Router', () => {
       handler({ user: { username: 'john' } }, res);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/auth/user',
+        method: 'get',
+        statusCode: '200',
+        payload: res.json.mock.calls[0][0],
+      });
+      expect(contractValidation.valid).toBe(true);
+      expect(contractValidation.errors).toStrictEqual([]);
     });
 
     test('getUser should return anonymous when no user on request', () => {
@@ -1069,16 +1095,20 @@ describe('Auth Router', () => {
       );
     });
 
-    test('logout should call req.logout and return logoutUrl', () => {
+    test('logout should regenerate session after req.logout and return logoutUrl', () => {
       const handler = getRouteHandler('post', '/logout');
       const req = {
         logout: vi.fn((done) => {
           done();
         }),
+        session: {
+          regenerate: vi.fn((done) => done()),
+        },
       };
       const res = createResponse();
       handler(req, res);
       expect(req.logout).toHaveBeenCalled();
+      expect(req.session.regenerate).toHaveBeenCalledTimes(1);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         logoutUrl: 'https://logout.example.com',
@@ -1093,10 +1123,34 @@ describe('Auth Router', () => {
 
       const logoutCall = mockRouter.post.mock.calls.find((c) => c[0] === '/logout');
       const handler = logoutCall[1];
-      const req = { logout: vi.fn() };
+      const req = {
+        logout: vi.fn((done) => done()),
+        session: {
+          regenerate: vi.fn((done) => done()),
+        },
+      };
       const res = createResponse();
       handler(req, res);
       expect(res.json).toHaveBeenCalledWith({ logoutUrl: undefined });
+    });
+
+    test('logout should return 500 when session regeneration fails', () => {
+      const handler = getRouteHandler('post', '/logout');
+      const req = {
+        logout: vi.fn((done) => {
+          done();
+        }),
+        session: {
+          regenerate: vi.fn((done) => done(new Error('regeneration failed'))),
+        },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(req.session.regenerate).toHaveBeenCalledTimes(1);
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to clear session' });
     });
   });
 });

@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { getVersion } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import logger from '../../log/index.js';
+import { sanitizeLogParam } from '../../log/sanitize.js';
 import * as storeContainer from '../../store/container.js';
 import { getContainerStatusSummary } from '../../util/container-summary.js';
 
@@ -103,7 +104,7 @@ function getAckPayloadData() {
  * Subscribe to Events (SSE).
  */
 export function subscribeEvents(req: Request, res: Response) {
-  log.info(`Controller drydock with ip ${req.ip} connected.`);
+  log.info(`Controller drydock with ip ${sanitizeLogParam(req.ip)} connected.`);
 
   const headers = {
     'Content-Type': 'text/event-stream',
@@ -126,7 +127,7 @@ export function subscribeEvents(req: Request, res: Response) {
   client.res.write(`data: ${JSON.stringify(ackMessage)}\n\n`);
 
   req.on('close', () => {
-    log.info(`Controller drydock with ip ${req.ip} disconnected.`);
+    log.info(`Controller drydock with ip ${sanitizeLogParam(req.ip)} disconnected.`);
     sseClients = sseClients.filter((c) => c.id !== client.id);
   });
 }

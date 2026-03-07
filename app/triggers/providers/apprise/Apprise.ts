@@ -58,7 +58,7 @@ class Apprise extends Trigger {
 
     // Persistent storage usage (target apprise yml config file and tags)
     if (this.configuration.config) {
-      uri += `/${this.configuration.config}`;
+      uri += `/${encodeURIComponent(this.configuration.config)}`;
       if (this.configuration.tag) {
         body.tag = this.configuration.tag;
       }
@@ -94,7 +94,7 @@ class Apprise extends Trigger {
 
     // Persistent storage usage (target apprise yml config file and tags)
     if (this.configuration.config) {
-      uri += `/${this.configuration.config}`;
+      uri += `/${encodeURIComponent(this.configuration.config)}`;
       if (this.configuration.tag) {
         body.tag = this.configuration.tag;
       }
