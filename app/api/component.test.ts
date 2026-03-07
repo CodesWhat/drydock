@@ -178,7 +178,9 @@ describe('Component Router', () => {
       component.getById(req, res, 'watcher');
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Component not found' });
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Component not found' }),
+      );
     });
   });
 
@@ -189,7 +191,7 @@ describe('Component Router', () => {
       expect(router.use).toHaveBeenCalledWith('nocache-middleware');
       expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:type/:name', expect.any(Function));
-      expect(router.get).toHaveBeenCalledWith('/:agent/:type/:name', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/:type/:name/:agent', expect.any(Function));
     });
 
     test('getAll handler should return list of components', () => {
@@ -206,12 +208,69 @@ describe('Component Router', () => {
       const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
 
       const res = createResponse();
-      getAllHandler({}, res);
+      getAllHandler({ query: {} }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [expect.objectContaining({ id: 'docker.hub' })],
         total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
+    });
+
+    test('getAll handler should apply limit/offset pagination', () => {
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.beta': { type: 'docker', name: 'beta', maskConfiguration: vi.fn(() => ({})) },
+          'acr.alpha': { type: 'acr', name: 'alpha', maskConfiguration: vi.fn(() => ({})) },
+          'docker.gamma': { type: 'docker', name: 'gamma', maskConfiguration: vi.fn(() => ({})) },
+        },
+      });
+
+      component.init('watcher');
+      const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+      const res = createResponse();
+      getAllHandler({ query: { limit: '1', offset: '1' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'docker.beta' })],
+        total: 3,
+        limit: 1,
+        offset: 1,
+        hasMore: true,
+      });
+    });
+
+    test('getAll handler should normalize invalid pagination params', () => {
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.alpha': { type: 'docker', name: 'alpha', maskConfiguration: vi.fn(() => ({})) },
+          'docker.beta': { type: 'docker', name: 'beta', maskConfiguration: vi.fn(() => ({})) },
+          'docker.gamma': { type: 'docker', name: 'gamma', maskConfiguration: vi.fn(() => ({})) },
+        },
+      });
+
+      component.init('watcher');
+      const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+      const res = createResponse();
+      getAllHandler({ query: { limit: ['999', '1'], offset: '-5' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({ id: 'docker.alpha' }),
+          expect.objectContaining({ id: 'docker.beta' }),
+          expect.objectContaining({ id: 'docker.gamma' }),
+        ],
+        total: 3,
+        limit: 200,
+        offset: 0,
+        hasMore: false,
       });
     });
 
@@ -234,7 +293,7 @@ describe('Component Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
-    test('getById handler via /:agent/:type/:name should work', () => {
+    test('getById handler via /:type/:name/:agent should work', () => {
       const comp = {
         type: 'docker',
         name: 'hub',
@@ -247,7 +306,7 @@ describe('Component Router', () => {
 
       component.init('trigger');
       const getByIdHandler = mockRouter.get.mock.calls.find(
-        (c) => c[0] === '/:agent/:type/:name',
+        (c) => c[0] === '/:type/:name/:agent',
       )[1];
 
       const res = createResponse();

@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import * as storeAudit from '../store/audit.js';
+import { buildPaginationLinks } from './pagination-links.js';
 
 const router = express.Router();
 const SAFE_AUDIT_FILTER_PATTERN = /^[a-zA-Z0-9._-]+$/;
@@ -85,12 +86,22 @@ function getAuditEntries(req: Request, res: Response) {
 
   const result = storeAudit.getAuditEntries(query);
   const data = result.entries;
+  const hasMore = offset + data.length < result.total;
+  const links = buildPaginationLinks({
+    basePath: '/api/audit',
+    query: req.query,
+    limit,
+    offset,
+    total: result.total,
+    returnedCount: data.length,
+  });
   res.status(200).json({
     data,
     total: result.total,
     limit,
     offset,
-    hasMore: offset + data.length < result.total,
+    hasMore,
+    ...(links ? { _links: links } : {}),
   });
 }
 

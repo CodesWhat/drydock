@@ -52,7 +52,11 @@ function getGroups(req: Request, res: Response) {
     }
   }
 
-  res.status(200).json(Object.values(groups));
+  const data = Object.values(groups);
+  res.status(200).json({
+    data,
+    total: data.length,
+  });
 }
 
 /**

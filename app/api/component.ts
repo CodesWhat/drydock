@@ -29,6 +29,46 @@ interface ComponentRouteParams {
 
 type ComponentKind = keyof RegistryState;
 type ComponentMap = Record<string, ComponentLike>;
+type ComponentListPagination = {
+  limit: number;
+  offset: number;
+};
+
+const COMPONENT_LIST_MAX_LIMIT = 200;
+
+function parseIntegerQueryParam(rawValue: unknown, fallback: number): number {
+  const value = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeComponentListPagination(
+  query: Request['query'] | undefined,
+): ComponentListPagination {
+  const queryParams = query || {};
+  const parsedLimit = parseIntegerQueryParam(queryParams.limit, 0);
+  const parsedOffset = parseIntegerQueryParam(queryParams.offset, 0);
+  return {
+    limit: Math.min(COMPONENT_LIST_MAX_LIMIT, Math.max(0, parsedLimit)),
+    offset: Math.max(0, parsedOffset),
+  };
+}
+
+function paginateComponentList(
+  components: ApiComponent[],
+  pagination: ComponentListPagination,
+): ApiComponent[] {
+  if (pagination.offset >= components.length) {
+    return [];
+  }
+  if (pagination.limit === 0) {
+    return components.slice(pagination.offset);
+  }
+  return components.slice(pagination.offset, pagination.offset + pagination.limit);
+}
 
 /**
  * Map a Component to a displayable (api/ui) item.
@@ -72,12 +112,17 @@ export function mapComponentsToList(components: ComponentMap): ApiComponent[] {
  * @param req
  * @param res
  */
-function getAll(_req: Request, res: Response, kind: ComponentKind): void {
+function getAll(req: Request, res: Response, kind: ComponentKind): void {
   const components = registry.getState()[kind] as unknown as ComponentMap;
-  const data = mapComponentsToList(components);
+  const allItems = mapComponentsToList(components);
+  const pagination = normalizeComponentListPagination(req.query);
+  const data = paginateComponentList(allItems, pagination);
   res.status(200).json({
     data,
-    total: data.length,
+    total: allItems.length,
+    limit: pagination.limit,
+    offset: pagination.offset,
+    hasMore: pagination.limit > 0 && pagination.offset + data.length < allItems.length,
   });
 }
 
@@ -111,7 +156,7 @@ export function init(kind: ComponentKind) {
   router.get('/:type/:name', (req: Request<ComponentRouteParams>, res: Response) =>
     getById(req, res, kind),
   );
-  router.get('/:agent/:type/:name', (req: Request<ComponentRouteParams>, res: Response) =>
+  router.get('/:type/:name/:agent', (req: Request<ComponentRouteParams>, res: Response) =>
     getById(req, res, kind),
   );
   return router;

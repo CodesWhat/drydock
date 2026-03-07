@@ -3,6 +3,7 @@ import type { AgentClient } from '../../agent/AgentClient.js';
 import type { Container, ContainerReport } from '../../model/container.js';
 import { getContainerStatusSummary } from '../../util/container-summary.js';
 import { sendErrorResponse } from '../error-response.js';
+import { buildPaginationLinks, type PaginationLinks } from '../pagination-links.js';
 import {
   getPathParamValue,
   parseBooleanQueryParam,
@@ -26,6 +27,7 @@ interface ContainerListResponse {
   limit: number;
   offset: number;
   hasMore: boolean;
+  _links?: PaginationLinks;
 }
 
 interface UpdateOperationStoreApi {
@@ -139,7 +141,10 @@ export function createCrudHandlers({
   getContainerRaw,
   auditStore,
 }: CrudHandlerDependencies) {
-  function buildContainerListResponse(query: Request['query']): ContainerListResponse {
+  function buildContainerListResponse(
+    query: Request['query'],
+    basePath: '/api/containers' | '/api/containers/watch',
+  ): ContainerListResponse {
     const includeVulnerabilities = parseBooleanQueryParam(query.includeVulnerabilities, false);
     const filteredQuery = removeContainerListControlParams(query);
     const pagination = normalizeContainerListPagination(query);
@@ -152,12 +157,22 @@ export function createCrudHandlers({
     const data = includeVulnerabilities
       ? redactedContainers
       : redactedContainers.map((container) => stripContainerVulnerabilityArrays(container));
+    const hasMore = pagination.limit > 0 && pagination.offset + data.length < total;
+    const links = buildPaginationLinks({
+      basePath,
+      query,
+      limit: pagination.limit,
+      offset: pagination.offset,
+      total,
+      returnedCount: data.length,
+    });
     return {
       data,
       total,
       limit: pagination.limit,
       offset: pagination.offset,
-      hasMore: pagination.limit > 0 && pagination.offset + data.length < total,
+      hasMore,
+      ...(links ? { _links: links } : {}),
     };
   }
 
@@ -167,7 +182,7 @@ export function createCrudHandlers({
    * @param res
    */
   function getContainers(req: Request, res: Response) {
-    res.status(200).json(buildContainerListResponse(req.query));
+    res.status(200).json(buildContainerListResponse(req.query, '/api/containers'));
   }
 
   /**
@@ -276,7 +291,7 @@ export function createCrudHandlers({
   async function watchContainers(req: Request, res: Response) {
     try {
       await Promise.all(Object.values(getWatchers()).map((watcher) => watcher.watch()));
-      res.status(200).json(buildContainerListResponse(req.query));
+      res.status(200).json(buildContainerListResponse(req.query, '/api/containers/watch'));
     } catch (error: unknown) {
       res.status(500).json({
         error: `Error when watching images (${getErrorMessage(error)})`,

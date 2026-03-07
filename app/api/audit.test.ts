@@ -55,6 +55,9 @@ describe('Audit Router', () => {
       limit: 50,
       offset: 0,
       hasMore: false,
+      _links: {
+        self: '/api/audit?limit=50&offset=0',
+      },
     });
   });
 
@@ -92,6 +95,9 @@ describe('Audit Router', () => {
       limit: 10,
       offset: 10,
       hasMore: false,
+      _links: {
+        self: '/api/audit?action=update-applied&container=redis&from=2024-01-01&to=2024-12-31&limit=10&offset=10',
+      },
     });
   });
 
@@ -194,6 +200,10 @@ describe('Audit Router', () => {
       limit: 2,
       offset: 10,
       hasMore: true,
+      _links: {
+        self: '/api/audit?limit=2&offset=10',
+        next: '/api/audit?limit=2&offset=12',
+      },
     });
   });
 

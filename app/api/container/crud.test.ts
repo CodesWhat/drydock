@@ -218,6 +218,10 @@ describe('api/container/crud', () => {
         limit: 1,
         offset: 1,
         hasMore: true,
+        _links: {
+          self: '/api/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=1',
+          next: '/api/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=2',
+        },
       });
     });
 
@@ -258,6 +262,10 @@ describe('api/container/crud', () => {
         limit: 200,
         offset: 0,
         hasMore: true,
+        _links: {
+          self: '/api/containers?limit=200&offset=0',
+          next: '/api/containers?limit=200&offset=200',
+        },
       });
       expect(Array.isArray(payload.data)).toBe(true);
       expect(payload.data).toHaveLength(200);
