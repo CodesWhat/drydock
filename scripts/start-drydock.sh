@@ -148,7 +148,7 @@ for i in $(seq 1 45); do
 	fi
 	READY=0
 	if [ -n "${CONTAINERS_JSON}" ]; then
-		READY=$(jq '[.[] | select((.image.name // "" | length > 0) and (.image.registry.name // "" | length > 0) and (.image.tag.value // "" | length > 0))] | length' <<<"${CONTAINERS_JSON}" 2>/dev/null || echo 0)
+		READY=$(jq '[.data[] | select((.image.name // "" | length > 0) and (.image.registry.name // "" | length > 0) and (.image.tag.value // "" | length > 0))] | length' <<<"${CONTAINERS_JSON}" 2>/dev/null || echo 0)
 	fi
 	READY=${READY:-0}
 	if [ "$READY" -ge "$EXPECTED_CONTAINERS" ]; then
