@@ -91,6 +91,34 @@ test('getAppInfos should return collection content', async () => {
   });
 });
 
+test('isUpgrade should return false when app collection is empty (fresh install)', () => {
+  const db = {
+    getCollection: () => null,
+    addCollection: () => ({
+      findOne: () => null,
+      insert: () => {},
+    }),
+  };
+  app.createCollections(db);
+  expect(app.isUpgrade()).toBe(false);
+});
+
+test('isUpgrade should return true when app collection has a previous version (upgrade)', () => {
+  const db = {
+    getCollection: () => ({
+      findOne: () => ({
+        name: 'drydock',
+        version: '1.3.9',
+      }),
+      insert: () => {},
+      remove: () => {},
+    }),
+    addCollection: () => null,
+  };
+  app.createCollections(db);
+  expect(app.isUpgrade()).toBe(true);
+});
+
 test('store/app should type the app collection variable', () => {
   const source = fs.readFileSync(path.resolve(__dirname, './app.ts'), 'utf8');
 
