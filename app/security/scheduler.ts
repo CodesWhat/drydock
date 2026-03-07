@@ -1,4 +1,4 @@
-import cronParser from 'cron-parser';
+import { CronExpressionParser } from 'cron-parser';
 import cron from 'node-cron';
 import {
   resolveContainerImageFullName,
@@ -95,7 +95,7 @@ function getCronIntervalMs(cronExpression: string): number {
   // Compute a conservative cache TTL based on the shortest upcoming gap
   // between scheduled runs. This avoids over-caching for irregular crons.
   try {
-    const iterator = cronParser.parseExpression(cronExpression, {
+    const iterator = CronExpressionParser.parse(cronExpression, {
       currentDate: new Date(),
       tz: 'UTC',
     });
