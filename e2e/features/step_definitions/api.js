@@ -72,6 +72,19 @@ function resolveTemplate(str, scope) {
   });
 }
 
+function getCollectionFromResponse(responseJson) {
+  if (Array.isArray(responseJson)) {
+    return responseJson;
+  }
+  if (responseJson && typeof responseJson === 'object' && Array.isArray(responseJson.data)) {
+    return responseJson.data;
+  }
+  if (responseJson && typeof responseJson === 'object' && Array.isArray(responseJson.items)) {
+    return responseJson.items;
+  }
+  return null;
+}
+
 function isDynamicPattern(str) {
   return str.includes('.*');
 }
@@ -504,16 +517,18 @@ When(/^I store the value of body path (.+) as (.+) in scenario scope$/, function
 When(
   /^I store the index of container named (.+) as (.+) in scenario scope$/,
   function (name, varName) {
-    assert.ok(Array.isArray(this.responseJson), 'Response body is not an array');
-    const index = this.responseJson.findIndex((item) => String(item?.name) === name);
+    const containers = getCollectionFromResponse(this.responseJson);
+    assert.ok(Array.isArray(containers), 'Response body does not contain a container array');
+    const index = containers.findIndex((item) => String(item?.name) === name);
     assert.ok(index >= 0, `No container found with name ${name}`);
     this.scenarioScope[varName] = index;
   },
 );
 
 When(/^I store the index of registry id (.+) as (.+) in scenario scope$/, function (id, varName) {
-  assert.ok(Array.isArray(this.responseJson), 'Response body is not an array');
-  const index = this.responseJson.findIndex((item) => String(item?.id) === id);
+  const registries = getCollectionFromResponse(this.responseJson);
+  assert.ok(Array.isArray(registries), 'Response body does not contain a registry array');
+  const index = registries.findIndex((item) => String(item?.id) === id);
   assert.ok(index >= 0, `No registry found with id ${id}`);
   this.scenarioScope[varName] = index;
 });
