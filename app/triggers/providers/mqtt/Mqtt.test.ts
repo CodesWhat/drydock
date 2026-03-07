@@ -138,7 +138,7 @@ test('maskConfiguration should mask sensitive data', async () => {
       enabled: false,
       prefix: 'homeassistant',
     },
-    password: 'p******d',
+    password: '[REDACTED]',
     topic: 'dd/container',
     url: 'mqtt://host:1883',
   });

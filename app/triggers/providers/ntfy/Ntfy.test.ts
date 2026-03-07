@@ -52,9 +52,9 @@ test('maskConfiguration should mask sensitive data', async () => {
   };
   expect(ntfy.maskConfiguration()).toEqual({
     auth: {
-      user: 'u**r',
-      password: 'p******d',
-      token: 't***n',
+      user: '[REDACTED]',
+      password: '[REDACTED]',
+      token: '[REDACTED]',
     },
   });
 });

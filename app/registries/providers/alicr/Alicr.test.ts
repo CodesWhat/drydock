@@ -74,7 +74,7 @@ test('normalizeImage should return proper v2 endpoint', async () => {
 test('maskConfiguration should mask credentials', async () => {
   expect(alicr.maskConfiguration()).toEqual({
     login: 'drydock',
-    password: 't***n',
+    password: '[REDACTED]',
   });
 });
 

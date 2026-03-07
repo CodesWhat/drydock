@@ -53,7 +53,7 @@ test('maskConfiguration should mask sensitive data', async () => {
     event: 'event',
   };
   expect(ifttt.maskConfiguration()).toEqual({
-    key: 'k*y',
+    key: '[REDACTED]',
     event: 'event',
   });
 });

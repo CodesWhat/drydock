@@ -115,8 +115,8 @@ test('maskConfiguration should mask sensitive data', async () => {
     html: 0,
     threshold: 'all',
     once: true,
-    token: 't***n',
-    user: 'u**r',
+    token: '[REDACTED]',
+    user: '[REDACTED]',
   });
 });
 

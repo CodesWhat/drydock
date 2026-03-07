@@ -195,8 +195,8 @@ test('maskSensitiveFields should mask specified fields', () => {
   };
   const result = baseRegistry.maskSensitiveFields(['password', 'token']);
   expect(result.login).toBe('user');
-  expect(result.password).toBe('s*********t');
-  expect(result.token).toBe('m*****n');
+  expect(result.password).toBe('[REDACTED]');
+  expect(result.token).toBe('[REDACTED]');
 });
 
 test('maskSensitiveFields should skip fields not in configuration', () => {

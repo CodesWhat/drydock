@@ -64,9 +64,7 @@ test('maskConfiguration should mask sensitive data', async () => {
   matrix.configuration = configurationValid;
   const masked = matrix.maskConfiguration();
   expect(masked.roomid).toEqual(configurationValid.roomid);
-  expect(masked.accesstoken).not.toEqual(configurationValid.accesstoken);
-  expect(masked.accesstoken.startsWith('m')).toBe(true);
-  expect(masked.accesstoken.endsWith('z')).toBe(true);
+  expect(masked.accesstoken).toBe('[REDACTED]');
 });
 
 test('buildMessageEndpoint should encode room id and transaction id', async () => {

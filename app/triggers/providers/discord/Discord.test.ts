@@ -40,7 +40,7 @@ describe('Discord Trigger', () => {
       url: 'https://discord.com/api/webhooks/123/secret',
     };
     const masked = discord.maskConfiguration();
-    expect(masked.url).toBe('h*****************************************t');
+    expect(masked.url).toBe('[REDACTED]');
   });
 
   test('should trigger with container', async () => {

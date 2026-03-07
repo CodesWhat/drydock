@@ -57,7 +57,7 @@ test('normalizeImage should return proper v2 endpoint', async () => {
 test('maskConfiguration should mask credentials', async () => {
   expect(ocir.maskConfiguration()).toEqual({
     login: 'tenancy/my.user@acme.com',
-    password: 't***n',
+    password: '[REDACTED]',
   });
 });
 

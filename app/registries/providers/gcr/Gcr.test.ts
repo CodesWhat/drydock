@@ -37,7 +37,7 @@ test('validatedConfiguration should throw error when configuration is missing', 
 test('maskConfiguration should mask configuration secrets', async () => {
   expect(gcr.maskConfiguration()).toEqual({
     clientemail: TEST_CLIENT_EMAIL,
-    privatekey: 's*************y',
+    privatekey: '[REDACTED]',
   });
 });
 

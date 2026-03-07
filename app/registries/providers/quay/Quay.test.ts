@@ -53,7 +53,7 @@ test('maskConfiguration should mask authentication configuration secrets', async
   expect(quay.maskConfiguration()).toEqual({
     account: 'account',
     namespace: 'namespace',
-    token: 't***n',
+    token: '[REDACTED]',
   });
 });
 

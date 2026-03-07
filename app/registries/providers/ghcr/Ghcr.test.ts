@@ -46,7 +46,7 @@ describe('GitHub Container Registry', () => {
     ghcr.configuration = { username: 'testuser', token: 'secret_token' };
     const masked = ghcr.maskConfiguration();
     expect(masked.username).toBe('testuser');
-    expect(masked.token).toBe('s**********n');
+    expect(masked.token).toBe('[REDACTED]');
   });
 
   test('should return auth pull credentials', async () => {

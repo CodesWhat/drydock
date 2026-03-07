@@ -52,7 +52,7 @@ test('maskConfiguration should mask sensitive data', async () => {
   gotify.configuration = configurationValid;
   expect(gotify.maskConfiguration()).toEqual({
     url: configurationValid.url,
-    token: 'x*x',
+    token: '[REDACTED]',
     priority: 2,
     mode: 'simple',
     threshold: 'all',

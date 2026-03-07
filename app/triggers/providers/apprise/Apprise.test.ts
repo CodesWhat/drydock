@@ -309,5 +309,5 @@ test('maskConfiguration should mask urls', async () => {
   const masked = apprise.maskConfiguration();
 
   expect(masked.url).toBe('http://xxx.com');
-  expect(masked.urls).toBe('m*************************m');
+  expect(masked.urls).toBe('[REDACTED]');
 });

@@ -70,7 +70,7 @@ describe('Agent component', () => {
     expect(masked.host).toBe('localhost');
     expect(masked.port).toBe(3000);
     expect(masked.secret).not.toBe('supersecret');
-    expect(masked.secret).toContain('*');
+    expect(masked.secret).toBe('[REDACTED]');
   });
 
   test('maskConfiguration should accept explicit configuration', () => {
@@ -83,7 +83,7 @@ describe('Agent component', () => {
     const masked = agent.maskConfiguration(config);
     expect(masked.host).toBe('myhost');
     expect(masked.secret).not.toBe('abc123');
-    expect(masked.secret).toContain('*');
+    expect(masked.secret).toBe('[REDACTED]');
   });
 
   test('maskConfiguration should handle non-string secret values', () => {

@@ -52,9 +52,7 @@ test('maskConfiguration should mask sensitive data', async () => {
     ...configurationValid,
   };
   const masked = teams.maskConfiguration();
-  expect(masked.url).not.toEqual(configurationValid.url);
-  expect(masked.url.startsWith('h')).toBe(true);
-  expect(masked.url.endsWith('e')).toBe(true);
+  expect(masked.url).toBe('[REDACTED]');
 });
 
 test('buildMessageBody should build adaptive card payload', async () => {

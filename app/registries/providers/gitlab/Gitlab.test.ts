@@ -46,7 +46,7 @@ test('maskConfiguration should mask configuration secrets', async () => {
   expect(gitlab.maskConfiguration()).toEqual({
     url: 'https://registry.gitlab.com',
     authurl: 'https://gitlab.com',
-    token: 'a****f',
+    token: '[REDACTED]',
   });
 });
 

@@ -37,7 +37,7 @@ test('validatedConfiguration should throw error when configuration is missing', 
 test('maskConfiguration should mask configuration secrets', async () => {
   const masked = gar.maskConfiguration();
   expect(masked.clientemail).toEqual(TEST_CLIENT_EMAIL);
-  expect(masked.privatekey).toMatch(/^-.+\n$/);
+  expect(masked.privatekey).toBe('[REDACTED]');
   expect(masked.privatekey).not.toEqual(TEST_PRIVATE_KEY);
 });
 

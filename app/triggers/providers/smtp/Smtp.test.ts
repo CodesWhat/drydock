@@ -184,7 +184,7 @@ test('maskConfiguration should mask sensitive data', async () => {
     host: configurationValid.host,
     port: configurationValid.port,
     user: configurationValid.user,
-    pass: 'p**s',
+    pass: '[REDACTED]',
   });
 });
 

@@ -1467,6 +1467,6 @@ test('maskFields should mask non-empty configured values', () => {
     empty: '',
   };
   const masked = trigger.maskFields(['token', 'empty']);
-  expect(masked.token).toBe('s**********t');
+  expect(masked.token).toBe('[REDACTED]');
   expect(masked.empty).toBe('');
 });
