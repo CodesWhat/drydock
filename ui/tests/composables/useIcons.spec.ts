@@ -29,6 +29,18 @@ describe('useIcons', () => {
       const { iconLibrary } = await loadUseIcons();
       expect(iconLibrary.value).toBe('ph-duotone');
     });
+
+    it('should fall back to default when persisted library is not a string', async () => {
+      localStorage.setItem(
+        'dd-preferences',
+        JSON.stringify({
+          schemaVersion: 1,
+          icons: { library: 123 },
+        }),
+      );
+      const { iconLibrary } = await loadUseIcons();
+      expect(iconLibrary.value).toBe('ph-duotone');
+    });
   });
 
   describe('setIconLibrary', () => {
