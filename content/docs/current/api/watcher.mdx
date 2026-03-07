@@ -16,8 +16,9 @@ This operation lets you get all the configured watchers.
 ```bash
 curl http://drydock:3000/api/watchers
 
-[
-   {
+{
+   "data": [
+      {
       "id":"docker.local",
       "type":"docker",
       "name":"local",
@@ -27,8 +28,10 @@ curl http://drydock:3000/api/watchers
          "cron":"0 * * * *",
          "watchbydefault":true
       }
-   }
-]
+      }
+   ],
+   "total": 1
+}
 ```
 
 ## Get a Watcher by id

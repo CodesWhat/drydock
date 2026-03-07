@@ -10,10 +10,11 @@ This API allows to query the state of the watched containers.
 This operation lets you get all the watched containers.
 
 ```bash
-curl http://drydock:3000/api/containers
+curl "http://drydock:3000/api/containers?limit=25&offset=0"
 
-[
-   {
+{
+  "data": [
+    {
   "id":"31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816",
   "name":"homeassistant",
   "watcher":"local",
@@ -41,7 +42,12 @@ curl http://drydock:3000/api/containers
   },
   "updateAvailable": true
 }
-]
+  ],
+  "total": 42,
+  "limit": 25,
+  "offset": 0,
+  "hasMore": true
+}
 ```
 
 ## Watch all Containers
@@ -51,7 +57,8 @@ This operation triggers a manual watch on all containers.
 ```bash
 curl -X POST http://drydock:3000/api/containers/watch
 
-[{
+{
+  "data": [{
   "id":"31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816",
   "name":"homeassistant",
   "watcher":"local",
@@ -78,7 +85,12 @@ curl -X POST http://drydock:3000/api/containers/watch
     "tag":"2021.6.5"
   },
   "updateAvailable": true
-}]
+  }],
+  "total": 42,
+  "limit": 0,
+  "offset": 0,
+  "hasMore": false
+}
 ```
 
 ## Get a Container by id

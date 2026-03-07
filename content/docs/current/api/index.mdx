@@ -38,7 +38,7 @@ The [webhook endpoints](/docs/configuration/webhooks) use a separate Bearer toke
 | `/api/events/ui` | `GET` | [Server-Sent Events](#server-sent-events-sse) for real-time UI updates |
 | `/api/audit` | `GET` | [Audit trail](#audit-trail) (paginated, filterable by action/container/date) |
 | `/api/notifications` | `GET`, `PATCH /:id` | [Notification rules](#notification-rules) (per-event enable/disable and trigger assignments) |
-| `/api/settings` | `GET`, `PUT` | [UI settings](#settings) (internetless mode) |
+| `/api/settings` | `GET`, `PATCH` | [UI settings](#settings) (internetless mode; `PUT` compatibility alias is deprecated) |
 | `/api/server` | `GET` | Server configuration and compatibility info (see [App API](/docs/api/app)) |
 | `/api/server/security/runtime` | `GET` | Security tools availability (see [App API](/docs/api/app)) |
 | `/api/containers/groups` | `GET` | [Container groups](#container-groups) (by stack/compose project) |
@@ -47,6 +47,10 @@ The [webhook endpoints](/docs/configuration/webhooks) use a separate Bearer toke
 | `/api/webhook/update/:containerName` | `POST` | [Webhook](/docs/configuration/webhooks) — update specific container |
 
 <Callout type="info">See each sub-page for detailed request/response examples.</Callout>
+
+### Command endpoint convention
+
+Some endpoints are intentional action commands and use `POST` under a resource path (for example container watch/scan/reveal). These are RPC-style operations rather than CRUD updates.
 
 ## Notification rules
 
@@ -125,10 +129,10 @@ Returns paginated audit log entries for container lifecycle events, updates, rol
 ### Get audit entries
 
 ```bash
-curl "http://drydock:3000/api/audit?page=1&limit=25&action=update-applied&container=homeassistant"
+curl "http://drydock:3000/api/audit?offset=0&limit=25&action=update-applied&container=homeassistant"
 
 {
-  "entries": [
+  "data": [
     {
       "id": "a1b2c3d4-...",
       "timestamp": "2024-12-01T10:01:30.000Z",
@@ -143,8 +147,9 @@ curl "http://drydock:3000/api/audit?page=1&limit=25&action=update-applied&contai
     }
   ],
   "total": 42,
-  "page": 1,
-  "limit": 25
+  "limit": 25,
+  "offset": 0,
+  "hasMore": true
 }
 ```
 
@@ -152,7 +157,7 @@ curl "http://drydock:3000/api/audit?page=1&limit=25&action=update-applied&contai
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `page` | integer | `1` | Page number (1-indexed) |
+| `offset` | integer | `0` | Number of entries to skip |
 | `limit` | integer | `50` | Results per page (max 200) |
 | `action` | string | | Filter by action type |
 | `container` | string | | Filter by container name |
@@ -231,7 +236,7 @@ curl http://drydock:3000/api/settings
 ### Update settings
 
 ```bash
-curl -X PUT http://drydock:3000/api/settings \
+curl -X PATCH http://drydock:3000/api/settings \
   -H 'Content-Type: application/json' \
   -d '{"internetlessMode": true}'
 
@@ -244,7 +249,7 @@ curl -X PUT http://drydock:3000/api/settings \
 | --- | --- | --- | --- |
 | `internetlessMode` | boolean | `false` | When enabled, disables registry icon lookups and other external requests |
 
-Returns 200 with the updated settings, or 400 if the body is invalid.
+Returns 200 with the updated settings, or 400 if the body is invalid. `PUT /api/settings` is still accepted as a temporary compatibility alias but is deprecated.
 
 ## Container groups
 

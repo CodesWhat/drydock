@@ -10,69 +10,31 @@ This API allows to query the state of the watched containers.
 This operation lets you get all the watched containers.
 
 ```bash
-curl http://drydock:3000/api/containers
+curl "http://drydock:3000/api/containers?limit=25&offset=0"
 
-[
-  {
-    "id": "31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816",
-    "name": "homeassistant",
-    "displayName": "Home Assistant",
-    "displayIcon": "mdi:home-assistant",
-    "status": "running",
-    "watcher": "local",
-    "includeTags": "^\\d+\\.\\d+.\\d+$",
-    "image": {
-      "id": "sha256:d4a6fafb7d4da37495e5c9be3242590be24a87d7edcc4f79761098889c54fca6",
-      "registry": {
-        "name": "hub",
-        "url": "123456789.dkr.ecr.eu-west-1.amazonaws.com"
-      },
-      "name": "test",
-      "tag": {
-        "value": "2021.6.4",
-        "semver": true
-      },
-      "digest": {
-        "watch": false,
-        "repo": "sha256:ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72"
-      },
-      "architecture": "amd64",
-      "os": "linux",
-      "created": "2021-06-12T05:33:38.440Z"
-    },
-    "result": {
-      "tag": "2021.6.5"
-    },
-    "updateAvailable": true,
-    "updateKind": {
-      "kind": "tag",
-      "localValue": "2021.6.4",
-      "remoteValue": "2021.6.5",
-      "semverDiff": "patch"
-    },
-    "updateDetectedAt": "2021-06-15T10:30:00.000Z",
-    "details": {
-      "ports": ["8123:8123/tcp"],
-      "volumes": ["/config:/config"],
-      "env": [
-        { "key": "TZ", "value": "***" }
-      ]
-    },
-    "security": {
-      "scan": {
-        "scanner": "trivy",
-        "image": "homeassistant/home-assistant:2021.6.5",
-        "scannedAt": "2021-06-15T11:00:00.000Z",
-        "status": "passed",
-        "blockSeverities": ["CRITICAL", "HIGH"],
-        "blockingCount": 0,
-        "summary": { "unknown": 0, "low": 1, "medium": 0, "high": 0, "critical": 0 },
-        "vulnerabilities": []
-      }
+{
+  "data": [
+    {
+      "id": "31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816",
+      "name": "homeassistant",
+      "watcher": "local",
+      "status": "running"
     }
-  }
-]
+  ],
+  "total": 42,
+  "limit": 25,
+  "offset": 0,
+  "hasMore": true
+}
 ```
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `limit` | integer | `0` | Maximum number of containers to return (`0` means unbounded; max `200`) |
+| `offset` | integer | `0` | Number of matching containers to skip |
+| `includeVulnerabilities` | boolean | `false` | Include full vulnerability arrays in `data` |
 
 ## Get container summary
 
@@ -132,7 +94,8 @@ This operation triggers a manual watch on all containers.
 ```bash
 curl -X POST http://drydock:3000/api/containers/watch
 
-[{
+{
+  "data": [{
   "id":"31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816",
   "name":"homeassistant",
   "watcher":"local",
@@ -159,7 +122,12 @@ curl -X POST http://drydock:3000/api/containers/watch
     "tag":"2021.6.5"
   },
   "updateAvailable": true
-}]
+  }],
+  "total": 42,
+  "limit": 0,
+  "offset": 0,
+  "hasMore": false
+}
 ```
 
 ## Get a Container by id

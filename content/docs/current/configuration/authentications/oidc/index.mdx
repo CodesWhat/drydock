@@ -19,6 +19,7 @@ The `oidc` authentication lets you protect drydock access using the [Openid Conn
 | `DD_AUTH_OIDC_{auth_name}_DISCOVERY` | 🔴 | Oidc discovery URL | | |
 | `DD_AUTH_OIDC_{auth_name}_REDIRECT` | ⚪ | Skip internal login page & automatically redirect to the OIDC provider | `true`, `false` | `false` |
 | `DD_AUTH_OIDC_{auth_name}_TIMEOUT` | ⚪ | Timeout (in ms) when calling the OIDC provider | Minimum is 500 | `5000` |
+| `DD_OIDC_ALLOW_HTTP` | ⚪ | HTTP discovery compatibility override (`true` = explicit allow, `false` = explicit block) | `true`, `false` | unset (temporarily allowed with warning) |
 
 <Callout type="info">The callback URL (to configure in the IDP is built as `${drydock_public_url}/auth/oidc/${auth_name}/cb`</Callout>
 
@@ -27,7 +28,7 @@ If it fails (irregular reverse proxy configuration...), you can enforce the valu
 
 <Callout type="info">If your IdP is on a different domain and callback fails with `OIDC session is missing or expired`, check `DD_SERVER_COOKIE_SAMESITE` (server config). Default is `lax` for OIDC compatibility; `strict` can break cross-site callbacks. Use `none` only for explicit cross-site/embed cases over HTTPS.</Callout>
 
-<Callout type="info">Both `http://` and `https://` discovery URLs are supported. If your IdP runs behind a reverse proxy that terminates TLS, or on a private network without TLS, you can use an `http://` discovery URL. drydock automatically handles the insecure transport for the entire OIDC flow (discovery, token exchange, userinfo).</Callout>
+<Callout type="warn">`http://` OIDC discovery is temporarily allowed when `DD_OIDC_ALLOW_HTTP` is unset (upgrade compatibility mode), and drydock logs warnings. To prepare for a future major release, set `DD_OIDC_ALLOW_HTTP=true` explicitly now and migrate your IdP to HTTPS as soon as possible. Set `DD_OIDC_ALLOW_HTTP=false` to fail-closed immediately.</Callout>
 
 ## How to integrate with&nbsp;[Authelia](https://www.authelia.com)
 
