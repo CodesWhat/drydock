@@ -170,7 +170,7 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/theme/useTheme', () => ({
   useTheme: () => ({
-    themeFamily: { value: 'drydock', __v_isRef: true },
+    themeFamily: { value: 'one-dark', __v_isRef: true },
     themeVariant: { value: 'dark', __v_isRef: true },
     isDark: { value: true, __v_isRef: true },
     setThemeFamily: vi.fn(),
@@ -207,12 +207,12 @@ vi.mock('@/icons', () => ({
 vi.mock('@/theme/palettes', () => ({
   themeFamilies: [
     {
-      id: 'drydock',
-      label: 'Drydock',
-      description: 'Navy tones',
-      swatchDark: '#0f172a',
-      swatchLight: '#f8fafc',
-      accent: '#0096C7',
+      id: 'one-dark',
+      label: 'One Dark',
+      description: 'Clean and balanced',
+      swatchDark: '#282c34',
+      swatchLight: '#fafafa',
+      accent: '#528bff',
     },
     {
       id: 'github',
@@ -575,7 +575,7 @@ describe('ConfigView', () => {
 
     it('renders theme family selection buttons', async () => {
       const w = await mountAppearanceTab();
-      expect(w.text()).toContain('Drydock');
+      expect(w.text()).toContain('One Dark');
       expect(w.text()).toContain('GitHub');
     });
 

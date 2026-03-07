@@ -25,7 +25,7 @@ describe('preferences store', () => {
   it('should return defaults when localStorage is empty', async () => {
     const { preferences } = await loadStore();
     expect(preferences.schemaVersion).toBe(1);
-    expect(preferences.theme.family).toBe('drydock');
+    expect(preferences.theme.family).toBe('one-dark');
     expect(preferences.theme.variant).toBe('dark');
     expect(preferences.containers.viewMode).toBe('table');
   });
@@ -45,7 +45,7 @@ describe('preferences store', () => {
   it('should fall back to defaults on corrupt JSON', async () => {
     localStorage.setItem('dd-preferences', '{corrupt');
     const { preferences } = await loadStore();
-    expect(preferences.theme.family).toBe('drydock');
+    expect(preferences.theme.family).toBe('one-dark');
     expect(preferences.theme.variant).toBe('dark');
   });
 
@@ -86,7 +86,7 @@ describe('preferences store', () => {
     preferences.containers.viewMode = 'cards';
     preferences.layout.sidebarCollapsed = true;
     resetPreferences();
-    expect(preferences.theme.family).toBe('drydock');
+    expect(preferences.theme.family).toBe('one-dark');
     expect(preferences.containers.viewMode).toBe('table');
     expect(preferences.layout.sidebarCollapsed).toBe(false);
   });
@@ -97,7 +97,7 @@ describe('preferences store', () => {
     flushPreferences();
     resetPreferences();
     const raw = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
-    expect(raw.theme.family).toBe('drydock');
+    expect(raw.theme.family).toBe('one-dark');
   });
 
   it('should preserve array values when persisting', async () => {

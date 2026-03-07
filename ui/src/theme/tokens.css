@@ -1,25 +1,25 @@
-/* Drydock Dark (default) */
+/* One Dark (default) */
 :root {
-  --dd-bg: #0f172a;
-  --dd-bg-sidebar: #0c1222;
-  --dd-bg-card: #1e293b;
-  --dd-bg-elevated: #151d2e;
-  --dd-bg-inset: #19233a;
-  --dd-bg-code: #0a0f1a;
-  --dd-border: #1e293b;
-  --dd-border-strong: #334155;
-  --dd-text: #e2e8f0;
-  --dd-text-secondary: #94a3b8;
-  --dd-text-muted: #64748b;
-  --dd-scrollbar: #475569;
-  --dd-success: #06d6a0;
-  --dd-danger: #e53935;
-  --dd-warning: #ff9800;
-  --dd-caution: #eab308;
-  --dd-info: #3b82f6;
-  --dd-primary: #0096c7;
-  --dd-alt: #a855f7;
-  --dd-neutral: #64748b;
+  --dd-bg: #282c34;
+  --dd-bg-sidebar: #21252b;
+  --dd-bg-card: #2c313c;
+  --dd-bg-elevated: #31353f;
+  --dd-bg-inset: #1e2127;
+  --dd-bg-code: #1e2127;
+  --dd-border: #181a1f;
+  --dd-border-strong: #3e4452;
+  --dd-text: #abb2bf;
+  --dd-text-secondary: #5c6370;
+  --dd-text-muted: #4b5263;
+  --dd-scrollbar: #4b5263;
+  --dd-success: #98c379;
+  --dd-danger: #e86671;
+  --dd-warning: #d19a66;
+  --dd-caution: #e5c07b;
+  --dd-info: #61afef;
+  --dd-primary: #528bff;
+  --dd-alt: #c678dd;
+  --dd-neutral: #5c6370;
   --dd-success-muted: color-mix(in srgb, var(--dd-success) 15%, transparent);
   --dd-danger-muted: color-mix(in srgb, var(--dd-danger) 15%, transparent);
   --dd-warning-muted: color-mix(in srgb, var(--dd-warning) 15%, transparent);
@@ -37,23 +37,30 @@
   --dd-log-footer-bg: color-mix(in srgb, var(--dd-bg-code) 80%, var(--dd-bg-elevated) 20%);
 }
 
-/* Drydock Light */
+/* One Dark Light */
 .light:not([class*="theme-"]),
-.theme-drydock.light {
-  --dd-bg: #f8fafc;
-  --dd-bg-sidebar: #ffffff;
+.theme-one-dark.light {
+  --dd-bg: #fafafa;
+  --dd-bg-sidebar: #f0f0f0;
   --dd-bg-card: #ffffff;
-  --dd-bg-elevated: #f1f5f9;
-  --dd-bg-inset: #f8fafc;
-  --dd-bg-code: #1e293b;
-  --dd-border: #e2e8f0;
-  --dd-border-strong: #cbd5e1;
-  --dd-text: #0f172a;
-  --dd-text-secondary: #475569;
-  --dd-text-muted: #94a3b8;
-  --dd-scrollbar: #cbd5e1;
+  --dd-bg-elevated: #e5e5e6;
+  --dd-bg-inset: #f0f0f0;
+  --dd-bg-code: #282c34;
+  --dd-border: #e5e5e6;
+  --dd-border-strong: #cecece;
+  --dd-text: #383a42;
+  --dd-text-secondary: #696c77;
+  --dd-text-muted: #a0a1a7;
+  --dd-scrollbar: #cecece;
+  --dd-success: #50a14f;
+  --dd-danger: #e45649;
+  --dd-warning: #c18401;
+  --dd-caution: #986801;
+  --dd-info: #4078f2;
+  --dd-primary: #526fff;
+  --dd-alt: #a626a4;
+  --dd-neutral: #a0a1a7;
 }
-/* Drydock Light keeps same semantic colors as dark - no override needed */
 
 /* GitHub Dark */
 .theme-github.dark {
@@ -197,4 +204,100 @@
   --dd-primary: #04a5e5;
   --dd-alt: #8839ef;
   --dd-neutral: #9ca0b0;
+}
+
+/* Gruvbox Dark */
+.theme-gruvbox.dark {
+  --dd-bg: #282828;
+  --dd-bg-sidebar: #1d2021;
+  --dd-bg-card: #3c3836;
+  --dd-bg-elevated: #32302f;
+  --dd-bg-inset: #1d2021;
+  --dd-bg-code: #1d2021;
+  --dd-border: #3c3836;
+  --dd-border-strong: #504945;
+  --dd-text: #ebdbb2;
+  --dd-text-secondary: #d5c4a1;
+  --dd-text-muted: #928374;
+  --dd-scrollbar: #665c54;
+  --dd-success: #b8bb26;
+  --dd-danger: #fb4934;
+  --dd-warning: #fe8019;
+  --dd-caution: #fabd2f;
+  --dd-info: #83a598;
+  --dd-primary: #fe8019;
+  --dd-alt: #d3869b;
+  --dd-neutral: #928374;
+}
+
+/* Gruvbox Light */
+.theme-gruvbox.light {
+  --dd-bg: #fbf1c7;
+  --dd-bg-sidebar: #f9f5d7;
+  --dd-bg-card: #ffffff;
+  --dd-bg-elevated: #f2e5bc;
+  --dd-bg-inset: #f9f5d7;
+  --dd-bg-code: #282828;
+  --dd-border: #d5c4a1;
+  --dd-border-strong: #bdae93;
+  --dd-text: #3c3836;
+  --dd-text-secondary: #504945;
+  --dd-text-muted: #928374;
+  --dd-scrollbar: #bdae93;
+  --dd-success: #98971a;
+  --dd-danger: #cc241d;
+  --dd-warning: #d65d0e;
+  --dd-caution: #d79921;
+  --dd-info: #458588;
+  --dd-primary: #d65d0e;
+  --dd-alt: #b16286;
+  --dd-neutral: #928374;
+}
+
+/* Ayu Mirage (Dark) */
+.theme-ayu.dark {
+  --dd-bg: #242936;
+  --dd-bg-sidebar: #1f2430;
+  --dd-bg-card: #2d3440;
+  --dd-bg-elevated: #282e3b;
+  --dd-bg-inset: #1a1e28;
+  --dd-bg-code: #1f2430;
+  --dd-border: #171b24;
+  --dd-border-strong: #2d3342;
+  --dd-text: #cccac2;
+  --dd-text-secondary: #707a8c;
+  --dd-text-muted: #5c697d;
+  --dd-scrollbar: #475266;
+  --dd-success: #87d96c;
+  --dd-danger: #f28779;
+  --dd-warning: #e6b450;
+  --dd-caution: #ffcc66;
+  --dd-info: #6acdff;
+  --dd-primary: #ffcc66;
+  --dd-alt: #d4bfff;
+  --dd-neutral: #707a8c;
+}
+
+/* Ayu Light */
+.theme-ayu.light {
+  --dd-bg: #fcfcfc;
+  --dd-bg-sidebar: #f8f9fa;
+  --dd-bg-card: #ffffff;
+  --dd-bg-elevated: #f3f4f5;
+  --dd-bg-inset: #f8f9fa;
+  --dd-bg-code: #242936;
+  --dd-border: #e8e9eb;
+  --dd-border-strong: #d4d5d7;
+  --dd-text: #5c6166;
+  --dd-text-secondary: #828e9f;
+  --dd-text-muted: #9aa5b3;
+  --dd-scrollbar: #d4d5d7;
+  --dd-success: #6cbf43;
+  --dd-danger: #e65050;
+  --dd-warning: #ea9216;
+  --dd-caution: #ffaa33;
+  --dd-info: #22a4e6;
+  --dd-primary: #f29718;
+  --dd-alt: #a37acc;
+  --dd-neutral: #828e9f;
 }

@@ -27,14 +27,16 @@ describe('validators', () => {
 
   describe('THEME_FAMILIES', () => {
     it('should contain all supported families', () => {
-      expect(THEME_FAMILIES.has('drydock')).toBe(true);
+      expect(THEME_FAMILIES.has('one-dark')).toBe(true);
       expect(THEME_FAMILIES.has('github')).toBe(true);
       expect(THEME_FAMILIES.has('dracula')).toBe(true);
       expect(THEME_FAMILIES.has('catppuccin')).toBe(true);
+      expect(THEME_FAMILIES.has('gruvbox')).toBe(true);
+      expect(THEME_FAMILIES.has('ayu')).toBe(true);
     });
 
-    it('should have exactly 4 members', () => {
-      expect(THEME_FAMILIES.size).toBe(4);
+    it('should have exactly 6 members', () => {
+      expect(THEME_FAMILIES.size).toBe(6);
     });
 
     it('should not contain unknown families', () => {

@@ -2,7 +2,7 @@ import { computed, ref, watch } from 'vue';
 import { preferences } from '../preferences/store';
 import { type ThemeFamily, type ThemeVariant, themeFamilies } from './palettes';
 
-const DEFAULT_THEME_FAMILY: ThemeFamily = 'drydock';
+const DEFAULT_THEME_FAMILY: ThemeFamily = 'one-dark';
 const DEFAULT_THEME_VARIANT: ThemeVariant = 'dark';
 const THEME_FAMILIES = new Set<ThemeFamily>(themeFamilies.map((family) => family.id));
 const THEME_VARIANTS = new Set<ThemeVariant>(['dark', 'light', 'system']);
@@ -55,7 +55,7 @@ function applyClasses() {
     .trim();
   const family = themeFamily.value;
   const variant = resolvedVariant.value;
-  if (family !== 'drydock') {
+  if (family !== 'one-dark') {
     el.classList.add(`theme-${family}`);
   }
   el.classList.add(variant);

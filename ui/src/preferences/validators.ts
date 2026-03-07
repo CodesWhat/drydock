@@ -2,7 +2,14 @@ import type { ViewMode } from './schema';
 
 export const VIEW_MODES = new Set<ViewMode>(['table', 'cards', 'list']);
 
-export const THEME_FAMILIES = new Set(['drydock', 'github', 'dracula', 'catppuccin']);
+export const THEME_FAMILIES = new Set([
+  'one-dark',
+  'github',
+  'dracula',
+  'catppuccin',
+  'gruvbox',
+  'ayu',
+]);
 
 export const THEME_VARIANTS = new Set(['dark', 'light', 'system']);
 
