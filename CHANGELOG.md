@@ -41,10 +41,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Non-existent DD_OIDC_ALLOW_HTTP env var referenced in UI** — The UI OIDC HTTP banner referenced a `DD_OIDC_ALLOW_HTTP` env var that does not exist — the backend auto-detects `http://` discovery URLs and passes `allowInsecureRequests` automatically. Removed the misleading reference.
 - **Load test and start scripts broken by standardized API responses** — `jq` queries in `run-load-test.sh` and `start-drydock.sh` used raw array syntax instead of `.data[]` to match the new collection response pattern.
 
+### Performance
+
+- **Vite chunk splitting** — Production build now splits vendor code into `framework`, `icons`, and `vendor` chunks for better browser cache efficiency across deployments.
+
 ### Security
 
 - **OIDC authorization redirect URL validation** — Added allowlist-based validation for OIDC authorization redirect URLs, preventing open redirect attacks through crafted callback parameters.
 - **Auth, registry token, and log sanitization hardening** — Consolidated security pass hardening authentication flows, registry token validation, and log output sanitization.
+- **Command trigger shell execution warning** — Command trigger now logs a one-time security warning on first execution, reminding operators that commands run with drydock process privileges.
 
 ## [1.4.0] — 2026-02-28
 
