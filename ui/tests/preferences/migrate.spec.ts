@@ -86,6 +86,71 @@ describe('preferences migration', () => {
       const result = migrate({ schemaVersion: 1 });
       expect(result).toEqual(DEFAULTS);
     });
+
+    it('should replace removed theme family with default', () => {
+      const result = migrate({ schemaVersion: 1, theme: { family: 'drydock', variant: 'dark' } });
+      expect(result.theme.family).toBe(DEFAULTS.theme.family);
+      expect(result.theme.variant).toBe('dark');
+    });
+
+    it('should replace invalid theme variant with default', () => {
+      const result = migrate({
+        schemaVersion: 1,
+        theme: { family: 'github', variant: 'invalid' },
+      });
+      expect(result.theme.family).toBe('github');
+      expect(result.theme.variant).toBe(DEFAULTS.theme.variant);
+    });
+
+    it('should replace invalid font family with default', () => {
+      const result = migrate({ schemaVersion: 1, font: { family: 'comic-sans' } });
+      expect(result.font.family).toBe(DEFAULTS.font.family);
+    });
+
+    it('should replace invalid icon library with default', () => {
+      const result = migrate({ schemaVersion: 1, icons: { library: 'removed-lib', scale: 1 } });
+      expect(result.icons.library).toBe(DEFAULTS.icons.library);
+      expect(result.icons.scale).toBe(1);
+    });
+
+    it('should replace invalid icon scale with default', () => {
+      const result = migrate({ schemaVersion: 1, icons: { library: 'lucide', scale: 99 } });
+      expect(result.icons.library).toBe('lucide');
+      expect(result.icons.scale).toBe(DEFAULTS.icons.scale);
+    });
+
+    it('should replace invalid radius with default', () => {
+      const result = migrate({ schemaVersion: 1, appearance: { radius: 'huge' } });
+      expect(result.appearance.radius).toBe(DEFAULTS.appearance.radius);
+    });
+
+    it('should replace invalid container viewMode with default', () => {
+      const result = migrate({ schemaVersion: 1, containers: { viewMode: 'timeline' } });
+      expect(result.containers.viewMode).toBe(DEFAULTS.containers.viewMode);
+    });
+
+    it('should replace invalid tableActions with default', () => {
+      const result = migrate({ schemaVersion: 1, containers: { tableActions: 'links' } });
+      expect(result.containers.tableActions).toBe(DEFAULTS.containers.tableActions);
+    });
+
+    it('should preserve all valid values through sanitization', () => {
+      const input = {
+        schemaVersion: 1,
+        theme: { family: 'catppuccin', variant: 'light' },
+        font: { family: 'jetbrains-mono' },
+        icons: { library: 'tabler', scale: 1.2 },
+        appearance: { radius: 'round' },
+        containers: { viewMode: 'cards', tableActions: 'buttons' },
+      };
+      const result = migrate(input);
+      expect(result.theme).toEqual({ family: 'catppuccin', variant: 'light' });
+      expect(result.font.family).toBe('jetbrains-mono');
+      expect(result.icons).toEqual({ library: 'tabler', scale: 1.2 });
+      expect(result.appearance.radius).toBe('round');
+      expect(result.containers.viewMode).toBe('cards');
+      expect(result.containers.tableActions).toBe('buttons');
+    });
   });
 
   describe('migrateFromLegacyKeys', () => {

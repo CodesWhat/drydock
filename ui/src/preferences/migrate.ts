@@ -16,6 +16,54 @@ export function mergeDefaults(source: Record<string, unknown>): PreferencesSchem
   return deepMerge(structuredClone(DEFAULTS), source) as PreferencesSchema;
 }
 
+// ─── Sanitize persisted data ─────────────────────────────────
+
+function deleteIfInvalid(obj: Record<string, unknown>, key: string, allow: Set<string>): void {
+  if (typeof obj[key] === 'string' && !allow.has(obj[key] as string)) {
+    delete obj[key];
+  }
+}
+
+/**
+ * Remove invalid enum values from persisted preferences so that
+ * deepMerge preserves defaults for those fields instead of
+ * overwriting them with stale/renamed values (e.g. 'drydock' theme).
+ */
+function sanitize(data: Record<string, unknown>): void {
+  const theme = data.theme;
+  if (theme && typeof theme === 'object') {
+    const t = theme as Record<string, unknown>;
+    deleteIfInvalid(t, 'family', THEME_FAMILIES);
+    deleteIfInvalid(t, 'variant', THEME_VARIANTS);
+  }
+
+  const font = data.font;
+  if (font && typeof font === 'object') {
+    deleteIfInvalid(font as Record<string, unknown>, 'family', FONT_FAMILIES);
+  }
+
+  const icons = data.icons;
+  if (icons && typeof icons === 'object') {
+    const i = icons as Record<string, unknown>;
+    deleteIfInvalid(i, 'library', ICON_LIBRARIES);
+    if ('scale' in i && !isValidScale(i.scale)) {
+      delete i.scale;
+    }
+  }
+
+  const appearance = data.appearance;
+  if (appearance && typeof appearance === 'object') {
+    deleteIfInvalid(appearance as Record<string, unknown>, 'radius', RADIUS_PRESETS);
+  }
+
+  const containers = data.containers;
+  if (containers && typeof containers === 'object') {
+    const c = containers as Record<string, unknown>;
+    if ('viewMode' in c && !isViewMode(c.viewMode)) delete c.viewMode;
+    deleteIfInvalid(c, 'tableActions', TABLE_ACTIONS);
+  }
+}
+
 // ─── Legacy key readers ─────────────────────────────────────
 
 function readString(key: string): string | undefined {
@@ -266,5 +314,6 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
   // Future migrations:
   // if (data.schemaVersion === 1) { data = migrateV1toV2(data); }
   // if (data.schemaVersion === 2) { data = migrateV2toV3(data); }
+  sanitize(data);
   return mergeDefaults(data);
 }
