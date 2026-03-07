@@ -97,6 +97,17 @@ describe('preferences store', () => {
     expect(raw.containers.sort.asc).toBe(false);
   });
 
+  it('should serialize and restore appearance radius', async () => {
+    const { preferences, flushPreferences } = await loadStore();
+    preferences.appearance.radius = 'soft';
+    flushPreferences();
+
+    vi.resetModules();
+
+    const { preferences: restoredPreferences } = await loadStore();
+    expect(restoredPreferences.appearance.radius).toBe('soft');
+  });
+
   it('should reset to defaults via resetPreferences', async () => {
     const { preferences, resetPreferences } = await loadStore();
     preferences.theme.family = 'github';
@@ -202,5 +213,9 @@ describe('preferences store', () => {
     expect(raw.theme.family).toBe('dracula');
     expect(raw.theme.variant).toBe('light');
     expect(raw.containers.viewMode).toBe('cards');
+
+    // Re-running the queued callback should be a no-op once dirty state is flushed.
+    idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline);
+    expect(setItemSpy).toHaveBeenCalledTimes(1);
   });
 });
