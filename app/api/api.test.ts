@@ -1,15 +1,40 @@
-const { mockInit, mockExpressJson, mockJsonMiddleware } = vi.hoisted(() => {
+const {
+  createMockRouter,
+  mockInit,
+  mockExpressJson,
+  mockJsonMiddleware,
+  mockRouterCallLog,
+  resetMockRouterCallLog,
+} = vi.hoisted(() => {
   const jsonMiddleware = vi.fn();
+  const mockRouterCallLog: Array<{ arg: unknown; type: 'get' | 'post' | 'use' }> = [];
+
+  const createTrackedMethod = (type: 'get' | 'post' | 'use') =>
+    vi.fn((...args: unknown[]) => {
+      mockRouterCallLog.push({ type, arg: args[0] });
+    });
+
+  const createMockRouter = () => ({
+    use: createTrackedMethod('use'),
+    get: createTrackedMethod('get'),
+    post: createTrackedMethod('post'),
+  });
+
   return {
-    mockInit: () => ({ init: vi.fn(() => ({ use: vi.fn(), get: vi.fn(), post: vi.fn() })) }),
+    createMockRouter,
+    mockInit: () => ({ init: vi.fn(() => createMockRouter()) }),
     mockJsonMiddleware: jsonMiddleware,
     mockExpressJson: vi.fn(() => jsonMiddleware),
+    mockRouterCallLog,
+    resetMockRouterCallLog: () => {
+      mockRouterCallLog.length = 0;
+    },
   };
 });
 
 vi.mock('express', () => ({
   default: {
-    Router: vi.fn(() => ({ use: vi.fn(), get: vi.fn(), post: vi.fn() })),
+    Router: vi.fn(() => createMockRouter()),
     json: mockExpressJson,
   },
 }));
@@ -49,6 +74,7 @@ describe('API Router', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    resetMockRouterCallLog();
     router = api.init();
   });
 
@@ -150,11 +176,15 @@ describe('API Router', () => {
     const openapiCall = getCalls.find((c) => c[0] === '/openapi.json');
     expect(openapiCall).toBeDefined();
 
-    const useCalls = router.use.mock.calls;
-    const authIndex = useCalls.findIndex((c) => c[0] === auth.requireAuthentication);
-    const openapiRouteIndex = getCalls.findIndex((c) => c[0] === '/openapi.json');
+    const openapiRouteIndex = mockRouterCallLog.findIndex(
+      (entry) => entry.type === 'get' && entry.arg === '/openapi.json',
+    );
+    const authIndex = mockRouterCallLog.findIndex(
+      (entry) => entry.type === 'use' && entry.arg === auth.requireAuthentication,
+    );
     expect(authIndex).toBeGreaterThan(-1);
     expect(openapiRouteIndex).toBeGreaterThan(-1);
+    expect(openapiRouteIndex).toBeLessThan(authIndex);
 
     const res = {
       status: vi.fn().mockReturnThis(),
