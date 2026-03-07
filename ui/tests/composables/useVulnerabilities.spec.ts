@@ -296,6 +296,64 @@ describe('useVulnerabilities', () => {
     expect(state.vulnerabilitiesByImage.value.nginx.map((v) => v.id)).toEqual(['CVE-1', 'CVE-2']);
   });
 
+  it('groups vulnerabilities in severity order without a post-group sort pass', () => {
+    const state = useVulnerabilities({
+      securitySortField: ref('critical'),
+      securitySortAsc: ref(false),
+    });
+
+    state.securityVulnerabilities.value = [
+      {
+        id: 'CVE-LOW',
+        severity: 'LOW',
+        package: 'pkg-low',
+        version: '1.0.0',
+        fixedIn: null,
+        title: '',
+        target: '',
+        primaryUrl: '',
+        image: 'ordered-image',
+        publishedDate: '',
+      },
+      {
+        id: 'CVE-CRITICAL',
+        severity: 'CRITICAL',
+        package: 'pkg-critical',
+        version: '1.0.0',
+        fixedIn: null,
+        title: '',
+        target: '',
+        primaryUrl: '',
+        image: 'ordered-image',
+        publishedDate: '',
+      },
+      {
+        id: 'CVE-MEDIUM',
+        severity: 'MEDIUM',
+        package: 'pkg-medium',
+        version: '1.0.0',
+        fixedIn: null,
+        title: '',
+        target: '',
+        primaryUrl: '',
+        image: 'ordered-image',
+        publishedDate: '',
+      },
+    ];
+
+    const sortSpy = vi.spyOn(Array.prototype, 'sort');
+    try {
+      expect(state.vulnerabilitiesByImage.value['ordered-image'].map((v) => v.id)).toEqual([
+        'CVE-CRITICAL',
+        'CVE-MEDIUM',
+        'CVE-LOW',
+      ]);
+      expect(sortSpy).not.toHaveBeenCalled();
+    } finally {
+      sortSpy.mockRestore();
+    }
+  });
+
   it('sorts image summaries by configured field and direction', async () => {
     const containers = [
       {

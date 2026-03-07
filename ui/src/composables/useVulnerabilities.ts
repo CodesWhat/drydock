@@ -102,20 +102,25 @@ export function useVulnerabilities({
 
   const vulnerabilitiesByImage = computed<Record<string, Vulnerability[]>>(() => {
     const grouped: Record<string, Vulnerability[]> = {};
+    const severityRank = (severity: Vulnerability['severity']) => severityOrder[severity] ?? 99;
 
     for (const vulnerability of securityVulnerabilities.value) {
       const existing = grouped[vulnerability.image];
       if (existing) {
-        existing.push(vulnerability);
+        const rank = severityRank(vulnerability.severity);
+        let insertAt = existing.length;
+
+        for (let index = existing.length - 1; index >= 0; index -= 1) {
+          if (severityRank(existing[index].severity) <= rank) {
+            break;
+          }
+          insertAt = index;
+        }
+
+        existing.splice(insertAt, 0, vulnerability);
       } else {
         grouped[vulnerability.image] = [vulnerability];
       }
-    }
-
-    for (const vulnerabilities of Object.values(grouped)) {
-      vulnerabilities.sort(
-        (a, b) => (severityOrder[a.severity] ?? 99) - (severityOrder[b.severity] ?? 99),
-      );
     }
 
     return grouped;
