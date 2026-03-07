@@ -36,6 +36,64 @@ type ComponentListPagination = {
 };
 
 const COMPONENT_LIST_MAX_LIMIT = 200;
+const REDACTED_TRIGGER_CONFIG_VALUE = '[REDACTED]';
+const TRIGGER_INFRASTRUCTURE_CONFIG_KEYS = new Set([
+  'host',
+  'hostname',
+  'url',
+  'urls',
+  'webhook',
+  'webhookurl',
+  'channel',
+  'channelid',
+  'roomid',
+  'username',
+  'user',
+  'botusername',
+]);
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function redactTriggerInfrastructureValue(value: unknown): unknown {
+  if (value == null) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    if (value.length === 0) {
+      return value;
+    }
+    return REDACTED_TRIGGER_CONFIG_VALUE;
+  }
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    return REDACTED_TRIGGER_CONFIG_VALUE;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactTriggerInfrastructureValue(entry));
+  }
+  return REDACTED_TRIGGER_CONFIG_VALUE;
+}
+
+function redactTriggerConfigurationInfrastructureDetails(configuration: unknown): unknown {
+  if (Array.isArray(configuration)) {
+    return configuration.map((entry) => redactTriggerConfigurationInfrastructureDetails(entry));
+  }
+  if (!isPlainObject(configuration)) {
+    return configuration;
+  }
+
+  const sanitizedConfiguration: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(configuration)) {
+    const normalizedKey = key.toLowerCase();
+    if (TRIGGER_INFRASTRUCTURE_CONFIG_KEYS.has(normalizedKey)) {
+      sanitizedConfiguration[key] = redactTriggerInfrastructureValue(value);
+      continue;
+    }
+    sanitizedConfiguration[key] = redactTriggerConfigurationInfrastructureDetails(value);
+  }
+  return sanitizedConfiguration;
+}
 
 function normalizeComponentListPagination(
   query: Request['query'] | undefined,
@@ -68,17 +126,25 @@ function paginateComponentList(
  * @param component
  * @returns {{id: *}}
  */
-export function mapComponentToItem(key: string, component: ComponentLike): ApiComponent {
+export function mapComponentToItem(
+  key: string,
+  component: ComponentLike,
+  kind?: ComponentKind,
+): ApiComponent {
   const configuration =
     typeof component.maskConfiguration === 'function'
       ? component.maskConfiguration()
       : component.configuration;
+  const sanitizedConfiguration =
+    kind === 'trigger'
+      ? redactTriggerConfigurationInfrastructureDetails(configuration)
+      : configuration;
 
   return {
     id: key,
     type: component.type,
     name: component.name,
-    configuration,
+    configuration: sanitizedConfiguration,
     agent: component.agent,
   };
 }
@@ -88,9 +154,12 @@ export function mapComponentToItem(key: string, component: ComponentLike): ApiCo
  * @param listFunction
  * @returns {{id: string}[]}
  */
-export function mapComponentsToList(components: ComponentMap): ApiComponent[] {
+export function mapComponentsToList(
+  components: ComponentMap,
+  kind?: ComponentKind,
+): ApiComponent[] {
   return Object.keys(components)
-    .map((key) => mapComponentToItem(key, components[key]))
+    .map((key) => mapComponentToItem(key, components[key], kind))
     .sort(
       byValues([
         [(x) => x.type, byString()],
@@ -106,7 +175,7 @@ export function mapComponentsToList(components: ComponentMap): ApiComponent[] {
  */
 function getAll(req: Request, res: Response, kind: ComponentKind): void {
   const components = registry.getState()[kind] as unknown as ComponentMap;
-  const allItems = mapComponentsToList(components);
+  const allItems = mapComponentsToList(components, kind);
   const pagination = normalizeComponentListPagination(req.query);
   const data = paginateComponentList(allItems, pagination);
   res.status(200).json({
@@ -130,7 +199,7 @@ export function getById(req: Request<ComponentRouteParams>, res: Response, kind:
   const components = registry.getState()[kind] as unknown as ComponentMap;
   const component = components[id];
   if (component) {
-    res.status(200).json(mapComponentToItem(id, component));
+    res.status(200).json(mapComponentToItem(id, component, kind));
   } else {
     sendErrorResponse(res, 404, 'Component not found');
   }

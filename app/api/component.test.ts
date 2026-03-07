@@ -82,6 +82,71 @@ describe('Component Router', () => {
         }),
       );
     });
+
+    test('should redact trigger infrastructure details from configuration', () => {
+      const comp = {
+        type: 'slack',
+        name: 'ops',
+        maskConfiguration: vi.fn(() => ({
+          channel: 'C01234567',
+          username: 'ops-bot',
+          smtp: {
+            host: 'smtp.internal.example.com',
+          },
+          webhook: {
+            url: 'https://hooks.example.com/path',
+          },
+          mode: 'simple',
+        })),
+      };
+      const result = component.mapComponentToItem('slack.ops', comp, 'trigger');
+      expect(result.configuration).toEqual({
+        channel: '[REDACTED]',
+        username: '[REDACTED]',
+        smtp: {
+          host: '[REDACTED]',
+        },
+        webhook: '[REDACTED]',
+        mode: 'simple',
+      });
+    });
+
+    test('should handle null/empty/array infrastructure values while redacting trigger configuration', () => {
+      const comp = {
+        type: 'slack',
+        name: 'ops',
+        maskConfiguration: vi.fn(() => ({
+          host: null,
+          username: '',
+          channelId: 42,
+          urls: ['https://one.example', '', 7, null],
+          mode: 'simple',
+        })),
+      };
+
+      const result = component.mapComponentToItem('slack.ops', comp, 'trigger');
+      expect(result.configuration).toEqual({
+        host: null,
+        username: '',
+        channelId: '[REDACTED]',
+        urls: ['[REDACTED]', '', '[REDACTED]', null],
+        mode: 'simple',
+      });
+    });
+
+    test('should redact top-level trigger configuration arrays recursively', () => {
+      const comp = {
+        type: 'slack',
+        name: 'ops',
+        maskConfiguration: vi.fn(() => [
+          { webhook: 'https://hooks.example.com/path' },
+          { mode: 'simple' },
+        ]),
+      };
+
+      const result = component.mapComponentToItem('slack.ops', comp, 'trigger');
+      expect(result.configuration).toEqual([{ webhook: '[REDACTED]' }, { mode: 'simple' }]);
+    });
   });
 
   describe('mapComponentsToList', () => {
@@ -127,6 +192,31 @@ describe('Component Router', () => {
 
       expect(result[0].name).toBe('alpha');
       expect(result[1].name).toBe('zeta');
+    });
+
+    test('should redact trigger infrastructure details when mapping trigger list', () => {
+      const components = {
+        'slack.ops': {
+          type: 'slack',
+          name: 'ops',
+          maskConfiguration: vi.fn(() => ({
+            channel: 'C01234567',
+            mode: 'simple',
+          })),
+        },
+      };
+
+      const result = component.mapComponentsToList(components, 'trigger');
+
+      expect(result).toEqual([
+        expect.objectContaining({
+          id: 'slack.ops',
+          configuration: {
+            channel: '[REDACTED]',
+            mode: 'simple',
+          },
+        }),
+      ]);
     });
   });
 
