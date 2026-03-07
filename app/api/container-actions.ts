@@ -8,6 +8,7 @@ import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
+import { sendErrorResponse } from './error-response.js';
 import { handleContainerActionError } from './helpers.js';
 
 const log = logger.child({ component: 'container-actions' });
@@ -50,7 +51,7 @@ async function executeAction(
 ) {
   const serverConfiguration = getServerConfiguration();
   if (!serverConfiguration.feature.containeractions) {
-    res.sendStatus(403);
+    sendErrorResponse(res, 403, 'Container actions are disabled');
     return;
   }
 
@@ -58,7 +59,7 @@ async function executeAction(
 
   const container = storeContainer.getContainer(id);
   if (!container) {
-    res.sendStatus(404);
+    sendErrorResponse(res, 404, 'Container not found');
     return;
   }
 
@@ -138,14 +139,14 @@ async function restartContainer(req: Request, res: Response) {
 async function updateContainer(req: Request, res: Response) {
   const serverConfiguration = getServerConfiguration();
   if (!serverConfiguration.feature.containeractions) {
-    res.sendStatus(403);
+    sendErrorResponse(res, 403, 'Container actions are disabled');
     return;
   }
 
   const id = req.params.id as string;
   const container = storeContainer.getContainer(id);
   if (!container) {
-    res.sendStatus(404);
+    sendErrorResponse(res, 404, 'Container not found');
     return;
   }
 

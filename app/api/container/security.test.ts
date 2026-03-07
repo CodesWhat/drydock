@@ -167,7 +167,8 @@ describe('api/container/security', () => {
       const res = callGetContainerVulnerabilities(harness.handlers);
 
       expect(harness.storeContainer.getContainer).toHaveBeenCalledWith('c1');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('returns an empty vulnerability payload when no scan exists', () => {
@@ -232,7 +233,8 @@ describe('api/container/security', () => {
       const res = await callGetContainerSbom(harness.handlers);
 
       expect(harness.storeContainer.getContainer).toHaveBeenCalledWith('c1');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
       expect(harness.deps.generateImageSbom).not.toHaveBeenCalled();
     });
 
@@ -358,7 +360,8 @@ describe('api/container/security', () => {
 
       const res = await callScanContainer(harness.handlers);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
       expect(harness.deps.broadcastScanStarted).not.toHaveBeenCalled();
       expect(harness.deps.scanImageForVulnerabilities).not.toHaveBeenCalled();
     });

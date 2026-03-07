@@ -16,6 +16,8 @@ import * as registry from '../registry/index.js';
 import * as store from '../store/index.js';
 import { getErrorMessage } from '../util/error.js';
 import { recordAuditEvent } from './audit-events.js';
+import { sendErrorResponse } from './error-response.js';
+import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
 
 const router = express.Router();
 
@@ -85,7 +87,7 @@ export function requireAuthentication(req: AuthRequest, res: Response, next: Nex
 }
 
 function sendUnauthorized(res: Response): void {
-  res.sendStatus(401);
+  sendErrorResponse(res, 401, 'Unauthorized');
 }
 
 function authenticateLogin(req: AuthRequest, res: Response, next: NextFunction): void {
@@ -132,10 +134,6 @@ function authenticateLogin(req: AuthRequest, res: Response, next: NextFunction):
  */
 function getCookieMaxAge(days: number): number {
   return 3600 * 1000 * 24 * days;
-}
-
-function shouldParseJsonBody(method: string): boolean {
-  return method === 'POST' || method === 'PUT' || method === 'PATCH';
 }
 
 /**
@@ -439,6 +437,7 @@ export function init(app: Application): void {
   router.use(authLimiter);
 
   const mutationJsonBodyParser = express.json();
+  router.use(requireJsonContentTypeForMutations);
   router.use((req: Request, res: Response, next: NextFunction) => {
     if (shouldParseJsonBody(req.method)) {
       return mutationJsonBodyParser(req, res, next);

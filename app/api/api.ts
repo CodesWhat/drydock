@@ -10,10 +10,13 @@ import * as backupRouter from './backup.js';
 import * as containerRouter from './container.js';
 import * as containerActionsRouter from './container-actions.js';
 import { requireSameOriginForMutations } from './csrf.js';
+import { sendErrorResponse } from './error-response.js';
 import * as groupRouter from './group.js';
 import * as iconsRouter from './icons.js';
+import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
 import * as logRouter from './log.js';
 import * as notificationRouter from './notification.js';
+import { openApiDocument } from './openapi.js';
 import * as previewRouter from './preview.js';
 import * as registryRouter from './registry.js';
 import * as serverRouter from './server.js';
@@ -23,10 +26,6 @@ import * as storeRouter from './store.js';
 import * as triggerRouter from './trigger.js';
 import * as watcherRouter from './watcher.js';
 import * as webhookRouter from './webhook.js';
-
-function shouldParseJsonBody(method: string): boolean {
-  return method === 'POST' || method === 'PUT' || method === 'PATCH';
-}
 
 /**
  * Init the API router.
@@ -45,6 +44,7 @@ export function init(): express.Router {
   router.use(apiLimiter);
 
   const mutationJsonBodyParser = express.json();
+  router.use(requireJsonContentTypeForMutations);
   router.use((req, res, next) => {
     if (shouldParseJsonBody(req.method)) {
       return mutationJsonBodyParser(req, res, next);
@@ -57,6 +57,11 @@ export function init(): express.Router {
 
   // Mount webhook router (uses its own bearer token auth)
   router.use('/webhook', webhookRouter.init());
+
+  // Public OpenAPI document for integrations and API clients.
+  router.get('/openapi.json', (_req: Request, res: Response) => {
+    res.status(200).json(openApiDocument);
+  });
 
   // Routes to protect after this line
   router.use(requireAuthentication);
@@ -118,7 +123,7 @@ export function init(): express.Router {
 
   // All other API routes => 404
   router.get('/{*path}', (_req: Request, res: Response) => {
-    res.sendStatus(404);
+    sendErrorResponse(res, 404, 'Route not found');
   });
 
   return router;

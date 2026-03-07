@@ -106,7 +106,8 @@ describe('Backup Router', () => {
       const res = createMockResponse();
       handler(req, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('should return backups for existing container', () => {
@@ -161,7 +162,8 @@ describe('Backup Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('should return 404 when no backups found', async () => {

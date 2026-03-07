@@ -157,7 +157,13 @@ describe('api/container/crud', () => {
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c1' })],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('normalizes negative/invalid pagination to zero and returns all results', () => {
@@ -176,10 +182,13 @@ describe('api/container/crud', () => {
         { limit: 0, offset: 0 },
       );
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([
-        expect.objectContaining({ id: 'c1' }),
-        expect.objectContaining({ id: 'c2' }),
-      ]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c1' }), expect.objectContaining({ id: 'c2' })],
+        total: 2,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('uses first limit/offset array values and strips control params from store query', () => {
@@ -203,7 +212,13 @@ describe('api/container/crud', () => {
         { limit: 1, offset: 1 },
       );
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([expect.objectContaining({ id: 'c2' })]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c2' })],
+        total: 3,
+        limit: 1,
+        offset: 1,
+        hasMore: true,
+      });
     });
 
     test('forwards normalized pagination to store query', () => {
@@ -238,10 +253,16 @@ describe('api/container/crud', () => {
       });
 
       const payload = res.json.mock.calls[0][0];
-      expect(Array.isArray(payload)).toBe(true);
-      expect(payload).toHaveLength(200);
-      expect(payload[0]).toEqual(expect.objectContaining({ id: 'c1' }));
-      expect(payload[199]).toEqual(expect.objectContaining({ id: 'c200' }));
+      expect(payload).toMatchObject({
+        total: 240,
+        limit: 200,
+        offset: 0,
+        hasMore: true,
+      });
+      expect(Array.isArray(payload.data)).toBe(true);
+      expect(payload.data).toHaveLength(200);
+      expect(payload.data[0]).toEqual(expect.objectContaining({ id: 'c1' }));
+      expect(payload.data[199]).toEqual(expect.objectContaining({ id: 'c200' }));
     });
 
     test('applies offset when normalized limit is zero', () => {
@@ -260,10 +281,13 @@ describe('api/container/crud', () => {
       });
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([
-        expect.objectContaining({ id: 'c3' }),
-        expect.objectContaining({ id: 'c4' }),
-      ]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c3' }), expect.objectContaining({ id: 'c4' })],
+        total: 4,
+        limit: 0,
+        offset: 2,
+        hasMore: false,
+      });
     });
 
     test('strips vulnerability arrays by default when security scans are present', () => {
@@ -286,15 +310,21 @@ describe('api/container/crud', () => {
       const res = callGetContainers(harness.handlers, {});
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([
-        expect.objectContaining({
-          id: 'c1',
-          security: expect.objectContaining({
-            scan: expect.objectContaining({ vulnerabilities: [] }),
-            updateScan: expect.objectContaining({ vulnerabilities: [] }),
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            id: 'c1',
+            security: expect.objectContaining({
+              scan: expect.objectContaining({ vulnerabilities: [] }),
+              updateScan: expect.objectContaining({ vulnerabilities: [] }),
+            }),
           }),
-        }),
-      ]);
+        ],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('keeps vulnerability arrays when includeVulnerabilities=true', () => {
@@ -313,7 +343,13 @@ describe('api/container/crud', () => {
       const res = callGetContainers(harness.handlers, { includeVulnerabilities: 'true' });
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([container]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [container],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('preserves undefined scan/updateScan when security object exists without scans', () => {
@@ -329,15 +365,21 @@ describe('api/container/crud', () => {
       const res = callGetContainers(harness.handlers, {});
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([
-        expect.objectContaining({
-          id: 'c1',
-          security: expect.objectContaining({
-            scan: undefined,
-            updateScan: undefined,
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            id: 'c1',
+            security: expect.objectContaining({
+              scan: undefined,
+              updateScan: undefined,
+            }),
           }),
-        }),
-      ]);
+        ],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
   });
 
@@ -451,7 +493,8 @@ describe('api/container/crud', () => {
 
       const res = callGetContainer(harness.handlers, 'missing');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('returns update-operation history for an existing container', () => {
@@ -477,7 +520,8 @@ describe('api/container/crud', () => {
 
       const res = callGetContainerUpdateOperations(harness.handlers, 'missing');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
       expect(harness.deps.updateOperationStore.getOperationsByContainerName).not.toHaveBeenCalled();
     });
   });
@@ -504,7 +548,8 @@ describe('api/container/crud', () => {
 
       const res = callRevealContainerEnv(handlers);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(501);
+      expect(res.status).toHaveBeenCalledWith(501);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Environment reveal is not available' });
     });
 
     test('returns env values with sensitivity flags and writes an audit entry', () => {
@@ -574,7 +619,8 @@ describe('api/container/crud', () => {
 
       const res = callRevealContainerEnv(harness.handlers, 'missing');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
       expect(harness.deps.auditStore.insertAudit).not.toHaveBeenCalled();
     });
   });
@@ -588,7 +634,8 @@ describe('api/container/crud', () => {
 
       const res = await callDeleteContainer(harness.handlers, 'c1');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(403);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container deletion is disabled' });
       expect(harness.deps.storeContainer.deleteContainer).not.toHaveBeenCalled();
     });
 
@@ -597,7 +644,8 @@ describe('api/container/crud', () => {
 
       const res = await callDeleteContainer(harness.handlers, 'missing');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
       expect(harness.deps.storeContainer.deleteContainer).not.toHaveBeenCalled();
     });
 
@@ -698,7 +746,13 @@ describe('api/container/crud', () => {
       expect(watcherA.watch).toHaveBeenCalledTimes(1);
       expect(watcherB.watch).toHaveBeenCalledTimes(1);
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c1' })],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('watchContainers returns 500 when any watcher fails', async () => {
@@ -724,7 +778,8 @@ describe('api/container/crud', () => {
 
       const res = await callWatchContainer(harness.handlers, 'missing');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('watchContainer returns 500 when watcher is not registered', async () => {
@@ -784,7 +839,7 @@ describe('api/container/crud', () => {
       expect(watcher.getContainers).toHaveBeenCalledTimes(1);
       expect(watcher.watchContainer).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.send).toHaveBeenCalledWith();
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('watchContainer runs watcher when getContainers confirms the target exists', async () => {

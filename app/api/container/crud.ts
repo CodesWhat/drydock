@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import type { AgentClient } from '../../agent/AgentClient.js';
 import type { Container, ContainerReport } from '../../model/container.js';
 import { getContainerStatusSummary } from '../../util/container-summary.js';
+import { sendErrorResponse } from '../error-response.js';
 import {
   getPathParamValue,
   parseBooleanQueryParam,
@@ -17,6 +18,14 @@ interface CrudStoreContainerApi {
 interface ContainerListPagination {
   limit: number;
   offset: number;
+}
+
+interface ContainerListResponse {
+  data: Container[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
 }
 
 interface UpdateOperationStoreApi {
@@ -130,22 +139,35 @@ export function createCrudHandlers({
   getContainerRaw,
   auditStore,
 }: CrudHandlerDependencies) {
+  function buildContainerListResponse(query: Request['query']): ContainerListResponse {
+    const includeVulnerabilities = parseBooleanQueryParam(query.includeVulnerabilities, false);
+    const filteredQuery = removeContainerListControlParams(query);
+    const pagination = normalizeContainerListPagination(query);
+    const pagedContainers = getContainersFromStore(filteredQuery, pagination);
+    const total =
+      pagination.limit === 0 && pagination.offset === 0
+        ? pagedContainers.length
+        : getContainersFromStore(filteredQuery).length;
+    const redactedContainers = redactContainersRuntimeEnv(pagedContainers);
+    const data = includeVulnerabilities
+      ? redactedContainers
+      : redactedContainers.map((container) => stripContainerVulnerabilityArrays(container));
+    return {
+      data,
+      total,
+      limit: pagination.limit,
+      offset: pagination.offset,
+      hasMore: pagination.limit > 0 && pagination.offset + data.length < total,
+    };
+  }
+
   /**
    * Get all (filtered) containers.
    * @param req
    * @param res
    */
   function getContainers(req: Request, res: Response) {
-    const { query } = req;
-    const includeVulnerabilities = parseBooleanQueryParam(query.includeVulnerabilities, false);
-    const filteredQuery = removeContainerListControlParams(query);
-    const pagination = normalizeContainerListPagination(query);
-    const pagedContainers = getContainersFromStore(filteredQuery, pagination);
-    const redactedContainers = redactContainersRuntimeEnv(pagedContainers);
-    const responsePayload = includeVulnerabilities
-      ? redactedContainers
-      : redactedContainers.map((container) => stripContainerVulnerabilityArrays(container));
-    res.status(200).json(responsePayload);
+    res.status(200).json(buildContainerListResponse(req.query));
   }
 
   /**
@@ -175,7 +197,7 @@ export function createCrudHandlers({
     if (container) {
       res.status(200).json(redactContainerRuntimeEnv(container));
     } else {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
     }
   }
 
@@ -188,7 +210,7 @@ export function createCrudHandlers({
     const id = getPathParamValue(req.params.id);
     const container = storeContainer.getContainer(id);
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 
@@ -204,14 +226,14 @@ export function createCrudHandlers({
   async function deleteContainer(req: Request, res: Response) {
     const serverConfiguration = getServerConfiguration();
     if (!serverConfiguration.feature.delete) {
-      res.sendStatus(403);
+      sendErrorResponse(res, 403, 'Container deletion is disabled');
       return;
     }
 
     const id = getPathParamValue(req.params.id);
     const container = storeContainer.getContainer(id);
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 
@@ -254,7 +276,7 @@ export function createCrudHandlers({
   async function watchContainers(req: Request, res: Response) {
     try {
       await Promise.all(Object.values(getWatchers()).map((watcher) => watcher.watch()));
-      getContainers(req, res);
+      res.status(200).json(buildContainerListResponse(req.query));
     } catch (error: unknown) {
       res.status(500).json({
         error: `Error when watching images (${getErrorMessage(error)})`,
@@ -273,7 +295,7 @@ export function createCrudHandlers({
 
     const container = storeContainer.getContainer(id);
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 
@@ -298,7 +320,7 @@ export function createCrudHandlers({
           (containerInList) => containerInList.id === container.id,
         );
         if (!containerFound) {
-          res.status(404).send();
+          sendErrorResponse(res, 404, 'Container not found');
           return;
         }
       }
@@ -324,14 +346,14 @@ export function createCrudHandlers({
    */
   function revealContainerEnv(req: Request, res: Response) {
     if (!getContainerRaw || !auditStore) {
-      res.sendStatus(501);
+      sendErrorResponse(res, 501, 'Environment reveal is not available');
       return;
     }
 
     const id = getPathParamValue(req.params.id);
     const container = getContainerRaw(id);
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 

@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import type { AgentClient } from '../../agent/AgentClient.js';
 import type { Container } from '../../model/container.js';
+import { sendErrorResponse } from '../error-response.js';
 import {
   getPathParamValue,
   parseBooleanQueryParam,
@@ -79,7 +80,7 @@ export function createLogHandlers({
     const id = getPathParamValue(req.params.id);
     const container = storeContainer.getContainer(id);
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 

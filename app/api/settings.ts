@@ -47,6 +47,8 @@ function updateSettings(req: Request, res: Response): void {
 export function init() {
   router.use(nocache());
   router.get('/', getSettings);
+  router.patch('/', updateSettings);
+  // Backward compatibility alias: retained temporarily, prefer PATCH semantics.
   router.put('/', updateSettings);
   return router;
 }

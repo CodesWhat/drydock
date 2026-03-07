@@ -50,10 +50,11 @@ describe('Audit Router', () => {
     });
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
-      entries: mockResult.entries,
+      data: mockResult.entries,
       total: 1,
-      page: 1,
       limit: 50,
+      offset: 0,
+      hasMore: false,
     });
   });
 
@@ -65,7 +66,7 @@ describe('Audit Router', () => {
 
     const req = createMockRequest({
       query: {
-        page: '2',
+        offset: '10',
         limit: '10',
         action: 'update-applied',
         container: 'redis',
@@ -86,21 +87,22 @@ describe('Audit Router', () => {
       to: '2024-12-31',
     });
     expect(res.json).toHaveBeenCalledWith({
-      entries: [],
+      data: [],
       total: 0,
-      page: 2,
       limit: 10,
+      offset: 10,
+      hasMore: false,
     });
   });
 
-  test('should accept first value when page/limit are provided as query arrays', () => {
+  test('should accept first value when offset/limit are provided as query arrays', () => {
     auditRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
     mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
 
     const req = createMockRequest({
       query: {
-        page: ['3', '99'],
+        offset: ['40', '99'],
         limit: ['20', '99'],
       },
     });
@@ -114,13 +116,13 @@ describe('Audit Router', () => {
     });
   });
 
-  test('should clamp page to minimum of 1', () => {
+  test('should clamp offset to minimum of 0', () => {
     auditRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
 
     mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
 
-    const req = createMockRequest({ query: { page: '-5' } });
+    const req = createMockRequest({ query: { offset: '-5' } });
     const res = createMockResponse();
 
     handler(req, res);
@@ -129,7 +131,7 @@ describe('Audit Router', () => {
       skip: 0,
       limit: 50,
     });
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ page: 1 }));
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ offset: 0 }));
   });
 
   test('should clamp limit to maximum of 200', () => {
@@ -163,6 +165,35 @@ describe('Audit Router', () => {
     expect(mockGetAuditEntries).toHaveBeenCalledWith({
       skip: 0,
       limit: 1,
+    });
+  });
+
+  test('should set hasMore when more entries remain after current offset window', () => {
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+    mockGetAuditEntries.mockReturnValue({
+      entries: [{ id: 'a-1' }, { id: 'a-2' }],
+      total: 20,
+    });
+
+    const req = createMockRequest({
+      query: {
+        offset: '10',
+        limit: '2',
+      },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      data: [{ id: 'a-1' }, { id: 'a-2' }],
+      total: 20,
+      limit: 2,
+      offset: 10,
+      hasMore: true,
     });
   });
 

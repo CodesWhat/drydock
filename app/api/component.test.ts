@@ -177,7 +177,8 @@ describe('Component Router', () => {
       const res = createResponse();
       component.getById(req, res, 'watcher');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Component not found' });
     });
   });
 
@@ -208,7 +209,10 @@ describe('Component Router', () => {
       getAllHandler({}, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(expect.any(Array));
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'docker.hub' })],
+        total: 1,
+      });
     });
 
     test('getById handler via /:type/:name should work', () => {

@@ -50,11 +50,11 @@ function getQueryStringValue(value: unknown): string | undefined {
  * @param res
  */
 function getAuditEntries(req: Request, res: Response) {
-  const parsedPage = Number.parseInt(getQueryStringValue(req.query.page) || '', 10);
+  const parsedOffset = Number.parseInt(getQueryStringValue(req.query.offset) || '', 10);
   const parsedLimit = Number.parseInt(getQueryStringValue(req.query.limit) || '', 10);
-  const page = Math.max(1, Number.isFinite(parsedPage) ? parsedPage : 1);
+  const offset = Math.max(0, Number.isFinite(parsedOffset) ? parsedOffset : 0);
   const limit = Math.min(200, Math.max(1, Number.isFinite(parsedLimit) ? parsedLimit : 50));
-  const skip = (page - 1) * limit;
+  const skip = offset;
 
   const action = getValidatedAuditFilter(req.query.action);
   if (action === null) {
@@ -84,11 +84,13 @@ function getAuditEntries(req: Request, res: Response) {
   }
 
   const result = storeAudit.getAuditEntries(query);
+  const data = result.entries;
   res.status(200).json({
-    entries: result.entries,
+    data,
     total: result.total,
-    page,
     limit,
+    offset,
+    hasMore: offset + data.length < result.total,
   });
 }
 

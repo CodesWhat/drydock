@@ -10,6 +10,7 @@ import type {
   ContainerSecurityScan,
   ContainerSignatureVerification,
 } from '../../security/scan.js';
+import { sendErrorResponse } from '../error-response.js';
 import { getPathParamValue } from './request-helpers.js';
 
 interface SecurityStoreContainerApi {
@@ -126,7 +127,7 @@ export function createSecurityHandlers({
     const id = getPathParamValue(req.params.id);
     const container = storeContainer.getContainer(id);
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
     if (!container.security?.scan) {
@@ -148,7 +149,7 @@ export function createSecurityHandlers({
 
     const container = storeContainer.getContainer(id);
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 
@@ -343,7 +344,7 @@ export function createSecurityHandlers({
     const id = getPathParamValue(req.params.id);
     const container = storeContainer.getContainer(id);
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 

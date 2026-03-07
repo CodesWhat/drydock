@@ -53,7 +53,7 @@ export async function getContainerLogs(req: Request, res: Response) {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const container = storeContainer.getContainer(id);
   if (!container) {
-    res.sendStatus(404);
+    res.status(404).json({ error: 'Container not found' });
     return;
   }
 
@@ -97,9 +97,9 @@ export function deleteContainer(req: Request, res: Response) {
       storeContainer.deleteContainer(id);
       res.sendStatus(204);
     } else {
-      res.sendStatus(404);
+      res.status(404).json({ error: 'Container not found' });
     }
   } else {
-    res.sendStatus(403);
+    res.status(403).json({ error: 'Container deletion is disabled' });
   }
 }

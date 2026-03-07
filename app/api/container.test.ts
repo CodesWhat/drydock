@@ -260,7 +260,13 @@ describe('Container Router', () => {
 
       expect(storeContainer.getContainers).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([{ id: 'c1' }]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [{ id: 'c1' }],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('should tolerate non-object query payloads', () => {
@@ -271,7 +277,13 @@ describe('Container Router', () => {
 
       expect(storeContainer.getContainers).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([{ id: 'c1' }]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [{ id: 'c1' }],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('should exclude vulnerability arrays from list payload by default', () => {
@@ -308,15 +320,21 @@ describe('Container Router', () => {
       handler({ query: {} }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([
-        expect.objectContaining({
-          id: 'c1',
-          security: expect.objectContaining({
-            scan: expect.objectContaining({ vulnerabilities: [] }),
-            updateScan: expect.objectContaining({ vulnerabilities: [] }),
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            id: 'c1',
+            security: expect.objectContaining({
+              scan: expect.objectContaining({ vulnerabilities: [] }),
+              updateScan: expect.objectContaining({ vulnerabilities: [] }),
+            }),
           }),
-        }),
-      ]);
+        ],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('should keep vulnerability arrays when includeVulnerabilities=true', () => {
@@ -343,7 +361,13 @@ describe('Container Router', () => {
 
       expect(storeContainer.getContainers).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([container]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [container],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('should preserve missing scan/updateScan fields when vulnerability arrays are stripped', () => {
@@ -359,15 +383,21 @@ describe('Container Router', () => {
       handler({ query: {} }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([
-        expect.objectContaining({
-          id: 'c1',
-          security: expect.objectContaining({
-            scan: undefined,
-            updateScan: undefined,
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            id: 'c1',
+            security: expect.objectContaining({
+              scan: undefined,
+              updateScan: undefined,
+            }),
           }),
-        }),
-      ]);
+        ],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('should apply limit and offset pagination and ignore control params in store query', () => {
@@ -402,7 +432,13 @@ describe('Container Router', () => {
         { limit: 1, offset: 1 },
       );
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([{ id: 'c2' }]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [{ id: 'c2' }],
+        total: 3,
+        limit: 1,
+        offset: 1,
+        hasMore: true,
+      });
     });
 
     test('should apply offset when limit is zero', () => {
@@ -436,7 +472,13 @@ describe('Container Router', () => {
         { limit: 0, offset: 2 },
       );
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([{ id: 'c3' }, { id: 'c4' }]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [{ id: 'c3' }, { id: 'c4' }],
+        total: 4,
+        limit: 0,
+        offset: 2,
+        hasMore: false,
+      });
     });
 
     test('should redact container runtime environment variable values', () => {
@@ -458,19 +500,25 @@ describe('Container Router', () => {
       handler({ query: {} }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([
-        {
-          id: 'c1',
-          details: {
-            ports: ['8080:8080'],
-            volumes: ['/tmp:/tmp'],
-            env: [
-              { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
-              { key: 'API_TOKEN', value: '[REDACTED]', sensitive: true },
-            ],
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          {
+            id: 'c1',
+            details: {
+              ports: ['8080:8080'],
+              volumes: ['/tmp:/tmp'],
+              env: [
+                { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
+                { key: 'API_TOKEN', value: '[REDACTED]', sensitive: true },
+              ],
+            },
           },
-        },
-      ]);
+        ],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
       expect(container.details.env[0].value).toBe('super-secret-password');
     });
   });
@@ -687,7 +735,7 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ params: { id: 'missing' } }, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should use first id when route param id is an array', () => {
@@ -697,7 +745,7 @@ describe('Container Router', () => {
       handler({ params: { id: ['c1', 'ignored'] } }, res);
 
       expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should default id to empty string when route param id array is empty', () => {
@@ -707,7 +755,7 @@ describe('Container Router', () => {
       handler({ params: { id: [] } }, res);
 
       expect(storeContainer.getContainer).toHaveBeenCalledWith('');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should default id to empty string when route param id is missing', () => {
@@ -717,7 +765,7 @@ describe('Container Router', () => {
       handler({ params: {} }, res);
 
       expect(storeContainer.getContainer).toHaveBeenCalledWith('');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
   });
 
@@ -728,7 +776,7 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ params: { id: 'missing' } }, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
       expect(mockGetOperationsByContainerName).not.toHaveBeenCalled();
     });
 
@@ -767,7 +815,7 @@ describe('Container Router', () => {
       const handler = getHandler('get', '/:id/vulnerabilities');
       const res = createResponse();
       handler({ params: { id: 'missing' } }, res);
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should return empty payload when container has no scan result', async () => {
@@ -810,7 +858,7 @@ describe('Container Router', () => {
       handler({ params: { id: ['c1', 'ignored'] } }, res);
 
       expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should default vulnerability id to empty string when route param id array is empty', async () => {
@@ -820,7 +868,7 @@ describe('Container Router', () => {
       handler({ params: { id: [] } }, res);
 
       expect(storeContainer.getContainer).toHaveBeenCalledWith('');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should default vulnerability id to empty string when route param id is missing', async () => {
@@ -830,7 +878,7 @@ describe('Container Router', () => {
       handler({ params: {} }, res);
 
       expect(storeContainer.getContainer).toHaveBeenCalledWith('');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
   });
 
@@ -840,7 +888,7 @@ describe('Container Router', () => {
       const handler = getHandler('get', '/:id/sbom');
       const res = createResponse();
       await handler({ params: { id: 'missing' }, query: {} }, res);
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should return 400 for unsupported sbom format', async () => {
@@ -1162,7 +1210,7 @@ describe('Container Router', () => {
 
       const res = callRevealContainerEnv('nonexistent');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should return empty env array when container has no env', () => {
@@ -1203,7 +1251,7 @@ describe('Container Router', () => {
       const res = createResponse();
       handlers.revealContainerEnv({ params: { id: 'c1' } }, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(501);
+      expect(res.status).toHaveBeenCalledWith(501);
     });
   });
 
@@ -1219,7 +1267,7 @@ describe('Container Router', () => {
     test('should return 404 when container not found', async () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       const res = await callScanContainer('missing');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should return 400 when security scanner not configured', async () => {
@@ -1801,14 +1849,14 @@ describe('Container Router', () => {
     test('should return 403 when delete feature is disabled', async () => {
       getServerConfiguration.mockReturnValue({ feature: { delete: false } });
       const res = await callDeleteContainer();
-      expect(res.sendStatus).toHaveBeenCalledWith(403);
+      expect(res.status).toHaveBeenCalledWith(403);
     });
 
     test('should return 404 when container not found', async () => {
       getServerConfiguration.mockReturnValue({ feature: { delete: true } });
       storeContainer.getContainer.mockReturnValue(undefined);
       const res = await callDeleteContainer();
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should delete local container and return 204', async () => {
@@ -1926,7 +1974,7 @@ describe('Container Router', () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       const res = createResponse();
       await containerRouter.getContainerTriggers({ params: { id: 'missing' } }, res);
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should return associated triggers for container', async () => {
@@ -2104,7 +2152,7 @@ describe('Container Router', () => {
     test('should return 404 when container not found', async () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       const res = await callWatchContainer('missing');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should return 500 when watcher not found', async () => {
@@ -2213,7 +2261,7 @@ describe('Container Router', () => {
     test('should return 404 when container not found', async () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       const res = await callGetContainerLogs('missing');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should return logs for local container', async () => {
@@ -2518,7 +2566,7 @@ describe('Container Router', () => {
       await handler({ params: { id: ['c1', 'ignored'] }, query: {} }, res);
 
       expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should default logs id to empty string when route param id array is empty', async () => {
@@ -2528,7 +2576,7 @@ describe('Container Router', () => {
       await handler({ params: { id: [] }, query: {} }, res);
 
       expect(storeContainer.getContainer).toHaveBeenCalledWith('');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should default logs id to empty string when route param id is missing', async () => {
@@ -2538,14 +2586,14 @@ describe('Container Router', () => {
       await handler({ params: {}, query: {} }, res);
 
       expect(storeContainer.getContainer).toHaveBeenCalledWith('');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
   });
 
   describe('patchContainerUpdatePolicy', () => {
     test('should return 404 when container not found', () => {
       const res = callUpdatePolicy(undefined, { action: 'clear' });
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should return 400 when no action provided', () => {
@@ -2566,7 +2614,7 @@ describe('Container Router', () => {
       handler({ params: { id: ['c1', 'ignored'] }, body: { action: 'clear' } }, res);
 
       expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should default update-policy id to empty string when route param id array is empty', () => {
@@ -2579,7 +2627,7 @@ describe('Container Router', () => {
       handler({ params: { id: [] }, body: { action: 'clear' } }, res);
 
       expect(storeContainer.getContainer).toHaveBeenCalledWith('');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should default update-policy id to empty string when route param id is missing', () => {
@@ -2592,7 +2640,7 @@ describe('Container Router', () => {
       handler({ params: {}, body: { action: 'clear' } }, res);
 
       expect(storeContainer.getContainer).toHaveBeenCalledWith('');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should handle missing body', () => {

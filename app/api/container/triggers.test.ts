@@ -108,7 +108,8 @@ describe('api/container/triggers', () => {
       const res = await callGetContainerTriggers(harness.handlers);
 
       expect(harness.storeContainer.getContainer).toHaveBeenCalledWith('c1');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
       expect(harness.deps.mapComponentsToList).not.toHaveBeenCalled();
     });
 

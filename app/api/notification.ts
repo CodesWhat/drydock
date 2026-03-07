@@ -8,6 +8,7 @@ import {
 import * as registry from '../registry/index.js';
 import * as notificationStore from '../store/notification.js';
 import { getErrorMessage } from '../util/error.js';
+import { sendErrorResponse } from './error-response.js';
 
 const router = express.Router();
 
@@ -83,7 +84,7 @@ function updateNotificationRule(req, res) {
       notificationRuleToUpdate.value,
     );
     if (!notificationRuleUpdated) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Notification rule not found');
       return;
     }
 

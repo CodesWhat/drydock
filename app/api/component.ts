@@ -3,6 +3,7 @@ import nocache from 'nocache';
 import { byString, byValues } from 'sort-es';
 import type { RegistryState } from '../registry/index.js';
 import * as registry from '../registry/index.js';
+import { sendErrorResponse } from './error-response.js';
 
 export interface ApiComponent {
   id: string;
@@ -73,7 +74,11 @@ export function mapComponentsToList(components: ComponentMap): ApiComponent[] {
  */
 function getAll(_req: Request, res: Response, kind: ComponentKind): void {
   const components = registry.getState()[kind] as unknown as ComponentMap;
-  res.status(200).json(mapComponentsToList(components));
+  const data = mapComponentsToList(components);
+  res.status(200).json({
+    data,
+    total: data.length,
+  });
 }
 
 /**
@@ -90,7 +95,7 @@ export function getById(req: Request<ComponentRouteParams>, res: Response, kind:
   if (component) {
     res.status(200).json(mapComponentToItem(id, component));
   } else {
-    res.sendStatus(404);
+    sendErrorResponse(res, 404, 'Component not found');
   }
 }
 

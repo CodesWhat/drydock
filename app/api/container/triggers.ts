@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import type { Container } from '../../model/container.js';
 import type { ApiComponent } from '../component.js';
+import { sendErrorResponse } from '../error-response.js';
 import { getPathParamValue } from './request-helpers.js';
 
 interface TriggerStoreContainerApi {
@@ -108,7 +109,7 @@ export function createTriggerHandlers({
 
     const container = storeContainer.getContainer(id);
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 

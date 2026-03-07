@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import type { Container, ContainerUpdatePolicy } from '../../model/container.js';
+import { sendErrorResponse } from '../error-response.js';
 import { getPathParamValue } from './request-helpers.js';
 
 interface UpdatePolicyStoreContainerApi {
@@ -173,7 +174,7 @@ export function createUpdatePolicyHandlers({
     const container = storeContainer.getContainer(id);
 
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 

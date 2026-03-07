@@ -42,6 +42,7 @@ vi.mock('./csrf', () => ({
 }));
 
 import * as api from './api.js';
+import { openApiDocument } from './openapi.js';
 
 describe('API Router', () => {
   let router;
@@ -64,7 +65,7 @@ describe('API Router', () => {
     const appMountIndex = useCalls.findIndex((c) => c[0] === '/app');
     expect(appMountIndex).toBeGreaterThan(-1);
 
-    const mutationParserIndex = useCalls.findIndex((c, index) => {
+    const mutationMiddlewares = useCalls.filter((c, index) => {
       return (
         index > 0 &&
         index < appMountIndex &&
@@ -73,9 +74,9 @@ describe('API Router', () => {
         c[0] !== csrf.requireSameOriginForMutations
       );
     });
-    expect(mutationParserIndex).toBeGreaterThan(-1);
+    expect(mutationMiddlewares).toHaveLength(2);
 
-    const mutationParser = useCalls[mutationParserIndex][0];
+    const mutationParser = mutationMiddlewares[1][0];
     const next = vi.fn();
     mockJsonMiddleware.mockClear();
 
@@ -87,6 +88,81 @@ describe('API Router', () => {
     mutationParser({ method: 'PUT' }, {}, next);
     mutationParser({ method: 'PATCH' }, {}, next);
     expect(mockJsonMiddleware).toHaveBeenCalledTimes(3);
+  });
+
+  test('should reject mutation requests with non-json content type when body is present', async () => {
+    const auth = await import('./auth.js');
+    const csrf = await import('./csrf.js');
+    const useCalls = router.use.mock.calls;
+    const appMountIndex = useCalls.findIndex((c) => c[0] === '/app');
+
+    const mutationMiddlewares = useCalls.filter((c, index) => {
+      return (
+        index > 0 &&
+        index < appMountIndex &&
+        typeof c[0] === 'function' &&
+        c[0] !== auth.requireAuthentication &&
+        c[0] !== csrf.requireSameOriginForMutations
+      );
+    });
+    expect(mutationMiddlewares).toHaveLength(2);
+
+    const contentTypeGuard = mutationMiddlewares[0][0];
+    const next = vi.fn();
+    const res = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    };
+
+    contentTypeGuard(
+      {
+        method: 'POST',
+        headers: { 'content-length': '12' },
+        is: vi.fn(() => false),
+      },
+      res,
+      next,
+    );
+    expect(res.status).toHaveBeenCalledWith(415);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Content-Type must be application/json' });
+    expect(next).not.toHaveBeenCalled();
+
+    res.status.mockClear();
+    res.json.mockClear();
+    next.mockClear();
+
+    contentTypeGuard(
+      {
+        method: 'POST',
+        headers: { 'content-length': '12' },
+        is: vi.fn(() => true),
+      },
+      res,
+      next,
+    );
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('should expose openapi document endpoint before auth middleware', async () => {
+    const auth = await import('./auth.js');
+    const getCalls = router.get.mock.calls;
+    const openapiCall = getCalls.find((c) => c[0] === '/openapi.json');
+    expect(openapiCall).toBeDefined();
+
+    const useCalls = router.use.mock.calls;
+    const authIndex = useCalls.findIndex((c) => c[0] === auth.requireAuthentication);
+    const openapiRouteIndex = getCalls.findIndex((c) => c[0] === '/openapi.json');
+    expect(authIndex).toBeGreaterThan(-1);
+    expect(openapiRouteIndex).toBeGreaterThan(-1);
+
+    const res = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    };
+    openapiCall[1]({}, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(openApiDocument);
   });
 
   test('should mount all sub-routers', async () => {
@@ -175,8 +251,12 @@ describe('API Router', () => {
 
     // Invoke the handler
     const handler = catchAll[1];
-    const res = { sendStatus: vi.fn() };
+    const res = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    };
     handler({}, res);
-    expect(res.sendStatus).toHaveBeenCalledWith(404);
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Route not found' });
   });
 });

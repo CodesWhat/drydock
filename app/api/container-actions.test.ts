@@ -132,7 +132,8 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('should return 404 when no docker trigger found', async () => {
@@ -158,7 +159,8 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(403);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
     });
 
     test('should return 500 when Docker API throws error', async () => {
@@ -306,7 +308,8 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(403);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
     });
 
     test('should return 500 when Docker API throws error', async () => {
@@ -353,7 +356,8 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(403);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
     });
 
     test('should insert audit entry with correct action', async () => {
@@ -429,7 +433,8 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('should return 400 when no update available', async () => {
@@ -481,7 +486,8 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(403);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
     });
 
     test('should return 500 when trigger throws error', async () => {

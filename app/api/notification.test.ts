@@ -215,7 +215,8 @@ describe('Notification Router', () => {
       res,
     );
 
-    expect(res.sendStatus).toHaveBeenCalledWith(404);
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Notification rule not found' });
   });
 
   test('should return 400 when store update throws', () => {

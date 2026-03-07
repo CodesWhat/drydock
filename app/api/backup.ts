@@ -6,6 +6,7 @@ import * as storeBackup from '../store/backup.js';
 import * as storeContainer from '../store/container.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
+import { sendErrorResponse } from './error-response.js';
 import { handleContainerActionError } from './helpers.js';
 
 const log = logger.child({ component: 'backup' });
@@ -32,7 +33,7 @@ function getContainerBackups(req: Request, res: Response) {
 
   const container = storeContainer.getContainer(id);
   if (!container) {
-    res.sendStatus(404);
+    sendErrorResponse(res, 404, 'Container not found');
     return;
   }
 
@@ -47,7 +48,7 @@ async function rollbackContainer(req: Request, res: Response) {
 
   const container = storeContainer.getContainer(id);
   if (!container) {
-    res.sendStatus(404);
+    sendErrorResponse(res, 404, 'Container not found');
     return;
   }
 

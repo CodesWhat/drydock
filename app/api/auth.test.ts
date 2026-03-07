@@ -214,7 +214,8 @@ describe('Auth Router', () => {
           status: 'error',
         }),
       );
-      expect(res.sendStatus).toHaveBeenCalledWith(401);
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
       expect(next).not.toHaveBeenCalled();
     });
 
@@ -471,16 +472,24 @@ describe('Auth Router', () => {
       const authMiddlewareIndex = mockRouter.use.mock.calls.findIndex(
         (c) => c[0] === auth.requireAuthentication,
       );
-      const mutationParserIndex = mockRouter.use.mock.calls.findIndex(
+      const mutationMiddlewares = mockRouter.use.mock.calls.filter(
         (c, index) =>
           index > 0 && typeof c[0] === 'function' && c[0] !== auth.requireAuthentication,
       );
 
       expect(authMiddlewareIndex).toBeGreaterThan(0);
-      expect(mutationParserIndex).toBeGreaterThan(0);
+      expect(mutationMiddlewares).toHaveLength(2);
+      const contentTypeGuardIndex = mockRouter.use.mock.calls.findIndex(
+        (c) => c[0] === mutationMiddlewares[0][0],
+      );
+      const mutationParserIndex = mockRouter.use.mock.calls.findIndex(
+        (c) => c[0] === mutationMiddlewares[1][0],
+      );
+      expect(contentTypeGuardIndex).toBeGreaterThan(0);
+      expect(mutationParserIndex).toBeGreaterThan(contentTypeGuardIndex);
       expect(mutationParserIndex).toBeLessThan(authMiddlewareIndex);
 
-      const mutationParser = mockRouter.use.mock.calls[mutationParserIndex][0];
+      const mutationParser = mutationMiddlewares[1][0];
       const next = vi.fn();
       mockJsonMiddleware.mockClear();
 
@@ -492,6 +501,50 @@ describe('Auth Router', () => {
       mutationParser({ method: 'PUT' }, {}, next);
       mutationParser({ method: 'PATCH' }, {}, next);
       expect(mockJsonMiddleware).toHaveBeenCalledTimes(3);
+    });
+
+    test('should reject auth mutation requests with non-json content type when body is present', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const mutationMiddlewares = mockRouter.use.mock.calls.filter(
+        (c, index) =>
+          index > 0 && typeof c[0] === 'function' && c[0] !== auth.requireAuthentication,
+      );
+      expect(mutationMiddlewares).toHaveLength(2);
+
+      const contentTypeGuard = mutationMiddlewares[0][0];
+      const next = vi.fn();
+      const res = createResponse();
+
+      contentTypeGuard(
+        {
+          method: 'POST',
+          headers: { 'content-length': '8' },
+          is: vi.fn(() => false),
+        },
+        res,
+        next,
+      );
+      expect(res.status).toHaveBeenCalledWith(415);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Content-Type must be application/json' });
+      expect(next).not.toHaveBeenCalled();
+
+      res.status.mockClear();
+      res.json.mockClear();
+      next.mockClear();
+
+      contentTypeGuard(
+        {
+          method: 'POST',
+          headers: { 'content-length': '8' },
+          is: vi.fn(() => true),
+        },
+        res,
+        next,
+      );
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.status).not.toHaveBeenCalled();
     });
 
     test('should register legacy public auth methods endpoint for compatibility with rate limiting', () => {

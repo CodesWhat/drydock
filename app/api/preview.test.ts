@@ -63,7 +63,8 @@ describe('Preview Router', () => {
     test('should return 404 when container not found', async () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       const res = await callPreview('missing');
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('should return 404 when no docker trigger found', async () => {
