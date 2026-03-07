@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **OIDC authorization redirect URL validation** — Added allowlist-based validation for OIDC authorization redirect URLs, preventing open redirect attacks through crafted callback parameters.
+- **Auth, registry token, and log sanitization hardening** — Consolidated security pass hardening authentication flows, registry token validation, and log output sanitization.
 
 ## [1.4.0] — 2026-02-28
 
@@ -187,6 +188,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- **Production source maps disabled** — UI production builds now exclude source maps, reducing bundle size and improving deployment efficiency.
 - **Audit store indexed date-range queries** — Audit entries now store a pre-parsed `timestampMs` index for numeric comparisons. Date-range queries use the LokiJS chain API with indexed filtering instead of full-collection scans. Automatic 30-day retention with periodic pruning.
 - **Backup store indexed lookups** — Backup collection adds indices on `data.containerName` and `data.id`, using `findOne()` for single-document lookups and indexed `find()` for name-filtered queries instead of full scans.
 - **LokiJS autosave interval set to 60 seconds** — Fixed autosave interval at 60s instead of the LokiJS default, reducing disk I/O while maintaining acceptable data durability.

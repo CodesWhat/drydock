@@ -225,7 +225,7 @@ Start, stop, restart, and update containers from the UI or API with feature-flag
 </td>
 <td align="center" width="33%">
 <h3>Webhook API</h3>
-Token-authenticated HTTP endpoints for CI/CD integration to trigger watch cycles and updates
+Token-authenticated HTTP endpoints with per-endpoint token support for CI/CD integration to trigger watch cycles and updates
 </td>
 <td align="center" width="33%">
 <h3>Container Grouping</h3>

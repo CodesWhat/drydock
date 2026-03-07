@@ -29,6 +29,8 @@ If it fails (irregular reverse proxy configuration...), you can enforce the valu
 
 <Callout type="warn">`http://` OIDC discovery URLs are deprecated and will be removed in v1.6.0. When the discovery URL uses `http:`, drydock passes `allowInsecureRequests` to the OIDC client. Migrate your IdP to HTTPS before upgrading.</Callout>
 
+<Callout type="info">**Redirect URL validation** — Drydock validates all OIDC authorization redirect URLs against an allowlist derived from the configured callback URL origin. This prevents open redirect attacks through crafted callback parameters. No configuration is needed — validation is enforced automatically.</Callout>
+
 ## How to integrate with&nbsp;[Authelia](https://www.authelia.com)
 
 ![logo](/docs/assets/configuration/authentications/oidc/authelia.png)

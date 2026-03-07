@@ -9,6 +9,38 @@ You can access drydock state and trigger actions using the HTTP REST API.
 
 By default, the API is enabled and exposed on port `3000`. You can override this behaviour [using environment variables](/docs/configuration/server).
 
+## API Versioning
+
+Starting in v1.4.0, the canonical API base path is `/api/v1/*`. The unversioned `/api/*` path remains as a backward-compatible alias during migration.
+
+| Path | Status | Description |
+| --- | --- | --- |
+| `/api/v1/*` | **Canonical** | Versioned API path — use this for new integrations |
+| `/api/*` | Deprecated alias | Planned for removal in v2.0.0 |
+
+Both paths return identical responses. Third-party integrations should migrate to `/api/v1/*` at their convenience.
+
+## Error Contract
+
+All error responses (HTTP 4xx/5xx) return a consistent JSON structure:
+
+```json
+{
+  "error": "Container not found",
+  "code": "CONTAINER_NOT_FOUND",
+  "message": "Container not found"
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `error` | string | Human-readable error message (legacy field, same as `message`) |
+| `code` | string | Machine-readable error code (e.g. `NOT_FOUND`, `UNAUTHORIZED`, `CONTAINER_NOT_FOUND`) |
+| `message` | string | Human-readable error message |
+| `details` | object | Optional contextual metadata (present only when additional context is available) |
+
+Error codes are derived from the HTTP status and error message. Common codes include `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONTAINER_NOT_FOUND`, `TOO_MANY_REQUESTS`, and `INTERNAL_SERVER_ERROR`.
+
 ## Authentication
 
 When [authentication](/docs/configuration/authentications) is enabled, all API endpoints require a valid session (cookie-based via Basic or OIDC login).
