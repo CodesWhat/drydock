@@ -77,6 +77,7 @@ function createApp() {
 
 function createResponse() {
   return {
+    set: vi.fn().mockReturnThis(),
     status: vi.fn().mockReturnThis(),
     json: vi.fn(),
     sendStatus: vi.fn(),
@@ -134,6 +135,7 @@ describe('Auth Router', () => {
     // Reset the strategy IDs array between tests
     auth.getAllIds().length = 0;
     mockGetServerConfiguration.mockReturnValue({ cookie: {} });
+    auth._resetLoginLockoutStateForTests();
   });
 
   describe('getAllIds', () => {
@@ -302,6 +304,331 @@ describe('Auth Router', () => {
       expect(next).toHaveBeenCalledWith(loginError);
       expect(mockRecordAuditEvent).not.toHaveBeenCalled();
       expect(res.sendStatus).not.toHaveBeenCalled();
+    });
+
+    test('should lock account after repeated failed login attempts', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {
+        headers: {
+          authorization: `Basic ${Buffer.from('alice:bad-pass').toString('base64')}`,
+        },
+        ip: '203.0.113.10',
+      };
+      const next = vi.fn();
+
+      for (let index = 0; index < 4; index += 1) {
+        const res = createResponse();
+        authenticateLoginFn(req, res, next);
+        expect(res.status).toHaveBeenCalledWith(401);
+      }
+
+      const lockoutResponse = createResponse();
+      authenticateLoginFn(req, lockoutResponse, next);
+      expect(lockoutResponse.status).toHaveBeenCalledWith(423);
+      expect(lockoutResponse.json).toHaveBeenCalledWith({
+        error: 'Account temporarily locked due to repeated failed login attempts',
+      });
+    });
+
+    test('should reject locked accounts before running authentication middleware', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {
+        headers: {
+          authorization: `Basic ${Buffer.from('alice:bad-pass').toString('base64')}`,
+        },
+        ip: '203.0.113.10',
+      };
+      const next = vi.fn();
+
+      for (let index = 0; index < 5; index += 1) {
+        authenticateLoginFn(req, createResponse(), next);
+      }
+      const authenticateCallCount = passport.authenticate.mock.calls.length;
+
+      const lockedResponse = createResponse();
+      authenticateLoginFn(req, lockedResponse, next);
+      expect(passport.authenticate.mock.calls.length).toBe(authenticateCallCount);
+      expect(lockedResponse.status).toHaveBeenCalledWith(423);
+      expect(lockedResponse.json).toHaveBeenCalledWith({
+        error: 'Account temporarily locked due to repeated failed login attempts',
+      });
+    });
+
+    test('should derive login identity from request body username', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {
+        body: { username: ' Alice ' },
+        ip: '203.0.113.11',
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      authenticateLoginFn(req, res, next);
+
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          details: expect.stringContaining('user=Alice'),
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    test('should handle blank basic auth credentials as missing login identity', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {
+        headers: {
+          authorization: 'Basic     ',
+        },
+        ip: '203.0.113.12',
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      authenticateLoginFn(req, res, next);
+
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          details: expect.stringContaining('user=unknown'),
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    test('should handle malformed basic auth payload decoding failures', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const originalBufferFrom = Buffer.from.bind(Buffer);
+      const bufferFromSpy = vi.spyOn(Buffer, 'from').mockImplementation(((
+        input: any,
+        encoding?: any,
+      ) => {
+        if (encoding === 'base64') {
+          throw new Error('decode failed');
+        }
+        return originalBufferFrom(input, encoding);
+      }) as any);
+
+      try {
+        const req = {
+          headers: {
+            authorization: 'Basic Zm9vOmJhcg==',
+          },
+          ip: '203.0.113.13',
+        };
+        const res = createResponse();
+        const next = vi.fn();
+
+        authenticateLoginFn(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(401);
+      } finally {
+        bufferFromSpy.mockRestore();
+      }
+    });
+
+    test('should extract identity from the first authorization header value when headers are arrays', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {
+        headers: {
+          authorization: [
+            `Basic ${Buffer.from('array-user').toString('base64')}`,
+            `Basic ${Buffer.from('ignored-user:pass').toString('base64')}`,
+          ],
+        },
+        ip: '203.0.113.21',
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      authenticateLoginFn(req, res, next);
+
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          details: expect.stringContaining('user=array-user'),
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    test('should ignore blank username candidates from body/basic auth and fall back to unknown audit user', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {
+        body: { username: '   ' },
+        headers: {
+          authorization: `Basic ${Buffer.from('   :password').toString('base64')}`,
+        },
+        ip: '   ',
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      authenticateLoginFn(req, res, next);
+
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          details: expect.stringContaining('user=unknown'),
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    test('should set Retry-After header when lockout is active and response supports setHeader', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {
+        headers: {
+          authorization: `Basic ${Buffer.from('lockout-user:bad-pass').toString('base64')}`,
+        },
+        ip: '203.0.113.14',
+      };
+      const next = vi.fn();
+
+      for (let index = 0; index < 4; index += 1) {
+        authenticateLoginFn(req, createResponse(), next);
+      }
+
+      const res = {
+        ...createResponse(),
+        setHeader: vi.fn(),
+      };
+      authenticateLoginFn(req, res as any, next);
+
+      expect(res.status).toHaveBeenCalledWith(423);
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
+    });
+
+    test('should reset failed-attempt window after lockout window elapses', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {
+        headers: {
+          authorization: `Basic ${Buffer.from('window-user:bad-pass').toString('base64')}`,
+        },
+        ip: '203.0.113.15',
+      };
+      const next = vi.fn();
+
+      authenticateLoginFn(req, createResponse(), next);
+
+      vi.setSystemTime(new Date('2026-01-01T00:16:00.000Z'));
+      const afterWindowRes = createResponse();
+      authenticateLoginFn(req, afterWindowRes, next);
+
+      expect(afterWindowRes.status).toHaveBeenCalledWith(401);
+      vi.useRealTimers();
+    });
+
+    test('should prune stale unlocked lockout entries before tracking a new identity', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      authenticateLoginFn(
+        {
+          body: { username: 'stale-user' },
+          ip: '203.0.113.19',
+        },
+        createResponse(),
+        vi.fn(),
+      );
+
+      vi.setSystemTime(new Date('2026-01-01T00:16:00.000Z'));
+      const freshResponse = createResponse();
+      authenticateLoginFn(
+        {
+          body: { username: 'fresh-user' },
+          ip: '203.0.113.20',
+        },
+        freshResponse,
+        vi.fn(),
+      );
+
+      expect(freshResponse.status).toHaveBeenCalledWith(401);
+      vi.useRealTimers();
+    });
+
+    test('should prune lockout entries when tracked identities exceed the cap', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const next = vi.fn();
+
+      for (let index = 0; index < 5002; index += 1) {
+        authenticateLoginFn(
+          {
+            body: { username: `bulk-user-${index}` },
+            ip: `198.51.100.${index % 255}`,
+          },
+          createResponse(),
+          next,
+        );
+      }
+
+      expect(passport.authenticate).toHaveBeenCalled();
+    });
+
+    test('should clear lockout state after successful authentication', () => {
+      passport.authenticate
+        .mockImplementationOnce((_ids, _options, callback) => {
+          return () => callback(null, false, undefined, 401);
+        })
+        .mockImplementationOnce((_ids, _options, callback) => {
+          return () => callback(null, { username: 'alice' }, undefined, 200);
+        });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {
+        headers: {
+          authorization: `Basic ${Buffer.from('alice:good-pass').toString('base64')}`,
+        },
+        ip: '203.0.113.16',
+      };
+      const next = vi.fn();
+
+      authenticateLoginFn(req, createResponse(), next);
+      authenticateLoginFn(req, createResponse(), next);
+
+      expect(next).toHaveBeenCalled();
     });
   });
 
@@ -754,6 +1081,94 @@ describe('Auth Router', () => {
         'DD_SESSION_SECRET is not set; using an ephemeral session secret. Set DD_SESSION_SECRET to a strong persistent value.',
       );
     });
+
+    test('should fall back to default lockout settings when env values are invalid', async () => {
+      const previous = {
+        account: process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS,
+        ip: process.env.DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS,
+        window: process.env.DD_AUTH_LOCKOUT_WINDOW_MS,
+        duration: process.env.DD_AUTH_LOCKOUT_DURATION_MS,
+      };
+      process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS = 'NaN';
+      process.env.DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS = '0';
+      process.env.DD_AUTH_LOCKOUT_WINDOW_MS = '-1';
+      process.env.DD_AUTH_LOCKOUT_DURATION_MS = 'oops';
+
+      try {
+        vi.resetModules();
+        const freshAuth = await import('./auth.js');
+        const freshPassport = (await import('passport')).default as any;
+        freshAuth.getAllIds().length = 0;
+
+        const app = createApp();
+        freshAuth.init(app);
+        freshPassport.authenticate.mockImplementation((_ids, _options, callback) => {
+          return () => callback(null, false, undefined, 401);
+        });
+
+        const loginCall = mockRouter.post.mock.calls.find((c) => c[0] === '/login');
+        const authenticateLoginFn = loginCall[1];
+        const req = {
+          body: { username: 'fallback-user' },
+          ip: '203.0.113.17',
+        };
+
+        const first = createResponse();
+        authenticateLoginFn(req, first, vi.fn());
+        expect(first.status).toHaveBeenCalledWith(401);
+      } finally {
+        process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS = previous.account;
+        process.env.DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS = previous.ip;
+        process.env.DD_AUTH_LOCKOUT_WINDOW_MS = previous.window;
+        process.env.DD_AUTH_LOCKOUT_DURATION_MS = previous.duration;
+      }
+    });
+
+    test('should accept positive lockout settings from env', async () => {
+      const previous = {
+        account: process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS,
+        ip: process.env.DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS,
+        window: process.env.DD_AUTH_LOCKOUT_WINDOW_MS,
+        duration: process.env.DD_AUTH_LOCKOUT_DURATION_MS,
+      };
+      process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS = '1';
+      process.env.DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS = '1';
+      process.env.DD_AUTH_LOCKOUT_WINDOW_MS = '900000';
+      process.env.DD_AUTH_LOCKOUT_DURATION_MS = '900000';
+
+      try {
+        vi.resetModules();
+        const freshAuth = await import('./auth.js');
+        const freshPassport = (await import('passport')).default as any;
+        freshAuth.getAllIds().length = 0;
+
+        const app = createApp();
+        freshAuth.init(app);
+        freshPassport.authenticate.mockImplementation((_ids, _options, callback) => {
+          return () => callback(null, false, undefined, 401);
+        });
+
+        const loginCall = mockRouter.post.mock.calls.find((c) => c[0] === '/login');
+        const authenticateLoginFn = loginCall[1];
+        const req = {
+          body: { username: 'single-attempt-user' },
+          ip: '203.0.113.18',
+        };
+
+        const first = createResponse();
+        authenticateLoginFn(req, first, vi.fn());
+        expect(first.status).toHaveBeenCalledWith(401);
+
+        const second = createResponse();
+        authenticateLoginFn(req, second, vi.fn());
+        expect(second.status).toHaveBeenCalledWith(423);
+      } finally {
+        process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS = previous.account;
+        process.env.DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS = previous.ip;
+        process.env.DD_AUTH_LOCKOUT_WINDOW_MS = previous.window;
+        process.env.DD_AUTH_LOCKOUT_DURATION_MS = previous.duration;
+      }
+    });
   });
 
   describe('route handlers', () => {
@@ -864,6 +1279,18 @@ describe('Auth Router', () => {
       expect(contractValidation.errors).toStrictEqual([]);
     });
 
+    test('getUser should set no-store cache headers', () => {
+      const handler = getRouteHandler('get', '/user');
+      const res = createResponse();
+      handler({ user: { username: 'john' } }, res);
+      expect(res.set).toHaveBeenCalledWith(
+        'Cache-Control',
+        'private, no-cache, no-store, must-revalidate',
+      );
+      expect(res.set).toHaveBeenCalledWith('Pragma', 'no-cache');
+      expect(res.set).toHaveBeenCalledWith('Expires', '0');
+    });
+
     test('getUser should return anonymous when no user on request', () => {
       const handler = getRouteHandler('get', '/user');
       const res = createResponse();
@@ -930,6 +1357,46 @@ describe('Auth Router', () => {
       );
     });
 
+    test('login should continue without session-limit enforcement for blank usernames', () => {
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        user: { username: '   ' },
+        session: { regenerate: vi.fn((done) => done()) },
+        sessionStore: {
+          all: vi.fn(),
+          destroy: vi.fn(),
+        },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(req.sessionStore.all).not.toHaveBeenCalled();
+      expect(req.sessionStore.destroy).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ username: '   ' });
+    });
+
+    test('login should continue without session-limit enforcement when username is missing', () => {
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        user: {},
+        session: { regenerate: vi.fn((done) => done()) },
+        sessionStore: {
+          all: vi.fn(),
+          destroy: vi.fn(),
+        },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(req.sessionStore.all).not.toHaveBeenCalled();
+      expect(req.sessionStore.destroy).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({});
+    });
+
     test('setRememberMe should persist preference on session', () => {
       const handler = getRouteHandler('post', '/remember');
       const req = {
@@ -941,6 +1408,24 @@ describe('Auth Router', () => {
       handler(req, res);
 
       expect(req.session.rememberMe).toBe(true);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ ok: true });
+    });
+
+    test('setRememberMe should update cookie maxAge for the current session', () => {
+      const handler = getRouteHandler('post', '/remember');
+      const req = {
+        body: { remember: true },
+        session: {
+          cookie: { maxAge: 12345 },
+        },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(req.session.rememberMe).toBe(true);
+      expect(req.session.cookie.maxAge).toBe(3600 * 1000 * 24 * 30);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ ok: true });
     });
@@ -997,6 +1482,113 @@ describe('Auth Router', () => {
       expect(req.session.cookie.maxAge).toBeNull();
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+    });
+
+    test('login should evict oldest sessions when concurrent session cap is reached', async () => {
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: {},
+        session: {
+          maxconcurrentsessions: 2,
+        },
+      });
+
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        body: { remember: true },
+        user: { username: 'john' },
+        sessionID: 'newly-regenerated-session',
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        sessionStore: {
+          all: vi.fn((done) =>
+            done(null, {
+              'session-oldest': {
+                passport: {
+                  user: JSON.stringify({ username: 'john' }),
+                },
+                cookie: {
+                  expires: '2026-01-01T00:00:00.000Z',
+                },
+              },
+              'session-newer': {
+                passport: {
+                  user: JSON.stringify({ username: 'john' }),
+                },
+                cookie: {
+                  expires: '2026-01-02T00:00:00.000Z',
+                },
+              },
+              'other-user-session': {
+                passport: {
+                  user: JSON.stringify({ username: 'jane' }),
+                },
+                cookie: {
+                  expires: '2026-01-03T00:00:00.000Z',
+                },
+              },
+            }),
+          ),
+          destroy: vi.fn((_sid, done) => done()),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      handler(req, res);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(req.sessionStore.destroy).toHaveBeenCalledTimes(1);
+      expect(req.sessionStore.destroy).toHaveBeenCalledWith('session-oldest', expect.any(Function));
+      expect(req.login).toHaveBeenCalledWith({ username: 'john' }, expect.any(Function));
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+    });
+
+    test('login should return 500 when concurrent session enforcement fails', async () => {
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: {},
+        session: {
+          maxconcurrentsessions: 1,
+        },
+      });
+
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        body: { remember: true },
+        user: { username: 'john' },
+        sessionID: 'newly-regenerated-session',
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        sessionStore: {
+          all: vi.fn((done) =>
+            done(null, {
+              'session-existing': {
+                passport: {
+                  user: JSON.stringify({ username: 'john' }),
+                },
+                cookie: {
+                  expires: '2026-01-01T00:00:00.000Z',
+                },
+              },
+            }),
+          ),
+          destroy: vi.fn((_sid, done) => done(new Error('destroy failed'))),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      handler(req, res);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(req.login).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auth-login',
+          status: 'error',
+          details: expect.stringContaining('session limit'),
+        }),
+      );
     });
 
     test('login should record failed login audit when session is unavailable', () => {

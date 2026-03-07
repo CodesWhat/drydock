@@ -2,8 +2,9 @@ import type { Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import * as openidClientLibrary from 'openid-client';
 import { v4 as uuid } from 'uuid';
-import { ddEnvVars, getPublicUrl } from '../../../configuration/index.js';
+import { ddEnvVars, getPublicUrl, getServerConfiguration } from '../../../configuration/index.js';
 import { getErrorMessage } from '../../../util/error.js';
+import { enforceConcurrentSessionLimit } from '../../../util/session-limit.js';
 import Authentication from '../Authentication.js';
 import OidcStrategy from './OidcStrategy.js';
 
@@ -11,6 +12,7 @@ const OIDC_CHECKS_TTL_MS = 5 * 60 * 1000;
 const OIDC_MAX_PENDING_CHECKS = 5;
 const OIDC_SESSION_LOCK_WAIT_TIMEOUT_MS = 10 * 1000;
 const OIDC_SESSION_LOCK_STALE_TTL_MS = 60 * 1000;
+const DEFAULT_MAX_CONCURRENT_SESSIONS_PER_USER = 5;
 const oidcSessionLocks = new Map<string, Promise<void>>();
 const OIDC_STATE_PATTERN = /^[A-Za-z0-9._~-]{8,256}$/;
 
@@ -58,6 +60,11 @@ type OidcRedirectRequest = Request & {
 
 type OidcCallbackRequest = Request & {
   session?: OidcSessionLike;
+  sessionID?: string;
+  sessionStore?: {
+    all?: (callback: (error: unknown, sessions?: unknown) => void) => void;
+    destroy?: (sid: string, callback: (error?: unknown) => void) => void;
+  };
   originalUrl?: string;
   url: string;
   login: (user: OidcAuthenticatedUser, done: (error?: unknown) => void) => void;
@@ -251,6 +258,22 @@ async function saveSessionIfPossible(session: OidcSessionLike | undefined) {
       }
     });
   });
+}
+
+function getMaxConcurrentSessionsPerUser(): number {
+  const serverConfiguration = getServerConfiguration() as Record<string, unknown>;
+  const configuredMaxSessions = (serverConfiguration.session as Record<string, unknown> | undefined)
+    ?.maxconcurrentsessions;
+
+  if (
+    typeof configuredMaxSessions !== 'number' ||
+    !Number.isInteger(configuredMaxSessions) ||
+    configuredMaxSessions < 1
+  ) {
+    return DEFAULT_MAX_CONCURRENT_SESSIONS_PER_USER;
+  }
+
+  return configuredMaxSessions;
 }
 
 /**
@@ -552,6 +575,13 @@ class Oidc extends Authentication {
       }
       this.log.debug('Get user info');
       const user = await this.getUserFromAccessToken(tokenSet.access_token);
+
+      await enforceConcurrentSessionLimit({
+        username: user.username,
+        maxConcurrentSessions: getMaxConcurrentSessionsPerUser(),
+        sessionStore: req.sessionStore,
+        currentSessionId: req.sessionID,
+      });
 
       this.log.debug('Perform passport login');
       req.login(user, (err) => {

@@ -248,8 +248,8 @@ test('getStrategy should enforce OIDC route rate limiting in express integration
 
 test('maskConfiguration should mask configuration secrets', async () => {
   expect(oidc.maskConfiguration()).toEqual({
-    clientid: '1*******8',
-    clientsecret: 's****t',
+    clientid: '[REDACTED]',
+    clientsecret: '[REDACTED]',
     discovery: 'https://idp/.well-known/openid-configuration',
     redirect: false,
     timeout: 5000,
@@ -803,6 +803,66 @@ test('callback should return 401 when login fails with error', async () => {
   await oidc.callback(req, res);
 
   expect401Json(res);
+});
+
+test('callback should evict oldest sessions when concurrent session cap is reached', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const getServerConfigurationSpy = vi.spyOn(configuration, 'getServerConfiguration');
+  getServerConfigurationSpy.mockReturnValue({
+    session: {
+      maxconcurrentsessions: 2,
+    },
+  } as ReturnType<typeof configuration.getServerConfiguration>);
+
+  try {
+    const session = createSessionWithPending({
+      'valid-state': createPendingCheck(),
+    });
+    const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+    req.sessionID = 'current-session';
+    req.sessionStore = {
+      all: vi.fn((done) =>
+        done(null, {
+          'session-oldest': {
+            passport: {
+              user: JSON.stringify({ username: 'user@example.com' }),
+            },
+            cookie: {
+              expires: '2026-01-01T00:00:00.000Z',
+            },
+          },
+          'session-newer': {
+            passport: {
+              user: JSON.stringify({ username: 'user@example.com' }),
+            },
+            cookie: {
+              expires: '2026-01-02T00:00:00.000Z',
+            },
+          },
+          'other-user-session': {
+            passport: {
+              user: JSON.stringify({ username: 'other@example.com' }),
+            },
+            cookie: {
+              expires: '2026-01-03T00:00:00.000Z',
+            },
+          },
+        }),
+      ),
+      destroy: vi.fn((_sid, done) => done()),
+    };
+    const res = createRes();
+
+    await oidc.callback(req, res);
+
+    expect(req.sessionStore.destroy).toHaveBeenCalledTimes(1);
+    expect(req.sessionStore.destroy).toHaveBeenCalledWith('session-oldest', expect.any(Function));
+    expect(req.login).toHaveBeenCalled();
+    expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+  } finally {
+    getServerConfigurationSpy.mockRestore();
+  }
 });
 
 test('callback should set long-lived cookie when rememberMe is true', async () => {
