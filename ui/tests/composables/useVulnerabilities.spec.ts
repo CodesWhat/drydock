@@ -215,10 +215,45 @@ describe('useVulnerabilities', () => {
     expect(state.filteredSummaries.value).toHaveLength(1);
     expect(state.filteredSummaries.value[0].image).toBe('redis');
 
+    state.secFilterFix.value = 'yes';
+    expect(state.filteredSummaries.value).toHaveLength(1);
+    expect(state.filteredSummaries.value[0].image).toBe('nginx');
+
     state.clearSecFilters();
     expect(state.secFilterSeverity.value).toBe('all');
     expect(state.secFilterFix.value).toBe('all');
     expect(state.activeSecFilterCount.value).toBe(0);
+  });
+
+  it('falls back to critical sorting and ignores asc for unknown sort fields', async () => {
+    mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+      totalContainers: 2,
+      scannedContainers: 2,
+      latestScannedAt: '2026-03-01T10:00:00.000Z',
+      images: [
+        {
+          image: 'critical-image',
+          containerIds: ['c1'],
+          vulnerabilities: [{ id: 'CVE-CRIT', severity: 'CRITICAL', package: 'pkg' }],
+        },
+        {
+          image: 'low-image',
+          containerIds: ['c2'],
+          vulnerabilities: [{ id: 'CVE-LOW', severity: 'LOW', package: 'pkg' }],
+        },
+      ],
+    });
+
+    const state = useVulnerabilities({
+      securitySortField: ref('unknown-sort-field'),
+      securitySortAsc: ref(true),
+    });
+    await state.fetchVulnerabilities();
+
+    expect(state.filteredSummaries.value.map((summary) => summary.image)).toEqual([
+      'critical-image',
+      'low-image',
+    ]);
   });
 
   it('separates image counts from grouped vulnerability lists', async () => {
