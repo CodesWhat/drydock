@@ -145,6 +145,35 @@ test('model should validate a non-empty error message', async () => {
   expect(containerValidated.error).toEqual({ message: 'Registry request failed' });
 });
 
+test('model should accept details with empty env values', async () => {
+  const containerValidated = container.validate({
+    id: 'container-env-test',
+    name: 'env-test',
+    watcher: 'test',
+    image: {
+      id: 'image-env-test',
+      registry: { name: 'hub', url: 'https://hub' },
+      name: 'organization/image',
+      tag: { value: '1.0.0', semver: true },
+      digest: { watch: false },
+      architecture: 'arch',
+      os: 'os',
+    },
+    details: {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'NORMAL', value: 'hello' },
+        { key: 'EMPTY_VALUE', value: '' },
+      ],
+    },
+  });
+  expect(containerValidated.details.env).toEqual([
+    { key: 'NORMAL', value: 'hello' },
+    { key: 'EMPTY_VALUE', value: '' },
+  ]);
+});
+
 test('model should reject empty error message', async () => {
   expect(() => {
     container.validate(createContainerWithError(''));

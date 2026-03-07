@@ -256,7 +256,7 @@ const schema = joi.object({
       .items(
         joi.object({
           key: joi.string().required(),
-          value: joi.string().required(),
+          value: joi.string().allow('').required(),
         }),
       )
       .required(),
