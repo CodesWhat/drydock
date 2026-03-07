@@ -32,6 +32,8 @@
   --dd-shadow-lg: 0 8px 24px color-mix(in srgb, #020617 24%, transparent);
   --dd-shadow-inset: inset 0 8px 16px -8px color-mix(in srgb, #020617 40%, transparent);
   --dd-hover-overlay: color-mix(in srgb, var(--dd-text) 8%, transparent);
+  --dd-log-text: #abb2bf;
+  --dd-log-text-muted: #5c6370;
   --dd-log-line: color-mix(in srgb, var(--dd-border) 55%, transparent);
   --dd-log-divider: color-mix(in srgb, var(--dd-border-strong) 70%, transparent);
   --dd-log-footer-bg: color-mix(in srgb, var(--dd-bg-code) 80%, var(--dd-bg-elevated) 20%);
@@ -60,6 +62,8 @@
   --dd-primary: #526fff;
   --dd-alt: #a626a4;
   --dd-neutral: #a0a1a7;
+  --dd-log-text: #abb2bf;
+  --dd-log-text-muted: #5c6370;
 }
 
 /* GitHub Dark */
@@ -84,6 +88,8 @@
   --dd-primary: #58a6ff;
   --dd-alt: #bc8cff;
   --dd-neutral: #6e7681;
+  --dd-log-text: #c9d1d9;
+  --dd-log-text-muted: #6e7681;
 }
 
 /* GitHub Light */
@@ -108,6 +114,8 @@
   --dd-primary: #0969da;
   --dd-alt: #6f42c1;
   --dd-neutral: #6e7681;
+  --dd-log-text: #c9d1d9;
+  --dd-log-text-muted: #6e7681;
 }
 
 /* Dracula Dark */
@@ -132,6 +140,8 @@
   --dd-primary: #bd93f9;
   --dd-alt: #ff79c6;
   --dd-neutral: #6272a4;
+  --dd-log-text: #f8f8f2;
+  --dd-log-text-muted: #6272a4;
 }
 
 /* Dracula Light (Alucard) */
@@ -156,6 +166,8 @@
   --dd-primary: #7c5cbf;
   --dd-alt: #c44a8f;
   --dd-neutral: #6272a4;
+  --dd-log-text: #f8f8f2;
+  --dd-log-text-muted: #6272a4;
 }
 
 /* Catppuccin Mocha (Dark) */
@@ -180,6 +192,8 @@
   --dd-primary: #89dceb;
   --dd-alt: #cba6f7;
   --dd-neutral: #6c7086;
+  --dd-log-text: #cdd6f4;
+  --dd-log-text-muted: #6c7086;
 }
 
 /* Catppuccin Latte (Light) */
@@ -204,6 +218,8 @@
   --dd-primary: #04a5e5;
   --dd-alt: #8839ef;
   --dd-neutral: #9ca0b0;
+  --dd-log-text: #cdd6f4;
+  --dd-log-text-muted: #6c7086;
 }
 
 /* Gruvbox Dark */
@@ -228,6 +244,8 @@
   --dd-primary: #fe8019;
   --dd-alt: #d3869b;
   --dd-neutral: #928374;
+  --dd-log-text: #ebdbb2;
+  --dd-log-text-muted: #928374;
 }
 
 /* Gruvbox Light */
@@ -252,6 +270,8 @@
   --dd-primary: #d65d0e;
   --dd-alt: #b16286;
   --dd-neutral: #928374;
+  --dd-log-text: #ebdbb2;
+  --dd-log-text-muted: #928374;
 }
 
 /* Ayu Mirage (Dark) */
@@ -276,6 +296,8 @@
   --dd-primary: #ffcc66;
   --dd-alt: #d4bfff;
   --dd-neutral: #707a8c;
+  --dd-log-text: #cccac2;
+  --dd-log-text-muted: #5c697d;
 }
 
 /* Ayu Light */
@@ -300,4 +322,6 @@
   --dd-primary: #f29718;
   --dd-alt: #a37acc;
   --dd-neutral: #828e9f;
+  --dd-log-text: #cccac2;
+  --dd-log-text-muted: #5c697d;
 }

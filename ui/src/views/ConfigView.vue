@@ -57,6 +57,19 @@ function setRadius(id: string) {
 const { iconLibrary, setIconLibrary, iconScale, setIconScale } = useIcons();
 const { activeFont, setFont, fontLoading, isFontLoaded } = useFont();
 
+// --- Font Size ---
+const activeFontSize = usePreference(
+  () => preferences.appearance.fontSize,
+  (v) => {
+    preferences.appearance.fontSize = v;
+  },
+);
+
+function setFontSize(scale: number) {
+  activeFontSize.value = scale;
+  document.documentElement.style.setProperty('--dd-font-size', String(scale));
+}
+
 const { logContainer, scrollBlocked, scrollToBottom, handleLogScroll, resumeAutoScroll } =
   useLogViewport();
 const { autoFetchInterval } = useAutoFetchLogs({
@@ -533,6 +546,8 @@ function handleSelectIconLibrary(library: string) {
       :on-select-font="handleSelectFont"
       :on-select-icon-library="handleSelectIconLibrary"
       :on-change-icon-scale="setIconScale"
+      :font-size="activeFontSize"
+      :on-change-font-size="setFontSize"
       :active-radius="activeRadius"
       :radius-presets="radiusPresets"
       :on-select-radius="setRadius"

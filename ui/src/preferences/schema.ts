@@ -7,7 +7,7 @@ export interface PreferencesSchema {
   theme: { family: ThemeFamily; variant: string };
   font: { family: string };
   icons: { library: string; scale: number };
-  appearance: { radius: string };
+  appearance: { radius: string; fontSize: number };
   layout: { sidebarCollapsed: boolean };
   containers: {
     viewMode: ViewMode;
@@ -42,7 +42,7 @@ export const DEFAULTS: PreferencesSchema = {
   theme: { family: 'one-dark', variant: 'dark' },
   font: { family: 'ibm-plex-mono' },
   icons: { library: 'ph-duotone', scale: 1 },
-  appearance: { radius: 'sharp' },
+  appearance: { radius: 'sharp', fontSize: 1 },
   layout: { sidebarCollapsed: false },
   containers: {
     viewMode: 'table',

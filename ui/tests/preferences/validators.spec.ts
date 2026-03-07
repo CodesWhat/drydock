@@ -1,4 +1,5 @@
 import {
+  isValidFontSize,
   isValidScale,
   isViewMode,
   RADIUS_PRESETS,
@@ -145,6 +146,38 @@ describe('validators', () => {
       expect(isValidScale(true)).toBe(false);
       expect(isValidScale({})).toBe(false);
       expect(isValidScale(NaN)).toBe(false);
+    });
+  });
+
+  describe('isValidFontSize', () => {
+    it('should return true for font size values in valid range (0.8 to 1.3)', () => {
+      expect(isValidFontSize(0.8)).toBe(true);
+      expect(isValidFontSize(1)).toBe(true);
+      expect(isValidFontSize(1.0)).toBe(true);
+      expect(isValidFontSize(1.1)).toBe(true);
+      expect(isValidFontSize(1.3)).toBe(true);
+    });
+
+    it('should return true for boundary values', () => {
+      expect(isValidFontSize(0.8)).toBe(true);
+      expect(isValidFontSize(1.3)).toBe(true);
+    });
+
+    it('should return false for values outside the range', () => {
+      expect(isValidFontSize(0.79)).toBe(false);
+      expect(isValidFontSize(1.31)).toBe(false);
+      expect(isValidFontSize(0)).toBe(false);
+      expect(isValidFontSize(2)).toBe(false);
+      expect(isValidFontSize(-1)).toBe(false);
+    });
+
+    it('should return false for non-number values', () => {
+      expect(isValidFontSize(null)).toBe(false);
+      expect(isValidFontSize(undefined)).toBe(false);
+      expect(isValidFontSize('1')).toBe(false);
+      expect(isValidFontSize(true)).toBe(false);
+      expect(isValidFontSize({})).toBe(false);
+      expect(isValidFontSize(NaN)).toBe(false);
     });
   });
 });

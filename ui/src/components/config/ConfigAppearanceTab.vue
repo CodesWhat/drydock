@@ -36,12 +36,14 @@ const props = withDefaults(
     libraryLabels: Record<string, string>;
     iconMap: Record<string, Record<string, string>>;
     iconScale?: number;
+    fontSize?: number;
     activeRadius?: string;
     radiusPresets: RadiusPreset[];
     onSelectThemeFamily: (familyId: string, event: Event) => void;
     onSelectFont: (fontId: string) => void;
     onSelectIconLibrary: (library: string) => void;
     onChangeIconScale: (value: number) => void;
+    onChangeFontSize: (value: number) => void;
     onSelectRadius: (id: string) => void;
   }>(),
   {
@@ -51,6 +53,7 @@ const props = withDefaults(
     fontLoading: false,
     iconLibrary: '',
     iconScale: 1,
+    fontSize: 1,
     activeRadius: 'sharp',
   },
 );
@@ -58,6 +61,11 @@ const props = withDefaults(
 function handleIconScaleInput(event: Event) {
   const target = event.target as HTMLInputElement;
   props.onChangeIconScale(Number.parseFloat(target.value));
+}
+
+function handleFontSizeInput(event: Event) {
+  const target = event.target as HTMLInputElement;
+  props.onChangeFontSize(Number.parseFloat(target.value));
 }
 </script>
 
@@ -170,6 +178,39 @@ function handleIconScaleInput(event: Event) {
               class="text-drydock-secondary shrink-0"
             />
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Font Size -->
+    <div
+      class="dd-rounded overflow-hidden"
+      :style="{
+        backgroundColor: 'var(--dd-bg-card)',
+        border: '1px solid var(--dd-border-strong)',
+      }"
+    >
+      <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+        <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
+        <h2 class="text-sm font-semibold dd-text">Font Size</h2>
+      </div>
+      <div class="p-5">
+        <div class="flex items-center gap-4">
+          <span class="text-[10px] dd-text-muted font-semibold">A</span>
+          <input
+            type="range"
+            min="0.8"
+            max="1.3"
+            step="0.05"
+            :value="props.fontSize"
+            class="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
+            :style="{ background: 'var(--dd-border-strong)', accentColor: 'var(--dd-primary)' }"
+            @input="handleFontSizeInput"
+          />
+          <span class="text-[16px] dd-text-muted font-semibold">A</span>
+        </div>
+        <div class="text-center mt-2 text-[11px] dd-text-muted">
+          {{ Math.round(props.fontSize * 100) }}%
         </div>
       </div>
     </div>

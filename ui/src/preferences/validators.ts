@@ -43,3 +43,7 @@ export function isViewMode(v: unknown): v is ViewMode {
 export function isValidScale(v: unknown): v is number {
   return typeof v === 'number' && v >= 0.8 && v <= 1.5;
 }
+
+export function isValidFontSize(v: unknown): v is number {
+  return typeof v === 'number' && v >= 0.8 && v <= 1.3;
+}

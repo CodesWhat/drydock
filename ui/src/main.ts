@@ -15,6 +15,8 @@ import ThemeToggle from './components/ThemeToggle.vue';
 import ToggleSwitch from './components/ToggleSwitch.vue';
 import { tooltip as Tooltip } from './directives/tooltip';
 import AppLayout from './layouts/AppLayout.vue';
+import { preferences } from './preferences/store';
+import { isValidFontSize } from './preferences/validators';
 import router from './router';
 import { getSettings } from './services/settings';
 import './theme/tokens.css';
@@ -22,6 +24,14 @@ import './style.css';
 
 // Pre-register only the icons we use so they render offline (no CDN fetch)
 registerIcons();
+
+// Restore persisted font size on boot so it applies before first paint
+if (isValidFontSize(preferences.appearance.fontSize) && preferences.appearance.fontSize !== 1) {
+  document.documentElement.style.setProperty(
+    '--dd-font-size',
+    String(preferences.appearance.fontSize),
+  );
+}
 
 // Disable Iconify CDN fetching when internetless mode is active.
 // Runs async — bundled icons are already registered above, so the UI renders

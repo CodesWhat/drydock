@@ -49,6 +49,23 @@ describe('preferences store', () => {
     expect(preferences.theme.variant).toBe('dark');
   });
 
+  it('should fall back to defaults when legacy migration throws', async () => {
+    vi.doMock('@/preferences/migrate', async () => {
+      const actual = await vi.importActual('@/preferences/migrate');
+      return {
+        ...actual,
+        migrateFromLegacyKeys: () => {
+          throw new Error('legacy migration failed');
+        },
+      };
+    });
+
+    const { preferences } = await loadStore();
+    expect(preferences.theme.family).toBe('one-dark');
+    expect(preferences.theme.variant).toBe('dark');
+    vi.doUnmock('@/preferences/migrate');
+  });
+
   it('should merge missing keys with defaults', async () => {
     localStorage.setItem(
       'dd-preferences',
