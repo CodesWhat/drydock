@@ -190,7 +190,7 @@ async function runTrigger({
   triggerAgent,
 }: ContainerTriggerRequest) {
   const url = triggerAgent
-    ? `/api/containers/${containerId}/triggers/${triggerAgent}/${triggerType}/${triggerName}`
+    ? `/api/containers/${containerId}/triggers/${triggerType}/${triggerName}/${triggerAgent}`
     : `/api/containers/${containerId}/triggers/${triggerType}/${triggerName}`;
   const response = await fetch(url, {
     method: 'POST',

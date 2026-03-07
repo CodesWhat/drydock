@@ -51,6 +51,7 @@ async function testTrigger(trigger: Record<string, unknown>) {
     await runTrigger({
       triggerType: trigger.type as string,
       triggerName: trigger.name as string,
+      triggerAgent: (trigger.agent as string | undefined) || undefined,
       container: {
         id: 'test',
         name: 'Test Container',

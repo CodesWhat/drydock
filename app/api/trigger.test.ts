@@ -40,7 +40,7 @@ function createResponse() {
 
 function getRemoteTriggerHandler() {
   triggerRouter.init();
-  const call = mockRouter.post.mock.calls.find((c) => c[0] === '/:agent/:type/:name');
+  const call = mockRouter.post.mock.calls.find((c) => c[0] === '/:type/:name/:agent');
   return call[1];
 }
 
@@ -53,7 +53,7 @@ describe('Trigger Router', () => {
     test('should register POST routes for triggers', () => {
       const router = triggerRouter.init();
       expect(router.post).toHaveBeenCalledWith('/:type/:name', expect.any(Function));
-      expect(router.post).toHaveBeenCalledWith('/:agent/:type/:name', expect.any(Function));
+      expect(router.post).toHaveBeenCalledWith('/:type/:name/:agent', expect.any(Function));
     });
   });
 

@@ -138,6 +138,6 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
 export function init() {
   const router = component.init('trigger');
   router.post('/:type/:name', runTrigger);
-  router.post('/:agent/:type/:name', runRemoteTrigger);
+  router.post('/:type/:name/:agent', runRemoteTrigger);
   return router;
 }

@@ -191,7 +191,7 @@ export function init() {
   router.delete('/:id', crudHandlers.deleteContainer);
   router.get('/:id/triggers', triggerHandlers.getContainerTriggers);
   router.post('/:id/triggers/:triggerType/:triggerName', triggerHandlers.runTrigger);
-  router.post('/:id/triggers/:triggerAgent/:triggerType/:triggerName', triggerHandlers.runTrigger);
+  router.post('/:id/triggers/:triggerType/:triggerName/:triggerAgent', triggerHandlers.runTrigger);
   router.patch('/:id/update-policy', updatePolicyHandlers.patchContainerUpdatePolicy);
   router.post('/:id/watch', crudHandlers.watchContainer);
   router.get('/:id/vulnerabilities', securityHandlers.getContainerVulnerabilities);

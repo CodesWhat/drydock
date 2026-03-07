@@ -381,7 +381,7 @@ describe('Container Service', () => {
       });
 
       expect(fetch).toHaveBeenCalledWith(
-        '/api/containers/container1/triggers/agent1/webhook/trigger1',
+        '/api/containers/container1/triggers/webhook/trigger1/agent1',
         {
           method: 'POST',
           credentials: 'include',

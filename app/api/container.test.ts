@@ -44,6 +44,7 @@ vi.mock('../registry', () => ({
 }));
 
 vi.mock('../configuration', () => ({
+  getVersion: vi.fn(() => '1.0.0'),
   getServerConfiguration: vi.fn(() => ({
     feature: { delete: true },
   })),
@@ -103,6 +104,7 @@ import Trigger from '../triggers/providers/Trigger.js';
 import { mapComponentsToList } from './component.js';
 import { createCrudHandlers } from './container/crud.js';
 import * as containerRouter from './container.js';
+import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 function createResponse() {
   return createMockResponse();
@@ -209,7 +211,7 @@ describe('Container Router', () => {
         expect.any(Function),
       );
       expect(router.post).toHaveBeenCalledWith(
-        '/:id/triggers/:triggerAgent/:triggerType/:triggerName',
+        '/:id/triggers/:triggerType/:triggerName/:triggerAgent',
         expect.any(Function),
       );
       expect(router.patch).toHaveBeenCalledWith('/:id/update-policy', expect.any(Function));
@@ -438,6 +440,10 @@ describe('Container Router', () => {
         limit: 1,
         offset: 1,
         hasMore: true,
+        _links: {
+          self: '/api/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=1',
+          next: '/api/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=2',
+        },
       });
     });
 
@@ -699,6 +705,14 @@ describe('Container Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ id: 'c1', name: 'test' });
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/api/containers/{id}',
+        method: 'get',
+        statusCode: '200',
+        payload: res.json.mock.calls[0][0],
+      });
+      expect(contractValidation.valid).toBe(true);
+      expect(contractValidation.errors).toStrictEqual([]);
     });
 
     test('should redact runtime environment variable values when container is found', () => {
@@ -2105,7 +2119,7 @@ describe('Container Router', () => {
         watcher: {},
         trigger: { 'myagent.slack.default': mockTrigger },
       });
-      const handler = getHandler('post', '/:id/triggers/:triggerAgent/:triggerType/:triggerName');
+      const handler = getHandler('post', '/:id/triggers/:triggerType/:triggerName/:triggerAgent');
       const res = createResponse();
       await handler(
         {
