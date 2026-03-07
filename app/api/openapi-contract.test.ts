@@ -1,6 +1,10 @@
+import { createRequire } from 'node:module';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { openApiDocument } from './openapi.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
+
+const require = createRequire(import.meta.url);
+const Ajv2020 = require('ajv/dist/2020.js') as typeof import('ajv/dist/2020.js').default;
 
 type MutableOpenApiDocument = {
   paths: Record<string, unknown>;
@@ -482,5 +486,169 @@ describe('validateOpenApiJsonResponse', () => {
       errors: [],
     });
     isArraySpy.mockRestore();
+  });
+
+  test('formats fallback validation messages for uncommon AJV error shapes', () => {
+    const compileSpy = vi.spyOn(Ajv2020.prototype, 'compile').mockImplementation(() => {
+      const validate = ((_: unknown) => false) as {
+        (input: unknown): boolean;
+        errors?: Array<Record<string, unknown>>;
+      };
+      validate.errors = [
+        {
+          keyword: 'type',
+          instancePath: '/custom/path/deeper',
+          params: { type: 'string, number' },
+          message: 'ignored',
+        },
+        {
+          keyword: 'required',
+          instancePath: '/payload/nested',
+          params: { missingProperty: 'child' },
+          message: 'must contain required property',
+        },
+        {
+          keyword: 'additionalProperties',
+          instancePath: '/payload/nested',
+          params: { additionalProperty: 'extra' },
+          message: 'must NOT have additional properties',
+        },
+        {
+          keyword: 'required',
+          instancePath: '/payload/nested',
+          params: { missingProperty: 123 },
+          message: 'must contain required property',
+        },
+        {
+          keyword: 'additionalProperties',
+          instancePath: '/payload/nested',
+          params: { additionalProperty: 123 },
+          message: 'must NOT have additional properties',
+        },
+        {
+          keyword: 'type',
+          instancePath: '/payload/value',
+          params: { type: [1, 2, 3] },
+          message: 'must be valid',
+        },
+        {
+          keyword: 'type',
+          instancePath: '/payload/objectType',
+          params: { type: { unsupported: true } },
+          message: 'must be valid type object',
+        },
+        {
+          keyword: 'enum',
+          instancePath: '/payload/value',
+          params: { allowedValues: 'not-an-array' },
+          message: 'must be equal to one of allowed values',
+        },
+        {
+          keyword: 'pattern',
+          instancePath: '/payload/value',
+          params: { pattern: 123 },
+          message: 'must match pattern',
+        },
+        {
+          keyword: 'format',
+          instancePath: '/payload/value',
+          params: { format: 123 },
+          message: 'must match format',
+        },
+        {
+          keyword: 'custom',
+          instancePath: '/payload/value',
+          params: {},
+          message: undefined,
+        },
+      ];
+      return validate as ReturnType<InstanceType<typeof Ajv2020>['compile']>;
+    });
+
+    setJsonContractSchema({ type: 'object' });
+    const result = validateOpenApiJsonResponse({
+      path: '/contract',
+      method: 'get',
+      statusCode: '200',
+      payload: { custom: 'leaf' },
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        '$.custom.path.deeper: expected one of string, number, got undefined',
+        '$.nested.child: is required',
+        '$.nested.extra: is not allowed by schema',
+        '$.nested: must contain required property',
+        '$.nested: must NOT have additional properties',
+        '$.value: must be valid',
+        '$.objectType: must be valid type object',
+        '$.value: must be equal to one of allowed values',
+        '$.value: must match pattern',
+        '$.value: must match format',
+        '$.value: schema validation failed',
+      ]),
+    );
+    compileSpy.mockRestore();
+  });
+
+  test('covers compile-error fallbacks for regex extracted refs, primitive throws, and empty errors', () => {
+    setJsonContractSchema({ type: 'string' });
+
+    const compileRegexRefSpy = vi.spyOn(Ajv2020.prototype, 'compile').mockImplementationOnce(() => {
+      throw new Error('reference #/components/schemas/Missing from "#/"');
+    });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: 'ok',
+      }),
+    ).toEqual({
+      valid: false,
+      errors: ['$: unresolved schema reference #/components/schemas/Missing'],
+    });
+    compileRegexRefSpy.mockRestore();
+
+    const compilePrimitiveThrowSpy = vi
+      .spyOn(Ajv2020.prototype, 'compile')
+      .mockImplementationOnce(() => {
+        throw 42;
+      });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: 'ok',
+      }),
+    ).toEqual({
+      valid: false,
+      errors: ['$: 42'],
+    });
+    compilePrimitiveThrowSpy.mockRestore();
+
+    const compileNoErrorsSpy = vi.spyOn(Ajv2020.prototype, 'compile').mockImplementationOnce(() => {
+      const validate = ((_: unknown) => false) as {
+        (input: unknown): boolean;
+        errors?: Array<Record<string, unknown>>;
+      };
+      validate.errors = undefined;
+      return validate as ReturnType<InstanceType<typeof Ajv2020>['compile']>;
+    });
+
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: 'ok',
+      }),
+    ).toEqual({
+      valid: true,
+      errors: [],
+    });
+    compileNoErrorsSpy.mockRestore();
   });
 });

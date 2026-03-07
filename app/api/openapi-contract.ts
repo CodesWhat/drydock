@@ -172,11 +172,7 @@ function formatValidationError(error: ErrorObject, payload: unknown): string {
   return `${path}: ${message}`;
 }
 
-function validateSchema(schema: JsonSchema | undefined, payload: unknown): string[] {
-  if (!schema) {
-    return ['$: schema is missing'];
-  }
-
+function validateSchema(schema: JsonSchema, payload: unknown): string[] {
   const ajv = new Ajv2020({
     allErrors: true,
     allowUnionTypes: true,

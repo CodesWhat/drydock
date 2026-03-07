@@ -632,6 +632,125 @@ describe('api/container/crud', () => {
       });
     });
 
+    test('normalizes edge-case scan payloads and resolves image names through all fallbacks', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'name-fallback-a',
+            name: 'name-fallback',
+            displayName: '',
+            security: {
+              scan: {
+                scannedAt: '2026-02-10T00:00:00.000Z',
+                vulnerabilities: [
+                  'invalid-vulnerability',
+                  {
+                    id: 'CVE-NAME',
+                    severity: 'HIGH',
+                    packageName: 'pkg-name',
+                  },
+                ],
+              },
+              updateScan: {
+                summary: 'invalid-summary',
+              },
+            },
+          }),
+          createContainer({
+            id: 'name-fallback-b',
+            name: 'name-fallback',
+            displayName: '',
+            security: {
+              scan: {
+                scannedAt: '2026-02-01T00:00:00.000Z',
+                vulnerabilities: [],
+              },
+            },
+          }),
+          createContainer({
+            id: 'unknown-fallback',
+            name: '',
+            displayName: '',
+            security: {
+              scan: {
+                scannedAt: 'z',
+                vulnerabilities: null,
+              },
+            },
+          }),
+          createContainer({
+            id: 'display-name',
+            name: 'display-name-fallback',
+            displayName: 'display-name',
+            security: {
+              scan: {
+                scannedAt: 'a',
+                vulnerabilities: [],
+              },
+            },
+          }),
+          createContainer({
+            id: 'empty-scan-date',
+            name: 'ignored-empty-date',
+            displayName: '',
+            security: {
+              scan: {
+                scannedAt: '',
+                vulnerabilities: [],
+              },
+            },
+          }),
+        ],
+      });
+
+      const res = callGetContainerSecurityVulnerabilities(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload).toMatchObject({
+        totalContainers: 5,
+        scannedContainers: 5,
+        latestScannedAt: 'z',
+      });
+
+      expect(payload.images).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            image: 'name-fallback',
+            containerIds: ['name-fallback-a', 'name-fallback-b'],
+            updateSummary: {
+              critical: 0,
+              high: 0,
+              medium: 0,
+              low: 0,
+              unknown: 0,
+            },
+            vulnerabilities: expect.arrayContaining([
+              expect.objectContaining({
+                id: 'unknown',
+                severity: 'UNKNOWN',
+                package: 'unknown',
+              }),
+              expect.objectContaining({
+                id: 'CVE-NAME',
+                package: 'pkg-name',
+              }),
+            ]),
+          }),
+          expect.objectContaining({
+            image: 'unknown',
+            containerIds: ['unknown-fallback'],
+            vulnerabilities: [],
+          }),
+          expect.objectContaining({
+            image: 'display-name',
+            containerIds: ['display-name'],
+            vulnerabilities: [],
+          }),
+        ]),
+      );
+    });
+
     test('returns redacted container when id exists', () => {
       const redacted = { id: 'c1', details: { env: [{ key: 'TOKEN', value: '[REDACTED]' }] } };
       const harness = createHarness({
