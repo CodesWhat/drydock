@@ -426,6 +426,24 @@ export default function Home() {
         <div className="bg-grid-neutral-200/50 dark:bg-grid-neutral-800/50 fixed inset-0" />
 
         <div className="relative z-10">
+          {/* RC Banner */}
+          <div className="relative z-20 border-b border-amber-200 bg-amber-50/80 backdrop-blur-sm dark:border-amber-900 dark:bg-amber-950/80">
+            <div className="mx-auto flex max-w-6xl items-center justify-center gap-2 px-4 py-2 text-sm">
+              <span className="inline-flex items-center rounded-full bg-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                RC
+              </span>
+              <span className="text-amber-800 dark:text-amber-200">
+                You&apos;re viewing the <strong>v1.4.0 release candidate</strong> docs.
+              </span>
+              <Link
+                href="https://github.com/CodesWhat/drydock/releases/tag/v1.3.9"
+                className="font-medium text-amber-700 underline underline-offset-2 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-100"
+              >
+                v1.3.9 is the current stable release
+              </Link>
+            </div>
+          </div>
+
           {/* Hero Section */}
           <section className="relative flex min-h-screen flex-col items-center justify-center px-4 py-10">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_white_20%,_transparent_70%)] dark:bg-[radial-gradient(ellipse_at_center,_rgb(10,10,10)_20%,_transparent_70%)]" />
@@ -445,7 +463,7 @@ export default function Home() {
 
               {/* Version Badge */}
               <Badge variant="secondary" className="mb-6 px-4 py-1.5 text-sm font-medium">
-                v1.4.0 &middot; Open Source
+                v1.4.0-rc &middot; Open Source
               </Badge>
 
               {/* Heading */}

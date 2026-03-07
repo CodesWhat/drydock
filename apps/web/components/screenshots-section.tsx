@@ -1,6 +1,6 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
+import { ChevronDown, Moon, Sun } from "lucide-react";
 import Image from "next/image";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
@@ -12,16 +12,53 @@ type Screenshot = {
   label: string;
 };
 
+function ScreenshotCard({
+  screenshot,
+  effectiveMode,
+  mounted,
+}: {
+  screenshot: Screenshot;
+  effectiveMode: "light" | "dark";
+  mounted: boolean;
+}) {
+  return (
+    <div className="group">
+      <div className="isolate overflow-hidden rounded-xl border border-neutral-200 bg-white/50 shadow-sm backdrop-blur-sm transition-all duration-300 group-hover:shadow-lg group-hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900/50 dark:group-hover:border-neutral-700">
+        <div className="relative aspect-video overflow-hidden">
+          {mounted && (
+            <Image
+              key={`${screenshot.label}-${effectiveMode}`}
+              src={effectiveMode === "dark" ? screenshot.srcDark : screenshot.srcLight}
+              alt={screenshot.alt}
+              fill
+              className="object-cover object-left-top transition-transform duration-500 group-hover:scale-105"
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            />
+          )}
+        </div>
+        <div className="px-4 py-3">
+          <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+            {screenshot.label}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ScreenshotsSection({ screenshots }: { screenshots: Screenshot[] }) {
   const { resolvedTheme } = useTheme();
   const [mode, setMode] = useState<"light" | "dark" | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   const effectiveMode = mounted ? (mode ?? (resolvedTheme === "dark" ? "dark" : "light")) : "light";
+
+  const [hero, ...rest] = screenshots;
 
   return (
     <section className="px-4 py-24">
@@ -68,31 +105,41 @@ export function ScreenshotsSection({ screenshots }: { screenshots: Screenshot[] 
           </div>
         )}
 
-        <div className="grid gap-6 sm:grid-cols-2">
-          {screenshots.map((screenshot) => (
-            <div key={screenshot.label} className="group">
-              <div className="isolate overflow-hidden rounded-xl border border-neutral-200 bg-white/50 shadow-sm backdrop-blur-sm transition-all duration-300 group-hover:shadow-lg group-hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900/50 dark:group-hover:border-neutral-700">
-                <div className="relative aspect-video overflow-hidden">
-                  {mounted && (
-                    <Image
-                      key={`${screenshot.label}-${effectiveMode}`}
-                      src={effectiveMode === "dark" ? screenshot.srcDark : screenshot.srcLight}
-                      alt={screenshot.alt}
-                      fill
-                      className="object-cover object-left-top transition-transform duration-500 group-hover:scale-105"
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                    />
-                  )}
-                </div>
-                <div className="px-4 py-3">
-                  <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                    {screenshot.label}
-                  </p>
-                </div>
-              </div>
+        {/* Hero screenshot — always visible */}
+        {hero && (
+          <ScreenshotCard screenshot={hero} effectiveMode={effectiveMode} mounted={mounted} />
+        )}
+
+        {/* Collapsible remaining screenshots */}
+        {rest.length > 0 && (
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={() => setExpanded((prev) => !prev)}
+              className="group/toggle mx-auto flex items-center gap-2 rounded-lg border border-neutral-200 bg-white/50 px-4 py-2 text-sm font-medium text-neutral-600 backdrop-blur-sm transition-colors hover:border-neutral-300 hover:text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900/50 dark:text-neutral-400 dark:hover:border-neutral-700 dark:hover:text-neutral-100"
+            >
+              {expanded ? "Hide screenshots" : `View all screenshots (${rest.length} more)`}
+              <ChevronDown
+                className={`h-4 w-4 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            <div
+              className={`grid gap-6 overflow-hidden transition-all duration-500 ease-in-out sm:grid-cols-2 ${
+                expanded ? "mt-6 max-h-[4000px] opacity-100" : "max-h-0 opacity-0"
+              }`}
+            >
+              {rest.map((screenshot) => (
+                <ScreenshotCard
+                  key={screenshot.label}
+                  screenshot={screenshot}
+                  effectiveMode={effectiveMode}
+                  mounted={mounted}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
     </section>
   );
