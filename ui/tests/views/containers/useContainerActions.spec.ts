@@ -479,6 +479,53 @@ describe('useContainerActions', () => {
     expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
   });
 
+  it('wires rollback confirmation dialog to rollback accept handler', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    composable.confirmRollback('backup-1');
+
+    expect(mocks.confirmRequire).toHaveBeenCalledTimes(1);
+    const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+      header: string;
+      accept?: () => Promise<unknown>;
+    };
+    expect(confirmCall.header).toBe('Rollback Container');
+
+    await confirmCall.accept?.();
+    expect(mocks.rollback).toHaveBeenCalledWith('container-1', 'backup-1');
+  });
+
+  it('uses latest-backup messaging when rollback confirmation has no explicit backup id', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    composable.confirmRollback();
+
+    expect(mocks.confirmRequire).toHaveBeenCalledTimes(1);
+    const confirmCall = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+    expect(confirmCall.message).toContain('latest backup image');
+  });
+
+  it('does not open rollback confirmation when no container is selected', async () => {
+    const { composable } = await mountActionsHarness({
+      selectedContainer: null,
+      selectedContainerId: undefined,
+    });
+
+    composable.confirmRollback('backup-1');
+
+    expect(mocks.confirmRequire).not.toHaveBeenCalled();
+  });
+
   it('covers helper formatting and status-style branches', async () => {
     const { composable } = await mountActionsHarness();
 

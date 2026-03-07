@@ -97,6 +97,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     backupsLoading: ref(false),
     detailBackups: ref([]),
     rollbackInProgress: ref(false),
+    confirmRollback: vi.fn(),
     rollbackToBackup: vi.fn(),
     rollbackMessage: ref(null),
     rollbackError: ref(null),

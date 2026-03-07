@@ -760,6 +760,22 @@ export function useContainerActions(input: UseContainerActionsInput) {
     });
   }
 
+  function confirmRollback(backupId?: string) {
+    const containerName = input.selectedContainer.value?.name;
+    if (!containerName) {
+      return;
+    }
+    const rollbackTarget = backupId ? 'the selected backup image' : 'the latest backup image';
+    confirm.require({
+      header: 'Rollback Container',
+      message: `Rollback ${containerName} to ${rollbackTarget}? This will replace the running container image.`,
+      rejectLabel: 'Cancel',
+      acceptLabel: 'Rollback',
+      severity: 'danger',
+      accept: () => rollbackToBackup(backupId),
+    });
+  }
+
   return {
     actionInProgress,
     actionPending,
@@ -768,6 +784,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     clearSkipsSelected,
     confirmDelete,
     confirmForceUpdate,
+    confirmRollback,
     confirmRestart,
     confirmStop,
     containerPolicyTooltip,

@@ -113,7 +113,7 @@ const {
   backupsLoading,
   detailBackups,
   rollbackInProgress,
-  rollbackToBackup,
+  confirmRollback,
   rollbackMessage,
   rollbackError,
   updateOperationsLoading,
@@ -847,7 +847,7 @@ const {
                   <button class="px-2.5 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                           :style="{ border: '1px solid var(--dd-border-strong)' }"
                           :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
-                          @click="rollbackToBackup()">
+                          @click="confirmRollback()">
                     {{ rollbackInProgress === 'latest' ? 'Rolling back...' : 'Rollback Latest' }}
                   </button>
                 </div>
@@ -863,7 +863,7 @@ const {
                     <button class="px-2.5 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                             :style="{ border: '1px solid var(--dd-border-strong)' }"
                             :disabled="rollbackInProgress !== null"
-                            @click="rollbackToBackup(backup.id)">
+                            @click="confirmRollback(backup.id)">
                       {{ rollbackInProgress === backup.id ? 'Rolling...' : 'Use' }}
                     </button>
                   </div>
