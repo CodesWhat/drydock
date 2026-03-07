@@ -132,20 +132,15 @@ class Component {
   /**
    * Mask a String
    * @param value the value to mask
-   * @param nb the number of chars to keep start/end
-   * @param char the replacement char
+   * @param _nb unused legacy parameter
+   * @param _char unused legacy parameter
    * @returns {string|undefined} the masked string
    */
-  static mask(value: string | undefined, nb = 1, char = '*'): string | undefined {
+  static mask(value: string | undefined, _nb = 1, _char = '*'): string | undefined {
     if (!value) {
       return undefined;
     }
-    if (value.length < 2 * nb) {
-      return char.repeat(value.length);
-    }
-    return `${value.substring(0, nb)}${char.repeat(
-      Math.max(0, value.length - nb * 2),
-    )}${value.substring(value.length - nb, value.length)}`;
+    return '[REDACTED]';
   }
 }
 

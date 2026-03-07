@@ -4,16 +4,20 @@ beforeEach(async () => {
   vi.resetAllMocks();
 });
 
-test('mask should mask with * when called with defaults', async () => {
-  expect(Component.mask('abcdefgh')).toStrictEqual('a******h');
+test('mask should return fixed redaction marker when called with defaults', async () => {
+  expect(Component.mask('abcdefgh')).toStrictEqual('[REDACTED]');
 });
 
-test('mask should mask with § when called with § masking char', async () => {
-  expect(Component.mask('abcdefgh', 1, '§')).toStrictEqual('a§§§§§§h');
+test('mask should return fixed redaction marker for non-empty values', () => {
+  expect(Component.mask('registry-token')).toBe('[REDACTED]');
 });
 
-test('mask should mask with § and keep 3 chars when called with § masking char and a number of 3', async () => {
-  expect(Component.mask('abcdefgh', 3, '§')).toStrictEqual('abc§§fgh');
+test('mask should ignore masking char and keep fixed redaction marker', async () => {
+  expect(Component.mask('abcdefgh', 1, '§')).toStrictEqual('[REDACTED]');
+});
+
+test('mask should ignore keep-count and keep fixed redaction marker', async () => {
+  expect(Component.mask('abcdefgh', 3, '§')).toStrictEqual('[REDACTED]');
 });
 
 test('mask should return undefined when value is undefined', async () => {
@@ -21,7 +25,7 @@ test('mask should return undefined when value is undefined', async () => {
 });
 
 test('mask should not fail when mask is longer than original string', async () => {
-  expect(Component.mask('abc', 5)).toStrictEqual('***');
+  expect(Component.mask('abc', 5)).toStrictEqual('[REDACTED]');
 });
 
 test('getId should return the concatenation $type.$name', async () => {
