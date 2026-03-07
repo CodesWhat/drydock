@@ -181,6 +181,24 @@ describe('useDashboardComputed servers', () => {
     expect(totalContainers).toBe(containers.length);
     expect(counters.serverReads).toBeLessThanOrEqual(containers.length * 4);
   });
+
+  it('keeps bare host when agent port is empty', () => {
+    const state = createState({
+      agents: [{ name: 'edge-c', connected: true, host: 'edge-c.local', port: '   ' }],
+      containers: [],
+    });
+
+    expect(state.servers.value.find((row) => row.name === 'edge-c')?.host).toBe('edge-c.local');
+  });
+
+  it('keeps bare host when agent port is missing', () => {
+    const state = createState({
+      agents: [{ name: 'edge-d', connected: true, host: 'edge-d.local' }],
+      containers: [],
+    });
+
+    expect(state.servers.value.find((row) => row.name === 'edge-d')?.host).toBe('edge-d.local');
+  });
 });
 
 describe('useDashboardComputed update summary', () => {
@@ -260,6 +278,69 @@ describe('useDashboardComputed update summary', () => {
       color: 'var(--dd-primary)',
       colorMuted: 'var(--dd-primary-muted)',
     });
+  });
+
+  it('falls back to caution update colors when summary total is zero but updates exist', () => {
+    const state = createState({
+      containerSummary: {
+        containers: {
+          total: 0,
+          running: 0,
+          stopped: 0,
+        },
+      } as DashboardContainerSummary,
+      containers: [makeBaseContainer({ id: 'ratio-zero-total', updateKind: 'minor' })],
+    });
+    const updateStat = state.stats.value.find((card) => card.id === 'stat-updates');
+
+    expect(updateStat).toMatchObject({
+      value: '1',
+      color: 'var(--dd-caution)',
+      colorMuted: 'var(--dd-caution-muted)',
+    });
+  });
+
+  it('exposes status and update-kind visual helpers for all supported values', () => {
+    const state = createState();
+
+    expect(state.getRecentUpdateStatusColor('updated')).toBe('var(--dd-success)');
+    expect(state.getRecentUpdateStatusColor('pending')).toBe('var(--dd-warning)');
+    expect(state.getRecentUpdateStatusColor('snoozed')).toBe('var(--dd-primary)');
+    expect(state.getRecentUpdateStatusColor('skipped')).toBe('var(--dd-text-muted)');
+    expect(state.getRecentUpdateStatusColor('failed')).toBe('var(--dd-danger)');
+    expect(state.getRecentUpdateStatusColor('error')).toBe('var(--dd-danger)');
+
+    expect(state.getRecentUpdateStatusMutedColor('updated')).toBe('var(--dd-success-muted)');
+    expect(state.getRecentUpdateStatusMutedColor('pending')).toBe('var(--dd-warning-muted)');
+    expect(state.getRecentUpdateStatusMutedColor('snoozed')).toBe('var(--dd-primary-muted)');
+    expect(state.getRecentUpdateStatusMutedColor('skipped')).toBe('var(--dd-bg-elevated)');
+    expect(state.getRecentUpdateStatusMutedColor('failed')).toBe('var(--dd-danger-muted)');
+    expect(state.getRecentUpdateStatusMutedColor('error')).toBe('var(--dd-danger-muted)');
+
+    expect(state.getRecentUpdateStatusIcon('updated')).toBe('check');
+    expect(state.getRecentUpdateStatusIcon('pending')).toBe('pending');
+    expect(state.getRecentUpdateStatusIcon('snoozed')).toBe('pending');
+    expect(state.getRecentUpdateStatusIcon('skipped')).toBe('skip-forward');
+    expect(state.getRecentUpdateStatusIcon('failed')).toBe('xmark');
+    expect(state.getRecentUpdateStatusIcon('error')).toBe('xmark');
+
+    expect(state.getUpdateKindColor('major')).toBe('var(--dd-danger)');
+    expect(state.getUpdateKindColor('minor')).toBe('var(--dd-warning)');
+    expect(state.getUpdateKindColor('patch')).toBe('var(--dd-primary)');
+    expect(state.getUpdateKindColor('digest')).toBe('var(--dd-neutral)');
+    expect(state.getUpdateKindColor(null)).toBe('var(--dd-text-muted)');
+
+    expect(state.getUpdateKindMutedColor('major')).toBe('var(--dd-danger-muted)');
+    expect(state.getUpdateKindMutedColor('minor')).toBe('var(--dd-warning-muted)');
+    expect(state.getUpdateKindMutedColor('patch')).toBe('var(--dd-primary-muted)');
+    expect(state.getUpdateKindMutedColor('digest')).toBe('var(--dd-neutral-muted)');
+    expect(state.getUpdateKindMutedColor(null)).toBe('var(--dd-bg-elevated)');
+
+    expect(state.getUpdateKindIcon('major')).toBe('chevrons-up');
+    expect(state.getUpdateKindIcon('minor')).toBe('chevron-up');
+    expect(state.getUpdateKindIcon('patch')).toBe('hashtag');
+    expect(state.getUpdateKindIcon('digest')).toBe('fingerprint');
+    expect(state.getUpdateKindIcon(null)).toBe('info');
   });
 });
 
@@ -352,10 +433,51 @@ describe('useDashboardComputed maintenance countdown', () => {
     expect(longCountdown.maintenanceCountdownLabel.value).toBe('1d 2h');
   });
 
+  it('formats short maintenance countdowns in minutes', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const thirtyMinutesLater = new Date(now + 30 * 60_000).toISOString();
+    const state = createState({
+      watchers: [
+        {
+          configuration: {
+            maintenanceWindow: 'Sun 02:00-03:00 UTC',
+            maintenanceNextWindow: thirtyMinutesLater,
+          },
+        },
+      ],
+      maintenanceCountdownNow: now,
+    });
+
+    expect(state.maintenanceCountdownLabel.value).toBe('30m');
+  });
+
   it('returns an empty countdown label when no maintenance windows exist', () => {
     const state = createState({ watchers: [{ configuration: {} }] });
 
     expect(state.maintenanceCountdownLabel.value).toBe('');
+  });
+
+  it('ignores invalid maintenance next-window timestamps', () => {
+    const now = Date.parse('2026-03-01T00:00:00.000Z');
+    const state = createState({
+      watchers: [
+        {
+          configuration: {
+            maintenanceWindow: 'Sun 02:00-03:00 UTC',
+            maintenanceNextWindow: 'invalid-date',
+          },
+        },
+        {
+          configuration: {
+            maintenanceWindow: 'Sun 04:00-05:00 UTC',
+            maintenanceNextWindow: new Date(now + 45 * 60_000).toISOString(),
+          },
+        },
+      ],
+      maintenanceCountdownNow: now,
+    });
+
+    expect(state.maintenanceCountdownLabel.value).toBe('45m');
   });
 });
 
@@ -518,5 +640,35 @@ describe('useDashboardComputed recent updates', () => {
 
     expect(rows).toHaveLength(6);
     expect(counters.detectedAtReads).toBeLessThanOrEqual(containers.length * 3);
+  });
+
+  it('falls back to suppressed update defaults when tags or timestamps are invalid', () => {
+    const state = createState({
+      containers: [
+        makeBaseContainer({
+          id: 'suppressed-empty',
+          name: 'suppressed-empty',
+          newTag: null,
+          suppressedUpdateTag: undefined,
+          updatePolicyState: 'skipped',
+          updateDetectedAt: 'invalid-date',
+        }),
+      ],
+    });
+
+    expect(state.recentUpdates.value).toEqual([
+      expect.objectContaining({
+        name: 'suppressed-empty',
+        newVer: '',
+        status: 'skipped',
+      }),
+    ]);
+  });
+
+  it('returns zero arc lengths when there are no security entries', () => {
+    const state = createState({ containers: [] });
+
+    expect(state.securityIssueArcLength.value).toBe(0);
+    expect(state.securityNotScannedArcLength.value).toBe(0);
   });
 });

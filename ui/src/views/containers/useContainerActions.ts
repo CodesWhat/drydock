@@ -325,7 +325,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     name: string,
     action: string,
     payload: Record<string, unknown> = {},
-    message?: string,
+    message: string,
   ) {
     const containerId = input.containerIdMap.value[name];
     if (!containerId || policyInProgress.value) {
@@ -335,9 +335,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     policyError.value = null;
     try {
       await updateContainerPolicy(containerId, action, payload);
-      if (message) {
-        policyMessage.value = message;
-      }
+      policyMessage.value = message;
       await input.loadContainers();
       return true;
     } catch (e: unknown) {
@@ -553,6 +551,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       return false;
     }
     actionInProgress.value = name;
+    input.error.value = null;
     const snapshot = input.containers.value.find((container) => container.name === name);
     try {
       await action(containerId);
@@ -570,7 +569,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       }
       return true;
     } catch (e: unknown) {
-      console.error(`Action failed for ${name}:`, errorMessage(e));
+      input.error.value = errorMessage(e, `Action failed for ${name}`);
       return false;
     } finally {
       actionInProgress.value = null;

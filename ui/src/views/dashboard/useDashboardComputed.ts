@@ -201,10 +201,6 @@ function insertPendingRecentUpdate(
   candidate: PendingRecentUpdateCandidate,
   maxItems: number,
 ) {
-  if (maxItems <= 0) {
-    return;
-  }
-
   let insertAt = -1;
   for (let index = 0; index < topPendingUpdates.length; index += 1) {
     if (comparePendingRecentUpdates(candidate, topPendingUpdates[index]) < 0) {

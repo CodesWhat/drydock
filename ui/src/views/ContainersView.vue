@@ -267,6 +267,7 @@ const VALID_FILTER_KINDS = new Set(['all', 'any', 'major', 'minor', 'patch', 'di
 function applyFilterKindFromQuery(queryValue: unknown) {
   const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
   if (raw === undefined || raw === null) {
+    filterKind.value = 'all';
     return;
   }
   if (typeof raw !== 'string') {
@@ -279,6 +280,14 @@ function applyFilterKindFromQuery(queryValue: unknown) {
 function applyFilterSearchFromQuery(queryValue: unknown) {
   const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
   filterSearch.value = typeof raw === 'string' ? raw : '';
+  // When navigating with a search query (e.g. from Ctrl+K), clear persisted
+  // dropdown filters so the target container is always visible.
+  if (filterSearch.value) {
+    filterStatus.value = 'all';
+    filterRegistry.value = 'all';
+    filterBouncer.value = 'all';
+    filterServer.value = 'all';
+  }
 }
 
 applyFilterSearchFromQuery(route.query.q);

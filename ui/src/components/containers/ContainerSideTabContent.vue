@@ -494,7 +494,7 @@ const {
                  :style="{ backgroundColor: 'var(--dd-bg-code)' }">
               <div class="px-3 py-2 flex items-center justify-between gap-2"
                    style="border-bottom: 1px solid var(--dd-log-divider);">
-                <span class="text-[10px] font-semibold uppercase tracking-wider" style="color: var(--dd-text-muted);">
+                <span class="text-[10px] font-semibold uppercase tracking-wider" style="color: var(--dd-log-text-muted);">
                   Container Logs
                 </span>
                 <div class="flex items-center gap-2">
@@ -504,7 +504,7 @@ const {
                       {{ opt.label }}
                     </option>
                   </select>
-                  <span class="text-[9px] font-mono" style="color: var(--dd-text-muted);">
+                  <span class="text-[9px] font-mono" style="color: var(--dd-log-text-muted);">
                     {{ getContainerLogs(selectedContainer.name).length }} lines
                   </span>
                 </div>
@@ -514,8 +514,8 @@ const {
                 <div v-for="(line, i) in getContainerLogs(selectedContainer.name)" :key="i"
                      class="px-3 py-0.5 font-mono text-[10px] leading-relaxed whitespace-pre"
                      :style="{ borderBottom: i < getContainerLogs(selectedContainer.name).length - 1 ? '1px solid var(--dd-log-line)' : 'none' }">
-                  <span style="color: var(--dd-text-muted);">{{ line.substring(0, 24) }}</span>
-                  <span :style="{ color: line.includes('[error]') || line.includes('[crit]') || line.includes('[emerg]') ? 'var(--dd-danger)' : line.includes('[warn]') ? 'var(--dd-warning)' : 'var(--dd-text-secondary)' }">{{ line.substring(24) }}</span>
+                  <span style="color: var(--dd-log-text-muted);">{{ line.substring(0, 24) }}</span>
+                  <span :style="{ color: line.includes('[error]') || line.includes('[crit]') || line.includes('[emerg]') ? 'var(--dd-danger)' : line.includes('[warn]') ? 'var(--dd-warning)' : 'var(--dd-log-text)' }">{{ line.substring(24) }}</span>
                 </div>
               </div>
               <div v-if="containerScrollBlocked && containerAutoFetchInterval > 0"

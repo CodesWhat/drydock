@@ -66,7 +66,9 @@ function mapWatcher(watcher: ApiComponent, status = 'watching') {
     containers: containerCounts.value[watcher.id] ?? totalContainers.value,
     cron: watcher.configuration?.cron ?? '',
     lastRun: '\u2014',
-    config: watcher.configuration ?? {},
+    config: Object.fromEntries(
+      Object.entries(watcher.configuration ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+    ),
     agent: watcher.agent,
   };
 }
