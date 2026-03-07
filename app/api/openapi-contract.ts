@@ -6,7 +6,7 @@ const require = createRequire(import.meta.url);
 const Ajv2020 = require('ajv/dist/2020.js') as typeof import('ajv/dist/2020.js').default;
 const addFormats = require('ajv-formats') as typeof import('ajv-formats').default;
 
-type JsonSchema = Record<string, unknown>;
+type OpenApiSchemaObject = Record<string, unknown>;
 type OpenApiMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
 
 interface ContractValidationResult {
@@ -172,7 +172,7 @@ function formatValidationError(error: ErrorObject, payload: unknown): string {
   return `${path}: ${message}`;
 }
 
-function validateSchema(schema: JsonSchema, payload: unknown): string[] {
+function validateSchema(schema: OpenApiSchemaObject, payload: unknown): string[] {
   const ajv = new Ajv2020({
     allErrors: true,
     allowUnionTypes: true,
@@ -180,7 +180,7 @@ function validateSchema(schema: JsonSchema, payload: unknown): string[] {
   });
   addFormats(ajv);
 
-  const wrappedSchema: JsonSchema = {
+  const wrappedSchema: OpenApiSchemaObject = {
     type: 'object',
     properties: {
       payload: schema,
@@ -231,7 +231,7 @@ export function validateOpenApiJsonResponse(
 
   const response = operation.responses[statusCode] as
     | {
-        content?: Record<string, { schema?: JsonSchema }>;
+        content?: Record<string, { schema?: OpenApiSchemaObject }>;
       }
     | undefined;
   if (!response) {
