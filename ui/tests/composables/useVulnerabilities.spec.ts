@@ -615,6 +615,76 @@ describe('useVulnerabilities', () => {
     expect(state.loading.value).toBe(false);
   });
 
+  it('applies fallback defaults for sparse and malformed API responses', async () => {
+    mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+      totalContainers: 2,
+      scannedContainers: 2,
+      latestScannedAt: '2026-03-01T10:00:00.000Z',
+      images: [
+        {
+          image: 'sparse-image',
+          containerIds: ['c1'],
+          vulnerabilities: [{}],
+        },
+        {
+          image: 'non-array-vulns',
+          containerIds: ['c2'],
+          vulnerabilities: 'not-an-array',
+        },
+        {
+          image: '',
+          containerIds: null,
+          vulnerabilities: [{ id: 'CVE-NOIMAGE', severity: 'HIGH', package: 'pkg' }],
+        },
+        {
+          image: 'empty-ids',
+          containerIds: ['', null, 42],
+          vulnerabilities: [],
+        },
+      ],
+    });
+
+    const securitySortField = ref('bogus-field');
+    const state = useVulnerabilities({
+      securitySortField,
+      securitySortAsc: ref(false),
+    });
+    await state.fetchVulnerabilities();
+
+    expect(state.securityVulnerabilities.value).toHaveLength(2);
+    const vuln = state.securityVulnerabilities.value.find((v) => v.id === 'unknown');
+    expect(vuln).toBeDefined();
+    expect(vuln!.package).toBe('unknown');
+    expect(vuln!.version).toBe('');
+    expect(vuln!.fixedIn).toBeNull();
+    expect(vuln!.title).toBe('');
+    expect(vuln!.target).toBe('');
+    expect(vuln!.primaryUrl).toBe('');
+    expect(vuln!.publishedDate).toBe('');
+    expect(vuln!.image).toBe('sparse-image');
+
+    expect(state.containerIdsByImage.value.unknown).toBeUndefined();
+    expect(state.containerIdsByImage.value['empty-ids']).toBeUndefined();
+  });
+
+  it('handles non-array overview.images gracefully', async () => {
+    mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+      totalContainers: 0,
+      scannedContainers: 0,
+      latestScannedAt: null,
+      images: 'not-an-array',
+    });
+
+    const state = useVulnerabilities({
+      securitySortField: ref('critical'),
+      securitySortAsc: ref(false),
+    });
+    await state.fetchVulnerabilities();
+
+    expect(state.securityVulnerabilities.value).toHaveLength(0);
+    expect(state.containerIdsByImage.value).toEqual({});
+  });
+
   it('sets an error and clears derived state when loading fails', async () => {
     mockGetSecurityVulnerabilityOverview.mockRejectedValue({ bad: true });
 

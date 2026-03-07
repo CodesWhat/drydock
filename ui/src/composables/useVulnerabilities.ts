@@ -218,7 +218,7 @@ export function useVulnerabilities({
       const latestScanAt = chooseLatestTimestamp(null, overview.latestScannedAt);
 
       for (const imageOverview of Array.isArray(overview.images) ? overview.images : []) {
-        const imageName = `${imageOverview.image || 'unknown'}` || 'unknown';
+        const imageName = imageOverview.image || 'unknown';
 
         const rawContainerIds = Array.isArray(imageOverview.containerIds)
           ? imageOverview.containerIds
