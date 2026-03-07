@@ -1,34 +1,47 @@
 import { Strategy as AnonymousStrategy } from 'passport-anonymous';
 import log from '../../../log/index.js';
+import { isUpgrade } from '../../../store/app.js';
 import Authentication from '../Authentication.js';
 
 /**
  * Anonymous authentication.
  */
 class Anonymous extends Authentication {
-  private ensureConfirmationEnabled(): void {
-    if (process.env.DD_AUTH_ANONYMOUS_CONFIRM?.trim().toLowerCase() === 'true') {
-      return;
-    }
-
-    throw new Error(
-      'Anonymous authentication requires DD_AUTH_ANONYMOUS_CONFIRM=true. Set DD_AUTH_ANONYMOUS_CONFIRM=true only for trusted networks.',
-    );
+  private isExplicitlyConfirmed(): boolean {
+    return process.env.DD_AUTH_ANONYMOUS_CONFIRM?.trim().toLowerCase() === 'true';
   }
 
   initAuthentication(): void {
-    this.ensureConfirmationEnabled();
+    if (this.isExplicitlyConfirmed()) {
+      return;
+    }
+    if (isUpgrade()) {
+      log.warn(
+        'No authentication configured — the dashboard is accessible without login. Set DD_AUTH_BASIC_<name>_USER / DD_AUTH_BASIC_<name>_HASH to secure it, or set DD_AUTH_ANONYMOUS_CONFIRM=true to silence this warning.',
+      );
+      return;
+    }
+    throw new Error(
+      'No authentication configured and this is a fresh install. Set DD_AUTH_BASIC_<name>_USER / DD_AUTH_BASIC_<name>_HASH to secure the dashboard, or set DD_AUTH_ANONYMOUS_CONFIRM=true to allow anonymous access.',
+    );
   }
 
   /**
    * Return passport strategy.
    */
   getStrategy() {
-    this.ensureConfirmationEnabled();
-    log.warn(
-      'Anonymous authentication is enabled; please make sure that the app is not exposed to unsecure networks',
+    if (this.isExplicitlyConfirmed()) {
+      return new AnonymousStrategy();
+    }
+    if (isUpgrade()) {
+      log.warn(
+        'Anonymous authentication is enabled without explicit confirmation; consider configuring authentication',
+      );
+      return new AnonymousStrategy();
+    }
+    throw new Error(
+      'Anonymous authentication cannot be enabled on a fresh install without DD_AUTH_ANONYMOUS_CONFIRM=true',
     );
-    return new AnonymousStrategy();
   }
 
   getStrategyDescription() {

@@ -1,3 +1,9 @@
+const mockIsUpgrade = vi.hoisted(() => vi.fn(() => true));
+
+vi.mock('../store/app.js', () => ({
+  isUpgrade: mockIsUpgrade,
+}));
+
 import fs from 'node:fs';
 import path from 'node:path';
 import * as configuration from '../configuration/index.js';
@@ -54,6 +60,7 @@ beforeEach(async () => {
   watchers = {};
   authentications = {};
   agents = {};
+  mockIsUpgrade.mockReturnValue(true);
 
   // Ensure default implementations return the variables
   mockGetRegistryConfigurations.mockImplementation(() => registries);
@@ -678,14 +685,21 @@ test('registerAuthentications should warn when registration errors occur', async
   );
 });
 
-test('registerAuthentications should not register anonymous auth by default without confirmation', async () => {
-  const spyLog = vi.spyOn(registry.testable_log, 'warn');
+test('registerAuthentications should register anonymous auth on upgrade without confirmation', async () => {
+  mockIsUpgrade.mockReturnValue(true);
+  await registry.testable_registerAuthentications();
 
+  expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
+});
+
+test('registerAuthentications should fail-closed on fresh install without confirmation', async () => {
+  mockIsUpgrade.mockReturnValue(false);
+  const spyLog = vi.spyOn(registry.testable_log, 'warn');
   await registry.testable_registerAuthentications();
 
   expect(Object.keys(registry.getState().authentication)).toEqual([]);
   expect(spyLog).toHaveBeenCalledWith(
-    expect.stringContaining('Anonymous authentication requires DD_AUTH_ANONYMOUS_CONFIRM=true'),
+    expect.stringContaining('Some authentications failed to register'),
   );
 });
 
@@ -694,6 +708,7 @@ test('registerAuthentications should register anonymous auth when confirmation i
   process.env.DD_AUTH_ANONYMOUS_CONFIRM = 'true';
 
   try {
+    mockIsUpgrade.mockReturnValue(false);
     await registry.testable_registerAuthentications();
     expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
   } finally {

@@ -25,6 +25,7 @@ interface AppStoreDb {
 }
 
 let app: AppCollection;
+let isUpgradeFromPreviousVersion = false;
 
 function saveAppInfosAndMigrate() {
   const appInfosCurrent = {
@@ -32,6 +33,7 @@ function saveAppInfosAndMigrate() {
     version: getVersion(),
   };
   const appInfosSaved = app.findOne({});
+  isUpgradeFromPreviousVersion = appInfosSaved !== null;
   const versionFromStore = appInfosSaved ? appInfosSaved.version : undefined;
   const currentVersion = appInfosCurrent.version;
   if (currentVersion !== versionFromStore) {
@@ -50,4 +52,8 @@ export function createCollections(db: AppStoreDb) {
 
 export function getAppInfos() {
   return app.findOne({});
+}
+
+export function isUpgrade(): boolean {
+  return isUpgradeFromPreviousVersion;
 }
