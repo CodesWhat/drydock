@@ -1271,7 +1271,11 @@ onUnmounted(() => {
         One or more OIDC providers use an insecure
         <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">http://</code>
         discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0.
-        Migrate your IdP to HTTPS.
+        <a href="https://drydock.codeswhat.com/docs/configuration/authentications/oidc"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="underline font-medium"
+           :style="{ color: 'var(--dd-warning)' }">Migrate your IdP to HTTPS.</a>
       </AnnouncementBanner>
 
       <!-- MAIN CONTENT -->
