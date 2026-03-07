@@ -15,9 +15,12 @@ The webhook API lets external systems trigger container watches and updates. Thi
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
 | `DD_SERVER_WEBHOOK_ENABLED` | ⚪ | Enable webhook endpoints | `true`, `false` | `false` |
-| `DD_SERVER_WEBHOOK_TOKEN` | 🔴 | Bearer token for webhook authentication (required when enabled) | Any string | — |
+| `DD_SERVER_WEBHOOK_TOKEN` | ⚪ | Shared Bearer token used by all webhook endpoints (fallback token) | Any string | — |
+| `DD_SERVER_WEBHOOK_TOKENS_WATCHALL` | ⚪ | Endpoint-specific token for `POST /api/webhook/watch` | Any string | — |
+| `DD_SERVER_WEBHOOK_TOKENS_WATCH` | ⚪ | Endpoint-specific token for `POST /api/webhook/watch/:containerName` | Any string | — |
+| `DD_SERVER_WEBHOOK_TOKENS_UPDATE` | ⚪ | Endpoint-specific token for `POST /api/webhook/update/:containerName` | Any string | — |
 
-<Callout type="warn">Webhooks are disabled by default. Set `DD_SERVER_WEBHOOK_ENABLED=true` and provide a `DD_SERVER_WEBHOOK_TOKEN` to activate them. Without a token, webhook endpoints will reject all requests.</Callout>
+<Callout type="warn">Webhooks are disabled by default. Set `DD_SERVER_WEBHOOK_ENABLED=true` and provide at least one webhook token (`DD_SERVER_WEBHOOK_TOKEN` or any `DD_SERVER_WEBHOOK_TOKENS_*` value). Requests to endpoints without a configured token are rejected.</Callout>
 
 ## Endpoints
 
@@ -34,6 +37,11 @@ All webhook requests require a Bearer token in the `Authorization` header:
 ```text
 Authorization: Bearer your-token-here
 ```
+
+Token selection rules:
+
+- If an endpoint-specific token (`DD_SERVER_WEBHOOK_TOKENS_*`) is set for that endpoint, it is required.
+- Otherwise, drydock falls back to `DD_SERVER_WEBHOOK_TOKEN`.
 
 ## Rate limiting
 
@@ -115,7 +123,9 @@ services:
     image: codeswhat/drydock
     environment:
       - DD_SERVER_WEBHOOK_ENABLED=true
-      - DD_SERVER_WEBHOOK_TOKEN=my-secret-token
+      - DD_SERVER_WEBHOOK_TOKENS_WATCHALL=my-watchall-token
+      - DD_SERVER_WEBHOOK_TOKENS_WATCH=my-watch-token
+      - DD_SERVER_WEBHOOK_TOKENS_UPDATE=my-update-token
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
@@ -127,7 +137,9 @@ services:
 ```bash
 docker run -d \
   -e DD_SERVER_WEBHOOK_ENABLED=true \
-  -e DD_SERVER_WEBHOOK_TOKEN=my-secret-token \
+  -e DD_SERVER_WEBHOOK_TOKENS_WATCHALL=my-watchall-token \
+  -e DD_SERVER_WEBHOOK_TOKENS_WATCH=my-watch-token \
+  -e DD_SERVER_WEBHOOK_TOKENS_UPDATE=my-update-token \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -p 3000:3000 \
   codeswhat/drydock

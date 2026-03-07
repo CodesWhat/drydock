@@ -13,7 +13,15 @@ const {
   mockTimingSafeEqual,
 } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), post: vi.fn() },
-  mockGetWebhookConfiguration: vi.fn(() => ({ enabled: true, token: 'test-token' })),
+  mockGetWebhookConfiguration: vi.fn(() => ({
+    enabled: true,
+    token: 'test-token',
+    tokens: {
+      watchall: '',
+      watch: '',
+      update: '',
+    },
+  })),
   mockGetContainers: vi.fn(() => []),
   mockGetState: vi.fn(() => ({ watcher: {}, trigger: {} })),
   mockInsertAudit: vi.fn(),
@@ -112,7 +120,15 @@ describe('Webhook Router', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetWebhookConfiguration.mockReturnValue({ enabled: true, token: 'test-token' });
+    mockGetWebhookConfiguration.mockReturnValue({
+      enabled: true,
+      token: 'test-token',
+      tokens: {
+        watchall: '',
+        watch: '',
+        update: '',
+      },
+    });
     mockAuditInc = vi.fn();
     mockGetAuditCounter.mockReturnValue({ inc: mockAuditInc });
     mockWebhookInc = vi.fn();
@@ -186,7 +202,15 @@ describe('Webhook Router', () => {
     });
 
     test('should return 403 when webhooks are disabled', () => {
-      mockGetWebhookConfiguration.mockReturnValue({ enabled: false, token: 'test-token' });
+      mockGetWebhookConfiguration.mockReturnValue({
+        enabled: false,
+        token: 'test-token',
+        tokens: {
+          watchall: '',
+          watch: '',
+          update: '',
+        },
+      });
       const middleware = getAuthMiddleware();
       const req = createMockRequest({ headers: { authorization: 'Bearer test-token' } });
       const res = createMockResponse();
@@ -201,7 +225,15 @@ describe('Webhook Router', () => {
     });
 
     test('should return 500 when webhook token is empty (misconfiguration)', () => {
-      mockGetWebhookConfiguration.mockReturnValue({ enabled: true, token: '' });
+      mockGetWebhookConfiguration.mockReturnValue({
+        enabled: true,
+        token: '',
+        tokens: {
+          watchall: '',
+          watch: '',
+          update: '',
+        },
+      });
       const middleware = getAuthMiddleware();
       const req = createMockRequest({ headers: { authorization: 'Bearer ' } });
       const res = createMockResponse();
@@ -224,6 +256,124 @@ describe('Webhook Router', () => {
 
       expect(next).toHaveBeenCalled();
       expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('should use watch-all endpoint token for /watch and reject shared token when override exists', () => {
+      mockGetWebhookConfiguration.mockReturnValue({
+        enabled: true,
+        token: 'shared-token',
+        tokens: {
+          watchall: 'watchall-token',
+          watch: 'watch-token',
+          update: 'update-token',
+        },
+      });
+      const middleware = getAuthMiddleware();
+      const req = createMockRequest({
+        path: '/watch',
+        headers: { authorization: 'Bearer shared-token' },
+      });
+      const res = createMockResponse();
+      const next = vi.fn();
+      middleware(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    test('should use watch token for /watch/:containerName', () => {
+      mockGetWebhookConfiguration.mockReturnValue({
+        enabled: true,
+        token: 'shared-token',
+        tokens: {
+          watchall: '',
+          watch: 'watch-token',
+          update: '',
+        },
+      });
+      const middleware = getAuthMiddleware();
+      const req = createMockRequest({
+        path: '/watch/my-nginx',
+        headers: { authorization: 'Bearer watch-token' },
+      });
+      const res = createMockResponse();
+      const next = vi.fn();
+      middleware(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('should use update token for /update/:containerName', () => {
+      mockGetWebhookConfiguration.mockReturnValue({
+        enabled: true,
+        token: 'shared-token',
+        tokens: {
+          watchall: '',
+          watch: '',
+          update: 'update-token',
+        },
+      });
+      const middleware = getAuthMiddleware();
+      const req = createMockRequest({
+        path: '/update/my-nginx',
+        headers: { authorization: 'Bearer update-token' },
+      });
+      const res = createMockResponse();
+      const next = vi.fn();
+      middleware(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('should fall back to shared token when endpoint-specific token is not configured', () => {
+      mockGetWebhookConfiguration.mockReturnValue({
+        enabled: true,
+        token: 'shared-token',
+        tokens: {
+          watchall: '',
+          watch: '',
+          update: '',
+        },
+      });
+      const middleware = getAuthMiddleware();
+      const req = createMockRequest({
+        path: '/update/my-nginx',
+        headers: { authorization: 'Bearer shared-token' },
+      });
+      const res = createMockResponse();
+      const next = vi.fn();
+      middleware(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('should return 500 when endpoint token is required but not configured', () => {
+      mockGetWebhookConfiguration.mockReturnValue({
+        enabled: true,
+        token: '',
+        tokens: {
+          watchall: '',
+          watch: '',
+          update: 'update-token',
+        },
+      });
+      const middleware = getAuthMiddleware();
+      const req = createMockRequest({
+        path: '/watch/my-nginx',
+        headers: { authorization: 'Bearer watch-token' },
+      });
+      const res = createMockResponse();
+      const next = vi.fn();
+      middleware(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.stringContaining('misconfigured') }),
+      );
+      expect(next).not.toHaveBeenCalled();
     });
   });
 
@@ -249,7 +399,7 @@ describe('Webhook Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Watch cycle triggered',
-        watchers: 2,
+        result: { watchers: 2 },
       });
     });
 
@@ -264,7 +414,7 @@ describe('Webhook Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Watch cycle triggered',
-        watchers: 0,
+        result: { watchers: 0 },
       });
     });
 
@@ -489,7 +639,7 @@ describe('Webhook Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Watch triggered for container my-nginx',
-        container: 'my-nginx',
+        result: { container: 'my-nginx' },
       });
     });
 
@@ -682,7 +832,7 @@ describe('Webhook Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Update triggered for container my-nginx',
-        container: 'my-nginx',
+        result: { container: 'my-nginx' },
       });
     });
 

@@ -17,6 +17,54 @@ const log = logger.child({ component: 'webhook' });
 
 const router = express.Router();
 
+type WebhookAction = 'watchall' | 'watch' | 'update';
+
+function normalizeRequestPath(req: Request): string {
+  const rawPath = (req.path || req.originalUrl || req.url || '').split('?')[0];
+  if (!rawPath) {
+    return '';
+  }
+  if (rawPath.length > 1 && rawPath.endsWith('/')) {
+    return rawPath.slice(0, -1);
+  }
+  return rawPath;
+}
+
+function getWebhookActionFromRequest(req: Request): WebhookAction | undefined {
+  const requestPath = normalizeRequestPath(req);
+  if (
+    requestPath === '/watch' ||
+    requestPath.endsWith('/webhook/watch') ||
+    requestPath.endsWith('/api/webhook/watch')
+  ) {
+    return 'watchall';
+  }
+  if (
+    requestPath.startsWith('/watch/') ||
+    requestPath.includes('/webhook/watch/') ||
+    requestPath.includes('/api/webhook/watch/')
+  ) {
+    return 'watch';
+  }
+  if (
+    requestPath.startsWith('/update/') ||
+    requestPath.includes('/webhook/update/') ||
+    requestPath.includes('/api/webhook/update/')
+  ) {
+    return 'update';
+  }
+  return undefined;
+}
+
+function getTokenForRequest(
+  req: Request,
+  webhookConfig: ReturnType<typeof getWebhookConfiguration>,
+): string {
+  const action = getWebhookActionFromRequest(req);
+  const endpointToken = action ? webhookConfig.tokens?.[action] : undefined;
+  return endpointToken || webhookConfig.token;
+}
+
 /**
  * Authenticate webhook requests via Bearer token.
  */
@@ -34,7 +82,7 @@ function authenticateToken(req: Request, res: Response, next: NextFunction) {
   }
 
   const token = authHeader.slice(7);
-  const configuredToken = webhookConfig.token;
+  const configuredToken = getTokenForRequest(req, webhookConfig);
 
   // Reject empty or missing configured token (misconfiguration guard)
   if (!configuredToken) {
@@ -128,7 +176,7 @@ async function watchAll(req: Request, res: Response) {
 
     res.status(200).json({
       message: 'Watch cycle triggered',
-      watchers: watcherEntries.length,
+      result: { watchers: watcherEntries.length },
     });
   } catch (e: unknown) {
     const message = getErrorMessage(e);
@@ -177,7 +225,7 @@ async function watchContainer(req: Request, res: Response) {
 
     res.status(200).json({
       message: `Watch triggered for container ${containerName}`,
-      container: containerName,
+      result: { container: containerName },
     });
   } catch (e: unknown) {
     handleContainerActionError(e, container, containerName, res, {
@@ -223,7 +271,7 @@ async function updateContainer(req: Request, res: Response) {
 
     res.status(200).json({
       message: `Update triggered for container ${containerName}`,
-      container: containerName,
+      result: { container: containerName },
     });
   } catch (e: unknown) {
     handleContainerActionError(e, container, containerName, res, {

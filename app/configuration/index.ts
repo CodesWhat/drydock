@@ -320,17 +320,39 @@ export function getWebhookConfiguration() {
   const configurationFromEnv = get('dd.server.webhook', ddEnvVars);
   const configurationSchema = joi.object().keys({
     enabled: joi.boolean().default(false),
-    token: joi.string().when('enabled', {
-      is: true,
-      then: joi.string().min(1).required(),
-      otherwise: joi.string().allow('').default(''),
-    }),
+    token: joi.string().allow('').default(''),
+    tokens: joi
+      .object({
+        watchall: joi.string().allow('').default(''),
+        watch: joi.string().allow('').default(''),
+        update: joi.string().allow('').default(''),
+      })
+      .default({
+        watchall: '',
+        watch: '',
+        update: '',
+      }),
   });
   const configurationToValidate = configurationSchema.validate(configurationFromEnv);
   if (configurationToValidate.error) {
     throw configurationToValidate.error;
   }
-  return configurationToValidate.value;
+
+  const configuration = configurationToValidate.value;
+  const hasAnyToken = [
+    configuration.token,
+    configuration.tokens?.watchall,
+    configuration.tokens?.watch,
+    configuration.tokens?.update,
+  ].some((token) => typeof token === 'string' && token.length > 0);
+
+  if (configuration.enabled && !hasAnyToken) {
+    throw new Error(
+      'At least one webhook token (DD_SERVER_WEBHOOK_TOKEN or DD_SERVER_WEBHOOK_TOKENS_*) must be configured when webhooks are enabled',
+    );
+  }
+
+  return configuration;
 }
 
 function parseSecuritySeverityList(rawValue: string | undefined): SecuritySeverity[] {

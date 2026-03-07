@@ -830,12 +830,20 @@ describe('getWebhookConfiguration', () => {
   beforeEach(() => {
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_UPDATE;
   });
 
   test('should return disabled webhook by default', () => {
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: false,
       token: '',
+      tokens: {
+        watchall: '',
+        watch: '',
+        update: '',
+      },
     });
   });
 
@@ -846,12 +854,38 @@ describe('getWebhookConfiguration', () => {
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: true,
       token: 'secret-token',
+      tokens: {
+        watchall: '',
+        watch: '',
+        update: '',
+      },
     });
   });
 
-  test('should throw when webhook is enabled without token', () => {
+  test('should return enabled webhook when per-endpoint tokens are provided without shared token', () => {
     configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL = 'watchall-token';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH = 'watch-token';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_UPDATE = 'update-token';
+
+    expect(configuration.getWebhookConfiguration()).toStrictEqual({
+      enabled: true,
+      token: '',
+      tokens: {
+        watchall: 'watchall-token',
+        watch: 'watch-token',
+        update: 'update-token',
+      },
+    });
+  });
+
+  test('should throw when webhook is enabled without shared or endpoint tokens', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_UPDATE;
 
     expect(() => configuration.getWebhookConfiguration()).toThrow();
   });
@@ -869,6 +903,11 @@ describe('getWebhookConfiguration', () => {
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: false,
       token: '',
+      tokens: {
+        watchall: '',
+        watch: '',
+        update: '',
+      },
     });
 
     if (originalDd === undefined) {
@@ -887,6 +926,11 @@ describe('getWebhookConfiguration', () => {
         webhook: {
           enabled: false,
           token: '',
+          tokens: {
+            watchall: '',
+            watch: '',
+            update: '',
+          },
         },
       },
     };
@@ -894,6 +938,11 @@ describe('getWebhookConfiguration', () => {
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: false,
       token: '',
+      tokens: {
+        watchall: '',
+        watch: '',
+        update: '',
+      },
     });
 
     if (originalDd === undefined) {
