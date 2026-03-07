@@ -19,10 +19,10 @@ import Anonymous from './Anonymous.js';
 
 describe('Anonymous Authentication', () => {
   let anonymous: InstanceType<typeof Anonymous>;
-  const originalAnonymousConfirmation = process.env.DD_AUTH_ANONYMOUS_CONFIRM;
+  const originalAnonymousConfirmation = process.env.DD_ANONYMOUS_CONFIRM;
 
   beforeEach(async () => {
-    delete process.env.DD_AUTH_ANONYMOUS_CONFIRM;
+    delete process.env.DD_ANONYMOUS_CONFIRM;
     mockIsUpgrade.mockReturnValue(false);
     vi.clearAllMocks();
     anonymous = new Anonymous();
@@ -30,10 +30,10 @@ describe('Anonymous Authentication', () => {
 
   afterAll(() => {
     if (originalAnonymousConfirmation === undefined) {
-      delete process.env.DD_AUTH_ANONYMOUS_CONFIRM;
+      delete process.env.DD_ANONYMOUS_CONFIRM;
       return;
     }
-    process.env.DD_AUTH_ANONYMOUS_CONFIRM = originalAnonymousConfirmation;
+    process.env.DD_ANONYMOUS_CONFIRM = originalAnonymousConfirmation;
   });
 
   test('should create instance', async () => {
@@ -67,12 +67,12 @@ describe('Anonymous Authentication', () => {
     });
 
     test('should not throw during initAuthentication with confirmation', () => {
-      process.env.DD_AUTH_ANONYMOUS_CONFIRM = 'true';
+      process.env.DD_ANONYMOUS_CONFIRM = 'true';
       expect(() => anonymous.initAuthentication()).not.toThrow();
     });
 
     test('should return anonymous strategy with confirmation', () => {
-      process.env.DD_AUTH_ANONYMOUS_CONFIRM = 'true';
+      process.env.DD_ANONYMOUS_CONFIRM = 'true';
       const strategy = anonymous.getStrategy();
       expect(strategy).toBeDefined();
       expect(strategy.name).toBe('anonymous');
@@ -111,19 +111,19 @@ describe('Anonymous Authentication', () => {
     });
 
     test('should not throw during initAuthentication with confirmation', () => {
-      process.env.DD_AUTH_ANONYMOUS_CONFIRM = 'true';
+      process.env.DD_ANONYMOUS_CONFIRM = 'true';
       expect(() => anonymous.initAuthentication()).not.toThrow();
     });
 
     test('should return anonymous strategy with confirmation', () => {
-      process.env.DD_AUTH_ANONYMOUS_CONFIRM = 'true';
+      process.env.DD_ANONYMOUS_CONFIRM = 'true';
       const strategy = anonymous.getStrategy();
       expect(strategy).toBeDefined();
       expect(strategy.name).toBe('anonymous');
     });
 
     test('should not log warning with confirmation', () => {
-      process.env.DD_AUTH_ANONYMOUS_CONFIRM = 'true';
+      process.env.DD_ANONYMOUS_CONFIRM = 'true';
       anonymous.initAuthentication();
       anonymous.getStrategy();
       expect(log.warn).not.toHaveBeenCalled();

@@ -704,8 +704,8 @@ test('registerAuthentications should fail-closed on fresh install without confir
 });
 
 test('registerAuthentications should register anonymous auth when confirmation is enabled', async () => {
-  const previousAnonymousConfirmation = process.env.DD_AUTH_ANONYMOUS_CONFIRM;
-  process.env.DD_AUTH_ANONYMOUS_CONFIRM = 'true';
+  const previousAnonymousConfirmation = process.env.DD_ANONYMOUS_CONFIRM;
+  process.env.DD_ANONYMOUS_CONFIRM = 'true';
 
   try {
     mockIsUpgrade.mockReturnValue(false);
@@ -713,9 +713,9 @@ test('registerAuthentications should register anonymous auth when confirmation i
     expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
   } finally {
     if (previousAnonymousConfirmation === undefined) {
-      delete process.env.DD_AUTH_ANONYMOUS_CONFIRM;
+      delete process.env.DD_ANONYMOUS_CONFIRM;
     } else {
-      process.env.DD_AUTH_ANONYMOUS_CONFIRM = previousAnonymousConfirmation;
+      process.env.DD_ANONYMOUS_CONFIRM = previousAnonymousConfirmation;
     }
   }
 });

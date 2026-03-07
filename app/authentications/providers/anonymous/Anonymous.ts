@@ -8,7 +8,7 @@ import Authentication from '../Authentication.js';
  */
 class Anonymous extends Authentication {
   private isExplicitlyConfirmed(): boolean {
-    return process.env.DD_AUTH_ANONYMOUS_CONFIRM?.trim().toLowerCase() === 'true';
+    return process.env.DD_ANONYMOUS_CONFIRM?.trim().toLowerCase() === 'true';
   }
 
   initAuthentication(): void {
@@ -17,12 +17,12 @@ class Anonymous extends Authentication {
     }
     if (isUpgrade()) {
       log.warn(
-        'No authentication configured — the dashboard is accessible without login. Set DD_AUTH_BASIC_<name>_USER / DD_AUTH_BASIC_<name>_HASH to secure it, or set DD_AUTH_ANONYMOUS_CONFIRM=true to silence this warning.',
+        'No authentication configured — the dashboard is accessible without login. Set DD_AUTH_BASIC_<name>_USER / DD_AUTH_BASIC_<name>_HASH to secure it, or set DD_ANONYMOUS_CONFIRM=true to silence this warning.',
       );
       return;
     }
     throw new Error(
-      'No authentication configured and this is a fresh install. Set DD_AUTH_BASIC_<name>_USER / DD_AUTH_BASIC_<name>_HASH to secure the dashboard, or set DD_AUTH_ANONYMOUS_CONFIRM=true to allow anonymous access.',
+      'No authentication configured and this is a fresh install. Set DD_AUTH_BASIC_<name>_USER / DD_AUTH_BASIC_<name>_HASH to secure the dashboard, or set DD_ANONYMOUS_CONFIRM=true to allow anonymous access.',
     );
   }
 
@@ -40,7 +40,7 @@ class Anonymous extends Authentication {
       return new AnonymousStrategy();
     }
     throw new Error(
-      'Anonymous authentication cannot be enabled on a fresh install without DD_AUTH_ANONYMOUS_CONFIRM=true',
+      'Anonymous authentication cannot be enabled on a fresh install without DD_ANONYMOUS_CONFIRM=true',
     );
   }
 
