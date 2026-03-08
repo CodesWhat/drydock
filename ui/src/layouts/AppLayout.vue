@@ -1110,14 +1110,12 @@ onUnmounted(() => {
         width: isCollapsed ? '56px' : '240px',
         minWidth: isCollapsed ? '56px' : '240px',
         backgroundColor: 'var(--dd-bg-sidebar)',
-        borderRight: '1px solid var(--dd-border)',
         overflowX: 'hidden',
       }">
 
       <!-- Logo -->
       <div class="flex items-center h-12 shrink-0 overflow-hidden"
-           :class="isCollapsed ? 'justify-center px-1' : 'justify-between px-3'"
-           :style="{ borderBottom: '1px solid var(--dd-border)' }">
+           :class="isCollapsed ? 'justify-center px-1' : 'justify-between px-3'">
         <div class="flex items-center overflow-hidden" :class="isCollapsed ? '' : 'gap-2 shrink-0'">
           <img :src="whaleLogo" alt="Drydock"
                class="h-5 w-auto shrink-0 transition-transform duration-300"
@@ -1227,7 +1225,6 @@ onUnmounted(() => {
               style="grid-template-columns: 1fr auto 1fr;"
               :style="{
                 backgroundColor: 'var(--dd-bg)',
-                borderBottom: '1px solid var(--dd-border)',
               }">
         <!-- Left: hamburger + breadcrumb -->
         <div class="flex items-center gap-3">
