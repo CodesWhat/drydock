@@ -46,15 +46,23 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           const normalizedId = id.replaceAll('\\', '/');
-          if (!normalizedId.includes('/node_modules/')) {
+          const nodeModulesSegment = '/node_modules/';
+          const nodeModulesIndex = normalizedId.lastIndexOf(nodeModulesSegment);
+          if (nodeModulesIndex === -1) {
             return undefined;
           }
 
-          if (normalizedId.includes('/vue/') || normalizedId.includes('/vue-router/')) {
+          const packagePath = normalizedId.slice(nodeModulesIndex + nodeModulesSegment.length);
+          const packageSegments = packagePath.split('/');
+          const packageName = packageSegments[0]?.startsWith('@')
+            ? `${packageSegments[0]}/${packageSegments[1] ?? ''}`
+            : packageSegments[0];
+
+          if (packageName === 'vue' || packageName === 'vue-router') {
             return 'framework';
           }
 
-          if (normalizedId.includes('/iconify-icon/')) {
+          if (packageName === 'iconify-icon') {
             return 'icons';
           }
 

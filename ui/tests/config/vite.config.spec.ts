@@ -32,6 +32,9 @@ describe('vite build configuration', () => {
     expect(manualChunks('/Users/test/app/node_modules/iconify-icon/dist/iconify-icon.mjs')).toBe(
       'icons',
     );
+    expect(
+      manualChunks('/Users/test/app/node_modules/@headlessui/vue/dist/headlessui.esm.js'),
+    ).toBe('vendor');
     expect(manualChunks('/Users/test/app/node_modules/pinia/dist/pinia.mjs')).toBe('vendor');
     expect(manualChunks('C:\\app\\node_modules\\vue\\dist\\vue.runtime.esm-bundler.js')).toBe(
       'framework',
