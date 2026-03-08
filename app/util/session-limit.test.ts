@@ -195,6 +195,49 @@ test('enforceConcurrentSessionLimit should use sid ordering when timestamps tie'
   expect(sessionStore.destroy).toHaveBeenCalledWith('session-a', expect.any(Function));
 });
 
+test('enforceConcurrentSessionLimit should destroy overflow sessions in parallel', async () => {
+  let inFlight = 0;
+  let maxInFlight = 0;
+
+  const sessionStore = {
+    all: vi.fn((done) =>
+      done(null, {
+        'session-oldest': {
+          passport: { user: JSON.stringify({ username: 'john' }) },
+          cookie: { expires: '2026-01-01T00:00:00.000Z' },
+        },
+        'session-middle': {
+          passport: { user: JSON.stringify({ username: 'john' }) },
+          cookie: { expires: '2026-01-02T00:00:00.000Z' },
+        },
+        'session-newest': {
+          passport: { user: JSON.stringify({ username: 'john' }) },
+          cookie: { expires: '2026-01-03T00:00:00.000Z' },
+        },
+      }),
+    ),
+    destroy: vi.fn((_sid, done) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      setTimeout(() => {
+        inFlight -= 1;
+        done();
+      }, 10);
+    }),
+  };
+
+  const destroyedCount = await enforceConcurrentSessionLimit({
+    username: 'john',
+    maxConcurrentSessions: 1,
+    currentSessionId: 'new-session',
+    sessionStore,
+  });
+
+  expect(destroyedCount).toBe(3);
+  expect(sessionStore.destroy).toHaveBeenCalledTimes(3);
+  expect(maxInFlight).toBeGreaterThan(1);
+});
+
 test('enforceConcurrentSessionLimit should reject when session enumeration fails', async () => {
   const sessionStore = {
     all: vi.fn((done) => done(new Error('all failed'))),
@@ -232,4 +275,42 @@ test('enforceConcurrentSessionLimit should reject when session destruction fails
       sessionStore,
     }),
   ).rejects.toThrow('destroy failed');
+});
+
+test('enforceConcurrentSessionLimit should avoid full session scans after index warmup', async () => {
+  const sessionStore = {
+    all: vi.fn((done) =>
+      done(null, {
+        'session-oldest': {
+          passport: { user: JSON.stringify({ username: 'john' }) },
+          cookie: { expires: '2026-01-01T00:00:00.000Z' },
+        },
+        'session-newer': {
+          passport: { user: JSON.stringify({ username: 'john' }) },
+          cookie: { expires: '2026-01-02T00:00:00.000Z' },
+        },
+      }),
+    ),
+    destroy: vi.fn((_sid, done) => done()),
+  };
+
+  await expect(
+    enforceConcurrentSessionLimit({
+      username: 'john',
+      maxConcurrentSessions: 10,
+      currentSessionId: 'current-session-1',
+      sessionStore,
+    }),
+  ).resolves.toBe(0);
+
+  await expect(
+    enforceConcurrentSessionLimit({
+      username: 'john',
+      maxConcurrentSessions: 10,
+      currentSessionId: 'current-session-2',
+      sessionStore,
+    }),
+  ).resolves.toBe(0);
+
+  expect(sessionStore.all).toHaveBeenCalledTimes(1);
 });
