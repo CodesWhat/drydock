@@ -5,7 +5,7 @@ describe('audit service', () => {
     vi.restoreAllMocks();
   });
 
-  it('calls GET /api/audit with no params', async () => {
+  it('calls GET /api/audit with a default limit when no params are provided', async () => {
     const mockResponse = { data: [], total: 0, limit: 50, offset: 0, hasMore: false };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -14,11 +14,24 @@ describe('audit service', () => {
 
     const result = await getAuditLog();
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/audit', { credentials: 'include' });
+    expect(global.fetch).toHaveBeenCalledWith('/api/audit?limit=50', { credentials: 'include' });
     expect(result).toEqual({
       ...mockResponse,
       entries: [],
     });
+  });
+
+  it('uses default limit for page-derived offset when limit is not provided', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: [], total: 0 }),
+    });
+
+    await getAuditLog({ page: 2 });
+
+    const calledUrl = (global.fetch as any).mock.calls[0][0];
+    expect(calledUrl).toContain('offset=50');
+    expect(calledUrl).toContain('limit=50');
   });
 
   it('appends query parameters', async () => {

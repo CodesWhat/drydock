@@ -1,3 +1,5 @@
+import { extractCollectionData } from '../utils/api';
+
 export async function getAuditLog(
   params: {
     page?: number;
@@ -20,27 +22,20 @@ export async function getAuditLog(
 
   const query = new URLSearchParams();
   if (offset !== undefined) query.set('offset', String(offset));
-  if (params.limit) query.set('limit', String(limit));
+  query.set('limit', String(limit));
   if (params.action) query.set('action', params.action);
   if (params.container) query.set('container', params.container);
   if (params.from) query.set('from', params.from);
   if (params.to) query.set('to', params.to);
   const queryString = query.toString();
-  const url = queryString ? `/api/audit?${queryString}` : '/api/audit';
+  const url = `/api/audit?${queryString}`;
   const response = await fetch(url, { credentials: 'include' });
   if (!response.ok) throw new Error(`Failed to fetch audit log: ${response.statusText}`);
   const payload = await response.json();
   if (payload && typeof payload === 'object') {
-    const dataArray = Array.isArray((payload as { data?: unknown }).data)
-      ? (payload as { data: unknown[] }).data
-      : Array.isArray((payload as { items?: unknown }).items)
-        ? (payload as { items: unknown[] }).items
-        : Array.isArray((payload as { entries?: unknown }).entries)
-          ? (payload as { entries: unknown[] }).entries
-          : [];
     return {
       ...payload,
-      entries: dataArray,
+      entries: extractCollectionData(payload),
     };
   }
   return payload;
