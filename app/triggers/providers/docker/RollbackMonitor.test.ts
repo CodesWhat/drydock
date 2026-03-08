@@ -171,7 +171,10 @@ describe('RollbackMonitor', () => {
 
     await monitor.start(
       { api: true },
-      createContainer({ image: { tag: { value: '2.0.0' }, digest: {} } }),
+      createContainer({
+        image: { tag: { value: '1.0.0' }, digest: {} },
+        updateKind: { remoteValue: '2.0.0' },
+      }),
       { autoRollback: true, rollbackWindow: 120_000, rollbackInterval: 3_000 },
       { info, warn: vi.fn() },
     );

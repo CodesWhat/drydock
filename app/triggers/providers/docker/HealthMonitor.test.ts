@@ -215,6 +215,8 @@ describe('HealthMonitor', () => {
       expect.objectContaining({
         action: 'auto-rollback',
         containerName: 'test-container',
+        fromVersion: '2.0.0',
+        toVersion: '1.0.0',
         status: 'success',
         details: 'Automatic rollback triggered by health check failure',
       }),

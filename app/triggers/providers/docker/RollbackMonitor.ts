@@ -16,6 +16,9 @@ type RollbackContainer = {
     tag: { value: string };
     digest?: { repo?: string };
   };
+  updateKind?: {
+    remoteValue?: string | null;
+  };
 };
 
 type RollbackConfig = {
@@ -182,11 +185,12 @@ class RollbackMonitor {
     logContainer.info(
       `Starting health monitor (window=${rollbackConfig.rollbackWindow}ms, interval=${rollbackConfig.rollbackInterval}ms)`,
     );
+    const failingImageTag = container.updateKind?.remoteValue ?? container.image.tag.value;
     this.startHealthMonitor({
       dockerApi,
       containerId: newContainerId,
       containerName: container.name,
-      backupImageTag: container.image.tag.value,
+      backupImageTag: failingImageTag,
       backupImageDigest: container.image.digest?.repo,
       window: rollbackConfig.rollbackWindow,
       interval: rollbackConfig.rollbackInterval,
