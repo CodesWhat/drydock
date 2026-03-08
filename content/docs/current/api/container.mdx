@@ -241,7 +241,7 @@ curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec
 For containers managed by a remote agent, use the 4-segment variant to route the trigger through the agent:
 
 ```bash
-curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/triggers/agent1/ntfy/one
+curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/triggers/ntfy/one/agent1
 ```
 
 ## Update a container
@@ -432,12 +432,16 @@ curl http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32
 ## Rollback a container
 
 This operation rolls back a container to a previously backed-up image. If no `backupId` is provided, the most recent backup is used.
+Rollback is destructive and requires explicit confirmation via `X-DD-Confirm-Action: container-rollback`.
 
 ```bash
 curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/rollback \
+  -H 'X-DD-Confirm-Action: container-rollback' \
   -H 'Content-Type: application/json' \
   -d '{"backupId": "abc123"}'
 ```
+
+Returns 200 on success, 404 if the container/backup/trigger is not found, or 428 if confirmation is missing.
 
 ## Get update/rollback history
 
@@ -498,7 +502,11 @@ Returns 200 with the operations array on success, or 404 if the container is not
 ## Delete a Container
 
 This operation lets you delete a container by id. Requires `DD_SERVER_FEATURE_DELETE` to be enabled.
+Delete is destructive and requires explicit confirmation via `X-DD-Confirm-Action: container-delete`.
 
 ```bash
-curl -X DELETE http://drydock:3000/api/containers/ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72
+curl -X DELETE http://drydock:3000/api/containers/ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72 \
+  -H 'X-DD-Confirm-Action: container-delete'
 ```
+
+Returns 204 on success, 403 if delete is disabled, 404 if the container does not exist, or 428 if confirmation is missing.

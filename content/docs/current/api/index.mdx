@@ -48,6 +48,19 @@ For cross-domain OIDC providers, keep `DD_SERVER_COOKIE_SAMESITE=lax` (default) 
 
 The [webhook endpoints](/docs/configuration/webhooks) use a separate Bearer token authentication.
 
+## Destructive action confirmation
+
+Some destructive endpoints require an explicit confirmation header:
+
+`X-DD-Confirm-Action: <token>`
+
+If the header is missing or does not match the expected token, the API responds with `428 Precondition Required`.
+
+| Endpoint | Method | Required header |
+| --- | --- | --- |
+| `/api/containers/:id/rollback` | `POST` | `X-DD-Confirm-Action: container-rollback` |
+| `/api/containers/:id` | `DELETE` | `X-DD-Confirm-Action: container-delete` |
+
 ## Endpoint overview
 
 | Category | Endpoints | Description |
@@ -94,54 +107,59 @@ Notification rules control which events trigger notifications and which triggers
 ```bash
 curl http://drydock:3000/api/notifications
 
-[
-  {
-    "id": "update-available",
-    "name": "Update Available",
-    "description": "When a container has a new version",
-    "enabled": true,
-    "triggers": []
-  },
-  {
-    "id": "update-applied",
-    "name": "Update Applied",
-    "description": "After a container is successfully updated",
-    "enabled": true,
-    "triggers": []
-  },
-  {
-    "id": "update-failed",
-    "name": "Update Failed",
-    "description": "When an update fails or is rolled back",
-    "enabled": true,
-    "triggers": []
-  },
-  {
-    "id": "security-alert",
-    "name": "Security Alert",
-    "description": "Critical/High vulnerability detected",
-    "enabled": true,
-    "triggers": []
-  },
-  {
-    "id": "agent-disconnect",
-    "name": "Agent Disconnected",
-    "description": "When a remote agent loses connection",
-    "enabled": false,
-    "triggers": []
-  }
-]
+{
+  "data": [
+    {
+      "id": "update-available",
+      "name": "Update Available",
+      "description": "When a container has a new version",
+      "enabled": true,
+      "triggers": []
+    },
+    {
+      "id": "update-applied",
+      "name": "Update Applied",
+      "description": "After a container is successfully updated",
+      "enabled": true,
+      "triggers": []
+    },
+    {
+      "id": "update-failed",
+      "name": "Update Failed",
+      "description": "When an update fails or is rolled back",
+      "enabled": true,
+      "triggers": []
+    },
+    {
+      "id": "security-alert",
+      "name": "Security Alert",
+      "description": "Critical/High vulnerability detected",
+      "enabled": true,
+      "triggers": []
+    },
+    {
+      "id": "agent-disconnect",
+      "name": "Agent Disconnected",
+      "description": "When a remote agent loses connection",
+      "enabled": false,
+      "triggers": []
+    }
+  ],
+  "total": 5
+}
 ```
 
 ### Response fields
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `id` | string | Rule identifier (e.g. `update-available`, `security-alert`) |
-| `name` | string | Human-readable rule name |
-| `description` | string | What this rule covers |
-| `enabled` | boolean | Whether the rule is active |
-| `triggers` | string[] | Trigger IDs that receive this notification (empty = all triggers) |
+| `data` | array | List of notification rules |
+| `total` | integer | Number of rules returned |
+| `data[].id` | string | Rule identifier (e.g. `update-available`, `security-alert`) |
+| `data[].name` | string | Human-readable rule name |
+| `data[].description` | string | What this rule covers |
+| `data[].enabled` | boolean | Whether the rule is active |
+| `data[].triggers` | string[] | Trigger IDs that receive this notification (empty = all triggers) |
 
 ### Update a notification rule
 
