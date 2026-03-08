@@ -88,6 +88,36 @@ describe('filterContainer', () => {
     const result = filterContainer(withGetter, ['nonexistent']);
     expect(result).toHaveProperty('computed', 'resolved-value');
   });
+
+  test('does not evaluate unrelated getters when filtering specific paths', () => {
+    const withExpensiveGetter = Object.create(null, {
+      security: {
+        value: { sbom: { format: 'spdx', documents: [{ id: 'doc' }] } },
+        enumerable: true,
+      },
+      expensive: {
+        get: () => {
+          throw new Error('unrelated getter should not be evaluated');
+        },
+        enumerable: true,
+      },
+    });
+
+    let result:
+      | {
+          security: { sbom: { format: string; documents?: { id: string }[] } };
+          expensive?: unknown;
+        }
+      | undefined;
+    expect(() => {
+      result = filterContainer(withExpensiveGetter, ['security.sbom.documents']);
+    }).not.toThrow();
+    expect(result?.security.sbom).not.toHaveProperty('documents');
+    expect(result?.security.sbom).toHaveProperty('format', 'spdx');
+    expect(Object.getOwnPropertyDescriptor(result, 'expensive')).toMatchObject({
+      get: expect.any(Function),
+    });
+  });
 });
 
 describe('HASS_ATTRIBUTE_PRESETS', () => {
