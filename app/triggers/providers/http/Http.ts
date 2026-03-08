@@ -33,10 +33,19 @@ class Http extends Trigger {
         .required(),
       method: this.joi.string().allow('GET').allow('POST').default('POST'),
       auth: this.joi.object({
-        type: this.joi.string().allow('BASIC').allow('BEARER').default('BASIC'),
-        user: this.joi.string(),
-        password: this.joi.string(),
-        bearer: this.joi.string(),
+        type: this.joi.string().uppercase().allow('BASIC').allow('BEARER').default('BASIC'),
+        user: this.joi.string().when('type', {
+          is: 'BASIC',
+          then: this.joi.required(),
+        }),
+        password: this.joi.string().when('type', {
+          is: 'BASIC',
+          then: this.joi.required(),
+        }),
+        bearer: this.joi.string().when('type', {
+          is: 'BEARER',
+          then: this.joi.required(),
+        }),
       }),
       proxy: this.joi.string(),
     });
