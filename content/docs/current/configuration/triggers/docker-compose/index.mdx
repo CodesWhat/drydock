@@ -33,6 +33,9 @@ The trigger will:
 | `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of image backups to retain per container | Integer | `3` |
 | `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_AUTOREMOVETIMEOUT` | ⚪ | Wait timeout for container auto-removal (ms) | Integer | `10000` |
 | `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILELABEL` | ⚪ | Container label name used to locate the compose file per container | Label name | `dd.compose.file` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_RECONCILIATIONMODE` | ⚪ | Compose/runtime reconciliation mode before lifecycle (`warn`, `block`, or `off`) | `warn`, `block`, `off` | `warn` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_DIGESTPINNING` | ⚪ | Write digest-pinned compose image references when a digest is available | `true`, `false` | `false` |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILEONCE` | ⚪ | Batch compose runtime refresh to one grouped pull/up pass per compose stack/file | `true`, `false` | `false` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). but only supports the `batch` mode.</Callout>
 
@@ -46,6 +49,8 @@ The trigger will:
 
 For **tag-based updates**, the trigger patches the compose file with the new tag and then recreates the container. For **digest-only updates** (same tag, new digest), the compose file is left unchanged and only the container runtime is refreshed via `docker compose pull` + `docker compose up -d`.
 
+When `DIGESTPINNING=true`, compose mutations use digest references (`image@sha256:...`) when a digest is available.
+
 ## Compose file patch behavior
 
 When a tag-based update requires a compose file change, Drydock patches Compose content in a service-scoped way:
@@ -55,6 +60,20 @@ When a tag-based update requires a compose file change, Drydock patches Compose 
 - Drydock does not use global string replacement for image tags, so matching strings in other fields (for example environment values) are not rewritten.
 
 <Callout type="info">If a service uses flow-style mapping without an `image` key (for example `nginx: { restart: always }`), Drydock will not auto-insert `image`. Convert that service to block-style YAML first.</Callout>
+
+Before persisting a compose mutation, Drydock validates the candidate file with `docker compose config --quiet` (and falls back to `docker-compose config --quiet` when needed). Invalid candidate configs are not written.
+
+## Reconciliation behavior
+
+Before lifecycle execution, Drydock checks the running container image against the compose-declared image for the target service.
+
+- `RECONCILIATIONMODE=warn` (default): log a reconciliation warning and continue.
+- `RECONCILIATIONMODE=block`: fail the update before write/runtime steps.
+- `RECONCILIATIONMODE=off`: skip reconciliation checks.
+
+## Compose-file-once mode
+
+When `COMPOSEFILEONCE=true` and multiple services in the same compose stack/file require runtime refresh, Drydock executes one grouped compose pull/up pass for that stack and skips repeated per-service compose pull/up calls in that batch.
 
 ## Troubleshooting: `permission denied` (`EACCES`)
 

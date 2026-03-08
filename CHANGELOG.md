@@ -93,6 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CORS implicit wildcard origin deprecation warning** — Startup warning when `DD_SERVER_CORS_ENABLED=true` without explicit `DD_SERVER_CORS_ORIGIN`. Default wildcard will require explicit opt-in in v1.5.0.
 - **Identity-aware rate limit keying** — Opt-in `DD_SERVER_RATELIMIT_IDENTITYKEYING=true` keys authenticated route rate limits by session/username instead of IP, preventing collisions for multiple users behind shared proxies. Unauthenticated routes remain IP-keyed. Disabled by default.
 - **Reactive server feature flags in UI** — Container action buttons (update, rollback, scan, triggers) are now gated by server-side feature flags via a `useServerFeatures` composable. When features like `DD_SERVER_FEATURE_CONTAINERACTIONS` are disabled, buttons show a disabled state with tooltip explaining why instead of silently failing at runtime.
+- **Compose trigger hardening** — Auto compose file detection from container labels (`com.docker.compose.project.config_files`) with Docker inspect fallback, pre-commit `docker compose config --quiet` validation before writes, compose file reconciliation (warn/block modes for runtime vs compose image drift), optional digest pinning (`DIGESTPINNING` trigger config), compose-file-once batch mode for multi-service stacks, multi-file compose chain awareness with deterministic writable target selection, compose metadata in update preview API, and compose file path display in container detail UI.
 
 ### Changed
 
