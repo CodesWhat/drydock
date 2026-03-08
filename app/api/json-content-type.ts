@@ -1,9 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { sendErrorResponse } from './error-response.js';
-
-function getFirstHeaderValue(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
+import { getFirstHeaderValue } from './header-value.js';
 
 function hasRequestBody(req: Request): boolean {
   const contentLength = getFirstHeaderValue(req.headers['content-length']);

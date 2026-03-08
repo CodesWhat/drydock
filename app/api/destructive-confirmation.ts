@@ -1,12 +1,9 @@
 import type { NextFunction, Request, Response } from 'express';
 import { sendErrorResponse } from './error-response.js';
+import { getFirstHeaderValue } from './header-value.js';
 
 const DESTRUCTIVE_CONFIRMATION_HEADER_KEY = 'x-dd-confirm-action';
 const DESTRUCTIVE_CONFIRMATION_HEADER_LABEL = 'X-DD-Confirm-Action';
-
-function getFirstHeaderValue(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
 
 function normalizeHeaderValue(value: string | undefined): string | undefined {
   if (typeof value !== 'string') {
