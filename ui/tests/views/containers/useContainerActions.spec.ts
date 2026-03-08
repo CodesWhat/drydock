@@ -622,7 +622,6 @@ describe('useContainerActions', () => {
   });
 
   it('handles preview guard, success, and failure flows', async () => {
-    const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable, selectedContainerId } = await mountActionsHarness({
       selectedContainer: null,
       selectedContainerId: undefined,
@@ -648,7 +647,6 @@ describe('useContainerActions', () => {
   });
 
   it('covers rollback guard and failure/latest-backup branches', async () => {
-    const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable, selectedContainerId } = await mountActionsHarness({
       selectedContainer: null,
       selectedContainerId: undefined,
