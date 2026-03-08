@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { watch } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import yaml from 'yaml';
@@ -66,6 +67,14 @@ vi.mock('../docker/HealthMonitor.js', () => ({ startHealthMonitor: vi.fn() }));
 vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
 }));
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    watch: vi.fn(),
+  };
+});
 
 vi.mock('../../../util/sleep.js', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
@@ -259,6 +268,7 @@ describe('Dockercompose Trigger', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(watch).mockReset();
 
     mockLog = {
       info: vi.fn(),
@@ -1960,6 +1970,57 @@ describe('Dockercompose Trigger', () => {
     }
   });
 
+  test('waitForComposeFileLockChange should return false when timeout is not positive', async () => {
+    await expect(
+      trigger.waitForComposeFileLockChange('/opt/drydock/test/compose.yml.drydock.lock', 0),
+    ).resolves.toBe(false);
+  });
+
+  test('waitForComposeFileLockChange should settle when changed path is unavailable', async () => {
+    const watcher: any = new EventEmitter();
+    watcher.close = vi.fn();
+    const watchMock = vi.mocked(watch);
+    watchMock.mockImplementation((_directoryPath, onChange: any) => {
+      setImmediate(() => onChange('rename', null as any));
+      return watcher;
+    });
+
+    await expect(
+      trigger.waitForComposeFileLockChange('/opt/drydock/test/compose.yml.drydock.lock', 1_000),
+    ).resolves.toBe(true);
+    expect(watcher.close).toHaveBeenCalledTimes(1);
+  });
+
+  test('waitForComposeFileLockChange should settle when target lock file changes', async () => {
+    const watcher: any = new EventEmitter();
+    watcher.close = vi.fn();
+    const watchMock = vi.mocked(watch);
+    watchMock.mockImplementation((_directoryPath, onChange: any) => {
+      setImmediate(() => onChange('change', Buffer.from('compose.yml.drydock.lock')));
+      return watcher;
+    });
+
+    await expect(
+      trigger.waitForComposeFileLockChange('/opt/drydock/test/compose.yml.drydock.lock', 1_000),
+    ).resolves.toBe(true);
+    expect(watcher.close).toHaveBeenCalledTimes(1);
+  });
+
+  test('waitForComposeFileLockChange should settle when watcher emits an error', async () => {
+    const watcher: any = new EventEmitter();
+    watcher.close = vi.fn();
+    const watchMock = vi.mocked(watch);
+    watchMock.mockImplementation(() => {
+      setImmediate(() => watcher.emit('error', new Error('watch failed')));
+      return watcher;
+    });
+
+    await expect(
+      trigger.waitForComposeFileLockChange('/opt/drydock/test/compose.yml.drydock.lock', 1_000),
+    ).resolves.toBe(true);
+    expect(watcher.close).toHaveBeenCalledTimes(1);
+  });
+
   test('maybeReleaseStaleComposeFileLock should treat missing lock file as released', async () => {
     const missingLockError: any = new Error('missing lock');
     missingLockError.code = 'ENOENT';
@@ -2082,6 +2143,27 @@ describe('Dockercompose Trigger', () => {
     expect(first).toEqual(second);
     expect(getComposeFileSpy).toHaveBeenCalledTimes(1);
     expect(parseSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('getCachedComposeDocument should reuse cached parse when file mtime is unchanged', () => {
+    const composeFilePath = '/opt/drydock/test/compose.yml';
+    const parseDocumentSpy = vi.spyOn(yaml, 'parseDocument');
+    const firstText = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+    const secondText = ['services:', '  nginx:', '    image: nginx:2.0.0', ''].join('\n');
+
+    const firstDocument = trigger.getCachedComposeDocument(
+      composeFilePath,
+      1700000000000,
+      firstText,
+    );
+    const secondDocument = trigger.getCachedComposeDocument(
+      composeFilePath,
+      1700000000000,
+      secondText,
+    );
+
+    expect(secondDocument).toBe(firstDocument);
+    expect(parseDocumentSpy).toHaveBeenCalledTimes(1);
   });
 
   test('getComposeFileAsObject should refresh cached parse when file mtime changes', async () => {

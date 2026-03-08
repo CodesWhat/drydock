@@ -140,6 +140,9 @@ async function withBasicSessionLock<T>(lockKey: string, operation: () => Promise
   }
 }
 
+export const testable_withBasicSessionLock = withBasicSessionLock;
+export const testable_basicSessionLocks = basicSessionLocks;
+
 export function enforceSessionLimitBeforeLogin(
   req: AuthRequest,
   username: string,
