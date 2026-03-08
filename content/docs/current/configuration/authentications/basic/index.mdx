@@ -19,6 +19,8 @@ The `basic` authentication lets you protect drydock access using the [Http Basic
 
 <Callout type="warn">**Known limitation:** Passwords containing colon characters (`:`) are not supported due to a bug in the underlying `passport-http` library. Authentication will fail if your password contains a colon. Use passwords without colons until this is resolved.</Callout>
 
+<Callout type="info">Argon2id verification uses asynchronous `crypto.argon2` so authentication does not block the Node.js event loop. The hash work still runs on libuv worker threads; for very high authentication concurrency, tune `UV_THREADPOOL_SIZE` or move verification into dedicated worker threads/services.</Callout>
+
 ## Examples
 
 <Tabs items={["Docker Compose", "Docker"]}>

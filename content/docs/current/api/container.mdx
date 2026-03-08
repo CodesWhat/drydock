@@ -376,6 +376,8 @@ curl -X POST http://drydock:3000/api/containers/31a61a8305ef1fc9a71fa4f20a68d7ec
 
 Returns 200 with the env array on success, 404 if the container is not found, or 429 if rate-limited.
 
+Container action auth model: `/start`, `/stop`, `/restart`, and `/update` are authentication-gated only. In current single-operator deployments, any authenticated user can execute these actions for any container.
+
 ## Start a container
 
 This operation starts a stopped container. Requires `DD_SERVER_FEATURE_CONTAINERACTIONS` to be enabled.

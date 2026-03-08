@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Socket proxy ECONNREFUSED with `:ro` mount** — Removed `:ro` flag from Docker socket mount in all socket proxy compose examples. The read-only flag can prevent the proxy from connecting to the Docker daemon on some Linux kernels; the proxy's environment variable filtering (`CONTAINERS=1`, `EVENTS=1`, etc.) is the actual security boundary. Added health check and `depends_on: condition: service_healthy` to all socket proxy examples for proper startup ordering. Added FAQ entry for troubleshooting ECONNREFUSED with socket proxies.
 - **Apprise trigger missing Content-Type header** — Apprise notify requests now set explicit `Content-Type: application/json` header, fixing failures with Apprise servers that require it.
 - **Toggle switch contrast** — Improved toggle thumb contrast across all themes for better visibility.
 - **Empty env var values rejected during container validation** — Joi schema on `details.env[].value` used `.string().required()` which implicitly disallows empty strings. Containers with empty environment variable values (e.g. `FOO=`) were silently skipped during watch cycles. Fixed with `.allow('')`. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
@@ -45,7 +46,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Drydock container display name hardcoded** — The Docker watcher hardcoded `drydock` as the display name for drydock's own container instead of using the actual container name like every other container.
 - **Non-existent DD_OIDC_ALLOW_HTTP env var referenced in UI** — The UI OIDC HTTP banner referenced a `DD_OIDC_ALLOW_HTTP` env var that does not exist — the backend auto-detects `http://` discovery URLs and passes `allowInsecureRequests` automatically. Removed the misleading reference.
 - **Load test and start scripts broken by standardized API responses** — `jq` queries in `run-load-test.sh` and `start-drydock.sh` used raw array syntax instead of `.data[]` to match the new collection response pattern.
-- **Container state not updated when started/stopped externally** — Containers started or stopped outside Drydock (via Portainer, Docker CLI, etc.) could show stale status until the next Docker event. The hourly cron poll now reconciles container status from Docker's `listContainers` response.
 
 ### Performance
 
@@ -293,7 +293,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Backup stores internal registry name instead of Docker-pullable name** — Backup `imageName` was stored as the internal registry-prefixed name (e.g. `hub.public/library/nginx`) which is not a valid Docker image reference. Rollback would fail with DNS lookup errors. Now stores the Docker-pullable base name (e.g. `nginx`) using the registry's `getImageFullName` method.
 - **Rollback API docs incorrect endpoint** — Fixed documentation showing `/api/backup/:id/rollback` instead of the correct `/api/containers/:id/rollback`.
 
-## [1.3.3] — 2026-02-16
+## [1.3.3] — 2026-02-18
 
 ### Fixed
 
@@ -390,7 +390,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CodeQL alert fixes** — Fixed log injection vulnerabilities by sanitizing user-controlled input before logging. Removed unused variables flagged by static analysis. Added rate limiting to the on-demand scan endpoint.
 - **Build provenance and SBOM attestations** — Added supply chain attestations to release workflow for verifiable build provenance.
 
-## 1.2.0
+## [1.2.0]
 
 ### Added
 
@@ -462,22 +462,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Popular imgset presets** — Added a curated preset guide at `docs/configuration/watchers/popular-imgsets.md` and linked it from watcher docs.
 
-## 1.1.3
+## [1.1.3]
 
-### Bug Fixes
+### Fixed
 
 - **ERR_ERL_PERMISSIVE_TRUST_PROXY on startup** — Express `trust proxy` was hard-coded to `true`, which triggers a validation error in `express-rate-limit` v8+ when the default key generator infers client IP from `X-Forwarded-For`. Replaced with a configurable `DD_SERVER_TRUSTPROXY` env var (default: `false`). Set to `1` (hop count) when behind a single reverse proxy, or a specific IP/CIDR for tighter control. ([#43](https://github.com/CodesWhat/drydock/issues/43))
 
 ---
 
-## 1.1.2
+## [1.1.2]
 
-### Bug Fixes
+### Fixed
 
 - **Misleading docker-compose file error messages** — When a compose file had a permission error (EACCES), the log incorrectly reported "does not exist" instead of "permission denied". Now distinguishes between missing files and permission issues with actionable guidance. ([#42](https://github.com/CodesWhat/drydock/issues/42))
 - **Agent watcher registration fails on startup** — Agent component path resolved outside the runtime root (`../agent/components` instead of `agent/components`), causing "Unknown watcher provider: 'docker'" errors and preventing agent watchers/triggers from registering. ([#42](https://github.com/CodesWhat/drydock/issues/42))
 
-### Improvements
+### Changed
 
 - **Debug logging for component registration** — Added debug-level logging showing resolved module paths during component registration and agent component registration attempts, making path resolution issues easier to diagnose.
 
@@ -682,7 +682,7 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.4.0-rc.5...HEAD
 [1.4.0]: https://github.com/CodesWhat/drydock/compare/v1.3.9...v1.4.0
 [1.3.9]: https://github.com/CodesWhat/drydock/compare/v1.3.8...v1.3.9
 [1.3.8]: https://github.com/CodesWhat/drydock/compare/v1.3.7...v1.3.8
@@ -694,8 +694,14 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 [1.3.2]: https://github.com/CodesWhat/drydock/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/CodesWhat/drydock/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/CodesWhat/drydock/compare/v1.2.0...v1.3.0
-[1.1.1]: https://github.com/CodesWhat/drydock/compare/v1.1.0...v1.1.1
+[1.2.0]: https://github.com/CodesWhat/drydock/compare/1.1.3...v1.2.0
+[1.1.3]: https://github.com/CodesWhat/drydock/compare/1.1.2...1.1.3
+[1.1.2]: https://github.com/CodesWhat/drydock/compare/v1.1.1...1.1.2
+[1.1.1]: https://github.com/CodesWhat/drydock/compare/v1.1.0...1.1.1
 [1.1.0]: https://github.com/CodesWhat/drydock/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/CodesWhat/drydock/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/CodesWhat/drydock/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/CodesWhat/drydock/releases/tag/v1.0.0
+[2026.2.3]: https://github.com/CodesWhat/drydock/compare/2026.2.2...2026.2.3
+[2026.2.2]: https://github.com/CodesWhat/drydock/compare/2026.1.0...2026.2.2
+[2026.1.0]: https://github.com/CodesWhat/drydock/releases/tag/2026.1.0
