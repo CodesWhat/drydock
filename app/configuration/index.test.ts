@@ -330,6 +330,15 @@ test('getServerConfiguration should allow overriding max concurrent sessions per
   delete configuration.ddEnvVars.DD_SERVER_SESSION_MAXCONCURRENTSESSIONS;
 });
 
+test('getServerConfiguration should allow enabling identity-aware rate-limit keys', async () => {
+  configuration.ddEnvVars.DD_SERVER_RATELIMIT_IDENTITYKEYING = 'true';
+  const config = configuration.getServerConfiguration();
+  expect(config.ratelimit).toStrictEqual({
+    identitykeying: true,
+  });
+  delete configuration.ddEnvVars.DD_SERVER_RATELIMIT_IDENTITYKEYING;
+});
+
 test('getPrometheusConfiguration should result in enabled by default', async () => {
   delete configuration.ddEnvVars.DD_PROMETHEUS_ENABLED;
   expect(configuration.getPrometheusConfiguration()).toStrictEqual({

@@ -308,6 +308,11 @@ export function getServerConfiguration() {
         maxconcurrentsessions: joi.number().integer().min(1).default(5),
       })
       .default({}),
+    ratelimit: joi
+      .object({
+        identitykeying: joi.boolean(),
+      })
+      .optional(),
     metrics: joi
       .object({
         auth: joi.boolean().default(true),
