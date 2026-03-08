@@ -14,3 +14,24 @@ test("production build uses webpack so SRI is applied", () => {
   assert.match(packageJson.scripts?.build ?? "", /\bnext build\b[\s\S]*--webpack\b/);
   assert.match(packageJson.scripts?.build ?? "", /\bnode\s+scripts\/apply-sri\.mjs\b/);
 });
+
+test("docs redirects keep versioned URLs and map legacy deep links to current docs", async () => {
+  const redirects = (await nextConfig.redirects?.()) ?? [];
+
+  const rootRedirect = redirects.find((rule) => rule.source === "/docs");
+  assert.deepEqual(rootRedirect, {
+    source: "/docs",
+    destination: "/docs/v1.4",
+    permanent: false,
+  });
+
+  assert.ok(
+    redirects.some(
+      (rule) =>
+        rule.source === "/docs/:path((?!v1\\.4(?:/|$)|v1\\.3(?:/|$)).*)" &&
+        rule.destination === "/docs/v1.4/:path" &&
+        rule.permanent === false,
+    ),
+    "expected a deep-link compatibility redirect for unversioned docs paths",
+  );
+});
