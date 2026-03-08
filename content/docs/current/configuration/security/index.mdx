@@ -25,7 +25,7 @@ DD_SECURITY_SCANNER=trivy
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
 | `DD_SECURITY_SCANNER` | 🔴 | Enable scanner provider | `trivy` | disabled |
-| `DD_SECURITY_BLOCK_SEVERITY` | ⚪ | Blocking severities (comma-separated) | Any of `UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL` | `CRITICAL,HIGH` |
+| `DD_SECURITY_BLOCK_SEVERITY` | ⚪ | Blocking severities (comma-separated). Set to `NONE` for advisory-only mode (scan without blocking updates) | `NONE`, or any of `UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL` | `CRITICAL,HIGH` |
 | `DD_SECURITY_TRIVY_SERVER` | ⚪ | Trivy server URL (enables client/server mode) | URL | empty (local CLI mode) |
 | `DD_SECURITY_TRIVY_COMMAND` | ⚪ | Trivy command path for local CLI mode (must not contain shell metacharacters or `..` path traversal) | executable path | `trivy` |
 | `DD_SECURITY_TRIVY_TIMEOUT` | ⚪ | Trivy command timeout in milliseconds | integer (`>=1000`) | `120000` |
@@ -73,6 +73,19 @@ services:
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
       - DD_SECURITY_TRIVY_SERVER=http://trivy:4954
       - DD_SECURITY_TRIVY_TIMEOUT=120000
+```
+
+## Advisory-Only Mode
+
+Set `DD_SECURITY_BLOCK_SEVERITY=NONE` to run vulnerability scans without blocking updates. Scan results remain visible in the Security view and audit log, but no update is ever rejected due to detected vulnerabilities.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:latest
+    environment:
+      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_BLOCK_SEVERITY=NONE
 ```
 
 ## Signature Verification (cosign)

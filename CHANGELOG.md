@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Advisory-only security scanning** — `DD_SECURITY_BLOCK_SEVERITY=NONE` runs vulnerability scans without blocking updates. Scan results remain visible in the Security view and audit log.
 - **OpenAPI 3.1.0 specification and endpoint** — Machine-readable API documentation available at `GET /api/openapi.json`, covering all v1.4 endpoints with request/response schemas.
 - **Font size preference** — Adjustable font size slider in Config > Appearance for UI-wide text scaling.
 - **Announcement banner** — Dismissible banner component for surfacing release notes and important notices in the dashboard.
