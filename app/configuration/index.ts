@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { readFile, stat } from 'node:fs/promises';
 import type { Request } from 'express';
 import joi from 'joi';
 import setValue from 'set-value';
@@ -39,30 +40,27 @@ export function get(prop: string, env: Record<string, string | undefined> = proc
  * Lookup external secrets defined in files.
  * @param ddEnvVars
  */
-export function replaceSecrets(ddEnvVars: Record<string, string | undefined>) {
+export async function replaceSecrets(ddEnvVars: Record<string, string | undefined>) {
   const secretFileEnvVars = Object.keys(ddEnvVars).filter((ddEnvVar) =>
     ddEnvVar.toUpperCase().endsWith(VAR_FILE_SUFFIX),
   );
-  secretFileEnvVars.forEach((secretFileEnvVar) => {
+  for (const secretFileEnvVar of secretFileEnvVars) {
     const secretKey = secretFileEnvVar.replaceAll(VAR_FILE_SUFFIX, '');
     const secretFilePath = resolveConfiguredPath(ddEnvVars[secretFileEnvVar], {
       label: `${secretFileEnvVar} path`,
     });
-    const fd = fs.openSync(secretFilePath, 'r');
-    try {
-      const secretFileStats = fs.fstatSync(fd);
-      if (secretFileStats.size > MAX_SECRET_FILE_SIZE_BYTES) {
-        throw new Error(
-          `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
-        );
-      }
-      const secretFileValue = fs.readFileSync(fd, 'utf-8');
-      delete ddEnvVars[secretFileEnvVar];
-      ddEnvVars[secretKey] = secretFileValue;
-    } finally {
-      fs.closeSync(fd);
+
+    const secretFileStats = await stat(secretFilePath);
+    if (secretFileStats.size > MAX_SECRET_FILE_SIZE_BYTES) {
+      throw new Error(
+        `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
+      );
     }
-  });
+
+    const secretFileValue = await readFile(secretFilePath, 'utf-8');
+    delete ddEnvVars[secretFileEnvVar];
+    ddEnvVars[secretKey] = secretFileValue;
+  }
 }
 
 // 1. Get a copy of all dd-related env vars (DD_ primary, WUD_ legacy fallback)
@@ -101,7 +99,7 @@ Object.keys(process.env)
   });
 
 // 2. Replace all secret files referenced by their secret values
-replaceSecrets(ddEnvVars);
+await replaceSecrets(ddEnvVars);
 
 export function getVersion() {
   const configuredVersion = ddEnvVars.DD_VERSION?.trim();
