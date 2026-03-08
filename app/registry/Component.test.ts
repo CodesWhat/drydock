@@ -1,3 +1,4 @@
+import log from '../log/index.js';
 import Component from './Component.js';
 
 beforeEach(async () => {
@@ -41,6 +42,24 @@ test('register should call validateConfiguration and init methods of the compone
   component.register('kind', 'type', 'name', { x: 'x' });
   expect(spyValidateConsiguration).toHaveBeenCalledWith({ x: 'x' });
   expect(spyInit).toHaveBeenCalledTimes(1);
+});
+
+test('register should redact trigger infrastructure details in startup logs', async () => {
+  const component = new Component();
+  const info = vi.fn();
+  vi.spyOn(log, 'child').mockReturnValue({ info } as any);
+
+  await component.register('trigger', 'slack', 'ops', {
+    channel: 'C01FAKECHANNEL',
+    url: 'http://httpbin.org/post',
+    mode: 'simple',
+  });
+
+  const registrationLogMessage = info.mock.calls[0][0] as string;
+  expect(registrationLogMessage).toContain('"channel":"[REDACTED]"');
+  expect(registrationLogMessage).toContain('"url":"[REDACTED]"');
+  expect(registrationLogMessage).not.toContain('C01FAKECHANNEL');
+  expect(registrationLogMessage).not.toContain('http://httpbin.org/post');
 });
 
 test('register should not call init when validateConfiguration fails', async () => {

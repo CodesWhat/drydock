@@ -1,8 +1,11 @@
 import { createMockResponse } from '../test/helpers.js';
 
-const { mockRouter, mockLog } = vi.hoisted(() => ({
+const { mockRouter, mockLog, mockGetErrorMessage } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
   mockLog: { info: vi.fn(), warn: vi.fn(), debug: vi.fn() },
+  mockGetErrorMessage: vi.fn((error: unknown) =>
+    error instanceof Error ? error.message : String(error),
+  ),
 }));
 
 vi.mock('express', () => ({
@@ -29,6 +32,10 @@ vi.mock('../log', () => ({
   default: { child: () => mockLog },
 }));
 
+vi.mock('../util/error', () => ({
+  getErrorMessage: mockGetErrorMessage,
+}));
+
 import * as agent from '../agent/index.js';
 import * as registry from '../registry/index.js';
 import * as triggerRouter from './trigger.js';
@@ -47,6 +54,9 @@ function getRemoteTriggerHandler() {
 describe('Trigger Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetErrorMessage.mockImplementation((error: unknown) =>
+      error instanceof Error ? error.message : String(error),
+    );
   });
 
   describe('init', () => {
@@ -230,6 +240,28 @@ describe('Trigger Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('(503)'));
+    });
+
+    test('should use shared getErrorMessage helper for trigger failures', async () => {
+      const mockTrigger = {
+        trigger: vi.fn().mockRejectedValue({ message: 'trigger failed from object' }),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'slack.default': mockTrigger },
+      });
+      mockGetErrorMessage.mockReturnValueOnce('shared helper message');
+
+      const req = {
+        params: { type: 'slack', name: 'default' },
+        body: { id: 'c1' },
+      };
+      const res = createResponse();
+
+      await runTrigger(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(mockGetErrorMessage).toHaveBeenCalledWith({ message: 'trigger failed from object' });
+      expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('shared helper message'));
     });
   });
 

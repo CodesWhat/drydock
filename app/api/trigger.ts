@@ -3,6 +3,7 @@ import * as agent from '../agent/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import * as registry from '../registry/index.js';
+import { getErrorMessage } from '../util/error.js';
 import * as component from './component.js';
 import { sendErrorResponse } from './error-response.js';
 
@@ -15,13 +16,6 @@ interface RunTriggerParams {
 
 interface RunRemoteTriggerParams extends RunTriggerParams {
   agent: string;
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
 }
 
 /**

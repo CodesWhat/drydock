@@ -83,6 +83,27 @@ describe('Component Router', () => {
       );
     });
 
+    test('should include metadata when component has getMetadata', () => {
+      const comp = {
+        type: 'basic',
+        name: 'admin',
+        maskConfiguration: vi.fn(() => ({ user: 'admin', hash: '[REDACTED]' })),
+        getMetadata: vi.fn(() => ({ usesLegacyHash: true })),
+      };
+      const result = component.mapComponentToItem('basic.admin', comp);
+      expect(result.metadata).toEqual({ usesLegacyHash: true });
+    });
+
+    test('should not include metadata when component lacks getMetadata', () => {
+      const comp = {
+        type: 'docker',
+        name: 'hub',
+        maskConfiguration: vi.fn(() => ({ url: 'https://hub.docker.com' })),
+      };
+      const result = component.mapComponentToItem('docker.hub', comp);
+      expect(result.metadata).toBeUndefined();
+    });
+
     test('should redact trigger infrastructure details from configuration', () => {
       const comp = {
         type: 'slack',
@@ -146,6 +167,27 @@ describe('Component Router', () => {
 
       const result = component.mapComponentToItem('slack.ops', comp, 'trigger');
       expect(result.configuration).toEqual([{ webhook: '[REDACTED]' }, { mode: 'simple' }]);
+    });
+
+    test('should redact trigger credentials in infrastructure fallback sanitizer', () => {
+      const comp = {
+        type: 'slack',
+        name: 'ops',
+        maskConfiguration: vi.fn(() => ({
+          apiKey: 'key-123',
+          token: 'token-123',
+          password: 'password-123',
+          mode: 'simple',
+        })),
+      };
+
+      const result = component.mapComponentToItem('slack.ops', comp, 'trigger');
+      expect(result.configuration).toEqual({
+        apiKey: '[REDACTED]',
+        token: '[REDACTED]',
+        password: '[REDACTED]',
+        mode: 'simple',
+      });
     });
   });
 

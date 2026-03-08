@@ -1,5 +1,6 @@
 import joi from 'joi';
 import log from '../log/index.js';
+import { redactTriggerConfigurationInfrastructureDetails } from './trigger-config-redaction.js';
 
 type AppLogger = typeof log;
 
@@ -50,9 +51,12 @@ class Component {
     this.agent = agent;
 
     this.configuration = this.validateConfiguration(configuration);
-    this.log.info(
-      `Register with configuration ${JSON.stringify(this.maskConfiguration(configuration))}`,
-    );
+    const maskedConfiguration = this.maskConfiguration(configuration);
+    const sanitizedConfiguration =
+      kind.toLowerCase() === 'trigger'
+        ? redactTriggerConfigurationInfrastructureDetails(maskedConfiguration)
+        : maskedConfiguration;
+    this.log.info(`Register with configuration ${JSON.stringify(sanitizedConfiguration)}`);
     await this.init();
     return this;
   }
