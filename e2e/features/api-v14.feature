@@ -47,7 +47,7 @@ Feature: Drydock v1.4 API exposure
     When I GET /api/notifications
     Then response code should be 200
     And response body should be valid json
-    And response body path $ should be of type array with minimum length 5
+    And response body path $.data should be of type array with minimum length 5
     When I PATCH /api/notifications/update-available with json body:
       """
       {"enabled": false, "triggers": ["mock.example"]}

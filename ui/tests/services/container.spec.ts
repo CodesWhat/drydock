@@ -334,6 +334,20 @@ describe('Container Service', () => {
       expect(triggers).toEqual(mockTriggers);
     });
 
+    it('unwraps container triggers from data envelope payloads', async () => {
+      const mockTriggers = [
+        { type: 'webhook', name: 'trigger1' },
+        { type: 'email', name: 'trigger2' },
+      ];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: mockTriggers, total: 2 }),
+      } as any);
+
+      const triggers = await getContainerTriggers('container1');
+      expect(triggers).toEqual(mockTriggers);
+    });
+
     it('throws when fetching triggers fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
@@ -726,6 +740,24 @@ describe('Container Service', () => {
       expect(fetch).toHaveBeenCalledWith('/api/containers/container1/update-operations', {
         credentials: 'include',
       });
+      expect(result).toEqual(operations);
+    });
+
+    it('unwraps update operations from data envelope payloads', async () => {
+      const operations = [
+        {
+          id: 'op-1',
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          rollbackReason: 'health_gate_failed',
+        },
+      ];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: operations, total: 1 }),
+      } as any);
+
+      const result = await getContainerUpdateOperations('container1');
       expect(result).toEqual(operations);
     });
 

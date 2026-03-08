@@ -1,3 +1,5 @@
+import { extractCollectionData } from '../utils/api';
+
 async function getBackups(containerId: string) {
   const response = await fetch(`/api/containers/${containerId}/backups`, {
     credentials: 'include',
@@ -5,7 +7,8 @@ async function getBackups(containerId: string) {
   if (!response.ok) {
     throw new Error(`Failed to get backups for container ${containerId}: ${response.statusText}`);
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData(payload);
 }
 
 async function rollback(containerId: string, backupId?: string) {

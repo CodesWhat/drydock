@@ -203,7 +203,8 @@ async function getContainerTriggers(containerId: string) {
   if (!response.ok) {
     throw new Error(`Failed to get triggers for container ${containerId}: ${response.statusText}`);
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData(payload);
 }
 
 async function runTrigger({
@@ -245,7 +246,8 @@ async function getContainerUpdateOperations(containerId: string) {
       `Failed to get update operations for container ${containerId}: ${response.statusText}`,
     );
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData(payload);
 }
 
 async function getContainerVulnerabilities(containerId: string) {

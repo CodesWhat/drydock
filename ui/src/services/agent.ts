@@ -1,3 +1,5 @@
+import { extractCollectionData } from '../utils/api';
+
 const BASE_URL = '/api/agents';
 
 export function getAgentIcon() {
@@ -9,5 +11,6 @@ export async function getAgents() {
   if (!response.ok) {
     throw new Error(`Failed to get agents: ${response.statusText}`);
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData(payload);
 }

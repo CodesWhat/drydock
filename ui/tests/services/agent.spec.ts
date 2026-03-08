@@ -30,6 +30,20 @@ describe('Agent Service', () => {
       expect(agents).toEqual(mockAgents);
     });
 
+    it('unwraps agents from collection envelope payloads', async () => {
+      const mockAgents = [
+        { name: 'node1', connected: true },
+        { name: 'node2', connected: false },
+      ];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: mockAgents, total: 2 }),
+      } as any);
+
+      const agents = await getAgents();
+      expect(agents).toEqual(mockAgents);
+    });
+
     it('throws an error when request fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
