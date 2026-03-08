@@ -7,9 +7,6 @@ const mockGetSettings = vi.fn();
 const mockUpdateSettings = vi.fn();
 const mockClearIconCache = vi.fn();
 const mockGetUser = vi.fn();
-const mockGetLog = vi.fn();
-const mockGetLogEntries = vi.fn();
-const mockGetAgents = vi.fn();
 
 vi.mock('@/services/app', () => ({
   getAppInfos: (...args: any[]) => mockGetAppInfos(...args),
@@ -33,44 +30,9 @@ vi.mock('@/services/auth', () => ({
   getUser: (...args: any[]) => mockGetUser(...args),
 }));
 
-vi.mock('@/services/log', () => ({
-  getLog: (...args: any[]) => mockGetLog(...args),
-  getLogEntries: (...args: any[]) => mockGetLogEntries(...args),
-}));
-
-vi.mock('@/services/agent', () => ({
-  getAgents: (...args: any[]) => mockGetAgents(...args),
-}));
-
 const mockDisableIconifyApi = vi.fn();
 vi.mock('@/boot/icons', () => ({
   disableIconifyApi: (...args: any[]) => mockDisableIconifyApi(...args),
-}));
-
-const { mockScrollBlocked, mockAutoFetchInterval } = vi.hoisted(() => {
-  // Create minimal ref-like objects with __v_isRef so Vue's template compiler unwraps them
-  function fakeRef<T>(val: T) {
-    return { value: val, __v_isRef: true as const };
-  }
-  return { mockScrollBlocked: fakeRef(false), mockAutoFetchInterval: fakeRef(0) };
-});
-
-vi.mock('@/composables/useLogViewerBehavior', () => ({
-  useLogViewport: () => ({
-    logContainer: { value: null, __v_isRef: true },
-    scrollBlocked: mockScrollBlocked,
-    scrollToBottom: vi.fn(),
-    handleLogScroll: vi.fn(),
-    resumeAutoScroll: vi.fn(),
-  }),
-  useAutoFetchLogs: () => ({ autoFetchInterval: mockAutoFetchInterval }),
-  LOG_AUTO_FETCH_INTERVALS: [
-    { label: 'Off', value: 0 },
-    { label: '2s', value: 2000 },
-    { label: '5s', value: 5000 },
-    { label: '10s', value: 10000 },
-    { label: '30s', value: 30000 },
-  ],
 }));
 
 const mockRouteQuery = vi.hoisted(() => ({ value: {} as Record<string, string> }));
@@ -255,8 +217,6 @@ describe('ConfigView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRouteQuery.value = {};
-    mockScrollBlocked.value = false;
-    mockAutoFetchInterval.value = 0;
     resetMockFontState();
     mockGetUser.mockResolvedValue({
       username: 'admin',
@@ -267,9 +227,6 @@ describe('ConfigView', () => {
     });
     mockGetAppInfos.mockResolvedValue({ version: '1.4.0' });
     mockGetStore.mockResolvedValue({ configuration: { path: '/store', file: 'dd.json' } });
-    mockGetLog.mockResolvedValue({ level: 'info' });
-    mockGetLogEntries.mockResolvedValue([]);
-    mockGetAgents.mockResolvedValue([]);
   });
 
   describe('on mount', () => {
@@ -691,123 +648,6 @@ describe('ConfigView', () => {
       const text = w.text();
       expect(text).toContain('Username');
       expect(text).toContain('Active Sessions');
-    });
-  });
-
-  describe('logs tab', () => {
-    async function mountLogsTab() {
-      mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
-
-      const w = factory();
-      await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalled());
-      await nextTick();
-
-      const tabs = w.findAll('button');
-      const logsTab = tabs.find((t) => t.text().includes('Logs'));
-      await logsTab?.trigger('click');
-      await vi.waitFor(() => expect(mockGetLogEntries).toHaveBeenCalled());
-      await vi.waitFor(() => expect(w.text()).not.toContain('Loading logs...'));
-      await nextTick();
-      return w;
-    }
-
-    it('fetches and displays application logs', async () => {
-      mockGetLog.mockResolvedValue({ level: 'debug' });
-      mockGetLogEntries.mockResolvedValue([
-        {
-          timestamp: '2026-02-23T10:15:00.000Z',
-          level: 'error',
-          component: 'watcher',
-          msg: 'something failed',
-        },
-      ]);
-
-      const w = await mountLogsTab();
-
-      expect(mockGetLog).toHaveBeenCalled();
-      expect(mockGetLogEntries).toHaveBeenLastCalledWith({
-        level: 'all',
-        component: undefined,
-        tail: 100,
-      });
-      expect(w.text()).toContain('Application Logs');
-      expect(w.text()).toContain('Server Level');
-      expect(w.text()).toContain('something failed');
-    });
-
-    it('applies log filters when clicking Apply', async () => {
-      const w = await mountLogsTab();
-
-      const selects = w.findAll('select');
-      expect(selects.length).toBeGreaterThanOrEqual(2);
-      await selects[0].setValue('error');
-      await selects[1].setValue('500');
-
-      const componentInput = w.find('input[placeholder="Filter by component..."]');
-      expect(componentInput.exists()).toBe(true);
-      await componentInput.setValue('api');
-
-      const applyButton = w.findAll('button').find((b) => b.text().includes('Apply'));
-      expect(applyButton).toBeDefined();
-      await applyButton?.trigger('click');
-
-      await vi.waitFor(() => {
-        expect(mockGetLogEntries).toHaveBeenLastCalledWith({
-          level: 'error',
-          component: 'api',
-          tail: 500,
-        });
-      });
-    });
-
-    it('renders auto-fetch interval selector', async () => {
-      const w = await mountLogsTab();
-      const selects = w.findAll('select');
-      const autoFetchSelect = selects.find((s) => s.text().includes('Off'));
-      expect(autoFetchSelect).toBeDefined();
-      expect(autoFetchSelect?.text()).toContain('2s');
-      expect(autoFetchSelect?.text()).toContain('5s');
-    });
-
-    it('renders refresh button', async () => {
-      const w = await mountLogsTab();
-      const refreshBtn = w
-        .findAll('.app-icon-stub')
-        .find((el) => el.attributes('data-icon') === 'refresh');
-      expect(refreshBtn).toBeDefined();
-    });
-
-    it('shows scroll-paused indicator when scrollBlocked and auto-fetch active', async () => {
-      mockScrollBlocked.value = true;
-      mockAutoFetchInterval.value = 2000;
-      const w = await mountLogsTab();
-      expect(w.text()).toContain('Auto-scroll paused');
-      const resumeBtn = w.findAll('button').find((b) => b.text().includes('Resume'));
-      expect(resumeBtn).toBeDefined();
-    });
-
-    it('hides scroll-paused indicator when auto-fetch is off', async () => {
-      mockScrollBlocked.value = true;
-      mockAutoFetchInterval.value = 0;
-      const w = await mountLogsTab();
-      expect(w.text()).not.toContain('Auto-scroll paused');
-    });
-
-    it('keeps config log fetch server-only and hides source selector', async () => {
-      mockGetAgents.mockResolvedValue([
-        { name: 'edge-1', connected: true },
-        { name: 'edge-2', connected: false },
-      ]);
-      const w = await mountLogsTab();
-
-      expect(w.find('select[data-testid="log-source-select"]').exists()).toBe(false);
-      expect(mockGetAgents).not.toHaveBeenCalled();
-      expect(mockGetLogEntries).toHaveBeenLastCalledWith({
-        level: 'all',
-        component: undefined,
-        tail: 100,
-      });
     });
   });
 });
