@@ -2,6 +2,7 @@ import express from 'express';
 import nocache from 'nocache';
 import { getLogBufferEnabled, getLogLevel } from '../configuration/index.js';
 import { getEntries } from '../log/buffer.js';
+import { sendErrorResponse } from './error-response.js';
 
 const router = express.Router();
 const ALLOWED_LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
@@ -58,13 +59,13 @@ function getLogEntries(req, res) {
 
   const level = getValidatedLogLevel(req.query.level);
   if (level === null) {
-    res.status(400).json({ error: 'Invalid level query parameter' });
+    sendErrorResponse(res, 400, 'Invalid level query parameter');
     return;
   }
 
   const component = getValidatedLogComponent(req.query.component);
   if (component === null) {
-    res.status(400).json({ error: 'Invalid component query parameter' });
+    sendErrorResponse(res, 400, 'Invalid component query parameter');
     return;
   }
 

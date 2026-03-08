@@ -113,7 +113,7 @@ const {
   backupsLoading,
   detailBackups,
   rollbackInProgress,
-  rollbackToBackup,
+  confirmRollback,
   rollbackMessage,
   rollbackError,
   updateOperationsLoading,
@@ -124,7 +124,7 @@ const {
   formatRollbackReason,
   updateOperationsError,
   scanContainer,
-  updateContainer,
+  confirmUpdate,
   registryColorBg,
   registryColorText,
   registryLabel,
@@ -511,8 +511,8 @@ const {
             <div class="px-4 py-3 flex items-center justify-between"
                  style="border-bottom: 1px solid var(--dd-log-divider);">
               <div class="flex items-center gap-2">
-                <AppIcon name="terminal" :size="11" :style="{ color: 'var(--dd-text-muted)' }" />
-                <span class="text-[11px] font-semibold uppercase tracking-wider" style="color: var(--dd-text-muted);">
+                <AppIcon name="terminal" :size="11" :style="{ color: 'var(--dd-log-text-muted)' }" />
+                <span class="text-[11px] font-semibold uppercase tracking-wider" style="color: var(--dd-log-text-muted);">
                   Container Logs
                 </span>
                 <span class="text-[11px] font-mono" style="color: var(--dd-primary);">{{ selectedContainer.name }}</span>
@@ -524,7 +524,7 @@ const {
                     {{ opt.label }}
                   </option>
                 </select>
-                <span class="text-[10px] font-mono" style="color: var(--dd-text-muted);">
+                <span class="text-[10px] font-mono" style="color: var(--dd-log-text-muted);">
                   {{ getContainerLogs(selectedContainer.name).length }} lines
                 </span>
               </div>
@@ -534,8 +534,8 @@ const {
               <div v-for="(line, i) in getContainerLogs(selectedContainer.name)" :key="i"
                    class="px-3 py-0.5 font-mono text-[11px] leading-relaxed whitespace-pre hover:bg-white/[0.02]"
                    :style="{ borderBottom: i < getContainerLogs(selectedContainer.name).length - 1 ? '1px solid var(--dd-log-line)' : 'none' }">
-                <span style="color: var(--dd-text-muted);">{{ line.substring(0, 24) }}</span>
-                <span :style="{ color: line.includes('[error]') || line.includes('[crit]') || line.includes('[emerg]') ? 'var(--dd-danger)' : line.includes('[warn]') || line.includes('[hint]') ? 'var(--dd-warning)' : 'var(--dd-text-secondary)' }">{{ line.substring(24) }}</span>
+                <span style="color: var(--dd-log-text-muted);">{{ line.substring(0, 24) }}</span>
+                <span :style="{ color: line.includes('[error]') || line.includes('[crit]') || line.includes('[emerg]') ? 'var(--dd-danger)' : line.includes('[warn]') || line.includes('[hint]') ? 'var(--dd-warning)' : 'var(--dd-log-text)' }">{{ line.substring(24) }}</span>
               </div>
             </div>
             <div v-if="containerScrollBlocked && containerAutoFetchInterval > 0"
@@ -655,7 +655,7 @@ const {
                     <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                             :style="{ border: '1px solid var(--dd-border-strong)' }"
                             :disabled="!selectedContainer.newTag || actionInProgress === selectedContainer.name"
-                            @click="updateContainer(selectedContainer.name)">
+                            @click="confirmUpdate(selectedContainer.name)">
                       Update Now
                     </button>
                     <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
@@ -847,7 +847,7 @@ const {
                   <button class="px-2.5 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                           :style="{ border: '1px solid var(--dd-border-strong)' }"
                           :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
-                          @click="rollbackToBackup()">
+                          @click="confirmRollback()">
                     {{ rollbackInProgress === 'latest' ? 'Rolling back...' : 'Rollback Latest' }}
                   </button>
                 </div>
@@ -863,7 +863,7 @@ const {
                     <button class="px-2.5 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                             :style="{ border: '1px solid var(--dd-border-strong)' }"
                             :disabled="rollbackInProgress !== null"
-                            @click="rollbackToBackup(backup.id)">
+                            @click="confirmRollback(backup.id)">
                       {{ rollbackInProgress === backup.id ? 'Rolling...' : 'Use' }}
                     </button>
                   </div>

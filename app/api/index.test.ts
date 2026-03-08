@@ -204,9 +204,28 @@ describe('API Index', () => {
     await indexRouter.init();
 
     expect(mockApp.use).toHaveBeenCalledWith('/health', 'health-router');
+    expect(mockApp.use).toHaveBeenCalledWith('/api/v1', 'api-router');
     expect(mockApp.use).toHaveBeenCalledWith('/api', 'api-router');
     expect(mockApp.use).toHaveBeenCalledWith('/metrics', 'prometheus-router');
     expect(mockApp.use).toHaveBeenCalledWith('/', 'ui-router');
+  });
+
+  test('should not mount legacy error-response normalization middleware', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const functionMiddlewareNames = mockApp.use.mock.calls
+      .filter((call) => typeof call[0] === 'function')
+      .map((call) => call[0].name);
+    expect(functionMiddlewareNames).not.toContain('normalizeErrorResponsePayload');
   });
 
   test('should enable helmet security headers with CSP allowing Iconify CDN', async () => {
@@ -335,6 +354,9 @@ describe('API Index', () => {
 
     const compressionOptions = compressionModule.default.mock.calls[0][0];
     expect(compressionOptions.filter({ path: '/api/events/stream', headers: {} }, {})).toBe(false);
+    expect(compressionOptions.filter({ path: '/api/v1/events/stream', headers: {} }, {})).toBe(
+      false,
+    );
     expect(compressionOptions.filter({ path: '/events/ui', headers: {} }, {})).toBe(false);
     expect(
       compressionOptions.filter(

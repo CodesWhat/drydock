@@ -47,6 +47,21 @@ describe('recentStorage', () => {
     expect(localStorage.getItem('legacy')).toBeNull();
   });
 
+  it('does not persist migrated legacy values when none pass validation', () => {
+    localStorage.setItem('legacy', JSON.stringify([{ invalid: true }]));
+
+    const result = loadRecentItems({
+      key: 'primary',
+      legacyKey: 'legacy',
+      maxItems: 8,
+      validate: isRecentItem,
+    });
+
+    expect(result).toEqual([]);
+    expect(localStorage.getItem('primary')).toBeNull();
+    expect(localStorage.getItem('legacy')).toBeNull();
+  });
+
   it('does not read legacy values when primary key already exists (even empty)', () => {
     localStorage.setItem('primary', JSON.stringify([]));
     localStorage.setItem('legacy', JSON.stringify([{ id: 'c', title: 'C' }]));
@@ -84,8 +99,80 @@ describe('recentStorage', () => {
     ]);
   });
 
+  it('returns an empty list when persisted value is not an array', () => {
+    localStorage.setItem('primary', JSON.stringify({ id: 'x' }));
+
+    const result = loadRecentItems({
+      key: 'primary',
+      maxItems: 8,
+      validate: isRecentItem,
+    });
+
+    expect(result).toEqual([]);
+  });
+
+  it('returns an empty list when persisted JSON cannot be parsed', () => {
+    localStorage.setItem('primary', '{broken');
+
+    const result = loadRecentItems({
+      key: 'primary',
+      maxItems: 8,
+      validate: isRecentItem,
+    });
+
+    expect(result).toEqual([]);
+  });
+
+  it('returns empty when no primary value exists and no legacy key is configured', () => {
+    const result = loadRecentItems({
+      key: 'primary',
+      maxItems: 8,
+      validate: isRecentItem,
+    });
+
+    expect(result).toEqual([]);
+  });
+
+  it('returns empty when neither primary nor legacy keys exist', () => {
+    const result = loadRecentItems({
+      key: 'primary',
+      legacyKey: 'legacy',
+      maxItems: 8,
+      validate: isRecentItem,
+    });
+
+    expect(result).toEqual([]);
+  });
+
   it('persists via saveRecentItems', () => {
     saveRecentItems('primary', [{ id: 'x', title: 'X' }]);
     expect(localStorage.getItem('primary')).toBe(JSON.stringify([{ id: 'x', title: 'X' }]));
+  });
+
+  it('ignores storage write failures in saveRecentItems', () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('quota exceeded');
+    });
+
+    expect(() => saveRecentItems('primary', [{ id: 'x', title: 'X' }])).not.toThrow();
+    spy.mockRestore();
+  });
+
+  it('still migrates legacy values when legacy key removal fails', () => {
+    localStorage.setItem('legacy', JSON.stringify([{ id: 'z', title: 'Z' }]));
+    const removeSpy = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('storage unavailable');
+    });
+
+    const result = loadRecentItems({
+      key: 'primary',
+      legacyKey: 'legacy',
+      maxItems: 8,
+      validate: isRecentItem,
+    });
+
+    expect(result).toEqual([{ id: 'z', title: 'Z' }]);
+    expect(localStorage.getItem('primary')).toBe(JSON.stringify([{ id: 'z', title: 'Z' }]));
+    removeSpy.mockRestore();
   });
 });

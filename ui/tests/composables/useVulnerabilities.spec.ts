@@ -1,15 +1,16 @@
 import { ref } from 'vue';
 
-const { mockGetAllContainers, mockGetContainerVulnerabilities, mockComputeSecurityDelta } =
+const { mockGetAllContainers, mockGetSecurityVulnerabilityOverview, mockComputeSecurityDelta } =
   vi.hoisted(() => ({
     mockGetAllContainers: vi.fn(),
-    mockGetContainerVulnerabilities: vi.fn(),
+    mockGetSecurityVulnerabilityOverview: vi.fn(),
     mockComputeSecurityDelta: vi.fn(),
   }));
 
 vi.mock('@/services/container', () => ({
   getAllContainers: (...args: any[]) => mockGetAllContainers(...args),
-  getContainerVulnerabilities: (...args: any[]) => mockGetContainerVulnerabilities(...args),
+  getSecurityVulnerabilityOverview: (...args: any[]) =>
+    mockGetSecurityVulnerabilityOverview(...args),
 }));
 
 vi.mock('@/utils/container-mapper', async () => {
@@ -25,17 +26,80 @@ vi.mock('@/utils/container-mapper', async () => {
 
 import { useVulnerabilities } from '@/composables/useVulnerabilities';
 
-/** Set up mockGetContainerVulnerabilities to return scan data matching the container list. */
-function setupVulnMocks(containers: any[]) {
-  const scanByContainerId = new Map<string, any>();
-  for (const c of containers) {
-    if (c.id && c.security?.scan) {
-      scanByContainerId.set(c.id, c.security.scan);
-    }
+function normalizeSeverityCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  if (value <= 0) return 0;
+  return Math.floor(value);
+}
+
+function chooseLatestTimestamp(current: string | null, candidate: unknown): string | null {
+  if (typeof candidate !== 'string' || candidate.length === 0) {
+    return current;
   }
-  mockGetContainerVulnerabilities.mockImplementation((id: string) => {
-    const scan = scanByContainerId.get(id);
-    return Promise.resolve(scan ?? { vulnerabilities: [] });
+  if (current === null) {
+    return candidate;
+  }
+  return candidate > current ? candidate : current;
+}
+
+/** Build the aggregated API response from a container fixture list. */
+function setupVulnMocks(containers: any[]) {
+  const images = new Map<string, any>();
+  let scannedContainers = 0;
+  let latestScannedAt: string | null = null;
+
+  for (const c of containers) {
+    const scan = c.security?.scan;
+    if (!scan) continue;
+    scannedContainers += 1;
+
+    const image = c.displayName || c.name || 'unknown';
+    const entry = images.get(image) || {
+      image,
+      containerIds: [] as string[],
+      vulnerabilities: [] as any[],
+    };
+
+    if (typeof c.id === 'string' && c.id.length > 0 && !entry.containerIds.includes(c.id)) {
+      entry.containerIds.push(c.id);
+    }
+
+    const updateSummary = c.security?.updateScan?.summary;
+    if (updateSummary) {
+      entry.updateSummary = {
+        unknown: normalizeSeverityCount(updateSummary.unknown),
+        low: normalizeSeverityCount(updateSummary.low),
+        medium: normalizeSeverityCount(updateSummary.medium),
+        high: normalizeSeverityCount(updateSummary.high),
+        critical: normalizeSeverityCount(updateSummary.critical),
+      };
+    }
+
+    latestScannedAt = chooseLatestTimestamp(latestScannedAt, scan.scannedAt);
+
+    const vulnList = Array.isArray(scan.vulnerabilities) ? scan.vulnerabilities : [];
+    for (const vulnerability of vulnList) {
+      entry.vulnerabilities.push({
+        id: vulnerability.id ?? 'unknown',
+        severity: vulnerability.severity ?? 'UNKNOWN',
+        package: vulnerability.packageName ?? vulnerability.package ?? 'unknown',
+        version: vulnerability.installedVersion ?? vulnerability.version ?? '',
+        fixedIn: vulnerability.fixedVersion ?? vulnerability.fixedIn ?? null,
+        title: vulnerability.title ?? vulnerability.Title ?? '',
+        target: vulnerability.target ?? vulnerability.Target ?? '',
+        primaryUrl: vulnerability.primaryUrl ?? vulnerability.PrimaryURL ?? '',
+        publishedDate: vulnerability.publishedDate ?? '',
+      });
+    }
+
+    images.set(image, entry);
+  }
+
+  mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+    totalContainers: containers.length,
+    scannedContainers,
+    latestScannedAt,
+    images: [...images.values()],
   });
 }
 
@@ -81,7 +145,6 @@ describe('useVulnerabilities', () => {
         },
       },
     ];
-    mockGetAllContainers.mockResolvedValue(containers);
     setupVulnMocks(containers);
 
     const securitySortField = ref('critical');
@@ -134,7 +197,6 @@ describe('useVulnerabilities', () => {
         },
       },
     ];
-    mockGetAllContainers.mockResolvedValue(containers);
     setupVulnMocks(containers);
 
     const state = useVulnerabilities({
@@ -153,10 +215,45 @@ describe('useVulnerabilities', () => {
     expect(state.filteredSummaries.value).toHaveLength(1);
     expect(state.filteredSummaries.value[0].image).toBe('redis');
 
+    state.secFilterFix.value = 'yes';
+    expect(state.filteredSummaries.value).toHaveLength(1);
+    expect(state.filteredSummaries.value[0].image).toBe('nginx');
+
     state.clearSecFilters();
     expect(state.secFilterSeverity.value).toBe('all');
     expect(state.secFilterFix.value).toBe('all');
     expect(state.activeSecFilterCount.value).toBe(0);
+  });
+
+  it('falls back to critical sorting and ignores asc for unknown sort fields', async () => {
+    mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+      totalContainers: 2,
+      scannedContainers: 2,
+      latestScannedAt: '2026-03-01T10:00:00.000Z',
+      images: [
+        {
+          image: 'critical-image',
+          containerIds: ['c1'],
+          vulnerabilities: [{ id: 'CVE-CRIT', severity: 'CRITICAL', package: 'pkg' }],
+        },
+        {
+          image: 'low-image',
+          containerIds: ['c2'],
+          vulnerabilities: [{ id: 'CVE-LOW', severity: 'LOW', package: 'pkg' }],
+        },
+      ],
+    });
+
+    const state = useVulnerabilities({
+      securitySortField: ref('unknown-sort-field'),
+      securitySortAsc: ref(true),
+    });
+    await state.fetchVulnerabilities();
+
+    expect(state.filteredSummaries.value.map((summary) => summary.image)).toEqual([
+      'critical-image',
+      'low-image',
+    ]);
   });
 
   it('separates image counts from grouped vulnerability lists', async () => {
@@ -185,7 +282,6 @@ describe('useVulnerabilities', () => {
         },
       },
     ];
-    mockGetAllContainers.mockResolvedValue(containers);
     setupVulnMocks(containers);
 
     const state = useVulnerabilities({
@@ -198,6 +294,105 @@ describe('useVulnerabilities', () => {
     expect(summary.vulns).toBeUndefined();
     expect(state.vulnerabilitiesByImage.value.nginx).toHaveLength(2);
     expect(state.vulnerabilitiesByImage.value.nginx.map((v) => v.id)).toEqual(['CVE-1', 'CVE-2']);
+  });
+
+  it('groups vulnerabilities by image then sorts each group by severity', () => {
+    const state = useVulnerabilities({
+      securitySortField: ref('critical'),
+      securitySortAsc: ref(false),
+    });
+
+    state.securityVulnerabilities.value = [
+      {
+        id: 'CVE-LOW',
+        severity: 'LOW',
+        package: 'pkg-low',
+        version: '1.0.0',
+        fixedIn: null,
+        title: '',
+        target: '',
+        primaryUrl: '',
+        image: 'ordered-image',
+        publishedDate: '',
+      },
+      {
+        id: 'CVE-UNKNOWN',
+        severity: 'UNKNOWN',
+        package: 'pkg-unknown',
+        version: '1.0.0',
+        fixedIn: null,
+        title: '',
+        target: '',
+        primaryUrl: '',
+        image: 'ordered-image',
+        publishedDate: '',
+      },
+      {
+        id: 'CVE-CRITICAL',
+        severity: 'CRITICAL',
+        package: 'pkg-critical',
+        version: '1.0.0',
+        fixedIn: null,
+        title: '',
+        target: '',
+        primaryUrl: '',
+        image: 'ordered-image',
+        publishedDate: '',
+      },
+      {
+        id: 'CVE-MEDIUM',
+        severity: 'MEDIUM',
+        package: 'pkg-medium',
+        version: '1.0.0',
+        fixedIn: null,
+        title: '',
+        target: '',
+        primaryUrl: '',
+        image: 'ordered-image',
+        publishedDate: '',
+      },
+      {
+        id: 'CVE-HIGH-OTHER',
+        severity: 'HIGH',
+        package: 'pkg-high-other',
+        version: '1.0.0',
+        fixedIn: null,
+        title: '',
+        target: '',
+        primaryUrl: '',
+        image: 'other-image',
+        publishedDate: '',
+      },
+      {
+        id: 'CVE-LOW-OTHER',
+        severity: 'LOW',
+        package: 'pkg-low-other',
+        version: '1.0.0',
+        fixedIn: null,
+        title: '',
+        target: '',
+        primaryUrl: '',
+        image: 'other-image',
+        publishedDate: '',
+      },
+    ];
+
+    const sortSpy = vi.spyOn(Array.prototype, 'sort');
+    try {
+      expect(state.vulnerabilitiesByImage.value['ordered-image'].map((v) => v.id)).toEqual([
+        'CVE-CRITICAL',
+        'CVE-MEDIUM',
+        'CVE-LOW',
+        'CVE-UNKNOWN',
+      ]);
+      expect(state.vulnerabilitiesByImage.value['other-image'].map((v) => v.id)).toEqual([
+        'CVE-HIGH-OTHER',
+        'CVE-LOW-OTHER',
+      ]);
+      expect(sortSpy).toHaveBeenCalled();
+    } finally {
+      sortSpy.mockRestore();
+    }
   });
 
   it('sorts image summaries by configured field and direction', async () => {
@@ -242,7 +437,6 @@ describe('useVulnerabilities', () => {
         },
       },
     ];
-    mockGetAllContainers.mockResolvedValue(containers);
     setupVulnMocks(containers);
 
     const securitySortField = ref('critical');
@@ -298,7 +492,6 @@ describe('useVulnerabilities', () => {
         security: { scan: null },
       },
     ];
-    mockGetAllContainers.mockResolvedValue(containers);
     setupVulnMocks(containers);
 
     const state = useVulnerabilities({
@@ -331,7 +524,6 @@ describe('useVulnerabilities', () => {
       },
     }));
 
-    mockGetAllContainers.mockResolvedValue(containers);
     setupVulnMocks(containers);
 
     const state = useVulnerabilities({
@@ -340,8 +532,8 @@ describe('useVulnerabilities', () => {
     });
     await state.fetchVulnerabilities();
 
-    expect(mockGetAllContainers).toHaveBeenCalledWith({ includeVulnerabilities: true });
-    expect(mockGetContainerVulnerabilities).not.toHaveBeenCalled();
+    expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledWith();
+    expect(mockGetAllContainers).not.toHaveBeenCalled();
     expect(state.securityVulnerabilities.value).toHaveLength(50);
   });
 
@@ -463,7 +655,6 @@ describe('useVulnerabilities', () => {
         },
       },
     ];
-    mockGetAllContainers.mockResolvedValue(containers);
     setupVulnMocks(containers);
 
     const securitySortField = ref('critical');
@@ -553,13 +744,70 @@ describe('useVulnerabilities', () => {
       'CVE-UNEXPECTED-SECOND',
     ]);
 
-    mockGetAllContainers.mockResolvedValueOnce(containers);
+    setupVulnMocks(containers);
     await state.fetchVulnerabilities();
     expect(state.loading.value).toBe(false);
   });
 
-  it('sets an error and clears derived state when loading fails', async () => {
-    mockGetAllContainers.mockRejectedValue({ bad: true });
+  it('applies fallback defaults for sparse and malformed API responses', async () => {
+    mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+      totalContainers: 2,
+      scannedContainers: 2,
+      latestScannedAt: '2026-03-01T10:00:00.000Z',
+      images: [
+        {
+          image: 'sparse-image',
+          containerIds: ['c1'],
+          vulnerabilities: [{}],
+        },
+        {
+          image: 'non-array-vulns',
+          containerIds: ['c2'],
+          vulnerabilities: 'not-an-array',
+        },
+        {
+          image: '',
+          containerIds: null,
+          vulnerabilities: [{ id: 'CVE-NOIMAGE', severity: 'HIGH', package: 'pkg' }],
+        },
+        {
+          image: 'empty-ids',
+          containerIds: ['', null, 42],
+          vulnerabilities: [],
+        },
+      ],
+    });
+
+    const securitySortField = ref('bogus-field');
+    const state = useVulnerabilities({
+      securitySortField,
+      securitySortAsc: ref(false),
+    });
+    await state.fetchVulnerabilities();
+
+    expect(state.securityVulnerabilities.value).toHaveLength(2);
+    const vuln = state.securityVulnerabilities.value.find((v) => v.id === 'unknown');
+    expect(vuln).toBeDefined();
+    expect(vuln!.package).toBe('unknown');
+    expect(vuln!.version).toBe('');
+    expect(vuln!.fixedIn).toBeNull();
+    expect(vuln!.title).toBe('');
+    expect(vuln!.target).toBe('');
+    expect(vuln!.primaryUrl).toBe('');
+    expect(vuln!.publishedDate).toBe('');
+    expect(vuln!.image).toBe('sparse-image');
+
+    expect(state.containerIdsByImage.value.unknown).toBeUndefined();
+    expect(state.containerIdsByImage.value['empty-ids']).toBeUndefined();
+  });
+
+  it('handles non-array overview.images gracefully', async () => {
+    mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+      totalContainers: 0,
+      scannedContainers: 0,
+      latestScannedAt: null,
+      images: 'not-an-array',
+    });
 
     const state = useVulnerabilities({
       securitySortField: ref('critical'),
@@ -567,8 +815,38 @@ describe('useVulnerabilities', () => {
     });
     await state.fetchVulnerabilities();
 
+    expect(state.securityVulnerabilities.value).toHaveLength(0);
+    expect(state.containerIdsByImage.value).toEqual({});
+  });
+
+  it('sets an error and clears derived state when loading fails', async () => {
+    mockGetSecurityVulnerabilityOverview
+      .mockResolvedValueOnce({
+        totalContainers: 1,
+        scannedContainers: 1,
+        latestScannedAt: '2026-03-01T10:00:00.000Z',
+        images: [
+          {
+            image: 'nginx',
+            containerIds: ['container-1'],
+            vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', package: 'openssl' }],
+          },
+        ],
+      })
+      .mockRejectedValueOnce({ bad: true });
+
+    const state = useVulnerabilities({
+      securitySortField: ref('critical'),
+      securitySortAsc: ref(false),
+    });
+    await state.fetchVulnerabilities();
+    expect(state.securityVulnerabilities.value).toHaveLength(1);
+
+    await state.fetchVulnerabilities();
+
     expect(state.loading.value).toBe(false);
     expect(state.error.value).toBe('Failed to load vulnerability data');
+    expect(state.securityVulnerabilities.value).toEqual([]);
     expect(state.containerIdsByImage.value).toEqual({});
     expect(state.latestSecurityScanAt.value).toBeNull();
     expect(state.totalContainerCount.value).toBe(0);

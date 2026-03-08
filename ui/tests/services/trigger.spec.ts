@@ -62,6 +62,48 @@ describe('Trigger Service', () => {
       expect(result).toEqual(mockTriggers);
     });
 
+    it('unwraps collection envelope with data array', async () => {
+      const mockTriggers = [{ type: 'slack', name: 'alerts' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: mockTriggers, total: 1 }),
+      } as any);
+
+      const result = await getAllTriggers();
+      expect(result).toEqual(mockTriggers);
+    });
+
+    it('unwraps collection envelope with items array', async () => {
+      const mockTriggers = [{ type: 'webhook', name: 'item-shape' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: mockTriggers, total: 1 }),
+      } as any);
+
+      const result = await getAllTriggers();
+      expect(result).toEqual(mockTriggers);
+    });
+
+    it('returns empty array for non-array non-object payload', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => null,
+      } as any);
+
+      const result = await getAllTriggers();
+      expect(result).toEqual([]);
+    });
+
+    it('returns empty array for object without data array', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ total: 0 }),
+      } as any);
+
+      const result = await getAllTriggers();
+      expect(result).toEqual([]);
+    });
+
     it('throws when fetching triggers fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
@@ -160,6 +202,31 @@ describe('Trigger Service', () => {
         }),
       ).rejects.toThrow('Unknown error');
     });
+
+    it('runs agent-scoped trigger when agent is provided', async () => {
+      const mockResult = { success: true };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => mockResult,
+      } as any);
+
+      const container = { id: 'c1', name: 'test' };
+      const result = await runTrigger({
+        triggerType: 'webhook',
+        triggerName: 'hook1',
+        triggerAgent: 'edge',
+        container,
+      });
+
+      expect(fetch).toHaveBeenCalledWith('/api/triggers/webhook/hook1/edge', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(container),
+      });
+      expect(result).toEqual(mockResult);
+    });
   });
 
   describe('getTrigger', () => {
@@ -199,7 +266,7 @@ describe('Trigger Service', () => {
 
       const result = await getTrigger({ agent: 'edge', type: 'slack', name: 'alerts' });
 
-      expect(fetch).toHaveBeenCalledWith('/api/triggers/edge/slack/alerts', {
+      expect(fetch).toHaveBeenCalledWith('/api/triggers/slack/alerts/edge', {
         credentials: 'include',
       });
       expect(result).toEqual(mockTrigger);

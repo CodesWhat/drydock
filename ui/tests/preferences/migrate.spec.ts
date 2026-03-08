@@ -124,6 +124,16 @@ describe('preferences migration', () => {
       expect(result.appearance.radius).toBe(DEFAULTS.appearance.radius);
     });
 
+    it('should replace invalid fontSize with default', () => {
+      const result = migrate({ schemaVersion: 1, appearance: { fontSize: 5 } });
+      expect(result.appearance.fontSize).toBe(DEFAULTS.appearance.fontSize);
+    });
+
+    it('should preserve valid fontSize', () => {
+      const result = migrate({ schemaVersion: 1, appearance: { fontSize: 1.1 } });
+      expect(result.appearance.fontSize).toBe(1.1);
+    });
+
     it('should replace invalid container viewMode with default', () => {
       const result = migrate({ schemaVersion: 1, containers: { viewMode: 'timeline' } });
       expect(result.containers.viewMode).toBe(DEFAULTS.containers.viewMode);
@@ -140,7 +150,7 @@ describe('preferences migration', () => {
         theme: { family: 'catppuccin', variant: 'light' },
         font: { family: 'jetbrains-mono' },
         icons: { library: 'tabler', scale: 1.2 },
-        appearance: { radius: 'round' },
+        appearance: { radius: 'round', fontSize: 1.15 },
         containers: { viewMode: 'cards', tableActions: 'buttons' },
       };
       const result = migrate(input);
@@ -148,12 +158,40 @@ describe('preferences migration', () => {
       expect(result.font.family).toBe('jetbrains-mono');
       expect(result.icons).toEqual({ library: 'tabler', scale: 1.2 });
       expect(result.appearance.radius).toBe('round');
+      expect(result.appearance.fontSize).toBe(1.15);
       expect(result.containers.viewMode).toBe('cards');
       expect(result.containers.tableActions).toBe('buttons');
     });
   });
 
   describe('migrateFromLegacyKeys', () => {
+    it('handles localStorage getter failures while reading legacy string keys', () => {
+      const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new Error('storage unavailable');
+      });
+
+      const result = migrateFromLegacyKeys();
+
+      expect(result).toEqual(DEFAULTS);
+      getItemSpy.mockRestore();
+    });
+
+    it('falls back to defaults when an individual string-key read throws', () => {
+      localStorage.setItem('drydock-theme-family-v1', 'github');
+      const originalGetItem = localStorage.getItem.bind(localStorage);
+      const getItemSpy = vi.spyOn(localStorage, 'getItem').mockImplementation((key: string) => {
+        if (key === 'drydock-theme-family-v1') {
+          throw new Error('read failed');
+        }
+        return originalGetItem(key);
+      });
+
+      const result = migrateFromLegacyKeys();
+
+      expect(result.theme.family).toBe(DEFAULTS.theme.family);
+      getItemSpy.mockRestore();
+    });
+
     describe('theme migration', () => {
       it('should migrate theme family', () => {
         localStorage.setItem('drydock-theme-family-v1', 'github');
@@ -332,6 +370,34 @@ describe('preferences migration', () => {
         expect(result.containers.filters.bouncer).toBe('safe');
         expect(result.containers.filters.server).toBe('local');
         expect(result.containers.filters.kind).toBe('minor');
+      });
+
+      it('should keep only string-valued filter fields', () => {
+        localStorage.setItem(
+          'dd-containers-filters-v1',
+          JSON.stringify({
+            status: 'running',
+            registry: 42,
+            bouncer: null,
+            server: false,
+            kind: 'digest',
+          }),
+        );
+        const result = migrateFromLegacyKeys();
+        expect(result.containers.filters.status).toBe('running');
+        expect(result.containers.filters.kind).toBe('digest');
+      });
+
+      it('should ignore filters payloads that contain no string values', () => {
+        localStorage.setItem(
+          'dd-containers-filters-v1',
+          JSON.stringify({
+            status: true,
+            registry: 42,
+          }),
+        );
+        const result = migrateFromLegacyKeys();
+        expect(result.containers.filters).toEqual(DEFAULTS.containers.filters);
       });
 
       it('should migrate columns', () => {

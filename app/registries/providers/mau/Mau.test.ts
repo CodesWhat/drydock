@@ -33,7 +33,7 @@ test('maskConfiguration should mask token', async () => {
   expect(mau.maskConfiguration()).toEqual({
     url: 'https://dock.mau.dev',
     authurl: 'https://dock.mau.dev',
-    token: 'a****f',
+    token: '[REDACTED]',
   });
 });
 

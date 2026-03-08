@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { mapComponentsToList } from '../../api/component.js';
+import { sendErrorResponse } from '../../api/error-response.js';
 import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
 import * as registry from '../../registry/index.js';
@@ -26,7 +27,8 @@ export async function watchWatcher(req: Request, res: Response) {
   const watcher = registry.getState().watcher[watcherId];
 
   if (!watcher) {
-    return res.status(404).json({ error: `Watcher ${name} not found` });
+    sendErrorResponse(res, 404, `Watcher ${name} not found`);
+    return;
   }
 
   try {
@@ -34,7 +36,7 @@ export async function watchWatcher(req: Request, res: Response) {
     res.json(results);
   } catch (e: any) {
     log.error(`Error watching watcher ${sanitizeLogParam(name)}: ${sanitizeLogParam(e.message)}`);
-    res.status(500).json({ error: e.message });
+    sendErrorResponse(res, 500, e.message);
   }
 }
 
@@ -49,12 +51,14 @@ export async function watchContainer(req: Request, res: Response) {
   const watcher = registry.getState().watcher[watcherId];
 
   if (!watcher) {
-    return res.status(404).json({ error: `Watcher ${name} not found` });
+    sendErrorResponse(res, 404, `Watcher ${name} not found`);
+    return;
   }
 
   const container = storeContainer.getContainer(id);
   if (!container) {
-    return res.status(404).json({ error: `Container ${id} not found in agent store` });
+    sendErrorResponse(res, 404, `Container ${id} not found in agent store`);
+    return;
   }
 
   try {
@@ -62,6 +66,6 @@ export async function watchContainer(req: Request, res: Response) {
     res.json(result);
   } catch (e: any) {
     log.error(`Error watching container ${sanitizeLogParam(id)}: ${sanitizeLogParam(e.message)}`);
-    res.status(500).json({ error: e.message });
+    sendErrorResponse(res, 500, e.message);
   }
 }

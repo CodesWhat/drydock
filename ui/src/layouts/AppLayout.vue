@@ -2,9 +2,11 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import whaleLogo from '@/assets/whale-logo.png';
+import AnnouncementBanner from '@/components/AnnouncementBanner.vue';
 import NotificationBell from '@/components/NotificationBell.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import { useIcons } from '@/composables/useIcons';
+import { useStorageRef } from '@/composables/useStorageRef';
 import { loadRecentItems, saveRecentItems } from '@/layouts/recentStorage';
 import { preferences } from '@/preferences/store';
 import { usePreference } from '@/preferences/usePreference';
@@ -244,6 +246,20 @@ const searchActiveIndex = ref(0);
 const searchContainers = ref<SearchContainerIndexItem[]>([]);
 const searchResourceResults = ref<SearchResultItem[]>([]);
 const searchResourcesLoading = ref(false);
+const oidcHttpDiscoveryDetected = ref(false);
+const hideOidcHttpBannerForSession = ref(false);
+const hideOidcHttpBannerPermanently = useStorageRef<boolean>(
+  'dd-banner-oidc-http-discovery-v1',
+  false,
+  (value): value is boolean => typeof value === 'boolean',
+);
+const shaHashDetected = ref(false);
+const hideShaHashBannerForSession = ref(false);
+const hideShaHashBannerPermanently = useStorageRef<boolean>(
+  'dd-banner-sha-hash-v1',
+  false,
+  (value): value is boolean => typeof value === 'boolean',
+);
 type SearchScope = 'all' | 'pages' | 'containers' | 'runtime' | 'config';
 type SearchPrefix = '/' | '@' | '#';
 interface SearchScopeOption {
@@ -528,6 +544,74 @@ function buildSearchIndexResults(resources: {
   return results;
 }
 
+function isHttpOidcDiscovery(authentication: unknown): boolean {
+  if (!authentication || typeof authentication !== 'object') {
+    return false;
+  }
+  const authRecord = authentication as Record<string, unknown>;
+  if (authRecord.type !== 'oidc') {
+    return false;
+  }
+  const configuration = authRecord.configuration;
+  if (!configuration || typeof configuration !== 'object') {
+    return false;
+  }
+  const discovery = (configuration as Record<string, unknown>).discovery;
+  if (typeof discovery !== 'string') {
+    return false;
+  }
+  try {
+    return new URL(discovery).protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+const showOidcHttpCompatibilityBanner = computed(
+  () =>
+    oidcHttpDiscoveryDetected.value &&
+    !hideOidcHttpBannerForSession.value &&
+    !hideOidcHttpBannerPermanently.value,
+);
+
+function dismissOidcHttpBannerForSession() {
+  hideOidcHttpBannerForSession.value = true;
+}
+
+function dismissOidcHttpBannerPermanently() {
+  hideOidcHttpBannerPermanently.value = true;
+}
+
+function isLegacyShaHash(authentication: unknown): boolean {
+  if (!authentication || typeof authentication !== 'object') {
+    return false;
+  }
+  const authRecord = authentication as Record<string, unknown>;
+  if (authRecord.type !== 'basic') {
+    return false;
+  }
+  const metadata = authRecord.metadata;
+  if (!metadata || typeof metadata !== 'object') {
+    return false;
+  }
+  return (metadata as Record<string, unknown>).usesLegacyHash === true;
+}
+
+const showShaHashDeprecationBanner = computed(
+  () =>
+    shaHashDetected.value &&
+    !hideShaHashBannerForSession.value &&
+    !hideShaHashBannerPermanently.value,
+);
+
+function dismissShaHashBannerForSession() {
+  hideShaHashBannerForSession.value = true;
+}
+
+function dismissShaHashBannerPermanently() {
+  hideShaHashBannerPermanently.value = true;
+}
+
 async function refreshSearchResources() {
   searchResourcesLoading.value = true;
   try {
@@ -540,6 +624,12 @@ async function refreshSearchResources() {
         getAllAuthentications().catch(() => []),
         getAllNotificationRules().catch(() => []),
       ]);
+    oidcHttpDiscoveryDetected.value = Array.isArray(authentications)
+      ? authentications.some((authentication) => isHttpOidcDiscovery(authentication))
+      : false;
+    shaHashDetected.value = Array.isArray(authentications)
+      ? authentications.some((authentication) => isLegacyShaHash(authentication))
+      : false;
     searchResourceResults.value = buildSearchIndexResults({
       agents,
       triggers,
@@ -1211,8 +1301,35 @@ onUnmounted(() => {
         </div>
       </header>
 
+      <AnnouncementBanner
+        v-if="showOidcHttpCompatibilityBanner"
+        data-testid="oidc-http-compat-banner"
+        title="HTTP OIDC discovery detected"
+        permanent-dismiss-label="Don't show again"
+        @dismiss="dismissOidcHttpBannerForSession"
+        @dismiss-permanent="dismissOidcHttpBannerPermanently">
+        One or more OIDC providers use an insecure
+        <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">http://</code>
+        discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0.
+        <a href="https://drydock.codeswhat.com/docs/configuration/authentications/oidc"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="underline font-medium"
+           :style="{ color: 'var(--dd-warning)' }">Migrate your IdP to HTTPS.</a>
+      </AnnouncementBanner>
+
+      <AnnouncementBanner
+        v-if="showShaHashDeprecationBanner"
+        data-testid="sha-hash-deprecation-banner"
+        title="Insecure SHA-1 password hash detected"
+        permanent-dismiss-label="Don't show again"
+        @dismiss="dismissShaHashBannerForSession"
+        @dismiss-permanent="dismissShaHashBannerPermanently">
+        Your basic authentication uses an insecure SHA-1 password hash. SHA-1 hashing is deprecated and will be removed in v1.6.0. Migrate to argon2id hashing.
+      </AnnouncementBanner>
+
       <!-- MAIN CONTENT -->
-      <main class="flex-1 min-h-0 overflow-hidden flex flex-col pl-4 pr-1 py-4 sm:pl-6 sm:pr-2 sm:py-6"
+      <main class="flex-1 min-h-0 overflow-auto flex flex-col pl-4 pr-1 py-4 sm:pl-6 sm:pr-2 sm:py-6"
             :style="{ backgroundColor: 'var(--dd-bg)' }">
         <router-view />
       </main>
@@ -1245,7 +1362,7 @@ onUnmounted(() => {
             <div class="px-6 pb-5 flex flex-col gap-2"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">
               <div class="pt-3 flex flex-col gap-1.5">
-                <a href="https://drydock.dev" target="_blank" rel="noopener"
+                <a href="https://drydock.codeswhat.com" target="_blank" rel="noopener"
                    class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-[12px] font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
                   <AppIcon name="book" :size="12" class="dd-text-muted" />
                   Documentation

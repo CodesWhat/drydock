@@ -36,6 +36,26 @@ describe('Notification Service', () => {
       expect(result).toEqual(mockRules);
     });
 
+    it('should unwrap notification rules from collection envelope payloads', async () => {
+      const mockRules: NotificationRule[] = [
+        {
+          id: 'update-available',
+          name: 'Update Available',
+          description: 'When a container has a new version',
+          enabled: true,
+          triggers: ['slack.ops'],
+        },
+      ];
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ data: mockRules, total: 1 }),
+      });
+
+      const result = await getAllNotificationRules();
+      expect(result).toEqual(mockRules);
+    });
+
     it('should throw when fetching notification rules fails', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: false,

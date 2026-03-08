@@ -52,7 +52,7 @@ function installConfigMock(options: ConfigMockOptions = {}) {
       });
     }
 
-    if (path === '/api/settings' && method === 'PUT') {
+    if (path === '/api/settings' && (method === 'PATCH' || method === 'PUT')) {
       const body = (init?.body ? JSON.parse(String(init.body)) : {}) as Partial<{
         internetlessMode: boolean;
       }>;

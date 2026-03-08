@@ -41,7 +41,35 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
-    sourcemap: true,
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.replaceAll('\\', '/');
+          const nodeModulesSegment = '/node_modules/';
+          const nodeModulesIndex = normalizedId.lastIndexOf(nodeModulesSegment);
+          if (nodeModulesIndex === -1) {
+            return undefined;
+          }
+
+          const packagePath = normalizedId.slice(nodeModulesIndex + nodeModulesSegment.length);
+          const packageSegments = packagePath.split('/');
+          const packageName = packageSegments[0]?.startsWith('@')
+            ? `${packageSegments[0]}/${packageSegments[1] ?? ''}`
+            : packageSegments[0];
+
+          if (packageName === 'vue' || packageName === 'vue-router') {
+            return 'framework';
+          }
+
+          if (packageName === 'iconify-icon') {
+            return 'icons';
+          }
+
+          return 'vendor';
+        },
+      },
+    },
   },
 
   define: {

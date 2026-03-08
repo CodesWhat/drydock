@@ -3,7 +3,9 @@ import * as agent from '../agent/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import * as registry from '../registry/index.js';
+import { getErrorMessage } from '../util/error.js';
 import * as component from './component.js';
+import { sendErrorResponse } from './error-response.js';
 
 const log = logger.child({ component: 'trigger' });
 
@@ -14,13 +16,6 @@ interface RunTriggerParams {
 
 interface RunRemoteTriggerParams extends RunTriggerParams {
   agent: string;
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
 }
 
 /**
@@ -35,9 +30,11 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
     log.warn(
       `Trigger cannot be executed without container (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)})`,
     );
-    res.status(400).json({
-      error: `Error when running trigger ${triggerType}.${triggerName} (container is undefined)`,
-    });
+    sendErrorResponse(
+      res,
+      400,
+      `Error when running trigger ${triggerType}.${triggerName} (container is undefined)`,
+    );
     return;
   }
 
@@ -46,9 +43,11 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
     log.warn(
       `Cannot execute local trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} on remote container ${sanitizeLogParam(containerToTrigger.agent)}.${sanitizeLogParam(containerToTrigger.id)}`,
     );
-    res.status(400).json({
-      error: `Cannot execute local trigger ${triggerType}.${triggerName} on remote container ${containerToTrigger.agent}.${containerToTrigger.id}`,
-    });
+    sendErrorResponse(
+      res,
+      400,
+      `Cannot execute local trigger ${triggerType}.${triggerName} on remote container ${containerToTrigger.agent}.${containerToTrigger.id}`,
+    );
     return;
   }
 
@@ -57,9 +56,11 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
     log.warn(
       `No trigger found(type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)})`,
     );
-    res.status(404).json({
-      error: `Error when running trigger ${triggerType}.${triggerName} (trigger not found)`,
-    });
+    sendErrorResponse(
+      res,
+      404,
+      `Error when running trigger ${triggerType}.${triggerName} (trigger not found)`,
+    );
     return;
   }
 
@@ -88,9 +89,7 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
     log.warn(
       `Error when running trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (${sanitizeLogParam(errorMessage)})`,
     );
-    res.status(500).json({
-      error: `Error when running trigger ${triggerType}.${triggerName}`,
-    });
+    sendErrorResponse(res, 500, `Error when running trigger ${triggerType}.${triggerName}`);
   }
 }
 
@@ -103,14 +102,12 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
 
   const agentClient = agent.getAgent(agentName);
   if (!agentClient) {
-    res.status(404).json({ error: `Agent ${agentName} not found` });
+    sendErrorResponse(res, 404, `Agent ${agentName} not found`);
     return;
   }
 
   if (!containerToTrigger?.id) {
-    res.status(400).json({
-      error: 'Container with ID is required in body',
-    });
+    sendErrorResponse(res, 400, 'Container with ID is required in body');
     return;
   }
 
@@ -125,9 +122,11 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
     log.warn(
       `Error when running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} on agent ${sanitizeLogParam(agentName)} (${sanitizeLogParam(errorMessage)})`,
     );
-    res.status(500).json({
-      error: `Error when running remote trigger ${triggerType}.${triggerName} on agent ${agentName}`,
-    });
+    sendErrorResponse(
+      res,
+      500,
+      `Error when running remote trigger ${triggerType}.${triggerName} on agent ${agentName}`,
+    );
   }
 }
 
@@ -138,6 +137,6 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
 export function init() {
   const router = component.init('trigger');
   router.post('/:type/:name', runTrigger);
-  router.post('/:agent/:type/:name', runRemoteTrigger);
+  router.post('/:type/:name/:agent', runRemoteTrigger);
   return router;
 }

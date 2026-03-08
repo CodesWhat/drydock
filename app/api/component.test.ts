@@ -82,6 +82,113 @@ describe('Component Router', () => {
         }),
       );
     });
+
+    test('should include metadata when component has getMetadata', () => {
+      const comp = {
+        type: 'basic',
+        name: 'admin',
+        maskConfiguration: vi.fn(() => ({ user: 'admin', hash: '[REDACTED]' })),
+        getMetadata: vi.fn(() => ({ usesLegacyHash: true })),
+      };
+      const result = component.mapComponentToItem('basic.admin', comp);
+      expect(result.metadata).toEqual({ usesLegacyHash: true });
+    });
+
+    test('should not include metadata when component lacks getMetadata', () => {
+      const comp = {
+        type: 'docker',
+        name: 'hub',
+        maskConfiguration: vi.fn(() => ({ url: 'https://hub.docker.com' })),
+      };
+      const result = component.mapComponentToItem('docker.hub', comp);
+      expect(result.metadata).toBeUndefined();
+    });
+
+    test('should redact trigger infrastructure details from configuration', () => {
+      const comp = {
+        type: 'slack',
+        name: 'ops',
+        maskConfiguration: vi.fn(() => ({
+          channel: 'C01234567',
+          username: 'ops-bot',
+          smtp: {
+            host: 'smtp.internal.example.com',
+          },
+          webhook: {
+            url: 'https://hooks.example.com/path',
+          },
+          mode: 'simple',
+        })),
+      };
+      const result = component.mapComponentToItem('slack.ops', comp, 'trigger');
+      expect(result.configuration).toEqual({
+        channel: '[REDACTED]',
+        username: '[REDACTED]',
+        smtp: {
+          host: '[REDACTED]',
+        },
+        webhook: '[REDACTED]',
+        mode: 'simple',
+      });
+    });
+
+    test('should handle null/empty/array infrastructure values while redacting trigger configuration', () => {
+      const comp = {
+        type: 'slack',
+        name: 'ops',
+        maskConfiguration: vi.fn(() => ({
+          host: null,
+          username: '',
+          channelId: 42,
+          urls: ['https://one.example', '', 7, null],
+          mode: 'simple',
+        })),
+      };
+
+      const result = component.mapComponentToItem('slack.ops', comp, 'trigger');
+      expect(result.configuration).toEqual({
+        host: null,
+        username: '',
+        channelId: '[REDACTED]',
+        urls: ['[REDACTED]', '', '[REDACTED]', null],
+        mode: 'simple',
+      });
+    });
+
+    test('should redact top-level trigger configuration arrays recursively', () => {
+      const comp = {
+        type: 'slack',
+        name: 'ops',
+        maskConfiguration: vi.fn(() => [
+          { webhook: 'https://hooks.example.com/path' },
+          { mode: 'simple' },
+        ]),
+      };
+
+      const result = component.mapComponentToItem('slack.ops', comp, 'trigger');
+      expect(result.configuration).toEqual([{ webhook: '[REDACTED]' }, { mode: 'simple' }]);
+    });
+
+    test('should redact trigger credentials in infrastructure fallback sanitizer', () => {
+      const comp = {
+        type: 'slack',
+        name: 'ops',
+        maskConfiguration: vi.fn(() => ({
+          apiKey: 'key-123',
+          token: 'token-123',
+          password: 'password-123',
+          mode: 'simple',
+        })),
+      };
+
+      const result = component.mapComponentToItem('slack.ops', comp, 'trigger');
+      expect(result.configuration).toEqual({
+        apiKey: '[REDACTED]',
+        token: '[REDACTED]',
+        password: '[REDACTED]',
+        mode: 'simple',
+      });
+    });
   });
 
   describe('mapComponentsToList', () => {
@@ -127,6 +234,31 @@ describe('Component Router', () => {
 
       expect(result[0].name).toBe('alpha');
       expect(result[1].name).toBe('zeta');
+    });
+
+    test('should redact trigger infrastructure details when mapping trigger list', () => {
+      const components = {
+        'slack.ops': {
+          type: 'slack',
+          name: 'ops',
+          maskConfiguration: vi.fn(() => ({
+            channel: 'C01234567',
+            mode: 'simple',
+          })),
+        },
+      };
+
+      const result = component.mapComponentsToList(components, 'trigger');
+
+      expect(result).toEqual([
+        expect.objectContaining({
+          id: 'slack.ops',
+          configuration: {
+            channel: '[REDACTED]',
+            mode: 'simple',
+          },
+        }),
+      ]);
     });
   });
 
@@ -177,7 +309,10 @@ describe('Component Router', () => {
       const res = createResponse();
       component.getById(req, res, 'watcher');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Component not found' }),
+      );
     });
   });
 
@@ -188,7 +323,7 @@ describe('Component Router', () => {
       expect(router.use).toHaveBeenCalledWith('nocache-middleware');
       expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:type/:name', expect.any(Function));
-      expect(router.get).toHaveBeenCalledWith('/:agent/:type/:name', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/:type/:name/:agent', expect.any(Function));
     });
 
     test('getAll handler should return list of components', () => {
@@ -205,10 +340,127 @@ describe('Component Router', () => {
       const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
 
       const res = createResponse();
-      getAllHandler({}, res);
+      getAllHandler({ query: {} }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(expect.any(Array));
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'docker.hub' })],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
+    });
+
+    test('getAll handler should apply limit/offset pagination', () => {
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.beta': { type: 'docker', name: 'beta', maskConfiguration: vi.fn(() => ({})) },
+          'acr.alpha': { type: 'acr', name: 'alpha', maskConfiguration: vi.fn(() => ({})) },
+          'docker.gamma': { type: 'docker', name: 'gamma', maskConfiguration: vi.fn(() => ({})) },
+        },
+      });
+
+      component.init('watcher');
+      const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+      const res = createResponse();
+      getAllHandler({ query: { limit: '1', offset: '1' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'docker.beta' })],
+        total: 3,
+        limit: 1,
+        offset: 1,
+        hasMore: true,
+      });
+    });
+
+    test('getAll handler should normalize invalid pagination params', () => {
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.alpha': { type: 'docker', name: 'alpha', maskConfiguration: vi.fn(() => ({})) },
+          'docker.beta': { type: 'docker', name: 'beta', maskConfiguration: vi.fn(() => ({})) },
+          'docker.gamma': { type: 'docker', name: 'gamma', maskConfiguration: vi.fn(() => ({})) },
+        },
+      });
+
+      component.init('watcher');
+      const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+      const res = createResponse();
+      getAllHandler({ query: { limit: ['999', '1'], offset: '-5' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({ id: 'docker.alpha' }),
+          expect.objectContaining({ id: 'docker.beta' }),
+          expect.objectContaining({ id: 'docker.gamma' }),
+        ],
+        total: 3,
+        limit: 200,
+        offset: 0,
+        hasMore: false,
+      });
+    });
+
+    test('getAll handler should return an empty page when offset exceeds available components', () => {
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.alpha': { type: 'docker', name: 'alpha', maskConfiguration: vi.fn(() => ({})) },
+          'docker.beta': { type: 'docker', name: 'beta', maskConfiguration: vi.fn(() => ({})) },
+        },
+      });
+
+      component.init('watcher');
+      const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+      const res = createResponse();
+      getAllHandler({ query: { limit: '1', offset: '99' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [],
+        total: 2,
+        limit: 1,
+        offset: 99,
+        hasMore: false,
+      });
+    });
+
+    test('getAll handler should fallback when pagination values are non-numeric or query is missing', () => {
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.alpha': { type: 'docker', name: 'alpha', maskConfiguration: vi.fn(() => ({})) },
+        },
+      });
+
+      component.init('watcher');
+      const getAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const resWithInvalid = createResponse();
+      const resWithUndefinedQuery = createResponse();
+
+      getAllHandler({ query: { limit: 'oops', offset: 'oops' } }, resWithInvalid);
+      getAllHandler({}, resWithUndefinedQuery);
+
+      expect(resWithInvalid.status).toHaveBeenCalledWith(200);
+      expect(resWithInvalid.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'docker.alpha' })],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
+      expect(resWithUndefinedQuery.status).toHaveBeenCalledWith(200);
+      expect(resWithUndefinedQuery.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'docker.alpha' })],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('getById handler via /:type/:name should work', () => {
@@ -230,7 +482,7 @@ describe('Component Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
-    test('getById handler via /:agent/:type/:name should work', () => {
+    test('getById handler via /:type/:name/:agent should work', () => {
       const comp = {
         type: 'docker',
         name: 'hub',
@@ -243,7 +495,7 @@ describe('Component Router', () => {
 
       component.init('trigger');
       const getByIdHandler = mockRouter.get.mock.calls.find(
-        (c) => c[0] === '/:agent/:type/:name',
+        (c) => c[0] === '/:type/:name/:agent',
       )[1];
 
       const res = createResponse();

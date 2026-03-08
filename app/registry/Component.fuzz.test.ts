@@ -12,8 +12,8 @@ describe('registry/Component fuzz tests', () => {
     expect(component.validateConfiguration({})).toEqual({});
   });
 
-  test('Component.mask preserves edges and masks middle characters', () => {
-    expect(Component.mask('token-value', 2, '#')).toBe('to#######ue');
+  test('Component.mask returns fixed redaction marker for non-empty values', () => {
+    expect(Component.mask('token-value', 2, '#')).toBe('[REDACTED]');
   });
 
   fcTest.prop([fc.string()])('Component.mask never throws on arbitrary strings', (input) => {

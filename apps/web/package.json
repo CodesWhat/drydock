@@ -2,13 +2,13 @@
   "name": "drydock-website",
   "version": "0.1.0",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=24.0.0"
   },
   "description": "Drydock - Open source container update monitoring",
   "private": true,
   "scripts": {
     "dev": "npm run sync:docs && next dev --turbopack",
-    "build": "npm run sync:docs && next build",
+    "build": "npm run sync:docs && next build --webpack && node scripts/apply-sri.mjs",
     "start": "next start",
     "sync:docs": "node scripts/sync-docs.mjs",
     "lint": "qlty check --filter biome --no-progress .",

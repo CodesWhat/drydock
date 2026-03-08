@@ -1,3 +1,5 @@
+import { extractCollectionData } from '../utils/api';
+
 function getWatcherIcon() {
   return 'sh-eye';
 }
@@ -27,15 +29,16 @@ async function getAllWatchers() {
   if (!response.ok) {
     throw new Error(`Failed to get watchers: ${response.statusText}`);
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData(payload);
 }
 
 function buildWatcherDetailPath({ type, name, agent }: WatcherDetailPathOptions) {
   const segments = ['/api/watchers'];
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
   if (agent) {
     segments.push(encodeURIComponent(agent));
   }
-  segments.push(encodeURIComponent(type), encodeURIComponent(name));
   return segments.join('/');
 }
 

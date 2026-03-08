@@ -12,10 +12,73 @@ import { getErrorMessage } from '../util/error.js';
 import { ddWebhookEnabled, wudWebhookEnabled } from '../watchers/providers/docker/label.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
+import { sendErrorResponse } from './error-response.js';
 
 const log = logger.child({ component: 'webhook' });
 
 const router = express.Router();
+
+type WebhookAction = 'watchall' | 'watch' | 'update';
+
+function normalizeRequestPath(req: Request): string {
+  const rawPath = (req.path || req.originalUrl || req.url || '').split('?')[0];
+  if (!rawPath) {
+    return '';
+  }
+  if (rawPath.length > 1 && rawPath.endsWith('/')) {
+    return rawPath.slice(0, -1);
+  }
+  return rawPath;
+}
+
+function getWebhookActionFromRequest(req: Request): WebhookAction | undefined {
+  const requestPath = normalizeRequestPath(req);
+  if (
+    requestPath === '/watch' ||
+    requestPath.endsWith('/webhook/watch') ||
+    requestPath.endsWith('/api/webhook/watch')
+  ) {
+    return 'watchall';
+  }
+  if (
+    requestPath.startsWith('/watch/') ||
+    requestPath.includes('/webhook/watch/') ||
+    requestPath.includes('/api/webhook/watch/')
+  ) {
+    return 'watch';
+  }
+  if (
+    requestPath.startsWith('/update/') ||
+    requestPath.includes('/webhook/update/') ||
+    requestPath.includes('/api/webhook/update/')
+  ) {
+    return 'update';
+  }
+  return undefined;
+}
+
+function getTokenForRequest(
+  req: Request,
+  webhookConfig: ReturnType<typeof getWebhookConfiguration>,
+): string {
+  const action = getWebhookActionFromRequest(req);
+  if (!action) {
+    return webhookConfig.token;
+  }
+
+  const hasAnyEndpointToken = [
+    webhookConfig.tokens?.watchall,
+    webhookConfig.tokens?.watch,
+    webhookConfig.tokens?.update,
+  ].some((token) => typeof token === 'string' && token.length > 0);
+
+  if (hasAnyEndpointToken) {
+    // Fail closed: once endpoint-specific token mode is enabled, each endpoint must set its own token.
+    return webhookConfig.tokens?.[action] || '';
+  }
+
+  return webhookConfig.token;
+}
 
 /**
  * Authenticate webhook requests via Bearer token.
@@ -23,23 +86,23 @@ const router = express.Router();
 function authenticateToken(req: Request, res: Response, next: NextFunction) {
   const webhookConfig = getWebhookConfiguration();
   if (!webhookConfig.enabled) {
-    res.status(403).json({ error: 'Webhooks are disabled' });
+    sendErrorResponse(res, 403, 'Webhooks are disabled');
     return;
   }
 
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Missing or invalid authorization header' });
+    sendErrorResponse(res, 401, 'Missing or invalid authorization header');
     return;
   }
 
   const token = authHeader.slice(7);
-  const configuredToken = webhookConfig.token;
+  const configuredToken = getTokenForRequest(req, webhookConfig);
 
   // Reject empty or missing configured token (misconfiguration guard)
   if (!configuredToken) {
     log.error('Webhook token is not configured; rejecting request');
-    res.status(500).json({ error: 'Webhook authentication is misconfigured' });
+    sendErrorResponse(res, 500, 'Webhook authentication is misconfigured');
     return;
   }
 
@@ -47,7 +110,7 @@ function authenticateToken(req: Request, res: Response, next: NextFunction) {
   const tokenHash = createHash('sha256').update(token, 'utf8').digest();
   const expectedHash = createHash('sha256').update(configuredToken, 'utf8').digest();
   if (!timingSafeEqual(tokenHash, expectedHash)) {
-    res.status(401).json({ error: 'Invalid token' });
+    sendErrorResponse(res, 401, 'Invalid token');
     return;
   }
 
@@ -93,19 +156,35 @@ function handleContainerActionError(
   context: ContainerWebhookErrorContext,
 ) {
   const message = getErrorMessage(error);
+  const safeContainerName = sanitizeLogParam(containerName);
   log.warn(
-    `Error ${context.actionVerb} container ${sanitizeLogParam(containerName)} (${sanitizeLogParam(message)})`,
+    `Error ${context.actionVerb} container ${safeContainerName} (${sanitizeLogParam(message)})`,
   );
 
   recordAuditEvent({
     action: context.auditAction,
     container,
     status: 'error',
-    details: message,
+    details: sanitizeLogParam(message),
   });
   getWebhookCounter()?.inc({ action: context.webhookAction });
 
-  res.status(500).json({ error: `Error ${context.actionVerb} container ${containerName}` });
+  sendErrorResponse(res, 500, `Error ${context.actionVerb} container ${safeContainerName}`);
+}
+
+function handleWatchAllError(error: unknown, res: Response) {
+  const message = getErrorMessage(error);
+  log.warn(`Error triggering watch cycle (${sanitizeLogParam(message)})`);
+
+  recordAuditEvent({
+    action: 'webhook-watch',
+    containerName: '*',
+    status: 'error',
+    details: sanitizeLogParam(message),
+  });
+  getWebhookCounter()?.inc({ action: 'watch-all' });
+
+  sendErrorResponse(res, 500, 'Error triggering watch cycle');
 }
 
 /**
@@ -128,21 +207,10 @@ async function watchAll(req: Request, res: Response) {
 
     res.status(200).json({
       message: 'Watch cycle triggered',
-      watchers: watcherEntries.length,
+      result: { watchers: watcherEntries.length },
     });
   } catch (e: unknown) {
-    const message = getErrorMessage(e);
-    log.warn(`Error triggering watch cycle (${message})`);
-
-    recordAuditEvent({
-      action: 'webhook-watch',
-      containerName: '*',
-      status: 'error',
-      details: message,
-    });
-    getWebhookCounter()?.inc({ action: 'watch-all' });
-
-    res.status(500).json({ error: 'Error triggering watch cycle' });
+    handleWatchAllError(e, res);
   }
 }
 
@@ -151,15 +219,16 @@ async function watchAll(req: Request, res: Response) {
  */
 async function watchContainer(req: Request, res: Response) {
   const containerName = req.params.containerName as string;
+  const safeContainerName = sanitizeLogParam(containerName);
   const container = findContainerByName(containerName);
 
   if (!container) {
-    res.status(404).json({ error: CONTAINER_NOT_FOUND_ERROR });
+    sendErrorResponse(res, 404, CONTAINER_NOT_FOUND_ERROR);
     return;
   }
 
   if (!isWebhookEnabledForContainer(container)) {
-    res.status(403).json({ error: CONTAINER_WEBHOOK_DISABLED_ERROR });
+    sendErrorResponse(res, 403, CONTAINER_WEBHOOK_DISABLED_ERROR);
     return;
   }
 
@@ -176,8 +245,8 @@ async function watchContainer(req: Request, res: Response) {
     getWebhookCounter()?.inc({ action: 'watch-container' });
 
     res.status(200).json({
-      message: `Watch triggered for container ${containerName}`,
-      container: containerName,
+      message: `Watch triggered for container ${safeContainerName}`,
+      result: { container: safeContainerName },
     });
   } catch (e: unknown) {
     handleContainerActionError(e, container, containerName, res, {
@@ -193,21 +262,22 @@ async function watchContainer(req: Request, res: Response) {
  */
 async function updateContainer(req: Request, res: Response) {
   const containerName = req.params.containerName as string;
+  const safeContainerName = sanitizeLogParam(containerName);
   const container = findContainerByName(containerName);
 
   if (!container) {
-    res.status(404).json({ error: CONTAINER_NOT_FOUND_ERROR });
+    sendErrorResponse(res, 404, CONTAINER_NOT_FOUND_ERROR);
     return;
   }
 
   if (!isWebhookEnabledForContainer(container)) {
-    res.status(403).json({ error: CONTAINER_WEBHOOK_DISABLED_ERROR });
+    sendErrorResponse(res, 403, CONTAINER_WEBHOOK_DISABLED_ERROR);
     return;
   }
 
   const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
   if (!trigger) {
-    res.status(404).json({ error: NO_DOCKER_TRIGGER_FOUND_ERROR });
+    sendErrorResponse(res, 404, NO_DOCKER_TRIGGER_FOUND_ERROR);
     return;
   }
 
@@ -222,8 +292,8 @@ async function updateContainer(req: Request, res: Response) {
     getWebhookCounter()?.inc({ action: 'update-container' });
 
     res.status(200).json({
-      message: `Update triggered for container ${containerName}`,
-      container: containerName,
+      message: `Update triggered for container ${safeContainerName}`,
+      result: { container: safeContainerName },
     });
   } catch (e: unknown) {
     handleContainerActionError(e, container, containerName, res, {

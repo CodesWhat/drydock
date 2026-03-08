@@ -573,17 +573,7 @@ export function updateContainer(container) {
   return containerToReturn;
 }
 
-/**
- * Get all (filtered) containers without redacting sensitive env values.
- * Intended for internal callers that do not return container data to users.
- * @param query
- * @param pagination
- * @returns {*}
- */
-export function getContainersRaw(
-  query: Record<string, unknown> = {},
-  pagination: ContainerListPaginationOptions = {},
-) {
+function getCachedOrComputedContainersByQuery(query: Record<string, unknown> = {}) {
   if (!containers) {
     return [];
   }
@@ -593,8 +583,7 @@ export function getContainersRaw(
   const cachedContainers = containersQueryCache.get(queryKey);
   if (cachedContainers) {
     setContainersQueryCache(queryKey, cachedContainers);
-    const cachedContainersPaged = applyContainerListPagination(cachedContainers, pagination);
-    return cloneContainers(cachedContainersPaged);
+    return cachedContainers;
   }
 
   const filter = {};
@@ -610,8 +599,32 @@ export function getContainersRaw(
     ]),
   );
   setContainersQueryCache(queryKey, containerListSorted);
+  return containerListSorted;
+}
+
+/**
+ * Get all (filtered) containers without redacting sensitive env values.
+ * Intended for internal callers that do not return container data to users.
+ * @param query
+ * @param pagination
+ * @returns {*}
+ */
+export function getContainersRaw(
+  query: Record<string, unknown> = {},
+  pagination: ContainerListPaginationOptions = {},
+) {
+  const containerListSorted = getCachedOrComputedContainersByQuery(query);
   const containerListSortedPaged = applyContainerListPagination(containerListSorted, pagination);
   return cloneContainers(containerListSortedPaged);
+}
+
+/**
+ * Get the total number of (filtered) containers.
+ * Uses cached query results when available and avoids cloning.
+ * @param query
+ */
+export function getContainerCount(query: Record<string, unknown> = {}) {
+  return getCachedOrComputedContainersByQuery(query).length;
 }
 
 /**

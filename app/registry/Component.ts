@@ -1,5 +1,6 @@
 import joi from 'joi';
 import log from '../log/index.js';
+import { redactTriggerConfigurationInfrastructureDetails } from './trigger-config-redaction.js';
 
 type AppLogger = typeof log;
 
@@ -50,9 +51,12 @@ class Component {
     this.agent = agent;
 
     this.configuration = this.validateConfiguration(configuration);
-    this.log.info(
-      `Register with configuration ${JSON.stringify(this.maskConfiguration(configuration))}`,
-    );
+    const maskedConfiguration = this.maskConfiguration(configuration);
+    const sanitizedConfiguration =
+      kind.toLowerCase() === 'trigger'
+        ? redactTriggerConfigurationInfrastructureDetails(maskedConfiguration)
+        : maskedConfiguration;
+    this.log.info(`Register with configuration ${JSON.stringify(sanitizedConfiguration)}`);
     await this.init();
     return this;
   }
@@ -132,20 +136,15 @@ class Component {
   /**
    * Mask a String
    * @param value the value to mask
-   * @param nb the number of chars to keep start/end
-   * @param char the replacement char
+   * @param _nb unused legacy parameter
+   * @param _char unused legacy parameter
    * @returns {string|undefined} the masked string
    */
-  static mask(value: string | undefined, nb = 1, char = '*'): string | undefined {
+  static mask(value: string | undefined, _nb = 1, _char = '*'): string | undefined {
     if (!value) {
       return undefined;
     }
-    if (value.length < 2 * nb) {
-      return char.repeat(value.length);
-    }
-    return `${value.substring(0, nb)}${char.repeat(
-      Math.max(0, value.length - nb * 2),
-    )}${value.substring(value.length - nb, value.length)}`;
+    return '[REDACTED]';
   }
 }
 

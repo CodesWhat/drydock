@@ -33,4 +33,10 @@ describe('ToggleSwitch', () => {
     await w.find('button').trigger('click');
     expect(w.emitted('update:modelValue')?.[0]).toEqual([true]);
   });
+
+  it('renders compact sizing when size is sm', () => {
+    const w = factory({ size: 'sm' });
+    const btn = w.find('button');
+    expect(btn.classes()).toEqual(expect.arrayContaining(['w-8', 'h-4']));
+  });
 });

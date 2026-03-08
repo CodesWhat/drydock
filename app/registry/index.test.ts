@@ -35,6 +35,8 @@ let triggers = {};
 let watchers = {};
 let authentications = {};
 let agents = {};
+const TEST_BASIC_HASH =
+  'argon2id$65536$3$4$ZHJ5ZG9jay1yZWdpc3RyeS10ZXN0LXNhbHQ=$YlkF5heeP1TK+kWW7LNnQbI3ws4zeQpVQc3fcw592ObbdIz+n02qdNC5Z1YhzTXJ8FbgaWo61lPGqB8Za5OYwg==';
 
 // Override the mocked functions
 // We need to cast to jest.Mock or assume they are mocks because of the factory above
@@ -658,11 +660,11 @@ test('registerAuthentications should register all auth strategies', async () => 
     basic: {
       john: {
         user: 'john',
-        hash: 'hash',
+        hash: TEST_BASIC_HASH,
       },
       jane: {
         user: 'jane',
-        hash: 'hash',
+        hash: TEST_BASIC_HASH,
       },
     },
   };
@@ -754,11 +756,11 @@ test('init should register all components', async () => {
     basic: {
       john: {
         user: 'john',
-        hash: 'hash',
+        hash: TEST_BASIC_HASH,
       },
       jane: {
         user: 'jane',
-        hash: 'hash',
+        hash: TEST_BASIC_HASH,
       },
     },
   };
@@ -817,11 +819,11 @@ test('deregisterAll should deregister all components', async () => {
     basic: {
       john: {
         user: 'john',
-        hash: 'hash',
+        hash: TEST_BASIC_HASH,
       },
       jane: {
         user: 'jane',
-        hash: 'hash',
+        hash: TEST_BASIC_HASH,
       },
     },
   };
@@ -1182,7 +1184,7 @@ test('init in agent mode should skip authentications and agents registration', a
     basic: {
       john: {
         user: 'john',
-        hash: 'hash',
+        hash: TEST_BASIC_HASH,
       },
     },
   };

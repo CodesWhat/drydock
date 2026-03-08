@@ -83,7 +83,7 @@ test('trigger should send POST http request to notify endpoint', async () => {
       format: 'text',
       type: 'info',
     },
-
+    headers: { 'Content-Type': 'application/json' },
     method: 'POST',
     url: 'http://xxx.com/notify',
     timeout: 30000,
@@ -112,7 +112,7 @@ test('trigger should use config and tag when configured', async () => {
       type: 'info',
       tag: 'mytag',
     },
-
+    headers: { 'Content-Type': 'application/json' },
     method: 'POST',
     url: 'http://xxx.com/notify/myconfig',
     timeout: 30000,
@@ -139,9 +139,36 @@ test('trigger should use config without tag', async () => {
       format: 'text',
       type: 'info',
     },
-
+    headers: { 'Content-Type': 'application/json' },
     method: 'POST',
     url: 'http://xxx.com/notify/myconfig',
+    timeout: 30000,
+  });
+});
+
+test('trigger should URL-encode config path segment', async () => {
+  apprise.configuration = {
+    url: 'http://xxx.com',
+    config: 'my/config?foo=bar',
+  };
+
+  const container = {
+    name: 'test',
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+  };
+  axios.mockResolvedValue({ data: {} });
+  await apprise.trigger(container);
+
+  expect(axios).toHaveBeenCalledWith({
+    data: {
+      title: expect.any(String),
+      body: expect.any(String),
+      format: 'text',
+      type: 'info',
+    },
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    url: 'http://xxx.com/notify/my%2Fconfig%3Ffoo%3Dbar',
     timeout: 30000,
   });
 });
@@ -174,9 +201,39 @@ test('triggerBatch should send batch notification', async () => {
       format: 'text',
       type: 'info',
     },
-
+    headers: { 'Content-Type': 'application/json' },
     method: 'POST',
     url: 'http://xxx.com/notify',
+    timeout: 30000,
+  });
+});
+
+test('triggerBatch should URL-encode config path segment', async () => {
+  apprise.configuration = {
+    url: 'http://xxx.com',
+    config: 'my/config?foo=bar',
+  };
+
+  const containers = [
+    {
+      name: 'test1',
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    },
+  ];
+
+  axios.mockResolvedValue({ data: {} });
+  await apprise.triggerBatch(containers);
+
+  expect(axios).toHaveBeenCalledWith({
+    data: {
+      title: expect.any(String),
+      body: expect.any(String),
+      format: 'text',
+      type: 'info',
+    },
+    headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    url: 'http://xxx.com/notify/my%2Fconfig%3Ffoo%3Dbar',
     timeout: 30000,
   });
 });
@@ -206,7 +263,7 @@ test('triggerBatch should use config and tag when configured', async () => {
       type: 'info',
       tag: 'mytag',
     },
-
+    headers: { 'Content-Type': 'application/json' },
     method: 'POST',
     url: 'http://xxx.com/notify/myconfig',
     timeout: 30000,
@@ -236,7 +293,7 @@ test('triggerBatch should use config without tag', async () => {
       format: 'text',
       type: 'info',
     },
-
+    headers: { 'Content-Type': 'application/json' },
     method: 'POST',
     url: 'http://xxx.com/notify/myconfig',
     timeout: 30000,
@@ -252,5 +309,5 @@ test('maskConfiguration should mask urls', async () => {
   const masked = apprise.maskConfiguration();
 
   expect(masked.url).toBe('http://xxx.com');
-  expect(masked.urls).toBe('m*************************m');
+  expect(masked.urls).toBe('[REDACTED]');
 });

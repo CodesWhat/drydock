@@ -95,6 +95,8 @@ type ContainerActionsContext = Pick<
   | 'actionInProgress'
   | 'confirmDelete'
   | 'confirmForceUpdate'
+  | 'confirmUpdate'
+  | 'confirmRollback'
   | 'confirmRestart'
   | 'confirmStop'
   | 'containerPolicyTooltip'

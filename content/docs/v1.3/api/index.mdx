@@ -37,7 +37,7 @@ The [webhook endpoints](/docs/configuration/webhooks) use a separate Bearer toke
 | `/api/events/ui` | `GET` | Server-Sent Events for real-time UI updates |
 | `/api/audit` | `GET` | Audit trail entries |
 | `/api/webhook/watch` | `POST` | [Webhook](/docs/configuration/webhooks) — trigger watch on all containers |
-| `/api/webhook/watch/:name` | `POST` | [Webhook](/docs/configuration/webhooks) — watch specific container |
-| `/api/webhook/update/:name` | `POST` | [Webhook](/docs/configuration/webhooks) — update specific container |
+| `/api/webhook/watch/:containerName` | `POST` | [Webhook](/docs/configuration/webhooks) — watch specific container |
+| `/api/webhook/update/:containerName` | `POST` | [Webhook](/docs/configuration/webhooks) — update specific container |
 
 <Callout type="info">See each sub-page for detailed request/response examples.</Callout>

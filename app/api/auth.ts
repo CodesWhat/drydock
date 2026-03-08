@@ -15,7 +15,11 @@ import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as store from '../store/index.js';
 import { getErrorMessage } from '../util/error.js';
+import { enforceConcurrentSessionLimit } from '../util/session-limit.js';
 import { recordAuditEvent } from './audit-events.js';
+import { sendErrorResponse } from './error-response.js';
+import { getFirstHeaderValue } from './header-value.js';
+import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
 
 const router = express.Router();
 
@@ -24,7 +28,17 @@ const STRATEGY_IDS: string[] = [];
 
 const DEFAULT_SESSION_DAYS = 7;
 const REMEMBER_ME_DAYS = 30;
+const DEFAULT_MAX_CONCURRENT_SESSIONS_PER_USER = 5;
+const AUTH_USER_CACHE_CONTROL = 'private, no-cache, no-store, must-revalidate';
+const DEFAULT_ACCOUNT_LOCKOUT_MAX_ATTEMPTS = 5;
+const DEFAULT_IP_LOCKOUT_MAX_ATTEMPTS = 25;
+const DEFAULT_LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
+const DEFAULT_LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+const MAX_LOCKOUT_TRACKED_IDENTITIES = 5000;
+const LOGIN_LOCKOUT_ERROR_MESSAGE =
+  'Account temporarily locked due to repeated failed login attempts';
 let generatedSessionSecret: string | undefined;
+let maxConcurrentSessionsPerUser = DEFAULT_MAX_CONCURRENT_SESSIONS_PER_USER;
 const sessionUserSchema = joi
   .object({
     username: joi.string().required(),
@@ -36,13 +50,204 @@ interface SessionUser {
   username: string;
 }
 
+interface LoginLockoutEntry {
+  failedAttempts: number;
+  windowStartAt: number;
+  lockedUntil: number;
+  lastAttemptAt: number;
+}
+
+interface LoginLockoutPolicy {
+  maxAttempts: number;
+  windowMs: number;
+  lockoutMs: number;
+}
+
 type UserWithUsername = Express.User & { username?: string };
 type SessionWithRememberMe = Session & Partial<SessionData> & { rememberMe?: boolean };
 type AuthRequest = Request & {
   body?: { remember?: boolean };
   session?: SessionWithRememberMe;
   user?: UserWithUsername;
+  sessionID?: string;
+  sessionStore?: {
+    all?: (callback: (error: unknown, sessions?: unknown) => void) => void;
+    destroy?: (sid: string, callback: (error?: unknown) => void) => void;
+  };
 };
+
+const accountLoginLockouts = new Map<string, LoginLockoutEntry>();
+const ipLoginLockouts = new Map<string, LoginLockoutEntry>();
+
+function parsePositiveIntegerEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
+}
+
+const accountLockoutPolicy: LoginLockoutPolicy = {
+  maxAttempts: parsePositiveIntegerEnv(
+    'DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS',
+    DEFAULT_ACCOUNT_LOCKOUT_MAX_ATTEMPTS,
+  ),
+  windowMs: parsePositiveIntegerEnv('DD_AUTH_LOCKOUT_WINDOW_MS', DEFAULT_LOCKOUT_WINDOW_MS),
+  lockoutMs: parsePositiveIntegerEnv('DD_AUTH_LOCKOUT_DURATION_MS', DEFAULT_LOCKOUT_DURATION_MS),
+};
+
+const ipLockoutPolicy: LoginLockoutPolicy = {
+  maxAttempts: parsePositiveIntegerEnv(
+    'DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS',
+    DEFAULT_IP_LOCKOUT_MAX_ATTEMPTS,
+  ),
+  windowMs: parsePositiveIntegerEnv('DD_AUTH_LOCKOUT_WINDOW_MS', DEFAULT_LOCKOUT_WINDOW_MS),
+  lockoutMs: parsePositiveIntegerEnv('DD_AUTH_LOCKOUT_DURATION_MS', DEFAULT_LOCKOUT_DURATION_MS),
+};
+
+function normalizeIdentity(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function getLoginIdentity(req: AuthRequest): string | undefined {
+  const requestBody = req.body as { username?: unknown } | undefined;
+  if (typeof requestBody?.username === 'string') {
+    const username = requestBody.username.trim();
+    if (username.length > 0) {
+      return username;
+    }
+  }
+
+  const authorization = getFirstHeaderValue(req.headers?.authorization);
+  if (!authorization || !authorization.toLowerCase().startsWith('basic ')) {
+    return undefined;
+  }
+
+  const encoded = authorization.slice(6).trim();
+  if (!encoded) {
+    return undefined;
+  }
+
+  try {
+    const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+    const separatorIndex = decoded.indexOf(':');
+    const username = separatorIndex >= 0 ? decoded.slice(0, separatorIndex) : decoded;
+    const trimmed = username.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function pruneLockoutEntries(
+  lockouts: Map<string, LoginLockoutEntry>,
+  policy: LoginLockoutPolicy,
+  now: number,
+): void {
+  lockouts.forEach((entry, key) => {
+    const expired = entry.lockedUntil <= now && now - entry.lastAttemptAt > policy.windowMs;
+    if (expired) {
+      lockouts.delete(key);
+    }
+  });
+
+  if (lockouts.size <= MAX_LOCKOUT_TRACKED_IDENTITIES) {
+    return;
+  }
+
+  const orderedEntries = [...lockouts.entries()].sort(
+    (a, b) => a[1].lastAttemptAt - b[1].lastAttemptAt,
+  );
+  const overflowCount = orderedEntries.length - MAX_LOCKOUT_TRACKED_IDENTITIES;
+  for (let index = 0; index < overflowCount; index += 1) {
+    lockouts.delete(orderedEntries[index][0]);
+  }
+}
+
+function getLockoutUntil(
+  lockouts: Map<string, LoginLockoutEntry>,
+  policy: LoginLockoutPolicy,
+  key: string | undefined,
+  now: number,
+): number | undefined {
+  if (!key) {
+    return undefined;
+  }
+
+  const entry = lockouts.get(key);
+  if (!entry) {
+    return undefined;
+  }
+
+  if (entry.lockedUntil <= now) {
+    if (now - entry.lastAttemptAt > policy.windowMs) {
+      lockouts.delete(key);
+    }
+    return undefined;
+  }
+
+  return entry.lockedUntil;
+}
+
+function registerFailedLoginAttempt(
+  lockouts: Map<string, LoginLockoutEntry>,
+  policy: LoginLockoutPolicy,
+  key: string | undefined,
+  now: number,
+): number | undefined {
+  if (!key) {
+    return undefined;
+  }
+
+  pruneLockoutEntries(lockouts, policy, now);
+
+  const existingEntry = lockouts.get(key);
+  if (!existingEntry) {
+    lockouts.set(key, {
+      failedAttempts: 1,
+      windowStartAt: now,
+      lockedUntil: 0,
+      lastAttemptAt: now,
+    });
+    return undefined;
+  }
+
+  existingEntry.failedAttempts += 1;
+  existingEntry.lastAttemptAt = now;
+  if (existingEntry.failedAttempts >= policy.maxAttempts) {
+    existingEntry.lockedUntil = now + policy.lockoutMs;
+  }
+
+  lockouts.set(key, existingEntry);
+  return existingEntry.lockedUntil > now ? existingEntry.lockedUntil : undefined;
+}
+
+function clearLoginLockout(
+  lockouts: Map<string, LoginLockoutEntry>,
+  key: string | undefined,
+): void {
+  if (!key) {
+    return;
+  }
+  lockouts.delete(key);
+}
+
+function setRetryAfterHeader(res: Response, seconds: number): void {
+  if (typeof (res as { setHeader?: unknown }).setHeader === 'function') {
+    (res as { setHeader: (name: string, value: string) => void }).setHeader(
+      'Retry-After',
+      `${seconds}`,
+    );
+  }
+}
 
 function deserializeSessionUser(serializedUser: unknown): SessionUser {
   if (typeof serializedUser !== 'string') {
@@ -72,7 +277,7 @@ function deserializeSessionUser(serializedUser: unknown): SessionUser {
  * @returns {[]}
  */
 export function getAllIds(): string[] {
-  return STRATEGY_IDS;
+  return [...STRATEGY_IDS];
 }
 
 export function requireAuthentication(req: AuthRequest, res: Response, next: NextFunction): void {
@@ -85,10 +290,45 @@ export function requireAuthentication(req: AuthRequest, res: Response, next: Nex
 }
 
 function sendUnauthorized(res: Response): void {
-  res.sendStatus(401);
+  sendErrorResponse(res, 401, 'Unauthorized');
+}
+
+function sendLockoutResponse(
+  req: AuthRequest,
+  res: Response,
+  lockoutUntil: number,
+  now: number,
+  loginIdentity: string | undefined,
+): void {
+  const retryAfterSeconds = Math.max(1, Math.ceil((lockoutUntil - now) / 1000));
+  setRetryAfterHeader(res, retryAfterSeconds);
+  recordLoginAuditEvent(
+    req,
+    'error',
+    `${LOGIN_LOCKOUT_ERROR_MESSAGE}; retry_after=${retryAfterSeconds}s`,
+    loginIdentity,
+  );
+  sendErrorResponse(res, 423, LOGIN_LOCKOUT_ERROR_MESSAGE);
 }
 
 function authenticateLogin(req: AuthRequest, res: Response, next: NextFunction): void {
+  const loginIdentity = getLoginIdentity(req);
+  const accountLockoutKey = normalizeIdentity(loginIdentity);
+  const ipLockoutKey = normalizeIdentity(req.ip);
+  const now = Date.now();
+  const accountLockoutUntil = getLockoutUntil(
+    accountLoginLockouts,
+    accountLockoutPolicy,
+    accountLockoutKey,
+    now,
+  );
+  const ipLockoutUntil = getLockoutUntil(ipLoginLockouts, ipLockoutPolicy, ipLockoutKey, now);
+  const activeLockoutUntil = Math.max(accountLockoutUntil ?? 0, ipLockoutUntil ?? 0);
+  if (activeLockoutUntil > now) {
+    sendLockoutResponse(req, res, activeLockoutUntil, now, loginIdentity);
+    return;
+  }
+
   passport.authenticate(
     getAllIds(),
     { session: false },
@@ -99,10 +339,37 @@ function authenticateLogin(req: AuthRequest, res: Response, next: NextFunction):
       }
 
       if (!user) {
-        recordLoginAuditEvent(req, 'error', 'Authentication failed (invalid credentials)');
+        const failedAt = Date.now();
+        const accountLockoutAfterFailure = registerFailedLoginAttempt(
+          accountLoginLockouts,
+          accountLockoutPolicy,
+          accountLockoutKey,
+          failedAt,
+        );
+        const ipLockoutAfterFailure = registerFailedLoginAttempt(
+          ipLoginLockouts,
+          ipLockoutPolicy,
+          ipLockoutKey,
+          failedAt,
+        );
+        const lockoutUntil = Math.max(accountLockoutAfterFailure ?? 0, ipLockoutAfterFailure ?? 0);
+        if (lockoutUntil > failedAt) {
+          sendLockoutResponse(req, res, lockoutUntil, failedAt, loginIdentity);
+          return;
+        }
+
+        recordLoginAuditEvent(
+          req,
+          'error',
+          'Authentication failed (invalid credentials)',
+          loginIdentity,
+        );
         sendUnauthorized(res);
         return;
       }
+
+      clearLoginLockout(accountLoginLockouts, accountLockoutKey);
+      clearLoginLockout(ipLoginLockouts, ipLockoutKey);
 
       const continueWithUser = (authenticatedUser: UserWithUsername): void => {
         req.user = authenticatedUser;
@@ -132,10 +399,6 @@ function authenticateLogin(req: AuthRequest, res: Response, next: NextFunction):
  */
 function getCookieMaxAge(days: number): number {
   return 3600 * 1000 * 24 * days;
-}
-
-function shouldParseJsonBody(method: string): boolean {
-  return method === 'POST' || method === 'PUT' || method === 'PATCH';
 }
 
 /**
@@ -171,13 +434,73 @@ function recordLoginAuditEvent(
   req: AuthRequest,
   status: 'success' | 'error',
   details: string,
+  loginIdentity?: string,
 ): void {
+  const auditUser =
+    typeof loginIdentity === 'string' && loginIdentity.trim() !== ''
+      ? loginIdentity
+      : getAuditUsername(req);
   recordAuditEvent({
     action: 'auth-login',
     status,
     containerName: 'authentication',
-    details: `${details}; user=${getAuditUsername(req)}`,
+    details: `${details}; user=${auditUser}`,
   });
+}
+
+function getMaxConcurrentSessionsPerUser(serverConfiguration: Record<string, unknown>): number {
+  const configuredMaxSessions = (serverConfiguration.session as Record<string, unknown> | undefined)
+    ?.maxconcurrentsessions;
+
+  if (
+    typeof configuredMaxSessions !== 'number' ||
+    !Number.isInteger(configuredMaxSessions) ||
+    configuredMaxSessions < 1
+  ) {
+    return DEFAULT_MAX_CONCURRENT_SESSIONS_PER_USER;
+  }
+
+  return configuredMaxSessions;
+}
+
+function enforceSessionLimitBeforeLogin(
+  req: AuthRequest,
+  username: string,
+  onSuccess: () => void,
+  onFailure: (errorMessage: string) => void,
+): void {
+  if (
+    !req.sessionStore ||
+    typeof req.sessionStore.all !== 'function' ||
+    typeof req.sessionStore.destroy !== 'function'
+  ) {
+    onSuccess();
+    return;
+  }
+
+  void enforceConcurrentSessionLimit({
+    username,
+    maxConcurrentSessions: maxConcurrentSessionsPerUser,
+    sessionStore: req.sessionStore,
+    currentSessionId: req.sessionID,
+  })
+    .then(() => {
+      onSuccess();
+    })
+    .catch((error: unknown) => {
+      const errorMessage = `Unable to enforce session limit before login (${getErrorMessage(error)})`;
+      log.warn(errorMessage);
+      onFailure(errorMessage);
+    });
+}
+
+export function _resetLoginLockoutStateForTests(): void {
+  accountLoginLockouts.clear();
+  ipLoginLockouts.clear();
+}
+
+export function _resetStrategyIdsForTests(): void {
+  STRATEGY_IDS.length = 0;
 }
 
 /**
@@ -242,6 +565,9 @@ function getLogoutRedirectUrl(): string | undefined {
  */
 function getUser(req: AuthRequest, res: Response): void {
   const user = req.user || { username: 'anonymous' };
+  res.set('Cache-Control', AUTH_USER_CACHE_CONTROL);
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
   res.status(200).json(user);
 }
 
@@ -268,10 +594,11 @@ function applyRememberMe(req: AuthRequest): void {
  */
 function setRememberMe(req: AuthRequest, res: Response): void {
   if (!req.session) {
-    res.status(500).json({ error: 'Unable to access session' });
+    sendErrorResponse(res, 500, 'Unable to access session');
     return;
   }
   req.session.rememberMe = req.body?.remember === true;
+  applyRememberMe(req);
   res.status(200).json({ ok: true });
 }
 
@@ -290,7 +617,7 @@ function login(req: AuthRequest, res: Response): void {
     const errorMessage = 'Unable to regenerate session during login (session unavailable)';
     log.warn(errorMessage);
     recordLoginAuditEvent(req, 'error', errorMessage);
-    res.status(500).json({ error: 'Unable to establish session' });
+    sendErrorResponse(res, 500, 'Unable to establish session');
     return;
   }
 
@@ -299,7 +626,7 @@ function login(req: AuthRequest, res: Response): void {
       const errorMessage = `Unable to regenerate session during login (${getErrorMessage(regenerateError)})`;
       log.warn(errorMessage);
       recordLoginAuditEvent(req, 'error', errorMessage);
-      res.status(500).json({ error: 'Unable to establish session' });
+      sendErrorResponse(res, 500, 'Unable to establish session');
       return;
     }
 
@@ -307,31 +634,50 @@ function login(req: AuthRequest, res: Response): void {
       const errorMessage = 'Unable to persist session after regeneration';
       log.warn(errorMessage);
       recordLoginAuditEvent(req, 'error', errorMessage);
-      res.status(500).json({ error: 'Unable to establish session' });
+      sendErrorResponse(res, 500, 'Unable to establish session');
       return;
     }
 
     req.session.rememberMe = rememberMe;
     applyRememberMe(req);
 
-    if (typeof req.login !== 'function') {
-      recordLoginAuditEvent(req, 'success', 'Login succeeded');
-      getUser(req, res);
-      return;
-    }
-
-    req.login(req.user as UserWithUsername, (loginError: unknown) => {
-      if (loginError) {
-        const errorMessage = `Unable to persist login session (${getErrorMessage(loginError)})`;
-        log.warn(errorMessage);
-        recordLoginAuditEvent(req, 'error', errorMessage);
-        res.status(500).json({ error: 'Unable to establish session' });
+    const proceedWithLogin = (): void => {
+      if (typeof req.login !== 'function') {
+        recordLoginAuditEvent(req, 'success', 'Login succeeded');
+        getUser(req, res);
         return;
       }
 
-      recordLoginAuditEvent(req, 'success', 'Login succeeded');
-      getUser(req, res);
-    });
+      req.login(req.user as UserWithUsername, (loginError: unknown) => {
+        if (loginError) {
+          const errorMessage = `Unable to persist login session (${getErrorMessage(loginError)})`;
+          log.warn(errorMessage);
+          recordLoginAuditEvent(req, 'error', errorMessage);
+          sendErrorResponse(res, 500, 'Unable to establish session');
+          return;
+        }
+
+        recordLoginAuditEvent(req, 'success', 'Login succeeded');
+        getUser(req, res);
+      });
+    };
+
+    const authenticatedUsername =
+      typeof req.user?.username === 'string' ? req.user.username.trim() : '';
+    if (authenticatedUsername.length > 0) {
+      enforceSessionLimitBeforeLogin(
+        req,
+        authenticatedUsername,
+        proceedWithLogin,
+        (errorMessage: string) => {
+          recordLoginAuditEvent(req, 'error', errorMessage);
+          sendErrorResponse(res, 500, 'Unable to establish session');
+        },
+      );
+      return;
+    }
+
+    proceedWithLogin();
   });
 }
 
@@ -341,9 +687,34 @@ function login(req: AuthRequest, res: Response): void {
  * @param res
  */
 function logout(req: AuthRequest, res: Response): void {
-  req.logout(() => {});
-  res.status(200).json({
-    logoutUrl: getLogoutRedirectUrl(),
+  req.logout((logoutError: unknown) => {
+    if (logoutError) {
+      log.warn(
+        `Unable to clear authentication state during logout (${getErrorMessage(logoutError)})`,
+      );
+      sendErrorResponse(res, 500, 'Unable to clear session');
+      return;
+    }
+
+    if (!req.session || typeof req.session.regenerate !== 'function') {
+      const errorMessage = 'Unable to regenerate session during logout (session unavailable)';
+      log.warn(errorMessage);
+      sendErrorResponse(res, 500, 'Unable to clear session');
+      return;
+    }
+
+    req.session.regenerate((regenerateError: unknown) => {
+      if (regenerateError) {
+        const errorMessage = `Unable to regenerate session during logout (${getErrorMessage(regenerateError)})`;
+        log.warn(errorMessage);
+        sendErrorResponse(res, 500, 'Unable to clear session');
+        return;
+      }
+
+      res.status(200).json({
+        logoutUrl: getLogoutRedirectUrl(),
+      });
+    });
   });
 }
 
@@ -367,10 +738,13 @@ function isTrustProxyEnabled(trustproxy: boolean | number | string): boolean {
  */
 export function init(app: Application): void {
   const serverConfiguration = getServerConfiguration();
+  maxConcurrentSessionsPerUser = getMaxConcurrentSessionsPerUser(
+    serverConfiguration as Record<string, unknown>,
+  );
   const sessionCookieSameSite = serverConfiguration.cookie?.samesite || 'lax';
+  const hasTlsEnabled = serverConfiguration.tls?.enabled === true;
   const hasHttpsConfiguration =
-    serverConfiguration.tls?.enabled === true ||
-    isTrustProxyEnabled(serverConfiguration.trustproxy);
+    hasTlsEnabled || isTrustProxyEnabled(serverConfiguration.trustproxy);
 
   if (sessionCookieSameSite === 'none' && !hasHttpsConfiguration) {
     throw new Error(
@@ -378,7 +752,7 @@ export function init(app: Application): void {
     );
   }
 
-  const sessionCookieSecure = sessionCookieSameSite === 'none' ? true : 'auto';
+  const sessionCookieSecure = hasTlsEnabled || sessionCookieSameSite === 'none' ? true : 'auto';
   if (sessionCookieSameSite === 'none') {
     log.warn('DD_SERVER_COOKIE_SAMESITE=none requires HTTPS; forcing secure session cookie');
   }
@@ -439,6 +813,7 @@ export function init(app: Application): void {
   router.use(authLimiter);
 
   const mutationJsonBodyParser = express.json();
+  router.use(requireJsonContentTypeForMutations);
   router.use((req: Request, res: Response, next: NextFunction) => {
     if (shouldParseJsonBody(req.method)) {
       return mutationJsonBodyParser(req, res, next);

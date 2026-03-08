@@ -1,3 +1,4 @@
+import { extractCollectionData } from '../utils/api';
 import { ApiError, errorMessage } from '../utils/error';
 
 function getContainerIcon() {
@@ -40,6 +41,40 @@ interface GetAllContainersOptions {
   limit?: number;
   offset?: number;
   signal?: AbortSignal;
+}
+
+interface AggregatedSecuritySummary {
+  unknown: number;
+  low: number;
+  medium: number;
+  high: number;
+  critical: number;
+}
+
+interface AggregatedSecurityVulnerability {
+  id: string;
+  severity: string;
+  package: string;
+  version: string;
+  fixedIn: string | null;
+  title: string;
+  target: string;
+  primaryUrl: string;
+  publishedDate: string;
+}
+
+interface AggregatedSecurityImage {
+  image: string;
+  containerIds: string[];
+  updateSummary?: AggregatedSecuritySummary;
+  vulnerabilities: AggregatedSecurityVulnerability[];
+}
+
+interface SecurityVulnerabilityOverview {
+  totalContainers: number;
+  scannedContainers: number;
+  latestScannedAt: string | null;
+  images: AggregatedSecurityImage[];
 }
 
 interface ContainerTriggerRequest {
@@ -98,7 +133,8 @@ async function getAllContainers(optionsOrSignal: GetAllContainersOptions | Abort
   if (!response.ok) {
     throw new Error(`Failed to get containers: ${response.statusText}`);
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData(payload);
 }
 
 async function getContainerSummary(): Promise<ContainerSummary> {
@@ -150,6 +186,9 @@ async function deleteContainer(containerId: string) {
   const response = await fetch(`/api/containers/${containerId}`, {
     method: 'DELETE',
     credentials: 'include',
+    headers: {
+      'X-DD-Confirm-Action': 'container-delete',
+    },
   });
   if (!response.ok) {
     throw new Error(`Failed to delete container ${containerId}: ${response.statusText}`);
@@ -164,7 +203,8 @@ async function getContainerTriggers(containerId: string) {
   if (!response.ok) {
     throw new Error(`Failed to get triggers for container ${containerId}: ${response.statusText}`);
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData(payload);
 }
 
 async function runTrigger({
@@ -174,7 +214,7 @@ async function runTrigger({
   triggerAgent,
 }: ContainerTriggerRequest) {
   const url = triggerAgent
-    ? `/api/containers/${containerId}/triggers/${triggerAgent}/${triggerType}/${triggerName}`
+    ? `/api/containers/${containerId}/triggers/${triggerType}/${triggerName}/${triggerAgent}`
     : `/api/containers/${containerId}/triggers/${triggerType}/${triggerName}`;
   const response = await fetch(url, {
     method: 'POST',
@@ -206,7 +246,8 @@ async function getContainerUpdateOperations(containerId: string) {
       `Failed to get update operations for container ${containerId}: ${response.statusText}`,
     );
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData(payload);
 }
 
 async function getContainerVulnerabilities(containerId: string) {
@@ -217,6 +258,16 @@ async function getContainerVulnerabilities(containerId: string) {
     throw new Error(
       `Failed to get vulnerabilities for container ${containerId}: ${response.statusText}`,
     );
+  }
+  return response.json();
+}
+
+async function getSecurityVulnerabilityOverview(): Promise<SecurityVulnerabilityOverview> {
+  const response = await fetch('/api/containers/security/vulnerabilities', {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get aggregated vulnerabilities: ${response.statusText}`);
   }
   return response.json();
 }
@@ -269,7 +320,8 @@ async function getContainerGroups(): Promise<ContainerGroup[]> {
   if (!response.ok) {
     throw new Error(`Failed to get container groups: ${response.statusText}`);
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData<ContainerGroup>(payload);
 }
 
 async function scanContainer(containerId: string, signal?: AbortSignal) {
@@ -318,6 +370,7 @@ export {
   getContainerLogs,
   getContainerUpdateOperations,
   getContainerVulnerabilities,
+  getSecurityVulnerabilityOverview,
   getContainerSbom,
   revealContainerEnv,
   runTrigger,
@@ -326,3 +379,9 @@ export {
 };
 
 export type { ContainerGroup };
+export type {
+  AggregatedSecurityImage,
+  AggregatedSecuritySummary,
+  AggregatedSecurityVulnerability,
+  SecurityVulnerabilityOverview,
+};

@@ -44,9 +44,7 @@ test('validateConfiguration should throw error when invalid', async () => {
 test('maskConfiguration should mask sensitive data', async () => {
   googlechat.configuration = configurationValid;
   const masked = googlechat.maskConfiguration();
-  expect(masked.url).not.toEqual(configurationValid.url);
-  expect(masked.url.startsWith('h')).toBe(true);
-  expect(masked.url.endsWith('3')).toBe(true);
+  expect(masked.url).toBe('[REDACTED]');
 });
 
 test('buildMessageBody should include thread key when configured', async () => {

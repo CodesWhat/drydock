@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { Request, Response } from 'express';
 import type { SelfUpdateStartingEventPayload } from '../event/index.js';
 import { hashToken } from '../util/crypto.js';
+import { sendErrorResponse } from './error-response.js';
 import type {
   ActiveSseClient,
   ActiveSseClientRegistry,
@@ -149,15 +150,15 @@ export function createSelfUpdateAckProtocol(
     const clientId = String(req.body?.clientId || '').trim();
     const clientToken = String(req.body?.clientToken || '').trim();
     if (!operationId) {
-      res.status(400).json({ error: 'operationId is required' });
+      sendErrorResponse(res, 400, 'operationId is required');
       return;
     }
     if (!clientId) {
-      res.status(400).json({ error: 'clientId is required' });
+      sendErrorResponse(res, 400, 'clientId is required');
       return;
     }
     if (!clientToken) {
-      res.status(400).json({ error: 'clientToken is required' });
+      sendErrorResponse(res, 400, 'clientToken is required');
       return;
     }
 

@@ -27,6 +27,39 @@ class BaseRegistry extends Registry {
     }
   }
 
+  private getTrustedRegistryHosts(requestOptions: RegistryRequestOptions): string[] {
+    const hosts = new Set<string>();
+    const requestHostSource = requestOptions?.url;
+    if (typeof requestHostSource === 'string' && requestHostSource.trim().length > 0) {
+      hosts.add(this.getRegistryHostname(requestHostSource));
+    }
+
+    const configuredHostSource = this.configuration?.url;
+    if (typeof configuredHostSource === 'string' && configuredHostSource.trim().length > 0) {
+      hosts.add(this.getRegistryHostname(configuredHostSource));
+    }
+
+    return Array.from(hosts);
+  }
+
+  private validateAuthUrlHost(authUrl: string, requestOptions: RegistryRequestOptions): void {
+    const authHost = this.getRegistryHostname(authUrl);
+    const trustedHosts = this.getTrustedRegistryHosts(requestOptions);
+
+    if (trustedHosts.length === 0) {
+      failClosedAuth(
+        `Unable to authenticate registry ${this.getId()}: token endpoint host ${authHost} cannot be validated because registry host is unavailable`,
+      );
+      return;
+    }
+
+    if (!trustedHosts.includes(authHost)) {
+      failClosedAuth(
+        `Unable to authenticate registry ${this.getId()}: token endpoint host ${authHost} is not trusted`,
+      );
+    }
+  }
+
   private getHttpsAgent() {
     const shouldDisableTlsVerification = this.configuration?.insecure === true;
     const hasCaFile = Boolean(this.configuration?.cafile);
@@ -131,6 +164,8 @@ class BaseRegistry extends Registry {
     tokenExtractor: (response: { data?: Record<string, unknown> }) => unknown = (response) =>
       response.data?.token,
   ) {
+    this.validateAuthUrlHost(authUrl, requestOptions);
+
     const requestOptionsWithAuth = this.withTlsRequestOptions({
       ...requestOptions,
     });

@@ -13,11 +13,9 @@ The `basic` authentication lets you protect drydock access using the [Http Basic
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
 | `DD_AUTH_BASIC_{auth_name}_USER` | 🔴 | Username | | |
-| `DD_AUTH_BASIC_{auth_name}_HASH` | 🔴 | Htpasswd compliant hash | [See htpasswd documentation](https://httpd.apache.org/docs/current/programs/htpasswd.html) | |
+| `DD_AUTH_BASIC_{auth_name}_HASH` | 🔴 | Argon2id password hash | `argon2id$memory$passes$parallelism$salt$hash` | |
 
-<Callout type="warn">Hash values may contain special characters (`$`, `{`, `}`); don't forget to protect them!
-Use single quotes in Bash commands
-`DD_AUTH_BASIC_JOHN_HASH='{SHA}1rToTufzHYhhemtgQhRRJy6/Gjo='`</Callout>
+<Callout type="warn">Hash values contain `$` characters. In Docker Compose YAML, double each `$` as `$$`. In Bash, use single quotes around the value.</Callout>
 
 <Callout type="warn">**Known limitation:** Passwords containing colon characters (`:`) are not supported due to a bug in the underlying `passport-http` library. Authentication will fail if your password contains a colon. Use passwords without colons until this is resolved.</Callout>
 
@@ -33,11 +31,11 @@ services:
     ...
     environment:
       - DD_AUTH_BASIC_JOHN_USER=john
-      - DD_AUTH_BASIC_JOHN_HASH={SHA}1rToTufzHYhhemtgQhRRJy6/Gjo=
+      - "DD_AUTH_BASIC_JOHN_HASH=argon2id$$65536$$3$$4$$/Y21uoNfTJ/Bv+t7Msz6XABip7tBOI55ZgjeCXyhGc0=$$MHhv8Tc/0TCnhAeoNQRHII3sbOLIQ+1lMlHk+Ifyv3IUAxT6NkVt+OXT03kJTn8JRzmD24L+qCjcqk2+Ad1dTw=="
       - DD_AUTH_BASIC_JANE_USER=jane
-      - DD_AUTH_BASIC_JANE_HASH={SHA}GHntYTv7Vgljq49/TZ+KI9s6PB0=
+      - "DD_AUTH_BASIC_JANE_HASH=argon2id$$65536$$3$$4$$r6d4/pX/7fLvpz3xw7qvEZok4KSYwMRm71TjBlujwPI=$$OmI2vv0GCpP12SC0u6dL6Lz1OpRyBjTQGe+bBvF84hhQJB1iTaFd/S1NRQafvAHL02U61E5/eqvOaQ81vPzxvw=="
       - DD_AUTH_BASIC_BOB_USER=bob
-      - DD_AUTH_BASIC_BOB_HASH={SHA}tjm75MZa6ep5tCaHAehlaoDJWxQ=
+      - "DD_AUTH_BASIC_BOB_HASH=argon2id$$65536$$3$$4$$shoWJqA1qg1Zen08/XIocsJUEFKgox8Glw0/EAkY5SY=$$toyn5NwytBXDTqQN94wJzjUT0tocDzhvvYii4YK279pDTbMDGoyqOhxxDi7lS0xEJAC7fRKfMAaZFfxmzD4GNw=="
 ```
 
 </Tab>
@@ -45,11 +43,11 @@ services:
 ```bash
 docker run \
   -e DD_AUTH_BASIC_JOHN_USER="john" \
-  -e DD_AUTH_BASIC_JOHN_HASH='{SHA}1rToTufzHYhhemtgQhRRJy6/Gjo=' \
+  -e 'DD_AUTH_BASIC_JOHN_HASH=argon2id$65536$3$4$/Y21uoNfTJ/Bv+t7Msz6XABip7tBOI55ZgjeCXyhGc0=$MHhv8Tc/0TCnhAeoNQRHII3sbOLIQ+1lMlHk+Ifyv3IUAxT6NkVt+OXT03kJTn8JRzmD24L+qCjcqk2+Ad1dTw==' \
   -e DD_AUTH_BASIC_JANE_USER="jane" \
-  -e DD_AUTH_BASIC_JANE_HASH='{SHA}GHntYTv7Vgljq49/TZ+KI9s6PB0=' \
+  -e 'DD_AUTH_BASIC_JANE_HASH=argon2id$65536$3$4$r6d4/pX/7fLvpz3xw7qvEZok4KSYwMRm71TjBlujwPI=$OmI2vv0GCpP12SC0u6dL6Lz1OpRyBjTQGe+bBvF84hhQJB1iTaFd/S1NRQafvAHL02U61E5/eqvOaQ81vPzxvw==' \
   -e DD_AUTH_BASIC_BOB_USER="bob" \
-  -e DD_AUTH_BASIC_BOB_HASH='{SHA}tjm75MZa6ep5tCaHAehlaoDJWxQ=' \
+  -e 'DD_AUTH_BASIC_BOB_HASH=argon2id$65536$3$4$shoWJqA1qg1Zen08/XIocsJUEFKgox8Glw0/EAkY5SY=$toyn5NwytBXDTqQN94wJzjUT0tocDzhvvYii4YK279pDTbMDGoyqOhxxDi7lS0xEJAC7fRKfMAaZFfxmzD4GNw==' \
   ...
   codeswhat/drydock
 ```
@@ -58,14 +56,28 @@ docker run \
 
 ## How to create a password hash
 
-### You can use htpasswd with SHA
+### Using the Drydock container
+
+The simplest approach — use the argon2id hasher built into the Drydock image:
 
 ```bash
-htpasswd -nbs john doe
-
-# Output: john:{SHA}1rToTufzHYhhemtgQhRRJy6/Gjo=
+docker run --rm codeswhat/drydock node -e '
+  const c = require("node:crypto");
+  const s = c.randomBytes(32);
+  const h = c.argon2Sync("argon2id", { message: process.argv[1], nonce: s, memory: 65536, passes: 3, parallelism: 4, tagLength: 64 });
+  console.log("argon2id$65536$3$4$" + s.toString("base64") + "$" + h.toString("base64"));
+' "yourpassword"
 ```
 
-## Or you can use an online service
+### Using Node.js locally (requires Node 24+)
 
-[Like this one](https://wtools.io/generate-htpasswd-online).
+```bash
+node -e '
+  const c = require("node:crypto");
+  const s = c.randomBytes(32);
+  const h = c.argon2Sync("argon2id", { message: process.argv[1], nonce: s, memory: 65536, passes: 3, parallelism: 4, tagLength: 64 });
+  console.log("argon2id$65536$3$4$" + s.toString("base64") + "$" + h.toString("base64"));
+' "yourpassword"
+```
+
+<Callout type="info">Legacy `{SHA}` hashes from WUD/htpasswd are still accepted but deprecated. They will be removed in v1.6.0. Use the commands above to generate an argon2id hash and update your `DD_AUTH_BASIC_*_HASH` values.</Callout>

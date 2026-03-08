@@ -8,6 +8,8 @@ import {
 import log from '../../../log/index.js';
 import Hass from './Hass.js';
 
+const MOCK_VERSION = '1.4.0-test';
+
 vi.mock('../../../event/index.js', () => ({
   registerContainerAdded: vi.fn(),
   registerContainerUpdated: vi.fn(),
@@ -15,6 +17,14 @@ vi.mock('../../../event/index.js', () => ({
   registerWatcherStart: vi.fn(),
   registerWatcherStop: vi.fn(),
 }));
+
+vi.mock('../../../configuration/index.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    getVersion: () => MOCK_VERSION,
+  };
+});
 
 const containerData = [
   {
@@ -81,7 +91,7 @@ test('publishDiscoveryMessage must publish a discovery message expected by HA', 
         manufacturer: 'drydock',
         model: 'drydock',
         name: 'drydock',
-        sw_version: 'unknown',
+        sw_version: MOCK_VERSION,
       },
       icon: 'mdi:docker',
       entity_picture:
@@ -110,7 +120,7 @@ test('addContainerSensor must publish sensor discovery message expected by HA', 
         manufacturer: 'drydock',
         model: 'drydock',
         name: 'drydock',
-        sw_version: 'unknown',
+        sw_version: MOCK_VERSION,
       },
       icon: 'mdi:docker',
       entity_picture:
@@ -166,7 +176,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
         manufacturer: 'drydock',
         model: 'drydock',
         name: 'drydock',
-        sw_version: 'unknown',
+        sw_version: MOCK_VERSION,
       },
       icon: 'mdi:docker',
       entity_picture:
@@ -188,7 +198,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
         manufacturer: 'drydock',
         model: 'drydock',
         name: 'drydock',
-        sw_version: 'unknown',
+        sw_version: MOCK_VERSION,
       },
       icon: 'mdi:docker',
       entity_picture:
@@ -210,7 +220,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
         manufacturer: 'drydock',
         model: 'drydock',
         name: 'drydock',
-        sw_version: 'unknown',
+        sw_version: MOCK_VERSION,
       },
       icon: 'mdi:docker',
       entity_picture:
@@ -234,7 +244,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
         manufacturer: 'drydock',
         model: 'drydock',
         name: 'drydock',
-        sw_version: 'unknown',
+        sw_version: MOCK_VERSION,
       },
       icon: 'mdi:docker',
       entity_picture:
@@ -256,7 +266,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
         manufacturer: 'drydock',
         model: 'drydock',
         name: 'drydock',
-        sw_version: 'unknown',
+        sw_version: MOCK_VERSION,
       },
       icon: 'mdi:docker',
       entity_picture:
@@ -278,7 +288,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
         manufacturer: 'drydock',
         model: 'drydock',
         name: 'drydock',
-        sw_version: 'unknown',
+        sw_version: MOCK_VERSION,
       },
       icon: 'mdi:docker',
       entity_picture:
@@ -371,7 +381,7 @@ test('updateWatcherSensors must publish all watcher sensor messages expected by 
         manufacturer: 'drydock',
         model: 'drydock',
         name: 'drydock',
-        sw_version: 'unknown',
+        sw_version: MOCK_VERSION,
       },
       icon: 'mdi:docker',
       entity_picture:

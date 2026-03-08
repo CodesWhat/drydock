@@ -1,3 +1,5 @@
+export const PREFERENCES_API_VERSION = 1;
+
 export { mergeDefaults, migrate, migrateFromLegacyKeys } from './migrate';
 export type { PreferencesSchema, ViewMode } from './schema';
 export { DEFAULTS } from './schema';

@@ -2,6 +2,8 @@ import type { Request, Response } from 'express';
 import type { AgentClient } from '../../agent/AgentClient.js';
 import type { Container, ContainerReport } from '../../model/container.js';
 import { getContainerStatusSummary } from '../../util/container-summary.js';
+import { sendErrorResponse } from '../error-response.js';
+import { buildPaginationLinks, type PaginationLinks } from '../pagination-links.js';
 import {
   getPathParamValue,
   parseBooleanQueryParam,
@@ -17,6 +19,53 @@ interface CrudStoreContainerApi {
 interface ContainerListPagination {
   limit: number;
   offset: number;
+}
+
+interface ContainerListResponse {
+  data: Container[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  _links?: PaginationLinks;
+}
+
+interface ContainerSecuritySummary {
+  unknown: number;
+  low: number;
+  medium: number;
+  high: number;
+  critical: number;
+}
+
+interface SecurityViewVulnerability {
+  id: string;
+  severity: string;
+  package: string;
+  version: string;
+  fixedIn: string | null;
+  title: string;
+  target: string;
+  primaryUrl: string;
+  publishedDate: string;
+}
+
+interface SecurityImageVulnerabilityGroup {
+  image: string;
+  containerIds: string[];
+  updateSummary?: ContainerSecuritySummary;
+  vulnerabilities: SecurityViewVulnerability[];
+}
+
+interface SecurityVulnerabilityOverviewResponse {
+  totalContainers: number;
+  scannedContainers: number;
+  latestScannedAt: string | null;
+  images: SecurityImageVulnerabilityGroup[];
+}
+
+interface WatchContainersBody {
+  containerIds?: string[];
 }
 
 interface UpdateOperationStoreApi {
@@ -46,24 +95,34 @@ interface AuditStoreApi {
 }
 
 export interface CrudHandlerDependencies {
-  getContainersFromStore: (
-    query: Request['query'],
-    pagination?: ContainerListPagination,
-  ) => Container[];
-  storeContainer: CrudStoreContainerApi;
-  updateOperationStore: UpdateOperationStoreApi;
-  getServerConfiguration: () => ServerConfiguration;
-  getAgent: (name: string) => AgentClient | undefined;
-  getErrorMessage: (error: unknown) => string;
-  getErrorStatusCode: (error: unknown) => number | undefined;
-  getWatchers: () => Record<string, LocalContainerWatcher>;
-  redactContainerRuntimeEnv: (container: Container) => Container;
-  redactContainersRuntimeEnv: (containers: Container[]) => Container[];
-  getContainerRaw?: (id: string) => Container | undefined;
-  auditStore?: AuditStoreApi;
+  storeApi: {
+    getContainersFromStore: (
+      query: Request['query'],
+      pagination?: ContainerListPagination,
+    ) => Container[];
+    getContainerCountFromStore: (query: Request['query']) => number;
+    storeContainer: CrudStoreContainerApi;
+    updateOperationStore: UpdateOperationStoreApi;
+    getContainerRaw?: (id: string) => Container | undefined;
+  };
+  agentApi: {
+    getServerConfiguration: () => ServerConfiguration;
+    getAgent: (name: string) => AgentClient | undefined;
+    getWatchers: () => Record<string, LocalContainerWatcher>;
+  };
+  errorApi: {
+    getErrorMessage: (error: unknown) => string;
+    getErrorStatusCode: (error: unknown) => number | undefined;
+  };
+  securityApi: {
+    redactContainerRuntimeEnv: (container: Container) => Container;
+    redactContainersRuntimeEnv: (containers: Container[]) => Container[];
+    auditStore?: AuditStoreApi;
+  };
 }
 
 const CONTAINER_LIST_MAX_LIMIT = 200;
+const WATCH_CONTAINERS_MAX_IDS = 200;
 
 function removeContainerListControlParams(query: Request['query']): Request['query'] {
   const filteredQuery: Record<string, unknown> = {};
@@ -83,6 +142,64 @@ function normalizeContainerListPagination(query: Request['query']) {
     limit: Math.min(CONTAINER_LIST_MAX_LIMIT, Math.max(0, parsedLimit)),
     offset: Math.max(0, parsedOffset),
   };
+}
+
+function parseWatchContainersBody(body: unknown): { body?: WatchContainersBody; error?: string } {
+  if (body === undefined || body === null) {
+    return { body: {} };
+  }
+
+  if (typeof body !== 'object' || Array.isArray(body)) {
+    return { error: 'Request body must be an object' };
+  }
+
+  const requestBody = body as Record<string, unknown>;
+  const unknownKeys = Object.keys(requestBody).filter((key) => key !== 'containerIds');
+  if (unknownKeys.length > 0) {
+    return { error: `Unknown request properties: ${unknownKeys.join(', ')}` };
+  }
+
+  const { containerIds } = requestBody;
+  if (containerIds === undefined) {
+    return { body: {} };
+  }
+  if (!Array.isArray(containerIds)) {
+    return { error: 'containerIds must be an array of non-empty strings' };
+  }
+  if (containerIds.length === 0) {
+    return { error: 'containerIds must not be empty' };
+  }
+  if (containerIds.length > WATCH_CONTAINERS_MAX_IDS) {
+    return { error: `containerIds must contain at most ${WATCH_CONTAINERS_MAX_IDS} entries` };
+  }
+
+  const normalizedIds: string[] = [];
+  const seenIds = new Set<string>();
+  for (const containerId of containerIds) {
+    if (typeof containerId !== 'string' || containerId.trim() === '') {
+      return { error: 'containerIds must be an array of non-empty strings' };
+    }
+    const normalizedId = containerId.trim();
+    if (seenIds.has(normalizedId)) {
+      continue;
+    }
+    seenIds.add(normalizedId);
+    normalizedIds.push(normalizedId);
+  }
+
+  return {
+    body: {
+      containerIds: normalizedIds,
+    },
+  };
+}
+
+function resolveWatcherIdForContainer(container: Container): string {
+  let watcherId = `docker.${container.watcher}`;
+  if (container.agent) {
+    watcherId = `${container.agent}.${watcherId}`;
+  }
+  return watcherId;
 }
 
 function stripContainerVulnerabilityArrays(container: Container): Container {
@@ -116,36 +233,142 @@ function getSecurityIssueCount(containers: Container[]): number {
   }).length;
 }
 
+function toNonNegativeInteger(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return Math.floor(value);
+}
+
+function chooseLatestScannedAt(current: string | null, candidate: unknown): string | null {
+  if (typeof candidate !== 'string' || candidate.length === 0) {
+    return current;
+  }
+  if (current === null) {
+    return candidate;
+  }
+  const currentTime = Date.parse(current);
+  const candidateTime = Date.parse(candidate);
+  if (Number.isFinite(currentTime) && Number.isFinite(candidateTime)) {
+    return candidateTime > currentTime ? candidate : current;
+  }
+  return candidate > current ? candidate : current;
+}
+
+function readStringField(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function readVulnerabilityString(vulnerability: unknown, fields: string[], fallback = ''): string {
+  if (!vulnerability || typeof vulnerability !== 'object') {
+    return fallback;
+  }
+  const record = vulnerability as Record<string, unknown>;
+  for (const field of fields) {
+    const value = readStringField(record[field]);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return fallback;
+}
+
+function readVulnerabilityFixedIn(vulnerability: unknown): string | null {
+  const fixedIn = readVulnerabilityString(vulnerability, ['fixedVersion', 'fixedIn']);
+  return fixedIn.length > 0 ? fixedIn : null;
+}
+
+function normalizeUpdateSummary(summary: unknown): ContainerSecuritySummary {
+  const record = summary && typeof summary === 'object' ? (summary as Record<string, unknown>) : {};
+  return {
+    unknown: toNonNegativeInteger(record.unknown),
+    low: toNonNegativeInteger(record.low),
+    medium: toNonNegativeInteger(record.medium),
+    high: toNonNegativeInteger(record.high),
+    critical: toNonNegativeInteger(record.critical),
+  };
+}
+
+function normalizeSecurityVulnerability(vulnerability: unknown): SecurityViewVulnerability {
+  return {
+    id: readVulnerabilityString(vulnerability, ['id'], 'unknown'),
+    severity: readVulnerabilityString(vulnerability, ['severity'], 'UNKNOWN'),
+    package: readVulnerabilityString(vulnerability, ['packageName', 'package'], 'unknown'),
+    version: readVulnerabilityString(vulnerability, ['installedVersion', 'version'], ''),
+    fixedIn: readVulnerabilityFixedIn(vulnerability),
+    title: readVulnerabilityString(vulnerability, ['title', 'Title'], ''),
+    target: readVulnerabilityString(vulnerability, ['target', 'Target'], ''),
+    primaryUrl: readVulnerabilityString(vulnerability, ['primaryUrl', 'PrimaryURL'], ''),
+    publishedDate: readVulnerabilityString(vulnerability, ['publishedDate'], ''),
+  };
+}
+
+function resolveSecurityImageName(container: Container): string {
+  const displayName = readStringField(container.displayName)?.trim();
+  if (displayName) {
+    return displayName;
+  }
+  const name = readStringField(container.name)?.trim();
+  if (name) {
+    return name;
+  }
+  return 'unknown';
+}
+
 export function createCrudHandlers({
-  getContainersFromStore,
-  storeContainer,
-  updateOperationStore,
-  getServerConfiguration,
-  getAgent,
-  getErrorMessage,
-  getErrorStatusCode,
-  getWatchers,
-  redactContainerRuntimeEnv,
-  redactContainersRuntimeEnv,
-  getContainerRaw,
-  auditStore,
+  storeApi: {
+    getContainersFromStore,
+    getContainerCountFromStore,
+    storeContainer,
+    updateOperationStore,
+    getContainerRaw,
+  },
+  agentApi: { getServerConfiguration, getAgent, getWatchers },
+  errorApi: { getErrorMessage, getErrorStatusCode },
+  securityApi: { redactContainerRuntimeEnv, redactContainersRuntimeEnv, auditStore },
 }: CrudHandlerDependencies) {
+  function buildContainerListResponse(
+    query: Request['query'],
+    basePath: '/api/containers' | '/api/containers/watch',
+  ): ContainerListResponse {
+    const includeVulnerabilities = parseBooleanQueryParam(query.includeVulnerabilities, false);
+    const filteredQuery = removeContainerListControlParams(query);
+    const pagination = normalizeContainerListPagination(query);
+    const pagedContainers = getContainersFromStore(filteredQuery, pagination);
+    const total =
+      pagination.limit === 0 && pagination.offset === 0
+        ? pagedContainers.length
+        : getContainerCountFromStore(filteredQuery);
+    const redactedContainers = redactContainersRuntimeEnv(pagedContainers);
+    const data = includeVulnerabilities
+      ? redactedContainers
+      : redactedContainers.map((container) => stripContainerVulnerabilityArrays(container));
+    const hasMore = pagination.limit > 0 && pagination.offset + data.length < total;
+    const links = buildPaginationLinks({
+      basePath,
+      query,
+      limit: pagination.limit,
+      offset: pagination.offset,
+      total,
+      returnedCount: data.length,
+    });
+    return {
+      data,
+      total,
+      limit: pagination.limit,
+      offset: pagination.offset,
+      hasMore,
+      ...(links ? { _links: links } : {}),
+    };
+  }
+
   /**
    * Get all (filtered) containers.
    * @param req
    * @param res
    */
   function getContainers(req: Request, res: Response) {
-    const { query } = req;
-    const includeVulnerabilities = parseBooleanQueryParam(query.includeVulnerabilities, false);
-    const filteredQuery = removeContainerListControlParams(query);
-    const pagination = normalizeContainerListPagination(query);
-    const pagedContainers = getContainersFromStore(filteredQuery, pagination);
-    const redactedContainers = redactContainersRuntimeEnv(pagedContainers);
-    const responsePayload = includeVulnerabilities
-      ? redactedContainers
-      : redactedContainers.map((container) => stripContainerVulnerabilityArrays(container));
-    res.status(200).json(responsePayload);
+    res.status(200).json(buildContainerListResponse(req.query, '/api/containers'));
   }
 
   /**
@@ -165,6 +388,64 @@ export function createCrudHandlers({
   }
 
   /**
+   * Get an aggregated vulnerability payload for the security view.
+   * @param _req
+   * @param res
+   */
+  function getContainerSecurityVulnerabilities(
+    _req: Request,
+    res: Response<SecurityVulnerabilityOverviewResponse>,
+  ) {
+    const containers = getContainersFromStore({});
+    const images = new Map<string, SecurityImageVulnerabilityGroup>();
+    let scannedContainers = 0;
+    let latestScannedAt: string | null = null;
+
+    for (const container of containers) {
+      const scan = container.security?.scan;
+      if (!scan) {
+        continue;
+      }
+      scannedContainers += 1;
+      latestScannedAt = chooseLatestScannedAt(latestScannedAt, scan.scannedAt);
+
+      const image = resolveSecurityImageName(container);
+      const existingGroup = images.get(image) || {
+        image,
+        containerIds: [],
+        vulnerabilities: [],
+      };
+
+      if (
+        typeof container.id === 'string' &&
+        container.id.length > 0 &&
+        !existingGroup.containerIds.includes(container.id)
+      ) {
+        existingGroup.containerIds.push(container.id);
+      }
+
+      const updateSummary = container.security?.updateScan?.summary;
+      if (updateSummary) {
+        existingGroup.updateSummary = normalizeUpdateSummary(updateSummary);
+      }
+
+      const vulnerabilityList = Array.isArray(scan.vulnerabilities) ? scan.vulnerabilities : [];
+      for (const vulnerability of vulnerabilityList) {
+        existingGroup.vulnerabilities.push(normalizeSecurityVulnerability(vulnerability));
+      }
+
+      images.set(image, existingGroup);
+    }
+
+    res.status(200).json({
+      totalContainers: containers.length,
+      scannedContainers,
+      latestScannedAt,
+      images: [...images.values()],
+    });
+  }
+
+  /**
    * Get a container by id.
    * @param req
    * @param res
@@ -175,7 +456,7 @@ export function createCrudHandlers({
     if (container) {
       res.status(200).json(redactContainerRuntimeEnv(container));
     } else {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
     }
   }
 
@@ -188,12 +469,15 @@ export function createCrudHandlers({
     const id = getPathParamValue(req.params.id);
     const container = storeContainer.getContainer(id);
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 
     const operations = updateOperationStore.getOperationsByContainerName(container.name);
-    res.status(200).json(operations);
+    res.status(200).json({
+      data: operations,
+      total: operations.length,
+    });
   }
 
   /**
@@ -204,14 +488,14 @@ export function createCrudHandlers({
   async function deleteContainer(req: Request, res: Response) {
     const serverConfiguration = getServerConfiguration();
     if (!serverConfiguration.feature.delete) {
-      res.sendStatus(403);
+      sendErrorResponse(res, 403, 'Container deletion is disabled');
       return;
     }
 
     const id = getPathParamValue(req.params.id);
     const container = storeContainer.getContainer(id);
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 
@@ -223,9 +507,7 @@ export function createCrudHandlers({
 
     const agent = getAgent(container.agent);
     if (!agent) {
-      res.status(500).json({
-        error: `Agent ${container.agent} not found`,
-      });
+      sendErrorResponse(res, 500, `Agent ${container.agent} not found`);
       return;
     }
 
@@ -238,9 +520,11 @@ export function createCrudHandlers({
         storeContainer.deleteContainer(id);
         res.sendStatus(204);
       } else {
-        res.status(500).json({
-          error: `Error deleting container on agent (${getErrorMessage(error)})`,
-        });
+        sendErrorResponse(
+          res,
+          500,
+          `Error deleting container on agent (${getErrorMessage(error)})`,
+        );
       }
     }
   }
@@ -252,13 +536,55 @@ export function createCrudHandlers({
    * @returns {Promise<void>}
    */
   async function watchContainers(req: Request, res: Response) {
+    const parsedBody = parseWatchContainersBody(req.body);
+    if (parsedBody.error) {
+      sendErrorResponse(res, 400, parsedBody.error);
+      return;
+    }
+
+    const watcherMap = getWatchers();
+    const containerIds = parsedBody.body?.containerIds;
     try {
-      await Promise.all(Object.values(getWatchers()).map((watcher) => watcher.watch()));
-      getContainers(req, res);
+      if (Array.isArray(containerIds) && containerIds.length > 0) {
+        const selectedTargets: Array<{
+          container: Container;
+          watcher: LocalContainerWatcher;
+        }> = [];
+
+        for (const containerId of containerIds) {
+          const container = storeContainer.getContainer(containerId);
+          if (!container) {
+            sendErrorResponse(res, 404, 'Container not found');
+            return;
+          }
+
+          const watcherId = resolveWatcherIdForContainer(container);
+          const watcher = watcherMap[watcherId];
+          if (!watcher) {
+            sendErrorResponse(
+              res,
+              500,
+              `No provider found for container ${container.id} and provider ${watcherId}`,
+            );
+            return;
+          }
+
+          selectedTargets.push({
+            container,
+            watcher,
+          });
+        }
+
+        await Promise.all(
+          selectedTargets.map((target) => target.watcher.watchContainer(target.container)),
+        );
+      } else {
+        await Promise.all(Object.values(watcherMap).map((watcher) => watcher.watch()));
+      }
+
+      res.status(200).json(buildContainerListResponse(req.query, '/api/containers/watch'));
     } catch (error: unknown) {
-      res.status(500).json({
-        error: `Error when watching images (${getErrorMessage(error)})`,
-      });
+      sendErrorResponse(res, 500, `Error when watching images (${getErrorMessage(error)})`);
     }
   }
 
@@ -273,19 +599,18 @@ export function createCrudHandlers({
 
     const container = storeContainer.getContainer(id);
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 
-    let watcherId = `docker.${container.watcher}`;
-    if (container.agent) {
-      watcherId = `${container.agent}.${watcherId}`;
-    }
+    const watcherId = resolveWatcherIdForContainer(container);
     const watcher = getWatchers()[watcherId];
     if (!watcher) {
-      res.status(500).json({
-        error: `No provider found for container ${id} and provider ${watcherId}`,
-      });
+      sendErrorResponse(
+        res,
+        500,
+        `No provider found for container ${id} and provider ${watcherId}`,
+      );
       return;
     }
 
@@ -298,7 +623,7 @@ export function createCrudHandlers({
           (containerInList) => containerInList.id === container.id,
         );
         if (!containerFound) {
-          res.status(404).send();
+          sendErrorResponse(res, 404, 'Container not found');
           return;
         }
       }
@@ -306,9 +631,7 @@ export function createCrudHandlers({
       const containerReport = await watcher.watchContainer(container);
       res.status(200).json(redactContainerRuntimeEnv(containerReport.container));
     } catch {
-      res.status(500).json({
-        error: `Error when watching container ${id}`,
-      });
+      sendErrorResponse(res, 500, `Error when watching container ${id}`);
     }
   }
 
@@ -324,14 +647,14 @@ export function createCrudHandlers({
    */
   function revealContainerEnv(req: Request, res: Response) {
     if (!getContainerRaw || !auditStore) {
-      res.sendStatus(501);
+      sendErrorResponse(res, 501, 'Environment reveal is not available');
       return;
     }
 
     const id = getPathParamValue(req.params.id);
     const container = getContainerRaw(id);
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 
@@ -365,6 +688,7 @@ export function createCrudHandlers({
   return {
     getContainers,
     getContainerSummary,
+    getContainerSecurityVulnerabilities,
     getContainer,
     getContainerUpdateOperations,
     deleteContainer,

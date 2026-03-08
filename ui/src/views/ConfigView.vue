@@ -21,6 +21,7 @@ import { getLog, getLogEntries } from '../services/log';
 import { getServer } from '../services/server';
 import { clearIconCache, getSettings, updateSettings } from '../services/settings';
 import { getStore } from '../services/store';
+import { applyRadius, type RadiusPresetId, RADIUS_PRESET_VALUES } from '../preferences/radius';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useTheme } from '../theme/useTheme';
@@ -30,13 +31,7 @@ const route = useRoute();
 const { themeFamily, themeVariant, isDark, setThemeFamily, transitionTheme } = useTheme();
 
 // --- Border Radius ---
-const radiusPresets = [
-  { id: 'none', label: 'None', sm: 0, md: 0, lg: 0 },
-  { id: 'sharp', label: 'Sharp', sm: 2, md: 3, lg: 4 },
-  { id: 'modern', label: 'Modern', sm: 4, md: 8, lg: 12 },
-  { id: 'soft', label: 'Soft', sm: 6, md: 12, lg: 16 },
-  { id: 'round', label: 'Round', sm: 8, md: 16, lg: 24 },
-];
+const radiusPresets = RADIUS_PRESET_VALUES;
 
 const activeRadius = usePreference(
   () => preferences.appearance.radius,
@@ -45,17 +40,26 @@ const activeRadius = usePreference(
   },
 );
 
-function setRadius(id: string) {
+function setRadius(id: RadiusPresetId) {
   activeRadius.value = id;
-  const p = radiusPresets.find((r) => r.id === id) ?? radiusPresets[1];
-  const el = document.documentElement;
-  el.style.setProperty('--dd-radius', `${p.md}px`);
-  el.style.setProperty('--dd-radius-sm', `${p.sm}px`);
-  el.style.setProperty('--dd-radius-lg', `${p.lg}px`);
+  applyRadius(id);
 }
 
 const { iconLibrary, setIconLibrary, iconScale, setIconScale } = useIcons();
 const { activeFont, setFont, fontLoading, isFontLoaded } = useFont();
+
+// --- Font Size ---
+const activeFontSize = usePreference(
+  () => preferences.appearance.fontSize,
+  (v) => {
+    preferences.appearance.fontSize = v;
+  },
+);
+
+function setFontSize(scale: number) {
+  activeFontSize.value = scale;
+  document.documentElement.style.setProperty('--dd-font-size', String(scale));
+}
 
 const { logContainer, scrollBlocked, scrollToBottom, handleLogScroll, resumeAutoScroll } =
   useLogViewport();
@@ -533,6 +537,8 @@ function handleSelectIconLibrary(library: string) {
       :on-select-font="handleSelectFont"
       :on-select-icon-library="handleSelectIconLibrary"
       :on-change-icon-scale="setIconScale"
+      :font-size="activeFontSize"
+      :on-change-font-size="setFontSize"
       :active-radius="activeRadius"
       :radius-presets="radiusPresets"
       :on-select-radius="setRadius"

@@ -1,3 +1,5 @@
+import { extractCollectionData } from '../utils/api';
+
 export interface NotificationRule {
   id: string;
   name: string;
@@ -16,7 +18,8 @@ async function getAllNotificationRules(): Promise<NotificationRule[]> {
   if (!response.ok) {
     throw new Error(`Failed to get notifications: ${response.statusText}`);
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData(payload);
 }
 
 async function updateNotificationRule(

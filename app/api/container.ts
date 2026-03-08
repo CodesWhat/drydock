@@ -35,6 +35,7 @@ import {
 } from './container/shared.js';
 import { createTriggerHandlers } from './container/triggers.js';
 import { createUpdatePolicyHandlers } from './container/update-policy.js';
+import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import { broadcastScanCompleted, broadcastScanStarted } from './sse.js';
 
 const log = logger.child({ component: 'container' });
@@ -104,6 +105,15 @@ export function getContainersFromStore(
   return storeContainer.getContainers(query);
 }
 
+/**
+ * Get filtered container count from store.
+ * @param query
+ * @returns {number}
+ */
+export function getContainerCountFromStore(query: Record<string, unknown>) {
+  return storeContainer.getContainerCount(query);
+}
+
 function getContainerImageFullName(container, tagOverride?: string) {
   return resolveContainerImageFullName(container, registry.getState().registry || {}, tagOverride);
 }
@@ -116,23 +126,32 @@ async function getContainerRegistryAuth(container) {
 }
 
 const crudHandlers = createCrudHandlers({
-  getContainersFromStore,
-  storeContainer,
-  updateOperationStore,
-  getServerConfiguration,
-  getAgent,
-  getErrorMessage,
-  getErrorStatusCode,
-  getWatchers,
-  redactContainerRuntimeEnv,
-  redactContainersRuntimeEnv,
-  getContainerRaw: storeContainer.getContainerRaw,
-  auditStore,
+  storeApi: {
+    getContainersFromStore,
+    getContainerCountFromStore,
+    storeContainer,
+    updateOperationStore,
+    getContainerRaw: storeContainer.getContainerRaw,
+  },
+  agentApi: {
+    getServerConfiguration,
+    getAgent,
+    getWatchers,
+  },
+  errorApi: {
+    getErrorMessage,
+    getErrorStatusCode,
+  },
+  securityApi: {
+    redactContainerRuntimeEnv,
+    redactContainersRuntimeEnv,
+    auditStore,
+  },
 });
 
 const triggerHandlers = createTriggerHandlers({
   storeContainer,
-  mapComponentsToList,
+  mapComponentsToList: (components) => mapComponentsToList(components, 'trigger'),
   getTriggers,
   Trigger,
   sanitizeLogParam,
@@ -186,12 +205,17 @@ export function init() {
   router.post('/watch', crudHandlers.watchContainers);
   router.get('/summary', crudHandlers.getContainerSummary);
   router.get('/recent-status', getContainerRecentStatus);
+  router.get('/security/vulnerabilities', crudHandlers.getContainerSecurityVulnerabilities);
   router.get('/:id', crudHandlers.getContainer);
   router.get('/:id/update-operations', crudHandlers.getContainerUpdateOperations);
-  router.delete('/:id', crudHandlers.deleteContainer);
+  router.delete(
+    '/:id',
+    requireDestructiveActionConfirmation('container-delete'),
+    crudHandlers.deleteContainer,
+  );
   router.get('/:id/triggers', triggerHandlers.getContainerTriggers);
   router.post('/:id/triggers/:triggerType/:triggerName', triggerHandlers.runTrigger);
-  router.post('/:id/triggers/:triggerAgent/:triggerType/:triggerName', triggerHandlers.runTrigger);
+  router.post('/:id/triggers/:triggerType/:triggerName/:triggerAgent', triggerHandlers.runTrigger);
   router.patch('/:id/update-policy', updatePolicyHandlers.patchContainerUpdatePolicy);
   router.post('/:id/watch', crudHandlers.watchContainer);
   router.get('/:id/vulnerabilities', securityHandlers.getContainerVulnerabilities);

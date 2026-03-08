@@ -1,4 +1,4 @@
-import cronParser from 'cron-parser';
+import { CronExpressionParser } from 'cron-parser';
 import { vi } from 'vitest';
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
@@ -295,7 +295,7 @@ describe('runScheduledScans', () => {
       ...createEnabledConfiguration(),
       scan: { cron: '0 3 15 * *', jitter: 60000, concurrency: 1, batchTimeout: 0 },
     });
-    const parseExpressionSpy = vi.spyOn(cronParser, 'parseExpression');
+    const parseExpressionSpy = vi.spyOn(CronExpressionParser, 'parse');
     const container = createContainer();
     mockGetContainers.mockReturnValue([container]);
     mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
@@ -820,7 +820,7 @@ describe('runScheduledScans', () => {
   });
 
   test('should fallback to 24h when cron parser yields non-positive intervals', async () => {
-    const parseExpressionSpy = vi.spyOn(cronParser, 'parseExpression');
+    const parseExpressionSpy = vi.spyOn(CronExpressionParser, 'parse');
     parseExpressionSpy.mockReturnValue({
       next: vi.fn(() => ({
         toDate: () => new Date('2026-03-01T00:00:00.000Z'),

@@ -43,7 +43,7 @@ describe('Authentication Service', () => {
     const mockAuthentications = [{ name: 'local-basic', type: 'basic' }];
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
-      json: async () => mockAuthentications,
+      json: async () => ({ data: mockAuthentications, total: 1 }),
     } as any);
 
     const result = await getAllAuthentications();
@@ -52,6 +52,49 @@ describe('Authentication Service', () => {
       credentials: 'include',
     });
     expect(result).toEqual(mockAuthentications);
+  });
+
+  it('supports array payload shape when fetching all authentications', async () => {
+    const mockAuthentications = [{ name: 'array-shape', type: 'basic' }];
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockAuthentications,
+    } as any);
+
+    const result = await getAllAuthentications();
+    expect(result).toEqual(mockAuthentications);
+  });
+
+  it('supports items payload shape when fetching all authentications', async () => {
+    const mockAuthentications = [{ name: 'items-shape', type: 'oidc' }];
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ items: mockAuthentications }),
+    } as any);
+
+    const result = await getAllAuthentications();
+    expect(result).toEqual(mockAuthentications);
+  });
+
+  it('supports entries payload shape when fetching all authentications', async () => {
+    const mockAuthentications = [{ name: 'ignored' }];
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ entries: mockAuthentications }),
+    } as any);
+
+    const result = await getAllAuthentications();
+    expect(result).toEqual(mockAuthentications);
+  });
+
+  it('returns empty array when auth payload is not an object', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => 'not-an-object',
+    } as any);
+
+    const result = await getAllAuthentications();
+    expect(result).toEqual([]);
   });
 
   it('throws when fetching all authentications fails', async () => {
@@ -107,7 +150,7 @@ describe('Authentication Service', () => {
 
     const result = await getAuthentication({ agent: 'edge', type: 'basic', name: 'local' });
 
-    expect(fetch).toHaveBeenCalledWith('/api/authentications/edge/basic/local', {
+    expect(fetch).toHaveBeenCalledWith('/api/authentications/basic/local/edge', {
       credentials: 'include',
     });
     expect(result).toEqual(mockAuthentication);

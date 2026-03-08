@@ -99,7 +99,7 @@ test('maskConfiguration should mask sensitive data', async () => {
     authentication: {
       type: 'PLAIN',
       user: 'user',
-      password: 'p******d',
+      password: '[REDACTED]',
     },
   });
 });

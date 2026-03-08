@@ -12,6 +12,19 @@ You can enable 1 or multiple authentication strategies using `DD_AUTH_*` env var
 <Callout type="warn">Please pay attention that all API routes & all UI views will be authenticated.</Callout>
 <Callout type="info">For OIDC setups, session-cookie policy is controlled by `DD_SERVER_COOKIE_SAMESITE` in [server configuration](/docs/configuration/server). Default `lax` works for most IdP callback flows.</Callout>
 
+## Login lockout controls
+
+To limit brute-force attempts on `POST /auth/login`, drydock tracks failed logins per account and per client IP and can temporarily lock access when thresholds are exceeded. Per-account controls use `DD_AUTH_ACCOUNT_LOCKOUT_*`; per-IP controls use `DD_AUTH_IP_LOCKOUT_*`.
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS` | ⚪ | Max failed login attempts per account before temporary lockout | Positive integer (`> 0`) | `5` |
+| `DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS` | ⚪ | Max failed login attempts per client IP before temporary lockout | Positive integer (`> 0`) | `25` |
+| `DD_AUTH_LOCKOUT_WINDOW_MS` | ⚪ | Rolling window (milliseconds) used to count failed login attempts | Positive integer (`> 0`) | `900000` |
+| `DD_AUTH_LOCKOUT_DURATION_MS` | ⚪ | Lockout duration (milliseconds) once a threshold is reached | Positive integer (`> 0`) | `900000` |
+
+<Callout type="info">If a lockout value is missing or invalid, drydock falls back to the corresponding default.</Callout>
+
 Currently, the following strategies are supported:
 
 <Callout type="info">[**Basic**](/docs/configuration/authentications/basic)</Callout>

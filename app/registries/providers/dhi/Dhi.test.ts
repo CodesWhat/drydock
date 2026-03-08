@@ -124,9 +124,9 @@ describe('DHI Registry', () => {
     expect(masked).toEqual({
       url: 'https://dhi.io',
       login: 'testuser',
-      password: 't******s',
-      token: 't*******n',
-      auth: 'd**********0',
+      password: '[REDACTED]',
+      token: '[REDACTED]',
+      auth: '[REDACTED]',
     });
   });
 });

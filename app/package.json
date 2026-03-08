@@ -2,6 +2,9 @@
   "name": "drydock-app",
   "version": "1.4.0",
   "description": "Drydock backend — Docker container update manager",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -11,7 +14,7 @@
     "format": "biome format --write .",
     "lint:fix": "biome check --fix .",
     "lint": "biome check .",
-    "test": "vitest run --coverage",
+    "test": "\"$npm_node_execpath\" -e \"const major = Number(process.versions.node.split('.')[0]); if (!Number.isInteger(major) || major < 24) { console.error('Drydock backend tests require Node.js >=24. Current: ' + process.version); process.exit(1); }\" && \"$npm_node_execpath\" ./node_modules/vitest/vitest.mjs run --coverage",
     "knip": "knip"
   },
   "author": "CodesWhat",
@@ -20,13 +23,15 @@
   "dependencies": {
     "@aws-sdk/client-ecr": "^3.1003.0",
     "@slack/web-api": "^7.14.1",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^3.0.1",
     "axios": "^1.13.6",
     "capitalize": "2.0.4",
     "change-case": "^5.4.4",
     "compression": "^1.8.1",
     "connect-loki": "1.2.0",
     "cors": "2.8.6",
-    "cron-parser": "^2.18.0",
+    "cron-parser": "^5.5.0",
     "dockerode": "4.0.9",
     "express": "5.2.1",
     "express-healthcheck": "0.1.0",
@@ -47,7 +52,6 @@
     "openid-client": "6.8.2",
     "p-limit": "^7.3.0",
     "parse-docker-image-name": "3.0.0",
-    "pass": "0.2.0",
     "passport": "0.7.0",
     "passport-anonymous": "1.0.1",
     "passport-http": "0.3.0",

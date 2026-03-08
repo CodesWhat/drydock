@@ -1,3 +1,5 @@
+import { extractCollectionData } from '../utils/api';
+
 function getTriggerIcon() {
   return 'sh-bolt';
 }
@@ -12,6 +14,7 @@ interface RunTriggerRequest {
   triggerType: string;
   triggerName: string;
   container: unknown;
+  triggerAgent?: string;
 }
 
 function getTriggerProviderIcon(type: string) {
@@ -112,15 +115,16 @@ async function getAllTriggers() {
   if (!response.ok) {
     throw new Error(`Failed to get triggers: ${response.statusText}`);
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData(payload);
 }
 
 function buildTriggerDetailPath({ type, name, agent }: TriggerDetailPathOptions) {
   const segments = ['/api/triggers'];
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
   if (agent) {
     segments.push(encodeURIComponent(agent));
   }
-  segments.push(encodeURIComponent(type), encodeURIComponent(name));
   return segments.join('/');
 }
 
@@ -134,8 +138,16 @@ async function getTrigger({ type, name, agent }: TriggerDetailPathOptions) {
   return response.json();
 }
 
-async function runTrigger({ triggerType, triggerName, container }: RunTriggerRequest) {
-  const response = await fetch(`/api/triggers/${triggerType}/${triggerName}`, {
+async function runTrigger({
+  triggerType,
+  triggerName,
+  container,
+  triggerAgent,
+}: RunTriggerRequest) {
+  const path = triggerAgent
+    ? `/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}/${encodeURIComponent(triggerAgent)}`
+    : `/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}`;
+  const response = await fetch(path, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },

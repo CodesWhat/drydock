@@ -3,10 +3,27 @@ import { execFile } from 'node:child_process';
 import { flatten } from '../../../model/container.js';
 import Trigger from '../Trigger.js';
 
+let hasLoggedShellExecutionWarning = false;
+
+export function resetShellExecutionWarningStateForTests() {
+  hasLoggedShellExecutionWarning = false;
+}
+
 /**
  * Command Trigger implementation
  */
 class Command extends Trigger {
+  private logShellExecutionWarningOnce() {
+    if (hasLoggedShellExecutionWarning) {
+      return;
+    }
+
+    hasLoggedShellExecutionWarning = true;
+    this.log.warn(
+      `Security: Command trigger executes DD_TRIGGER_COMMAND_* cmd using ${this.configuration.shell} -c with drydock process privileges. Use only trusted command strings and interpolated values.`,
+    );
+  }
+
   /**
    * Get the Trigger configuration schema.
    * @returns {*}
@@ -48,6 +65,8 @@ class Command extends Trigger {
    * @param {*} extraEnvVars
    */
   async runCommand(extraEnvVars) {
+    this.logShellExecutionWarningOnce();
+
     const commandOptions = {
       env: {
         ...process.env,
@@ -58,6 +77,7 @@ class Command extends Trigger {
     try {
       const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>(
         (resolve, reject) => {
+          // Intentional admin-controlled shell execution from DD_TRIGGER_COMMAND_* env configuration.
           execFile(
             this.configuration.shell,
             ['-c', this.configuration.cmd],

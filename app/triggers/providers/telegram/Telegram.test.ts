@@ -50,8 +50,8 @@ test('maskConfiguration should mask sensitive data', async () => {
   telegram.configuration = configurationValid;
   expect(telegram.maskConfiguration()).toEqual({
     batchtitle: '${containers.length} updates available',
-    bottoken: 't***n',
-    chatid: '1*******9',
+    bottoken: '[REDACTED]',
+    chatid: '[REDACTED]',
     mode: 'simple',
     once: true,
     auto: true,

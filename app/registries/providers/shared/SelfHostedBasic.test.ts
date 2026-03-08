@@ -142,8 +142,8 @@ test('maskConfiguration should mask password and auth', async () => {
 
   expect(registry.maskConfiguration()).toEqual({
     url: 'https://registry.acme.com',
-    password: 's****t',
-    auth: 'c**************0',
+    password: '[REDACTED]',
+    auth: '[REDACTED]',
   });
 });
 

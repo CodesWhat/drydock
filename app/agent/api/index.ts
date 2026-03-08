@@ -3,9 +3,11 @@ import fs from 'node:fs';
 import https from 'node:https';
 import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
+import { sendErrorResponse } from '../../api/error-response.js';
 import { getServerConfiguration } from '../../configuration/index.js';
 import { getEntries } from '../../log/buffer.js';
 import logger from '../../log/index.js';
+import { sanitizeLogParam } from '../../log/sanitize.js';
 import { hashToken } from '../../util/crypto.js';
 import * as containerApi from './container.js';
 import * as eventApi from './event.js';
@@ -79,7 +81,7 @@ export async function init() {
     try {
       cachedSecret = fs.readFileSync(agentSecretFile, 'utf-8').trim();
     } catch (e: any) {
-      log.error(`Error reading secret file: ${e.message}`);
+      log.error(`Error reading secret file: ${sanitizeLogParam(e.message)}`);
       throw new Error(`Error reading secret file: ${e.message}`);
     }
   }
@@ -120,13 +122,13 @@ export async function init() {
   app.get('/api/log/entries', (req: Request, res: Response) => {
     const level = getValidatedLogLevel(req.query.level);
     if (level === null) {
-      res.status(400).json({ error: 'Invalid level query parameter' });
+      sendErrorResponse(res, 400, 'Invalid level query parameter');
       return;
     }
 
     const component = getValidatedLogComponent(req.query.component);
     if (component === null) {
-      res.status(400).json({ error: 'Invalid component query parameter' });
+      sendErrorResponse(res, 400, 'Invalid component query parameter');
       return;
     }
 

@@ -579,7 +579,7 @@ describe('SSE Router', () => {
       handler(rejectedReq, rejectedRes);
 
       expect(rejectedRes.status).toHaveBeenCalledWith(429);
-      expect(rejectedRes.json).toHaveBeenCalledWith({ message: 'Too many SSE connections' });
+      expect(rejectedRes.json).toHaveBeenCalledWith({ error: 'Too many SSE connections' });
     });
 
     test('should allow connections from different IPs independently', () => {
@@ -719,7 +719,7 @@ describe('SSE Router', () => {
       handler(createSSERequest('203.0.113.11', sessionID), rejectedRes);
 
       expect(rejectedRes.status).toHaveBeenCalledWith(429);
-      expect(rejectedRes.json).toHaveBeenCalledWith({ message: 'Too many SSE connections' });
+      expect(rejectedRes.json).toHaveBeenCalledWith({ error: 'Too many SSE connections' });
     });
   });
 

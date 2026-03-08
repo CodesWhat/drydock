@@ -31,6 +31,18 @@ describe('securityViewUtils', () => {
         '2026-03-02T10:00:00.000Z',
       );
     });
+
+    it('keeps current when candidate is older than current', () => {
+      expect(chooseLatestTimestamp('2026-03-03T10:00:00.000Z', '2026-03-02T10:00:00.000Z')).toBe(
+        '2026-03-03T10:00:00.000Z',
+      );
+    });
+
+    it('returns candidate when current timestamp is invalid', () => {
+      expect(chooseLatestTimestamp('not-a-date', '2026-03-02T10:00:00.000Z')).toBe(
+        '2026-03-02T10:00:00.000Z',
+      );
+    });
   });
 
   describe('buildSecurityEmptyState', () => {
@@ -44,6 +56,21 @@ describe('securityViewUtils', () => {
       ).toEqual({
         title: 'No vulnerability data yet',
         description: 'Trivy missing from PATH',
+        showSetupGuide: true,
+        showScanButton: false,
+      });
+    });
+
+    it('falls back to default scanner setup message when none is provided', () => {
+      expect(
+        buildSecurityEmptyState({
+          hasVulnerabilityData: false,
+          scannerSetupNeeded: true,
+          scannerMessage: '',
+        }),
+      ).toEqual({
+        title: 'No vulnerability data yet',
+        description: 'Scanner is not ready yet.',
         showSetupGuide: true,
         showScanButton: false,
       });

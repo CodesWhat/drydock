@@ -87,9 +87,9 @@ test('match should return false when registry url is not from ecr', async () => 
 
 test('maskConfiguration should mask configuration secrets', async () => {
   expect(ecr.maskConfiguration()).toEqual({
-    accesskeyid: 'a*********d',
+    accesskeyid: '[REDACTED]',
     region: 'region',
-    secretaccesskey: 's*************y',
+    secretaccesskey: '[REDACTED]',
   });
 });
 

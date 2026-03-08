@@ -147,7 +147,7 @@ for _ in $(seq 1 15); do
 	fi
 	COUNT=0
 	if [ -n "${CONTAINERS_JSON}" ]; then
-		COUNT=$(jq 'length' <<<"${CONTAINERS_JSON}" 2>/dev/null || echo 0)
+		COUNT=$(jq '.data | length' <<<"${CONTAINERS_JSON}" 2>/dev/null || echo 0)
 	fi
 	COUNT=${COUNT:-0}
 	if [ "${COUNT}" -gt 0 ]; then

@@ -5,6 +5,7 @@ import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
+import { sendErrorResponse } from './error-response.js';
 import { handleContainerActionError } from './helpers.js';
 
 const log = logger.child({ component: 'preview' });
@@ -19,13 +20,13 @@ async function previewContainer(req: Request, res: Response) {
 
   const container = storeContainer.getContainer(id);
   if (!container) {
-    res.sendStatus(404);
+    sendErrorResponse(res, 404, 'Container not found');
     return;
   }
 
   const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
   if (!trigger) {
-    res.status(404).json({ error: NO_DOCKER_TRIGGER_FOUND_ERROR });
+    sendErrorResponse(res, 404, NO_DOCKER_TRIGGER_FOUND_ERROR);
     return;
   }
 

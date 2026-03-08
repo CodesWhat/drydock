@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+import { getContainerViewKey } from '../../utils/container-view-key';
 
 const {
   filteredContainers,
@@ -21,7 +22,7 @@ const {
   tableActionStyle,
   openActionsMenu,
   toggleActionsMenu,
-  updateContainer,
+  confirmUpdate,
   confirmStop,
   startContainer,
   confirmRestart,
@@ -96,10 +97,10 @@ const {
       <DataTable v-if="containerViewMode === 'table'"
                  :columns="tableColumns"
                  :rows="group.containers"
-                 row-key="name"
+                 :row-key="getContainerViewKey"
                  :sort-key="containerSortKey"
                  :sort-asc="containerSortAsc"
-                 :selected-key="selectedContainer?.name"
+                 :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
                  :show-actions="true"
                  :virtual-scroll="false"
                  @update:sort-key="containerSortKey = $event"
@@ -288,7 +289,7 @@ const {
               </button>
               <button v-else-if="c.newTag"
                       class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
-                      v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
+                      v-tooltip.top="tt('Update')" @click.stop="confirmUpdate(c.name)">
                 <AppIcon name="cloud-download" :size="16" />
               </button>
               <button v-else-if="c.status === 'running'"
@@ -330,7 +331,7 @@ const {
                    :style="{ border: '1px solid var(--dd-success)' }">
                 <button class="inline-flex items-center justify-center whitespace-nowrap px-3 py-1.5 text-[11px] font-bold tracking-wide transition-colors"
                         :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }"
-                        @click.stop="updateContainer(c.name)">
+                        @click.stop="confirmUpdate(c.name)">
                   <AppIcon name="cloud-download" :size="11" class="mr-1" /> Update
                 </button>
                 <button class="inline-flex items-center justify-center w-7 transition-colors"
@@ -363,7 +364,7 @@ const {
 
       <!-- Actions dropdown (teleported to body so it renders in all view modes) -->
       <Teleport to="body">
-        <template v-for="c in displayContainers" :key="'menu-' + c.name">
+        <template v-for="c in displayContainers" :key="'menu-' + getContainerViewKey(c)">
           <div v-if="openActionsMenu === c.name"
                class="z-[200] min-w-[160px] py-1 dd-rounded shadow-lg"
                :style="{
@@ -430,8 +431,8 @@ const {
       <!-- CONTAINER CARD GRID -->
       <DataCardGrid v-if="containerViewMode === 'cards'"
                     :items="group.containers"
-                    item-key="name"
-                    :selected-key="selectedContainer?.name"
+                    :item-key="getContainerViewKey"
+                    :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
                     @item-click="selectContainer($event)">
         <template #card="{ item: c }">
           <!-- Card header -->
@@ -558,7 +559,7 @@ const {
               </button>
               <button v-if="c.newTag"
                       class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-success hover:dd-bg-elevated"
-                      v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
+                      v-tooltip.top="tt('Update')" @click.stop="confirmUpdate(c.name)">
                 <AppIcon name="cloud-download" :size="14" />
               </button>
             </div>
@@ -569,8 +570,8 @@ const {
       <!-- LIST VIEW -->
       <DataListAccordion v-if="containerViewMode === 'list'"
                          :items="group.containers"
-                         item-key="name"
-                         :selected-key="selectedContainer?.name"
+                         :item-key="getContainerViewKey"
+                         :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
                          @item-click="selectContainer($event)">
         <template #header="{ item: c }">
           <AppIcon v-if="c._pending" name="spinner" :size="14" class="dd-spin dd-text-muted shrink-0" />

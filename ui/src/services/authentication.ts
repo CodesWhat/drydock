@@ -1,3 +1,5 @@
+import { extractCollectionData } from '../utils/api';
+
 function getAuthenticationIcon() {
   return 'sh-lock';
 }
@@ -39,15 +41,16 @@ async function getAllAuthentications() {
   if (!response.ok) {
     throw new Error(`Failed to get authentications: ${response.statusText}`);
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData(payload);
 }
 
 function buildAuthenticationDetailPath({ type, name, agent }: AuthenticationDetailPathOptions) {
   const segments = ['/api/authentications'];
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
   if (agent) {
     segments.push(encodeURIComponent(agent));
   }
-  segments.push(encodeURIComponent(type), encodeURIComponent(name));
   return segments.join('/');
 }
 

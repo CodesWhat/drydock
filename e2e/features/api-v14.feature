@@ -9,7 +9,7 @@ Feature: Drydock v1.4 API exposure
   Scenario: Drydock must allow container lifecycle actions
     Given I GET /api/containers
     And I store the index of container named hub_nginx_120 as containerIndex in scenario scope
-    And I store the value of body path $[`containerIndex`].id as containerId in scenario scope
+    And I store the value of body path $.data[`containerIndex`].id as containerId in scenario scope
     When I POST to /api/containers/`containerId`/stop
     Then response code should be 404
     And response body should be valid json
@@ -28,14 +28,14 @@ Feature: Drydock v1.4 API exposure
     Then response code should be 200
     And response body should be valid json
     And response body path $.internetlessMode should be false
-    When I PUT to /api/settings with json body:
+    When I PATCH /api/settings with json body:
       """
       {"internetlessMode": true}
       """
     Then response code should be 200
     And response body should be valid json
     And response body path $.internetlessMode should be true
-    When I PUT to /api/settings with json body:
+    When I PATCH /api/settings with json body:
       """
       {"internetlessMode": false}
       """
@@ -47,7 +47,7 @@ Feature: Drydock v1.4 API exposure
     When I GET /api/notifications
     Then response code should be 200
     And response body should be valid json
-    And response body path $ should be of type array with minimum length 5
+    And response body path $.data should be of type array with minimum length 5
     When I PATCH /api/notifications/update-available with json body:
       """
       {"enabled": false, "triggers": ["mock.example"]}

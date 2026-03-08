@@ -97,9 +97,10 @@ fi
 DOCKER_ARGS+=(--env DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL="${GCR_CLIENT_EMAIL:-gcr@drydock-test.iam.gserviceaccount.com}")
 DOCKER_ARGS+=(--env "DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=${GCR_PRIVATE_KEY:------BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDZ\n-----END PRIVATE KEY-----}")
 
+# shellcheck disable=SC2016,SC2054
 DOCKER_ARGS+=(
 	--env DD_AUTH_BASIC_JOHN_USER="john"
-	--env DD_AUTH_BASIC_JOHN_HASH='{SHA}1rToTufzHYhhemtgQhRRJy6/Gjo='
+	--env DD_AUTH_BASIC_JOHN_HASH='argon2id$65536$3$4$ZHJ5ZG9jay1iYXNpYy1hdXRoLXNhbHQ=$GumQTfvOsp+hTyVxLIQvvP2izj/+lCCVYTPnwm9+ZC0+x0OQomJgNgIYFI7e5iUZtblM2rlIIYIwxaAeegWMKQ=='
 	drydock
 )
 
@@ -148,7 +149,7 @@ for i in $(seq 1 45); do
 	fi
 	READY=0
 	if [ -n "${CONTAINERS_JSON}" ]; then
-		READY=$(jq '[.[] | select((.image.name // "" | length > 0) and (.image.registry.name // "" | length > 0) and (.image.tag.value // "" | length > 0))] | length' <<<"${CONTAINERS_JSON}" 2>/dev/null || echo 0)
+		READY=$(jq '[.data[] | select((.image.name // "" | length > 0) and (.image.registry.name // "" | length > 0) and (.image.tag.value // "" | length > 0))] | length' <<<"${CONTAINERS_JSON}" 2>/dev/null || echo 0)
 	fi
 	READY=${READY:-0}
 	if [ "$READY" -ge "$EXPECTED_CONTAINERS" ]; then

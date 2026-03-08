@@ -7,7 +7,13 @@ Questions or ideas? Start a [GitHub Discussion](https://github.com/CodesWhat/dry
 ## Getting started
 
 1. **Fork** the repository and clone your fork.
-2. **Install dependencies** — each workspace manages its own:
+2. **Use Node.js 24+** (required for local development and tests):
+
+   ```bash
+   nvm use || nvm install
+   ```
+
+3. **Install dependencies** — each workspace manages its own:
 
    ```bash
    cd app && npm install
@@ -15,7 +21,7 @@ Questions or ideas? Start a [GitHub Discussion](https://github.com/CodesWhat/dry
    cd e2e && npm install
    ```
 
-3. **Create a branch** from the appropriate base:
+4. **Create a branch** from the appropriate base:
    - Bug fixes for the current release: branch from `main`
    - New features targeting the next release: branch from the active feature branch (check open branches for the current one)
 
@@ -47,7 +53,7 @@ docker compose -f test/qa-compose.yml up -d   # Starts on port 3333
 ## Code style
 
 - **Language:** TypeScript (ESM, `NodeNext` module resolution)
-- **Linter/formatter:** [Biome](https://biomejs.dev/) via [qlty](https://qlty.sh) — Biome is **not** a direct devDependency; it's managed entirely through qlty
+- **Linter/formatter:** [Biome](https://biomejs.dev/) — direct devDependency in the root workspace. [Qlty](https://qlty.sh) runs all other linters (actionlint, shellcheck, trivy, etc.)
 - **Line width:** 100
 - **Quotes:** single quotes
 - **No transpiler:** the project compiles with `tsc` directly
@@ -55,9 +61,9 @@ docker compose -f test/qa-compose.yml up -d   # Starts on port 3333
 Run from any workspace:
 
 ```bash
-npm run lint       # qlty check --filter biome
-npm run lint:fix   # qlty check --fix --filter biome
-npm run format     # qlty fmt --filter biome
+npm run lint       # biome check .
+npm run lint:fix   # biome check --fix .
+npm run format     # biome format --write .
 ```
 
 Or check everything from the repo root:
@@ -85,6 +91,8 @@ We use **Gitmoji + Conventional Commits**:
 |✅|`test`|Adding/updating tests|
 |🔧|`chore`|Build, config, tooling|
 |🔒|`security`|Security fix|
+|⬆️|`deps`|Dependency upgrade|
+|🗑️|`revert`|Revert a previous commit|
 
 Scope is optional. Subject line should be imperative, lowercase, no trailing period.
 
@@ -150,4 +158,4 @@ Open a [GitHub Issue](https://github.com/CodesWhat/drydock/issues) with steps to
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+By contributing, you agree that your contributions will be licensed under the [GNU Affero General Public License v3.0](LICENSE).

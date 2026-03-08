@@ -1,4 +1,5 @@
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
+import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 const {
   mockRouter,
@@ -49,6 +50,7 @@ vi.mock('../prometheus/container-actions', () => ({
 
 vi.mock('../configuration', () => ({
   getServerConfiguration: mockGetServerConfiguration,
+  getVersion: vi.fn(() => 'test-version'),
 }));
 
 vi.mock('../log', () => ({
@@ -120,8 +122,19 @@ describe('Container Actions Router', () => {
       expect(dockerContainer.start).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ message: 'Container started successfully' }),
+        expect.objectContaining({
+          message: 'Container started successfully',
+          result: expect.any(Object),
+        }),
       );
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/api/containers/{id}/start',
+        method: 'post',
+        statusCode: '200',
+        payload: res.json.mock.calls[0][0],
+      });
+      expect(contractValidation.valid).toBe(true);
+      expect(contractValidation.errors).toStrictEqual([]);
     });
 
     test('should return 404 when container not found', async () => {
@@ -132,7 +145,10 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Container not found' }),
+      );
     });
 
     test('should return 404 when no docker trigger found', async () => {
@@ -158,7 +174,10 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(403);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Container actions are disabled' }),
+      );
     });
 
     test('should return 500 when Docker API throws error', async () => {
@@ -174,7 +193,9 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error performing start on container' });
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Error performing start on container' }),
+      );
     });
 
     test('should stringify non-Error Docker API failures', async () => {
@@ -190,7 +211,9 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error performing start on container' });
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Error performing start on container' }),
+      );
     });
 
     test('should insert audit entry on success', async () => {
@@ -273,7 +296,7 @@ describe('Container Actions Router', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'Container started successfully',
-          container,
+          result: container,
         }),
       );
     });
@@ -294,7 +317,10 @@ describe('Container Actions Router', () => {
       expect(dockerContainer.stop).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ message: 'Container stopped successfully' }),
+        expect.objectContaining({
+          message: 'Container stopped successfully',
+          result: expect.any(Object),
+        }),
       );
     });
 
@@ -306,7 +332,10 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(403);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Container actions are disabled' }),
+      );
     });
 
     test('should return 500 when Docker API throws error', async () => {
@@ -322,7 +351,9 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error performing stop on container' });
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Error performing stop on container' }),
+      );
     });
   });
 
@@ -341,7 +372,10 @@ describe('Container Actions Router', () => {
       expect(dockerContainer.restart).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ message: 'Container restarted successfully' }),
+        expect.objectContaining({
+          message: 'Container restarted successfully',
+          result: expect.any(Object),
+        }),
       );
     });
 
@@ -353,7 +387,10 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(403);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Container actions are disabled' }),
+      );
     });
 
     test('should insert audit entry with correct action', async () => {
@@ -388,7 +425,9 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error performing restart on container' });
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Error performing restart on container' }),
+      );
     });
   });
 
@@ -416,7 +455,7 @@ describe('Container Actions Router', () => {
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'Container updated successfully',
-          container: updatedContainer,
+          result: updatedContainer,
         }),
       );
     });
@@ -429,7 +468,10 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Container not found' }),
+      );
     });
 
     test('should return 400 when no update available', async () => {
@@ -481,7 +523,10 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(403);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Container actions are disabled' }),
+      );
     });
 
     test('should return 500 when trigger throws error', async () => {
@@ -502,7 +547,9 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error updating container' });
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Error updating container' }),
+      );
     });
 
     test('should insert audit entry on success', async () => {
@@ -601,7 +648,9 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Error updating container' });
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Error updating container' }),
+      );
     });
   });
 });

@@ -15,7 +15,7 @@ const {
   startContainer,
   confirmRestart,
   scanContainer,
-  updateContainer,
+  confirmUpdate,
   confirmDelete,
   tt,
 } = useContainersViewTemplateContext();
@@ -65,7 +65,7 @@ const {
             v-if="selectedContainer.newTag"
             class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
             v-tooltip.top="tt('Update')"
-            @click="updateContainer(selectedContainer.name)">
+            @click="confirmUpdate(selectedContainer.name)">
             <AppIcon name="cloud-download" :size="14" />
           </button>
           <button
@@ -114,11 +114,15 @@ const {
           <button
             v-for="tab in detailTabs"
             :key="tab.id"
-            class="whitespace-nowrap shrink-0 px-3 py-2.5 text-[11px] font-medium transition-colors relative"
-            :class="activeDetailTab === tab.id ? 'text-drydock-secondary' : 'dd-text-muted hover:dd-text'"
+            class="whitespace-nowrap shrink-0 py-2.5 text-[11px] font-medium transition-colors relative"
+            :class="[
+              activeDetailTab === tab.id ? 'text-drydock-secondary' : 'dd-text-muted hover:dd-text',
+              panelSize === 'sm' ? 'px-2' : 'px-3',
+            ]"
+            v-tooltip.top="panelSize === 'sm' ? tt(tab.label) : undefined"
             @click="activeDetailTab = tab.id">
-            <AppIcon :name="tab.icon" :size="12" class="mr-1" />
-            {{ tab.label }}
+            <AppIcon :name="tab.icon" :size="12" :class="panelSize === 'sm' ? '' : 'mr-1'" />
+            <template v-if="panelSize !== 'sm'">{{ tab.label }}</template>
             <div
               v-if="activeDetailTab === tab.id"
               class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full" />

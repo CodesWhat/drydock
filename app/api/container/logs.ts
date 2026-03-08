@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import type { AgentClient } from '../../agent/AgentClient.js';
 import type { Container } from '../../model/container.js';
+import { sendErrorResponse } from '../error-response.js';
 import {
   getPathParamValue,
   parseBooleanQueryParam,
@@ -79,7 +80,7 @@ export function createLogHandlers({
     const id = getPathParamValue(req.params.id);
     const container = storeContainer.getContainer(id);
     if (!container) {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 
@@ -91,17 +92,13 @@ export function createLogHandlers({
       try {
         const agent = getAgent(container.agent);
         if (!agent) {
-          res.status(500).json({
-            error: `Agent ${container.agent} not found`,
-          });
+          sendErrorResponse(res, 500, `Agent ${container.agent} not found`);
           return;
         }
         const result = await agent.getContainerLogs(id, { tail, since, timestamps });
         res.status(200).json(result);
       } catch (error: unknown) {
-        res.status(500).json({
-          error: `Error fetching logs from agent (${getErrorMessage(error)})`,
-        });
+        sendErrorResponse(res, 500, `Error fetching logs from agent (${getErrorMessage(error)})`);
       }
       return;
     }
@@ -109,9 +106,7 @@ export function createLogHandlers({
     const watcherId = `docker.${container.watcher}`;
     const watcher = getWatchers()[watcherId];
     if (!isLocalDockerWatcherApi(watcher) || !watcher.dockerApi) {
-      res.status(500).json({
-        error: `No watcher found for container ${id}`,
-      });
+      sendErrorResponse(res, 500, `No watcher found for container ${id}`);
       return;
     }
 
@@ -122,9 +117,7 @@ export function createLogHandlers({
       const logs = demuxDockerStream(logsBuffer);
       res.status(200).json({ logs });
     } catch (error: unknown) {
-      res.status(500).json({
-        error: `Error fetching container logs (${getErrorMessage(error)})`,
-      });
+      sendErrorResponse(res, 500, `Error fetching container logs (${getErrorMessage(error)})`);
     }
   }
 

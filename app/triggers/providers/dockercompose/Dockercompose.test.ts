@@ -66,6 +66,10 @@ vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
 }));
 
+vi.mock('../../../util/sleep.js', () => ({
+  sleep: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -1749,6 +1753,50 @@ describe('Dockercompose Trigger', () => {
     );
     expect(fs.rename).toHaveBeenCalledWith(temporaryFilePath, '/opt/drydock/test/compose.yml');
     expect(fs.unlink).toHaveBeenCalledWith(temporaryFilePath);
+  });
+
+  test('writeComposeFileAtomic should retry on EBUSY and succeed', async () => {
+    const ebusyError: any = new Error('EBUSY: resource busy or locked');
+    ebusyError.code = 'EBUSY';
+    fs.rename
+      .mockRejectedValueOnce(ebusyError)
+      .mockRejectedValueOnce(ebusyError)
+      .mockResolvedValueOnce(undefined);
+
+    await trigger.writeComposeFileAtomic('/opt/drydock/test/compose.yml', 'data');
+
+    expect(fs.rename).toHaveBeenCalledTimes(3);
+    expect(fs.unlink).not.toHaveBeenCalled();
+  });
+
+  test('writeComposeFileAtomic should fall back to direct write after EBUSY retries exhausted', async () => {
+    const ebusyError: any = new Error('EBUSY: resource busy or locked');
+    ebusyError.code = 'EBUSY';
+    for (let i = 0; i < 6; i++) {
+      fs.rename.mockRejectedValueOnce(ebusyError);
+    }
+
+    await trigger.writeComposeFileAtomic('/opt/drydock/test/compose.yml', 'data');
+
+    // 1 initial attempt + 5 retries = 6 rename attempts
+    expect(fs.rename).toHaveBeenCalledTimes(6);
+    // Falls back to direct write to the target file
+    expect(fs.writeFile).toHaveBeenCalledWith('/opt/drydock/test/compose.yml', 'data');
+    // Temp file cleaned up
+    const temporaryFilePath = fs.writeFile.mock.calls[0][0];
+    expect(fs.unlink).toHaveBeenCalledWith(temporaryFilePath);
+  });
+
+  test('writeComposeFileAtomic should not retry on non-EBUSY errors', async () => {
+    const permError: any = new Error('EACCES: permission denied');
+    permError.code = 'EACCES';
+    fs.rename.mockRejectedValueOnce(permError);
+
+    await expect(
+      trigger.writeComposeFileAtomic('/opt/drydock/test/compose.yml', 'data'),
+    ).rejects.toThrow('EACCES');
+
+    expect(fs.rename).toHaveBeenCalledTimes(1);
   });
 
   test('withComposeFileLock should wait and retry when lock exists but is not stale', async () => {

@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import log from '../log/index.js';
+import appPackageJson from '../package.json';
 import * as configuration from './index.js';
 
 function getTestDirectory() {
@@ -248,6 +249,7 @@ test('getServerConfiguration should return configured api (new vars)', async () 
     },
     metrics: {},
     port: 4000,
+    session: {},
     tls: {},
     trustproxy: false,
   });
@@ -269,6 +271,7 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
       auth: false,
     },
     port: 3000,
+    session: {},
     tls: {},
     trustproxy: false,
   });
@@ -316,6 +319,15 @@ test('getServerConfiguration should normalize session cookie sameSite casing', a
     samesite: 'strict',
   });
   delete configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE;
+});
+
+test('getServerConfiguration should allow overriding max concurrent sessions per user', async () => {
+  configuration.ddEnvVars.DD_SERVER_SESSION_MAXCONCURRENTSESSIONS = '3';
+  const config = configuration.getServerConfiguration();
+  expect(config.session).toStrictEqual({
+    maxconcurrentsessions: 3,
+  });
+  delete configuration.ddEnvVars.DD_SERVER_SESSION_MAXCONCURRENTSESSIONS;
 });
 
 test('getPrometheusConfiguration should result in enabled by default', async () => {
@@ -760,9 +772,43 @@ describe('getPrometheusConfiguration errors', () => {
 });
 
 describe('getVersion', () => {
-  test('should return unknown when DD_VERSION is not set', () => {
-    delete configuration.ddEnvVars.DD_VERSION;
-    expect(configuration.getVersion()).toBe('unknown');
+  async function importFreshConfiguration() {
+    vi.resetModules();
+    return import('./index.js');
+  }
+
+  test('should fall back to package.json version when DD_VERSION is not set', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    delete freshConfiguration.ddEnvVars.DD_VERSION;
+    expect(freshConfiguration.getVersion()).toBe(appPackageJson.version);
+  });
+
+  test('should reuse cached package version after first lookup', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    delete freshConfiguration.ddEnvVars.DD_VERSION;
+
+    const readFileSpy = vi.spyOn(fs, 'readFileSync');
+    const first = freshConfiguration.getVersion();
+    const second = freshConfiguration.getVersion();
+
+    expect(first).toBe(appPackageJson.version);
+    expect(second).toBe(appPackageJson.version);
+    expect(readFileSpy).toHaveBeenCalledTimes(1);
+
+    readFileSpy.mockRestore();
+  });
+
+  test('should return unknown when package version cannot be resolved', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    delete freshConfiguration.ddEnvVars.DD_VERSION;
+
+    const readFileSpy = vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      throw new Error('read failure');
+    });
+
+    expect(freshConfiguration.getVersion()).toBe('unknown');
+
+    readFileSpy.mockRestore();
   });
 });
 
@@ -777,6 +823,12 @@ describe('getServerConfiguration errors', () => {
     configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE = 'invalid';
     expect(() => configuration.getServerConfiguration()).toThrow();
     delete configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE;
+  });
+
+  test('should throw when max concurrent sessions is lower than 1', () => {
+    configuration.ddEnvVars.DD_SERVER_SESSION_MAXCONCURRENTSESSIONS = '0';
+    expect(() => configuration.getServerConfiguration()).toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_SESSION_MAXCONCURRENTSESSIONS;
   });
 
   test('should fallback to defaults when nested server config is null', () => {
@@ -830,12 +882,21 @@ describe('getWebhookConfiguration', () => {
   beforeEach(() => {
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_UPDATE;
   });
 
   test('should return disabled webhook by default', () => {
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: false,
       token: '',
+      tokens: {
+        watchall: '',
+        watch: '',
+        update: '',
+      },
     });
   });
 
@@ -846,12 +907,50 @@ describe('getWebhookConfiguration', () => {
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: true,
       token: 'secret-token',
+      tokens: {
+        watchall: '',
+        watch: '',
+        update: '',
+      },
     });
   });
 
-  test('should throw when webhook is enabled without token', () => {
+  test('should return enabled webhook when per-endpoint tokens are provided without shared token', () => {
     configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL = 'watchall-token';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH = 'watch-token';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_UPDATE = 'update-token';
+
+    expect(configuration.getWebhookConfiguration()).toStrictEqual({
+      enabled: true,
+      token: '',
+      tokens: {
+        watchall: 'watchall-token',
+        watch: 'watch-token',
+        update: 'update-token',
+      },
+    });
+  });
+
+  test('should throw when endpoint-specific webhook tokens are partially configured', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN = 'shared-token';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL = 'watchall-token';
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_UPDATE;
+
+    expect(() => configuration.getWebhookConfiguration()).toThrow(
+      'All endpoint-specific webhook tokens (DD_SERVER_WEBHOOK_TOKENS_WATCHALL, DD_SERVER_WEBHOOK_TOKENS_WATCH, DD_SERVER_WEBHOOK_TOKENS_UPDATE) must be configured together when any DD_SERVER_WEBHOOK_TOKENS_* value is set',
+    );
+  });
+
+  test('should throw when webhook is enabled without shared or endpoint tokens', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_UPDATE;
 
     expect(() => configuration.getWebhookConfiguration()).toThrow();
   });
@@ -869,6 +968,11 @@ describe('getWebhookConfiguration', () => {
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: false,
       token: '',
+      tokens: {
+        watchall: '',
+        watch: '',
+        update: '',
+      },
     });
 
     if (originalDd === undefined) {
@@ -887,6 +991,11 @@ describe('getWebhookConfiguration', () => {
         webhook: {
           enabled: false,
           token: '',
+          tokens: {
+            watchall: '',
+            watch: '',
+            update: '',
+          },
         },
       },
     };
@@ -894,6 +1003,11 @@ describe('getWebhookConfiguration', () => {
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: false,
       token: '',
+      tokens: {
+        watchall: '',
+        watch: '',
+        update: '',
+      },
     });
 
     if (originalDd === undefined) {
@@ -901,6 +1015,13 @@ describe('getWebhookConfiguration', () => {
     } else {
       configuration.ddEnvVars.dd = originalDd;
     }
+  });
+
+  test('should throw when webhook tokens payload is not an object', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN = 'shared-token';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS = 'invalid';
+    expect(() => configuration.getWebhookConfiguration()).toThrow();
   });
 });
 

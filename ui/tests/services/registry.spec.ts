@@ -98,7 +98,7 @@ describe('Registry Service', () => {
       ];
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockRegistries,
+        json: async () => ({ data: mockRegistries, total: 2 }),
       } as any);
 
       const registries = await getAllRegistries();
@@ -107,6 +107,49 @@ describe('Registry Service', () => {
         credentials: 'include',
       });
       expect(registries).toEqual(mockRegistries);
+    });
+
+    it('supports array payload shape', async () => {
+      const mockRegistries = [{ name: 'array-shape', type: 'hub' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockRegistries,
+      } as any);
+
+      const registries = await getAllRegistries();
+      expect(registries).toEqual(mockRegistries);
+    });
+
+    it('supports items payload shape', async () => {
+      const mockRegistries = [{ name: 'items-shape', type: 'ghcr' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: mockRegistries }),
+      } as any);
+
+      const registries = await getAllRegistries();
+      expect(registries).toEqual(mockRegistries);
+    });
+
+    it('supports entries payload shape', async () => {
+      const mockRegistries = [{ name: 'ignored' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ entries: mockRegistries }),
+      } as any);
+
+      const registries = await getAllRegistries();
+      expect(registries).toEqual(mockRegistries);
+    });
+
+    it('returns empty array when payload is not an object', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => 'not-an-object',
+      } as any);
+
+      const registries = await getAllRegistries();
+      expect(registries).toEqual([]);
     });
 
     it('throws when fetching registries fails', async () => {
@@ -159,7 +202,7 @@ describe('Registry Service', () => {
 
       const result = await getRegistry({ agent: 'edge', type: 'hub', name: 'private' });
 
-      expect(fetch).toHaveBeenCalledWith('/api/registries/edge/hub/private', {
+      expect(fetch).toHaveBeenCalledWith('/api/registries/hub/private/edge', {
         credentials: 'include',
       });
       expect(result).toEqual(mockRegistry);

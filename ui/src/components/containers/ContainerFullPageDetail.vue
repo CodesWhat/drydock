@@ -9,7 +9,7 @@ const {
   startContainer,
   confirmRestart,
   scanContainer,
-  updateContainer,
+  confirmUpdate,
   confirmDelete,
   registryColorBg,
   registryColorText,
@@ -122,7 +122,7 @@ const {
             v-if="selectedContainer.newTag"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold transition-colors"
             :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
-            @click="updateContainer(selectedContainer.name)">
+            @click="confirmUpdate(selectedContainer.name)">
             <AppIcon name="cloud-download" :size="12" />
             Update
           </button>

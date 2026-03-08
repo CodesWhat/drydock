@@ -32,6 +32,17 @@ function makeContainer(id, name, labels = {}, updateAvailable = false) {
   return { id, name, displayName: name, labels, updateAvailable };
 }
 
+function getGroupsPayload(res) {
+  const payload = res.json.mock.calls[0][0];
+  expect(payload).toEqual(
+    expect.objectContaining({
+      data: expect.any(Array),
+      total: expect.any(Number),
+    }),
+  );
+  return payload;
+}
+
 describe('Group Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -55,7 +66,7 @@ describe('Group Router', () => {
       handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([]);
+      expect(res.json).toHaveBeenCalledWith({ data: [], total: 0 });
     });
 
     test('should group containers by dd.group label', () => {
@@ -70,8 +81,10 @@ describe('Group Router', () => {
       handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      const groups = res.json.mock.calls[0][0];
+      const payload = getGroupsPayload(res);
+      const groups = payload.data;
       expect(groups).toHaveLength(1);
+      expect(payload.total).toBe(1);
       expect(groups[0].name).toBe('web-stack');
       expect(groups[0].containerCount).toBe(2);
       expect(groups[0].containers).toHaveLength(2);
@@ -88,8 +101,9 @@ describe('Group Router', () => {
       const res = createMockResponse();
       handler(req, res);
 
-      const groups = res.json.mock.calls[0][0];
+      const { data: groups, total } = getGroupsPayload(res);
       expect(groups).toHaveLength(1);
+      expect(total).toBe(1);
       expect(groups[0].name).toBe('legacy-stack');
       expect(groups[0].containerCount).toBe(2);
     });
@@ -105,8 +119,9 @@ describe('Group Router', () => {
       const res = createMockResponse();
       handler(req, res);
 
-      const groups = res.json.mock.calls[0][0];
+      const { data: groups, total } = getGroupsPayload(res);
       expect(groups).toHaveLength(1);
+      expect(total).toBe(1);
       expect(groups[0].name).toBe('myapp');
       expect(groups[0].containerCount).toBe(2);
     });
@@ -125,8 +140,9 @@ describe('Group Router', () => {
       const res = createMockResponse();
       handler(req, res);
 
-      const groups = res.json.mock.calls[0][0];
+      const { data: groups, total } = getGroupsPayload(res);
       expect(groups).toHaveLength(1);
+      expect(total).toBe(1);
       expect(groups[0].name).toBe('preferred');
     });
 
@@ -141,8 +157,9 @@ describe('Group Router', () => {
       const res = createMockResponse();
       handler(req, res);
 
-      const groups = res.json.mock.calls[0][0];
+      const { data: groups, total } = getGroupsPayload(res);
       expect(groups).toHaveLength(1);
+      expect(total).toBe(1);
       expect(groups[0].name).toBeNull();
       expect(groups[0].containerCount).toBe(2);
     });
@@ -159,7 +176,8 @@ describe('Group Router', () => {
       const res = createMockResponse();
       handler(req, res);
 
-      const groups = res.json.mock.calls[0][0];
+      const { data: groups, total } = getGroupsPayload(res);
+      expect(total).toBe(1);
       expect(groups[0].updatesAvailable).toBe(2);
       expect(groups[0].containerCount).toBe(3);
     });
@@ -177,8 +195,9 @@ describe('Group Router', () => {
       const res = createMockResponse();
       handler(req, res);
 
-      const groups = res.json.mock.calls[0][0];
+      const { data: groups, total } = getGroupsPayload(res);
       expect(groups).toHaveLength(3);
+      expect(total).toBe(3);
 
       const frontend = groups.find((g) => g.name === 'frontend');
       const backend = groups.find((g) => g.name === 'backend');
@@ -199,7 +218,8 @@ describe('Group Router', () => {
       const res = createMockResponse();
       handler(req, res);
 
-      const groups = res.json.mock.calls[0][0];
+      const { data: groups, total } = getGroupsPayload(res);
+      expect(total).toBe(1);
       const container = groups[0].containers[0];
       expect(container).toEqual({
         id: 'c1',
@@ -222,7 +242,8 @@ describe('Group Router', () => {
       const res = createMockResponse();
       handler(req, res);
 
-      const groups = res.json.mock.calls[0][0];
+      const { data: groups, total } = getGroupsPayload(res);
+      expect(total).toBe(1);
       expect(groups[0].name).toBe('wud-group');
     });
   });

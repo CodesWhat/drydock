@@ -42,7 +42,7 @@ test('maskConfiguration should mask sensitive data', async () => {
     channel: 'channel',
   };
   expect(slack.maskConfiguration()).toEqual({
-    token: 't***n',
+    token: '[REDACTED]',
     channel: 'channel',
   });
 });

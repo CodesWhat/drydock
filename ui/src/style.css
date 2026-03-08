@@ -18,9 +18,14 @@ body {
   --dd-radius: 3px; /* Global border-radius — cards, buttons */
   --dd-radius-sm: 2px; /* Small elements (badges, chips) */
   --dd-radius-lg: 4px; /* Large panels (modals, detail panels) */
+  --dd-font-size: 1; /* Font size scale factor (1 = 100% = default) */
   --drydock-font: "IBM Plex Mono", monospace;
   background-color: var(--dd-bg);
   color: var(--dd-text);
+}
+
+html {
+  font-size: calc(16px * var(--dd-font-size));
 }
 
 @theme {

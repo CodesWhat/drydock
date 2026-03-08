@@ -1,3 +1,5 @@
+import { extractCollectionData } from '../utils/api';
+
 /**
  * Get registry component icon.
  * @returns {string}
@@ -89,15 +91,16 @@ async function getAllRegistries() {
   if (!response.ok) {
     throw new Error(`Failed to get registries: ${response.statusText}`);
   }
-  return response.json();
+  const payload = await response.json();
+  return extractCollectionData(payload);
 }
 
 function buildRegistryDetailPath({ type, name, agent }: RegistryDetailPathOptions) {
   const segments = ['/api/registries'];
+  segments.push(encodeURIComponent(type), encodeURIComponent(name));
   if (agent) {
     segments.push(encodeURIComponent(agent));
   }
-  segments.push(encodeURIComponent(type), encodeURIComponent(name));
   return segments.join('/');
 }
 

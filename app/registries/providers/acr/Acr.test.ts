@@ -27,7 +27,7 @@ test('validatedConfiguration should throw error when configuration item is missi
 test('maskConfiguration should mask configuration secrets', async () => {
   expect(acr.maskConfiguration()).toEqual({
     clientid: 'clientid',
-    clientsecret: 'c**********t',
+    clientsecret: '[REDACTED]',
   });
 });
 

@@ -49,6 +49,23 @@ describe('preferences store', () => {
     expect(preferences.theme.variant).toBe('dark');
   });
 
+  it('should fall back to defaults when legacy migration throws', async () => {
+    vi.doMock('@/preferences/migrate', async () => {
+      const actual = await vi.importActual('@/preferences/migrate');
+      return {
+        ...actual,
+        migrateFromLegacyKeys: () => {
+          throw new Error('legacy migration failed');
+        },
+      };
+    });
+
+    const { preferences } = await loadStore();
+    expect(preferences.theme.family).toBe('one-dark');
+    expect(preferences.theme.variant).toBe('dark');
+    vi.doUnmock('@/preferences/migrate');
+  });
+
   it('should merge missing keys with defaults', async () => {
     localStorage.setItem(
       'dd-preferences',
@@ -78,6 +95,17 @@ describe('preferences store', () => {
     const raw = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
     expect(raw.containers.sort.key).toBe('status');
     expect(raw.containers.sort.asc).toBe(false);
+  });
+
+  it('should serialize and restore appearance radius', async () => {
+    const { preferences, flushPreferences } = await loadStore();
+    preferences.appearance.radius = 'soft';
+    flushPreferences();
+
+    vi.resetModules();
+
+    const { preferences: restoredPreferences } = await loadStore();
+    expect(restoredPreferences.appearance.radius).toBe('soft');
   });
 
   it('should reset to defaults via resetPreferences', async () => {
@@ -185,5 +213,9 @@ describe('preferences store', () => {
     expect(raw.theme.family).toBe('dracula');
     expect(raw.theme.variant).toBe('light');
     expect(raw.containers.viewMode).toBe('cards');
+
+    // Re-running the queued callback should be a no-op once dirty state is flushed.
+    idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline);
+    expect(setItemSpy).toHaveBeenCalledTimes(1);
   });
 });

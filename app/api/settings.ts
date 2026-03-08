@@ -2,6 +2,7 @@ import express, { type Request, type Response } from 'express';
 import joi from 'joi';
 import nocache from 'nocache';
 import * as settingsStore from '../store/settings.js';
+import { sendErrorResponse } from './error-response.js';
 
 const router = express.Router();
 
@@ -30,9 +31,7 @@ function updateSettings(req: Request, res: Response): void {
     stripUnknown: true,
   });
   if (settingsToUpdate.error) {
-    res.status(400).json({
-      error: settingsToUpdate.error.message,
-    });
+    sendErrorResponse(res, 400, settingsToUpdate.error.message);
     return;
   }
 
@@ -47,6 +46,8 @@ function updateSettings(req: Request, res: Response): void {
 export function init() {
   router.use(nocache());
   router.get('/', getSettings);
+  router.patch('/', updateSettings);
+  // Backward compatibility alias: retained temporarily, prefer PATCH semantics.
   router.put('/', updateSettings);
   return router;
 }

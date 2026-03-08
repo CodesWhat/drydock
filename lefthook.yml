@@ -14,11 +14,11 @@ pre-commit:
   commands:
     biome-fix:
       glob: '*.{ts,js,json,vue,css}'
-      run: npx biome check --fix {staged_files} && git add {staged_files}
+      run: npx biome check --fix --no-errors-on-unmatched {staged_files} && git add {staged_files}
       priority: 1
     biome-format:
       glob: '*.{ts,js,json,vue,css}'
-      run: npx biome format --write {staged_files} && git add {staged_files}
+      run: npx biome format --write --no-errors-on-unmatched {staged_files} && git add {staged_files}
       priority: 2
 
 pre-push:

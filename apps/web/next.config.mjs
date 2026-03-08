@@ -4,6 +4,12 @@ const withMDX = createMDX();
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  crossOrigin: "anonymous",
+  experimental: {
+    sri: {
+      algorithm: "sha384",
+    },
+  },
   images: {
     remotePatterns: [
       {

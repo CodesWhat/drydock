@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import * as settingsStore from '../store/settings.js';
+import { sendErrorResponse } from './error-response.js';
 import { fetchAndCacheIconOnce } from './icons/fetch.js';
 import { normalizeSlug, providers } from './icons/providers.js';
 import { sendCachedIcon, sendMissingIconResponse } from './icons/response.js';
@@ -29,9 +30,7 @@ const log = logger.child({ component: 'icons' });
 async function getIcon(req: Request, res: Response) {
   const iconRequest = iconRequestSchema.validate(req.params || {}, { stripUnknown: true });
   if (iconRequest.error) {
-    res.status(400).json({
-      error: iconRequest.error.message,
-    });
+    sendErrorResponse(res, 400, iconRequest.error.message);
     return;
   }
 
@@ -81,9 +80,7 @@ async function getIcon(req: Request, res: Response) {
     log.warn(
       `Unable to fetch icon provider=${sanitizeLogParam(provider)} slug=${sanitizeLogParam(slug)} (${sanitizeLogParam(errorMessage)})`,
     );
-    res.status(502).json({
-      error: `Unable to fetch icon ${provider}/${slug}`,
-    });
+    sendErrorResponse(res, 502, `Unable to fetch icon ${provider}/${slug}`);
   }
 }
 
@@ -99,7 +96,7 @@ async function clearCache(_req: Request, res: Response) {
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
     log.warn(`Failed to clear icon cache: ${sanitizeLogParam(errorMessage)}`);
-    res.status(500).json({ error: 'Failed to clear icon cache' });
+    sendErrorResponse(res, 500, 'Failed to clear icon cache');
   }
 }
 

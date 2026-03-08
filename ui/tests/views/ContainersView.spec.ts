@@ -390,10 +390,23 @@ describe('ContainersView', () => {
       expect(mockFilterKind.value).toBe('all');
     });
 
-    it('preserves existing filterKind when query omits filterKind', async () => {
+    it('resets filterKind to all when query omits filterKind', async () => {
       mockRoute.query = {};
       await mountContainersView([makeContainer()], undefined, { initialFilterKind: 'major' });
-      expect(mockFilterKind.value).toBe('major');
+      expect(mockFilterKind.value).toBe('all');
+    });
+
+    it('clears dropdown filters when navigating with a search query', async () => {
+      mockRoute.query = { q: 'nginx' };
+      mockFilterStatus.value = 'running';
+      mockFilterRegistry.value = 'dockerhub';
+      mockFilterBouncer.value = 'safe';
+      mockFilterServer.value = 'Local';
+      await mountContainersView([makeContainer()]);
+      expect(mockFilterStatus.value).toBe('all');
+      expect(mockFilterRegistry.value).toBe('all');
+      expect(mockFilterBouncer.value).toBe('all');
+      expect(mockFilterServer.value).toBe('all');
     });
   });
 

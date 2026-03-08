@@ -57,9 +57,7 @@ test('maskConfiguration should mask sensitive data', async () => {
   };
   const masked = mattermost.maskConfiguration();
   expect(masked.channel).toEqual('drydock');
-  expect(masked.url).not.toEqual(configurationValid.url);
-  expect(masked.url.startsWith('h')).toBe(true);
-  expect(masked.url.endsWith('z')).toBe(true);
+  expect(masked.url).toBe('[REDACTED]');
 });
 
 test('buildMessageBody should include optional fields when configured', async () => {

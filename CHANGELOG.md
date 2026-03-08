@@ -10,13 +10,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **OpenAPI 3.1.0 specification and endpoint** — Machine-readable API documentation available at `GET /api/openapi.json`, covering all v1.4 endpoints with request/response schemas.
+- **Font size preference** — Adjustable font size slider in Config > Appearance for UI-wide text scaling.
+- **Announcement banner** — Dismissible banner component for surfacing release notes and important notices in the dashboard.
+- **Dashboard vulnerability sort by severity** — Top-5 vulnerability list on the dashboard now sorted by total count descending with critical count as tiebreaker, so the most severe containers appear first.
+- **Watcher agent support initialization** — Watchers now initialize agent support on startup for distributed monitoring readiness.
+- **Security vulnerability overview endpoint** — New `GET /api/containers/security/vulnerabilities` returns pre-aggregated vulnerability data grouped by image with severity summaries, so the Security view no longer needs to load all containers.
+- **Rollback confirmation dialog** — Container rollback actions now require explicit confirmation through a danger-severity dialog before restoring from backup.
+
+### Changed
+
+- **Standardized API responses with collection pattern** — All collection endpoints (`/api/containers`, `/api/registries`, `/api/watchers`, `/api/authentications`, `/api/audit`) now return `{ data: [...], total }` instead of raw arrays. Supports pagination via `offset`/`limit` query parameters.
+- **Paginated API discoverability links** — Paginated collection responses now include `_links.self` and `_links.next` where applicable (for example `/api/containers` and `/api/audit`) to make page traversal explicit for API consumers.
+- **Versioned API base path with transition alias** — `/api/v1/*` is now the canonical API path for integrations. `/api/*` remains as a backward-compatible alias during migration and is planned for removal in a future major release (target: v2.0.0).
+- **Agent-scoped path order normalized** — Agent-qualified component and trigger routes now use `/:type/:name/:agent` (for example `/api/triggers/:type/:name/:agent` and `/api/containers/:id/triggers/:triggerType/:triggerName/:triggerAgent`) instead of the old agent-first order. This is a breaking change for external API clients using the old path shape.
+- **Machine-readable API error contract** — Error responses now include top-level `code` and `message` fields while preserving legacy `error` string compatibility; optional `details` may be included for contextual metadata.
+- **6 color themes** — Replaced original Drydock theme with popular editor palettes: One Dark, GitHub, Dracula, Catppuccin, Gruvbox, and Ayu. Each with dark and light variants.
+
 ### Fixed
 
+- **Apprise trigger missing Content-Type header** — Apprise notify requests now set explicit `Content-Type: application/json` header, fixing failures with Apprise servers that require it.
+- **Toggle switch contrast** — Improved toggle thumb contrast across all themes for better visibility.
 - **Empty env var values rejected during container validation** — Joi schema on `details.env[].value` used `.string().required()` which implicitly disallows empty strings. Containers with empty environment variable values (e.g. `FOO=`) were silently skipped during watch cycles. Fixed with `.allow('')`. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
 - **OIDC login broken by same-origin redirect check** — `LoginView.vue` restricted OIDC redirects to same-origin URLs, but OIDC Identity Provider URLs are always cross-origin (Authentik, Keycloak, etc.). Removed the same-origin check, keeping only HTTP/HTTPS protocol validation.
 - **Blank white screen on plain HTTP deployments** — Helmet.js defaults enabled HSTS and `upgrade-insecure-requests` CSP even when TLS was not configured, causing browsers to block sub-resource loads on plain HTTP. Now conditionally omits `upgrade-insecure-requests` and HSTS when TLS is off. Strict boolean check on `tls.enabled` prevents string coercion. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
 - **Stale theme preferences after upgrade from v1.3** — Preferences migration `deepMerge` overwrote defaults with persisted values unconditionally, so invalid enum values (e.g. removed `drydock` theme family) survived migration and caused rendering failures. Added `sanitize()` pass that strips invalid theme families, variants, font families, icon libraries, scales, radius presets, view modes, and table actions before merge.
 - **OIDC discovery fails on HTTP IdP URLs** — openid-client v6 enforces HTTPS by default for all OIDC requests. Users running IdPs behind reverse proxies or on private networks with HTTP discovery URLs got "only requests to HTTPS are allowed" errors. Now passes `allowInsecureRequests` when the discovery URL protocol is `http:`.
+- **Docker Compose trigger fails with EBUSY on bind-mounted stacks** — `writeComposeFileAtomic()` used a single `fs.rename()` call that failed permanently when another process (e.g. Dockge) held the file or when Docker bind-mount overlay contention blocked the rename. Now retries up to 5 times with 200ms backoff, then falls back to a direct `writeFile` if rename remains blocked. ([#84](https://github.com/CodesWhat/drydock/discussions/84))
+- **Drydock container display name hardcoded** — The Docker watcher hardcoded `drydock` as the display name for drydock's own container instead of using the actual container name like every other container.
+- **Non-existent DD_OIDC_ALLOW_HTTP env var referenced in UI** — The UI OIDC HTTP banner referenced a `DD_OIDC_ALLOW_HTTP` env var that does not exist — the backend auto-detects `http://` discovery URLs and passes `allowInsecureRequests` automatically. Removed the misleading reference.
+- **Load test and start scripts broken by standardized API responses** — `jq` queries in `run-load-test.sh` and `start-drydock.sh` used raw array syntax instead of `.data[]` to match the new collection response pattern.
+
+### Performance
+
+- **Vite chunk splitting** — Production build now splits vendor code into `framework`, `icons`, and `vendor` chunks for better browser cache efficiency across deployments.
+
+### Dependencies
+
+- **cron-parser v2 to v5** — Upgraded `cron-parser` from v2 to v5 (`CronExpressionParser` API). Note: `joi-cron-expression` still uses cron-parser v2 internally as its own dependency.
+- **Removed `pass` package** — Replaced abandoned `pass` password hashing with native `node:crypto` (covered under Security below).
+
+### Changed
+
+- **Argon2id password hashing** — Basic auth now uses argon2id (OWASP recommended) via Node.js built-in `crypto.argon2Sync()` instead of scrypt for password hashing. Default parameters: 64 MiB memory, 3 passes, parallelism 4.
+
+### Deprecated
+
+- **SHA-1 basic auth password hashes** — Legacy `{SHA}<base64>` password hashes are accepted with deprecation warnings. SHA-1 support will be removed in v1.6.0. Migrate to argon2id hashing.
+
+### Security
+
+- **OIDC authorization redirect URL validation** — Added allowlist-based validation for OIDC authorization redirect URLs, preventing open redirect attacks through crafted callback parameters.
+- **Auth, registry token, and log sanitization hardening** — Consolidated security pass hardening authentication flows, registry token validation, and log output sanitization.
+- **Command trigger shell execution warning** — Command trigger now logs a one-time security warning on first execution, reminding operators that commands run with drydock process privileges.
+- **Login brute-force lockout** — Per-account and per-IP lockout after configurable failed login attempts (`DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS`, `DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS`) with configurable window and duration.
+- **Concurrent session limits** — Maximum authenticated sessions per user (default 5, configurable via `DD_SERVER_SESSION_MAXCONCURRENTSESSIONS`). Oldest sessions are revoked first when the limit is reached.
+- **Destructive action confirmation header** — Dangerous operations (delete container, restore backup, delete all containers) now require an `X-DD-Confirm-Action` header, returning 428 when missing.
+- **Native argon2id password hashing** — Replaced abandoned `pass` package with `node:crypto` argon2Sync for Basic auth. OWASP-aligned parameters with timing-safe comparison. Legacy `{SHA}` hashes accepted with deprecation warnings.
+- **Full credential redaction** — `Component.mask()` now returns `[REDACTED]` instead of leaking prefix/suffix characters in logs and API responses.
+- **Trigger infrastructure config redaction** — Webhook URLs, hostnames, channels, and usernames are redacted from trigger configuration in API responses.
+- **Website SRI integrity hashes** — Post-build script injects subresource integrity hashes for static assets on the documentation website.
 
 ## [1.4.0] — 2026-02-28
 
@@ -46,7 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`config migrate` CLI** — `node dist/index.js config migrate` converts legacy `WUD_*` and Watchtower env vars/labels to `DD_*`/`dd.*` format across `.env` and compose files. Supports `--dry-run` preview and `--source` / `--file` selection.
 - **Legacy compatibility usage metric** — Prometheus counter `dd_legacy_input_total{source,key}` tracks local runtime consumption of legacy inputs (`WUD_*` env vars, `wud.*` labels) without external telemetry. Startup warns when legacy env vars are detected; watcher/trigger paths emit one-time deprecation warnings on `wud.*` label fallback.
 - **Bundled selfhst icons for offline startup** — Common container icons (Docker, Grafana, Nextcloud, etc.) bundled in the image so the UI works without internet on first boot.
-- **Runtime tool status endpoint** — `/api/server/security-tools` reports Trivy/Cosign availability for the Security view.
+- **Runtime tool status endpoint** — `/api/server/security/runtime` reports Trivy/Cosign availability for the Security view.
 - **Gzip response compression** — Configurable via `DD_SERVER_COMPRESSION_ENABLED` and `DD_SERVER_COMPRESSION_THRESHOLD` (default 1024 bytes), with automatic SSE exclusion.
 - **Container runtime details** — Ports, volumes, and environment exposed in the container model and API for the detail panel.
 - **Update detected timestamp** — `updateDetectedAt` field tracks when an update was first seen, preserved across refresh cycles.
@@ -62,7 +117,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Tailwind CSS 4 UI stack** — Complete frontend migration from Vuetify 3 to Tailwind CSS 4 with custom shared components. All 13 views rebuilt with Composition API.
 - **Shared data components** — Reusable DataTable, DataCardGrid, DataListAccordion, DataFilterBar, DetailPanel, DataViewLayout, and EmptyState components used consistently across all views with table/cards/list view modes.
-- **4 color themes** — Drydock (navy tones), GitHub (clean/familiar), Dracula (bold purple), and Catppuccin (warm pastels). Each with dark and light variants. Circle-reveal transition animation between themes.
+- **6 color themes** — One Dark (clean/balanced), GitHub (clean/familiar), Dracula (bold purple), Catppuccin (warm pastels), Gruvbox (retro earthy warmth), and Ayu (soft golden tones). Each with dark and light variants. Circle-reveal transition animation between themes.
 - **7 icon libraries** — Phosphor Duotone (default), Phosphor, Lucide, Tabler, Heroicons, Iconoir, and Font Awesome. Switchable in Config > Appearance with icon size slider.
 - **6 font families** — IBM Plex Mono (default/bundled), JetBrains Mono, Source Code Pro, Inconsolata, Commit Mono, and Comic Mono. Lazy-loaded from local `/fonts/` directory with internetless fallback.
 - **Command palette** — Global Cmd/Ctrl+K search with scope filtering (`/` pages, `@` runtime, `#` config), keyboard navigation, grouped sections, and recent history.
@@ -161,6 +216,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- **Production source maps disabled** — UI production builds now exclude source maps, reducing bundle size and improving deployment efficiency.
 - **Audit store indexed date-range queries** — Audit entries now store a pre-parsed `timestampMs` index for numeric comparisons. Date-range queries use the LokiJS chain API with indexed filtering instead of full-collection scans. Automatic 30-day retention with periodic pruning.
 - **Backup store indexed lookups** — Backup collection adds indices on `data.containerName` and `data.id`, using `findOne()` for single-document lookups and indexed `find()` for name-filtered queries instead of full scans.
 - **LokiJS autosave interval set to 60 seconds** — Fixed autosave interval at 60s instead of the LokiJS default, reducing disk I/O while maintaining acceptable data durability.
@@ -233,7 +289,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Backup stores internal registry name instead of Docker-pullable name** — Backup `imageName` was stored as the internal registry-prefixed name (e.g. `hub.public/library/nginx`) which is not a valid Docker image reference. Rollback would fail with DNS lookup errors. Now stores the Docker-pullable base name (e.g. `nginx`) using the registry's `getImageFullName` method.
 - **Rollback API docs incorrect endpoint** — Fixed documentation showing `/api/backup/:id/rollback` instead of the correct `/api/containers/:id/rollback`.
 
-## [1.3.3] — 2026-02-16
+## [1.3.3] — 2026-02-18
 
 ### Fixed
 
@@ -330,7 +386,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CodeQL alert fixes** — Fixed log injection vulnerabilities by sanitizing user-controlled input before logging. Removed unused variables flagged by static analysis. Added rate limiting to the on-demand scan endpoint.
 - **Build provenance and SBOM attestations** — Added supply chain attestations to release workflow for verifiable build provenance.
 
-## 1.2.0
+## [1.2.0]
 
 ### Added
 
@@ -402,22 +458,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Popular imgset presets** — Added a curated preset guide at `docs/configuration/watchers/popular-imgsets.md` and linked it from watcher docs.
 
-## 1.1.3
+## [1.1.3]
 
-### Bug Fixes
+### Fixed
 
 - **ERR_ERL_PERMISSIVE_TRUST_PROXY on startup** — Express `trust proxy` was hard-coded to `true`, which triggers a validation error in `express-rate-limit` v8+ when the default key generator infers client IP from `X-Forwarded-For`. Replaced with a configurable `DD_SERVER_TRUSTPROXY` env var (default: `false`). Set to `1` (hop count) when behind a single reverse proxy, or a specific IP/CIDR for tighter control. ([#43](https://github.com/CodesWhat/drydock/issues/43))
 
 ---
 
-## 1.1.2
+## [1.1.2]
 
-### Bug Fixes
+### Fixed
 
 - **Misleading docker-compose file error messages** — When a compose file had a permission error (EACCES), the log incorrectly reported "does not exist" instead of "permission denied". Now distinguishes between missing files and permission issues with actionable guidance. ([#42](https://github.com/CodesWhat/drydock/issues/42))
 - **Agent watcher registration fails on startup** — Agent component path resolved outside the runtime root (`../agent/components` instead of `agent/components`), causing "Unknown watcher provider: 'docker'" errors and preventing agent watchers/triggers from registering. ([#42](https://github.com/CodesWhat/drydock/issues/42))
 
-### Improvements
+### Changed
 
 - **Debug logging for component registration** — Added debug-level logging showing resolved module paths during component registration and agent component registration attempts, making path resolution issues easier to diagnose.
 
@@ -622,7 +678,7 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.4.0-rc.5...HEAD
 [1.4.0]: https://github.com/CodesWhat/drydock/compare/v1.3.9...v1.4.0
 [1.3.9]: https://github.com/CodesWhat/drydock/compare/v1.3.8...v1.3.9
 [1.3.8]: https://github.com/CodesWhat/drydock/compare/v1.3.7...v1.3.8
@@ -634,8 +690,14 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 [1.3.2]: https://github.com/CodesWhat/drydock/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/CodesWhat/drydock/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/CodesWhat/drydock/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/CodesWhat/drydock/compare/1.1.3...v1.2.0
+[1.1.3]: https://github.com/CodesWhat/drydock/compare/1.1.2...1.1.3
+[1.1.2]: https://github.com/CodesWhat/drydock/compare/v1.1.1...1.1.2
 [1.1.1]: https://github.com/CodesWhat/drydock/compare/v1.1.0...1.1.1
 [1.1.0]: https://github.com/CodesWhat/drydock/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/CodesWhat/drydock/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/CodesWhat/drydock/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/CodesWhat/drydock/releases/tag/v1.0.0
+[2026.2.3]: https://github.com/CodesWhat/drydock/compare/2026.2.2...2026.2.3
+[2026.2.2]: https://github.com/CodesWhat/drydock/compare/2026.1.0...2026.2.2
+[2026.1.0]: https://github.com/CodesWhat/drydock/releases/tag/2026.1.0

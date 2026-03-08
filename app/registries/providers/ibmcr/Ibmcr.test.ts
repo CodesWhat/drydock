@@ -82,7 +82,7 @@ test('normalizeImage should return proper v2 endpoint', async () => {
 test('maskConfiguration should mask credentials', async () => {
   expect(ibmcr.maskConfiguration()).toEqual({
     login: 'iamapikey',
-    password: 'a*****y',
+    password: '[REDACTED]',
   });
 });
 
@@ -93,7 +93,7 @@ test('maskConfiguration should mask apikey', async () => {
   };
 
   expect(ibmcrWithApiKey.maskConfiguration()).toEqual({
-    apikey: 'a*****y',
+    apikey: '[REDACTED]',
   });
 });
 

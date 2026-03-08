@@ -3,6 +3,9 @@
   "version": "1.4.0",
   "description": "Drydock dashboard — Vue 3 + Tailwind CSS 4 SPA",
   "repository": "CodesWhat/drydock",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "license": "AGPL-3.0-only",
   "author": "CodesWhat",
   "private": true,

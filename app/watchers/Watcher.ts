@@ -7,6 +7,10 @@ import Component from '../registry/Component.js';
 abstract class Watcher extends Component {
   dockerApi?: unknown;
 
+  protected constructor() {
+    super();
+  }
+
   /**
    * Watch main method.
    * @returns {Promise<any[]>}

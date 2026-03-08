@@ -68,6 +68,8 @@ export function replaceSecrets(ddEnvVars: Record<string, string | undefined>) {
 // 1. Get a copy of all dd-related env vars (DD_ primary, WUD_ legacy fallback)
 export const ddEnvVars: Record<string, string | undefined> = {};
 const mappedLegacyEnvVars = new Set<string>();
+let packageVersionCache: string | undefined;
+let packageVersionResolved = false;
 
 // First, collect legacy WUD_ vars and remap to DD_ keys
 Object.keys(process.env)
@@ -102,7 +104,33 @@ Object.keys(process.env)
 replaceSecrets(ddEnvVars);
 
 export function getVersion() {
-  return ddEnvVars.DD_VERSION || 'unknown';
+  const configuredVersion = ddEnvVars.DD_VERSION?.trim();
+  if (configuredVersion) {
+    return configuredVersion;
+  }
+
+  if (!packageVersionResolved) {
+    packageVersionResolved = true;
+    const packageJsonCandidates = [
+      new URL('../package.json', import.meta.url),
+      new URL('../../package.json', import.meta.url),
+    ];
+
+    for (const packageJsonUrl of packageJsonCandidates) {
+      try {
+        const packageJsonRaw = fs.readFileSync(packageJsonUrl, 'utf-8');
+        const packageJson = JSON.parse(packageJsonRaw) as { version?: unknown };
+        if (typeof packageJson.version === 'string' && packageJson.version.trim()) {
+          packageVersionCache = packageJson.version.trim();
+          break;
+        }
+      } catch {
+        // Continue until we find a readable package.json with a version field.
+      }
+    }
+  }
+
+  return packageVersionCache || 'unknown';
 }
 
 export function getLogLevel() {
@@ -279,6 +307,11 @@ export function getServerConfiguration() {
       .alternatives()
       .try(joi.boolean(), joi.number().integer().min(0), joi.string())
       .default(false),
+    session: joi
+      .object({
+        maxconcurrentsessions: joi.number().integer().min(1).default(5),
+      })
+      .default({}),
     metrics: joi
       .object({
         auth: joi.boolean().default(true),
@@ -320,17 +353,57 @@ export function getWebhookConfiguration() {
   const configurationFromEnv = get('dd.server.webhook', ddEnvVars);
   const configurationSchema = joi.object().keys({
     enabled: joi.boolean().default(false),
-    token: joi.string().when('enabled', {
-      is: true,
-      then: joi.string().min(1).required(),
-      otherwise: joi.string().allow('').default(''),
-    }),
+    token: joi.string().allow('').default(''),
+    tokens: joi
+      .object({
+        watchall: joi.string().allow('').default(''),
+        watch: joi.string().allow('').default(''),
+        update: joi.string().allow('').default(''),
+      })
+      .default({
+        watchall: '',
+        watch: '',
+        update: '',
+      }),
   });
   const configurationToValidate = configurationSchema.validate(configurationFromEnv);
   if (configurationToValidate.error) {
     throw configurationToValidate.error;
   }
-  return configurationToValidate.value;
+
+  const configuration = configurationToValidate.value;
+  const hasAnyToken = [
+    configuration.token,
+    configuration.tokens?.watchall,
+    configuration.tokens?.watch,
+    configuration.tokens?.update,
+  ].some((token) => typeof token === 'string' && token.length > 0);
+
+  const endpointTokens = [
+    configuration.tokens?.watchall,
+    configuration.tokens?.watch,
+    configuration.tokens?.update,
+  ];
+  const hasAnyEndpointToken = endpointTokens.some(
+    (token) => typeof token === 'string' && token.length > 0,
+  );
+  const hasAllEndpointTokens = endpointTokens.every(
+    (token) => typeof token === 'string' && token.length > 0,
+  );
+
+  if (configuration.enabled && hasAnyEndpointToken && !hasAllEndpointTokens) {
+    throw new Error(
+      'All endpoint-specific webhook tokens (DD_SERVER_WEBHOOK_TOKENS_WATCHALL, DD_SERVER_WEBHOOK_TOKENS_WATCH, DD_SERVER_WEBHOOK_TOKENS_UPDATE) must be configured together when any DD_SERVER_WEBHOOK_TOKENS_* value is set',
+    );
+  }
+
+  if (configuration.enabled && !hasAnyToken) {
+    throw new Error(
+      'At least one webhook token (DD_SERVER_WEBHOOK_TOKEN or DD_SERVER_WEBHOOK_TOKENS_*) must be configured when webhooks are enabled',
+    );
+  }
+
+  return configuration;
 }
 
 function parseSecuritySeverityList(rawValue: string | undefined): SecuritySeverity[] {

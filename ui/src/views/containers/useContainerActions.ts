@@ -325,7 +325,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     name: string,
     action: string,
     payload: Record<string, unknown> = {},
-    message?: string,
+    message: string,
   ) {
     const containerId = input.containerIdMap.value[name];
     if (!containerId || policyInProgress.value) {
@@ -335,9 +335,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     policyError.value = null;
     try {
       await updateContainerPolicy(containerId, action, payload);
-      if (message) {
-        policyMessage.value = message;
-      }
+      policyMessage.value = message;
       await input.loadContainers();
       return true;
     } catch (e: unknown) {
@@ -553,6 +551,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       return false;
     }
     actionInProgress.value = name;
+    input.error.value = null;
     const snapshot = input.containers.value.find((container) => container.name === name);
     try {
       await action(containerId);
@@ -570,7 +569,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       }
       return true;
     } catch (e: unknown) {
-      console.error(`Action failed for ${name}:`, errorMessage(e));
+      input.error.value = errorMessage(e, `Action failed for ${name}`);
       return false;
     } finally {
       actionInProgress.value = null;
@@ -750,6 +749,17 @@ export function useContainerActions(input: UseContainerActionsInput) {
     });
   }
 
+  function confirmUpdate(name: string) {
+    confirm.require({
+      header: 'Update Container',
+      message: `Update ${name} now? This will apply the latest discovered image.`,
+      rejectLabel: 'Cancel',
+      acceptLabel: 'Update',
+      severity: 'warn',
+      accept: () => executeAction(name, apiUpdateContainer),
+    });
+  }
+
   function confirmDelete(name: string) {
     confirm.require({
       header: 'Delete Container',
@@ -761,6 +771,22 @@ export function useContainerActions(input: UseContainerActionsInput) {
     });
   }
 
+  function confirmRollback(backupId?: string) {
+    const containerName = input.selectedContainer.value?.name;
+    if (!containerName) {
+      return;
+    }
+    const rollbackTarget = backupId ? 'the selected backup image' : 'the latest backup image';
+    confirm.require({
+      header: 'Rollback Container',
+      message: `Rollback ${containerName} to ${rollbackTarget}? This will replace the running container image.`,
+      rejectLabel: 'Cancel',
+      acceptLabel: 'Rollback',
+      severity: 'danger',
+      accept: () => rollbackToBackup(backupId),
+    });
+  }
+
   return {
     actionInProgress,
     actionPending,
@@ -769,6 +795,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
     clearSkipsSelected,
     confirmDelete,
     confirmForceUpdate,
+    confirmUpdate,
+    confirmRollback,
     confirmRestart,
     confirmStop,
     containerPolicyTooltip,

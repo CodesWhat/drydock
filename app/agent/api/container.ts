@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { sendErrorResponse } from '../../api/error-response.js';
 import { getServerConfiguration } from '../../configuration/index.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
@@ -53,7 +54,7 @@ export async function getContainerLogs(req: Request, res: Response) {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const container = storeContainer.getContainer(id);
   if (!container) {
-    res.sendStatus(404);
+    sendErrorResponse(res, 404, 'Container not found');
     return;
   }
 
@@ -64,9 +65,7 @@ export async function getContainerLogs(req: Request, res: Response) {
   const watcherId = `docker.${container.watcher}`;
   const watcher = registry.getState().watcher[watcherId] as AgentDockerWatcher | undefined;
   if (!watcher) {
-    res.status(500).json({
-      error: `No watcher found for container ${id}`,
-    });
+    sendErrorResponse(res, 500, `No watcher found for container ${id}`);
     return;
   }
 
@@ -77,9 +76,7 @@ export async function getContainerLogs(req: Request, res: Response) {
     const logs = demuxDockerStream(logsBuffer);
     res.status(200).json({ logs });
   } catch (e: any) {
-    res.status(500).json({
-      error: `Error fetching container logs (${e.message})`,
-    });
+    sendErrorResponse(res, 500, `Error fetching container logs (${e.message})`);
   }
 }
 
@@ -97,9 +94,9 @@ export function deleteContainer(req: Request, res: Response) {
       storeContainer.deleteContainer(id);
       res.sendStatus(204);
     } else {
-      res.sendStatus(404);
+      sendErrorResponse(res, 404, 'Container not found');
     }
   } else {
-    res.sendStatus(403);
+    sendErrorResponse(res, 403, 'Container deletion is disabled');
   }
 }

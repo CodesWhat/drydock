@@ -9,7 +9,7 @@ async function getSettings(): Promise<Settings> {
 
 async function updateSettings(settings: Partial<Settings>): Promise<Settings> {
   const response = await fetch('/api/settings', {
-    method: 'PUT',
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(settings),

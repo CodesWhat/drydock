@@ -32,6 +32,7 @@ describe('agent API container', () => {
     vi.clearAllMocks();
     req = { params: {} };
     res = {
+      status: vi.fn().mockReturnThis(),
       json: vi.fn(),
       sendStatus: vi.fn(),
     };
@@ -67,9 +68,9 @@ describe('agent API container', () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       req.params.id = 'c1';
       req.query = {};
-      res.status = vi.fn().mockReturnThis();
       await containerApi.getContainerLogs(req, res);
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('should return 500 when watcher not found', async () => {
@@ -81,7 +82,6 @@ describe('agent API container', () => {
       registry.getState.mockReturnValue({ watcher: {}, trigger: {} });
       req.params.id = 'c1';
       req.query = {};
-      res.status = vi.fn().mockReturnThis();
       await containerApi.getContainerLogs(req, res);
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith(
@@ -108,7 +108,6 @@ describe('agent API container', () => {
       registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
       req.params.id = routeId;
       req.query = {};
-      res.status = vi.fn().mockReturnThis();
 
       await containerApi.getContainerLogs(req, res);
 
@@ -131,7 +130,6 @@ describe('agent API container', () => {
       registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
       req.params.id = 'c1';
       req.query = {};
-      res.status = vi.fn().mockReturnThis();
       await containerApi.getContainerLogs(req, res);
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith(
@@ -162,7 +160,6 @@ describe('agent API container', () => {
       registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
       req.params.id = 'c1';
       req.query = {};
-      res.status = vi.fn().mockReturnThis();
       await containerApi.getContainerLogs(req, res);
       expect(res.status).toHaveBeenCalledWith(200);
       // The demux should still extract something (the string gets converted to Buffer via Buffer.from)
@@ -188,7 +185,6 @@ describe('agent API container', () => {
       registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
       req.params.id = 'c1';
       req.query = {};
-      res.status = vi.fn().mockReturnThis();
       await containerApi.getContainerLogs(req, res);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ logs: '' });
@@ -208,7 +204,6 @@ describe('agent API container', () => {
       registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
       req.params.id = 'c1';
       req.query = { timestamps: 'false' };
-      res.status = vi.fn().mockReturnThis();
       await containerApi.getContainerLogs(req, res);
       expect(mockDockerContainer.logs).toHaveBeenCalledWith(
         expect.objectContaining({ timestamps: false }),
@@ -229,7 +224,6 @@ describe('agent API container', () => {
       registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
       req.params.id = 'c1';
       req.query = {};
-      res.status = vi.fn().mockReturnThis();
       await containerApi.getContainerLogs(req, res);
       expect(mockDockerContainer.logs).toHaveBeenCalledWith(
         expect.objectContaining({ timestamps: true }),
@@ -244,7 +238,8 @@ describe('agent API container', () => {
       });
       req.params.id = 'c1';
       containerApi.deleteContainer(req, res);
-      expect(res.sendStatus).toHaveBeenCalledWith(403);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container deletion is disabled' });
     });
 
     test('should return 404 when container is not found', () => {
@@ -254,7 +249,8 @@ describe('agent API container', () => {
       req.params.id = 'c1';
       storeContainer.getContainer.mockReturnValue(undefined);
       containerApi.deleteContainer(req, res);
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test.each([

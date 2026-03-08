@@ -16,8 +16,9 @@ This operation lets you get all the configured registries.
 ```bash
 curl http://drydock:3000/api/registries
 
-[
-    {
+{
+    "data": [
+      {
         "id":"ecr.private",
         "type":"ecr",
         "name":"private",
@@ -26,16 +27,18 @@ curl http://drydock:3000/api/registries
             "accesskeyid":"A******************D",
             "secretaccesskey":"T**************************************D"
         }
-    },
-    {
+      },
+      {
         "id":"hub.private",
         "type":"hub",
         "name":"private",
         "configuration":{
             "auth": "dXNlcm5hbWU6cGFzc3dvcmQ="
         }
-    }
-]
+      }
+    ],
+    "total": 2
+}
 ```
 
 ## Get a Registry by id

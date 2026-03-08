@@ -4,7 +4,7 @@ Feature: Drydock Container API Exposure
     When I GET /api/containers
     Then response code should be 200
     And response body should be valid json
-    And response body path $ should be of type array with minimum length 10
+    And response body path $.data should be of type array with minimum length 10
 
   # Test one representative container per registry type + update pattern
   Scenario Outline: Drydock must handle different registry types and update patterns
@@ -12,12 +12,12 @@ Feature: Drydock Container API Exposure
     Then response code should be 200
     And response body should be valid json
     And I store the index of container named <containerName> as containerIndex in scenario scope
-    And response body path $[`containerIndex`].name should be <containerName>
-    And response body path $[`containerIndex`].status should be running
-    And response body path $[`containerIndex`].image.registry.name should be <registry>
-    And response body path $[`containerIndex`].image.registry.url should be <registryUrl>
-    And response body path $[`containerIndex`].image.name should be <imageName>
-    And response body path $[`containerIndex`].image.tag.value should be <tag>
+    And response body path $.data[`containerIndex`].name should be <containerName>
+    And response body path $.data[`containerIndex`].status should be running
+    And response body path $.data[`containerIndex`].image.registry.name should be <registry>
+    And response body path $.data[`containerIndex`].image.registry.url should be <registryUrl>
+    And response body path $.data[`containerIndex`].image.name should be <imageName>
+    And response body path $.data[`containerIndex`].image.tag.value should be <tag>
     Examples:
       | registry       | containerName            | registryUrl                                             | imageName                           | tag                | testCase                    |
       # | ecr.private    | ecr_sub_sub_test         | https://229211676173.dkr.ecr.eu-west-1.amazonaws.com/v2 | sub/sub/test                        | 1.0.0              | ECR semver major update     |
@@ -35,7 +35,7 @@ Feature: Drydock Container API Exposure
   Scenario: Drydock must provide detailed container information for semver containers
     Given I GET /api/containers
     And I store the index of container named gitlab_test as containerIndex in scenario scope
-    And I store the value of body path $[`containerIndex`].id as containerId in scenario scope
+    And I store the value of body path $.data[`containerIndex`].id as containerId in scenario scope
     When I GET /api/containers/`containerId`
     Then response code should be 200
     And response body should be valid json
@@ -48,7 +48,7 @@ Feature: Drydock Container API Exposure
   Scenario: Drydock must provide detailed container information for digest-based containers
     Given I GET /api/containers
     And I store the index of container named hub_nginx_latest as containerIndex in scenario scope
-    And I store the value of body path $[`containerIndex`].id as containerId in scenario scope
+    And I store the value of body path $.data[`containerIndex`].id as containerId in scenario scope
     When I GET /api/containers/`containerId`
     Then response code should be 200
     And response body should be valid json
@@ -61,7 +61,7 @@ Feature: Drydock Container API Exposure
   Scenario: Drydock must generate correct links for containers with link templates
     Given I GET /api/containers
     And I store the index of container named hub_homeassistant_202161 as containerIndex in scenario scope
-    And I store the value of body path $[`containerIndex`].id as containerId in scenario scope
+    And I store the value of body path $.data[`containerIndex`].id as containerId in scenario scope
     When I GET /api/containers/`containerId`
     Then response code should be 200
     And response body should be valid json
@@ -72,7 +72,7 @@ Feature: Drydock Container API Exposure
   Scenario: Drydock must allow triggering container watch
     Given I GET /api/containers
     And I store the index of container named gitlab_test as containerIndex in scenario scope
-    And I store the value of body path $[`containerIndex`].id as containerId in scenario scope
+    And I store the value of body path $.data[`containerIndex`].id as containerId in scenario scope
     When I POST to /api/containers/`containerId`/watch
     Then response code should be 200
     And response body should be valid json

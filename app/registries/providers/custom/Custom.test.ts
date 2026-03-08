@@ -85,7 +85,7 @@ test('maskConfiguration should mask configuration secrets', async () => {
   expect(custom.maskConfiguration()).toEqual({
     auth: undefined,
     login: TEST_LOGIN,
-    password: 'p******d',
+    password: '[REDACTED]',
     url: 'http://localhost:5000',
   });
 });

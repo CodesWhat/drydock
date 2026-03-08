@@ -70,15 +70,18 @@ describe('Notification Router', () => {
 
     expect(mockGetNotificationRules).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith([
-      {
-        id: 'update-available',
-        name: 'Update Available',
-        enabled: true,
-        triggers: ['slack.ops'],
-        description: 'When a container has a new version',
-      },
-    ]);
+    expect(res.json).toHaveBeenCalledWith({
+      data: [
+        {
+          id: 'update-available',
+          name: 'Update Available',
+          enabled: true,
+          triggers: ['slack.ops'],
+          description: 'When a container has a new version',
+        },
+      ],
+      total: 1,
+    });
   });
 
   test('should handle missing trigger registry state when listing rules', () => {
@@ -90,12 +93,15 @@ describe('Notification Router', () => {
     handler({}, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith([
-      expect.objectContaining({
-        id: 'update-available',
-        triggers: [],
-      }),
-    ]);
+    expect(res.json).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          id: 'update-available',
+          triggers: [],
+        }),
+      ],
+      total: 1,
+    });
   });
 
   test('should preserve falsy rules when store returns sparse entries', () => {
@@ -107,7 +113,7 @@ describe('Notification Router', () => {
     handler({}, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith([undefined]);
+    expect(res.json).toHaveBeenCalledWith({ data: [undefined], total: 1 });
   });
 
   test('should update a notification rule when payload is valid', () => {
@@ -215,7 +221,8 @@ describe('Notification Router', () => {
       res,
     );
 
-    expect(res.sendStatus).toHaveBeenCalledWith(404);
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Notification rule not found' });
   });
 
   test('should return 400 when store update throws', () => {

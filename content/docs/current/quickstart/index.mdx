@@ -25,7 +25,7 @@ services:
       - DD_WATCHER_LOCAL_HOST=socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
       - DD_AUTH_BASIC_ADMIN_USER=admin
-      - "DD_AUTH_BASIC_ADMIN_HASH={SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g="
+      - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$H/LzIyo+5tbepUCiuRU2bFai+nbf+y/ZjMYH7h+vf1g=$$GeCkn8cI/+DbKXUiPydlqKUvj5Ujb4wL5sUkSm83rQWyIejvWoejrk6zWmQ2x5an7qvSHYL9gZHpibCXAJNdYw=="
     ports:
       - 3000:3000
 
@@ -56,7 +56,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DD_AUTH_BASIC_ADMIN_USER=admin
-      - "DD_AUTH_BASIC_ADMIN_HASH={SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g="
+      - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$H/LzIyo+5tbepUCiuRU2bFai+nbf+y/ZjMYH7h+vf1g=$$GeCkn8cI/+DbKXUiPydlqKUvj5Ujb4wL5sUkSm83rQWyIejvWoejrk6zWmQ2x5an7qvSHYL9gZHpibCXAJNdYw=="
     ports:
       - 3000:3000
 ```
@@ -69,7 +69,7 @@ services:
 docker run -d --name drydock \
   -v "/var/run/docker.sock:/var/run/docker.sock" \
   -e DD_AUTH_BASIC_ADMIN_USER=admin \
-  -e "DD_AUTH_BASIC_ADMIN_HASH={SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g=" \
+  -e 'DD_AUTH_BASIC_ADMIN_HASH=argon2id$65536$3$4$H/LzIyo+5tbepUCiuRU2bFai+nbf+y/ZjMYH7h+vf1g=$GeCkn8cI/+DbKXUiPydlqKUvj5Ujb4wL5sUkSm83rQWyIejvWoejrk6zWmQ2x5an7qvSHYL9gZHpibCXAJNdYw==' \
   -p 3000:3000 \
   codeswhat/drydock
 ```

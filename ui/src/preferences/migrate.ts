@@ -3,6 +3,7 @@ import { DEFAULTS, type PreferencesSchema } from './schema';
 import {
   FONT_FAMILIES,
   ICON_LIBRARIES,
+  isValidFontSize,
   isValidScale,
   isViewMode,
   RADIUS_PRESETS,
@@ -53,7 +54,11 @@ function sanitize(data: Record<string, unknown>): void {
 
   const appearance = data.appearance;
   if (appearance && typeof appearance === 'object') {
-    deleteIfInvalid(appearance as Record<string, unknown>, 'radius', RADIUS_PRESETS);
+    const a = appearance as Record<string, unknown>;
+    deleteIfInvalid(a, 'radius', RADIUS_PRESETS);
+    if ('fontSize' in a && !isValidFontSize(a.fontSize)) {
+      delete a.fontSize;
+    }
   }
 
   const containers = data.containers;

@@ -1,4 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
+import { defineComponent } from 'vue';
+import { resetPreferences } from '@/preferences/store';
 import {
   getAllNotificationRules,
   type NotificationRule,
@@ -47,9 +49,14 @@ function makeRule(overrides: Partial<NotificationRule> = {}): NotificationRule {
   };
 }
 
-async function mountNotificationsView() {
+async function mountNotificationsView(stubs: Record<string, any> = {}) {
   const wrapper = mountWithPlugins(NotificationsView, {
-    global: { stubs: dataViewStubs },
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        ...stubs,
+      },
+    },
   });
   await flushPromises();
   return wrapper;
@@ -58,6 +65,7 @@ async function mountNotificationsView() {
 describe('NotificationsView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPreferences();
     mockRoute.query = {};
 
     mockGetAllNotificationRules.mockResolvedValue([
@@ -121,6 +129,60 @@ describe('NotificationsView', () => {
     expect(mockUpdateNotificationRule).toHaveBeenCalledWith('security-alert', {
       triggers: [],
     });
+  });
+
+  it('renders shared switch controls in table, cards, list, and detail contexts', async () => {
+    const wrapper = await mountNotificationsView({
+      DataTable: defineComponent({
+        props: ['rows', 'rowKey', 'activeRow', 'selectedKey', 'sortKey', 'sortAsc'],
+        emits: ['row-click', 'update:sort-key', 'update:sort-asc'],
+        template: `
+          <div class="data-table"
+               :data-row-count="rows?.length ?? 0"
+               :data-selected-key="selectedKey || activeRow || ''">
+            <button v-if="rows?.[0]" class="row-click-first" @click="$emit('row-click', rows[0])">Open 1</button>
+            <slot name="cell-enabled" v-if="rows?.[0]" :row="rows[0]" />
+            <slot name="empty" v-if="!rows || rows.length === 0" />
+          </div>
+        `,
+      }),
+      DataListAccordion: defineComponent({
+        props: ['items', 'itemKey', 'selectedKey'],
+        emits: ['item-click'],
+        template: `
+          <div class="data-list-accordion" :data-item-count="items?.length ?? 0">
+            <button v-if="items?.[0]" class="list-click-first" @click="$emit('item-click', items[0])">List 1</button>
+            <slot name="header" v-if="items?.[0]" :item="items[0]" />
+          </div>
+        `,
+      }),
+    });
+
+    const tableRuleSwitch = wrapper.find('button[aria-label="Toggle notification rule"]');
+    expect(tableRuleSwitch.exists()).toBe(true);
+    expect(tableRuleSwitch.classes()).toEqual(expect.arrayContaining(['w-8', 'h-4']));
+
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('button[role="switch"]')).toHaveLength(2);
+
+    const detailSwitch = wrapper.find('button[aria-label="Rule status"]');
+    expect(detailSwitch.exists()).toBe(true);
+    expect(detailSwitch.classes()).toEqual(expect.arrayContaining(['w-10', 'h-5']));
+
+    await wrapper.find('.mode-cards').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('button[role="switch"]')).toHaveLength(2);
+
+    const cardsRuleSwitch = wrapper.find('button[aria-label="Toggle notification rule"]');
+    expect(cardsRuleSwitch.classes()).toEqual(expect.arrayContaining(['w-8', 'h-4']));
+
+    await wrapper.find('.mode-list').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('button[role="switch"]')).toHaveLength(2);
+
+    const listRuleSwitch = wrapper.find('button[aria-label="Toggle notification rule"]');
+    expect(listRuleSwitch.classes()).toEqual(expect.arrayContaining(['w-8', 'h-4']));
   });
 
   it('shows an inline error when rules fail to load', async () => {

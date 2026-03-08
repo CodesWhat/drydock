@@ -63,3 +63,13 @@ This operation lets you run a specific Trigger with simulated data.
 export CONTAINER='{"id":"123456789","name":"container_test","watcher":"watcher_test","updateKind":{"kind":"tag","semverDiff":"patch","localValue":"1.2.3","remoteValue":"1.2.4","result":{"link":"https://my-container/release-notes/"}}}'
 curl -X POST -H "Content-Type: application/json" -d $CONTAINER http://drydock:3000/api/triggers/smtp/gmail
 ```
+
+## Running a remote trigger (agent-scoped)
+
+Use the agent-scoped route when the target container is managed by a connected remote agent.
+The path order is `/:type/:name/:agent` (agent is the final segment).
+
+```bash
+export CONTAINER='{"id":"123456789","name":"container_test","agent":"agent1","watcher":"remote"}'
+curl -X POST -H "Content-Type: application/json" -d $CONTAINER http://drydock:3000/api/triggers/smtp/gmail/agent1
+```

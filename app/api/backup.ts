@@ -5,7 +5,9 @@ import * as registry from '../registry/index.js';
 import * as storeBackup from '../store/backup.js';
 import * as storeContainer from '../store/container.js';
 import { recordAuditEvent } from './audit-events.js';
+import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
+import { sendErrorResponse } from './error-response.js';
 import { handleContainerActionError } from './helpers.js';
 
 const log = logger.child({ component: 'backup' });
@@ -17,11 +19,14 @@ const router = express.Router();
  */
 function getBackups(req: Request, res: Response) {
   const { containerName } = req.query;
-  if (containerName) {
-    res.status(200).json(storeBackup.getBackupsByName(containerName as string));
-  } else {
-    res.status(200).json(storeBackup.getAllBackups());
-  }
+  const backups = containerName
+    ? storeBackup.getBackupsByName(containerName as string)
+    : storeBackup.getAllBackups();
+
+  res.status(200).json({
+    data: backups,
+    total: backups.length,
+  });
 }
 
 /**
@@ -32,11 +37,15 @@ function getContainerBackups(req: Request, res: Response) {
 
   const container = storeContainer.getContainer(id);
   if (!container) {
-    res.sendStatus(404);
+    sendErrorResponse(res, 404, 'Container not found');
     return;
   }
 
-  res.status(200).json(storeBackup.getBackupsByName(container.name));
+  const backups = storeBackup.getBackupsByName(container.name);
+  res.status(200).json({
+    data: backups,
+    total: backups.length,
+  });
 }
 
 /**
@@ -47,7 +56,7 @@ async function rollbackContainer(req: Request, res: Response) {
 
   const container = storeContainer.getContainer(id);
   if (!container) {
-    res.sendStatus(404);
+    sendErrorResponse(res, 404, 'Container not found');
     return;
   }
 
@@ -57,13 +66,13 @@ async function rollbackContainer(req: Request, res: Response) {
   if (backupId) {
     backup = storeBackup.getBackup(backupId);
     if (!backup || backup.containerName !== container.name) {
-      res.status(404).json({ error: 'Backup not found for this container' });
+      sendErrorResponse(res, 404, 'Backup not found for this container');
       return;
     }
   } else {
     const backups = storeBackup.getBackupsByName(container.name);
     if (backups.length === 0) {
-      res.status(404).json({ error: 'No backups found for this container' });
+      sendErrorResponse(res, 404, 'No backups found for this container');
       return;
     }
     backup = backups[0];
@@ -71,7 +80,7 @@ async function rollbackContainer(req: Request, res: Response) {
 
   const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
   if (!trigger) {
-    res.status(404).json({ error: NO_DOCKER_TRIGGER_FOUND_ERROR });
+    sendErrorResponse(res, 404, NO_DOCKER_TRIGGER_FOUND_ERROR);
     return;
   }
 
@@ -91,7 +100,7 @@ async function rollbackContainer(req: Request, res: Response) {
     // changed after the most recent update recreated the container)
     const currentContainer = await trigger.getCurrentContainer(dockerApi, { id: container.name });
     if (!currentContainer) {
-      res.status(500).json({ error: 'Container not found in Docker' });
+      sendErrorResponse(res, 500, 'Container not found in Docker');
       return;
     }
 
@@ -136,6 +145,10 @@ export function init() {
   router.use(nocache());
   router.get('/', getBackups);
   router.get('/:id/backups', getContainerBackups);
-  router.post('/:id/rollback', rollbackContainer);
+  router.post(
+    '/:id/rollback',
+    requireDestructiveActionConfirmation('container-rollback'),
+    rollbackContainer,
+  );
   return router;
 }

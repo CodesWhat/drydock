@@ -53,7 +53,7 @@ test('maskConfiguration should mask authentication configuration secrets', async
   expect(quay.maskConfiguration()).toEqual({
     account: 'account',
     namespace: 'namespace',
-    token: 't***n',
+    token: '[REDACTED]',
   });
 });
 
@@ -129,19 +129,30 @@ test('getAuthPull should return credentials when auth configuration', async () =
 });
 
 test('authenticate should populate header with base64 bearer', async () => {
-  await expect(quay.authenticate({}, { headers: {} })).resolves.toEqual({
-    headers: {
-      Authorization: `Bearer ${TEST_TOKEN}`,
-    },
-  });
+  await expect(
+    quay.authenticate({}, { headers: {}, url: 'https://quay.io/v2/test/image/manifests/latest' }),
+  ).resolves.toEqual(
+    expect.objectContaining({
+      headers: {
+        Authorization: `Bearer ${TEST_TOKEN}`,
+      },
+    }),
+  );
 });
 
 test('authenticate should not populate header with base64 bearer when anonymous', async () => {
   const quayInstance = new Quay();
   quayInstance.configuration = {};
-  await expect(quayInstance.authenticate({}, { headers: {} })).resolves.toEqual({
-    headers: {},
-  });
+  await expect(
+    quayInstance.authenticate(
+      {},
+      { headers: {}, url: 'https://quay.io/v2/test/image/manifests/latest' },
+    ),
+  ).resolves.toEqual(
+    expect.objectContaining({
+      headers: {},
+    }),
+  );
 });
 
 test('authenticate should throw when token request fails', async () => {
@@ -154,9 +165,12 @@ test('authenticate should throw when token request fails', async () => {
     account: 'account',
     token: TEST_TOKEN,
   };
-  await expect(quayInstance.authenticate({ name: 'test/image' }, { headers: {} })).rejects.toThrow(
-    'token request failed (Network error)',
-  );
+  await expect(
+    quayInstance.authenticate(
+      { name: 'test/image' },
+      { headers: {}, url: 'https://quay.io/v2/test/image/manifests/latest' },
+    ),
+  ).rejects.toThrow('token request failed (Network error)');
 });
 
 test('getTagsPage should call registry with default pagination', async () => {

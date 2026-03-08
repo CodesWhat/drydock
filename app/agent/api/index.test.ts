@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-const { mockApp, mockServerConfig, mockHashToken } = vi.hoisted(() => {
+const { mockApp, mockServerConfig, mockHashToken, mockLog } = vi.hoisted(() => {
   const mockApp = {
     disable: vi.fn(),
     use: vi.fn(),
@@ -17,7 +17,13 @@ const { mockApp, mockServerConfig, mockHashToken } = vi.hoisted(() => {
   const mockHashToken = vi.fn((token: string) =>
     Buffer.from(token.padEnd(32, '_').slice(0, 32), 'utf8'),
   );
-  return { mockApp, mockServerConfig, mockHashToken };
+  const mockLog = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  };
+  return { mockApp, mockServerConfig, mockHashToken, mockLog };
 });
 
 vi.mock('node:fs', () => ({
@@ -29,7 +35,7 @@ vi.mock('node:https', () => ({
 }));
 
 vi.mock('../../log/index.js', () => ({
-  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
+  default: { child: () => mockLog },
 }));
 
 vi.mock('../../configuration/index.js', () => ({
@@ -157,6 +163,19 @@ describe('Agent API index', () => {
         throw new Error('ENOENT');
       });
       await expect(init()).rejects.toThrow('Error reading secret file');
+    });
+
+    test('should sanitize secret file read errors before logging', async () => {
+      process.env.DD_AGENT_SECRET_FILE = '/nonexistent';
+      const fs = await import('node:fs');
+      fs.default.readFileSync.mockImplementation(() => {
+        throw new Error('ENOENT\nforged-log-line');
+      });
+
+      await expect(init()).rejects.toThrow('Error reading secret file');
+      expect(mockLog.error).toHaveBeenCalledWith(
+        'Error reading secret file: ENOENTforged-log-line',
+      );
     });
 
     test('should enable cors when configured', async () => {

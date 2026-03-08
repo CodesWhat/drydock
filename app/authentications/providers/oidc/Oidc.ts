@@ -2,8 +2,9 @@ import type { Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import * as openidClientLibrary from 'openid-client';
 import { v4 as uuid } from 'uuid';
-import { ddEnvVars, getPublicUrl } from '../../../configuration/index.js';
+import { ddEnvVars, getPublicUrl, getServerConfiguration } from '../../../configuration/index.js';
 import { getErrorMessage } from '../../../util/error.js';
+import { enforceConcurrentSessionLimit } from '../../../util/session-limit.js';
 import Authentication from '../Authentication.js';
 import OidcStrategy from './OidcStrategy.js';
 
@@ -11,6 +12,7 @@ const OIDC_CHECKS_TTL_MS = 5 * 60 * 1000;
 const OIDC_MAX_PENDING_CHECKS = 5;
 const OIDC_SESSION_LOCK_WAIT_TIMEOUT_MS = 10 * 1000;
 const OIDC_SESSION_LOCK_STALE_TTL_MS = 60 * 1000;
+const DEFAULT_MAX_CONCURRENT_SESSIONS_PER_USER = 5;
 const oidcSessionLocks = new Map<string, Promise<void>>();
 const OIDC_STATE_PATTERN = /^[A-Za-z0-9._~-]{8,256}$/;
 
@@ -58,6 +60,11 @@ type OidcRedirectRequest = Request & {
 
 type OidcCallbackRequest = Request & {
   session?: OidcSessionLike;
+  sessionID?: string;
+  sessionStore?: {
+    all?: (callback: (error: unknown, sessions?: unknown) => void) => void;
+    destroy?: (sid: string, callback: (error?: unknown) => void) => void;
+  };
   originalUrl?: string;
   url: string;
   login: (user: OidcAuthenticatedUser, done: (error?: unknown) => void) => void;
@@ -69,6 +76,30 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isValidStateToken(value: unknown): value is string {
   return isNonEmptyString(value) && OIDC_STATE_PATTERN.test(value);
+}
+
+function parseHttpUrl(value: unknown): URL | undefined {
+  if (!isNonEmptyString(value)) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return undefined;
+    }
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizePathname(pathname: string): string {
+  const normalized = pathname.replace(/\/+$/, '');
+  return normalized.length > 0 ? normalized : '/';
+}
+
+function toEndpointKey(url: URL): string {
+  return `${url.origin}${normalizePathname(url.pathname)}`;
 }
 
 function createPendingChecksRecord(): OidcPendingChecks {
@@ -229,6 +260,22 @@ async function saveSessionIfPossible(session: OidcSessionLike | undefined) {
   });
 }
 
+function getMaxConcurrentSessionsPerUser(): number {
+  const serverConfiguration = getServerConfiguration() as Record<string, unknown>;
+  const configuredMaxSessions = (serverConfiguration.session as Record<string, unknown> | undefined)
+    ?.maxconcurrentsessions;
+
+  if (
+    typeof configuredMaxSessions !== 'number' ||
+    !Number.isInteger(configuredMaxSessions) ||
+    configuredMaxSessions < 1
+  ) {
+    return DEFAULT_MAX_CONCURRENT_SESSIONS_PER_USER;
+  }
+
+  return configuredMaxSessions;
+}
+
 /**
  * Htpasswd authentication.
  */
@@ -352,6 +399,42 @@ class Oidc extends Authentication {
     };
   }
 
+  getAllowedAuthorizationRedirects() {
+    const strictEndpoints = new Set<string>();
+    const allowedOrigins = new Set<string>();
+
+    const discoveryUrl = parseHttpUrl(this.configuration.discovery);
+    if (discoveryUrl) {
+      allowedOrigins.add(discoveryUrl.origin);
+    }
+
+    if (this.client && typeof this.client.serverMetadata === 'function') {
+      const serverMetadata = this.client.serverMetadata();
+      const authorizationEndpoint = parseHttpUrl(serverMetadata.authorization_endpoint);
+      if (authorizationEndpoint) {
+        strictEndpoints.add(toEndpointKey(authorizationEndpoint));
+        allowedOrigins.add(authorizationEndpoint.origin);
+      }
+      const issuerUrl = parseHttpUrl(serverMetadata.issuer);
+      if (issuerUrl) {
+        allowedOrigins.add(issuerUrl.origin);
+      }
+    }
+
+    return { strictEndpoints, allowedOrigins };
+  }
+
+  isAllowedAuthorizationRedirect(authUrl: URL) {
+    if (authUrl.protocol !== 'http:' && authUrl.protocol !== 'https:') {
+      return false;
+    }
+    const { strictEndpoints, allowedOrigins } = this.getAllowedAuthorizationRedirects();
+    if (strictEndpoints.size > 0) {
+      return strictEndpoints.has(toEndpointKey(authUrl));
+    }
+    return allowedOrigins.has(authUrl.origin);
+  }
+
   async redirect(req: OidcRedirectRequest, res: Response): Promise<void> {
     const openidClient = await this.getOpenIdClient();
     const codeVerifier = openidClient.randomPKCECodeVerifier();
@@ -374,6 +457,14 @@ class Oidc extends Authentication {
       state,
     }).href;
     this.log.debug(`Build redirection url [${authUrl}]`);
+    const parsedAuthUrl = parseHttpUrl(authUrl);
+    if (!parsedAuthUrl || !this.isAllowedAuthorizationRedirect(parsedAuthUrl)) {
+      this.log.warn(
+        `OIDC authorization redirect URL is not allowed for strategy ${sessionKey} (${authUrl})`,
+      );
+      res.status(500).json({ error: 'Unable to initialize OIDC session' });
+      return;
+    }
 
     try {
       const persistOidcChecks = async () => {
@@ -484,6 +575,13 @@ class Oidc extends Authentication {
       }
       this.log.debug('Get user info');
       const user = await this.getUserFromAccessToken(tokenSet.access_token);
+
+      await enforceConcurrentSessionLimit({
+        username: user.username,
+        maxConcurrentSessions: getMaxConcurrentSessionsPerUser(),
+        sessionStore: req.sessionStore,
+        currentSessionId: req.sessionID,
+      });
 
       this.log.debug('Perform passport login');
       req.login(user, (err) => {

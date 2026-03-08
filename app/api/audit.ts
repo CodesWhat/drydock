@@ -1,6 +1,8 @@
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import * as storeAudit from '../store/audit.js';
+import { sendErrorResponse } from './error-response.js';
+import { buildPaginationLinks } from './pagination-links.js';
 
 const router = express.Router();
 const SAFE_AUDIT_FILTER_PATTERN = /^[a-zA-Z0-9._-]+$/;
@@ -50,20 +52,22 @@ function getQueryStringValue(value: unknown): string | undefined {
  * @param res
  */
 function getAuditEntries(req: Request, res: Response) {
-  const parsedPage = Number.parseInt(getQueryStringValue(req.query.page) || '', 10);
+  const parsedOffset = Number.parseInt(getQueryStringValue(req.query.offset) || '', 10);
   const parsedLimit = Number.parseInt(getQueryStringValue(req.query.limit) || '', 10);
-  const page = Math.max(1, Number.isFinite(parsedPage) ? parsedPage : 1);
+  const offset = Math.max(0, Number.isFinite(parsedOffset) ? parsedOffset : 0);
   const limit = Math.min(200, Math.max(1, Number.isFinite(parsedLimit) ? parsedLimit : 50));
-  const skip = (page - 1) * limit;
+  const skip = offset;
 
   const action = getValidatedAuditFilter(req.query.action);
   if (action === null) {
-    return res.status(400).json({ error: 'Invalid action query parameter' });
+    sendErrorResponse(res, 400, 'Invalid action query parameter');
+    return;
   }
 
   const container = getValidatedAuditFilter(req.query.container);
   if (container === null) {
-    return res.status(400).json({ error: 'Invalid container query parameter' });
+    sendErrorResponse(res, 400, 'Invalid container query parameter');
+    return;
   }
 
   const query: AuditEntriesQuery = { skip, limit };
@@ -84,11 +88,23 @@ function getAuditEntries(req: Request, res: Response) {
   }
 
   const result = storeAudit.getAuditEntries(query);
-  res.status(200).json({
-    entries: result.entries,
-    total: result.total,
-    page,
+  const data = result.entries;
+  const hasMore = offset + data.length < result.total;
+  const links = buildPaginationLinks({
+    basePath: '/api/audit',
+    query: req.query,
     limit,
+    offset,
+    total: result.total,
+    returnedCount: data.length,
+  });
+  res.status(200).json({
+    data,
+    total: result.total,
+    limit,
+    offset,
+    hasMore,
+    ...(links ? { _links: links } : {}),
   });
 }
 

@@ -4,6 +4,7 @@ import { sanitizeLogParam } from '../log/sanitize.js';
 import type { AuditEntry } from '../model/audit.js';
 import type { Container } from '../model/container.js';
 import { recordAuditEvent } from './audit-events.js';
+import { sendErrorResponse } from './error-response.js';
 
 /**
  * Handle a container action error by logging, recording an audit event, and sending a 500 response.
@@ -36,9 +37,7 @@ export function handleContainerActionError({
     details: message,
   });
 
-  res.status(500).json({
-    error: publicErrorMessage,
-  });
+  sendErrorResponse(res, 500, publicErrorMessage);
 
   return message;
 }

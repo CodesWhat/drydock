@@ -64,7 +64,7 @@ describe('Docker Hub Registry', () => {
     hub.configuration = { login: 'testuser', token: 'secret_token' };
     const masked = hub.maskConfiguration();
     expect(masked.login).toBe('testuser');
-    expect(masked.token).toBe('s**********n');
+    expect(masked.token).toBe('[REDACTED]');
   });
 
   test('should get image full name without registry prefix', async () => {
@@ -171,9 +171,9 @@ describe('Docker Hub Registry', () => {
     expect(masked).toEqual({
       url: 'https://registry-1.docker.io',
       login: 'testuser',
-      password: 't******s',
-      token: 't*******n',
-      auth: 'd**********0',
+      password: '[REDACTED]',
+      token: '[REDACTED]',
+      auth: '[REDACTED]',
     });
   });
 

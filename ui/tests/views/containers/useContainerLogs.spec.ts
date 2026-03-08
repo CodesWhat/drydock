@@ -123,6 +123,31 @@ describe('useContainerLogs', () => {
     expect(composable.getContainerLogs('web')).toEqual(['Failed to load container logs']);
   });
 
+  it('uses empty-log fallback message when API does not return logs text', async () => {
+    mocks.getContainerLogs.mockResolvedValueOnce({});
+    const { composable } = await mountLogsHarness({
+      containerIdMap: { web: 'container-1' },
+      selectedContainer: makeContainer(),
+    });
+
+    await composable.loadContainerLogs('web', true);
+
+    expect(composable.getContainerLogs('web')).toEqual(['No logs available for this container']);
+  });
+
+  it('does not fetch again when cache already exists and force is false', async () => {
+    const { composable } = await mountLogsHarness({
+      containerIdMap: { web: 'container-1' },
+      selectedContainer: makeContainer(),
+    });
+
+    await composable.loadContainerLogs('web');
+    expect(mocks.getContainerLogs).toHaveBeenCalledTimes(1);
+
+    await composable.loadContainerLogs('web');
+    expect(mocks.getContainerLogs).toHaveBeenCalledTimes(1);
+  });
+
   it('returns no-op when container is not mapped to an id', async () => {
     const { composable } = await mountLogsHarness({
       containerIdMap: {},
@@ -132,6 +157,53 @@ describe('useContainerLogs', () => {
     await composable.loadContainerLogs('web');
     expect(mocks.getContainerLogs).not.toHaveBeenCalled();
     expect(composable.getContainerLogs('web')).toEqual(['Loading logs...']);
+  });
+
+  it('auto-fetch refreshes logs for the selected container when interval is enabled', async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      value: false,
+    });
+    const { composable } = await mountLogsHarness({
+      containerIdMap: { web: 'container-1' },
+      selectedContainer: makeContainer(),
+      activeDetailTab: 'logs',
+    });
+
+    await composable.loadContainerLogs('web');
+    mocks.getContainerLogs.mockResolvedValue({ logs: 'line-3\n' });
+
+    composable.containerAutoFetchInterval.value = 2000;
+    await nextTick();
+    vi.advanceTimersByTime(2100);
+    await flushPromises();
+
+    expect(mocks.getContainerLogs).toHaveBeenCalledWith('container-1', 100);
+    expect(composable.getContainerLogs('web')).toEqual(['line-3']);
+    vi.useRealTimers();
+  });
+
+  it('no-ops auto-fetch refresh when there is no selected container', async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      value: false,
+    });
+    const { composable } = await mountLogsHarness({
+      containerIdMap: { web: 'container-1' },
+      selectedContainer: null,
+      activeDetailTab: 'logs',
+    });
+    mocks.getContainerLogs.mockClear();
+
+    composable.containerAutoFetchInterval.value = 2000;
+    await nextTick();
+    vi.advanceTimersByTime(2100);
+    await flushPromises();
+
+    expect(mocks.getContainerLogs).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('resets auto-fetch interval when selected container or tab changes', async () => {

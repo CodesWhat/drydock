@@ -201,10 +201,6 @@ function insertPendingRecentUpdate(
   candidate: PendingRecentUpdateCandidate,
   maxItems: number,
 ) {
-  if (maxItems <= 0) {
-    return;
-  }
-
   let insertAt = -1;
   for (let index = 0; index < topPendingUpdates.length; index += 1) {
     if (comparePendingRecentUpdates(candidate, topPendingUpdates[index]) < 0) {
@@ -486,6 +482,24 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
   const vulnerabilities = computed(() => {
     return input.containers.value
       .filter((container) => container.bouncer === 'blocked' || container.bouncer === 'unsafe')
+      .sort((left, right) => {
+        const leftTotal = left.securitySummary
+          ? left.securitySummary.critical +
+            left.securitySummary.high +
+            left.securitySummary.medium +
+            left.securitySummary.low
+          : 0;
+        const rightTotal = right.securitySummary
+          ? right.securitySummary.critical +
+            right.securitySummary.high +
+            right.securitySummary.medium +
+            right.securitySummary.low
+          : 0;
+        if (rightTotal !== leftTotal) return rightTotal - leftTotal;
+        const leftCritical = left.securitySummary?.critical ?? 0;
+        const rightCritical = right.securitySummary?.critical ?? 0;
+        return rightCritical - leftCritical;
+      })
       .slice(0, 5)
       .map((container) => ({
         id: container.name,

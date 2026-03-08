@@ -2,6 +2,24 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createMockResponse } from '../../test/helpers.js';
 import { createCrudHandlers } from './crud.js';
 
+type CrudDependencies = Parameters<typeof createCrudHandlers>[0];
+
+type GroupedCrudDepsInput = {
+  getContainersFromStore: CrudDependencies['storeApi']['getContainersFromStore'];
+  getContainerCountFromStore: CrudDependencies['storeApi']['getContainerCountFromStore'];
+  storeContainer: CrudDependencies['storeApi']['storeContainer'];
+  updateOperationStore: CrudDependencies['storeApi']['updateOperationStore'];
+  getContainerRaw: NonNullable<CrudDependencies['storeApi']['getContainerRaw']>;
+  getServerConfiguration: CrudDependencies['agentApi']['getServerConfiguration'];
+  getAgent: CrudDependencies['agentApi']['getAgent'];
+  getWatchers: CrudDependencies['agentApi']['getWatchers'];
+  getErrorMessage: CrudDependencies['errorApi']['getErrorMessage'];
+  getErrorStatusCode: CrudDependencies['errorApi']['getErrorStatusCode'];
+  redactContainerRuntimeEnv: CrudDependencies['securityApi']['redactContainerRuntimeEnv'];
+  redactContainersRuntimeEnv: CrudDependencies['securityApi']['redactContainersRuntimeEnv'];
+  auditStore: NonNullable<CrudDependencies['securityApi']['auditStore']>;
+};
+
 function createContainer(overrides: Record<string, unknown> = {}) {
   return {
     id: 'c1',
@@ -17,6 +35,32 @@ function createContainer(overrides: Record<string, unknown> = {}) {
       env: [],
     },
     ...overrides,
+  };
+}
+
+function groupCrudDeps(deps: GroupedCrudDepsInput): CrudDependencies {
+  return {
+    storeApi: {
+      getContainersFromStore: deps.getContainersFromStore,
+      getContainerCountFromStore: deps.getContainerCountFromStore,
+      storeContainer: deps.storeContainer,
+      updateOperationStore: deps.updateOperationStore,
+      getContainerRaw: deps.getContainerRaw,
+    },
+    agentApi: {
+      getServerConfiguration: deps.getServerConfiguration,
+      getAgent: deps.getAgent,
+      getWatchers: deps.getWatchers,
+    },
+    errorApi: {
+      getErrorMessage: deps.getErrorMessage,
+      getErrorStatusCode: deps.getErrorStatusCode,
+    },
+    securityApi: {
+      redactContainerRuntimeEnv: deps.redactContainerRuntimeEnv,
+      redactContainersRuntimeEnv: deps.redactContainersRuntimeEnv,
+      auditStore: deps.auditStore,
+    },
   };
 }
 
@@ -42,6 +86,7 @@ function createHarness(options: { containers?: any[] } = {}) {
       }
       return containers.slice(offset, offset + limit);
     }),
+    getContainerCountFromStore: vi.fn((_query: Record<string, unknown>) => containers.length),
     storeContainer: {
       getContainer: vi.fn((id: string) => byId.get(id)),
       deleteContainer: vi.fn((id: string) => {
@@ -68,7 +113,7 @@ function createHarness(options: { containers?: any[] } = {}) {
 
   return {
     deps,
-    handlers: createCrudHandlers(deps),
+    handlers: createCrudHandlers(groupCrudDeps(deps)),
   };
 }
 
@@ -84,6 +129,12 @@ function callGetContainers(
 function callGetContainerSummary(handlers: ReturnType<typeof createCrudHandlers>) {
   const res = createMockResponse();
   handlers.getContainerSummary({} as any, res as any);
+  return res;
+}
+
+function callGetContainerSecurityVulnerabilities(handlers: ReturnType<typeof createCrudHandlers>) {
+  const res = createMockResponse();
+  handlers.getContainerSecurityVulnerabilities({} as any, res as any);
   return res;
 }
 
@@ -125,10 +176,19 @@ async function callDeleteContainer(
 
 async function callWatchContainers(
   handlers: ReturnType<typeof createCrudHandlers>,
-  query: Record<string, unknown> = {},
+  options: {
+    query?: Record<string, unknown>;
+    body?: unknown;
+  } = {},
 ) {
   const res = createMockResponse();
-  await handlers.watchContainers({ query } as any, res as any);
+  await handlers.watchContainers(
+    {
+      query: options.query ?? {},
+      body: options.body,
+    } as any,
+    res as any,
+  );
   return res;
 }
 
@@ -146,6 +206,29 @@ describe('api/container/crud', () => {
     vi.clearAllMocks();
   });
 
+  describe('createCrudHandlers dependency grouping', () => {
+    test('accepts grouped dependency objects', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+      const handlers = createCrudHandlers(groupCrudDeps(harness.deps));
+
+      const res = callGetContainerSummary(handlers);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          containers: expect.objectContaining({
+            total: 1,
+            running: 1,
+            stopped: 0,
+          }),
+          security: { issues: 0 },
+        }),
+      );
+    });
+  });
+
   describe('getContainers pagination normalization', () => {
     test('handles non-object falsy query and forwards an empty store filter', () => {
       const harness = createHarness({
@@ -157,7 +240,13 @@ describe('api/container/crud', () => {
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c1' })],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('normalizes negative/invalid pagination to zero and returns all results', () => {
@@ -176,10 +265,13 @@ describe('api/container/crud', () => {
         { limit: 0, offset: 0 },
       );
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([
-        expect.objectContaining({ id: 'c1' }),
-        expect.objectContaining({ id: 'c2' }),
-      ]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c1' }), expect.objectContaining({ id: 'c2' })],
+        total: 2,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('uses first limit/offset array values and strips control params from store query', () => {
@@ -203,7 +295,17 @@ describe('api/container/crud', () => {
         { limit: 1, offset: 1 },
       );
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([expect.objectContaining({ id: 'c2' })]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c2' })],
+        total: 3,
+        limit: 1,
+        offset: 1,
+        hasMore: true,
+        _links: {
+          self: '/api/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=1',
+          next: '/api/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=2',
+        },
+      });
     });
 
     test('forwards normalized pagination to store query', () => {
@@ -227,6 +329,42 @@ describe('api/container/crud', () => {
       );
     });
 
+    test('uses container count dependency for paginated totals without a second list query', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1' }),
+          createContainer({ id: 'c2' }),
+          createContainer({ id: 'c3' }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, {
+        watcher: 'docker',
+        limit: '1',
+        offset: '1',
+      });
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledTimes(1);
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        { watcher: 'docker' },
+        { limit: 1, offset: 1 },
+      );
+      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledTimes(1);
+      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith({ watcher: 'docker' });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c2' })],
+        total: 3,
+        limit: 1,
+        offset: 1,
+        hasMore: true,
+        _links: {
+          self: '/api/containers?watcher=docker&limit=1&offset=1',
+          next: '/api/containers?watcher=docker&limit=1&offset=2',
+        },
+      });
+    });
+
     test('caps limit at 200 items', () => {
       const containers = Array.from({ length: 240 }, (_, index) =>
         createContainer({ id: `c${index + 1}` }),
@@ -238,10 +376,20 @@ describe('api/container/crud', () => {
       });
 
       const payload = res.json.mock.calls[0][0];
-      expect(Array.isArray(payload)).toBe(true);
-      expect(payload).toHaveLength(200);
-      expect(payload[0]).toEqual(expect.objectContaining({ id: 'c1' }));
-      expect(payload[199]).toEqual(expect.objectContaining({ id: 'c200' }));
+      expect(payload).toMatchObject({
+        total: 240,
+        limit: 200,
+        offset: 0,
+        hasMore: true,
+        _links: {
+          self: '/api/containers?limit=200&offset=0',
+          next: '/api/containers?limit=200&offset=200',
+        },
+      });
+      expect(Array.isArray(payload.data)).toBe(true);
+      expect(payload.data).toHaveLength(200);
+      expect(payload.data[0]).toEqual(expect.objectContaining({ id: 'c1' }));
+      expect(payload.data[199]).toEqual(expect.objectContaining({ id: 'c200' }));
     });
 
     test('applies offset when normalized limit is zero', () => {
@@ -260,10 +408,13 @@ describe('api/container/crud', () => {
       });
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([
-        expect.objectContaining({ id: 'c3' }),
-        expect.objectContaining({ id: 'c4' }),
-      ]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c3' }), expect.objectContaining({ id: 'c4' })],
+        total: 4,
+        limit: 0,
+        offset: 2,
+        hasMore: false,
+      });
     });
 
     test('strips vulnerability arrays by default when security scans are present', () => {
@@ -286,15 +437,21 @@ describe('api/container/crud', () => {
       const res = callGetContainers(harness.handlers, {});
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([
-        expect.objectContaining({
-          id: 'c1',
-          security: expect.objectContaining({
-            scan: expect.objectContaining({ vulnerabilities: [] }),
-            updateScan: expect.objectContaining({ vulnerabilities: [] }),
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            id: 'c1',
+            security: expect.objectContaining({
+              scan: expect.objectContaining({ vulnerabilities: [] }),
+              updateScan: expect.objectContaining({ vulnerabilities: [] }),
+            }),
           }),
-        }),
-      ]);
+        ],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('keeps vulnerability arrays when includeVulnerabilities=true', () => {
@@ -313,7 +470,13 @@ describe('api/container/crud', () => {
       const res = callGetContainers(harness.handlers, { includeVulnerabilities: 'true' });
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([container]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [container],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('preserves undefined scan/updateScan when security object exists without scans', () => {
@@ -329,15 +492,21 @@ describe('api/container/crud', () => {
       const res = callGetContainers(harness.handlers, {});
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([
-        expect.objectContaining({
-          id: 'c1',
-          security: expect.objectContaining({
-            scan: undefined,
-            updateScan: undefined,
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            id: 'c1',
+            security: expect.objectContaining({
+              scan: undefined,
+              updateScan: undefined,
+            }),
           }),
-        }),
-      ]);
+        ],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
   });
 
@@ -429,6 +598,235 @@ describe('api/container/crud', () => {
       });
     });
 
+    test('returns aggregated vulnerabilities grouped by image for the security view', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            name: 'nginx',
+            displayName: 'nginx',
+            security: {
+              scan: {
+                scannedAt: '2026-02-01T10:00:00.000Z',
+                vulnerabilities: [
+                  {
+                    id: 'CVE-2026-0001',
+                    severity: 'CRITICAL',
+                    packageName: 'openssl',
+                    installedVersion: '3.0.0',
+                    fixedVersion: '3.0.1',
+                    title: 'openssl issue',
+                    target: 'usr/lib/libssl.so',
+                    primaryUrl: 'https://example.com/CVE-2026-0001',
+                    publishedDate: '2026-01-01T00:00:00.000Z',
+                  },
+                ],
+              },
+              updateScan: {
+                summary: {
+                  critical: 0,
+                  high: 0,
+                  medium: 0,
+                  low: 0,
+                  unknown: 2,
+                },
+              },
+            },
+          }),
+          createContainer({
+            id: 'c2',
+            name: 'nginx',
+            displayName: 'nginx',
+            security: {
+              scan: {
+                scannedAt: '2026-02-02T10:00:00.000Z',
+                vulnerabilities: [
+                  {
+                    id: 'CVE-2026-0002',
+                    severity: 'HIGH',
+                    package: 'zlib',
+                    version: '1.2.10',
+                  },
+                ],
+              },
+            },
+          }),
+          createContainer({
+            id: 'c3',
+            name: 'redis',
+            displayName: 'redis',
+            security: {},
+          }),
+        ],
+      });
+
+      const res = callGetContainerSecurityVulnerabilities(harness.handlers);
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({});
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        totalContainers: 3,
+        scannedContainers: 2,
+        latestScannedAt: '2026-02-02T10:00:00.000Z',
+        images: [
+          {
+            image: 'nginx',
+            containerIds: ['c1', 'c2'],
+            updateSummary: {
+              critical: 0,
+              high: 0,
+              medium: 0,
+              low: 0,
+              unknown: 2,
+            },
+            vulnerabilities: [
+              {
+                id: 'CVE-2026-0001',
+                severity: 'CRITICAL',
+                package: 'openssl',
+                version: '3.0.0',
+                fixedIn: '3.0.1',
+                title: 'openssl issue',
+                target: 'usr/lib/libssl.so',
+                primaryUrl: 'https://example.com/CVE-2026-0001',
+                publishedDate: '2026-01-01T00:00:00.000Z',
+              },
+              {
+                id: 'CVE-2026-0002',
+                severity: 'HIGH',
+                package: 'zlib',
+                version: '1.2.10',
+                fixedIn: null,
+                title: '',
+                target: '',
+                primaryUrl: '',
+                publishedDate: '',
+              },
+            ],
+          },
+        ],
+      });
+    });
+
+    test('normalizes edge-case scan payloads and resolves image names through all fallbacks', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'name-fallback-a',
+            name: 'name-fallback',
+            displayName: '',
+            security: {
+              scan: {
+                scannedAt: '2026-02-10T00:00:00.000Z',
+                vulnerabilities: [
+                  'invalid-vulnerability',
+                  {
+                    id: 'CVE-NAME',
+                    severity: 'HIGH',
+                    packageName: 'pkg-name',
+                  },
+                ],
+              },
+              updateScan: {
+                summary: 'invalid-summary',
+              },
+            },
+          }),
+          createContainer({
+            id: 'name-fallback-b',
+            name: 'name-fallback',
+            displayName: '',
+            security: {
+              scan: {
+                scannedAt: '2026-02-01T00:00:00.000Z',
+                vulnerabilities: [],
+              },
+            },
+          }),
+          createContainer({
+            id: 'unknown-fallback',
+            name: '',
+            displayName: '',
+            security: {
+              scan: {
+                scannedAt: 'z',
+                vulnerabilities: null,
+              },
+            },
+          }),
+          createContainer({
+            id: 'display-name',
+            name: 'display-name-fallback',
+            displayName: 'display-name',
+            security: {
+              scan: {
+                scannedAt: 'a',
+                vulnerabilities: [],
+              },
+            },
+          }),
+          createContainer({
+            id: 'empty-scan-date',
+            name: 'ignored-empty-date',
+            displayName: '',
+            security: {
+              scan: {
+                scannedAt: '',
+                vulnerabilities: [],
+              },
+            },
+          }),
+        ],
+      });
+
+      const res = callGetContainerSecurityVulnerabilities(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload).toMatchObject({
+        totalContainers: 5,
+        scannedContainers: 5,
+        latestScannedAt: 'z',
+      });
+
+      expect(payload.images).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            image: 'name-fallback',
+            containerIds: ['name-fallback-a', 'name-fallback-b'],
+            updateSummary: {
+              critical: 0,
+              high: 0,
+              medium: 0,
+              low: 0,
+              unknown: 0,
+            },
+            vulnerabilities: expect.arrayContaining([
+              expect.objectContaining({
+                id: 'unknown',
+                severity: 'UNKNOWN',
+                package: 'unknown',
+              }),
+              expect.objectContaining({
+                id: 'CVE-NAME',
+                package: 'pkg-name',
+              }),
+            ]),
+          }),
+          expect.objectContaining({
+            image: 'unknown',
+            containerIds: ['unknown-fallback'],
+            vulnerabilities: [],
+          }),
+          expect.objectContaining({
+            image: 'display-name',
+            containerIds: ['display-name'],
+            vulnerabilities: [],
+          }),
+        ]),
+      );
+    });
+
     test('returns redacted container when id exists', () => {
       const redacted = { id: 'c1', details: { env: [{ key: 'TOKEN', value: '[REDACTED]' }] } };
       const harness = createHarness({
@@ -451,7 +849,8 @@ describe('api/container/crud', () => {
 
       const res = callGetContainer(harness.handlers, 'missing');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('returns update-operation history for an existing container', () => {
@@ -469,7 +868,10 @@ describe('api/container/crud', () => {
         'edge-api',
       );
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([{ id: 'op-1' }, { id: 'op-2' }]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [{ id: 'op-1' }, { id: 'op-2' }],
+        total: 2,
+      });
     });
 
     test('returns 404 for update-operation lookup when container is missing', () => {
@@ -477,7 +879,8 @@ describe('api/container/crud', () => {
 
       const res = callGetContainerUpdateOperations(harness.handlers, 'missing');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
       expect(harness.deps.updateOperationStore.getOperationsByContainerName).not.toHaveBeenCalled();
     });
   });
@@ -485,26 +888,36 @@ describe('api/container/crud', () => {
   describe('revealContainerEnv', () => {
     test('returns 501 when raw env dependencies are not provided', () => {
       const handlers = createCrudHandlers({
-        getContainersFromStore: vi.fn(() => []),
-        storeContainer: {
-          getContainer: vi.fn(),
-          deleteContainer: vi.fn(),
+        storeApi: {
+          getContainersFromStore: vi.fn(() => []),
+          getContainerCountFromStore: vi.fn(() => 0),
+          storeContainer: {
+            getContainer: vi.fn(),
+            deleteContainer: vi.fn(),
+          },
+          updateOperationStore: {
+            getOperationsByContainerName: vi.fn(() => []),
+          },
         },
-        updateOperationStore: {
-          getOperationsByContainerName: vi.fn(() => []),
+        agentApi: {
+          getServerConfiguration: vi.fn(() => ({ feature: { delete: true } })),
+          getAgent: vi.fn(),
+          getWatchers: vi.fn(() => ({})),
         },
-        getServerConfiguration: vi.fn(() => ({ feature: { delete: true } })),
-        getAgent: vi.fn(),
-        getErrorMessage: vi.fn(() => 'error'),
-        getErrorStatusCode: vi.fn(() => undefined),
-        getWatchers: vi.fn(() => ({})),
-        redactContainerRuntimeEnv: vi.fn((container) => container),
-        redactContainersRuntimeEnv: vi.fn((value) => value),
+        errorApi: {
+          getErrorMessage: vi.fn(() => 'error'),
+          getErrorStatusCode: vi.fn(() => undefined),
+        },
+        securityApi: {
+          redactContainerRuntimeEnv: vi.fn((container) => container),
+          redactContainersRuntimeEnv: vi.fn((value) => value),
+        },
       });
 
       const res = callRevealContainerEnv(handlers);
 
-      expect(res.sendStatus).toHaveBeenCalledWith(501);
+      expect(res.status).toHaveBeenCalledWith(501);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Environment reveal is not available' });
     });
 
     test('returns env values with sensitivity flags and writes an audit entry', () => {
@@ -574,7 +987,8 @@ describe('api/container/crud', () => {
 
       const res = callRevealContainerEnv(harness.handlers, 'missing');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
       expect(harness.deps.auditStore.insertAudit).not.toHaveBeenCalled();
     });
   });
@@ -588,7 +1002,8 @@ describe('api/container/crud', () => {
 
       const res = await callDeleteContainer(harness.handlers, 'c1');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(403);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container deletion is disabled' });
       expect(harness.deps.storeContainer.deleteContainer).not.toHaveBeenCalled();
     });
 
@@ -597,7 +1012,8 @@ describe('api/container/crud', () => {
 
       const res = await callDeleteContainer(harness.handlers, 'missing');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
       expect(harness.deps.storeContainer.deleteContainer).not.toHaveBeenCalled();
     });
 
@@ -693,12 +1109,18 @@ describe('api/container/crud', () => {
         'docker.remote': watcherB,
       });
 
-      const res = await callWatchContainers(harness.handlers, { watcher: 'docker' });
+      const res = await callWatchContainers(harness.handlers, { query: { watcher: 'docker' } });
 
       expect(watcherA.watch).toHaveBeenCalledTimes(1);
       expect(watcherB.watch).toHaveBeenCalledTimes(1);
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c1' })],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
     });
 
     test('watchContainers returns 500 when any watcher fails', async () => {
@@ -719,12 +1141,208 @@ describe('api/container/crud', () => {
       });
     });
 
+    test('watchContainers validates request payload and rejects unknown properties', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+      const watcher = {
+        watch: vi.fn().mockResolvedValue(undefined),
+        watchContainer: vi.fn().mockResolvedValue({ container: createContainer({ id: 'c1' }) }),
+      };
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': watcher,
+      });
+
+      const res = await callWatchContainers(harness.handlers, {
+        body: {
+          containerIds: ['c1'],
+          unexpected: true,
+        },
+      });
+
+      expect(watcher.watch).not.toHaveBeenCalled();
+      expect(watcher.watchContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Unknown request properties: unexpected',
+      });
+    });
+
+    test('watchContainers treats an empty payload object as watch-all', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+      const watcher = {
+        watch: vi.fn().mockResolvedValue(undefined),
+        watchContainer: vi.fn(),
+      };
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': watcher,
+      });
+
+      const res = await callWatchContainers(harness.handlers, {
+        body: {},
+      });
+
+      expect(watcher.watch).toHaveBeenCalledTimes(1);
+      expect(watcher.watchContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('watchContainers validates payload types and containerIds constraints', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+
+      const invalidBodyRes = await callWatchContainers(harness.handlers, {
+        body: ['c1'],
+      });
+      expect(invalidBodyRes.status).toHaveBeenCalledWith(400);
+      expect(invalidBodyRes.json).toHaveBeenCalledWith({
+        error: 'Request body must be an object',
+      });
+
+      const nonArrayIdsRes = await callWatchContainers(harness.handlers, {
+        body: { containerIds: 'c1' },
+      });
+      expect(nonArrayIdsRes.status).toHaveBeenCalledWith(400);
+      expect(nonArrayIdsRes.json).toHaveBeenCalledWith({
+        error: 'containerIds must be an array of non-empty strings',
+      });
+
+      const emptyIdsRes = await callWatchContainers(harness.handlers, {
+        body: { containerIds: [] },
+      });
+      expect(emptyIdsRes.status).toHaveBeenCalledWith(400);
+      expect(emptyIdsRes.json).toHaveBeenCalledWith({
+        error: 'containerIds must not be empty',
+      });
+
+      const tooManyIdsRes = await callWatchContainers(harness.handlers, {
+        body: { containerIds: Array.from({ length: 201 }, (_, index) => `c${index}`) },
+      });
+      expect(tooManyIdsRes.status).toHaveBeenCalledWith(400);
+      expect(tooManyIdsRes.json).toHaveBeenCalledWith({
+        error: 'containerIds must contain at most 200 entries',
+      });
+
+      const invalidIdRes = await callWatchContainers(harness.handlers, {
+        body: { containerIds: ['c1', '   '] },
+      });
+      expect(invalidIdRes.status).toHaveBeenCalledWith(400);
+      expect(invalidIdRes.json).toHaveBeenCalledWith({
+        error: 'containerIds must be an array of non-empty strings',
+      });
+    });
+
+    test('watchContainers honors containerIds payload for targeted batch watch', async () => {
+      const c1 = createContainer({ id: 'c1', watcher: 'local', agent: undefined });
+      const c2 = createContainer({ id: 'c2', watcher: 'remote', agent: undefined });
+      const harness = createHarness({
+        containers: [c1, c2],
+      });
+      const watcherLocal = {
+        watch: vi.fn().mockResolvedValue(undefined),
+        watchContainer: vi.fn().mockResolvedValue({ container: c1 }),
+      };
+      const watcherRemote = {
+        watch: vi.fn().mockResolvedValue(undefined),
+        watchContainer: vi.fn().mockResolvedValue({ container: c2 }),
+      };
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': watcherLocal,
+        'docker.remote': watcherRemote,
+      });
+
+      const res = await callWatchContainers(harness.handlers, {
+        body: { containerIds: ['c1'] },
+      });
+
+      expect(watcherLocal.watch).not.toHaveBeenCalled();
+      expect(watcherRemote.watch).not.toHaveBeenCalled();
+      expect(watcherLocal.watchContainer).toHaveBeenCalledTimes(1);
+      expect(watcherLocal.watchContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }),
+      );
+      expect(watcherRemote.watchContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c1' }), expect.objectContaining({ id: 'c2' })],
+        total: 2,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
+    });
+
+    test('watchContainers de-duplicates targeted container ids before dispatching', async () => {
+      const c1 = createContainer({ id: 'c1', watcher: 'local', agent: undefined });
+      const c2 = createContainer({ id: 'c2', watcher: 'remote', agent: undefined });
+      const harness = createHarness({
+        containers: [c1, c2],
+      });
+      const watcherLocal = {
+        watch: vi.fn().mockResolvedValue(undefined),
+        watchContainer: vi.fn().mockResolvedValue({ container: c1 }),
+      };
+      const watcherRemote = {
+        watch: vi.fn().mockResolvedValue(undefined),
+        watchContainer: vi.fn().mockResolvedValue({ container: c2 }),
+      };
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': watcherLocal,
+        'docker.remote': watcherRemote,
+      });
+
+      const res = await callWatchContainers(harness.handlers, {
+        body: { containerIds: ['c1', ' c1 ', 'c2', 'c2'] },
+      });
+
+      expect(watcherLocal.watchContainer).toHaveBeenCalledTimes(1);
+      expect(watcherRemote.watchContainer).toHaveBeenCalledTimes(1);
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('watchContainers returns 404 when targeted container is missing', async () => {
+      const harness = createHarness();
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': {
+          watch: vi.fn(),
+          watchContainer: vi.fn(),
+        },
+      });
+
+      const res = await callWatchContainers(harness.handlers, {
+        body: { containerIds: ['missing'] },
+      });
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+    });
+
+    test('watchContainers returns 500 when targeted watcher provider is missing', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', watcher: 'local' })],
+      });
+      harness.deps.getWatchers.mockReturnValue({});
+
+      const res = await callWatchContainers(harness.handlers, {
+        body: { containerIds: ['c1'] },
+      });
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'No provider found for container c1 and provider docker.local',
+      });
+    });
+
     test('watchContainer returns 404 when container is missing', async () => {
       const harness = createHarness();
 
       const res = await callWatchContainer(harness.handlers, 'missing');
 
-      expect(res.sendStatus).toHaveBeenCalledWith(404);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('watchContainer returns 500 when watcher is not registered', async () => {
@@ -784,7 +1402,7 @@ describe('api/container/crud', () => {
       expect(watcher.getContainers).toHaveBeenCalledTimes(1);
       expect(watcher.watchContainer).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.send).toHaveBeenCalledWith();
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
     test('watchContainer runs watcher when getContainers confirms the target exists', async () => {

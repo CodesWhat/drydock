@@ -9,6 +9,7 @@ import {
   getContainerTriggers,
   getContainerUpdateOperations,
   getContainerVulnerabilities,
+  getSecurityVulnerabilityOverview,
   refreshAllContainers,
   refreshContainer,
   revealContainerEnv,
@@ -40,7 +41,7 @@ describe('Container Service', () => {
       ];
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockContainers,
+        json: async () => ({ data: mockContainers, total: 2 }),
       } as any);
 
       const containers = await getAllContainers();
@@ -55,7 +56,7 @@ describe('Container Service', () => {
       const mockContainers = [{ id: '1', name: 'container1' }];
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockContainers,
+        json: async () => ({ data: mockContainers, total: 1 }),
       } as any);
 
       const containers = await getAllContainers({ includeVulnerabilities: true });
@@ -70,7 +71,7 @@ describe('Container Service', () => {
       const mockContainers = [{ id: '2', name: 'container2' }];
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockContainers,
+        json: async () => ({ data: mockContainers, total: 1 }),
       } as any);
 
       const containers = await getAllContainers({ limit: 10, offset: 20 });
@@ -81,12 +82,55 @@ describe('Container Service', () => {
       expect(containers).toEqual(mockContainers);
     });
 
+    it('supports array payload shape', async () => {
+      const mockContainers = [{ id: '3', name: 'container3' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockContainers,
+      } as any);
+
+      const containers = await getAllContainers();
+      expect(containers).toEqual(mockContainers);
+    });
+
+    it('supports items payload shape', async () => {
+      const mockContainers = [{ id: '4', name: 'container4' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: mockContainers }),
+      } as any);
+
+      const containers = await getAllContainers();
+      expect(containers).toEqual(mockContainers);
+    });
+
+    it('supports entries payload shape', async () => {
+      const mockContainers = [{ id: 'ignored' }];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ entries: mockContainers }),
+      } as any);
+
+      const containers = await getAllContainers();
+      expect(containers).toEqual(mockContainers);
+    });
+
+    it('returns empty array when payload is not an object', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => 'not-an-object',
+      } as any);
+
+      const containers = await getAllContainers();
+      expect(containers).toEqual([]);
+    });
+
     it('accepts AbortSignal as the first argument for backward compatibility', async () => {
       const controller = new AbortController();
       const mockContainers = [{ id: '1', name: 'container1' }];
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockContainers,
+        json: async () => ({ data: mockContainers, total: 1 }),
       } as any);
 
       const containers = await getAllContainers(controller.signal);
@@ -255,6 +299,7 @@ describe('Container Service', () => {
       expect(fetch).toHaveBeenCalledWith('/api/containers/container1', {
         method: 'DELETE',
         credentials: 'include',
+        headers: { 'X-DD-Confirm-Action': 'container-delete' },
       });
       expect(result).toBeDefined();
     });
@@ -287,6 +332,20 @@ describe('Container Service', () => {
       expect(fetch).toHaveBeenCalledWith('/api/containers/container1/triggers', {
         credentials: 'include',
       });
+      expect(triggers).toEqual(mockTriggers);
+    });
+
+    it('unwraps container triggers from data envelope payloads', async () => {
+      const mockTriggers = [
+        { type: 'webhook', name: 'trigger1' },
+        { type: 'email', name: 'trigger2' },
+      ];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: mockTriggers, total: 2 }),
+      } as any);
+
+      const triggers = await getContainerTriggers('container1');
       expect(triggers).toEqual(mockTriggers);
     });
 
@@ -339,7 +398,7 @@ describe('Container Service', () => {
       });
 
       expect(fetch).toHaveBeenCalledWith(
-        '/api/containers/container1/triggers/agent1/webhook/trigger1',
+        '/api/containers/container1/triggers/webhook/trigger1/agent1',
         {
           method: 'POST',
           credentials: 'include',
@@ -685,6 +744,24 @@ describe('Container Service', () => {
       expect(result).toEqual(operations);
     });
 
+    it('unwraps update operations from data envelope payloads', async () => {
+      const operations = [
+        {
+          id: 'op-1',
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          rollbackReason: 'health_gate_failed',
+        },
+      ];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: operations, total: 1 }),
+      } as any);
+
+      const result = await getContainerUpdateOperations('container1');
+      expect(result).toEqual(operations);
+    });
+
     it('throws when fetching update operations fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
@@ -725,6 +802,45 @@ describe('Container Service', () => {
 
       await expect(getContainerVulnerabilities('c1')).rejects.toThrow(
         'Failed to get vulnerabilities for container c1: Internal Server Error',
+      );
+    });
+  });
+
+  describe('getSecurityVulnerabilityOverview', () => {
+    it('fetches aggregated vulnerabilities successfully', async () => {
+      const mockResult = {
+        totalContainers: 2,
+        scannedContainers: 1,
+        latestScannedAt: '2026-03-01T10:00:00.000Z',
+        images: [
+          {
+            image: 'nginx',
+            containerIds: ['c1'],
+            vulnerabilities: [{ id: 'CVE-2026-1', severity: 'CRITICAL' }],
+          },
+        ],
+      };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResult,
+      } as any);
+
+      const result = await getSecurityVulnerabilityOverview();
+
+      expect(fetch).toHaveBeenCalledWith('/api/containers/security/vulnerabilities', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockResult);
+    });
+
+    it('throws when fetching aggregated vulnerabilities fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Internal Server Error',
+      } as any);
+
+      await expect(getSecurityVulnerabilityOverview()).rejects.toThrow(
+        'Failed to get aggregated vulnerabilities: Internal Server Error',
       );
     });
   });

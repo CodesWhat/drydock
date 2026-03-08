@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import { sendErrorResponse } from './error-response.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE']);
 
@@ -60,7 +61,7 @@ export function requireSameOriginForMutations(
   }
 
   if (isCrossSiteFetch(req)) {
-    res.status(403).json({ error: 'CSRF validation failed' });
+    sendErrorResponse(res, 403, 'CSRF validation failed');
     return;
   }
 
@@ -68,7 +69,7 @@ export function requireSameOriginForMutations(
   const requestOrigin = getRequestOrigin(req);
 
   if (!expectedOrigin || !requestOrigin || requestOrigin !== expectedOrigin) {
-    res.status(403).json({ error: 'CSRF validation failed' });
+    sendErrorResponse(res, 403, 'CSRF validation failed');
     return;
   }
 

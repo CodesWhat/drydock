@@ -136,7 +136,7 @@ function asLog(entry: unknown): AgentLog {
           class="px-3 py-[3px] font-mono text-[11px] leading-relaxed flex gap-3 transition-colors"
           :style="{ borderBottom: '1px solid var(--dd-log-line)' }"
         >
-          <span class="shrink-0 tabular-nums" style="color: var(--dd-text-muted);">
+          <span class="shrink-0 tabular-nums" style="color: var(--dd-log-text-muted);">
             {{ props.formatTimestamp(asLog(entry).timestamp) }}
           </span>
           <span
@@ -144,14 +144,14 @@ function asLog(entry: unknown): AgentLog {
             :style="{
               color: asLog(entry).level === 'error' ? 'var(--dd-danger)'
                    : asLog(entry).level === 'warn' ? 'var(--dd-warning)'
-                   : asLog(entry).level === 'debug' ? 'var(--dd-text-muted)'
+                   : asLog(entry).level === 'debug' ? 'var(--dd-log-text-muted)'
                    : 'var(--dd-success)'
             }"
           >
             {{ asLog(entry).level }}
           </span>
           <span class="shrink-0" style="color: var(--dd-primary);">{{ asLog(entry).component || '-' }}</span>
-          <span class="break-all" style="color: var(--dd-text-secondary);">{{ asLog(entry).message }}</span>
+          <span class="break-all" style="color: var(--dd-log-text);">{{ asLog(entry).message }}</span>
         </div>
       </template>
 
@@ -160,7 +160,7 @@ function asLog(entry: unknown): AgentLog {
           class="shrink-0 px-4 py-2 flex items-center justify-between"
           :style="{ borderTop: '1px solid var(--dd-log-divider)', backgroundColor: 'var(--dd-log-footer-bg)' }"
         >
-          <span class="text-[10px] font-medium" style="color: var(--dd-text-muted);">
+          <span class="text-[10px] font-medium" style="color: var(--dd-log-text-muted);">
             {{ props.logs.length }} entries
           </span>
           <div class="flex items-center gap-1.5">
