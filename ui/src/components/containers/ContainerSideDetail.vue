@@ -15,7 +15,7 @@ const {
   startContainer,
   confirmRestart,
   scanContainer,
-  updateContainer,
+  confirmUpdate,
   confirmDelete,
   tt,
 } = useContainersViewTemplateContext();
@@ -65,7 +65,7 @@ const {
             v-if="selectedContainer.newTag"
             class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
             v-tooltip.top="tt('Update')"
-            @click="updateContainer(selectedContainer.name)">
+            @click="confirmUpdate(selectedContainer.name)">
             <AppIcon name="cloud-download" :size="14" />
           </button>
           <button

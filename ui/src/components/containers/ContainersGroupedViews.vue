@@ -22,7 +22,7 @@ const {
   tableActionStyle,
   openActionsMenu,
   toggleActionsMenu,
-  updateContainer,
+  confirmUpdate,
   confirmStop,
   startContainer,
   confirmRestart,
@@ -289,7 +289,7 @@ const {
               </button>
               <button v-else-if="c.newTag"
                       class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
-                      v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
+                      v-tooltip.top="tt('Update')" @click.stop="confirmUpdate(c.name)">
                 <AppIcon name="cloud-download" :size="16" />
               </button>
               <button v-else-if="c.status === 'running'"
@@ -331,7 +331,7 @@ const {
                    :style="{ border: '1px solid var(--dd-success)' }">
                 <button class="inline-flex items-center justify-center whitespace-nowrap px-3 py-1.5 text-[11px] font-bold tracking-wide transition-colors"
                         :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }"
-                        @click.stop="updateContainer(c.name)">
+                        @click.stop="confirmUpdate(c.name)">
                   <AppIcon name="cloud-download" :size="11" class="mr-1" /> Update
                 </button>
                 <button class="inline-flex items-center justify-center w-7 transition-colors"
@@ -559,7 +559,7 @@ const {
               </button>
               <button v-if="c.newTag"
                       class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-success hover:dd-bg-elevated"
-                      v-tooltip.top="tt('Update')" @click.stop="updateContainer(c.name)">
+                      v-tooltip.top="tt('Update')" @click.stop="confirmUpdate(c.name)">
                 <AppIcon name="cloud-download" :size="14" />
               </button>
             </div>

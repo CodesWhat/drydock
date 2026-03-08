@@ -749,6 +749,17 @@ export function useContainerActions(input: UseContainerActionsInput) {
     });
   }
 
+  function confirmUpdate(name: string) {
+    confirm.require({
+      header: 'Update Container',
+      message: `Update ${name} now? This will apply the latest discovered image.`,
+      rejectLabel: 'Cancel',
+      acceptLabel: 'Update',
+      severity: 'warn',
+      accept: () => executeAction(name, apiUpdateContainer),
+    });
+  }
+
   function confirmDelete(name: string) {
     confirm.require({
       header: 'Delete Container',
@@ -784,6 +795,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     clearSkipsSelected,
     confirmDelete,
     confirmForceUpdate,
+    confirmUpdate,
     confirmRollback,
     confirmRestart,
     confirmStop,

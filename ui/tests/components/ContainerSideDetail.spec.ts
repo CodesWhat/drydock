@@ -24,7 +24,7 @@ const confirmStop = vi.fn();
 const startContainer = vi.fn();
 const confirmRestart = vi.fn();
 const scanContainer = vi.fn();
-const updateContainer = vi.fn();
+const confirmUpdate = vi.fn();
 const confirmDelete = vi.fn();
 const tt = (value: string) => value;
 
@@ -42,7 +42,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     startContainer,
     confirmRestart,
     scanContainer,
-    updateContainer,
+    confirmUpdate,
     confirmDelete,
     tt,
   }),
@@ -68,7 +68,7 @@ describe('ContainerSideDetail', () => {
     startContainer.mockReset();
     confirmRestart.mockReset();
     scanContainer.mockReset();
-    updateContainer.mockReset();
+    confirmUpdate.mockReset();
     confirmDelete.mockReset();
   });
 

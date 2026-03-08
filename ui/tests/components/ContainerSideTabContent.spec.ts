@@ -109,7 +109,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     formatRollbackReason: () => '',
     updateOperationsError: ref(null),
     scanContainer: vi.fn(),
-    updateContainer: vi.fn(),
+    confirmUpdate: vi.fn(),
     registryColorBg: ref(''),
     registryColorText: ref(''),
     registryLabel: ref(''),

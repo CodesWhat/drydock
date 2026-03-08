@@ -479,6 +479,29 @@ describe('useContainerActions', () => {
     expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
   });
 
+  it('wires update confirmation dialog to update accept handler', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    composable.confirmUpdate('web');
+
+    expect(mocks.confirmRequire).toHaveBeenCalledTimes(1);
+    const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+      header: string;
+      acceptLabel: string;
+      accept?: () => Promise<unknown>;
+    };
+    expect(confirmCall.header).toBe('Update Container');
+    expect(confirmCall.acceptLabel).toBe('Update');
+
+    await confirmCall.accept?.();
+    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+  });
+
   it('wires rollback confirmation dialog to rollback accept handler', async () => {
     const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable } = await mountActionsHarness({

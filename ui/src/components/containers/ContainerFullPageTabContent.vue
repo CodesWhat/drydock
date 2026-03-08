@@ -124,7 +124,7 @@ const {
   formatRollbackReason,
   updateOperationsError,
   scanContainer,
-  updateContainer,
+  confirmUpdate,
   registryColorBg,
   registryColorText,
   registryLabel,
@@ -655,7 +655,7 @@ const {
                     <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                             :style="{ border: '1px solid var(--dd-border-strong)' }"
                             :disabled="!selectedContainer.newTag || actionInProgress === selectedContainer.name"
-                            @click="updateContainer(selectedContainer.name)">
+                            @click="confirmUpdate(selectedContainer.name)">
                       Update Now
                     </button>
                     <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
