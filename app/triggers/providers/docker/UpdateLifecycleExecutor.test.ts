@@ -393,6 +393,26 @@ describe('UpdateLifecycleExecutor', () => {
       containerName: 'docker.local_web',
       error: 'scan failed hard',
     });
+    expect(harness.pruneOldBackups).toHaveBeenCalledWith('web', 3);
+  });
+
+  test('rethrows original lifecycle error when failure-path backup pruning throws', async () => {
+    const failure = new Error('scan failed hard');
+    const harness = createHarness({
+      maybeScanAndGateUpdate: vi.fn().mockRejectedValue(failure),
+      pruneOldBackups: vi.fn(() => {
+        throw new Error('prune blew up');
+      }),
+    });
+
+    await expect(harness.executor.run(createContainer(), { runtime: true })).rejects.toThrow(
+      'scan failed hard',
+    );
+    expect(harness.emitContainerUpdateFailed).toHaveBeenCalledWith({
+      containerName: 'docker.local_web',
+      error: 'scan failed hard',
+    });
+    expect(harness.pruneOldBackups).toHaveBeenCalledWith('web', 3);
   });
 
   test('stringifies non-Error failures when emitting update-failed events', async () => {

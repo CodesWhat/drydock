@@ -306,6 +306,30 @@ describe('Backup Store', () => {
     expect(backup.getBackupsByName('redis')).toHaveLength(1);
   });
 
+  test('pruneOldBackups should not remove backups when maxCount is undefined', () => {
+    backup.insertBackup({
+      containerId: 'c1',
+      containerName: 'nginx',
+      imageName: 'library/nginx',
+      imageTag: '1.20',
+      triggerName: 'docker.default',
+      timestamp: '2024-01-01T00:00:00.000Z',
+    });
+    backup.insertBackup({
+      containerId: 'c1',
+      containerName: 'nginx',
+      imageName: 'library/nginx',
+      imageTag: '1.21',
+      triggerName: 'docker.default',
+      timestamp: '2024-03-01T00:00:00.000Z',
+    });
+
+    const pruned = backup.pruneOldBackups('nginx', undefined as any);
+
+    expect(pruned).toBe(0);
+    expect(backup.getBackupsByName('nginx')).toHaveLength(2);
+  });
+
   test('pruneOldBackups should return 0 when collection not initialized', async () => {
     vi.resetModules();
     const freshBackup = await import('./backup.js');
