@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Standardized API responses with collection pattern** — All collection endpoints (`/api/containers`, `/api/registries`, `/api/watchers`, `/api/authentications`, `/api/audit`) now return `{ data: [...], total }` instead of raw arrays. Supports pagination via `offset`/`limit` query parameters.
 - **Paginated API discoverability links** — Paginated collection responses now include `_links.self` and `_links.next` where applicable (for example `/api/containers` and `/api/audit`) to make page traversal explicit for API consumers.
 - **Versioned API base path with transition alias** — `/api/v1/*` is now the canonical API path for integrations. `/api/*` remains as a backward-compatible alias during migration and is planned for removal in a future major release (target: v2.0.0).
+- **Agent-scoped path order normalized** — Agent-qualified component and trigger routes now use `/:type/:name/:agent` (for example `/api/triggers/:type/:name/:agent` and `/api/containers/:id/triggers/:triggerType/:triggerName/:triggerAgent`) instead of the old agent-first order. This is a breaking change for external API clients using the old path shape.
 - **Machine-readable API error contract** — Error responses now include top-level `code` and `message` fields while preserving legacy `error` string compatibility; optional `details` may be included for contextual metadata.
 - **6 color themes** — Replaced original Drydock theme with popular editor palettes: One Dark, GitHub, Dracula, Catppuccin, Gruvbox, and Ayu. Each with dark and light variants.
 
@@ -46,6 +47,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Vite chunk splitting** — Production build now splits vendor code into `framework`, `icons`, and `vendor` chunks for better browser cache efficiency across deployments.
 
+### Dependencies
+
+- **cron-parser v2 to v5** — Upgraded `cron-parser` from v2 to v5 (`CronExpressionParser` API). Note: `joi-cron-expression` still uses cron-parser v2 internally as its own dependency.
+- **Removed `pass` package** — Replaced abandoned `pass` password hashing with native `node:crypto` (covered under Security below).
+
+### Changed
+
+- **Argon2id password hashing** — Basic auth now uses argon2id (OWASP recommended) via Node.js built-in `crypto.argon2Sync()` instead of scrypt for password hashing. Default parameters: 64 MiB memory, 3 passes, parallelism 4.
+
+### Deprecated
+
+- **SHA-1 basic auth password hashes** — Legacy `{SHA}<base64>` password hashes are accepted with deprecation warnings. SHA-1 support will be removed in v1.6.0. Migrate to argon2id hashing.
+
 ### Security
 
 - **OIDC authorization redirect URL validation** — Added allowlist-based validation for OIDC authorization redirect URLs, preventing open redirect attacks through crafted callback parameters.
@@ -54,7 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Login brute-force lockout** — Per-account and per-IP lockout after configurable failed login attempts (`DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS`, `DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS`) with configurable window and duration.
 - **Concurrent session limits** — Maximum authenticated sessions per user (default 5, configurable via `DD_SERVER_SESSION_MAXCONCURRENTSESSIONS`). Oldest sessions are revoked first when the limit is reached.
 - **Destructive action confirmation header** — Dangerous operations (delete container, restore backup, delete all containers) now require an `X-DD-Confirm-Action` header, returning 428 when missing.
-- **Native scrypt password hashing** — Replaced abandoned `pass` package with `node:crypto` scryptSync for Basic auth. Supports configurable N/r/p parameters with timing-safe comparison.
+- **Native argon2id password hashing** — Replaced abandoned `pass` package with `node:crypto` argon2Sync for Basic auth. OWASP-aligned parameters with timing-safe comparison. Legacy `{SHA}` hashes accepted with deprecation warnings.
 - **Full credential redaction** — `Component.mask()` now returns `[REDACTED]` instead of leaking prefix/suffix characters in logs and API responses.
 - **Trigger infrastructure config redaction** — Webhook URLs, hostnames, channels, and usernames are redacted from trigger configuration in API responses.
 - **Website SRI integrity hashes** — Post-build script injects subresource integrity hashes for static assets on the documentation website.
@@ -275,7 +289,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Backup stores internal registry name instead of Docker-pullable name** — Backup `imageName` was stored as the internal registry-prefixed name (e.g. `hub.public/library/nginx`) which is not a valid Docker image reference. Rollback would fail with DNS lookup errors. Now stores the Docker-pullable base name (e.g. `nginx`) using the registry's `getImageFullName` method.
 - **Rollback API docs incorrect endpoint** — Fixed documentation showing `/api/backup/:id/rollback` instead of the correct `/api/containers/:id/rollback`.
 
-## [1.3.3] — 2026-02-16
+## [1.3.3] — 2026-02-18
 
 ### Fixed
 
@@ -372,7 +386,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CodeQL alert fixes** — Fixed log injection vulnerabilities by sanitizing user-controlled input before logging. Removed unused variables flagged by static analysis. Added rate limiting to the on-demand scan endpoint.
 - **Build provenance and SBOM attestations** — Added supply chain attestations to release workflow for verifiable build provenance.
 
-## 1.2.0
+## [1.2.0]
 
 ### Added
 
@@ -444,22 +458,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Popular imgset presets** — Added a curated preset guide at `docs/configuration/watchers/popular-imgsets.md` and linked it from watcher docs.
 
-## 1.1.3
+## [1.1.3]
 
-### Bug Fixes
+### Fixed
 
 - **ERR_ERL_PERMISSIVE_TRUST_PROXY on startup** — Express `trust proxy` was hard-coded to `true`, which triggers a validation error in `express-rate-limit` v8+ when the default key generator infers client IP from `X-Forwarded-For`. Replaced with a configurable `DD_SERVER_TRUSTPROXY` env var (default: `false`). Set to `1` (hop count) when behind a single reverse proxy, or a specific IP/CIDR for tighter control. ([#43](https://github.com/CodesWhat/drydock/issues/43))
 
 ---
 
-## 1.1.2
+## [1.1.2]
 
-### Bug Fixes
+### Fixed
 
 - **Misleading docker-compose file error messages** — When a compose file had a permission error (EACCES), the log incorrectly reported "does not exist" instead of "permission denied". Now distinguishes between missing files and permission issues with actionable guidance. ([#42](https://github.com/CodesWhat/drydock/issues/42))
 - **Agent watcher registration fails on startup** — Agent component path resolved outside the runtime root (`../agent/components` instead of `agent/components`), causing "Unknown watcher provider: 'docker'" errors and preventing agent watchers/triggers from registering. ([#42](https://github.com/CodesWhat/drydock/issues/42))
 
-### Improvements
+### Changed
 
 - **Debug logging for component registration** — Added debug-level logging showing resolved module paths during component registration and agent component registration attempts, making path resolution issues easier to diagnose.
 
@@ -664,7 +678,7 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.4.0-rc.5...HEAD
 [1.4.0]: https://github.com/CodesWhat/drydock/compare/v1.3.9...v1.4.0
 [1.3.9]: https://github.com/CodesWhat/drydock/compare/v1.3.8...v1.3.9
 [1.3.8]: https://github.com/CodesWhat/drydock/compare/v1.3.7...v1.3.8
@@ -676,8 +690,14 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 [1.3.2]: https://github.com/CodesWhat/drydock/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/CodesWhat/drydock/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/CodesWhat/drydock/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/CodesWhat/drydock/compare/1.1.3...v1.2.0
+[1.1.3]: https://github.com/CodesWhat/drydock/compare/1.1.2...1.1.3
+[1.1.2]: https://github.com/CodesWhat/drydock/compare/v1.1.1...1.1.2
 [1.1.1]: https://github.com/CodesWhat/drydock/compare/v1.1.0...1.1.1
 [1.1.0]: https://github.com/CodesWhat/drydock/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/CodesWhat/drydock/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/CodesWhat/drydock/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/CodesWhat/drydock/releases/tag/v1.0.0
+[2026.2.3]: https://github.com/CodesWhat/drydock/compare/2026.2.2...2026.2.3
+[2026.2.2]: https://github.com/CodesWhat/drydock/compare/2026.1.0...2026.2.2
+[2026.1.0]: https://github.com/CodesWhat/drydock/releases/tag/2026.1.0
