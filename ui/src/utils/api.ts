@@ -1,4 +1,4 @@
-type CollectionEnvelope = { data?: unknown; items?: unknown };
+type CollectionEnvelope = { data?: unknown; items?: unknown; entries?: unknown };
 type ItemValidator<T> = (item: unknown) => item is T;
 
 function extractCollectionData(payload: unknown): unknown[];
@@ -14,6 +14,8 @@ function extractCollectionData<T>(payload: unknown, validateItem?: ItemValidator
       collection = envelope.data;
     } else if (Array.isArray(envelope.items)) {
       collection = envelope.items;
+    } else if (Array.isArray(envelope.entries)) {
+      collection = envelope.entries;
     }
   }
 

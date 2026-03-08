@@ -22,6 +22,12 @@ describe('extractCollectionData', () => {
     expect(extractCollectionData(payload)).toEqual(payload.items);
   });
 
+  it('returns entries envelope payloads', () => {
+    const payload = { entries: [{ id: 'a' }, { id: 'b' }] };
+
+    expect(extractCollectionData(payload)).toEqual(payload.entries);
+  });
+
   it('returns direct arrays without validating entry shapes', () => {
     const payload = [{ id: 'a' }, 'non-object-entry', null];
 
