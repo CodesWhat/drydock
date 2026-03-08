@@ -184,7 +184,7 @@ describe('NotificationBell', () => {
     await openBell(wrapper);
     const rows = findEntryRows(wrapper);
     await rows[0].trigger('click');
-    expect(mockPush).toHaveBeenCalledWith('/audit?container=nginx');
+    expect(mockPush).toHaveBeenCalledWith({ path: '/audit', query: { container: 'nginx' } });
   });
 
   it('closes dropdown on entry click', async () => {
@@ -348,7 +348,7 @@ describe('NotificationBell', () => {
     await openBell(wrapper);
     const rows = findEntryRows(wrapper);
     await rows[0].trigger('click');
-    expect(mockPush).toHaveBeenCalledWith('/audit?container=my%20app%2Ftest');
+    expect(mockPush).toHaveBeenCalledWith({ path: '/audit', query: { container: 'my app/test' } });
   });
 
   it('hides mark all read button when no unread', async () => {

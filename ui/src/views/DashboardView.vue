@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { type RouteLocationRaw, useRouter } from 'vue-router';
+import { ROUTES } from '../router/routes';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
 import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
@@ -161,7 +162,7 @@ const {
               </h2>
             </div>
             <button class="text-[11px] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo({ path: '/containers', query: { filterKind: 'any' } })">View all &rarr;</button>
+                    @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
           </div>
 
           <div>
@@ -298,7 +299,7 @@ const {
               </h2>
             </div>
             <button class="text-[11px] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo('/security')">View all &rarr;</button>
+                    @click="navigateTo(ROUTES.SECURITY)">View all &rarr;</button>
           </div>
 
           <div class="p-5">
@@ -453,14 +454,14 @@ const {
               </h2>
             </div>
             <button class="text-[11px] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo('/servers')">View all &rarr;</button>
+                    @click="navigateTo(ROUTES.SERVERS)">View all &rarr;</button>
           </div>
 
           <div class="p-4 space-y-3">
             <div v-for="server in servers" :key="server.name"
                  class="flex items-center gap-3 p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated"
                  :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
-                 @click="navigateTo('/servers')">
+                 @click="navigateTo(ROUTES.SERVERS)">
               <span class="badge px-1.5 py-0 text-[9px] max-md:!hidden"
                     :style="{
                       backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
@@ -519,7 +520,7 @@ const {
               </h2>
             </div>
             <button class="text-[11px] font-medium text-drydock-secondary hover:underline"
-                    @click="navigateTo({ path: '/containers', query: { filterKind: 'any' } })">View all &rarr;</button>
+                    @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
           </div>
 
           <div class="p-5">

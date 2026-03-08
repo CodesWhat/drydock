@@ -20,6 +20,7 @@ import { getAllRegistries } from '@/services/registry';
 import sseService from '@/services/sse';
 import { getAllTriggers } from '@/services/trigger';
 import { getAllWatchers } from '@/services/watcher';
+import { ROUTES } from '@/router/routes';
 import { useTheme } from '@/theme/useTheme';
 
 const router = useRouter();
@@ -103,40 +104,41 @@ const navGroups = computed<NavGroup[]>(() => [
   {
     label: '',
     items: [
-      { label: 'Dashboard', icon: 'dashboard', route: '/' },
+      { label: 'Dashboard', icon: 'dashboard', route: ROUTES.DASHBOARD },
       {
         label: 'Containers',
         icon: 'containers',
-        route: '/containers',
+        route: ROUTES.CONTAINERS,
         badge: containerCount.value || undefined,
         badgeColor: 'blue',
       },
       {
         label: 'Security',
         icon: 'security',
-        route: '/security',
+        route: ROUTES.SECURITY,
         badge: securityIssueCount.value || undefined,
         badgeColor: 'red',
       },
-      { label: 'Audit', icon: 'audit', route: '/audit' },
+      { label: 'Audit', icon: 'audit', route: ROUTES.AUDIT },
+      { label: 'System Logs', icon: 'logs', route: ROUTES.LOGS },
     ],
   },
   {
     label: 'Manage',
     items: [
-      { label: 'Hosts', icon: 'servers', route: '/servers' },
-      { label: 'Registries', icon: 'registries', route: '/registries' },
-      { label: 'Watchers', icon: 'watchers', route: '/watchers' },
+      { label: 'Hosts', icon: 'servers', route: ROUTES.SERVERS },
+      { label: 'Registries', icon: 'registries', route: ROUTES.REGISTRIES },
+      { label: 'Watchers', icon: 'watchers', route: ROUTES.WATCHERS },
     ],
   },
   {
     label: 'Settings',
     items: [
-      { label: 'General', icon: 'config', route: '/config' },
-      { label: 'Notifications', icon: 'notifications', route: '/notifications' },
-      { label: 'Triggers', icon: 'triggers', route: '/triggers' },
-      { label: 'Auth', icon: 'auth', route: '/auth' },
-      { label: 'Agents', icon: 'agents', route: '/agents' },
+      { label: 'General', icon: 'config', route: ROUTES.CONFIG },
+      { label: 'Notifications', icon: 'notifications', route: ROUTES.NOTIFICATIONS },
+      { label: 'Triggers', icon: 'triggers', route: ROUTES.TRIGGERS },
+      { label: 'Auth', icon: 'auth', route: ROUTES.AUTH },
+      { label: 'Agents', icon: 'agents', route: ROUTES.AGENTS },
     ],
   },
 ]);
@@ -185,7 +187,7 @@ const staticSearchResults = computed<SearchResultItem[]>(() => {
       title: 'Appearance Settings',
       subtitle: 'Config · Appearance',
       icon: 'config',
-      route: '/config',
+      route: ROUTES.CONFIG,
       query: { tab: 'appearance' },
       kind: 'setting',
       searchable: 'appearance settings config theme color font icon library',
@@ -195,20 +197,10 @@ const staticSearchResults = computed<SearchResultItem[]>(() => {
       title: 'Profile Settings',
       subtitle: 'Config · Profile',
       icon: 'user',
-      route: '/config',
+      route: ROUTES.CONFIG,
       query: { tab: 'profile' },
       kind: 'setting',
       searchable: 'profile settings config account user',
-    },
-    {
-      id: 'settings:logs',
-      title: 'Application Logs',
-      subtitle: 'Config · Logs',
-      icon: 'logs',
-      route: '/config',
-      query: { tab: 'logs' },
-      kind: 'setting',
-      searchable: 'logs application logs config troubleshooting',
     },
   ];
 
@@ -231,7 +223,7 @@ async function handleSignOut() {
   try {
     await logout();
   } finally {
-    router.push('/login');
+    router.push(ROUTES.LOGIN);
   }
 }
 
@@ -385,7 +377,7 @@ const containerSearchResults = computed<SearchResultItem[]>(() =>
     subtitle: `Container · ${container.image} · ${container.status} · ${container.host}`,
     icon: 'containers',
     containerIcon: container.icon,
-    route: '/containers',
+    route: ROUTES.CONTAINERS,
     query: { q: container.displayName },
     kind: 'container',
     searchable:
@@ -448,7 +440,7 @@ function buildSearchIndexResults(resources: {
       title: name,
       subtitle: `Agent · ${status} · ${hostLabel}`,
       icon: 'agents',
-      route: '/agents',
+      route: ROUTES.AGENTS,
       query: { q: name },
       kind: 'agent',
       searchable: `${name} ${hostLabel} ${status} agent`.toLowerCase(),
@@ -465,7 +457,7 @@ function buildSearchIndexResults(resources: {
       title: name,
       subtitle: `Trigger · ${type}`,
       icon: 'triggers',
-      route: '/triggers',
+      route: ROUTES.TRIGGERS,
       query: { q: name },
       kind: 'trigger',
       searchable: `${name} ${id} ${type} trigger`.toLowerCase(),
@@ -482,7 +474,7 @@ function buildSearchIndexResults(resources: {
       title: name,
       subtitle: `Watcher · ${type}`,
       icon: 'watchers',
-      route: '/watchers',
+      route: ROUTES.WATCHERS,
       query: { q: name },
       kind: 'watcher',
       searchable: `${name} ${id} ${type} watcher`.toLowerCase(),
@@ -499,7 +491,7 @@ function buildSearchIndexResults(resources: {
       title: name,
       subtitle: `Registry · ${type}`,
       icon: 'registries',
-      route: '/registries',
+      route: ROUTES.REGISTRIES,
       query: { q: name },
       kind: 'registry',
       searchable: `${name} ${id} ${type} registry`.toLowerCase(),
@@ -516,7 +508,7 @@ function buildSearchIndexResults(resources: {
       title: name,
       subtitle: `Auth · ${type}`,
       icon: 'auth',
-      route: '/auth',
+      route: ROUTES.AUTH,
       query: { q: name },
       kind: 'auth',
       searchable: `${name} ${id} ${type} auth authentication`.toLowerCase(),
@@ -534,7 +526,7 @@ function buildSearchIndexResults(resources: {
       title: name,
       subtitle: `Notification rule · ${id}`,
       icon: 'notifications',
-      route: '/notifications',
+      route: ROUTES.NOTIFICATIONS,
       query: { q: name },
       kind: 'notification',
       searchable: `${name} ${id} notification rule alerts`.toLowerCase(),
@@ -1284,7 +1276,7 @@ onUnmounted(() => {
                   {{ currentUser?.username || 'User' }}
                 </div>
                 <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
-                        @click="showUserMenu = false; router.push('/config?tab=profile')">
+                        @click="showUserMenu = false; router.push({ path: ROUTES.CONFIG, query: { tab: 'profile' } })">
                   <AppIcon name="user" :size="11" class="dd-text-muted" />
                   Profile
                 </button>

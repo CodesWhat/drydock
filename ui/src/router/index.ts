@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { getUser } from '@/services/auth';
+import { ROUTES } from './routes';
 
 const viewLoaders = {
   dashboard: () => import('../views/DashboardView.vue'),
@@ -16,6 +17,7 @@ const viewLoaders = {
   auth: () => import('../views/AuthView.vue'),
   notifications: () => import('../views/NotificationsView.vue'),
   audit: () => import('../views/AuditView.vue'),
+  logs: () => import('../views/LogsView.vue'),
 };
 
 function createLazyRoute(path: string, name: keyof typeof viewLoaders) {
@@ -23,26 +25,27 @@ function createLazyRoute(path: string, name: keyof typeof viewLoaders) {
 }
 
 const routes = [
-  createLazyRoute('/login', 'login'),
+  createLazyRoute(ROUTES.LOGIN, 'login'),
   {
-    path: '/',
+    path: ROUTES.DASHBOARD,
     component: AppLayout,
     children: [
       createLazyRoute('', 'dashboard'),
-      createLazyRoute('/containers', 'containers'),
-      createLazyRoute('/security', 'security'),
-      createLazyRoute('/servers', 'servers'),
-      createLazyRoute('/config', 'config'),
-      createLazyRoute('/registries', 'registries'),
-      createLazyRoute('/agents', 'agents'),
-      createLazyRoute('/triggers', 'triggers'),
-      createLazyRoute('/watchers', 'watchers'),
-      createLazyRoute('/auth', 'auth'),
-      createLazyRoute('/notifications', 'notifications'),
-      createLazyRoute('/audit', 'audit'),
+      createLazyRoute(ROUTES.CONTAINERS, 'containers'),
+      createLazyRoute(ROUTES.SECURITY, 'security'),
+      createLazyRoute(ROUTES.SERVERS, 'servers'),
+      createLazyRoute(ROUTES.CONFIG, 'config'),
+      createLazyRoute(ROUTES.REGISTRIES, 'registries'),
+      createLazyRoute(ROUTES.AGENTS, 'agents'),
+      createLazyRoute(ROUTES.TRIGGERS, 'triggers'),
+      createLazyRoute(ROUTES.WATCHERS, 'watchers'),
+      createLazyRoute(ROUTES.AUTH, 'auth'),
+      createLazyRoute(ROUTES.NOTIFICATIONS, 'notifications'),
+      createLazyRoute(ROUTES.AUDIT, 'audit'),
+      createLazyRoute(ROUTES.LOGS, 'logs'),
     ],
   },
-  { path: '/:pathMatch(.*)*', redirect: '/' },
+  { path: '/:pathMatch(.*)*', redirect: ROUTES.DASHBOARD },
 ];
 
 const router = createRouter({
