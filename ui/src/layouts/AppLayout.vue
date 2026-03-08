@@ -1346,7 +1346,10 @@ onUnmounted(() => {
               <AppIcon name="xmark" :size="12" />
             </button>
             <div class="flex flex-col items-center pt-6 pb-4 px-6">
-              <img :src="whaleLogo" alt="Drydock" class="h-12 w-auto mb-3" :style="isDark ? { filter: 'invert(1)' } : {}" />
+              <div class="w-full h-12 mb-3 relative overflow-hidden">
+                <img :src="whaleLogo" alt="Drydock" class="h-10 w-auto absolute top-1 about-swim"
+                     :style="isDark ? { filter: 'invert(1)' } : {}" />
+              </div>
               <h2 id="about-dialog-title" class="text-base font-bold dd-text">Drydock</h2>
               <span class="text-[11px] dd-text-muted mt-0.5">Docker Container Update Manager</span>
               <span class="badge text-[10px] font-semibold mt-2 dd-bg-elevated dd-text-secondary">v1.4.0</span>
@@ -1504,3 +1507,16 @@ onUnmounted(() => {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+@keyframes swim {
+  0% { left: -15%; transform: scaleX(1); }
+  45% { left: 105%; transform: scaleX(1); }
+  50% { left: 105%; transform: scaleX(-1); }
+  95% { left: -15%; transform: scaleX(-1); }
+  100% { left: -15%; transform: scaleX(1); }
+}
+.about-swim {
+  animation: swim 6s ease-in-out infinite;
+}
+</style>
