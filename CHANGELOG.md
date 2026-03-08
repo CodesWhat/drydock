@@ -100,6 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Backup retention on failed updates** — Backup entries are now pruned on the failure path, not just after successful updates, preventing indefinite accumulation of stale backups.
 - **Backup pruning with undefined maxCount** — `pruneOldBackups()` no longer deletes all backups when `maxCount` is `undefined` (e.g. when `DD_BACKUPCOUNT` is not configured). Now correctly no-ops on invalid or non-finite values.
+- **Auto-rollback audit fromVersion accuracy** — Rollback audit entries now correctly record `fromVersion` as the failing new image tag (via `updateKind.remoteValue`) instead of the pre-update old tag.
 
 ## [1.4.0] — 2026-02-28
 
