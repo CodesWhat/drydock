@@ -118,6 +118,8 @@ output/
 
 # Generated screenshots (root only, not apps/web/public/screenshots)
 /screenshots/
+/qa-*.png
+/qa-*.md
 
 # qlty config (track qlty.toml, ignore cache/outputs)
 .qlty/*
