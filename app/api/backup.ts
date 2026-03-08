@@ -19,11 +19,14 @@ const router = express.Router();
  */
 function getBackups(req: Request, res: Response) {
   const { containerName } = req.query;
-  if (containerName) {
-    res.status(200).json(storeBackup.getBackupsByName(containerName as string));
-  } else {
-    res.status(200).json(storeBackup.getAllBackups());
-  }
+  const backups = containerName
+    ? storeBackup.getBackupsByName(containerName as string)
+    : storeBackup.getAllBackups();
+
+  res.status(200).json({
+    data: backups,
+    total: backups.length,
+  });
 }
 
 /**
@@ -38,7 +41,11 @@ function getContainerBackups(req: Request, res: Response) {
     return;
   }
 
-  res.status(200).json(storeBackup.getBackupsByName(container.name));
+  const backups = storeBackup.getBackupsByName(container.name);
+  res.status(200).json({
+    data: backups,
+    total: backups.length,
+  });
 }
 
 /**

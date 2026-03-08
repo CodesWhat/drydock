@@ -83,7 +83,7 @@ describe('Backup Router', () => {
 
       expect(mockGetAllBackups).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(allBackups);
+      expect(res.json).toHaveBeenCalledWith({ data: allBackups, total: allBackups.length });
     });
 
     test('should return filtered backups when containerName provided', () => {
@@ -97,7 +97,7 @@ describe('Backup Router', () => {
 
       expect(mockGetBackupsByName).toHaveBeenCalledWith('nginx');
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(filtered);
+      expect(res.json).toHaveBeenCalledWith({ data: filtered, total: filtered.length });
     });
   });
 
@@ -126,7 +126,7 @@ describe('Backup Router', () => {
 
       expect(mockGetBackupsByName).toHaveBeenCalledWith('nginx');
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(backups);
+      expect(res.json).toHaveBeenCalledWith({ data: backups, total: backups.length });
     });
 
     test('should use first id when route param id is an array', () => {
@@ -140,7 +140,7 @@ describe('Backup Router', () => {
 
       expect(mockGetContainer).toHaveBeenCalledWith('c1');
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([]);
+      expect(res.json).toHaveBeenCalledWith({ data: [], total: 0 });
     });
 
     test('should return empty array when container has no backups', () => {
@@ -153,7 +153,7 @@ describe('Backup Router', () => {
       handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([]);
+      expect(res.json).toHaveBeenCalledWith({ data: [], total: 0 });
     });
   });
 

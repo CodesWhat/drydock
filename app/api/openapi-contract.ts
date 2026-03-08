@@ -6,6 +6,13 @@ const require = createRequire(import.meta.url);
 const Ajv2020 = require('ajv/dist/2020.js') as typeof import('ajv/dist/2020.js').default;
 const addFormats = require('ajv-formats') as typeof import('ajv-formats').default;
 
+const ajv = new Ajv2020({
+  allErrors: true,
+  allowUnionTypes: true,
+  strict: false,
+});
+addFormats(ajv);
+
 type OpenApiSchemaObject = Record<string, unknown>;
 type OpenApiMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
 
@@ -173,13 +180,6 @@ function formatValidationError(error: ErrorObject, payload: unknown): string {
 }
 
 function validateSchema(schema: OpenApiSchemaObject, payload: unknown): string[] {
-  const ajv = new Ajv2020({
-    allErrors: true,
-    allowUnionTypes: true,
-    strict: false,
-  });
-  addFormats(ajv);
-
   const wrappedSchema: OpenApiSchemaObject = {
     type: 'object',
     properties: {

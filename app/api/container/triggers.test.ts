@@ -137,9 +137,11 @@ describe('api/container/triggers', () => {
       });
 
       const res = await callGetContainerTriggers(harness.handlers);
-      const associatedTriggers = res.json.mock.calls[0][0];
+      const payload = res.json.mock.calls[0][0];
+      const associatedTriggers = payload.data;
 
       expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.total).toBe(2);
       expect(associatedTriggers.map((trigger) => trigger.id).sort()).toEqual([
         'agent-1.slack.alert',
         'slack.notify',
@@ -157,7 +159,8 @@ describe('api/container/triggers', () => {
       });
 
       const res = await callGetContainerTriggers(harness.handlers);
-      const associatedTriggers = res.json.mock.calls[0][0];
+      const payload = res.json.mock.calls[0][0];
+      const associatedTriggers = payload.data;
       const thresholdsById = Object.fromEntries(
         associatedTriggers.map((trigger) => [trigger.id, trigger.configuration.threshold]),
       );
@@ -165,6 +168,7 @@ describe('api/container/triggers', () => {
       expect(
         harness.deps.Trigger.parseIncludeOrIncludeTriggerString.mock.calls.map((call) => call[0]),
       ).toEqual(['notify:patch', 'slack.alert : all']);
+      expect(payload.total).toBe(2);
       expect(associatedTriggers.map((trigger) => trigger.id).sort()).toEqual([
         'slack.alert',
         'slack.notify',
@@ -190,7 +194,7 @@ describe('api/container/triggers', () => {
       const res = await callGetContainerTriggers(harness.handlers);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([]);
+      expect(res.json).toHaveBeenCalledWith({ data: [], total: 0 });
     });
   });
 

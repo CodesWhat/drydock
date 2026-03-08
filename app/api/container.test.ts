@@ -173,7 +173,8 @@ async function callGetContainerTriggers(container, triggers) {
 
 /** Extract the triggers array from a response json call */
 function getTriggersFromResponse(res) {
-  return res.json.mock.calls[0][0];
+  const payload = res.json.mock.calls[0][0];
+  return payload.data;
 }
 
 /** Get the updatePolicy from the first updateContainer call */
@@ -854,7 +855,7 @@ describe('Container Router', () => {
 
       expect(mockGetOperationsByContainerName).toHaveBeenCalledWith('nginx');
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(operations);
+      expect(res.json).toHaveBeenCalledWith({ data: operations, total: operations.length });
     });
   });
 
@@ -2040,7 +2041,9 @@ describe('Container Router', () => {
         { type: 'slack', name: 'default', configuration: {} },
       ]);
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(expect.any(Array));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.any(Array), total: 1 }),
+      );
     });
 
     test('should filter triggers with triggerInclude', async () => {

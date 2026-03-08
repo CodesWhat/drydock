@@ -97,7 +97,10 @@ function getAgentsList(req: Request, res: Response) {
       ...stats,
     };
   });
-  res.json(safeAgents);
+  res.status(200).json({
+    data: safeAgents,
+    total: safeAgents.length,
+  });
 }
 
 async function getAgentLogEntries(

@@ -1,3 +1,4 @@
+import appPackageJson from '../package.json';
 import { openApiDocument as openApiDocumentFromIndex } from './openapi/index.js';
 import { openApiDocument } from './openapi.js';
 
@@ -8,6 +9,7 @@ describe('OpenAPI document', () => {
 
   test('should declare OpenAPI 3.1 and include representative API paths', () => {
     expect(openApiDocument.openapi).toBe('3.1.0');
+    expect(openApiDocument.info.version).toBe(appPackageJson.version);
     expect(openApiDocument.paths['/api/openapi.json']?.get).toBeDefined();
     expect(openApiDocument.paths['/api/containers/{id}/scan']?.post).toBeDefined();
     expect(openApiDocument.paths['/api/webhook/watch']?.post).toBeDefined();
@@ -130,5 +132,21 @@ describe('OpenAPI document', () => {
     }
 
     expect(offenders).toStrictEqual([]);
+  });
+
+  test('should model non-paginated collection endpoints with CollectionResult envelopes', () => {
+    const collectionPaths = [
+      '/api/containers/{id}/backups',
+      '/api/containers/{id}/triggers',
+      '/api/containers/{id}/update-operations',
+      '/api/agents',
+      '/api/notifications',
+    ] as const;
+
+    for (const path of collectionPaths) {
+      const schema =
+        openApiDocument.paths[path]?.get?.responses?.['200']?.content?.['application/json']?.schema;
+      expect(schema).toEqual({ $ref: '#/components/schemas/CollectionResult' });
+    }
   });
 });

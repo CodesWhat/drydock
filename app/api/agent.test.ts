@@ -78,31 +78,34 @@ describe('Agent Router', () => {
     const res = createResponse();
     handler({}, res);
 
-    expect(res.json).toHaveBeenCalledWith([
-      {
-        name: 'agent-1',
-        host: 'localhost',
-        port: 3000,
-        connected: true,
-        version: '1.5.0',
-        os: 'linux',
-        arch: 'x64',
-        cpus: 8,
-        memoryGb: 31.4,
-        uptimeSeconds: 3600,
-        lastSeen: '2026-02-28T10:00:00.000Z',
-        containers: { total: 3, running: 2, stopped: 1 },
-        images: 2,
-      },
-      {
-        name: 'agent-2',
-        host: 'remote',
-        port: 4000,
-        connected: false,
-        containers: { total: 0, running: 0, stopped: 0 },
-        images: 0,
-      },
-    ]);
+    expect(res.json).toHaveBeenCalledWith({
+      data: [
+        {
+          name: 'agent-1',
+          host: 'localhost',
+          port: 3000,
+          connected: true,
+          version: '1.5.0',
+          os: 'linux',
+          arch: 'x64',
+          cpus: 8,
+          memoryGb: 31.4,
+          uptimeSeconds: 3600,
+          lastSeen: '2026-02-28T10:00:00.000Z',
+          containers: { total: 3, running: 2, stopped: 1 },
+          images: 2,
+        },
+        {
+          name: 'agent-2',
+          host: 'remote',
+          port: 4000,
+          connected: false,
+          containers: { total: 0, running: 0, stopped: 0 },
+          images: 0,
+        },
+      ],
+      total: 2,
+    });
     expect(getContainers).toHaveBeenCalledTimes(1);
   });
 
@@ -140,7 +143,7 @@ describe('Agent Router', () => {
     const res = createResponse();
     handler({}, res);
 
-    expect(res.json).toHaveBeenCalledWith([]);
+    expect(res.json).toHaveBeenCalledWith({ data: [], total: 0 });
   });
 
   test('should compute container stats using status and image fallbacks', () => {
@@ -163,13 +166,16 @@ describe('Agent Router', () => {
     const res = createResponse();
     handler({}, res);
 
-    expect(res.json).toHaveBeenCalledWith([
-      expect.objectContaining({
-        name: 'agent-fallbacks',
-        containers: { total: 3, running: 1, stopped: 2 },
-        images: 3,
-      }),
-    ]);
+    expect(res.json).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          name: 'agent-fallbacks',
+          containers: { total: 3, running: 1, stopped: 2 },
+          images: 3,
+        }),
+      ],
+      total: 1,
+    });
   });
 
   test('should ignore containers with non-string agent identifiers when grouping', () => {
@@ -191,13 +197,16 @@ describe('Agent Router', () => {
     const res = createResponse();
     handler({}, res);
 
-    expect(res.json).toHaveBeenCalledWith([
-      expect.objectContaining({
-        name: 'agent-typed',
-        containers: { total: 0, running: 0, stopped: 0 },
-        images: 0,
-      }),
-    ]);
+    expect(res.json).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          name: 'agent-typed',
+          containers: { total: 0, running: 0, stopped: 0 },
+          images: 0,
+        }),
+      ],
+      total: 1,
+    });
   });
 
   test('agent route handlers should declare typed req and res parameters', () => {

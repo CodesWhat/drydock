@@ -1,5 +1,7 @@
 import { createRequire } from 'node:module';
+import type { Response } from 'express';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { sendErrorResponse } from './error-response.js';
 import { openApiDocument } from './openapi.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
@@ -58,6 +60,35 @@ afterEach(() => {
 });
 
 describe('validateOpenApiJsonResponse', () => {
+  test('accepts runtime error-response payload against ErrorResponse schema', () => {
+    setJsonContractSchema(
+      { $ref: '#/components/schemas/ErrorResponse' },
+      { schemas: structuredClone(originalSchemas) },
+    );
+
+    const response = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn(),
+    } as unknown as Response;
+
+    sendErrorResponse(response, 400, 'Bad payload');
+
+    expect(response.json).toHaveBeenCalledTimes(1);
+    const payload = response.json.mock.calls[0]?.[0];
+
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload,
+      }),
+    ).toEqual({
+      valid: true,
+      errors: [],
+    });
+  });
+
   test('returns descriptive errors for unknown path, operation, status, and missing json schema', () => {
     mutableOpenApiDocument.paths = {};
 
@@ -650,5 +681,49 @@ describe('validateOpenApiJsonResponse', () => {
       errors: [],
     });
     compileNoErrorsSpy.mockRestore();
+  });
+
+  test('reuses one AJV instance across validateSchema calls', () => {
+    const compileInstances = new Set<object>();
+    const compileSpy = vi.spyOn(Ajv2020.prototype, 'compile').mockImplementation(function (
+      this: InstanceType<typeof Ajv2020>,
+    ) {
+      compileInstances.add(this as object);
+      const validate = ((_: unknown) => true) as {
+        (input: unknown): boolean;
+        errors?: Array<Record<string, unknown>>;
+      };
+      validate.errors = [];
+      return validate as ReturnType<InstanceType<typeof Ajv2020>['compile']>;
+    });
+
+    setJsonContractSchema({ type: 'string' });
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: 'ok',
+      }),
+    ).toEqual({
+      valid: true,
+      errors: [],
+    });
+
+    expect(
+      validateOpenApiJsonResponse({
+        path: '/contract',
+        method: 'get',
+        statusCode: '200',
+        payload: 'still-ok',
+      }),
+    ).toEqual({
+      valid: true,
+      errors: [],
+    });
+
+    expect(compileSpy).toHaveBeenCalledTimes(2);
+    expect(compileInstances.size).toBe(1);
+    compileSpy.mockRestore();
   });
 });

@@ -462,7 +462,7 @@ export const openApiPaths = {
       operationId: 'getContainerUpdateOperations',
       parameters: [containerIdPathParam],
       responses: {
-        200: jsonResponse('Update operations', { $ref: '#/components/schemas/GenericArray' }),
+        200: jsonResponse('Update operations', { $ref: '#/components/schemas/CollectionResult' }),
         401: errorResponse('Authentication required'),
         404: errorResponse('Container not found'),
       },
@@ -475,7 +475,7 @@ export const openApiPaths = {
       operationId: 'getContainerTriggers',
       parameters: [containerIdPathParam],
       responses: {
-        200: jsonResponse('Container triggers', { $ref: '#/components/schemas/GenericArray' }),
+        200: jsonResponse('Container triggers', { $ref: '#/components/schemas/CollectionResult' }),
         401: errorResponse('Authentication required'),
         404: errorResponse('Container not found'),
       },
@@ -715,7 +715,7 @@ export const openApiPaths = {
       operationId: 'getContainerBackups',
       parameters: [containerIdPathParam],
       responses: {
-        200: jsonResponse('Container backups', { $ref: '#/components/schemas/GenericArray' }),
+        200: jsonResponse('Container backups', { $ref: '#/components/schemas/CollectionResult' }),
         401: errorResponse('Authentication required'),
         404: errorResponse('Container not found'),
       },
@@ -919,7 +919,7 @@ export const openApiPaths = {
       summary: 'List known agents with health and inventory stats',
       operationId: 'listAgents',
       responses: {
-        200: jsonResponse('Agent list', { $ref: '#/components/schemas/GenericArray' }),
+        200: jsonResponse('Agent list', { $ref: '#/components/schemas/CollectionResult' }),
         401: errorResponse('Authentication required'),
       },
     },
@@ -1105,7 +1105,9 @@ export const openApiPaths = {
       summary: 'List notification rules',
       operationId: 'listNotificationRules',
       responses: {
-        200: jsonResponse('Notification rules', { $ref: '#/components/schemas/GenericArray' }),
+        200: jsonResponse('Notification rules', {
+          $ref: '#/components/schemas/CollectionResult',
+        }),
         401: errorResponse('Authentication required'),
       },
     },

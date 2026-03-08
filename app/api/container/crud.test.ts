@@ -868,7 +868,10 @@ describe('api/container/crud', () => {
         'edge-api',
       );
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith([{ id: 'op-1' }, { id: 'op-2' }]);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [{ id: 'op-1' }, { id: 'op-2' }],
+        total: 2,
+      });
     });
 
     test('returns 404 for update-operation lookup when container is missing', () => {
