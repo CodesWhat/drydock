@@ -5,6 +5,12 @@ import { registerContainerAdded, registerContainerUpdated } from '../../../event
 import { flatten } from '../../../model/container.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import Trigger, { type TriggerConfiguration } from '../Trigger.js';
+import {
+  filterContainer,
+  HASS_ATTRIBUTE_PRESET_VALUES,
+  HASS_ATTRIBUTE_PRESETS,
+  type HassAttributePreset,
+} from './filter.js';
 import Hass from './Hass.js';
 
 const containerDefaultTopic = 'dd/container';
@@ -31,10 +37,12 @@ interface MqttConfiguration extends TriggerConfiguration {
   clientid: string;
   user?: string;
   password?: string;
+  exclude: string;
   hass: {
     enabled: boolean;
     prefix: string;
     discovery: boolean;
+    attributes: HassAttributePreset;
   };
   tls: {
     clientkey?: string;
@@ -52,10 +60,12 @@ class Mqtt extends Trigger {
     url: '',
     topic: containerDefaultTopic,
     clientid: '',
+    exclude: '',
     hass: {
       enabled: false,
       prefix: hassDefaultPrefix,
       discovery: false,
+      attributes: 'full',
     },
     tls: {
       rejectunauthorized: true,
@@ -97,16 +107,22 @@ class Mqtt extends Trigger {
       clientid: this.joi.string().default(() => generateClientId()),
       user: this.joi.string(),
       password: this.joi.string(),
+      exclude: this.joi.string().allow('').default(''),
       hass: this.joi
         .object({
           enabled: this.joi.boolean().default(false),
           prefix: this.joi.string().default(hassDefaultPrefix),
           discovery: this.joi.boolean().default((parent) => !!parent?.enabled),
+          attributes: this.joi
+            .string()
+            .valid(...HASS_ATTRIBUTE_PRESET_VALUES)
+            .default('full'),
         })
         .default({
           enabled: false,
           prefix: hassDefaultPrefix,
           discovery: false,
+          attributes: 'full',
         }),
       tls: this.joi
         .object({
@@ -198,6 +214,16 @@ class Mqtt extends Trigger {
     await super.deregisterComponent();
   }
 
+  getExcludePaths(): string[] {
+    if (this.configuration.exclude) {
+      return this.configuration.exclude
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    return HASS_ATTRIBUTE_PRESETS[this.configuration.hass.attributes];
+  }
+
   /**
    * Send an MQTT message with new image version details.
    *
@@ -210,8 +236,11 @@ class Mqtt extends Trigger {
       container,
     });
 
+    const excludePaths = this.getExcludePaths();
+    const containerToPublish = filterContainer(container, excludePaths);
+
     this.log.debug(`Publish container result to ${containerTopic}`);
-    return this.client.publish(containerTopic, JSON.stringify(flatten(container)), {
+    return this.client.publish(containerTopic, JSON.stringify(flatten(containerToPublish)), {
       retain: true,
     });
   }
