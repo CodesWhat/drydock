@@ -66,15 +66,15 @@ vi.mock('./csrf', () => ({
   requireSameOriginForMutations: vi.fn((req, res, next) => next()),
 }));
 
-import * as api from './api.js';
-import { openApiDocument } from './openapi.js';
-
 describe('API Router', () => {
+  let api;
   let router;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     resetMockRouterCallLog();
+    vi.resetModules();
+    api = await import('./api.js');
     router = api.init();
   });
 
@@ -172,6 +172,7 @@ describe('API Router', () => {
 
   test('should expose openapi document endpoint before auth middleware', async () => {
     const auth = await import('./auth.js');
+    const { openApiDocument } = await import('./openapi.js');
     const getCalls = router.get.mock.calls;
     const openapiCall = getCalls.find((c) => c[0] === '/openapi.json');
     expect(openapiCall).toBeDefined();
@@ -190,9 +191,38 @@ describe('API Router', () => {
       status: vi.fn().mockReturnThis(),
       json: vi.fn(),
     };
-    openapiCall[1]({}, res);
+    await openapiCall[1]({}, res);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(openApiDocument);
+  });
+
+  test('should lazy-load openapi document module when openapi endpoint is requested', async () => {
+    vi.resetModules();
+    const openApiModuleLoadSpy = vi.fn();
+    const mockedOpenApiDocument = { openapi: '3.1.0' };
+    vi.doMock('./openapi.js', () => {
+      openApiModuleLoadSpy();
+      return { openApiDocument: mockedOpenApiDocument };
+    });
+
+    try {
+      const isolatedApi = await import('./api.js');
+      const isolatedRouter = isolatedApi.init();
+      const openapiCall = isolatedRouter.get.mock.calls.find((c) => c[0] === '/openapi.json');
+      expect(openapiCall).toBeDefined();
+      expect(openApiModuleLoadSpy).not.toHaveBeenCalled();
+
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      };
+      await openapiCall[1]({}, res);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(mockedOpenApiDocument);
+      expect(openApiModuleLoadSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.doUnmock('./openapi.js');
+    }
   });
 
   test('should mount all sub-routers', async () => {

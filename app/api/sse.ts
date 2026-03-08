@@ -41,6 +41,7 @@ const ALLOWED_CONTAINER_EVENT_NAMES = new Set<string>([
   'dd:agent-disconnected',
 ]);
 const clients = new Set<FlushableResponse>();
+const heartbeatBackpressuredClients = new Set<FlushableResponse>();
 const sseClientRegistry = new ActiveSseClientRegistry();
 const activeSseClientRegistryTestAdapter =
   createActiveSseClientRegistryTestAdapter(sseClientRegistry);
@@ -81,11 +82,22 @@ function isResponseClosed(response: FlushableResponse): boolean {
 
 function dropActiveClient(client: ActiveSseClient): void {
   clients.delete(client.response);
+  heartbeatBackpressuredClients.delete(client.response);
   sseClientRegistry.remove(client);
 }
 
 function writeHeartbeat(response: FlushableResponse): void {
-  response.write('event: dd:heartbeat\ndata: {}\n\n');
+  if (heartbeatBackpressuredClients.has(response)) {
+    return;
+  }
+
+  const writeAccepted = response.write('event: dd:heartbeat\ndata: {}\n\n');
+  if (writeAccepted === false) {
+    heartbeatBackpressuredClients.add(response);
+    response.once?.('drain', () => {
+      heartbeatBackpressuredClients.delete(response);
+    });
+  }
 }
 
 function startSharedHeartbeatIntervalIfNeeded(): void {
@@ -105,6 +117,7 @@ function stopSharedHeartbeatIntervalIfIdle(): void {
   }
   globalThis.clearInterval(sharedHeartbeatIntervalHandle);
   sharedHeartbeatIntervalHandle = undefined;
+  heartbeatBackpressuredClients.clear();
 }
 
 function sweepStaleSseState(nowMs = Date.now()): void {
@@ -251,6 +264,7 @@ function clearRuntimeIntervals(): void {
     globalThis.clearInterval(sharedHeartbeatIntervalHandle);
     sharedHeartbeatIntervalHandle = undefined;
   }
+  heartbeatBackpressuredClients.clear();
 }
 
 function cleanupOnProcessShutdown(): void {

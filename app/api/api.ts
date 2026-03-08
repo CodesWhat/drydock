@@ -16,7 +16,6 @@ import * as iconsRouter from './icons.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
 import * as logRouter from './log.js';
 import * as notificationRouter from './notification.js';
-import { openApiDocument } from './openapi.js';
 import * as previewRouter from './preview.js';
 import * as registryRouter from './registry.js';
 import * as serverRouter from './server.js';
@@ -59,7 +58,8 @@ export function init(): express.Router {
   router.use('/webhook', webhookRouter.init());
 
   // Public OpenAPI document for integrations and API clients.
-  router.get('/openapi.json', (_req: Request, res: Response) => {
+  router.get('/openapi.json', async (_req: Request, res: Response) => {
+    const { openApiDocument } = await import('./openapi.js');
     res.status(200).json(openApiDocument);
   });
 

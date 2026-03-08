@@ -132,9 +132,12 @@ function callGetContainerSummary(handlers: ReturnType<typeof createCrudHandlers>
   return res;
 }
 
-function callGetContainerSecurityVulnerabilities(handlers: ReturnType<typeof createCrudHandlers>) {
+function callGetContainerSecurityVulnerabilities(
+  handlers: ReturnType<typeof createCrudHandlers>,
+  query: Record<string, unknown> = {},
+) {
   const res = createMockResponse();
-  handlers.getContainerSecurityVulnerabilities({} as any, res as any);
+  handlers.getContainerSecurityVulnerabilities({ query } as any, res as any);
   return res;
 }
 
@@ -668,6 +671,10 @@ describe('api/container/crud', () => {
         totalContainers: 3,
         scannedContainers: 2,
         latestScannedAt: '2026-02-02T10:00:00.000Z',
+        total: 2,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
         images: [
           {
             image: 'nginx',
@@ -691,6 +698,95 @@ describe('api/container/crud', () => {
                 primaryUrl: 'https://example.com/CVE-2026-0001',
                 publishedDate: '2026-01-01T00:00:00.000Z',
               },
+              {
+                id: 'CVE-2026-0002',
+                severity: 'HIGH',
+                package: 'zlib',
+                version: '1.2.10',
+                fixedIn: null,
+                title: '',
+                target: '',
+                primaryUrl: '',
+                publishedDate: '',
+              },
+            ],
+          },
+        ],
+      });
+    });
+
+    test('supports limit/offset pagination for aggregated vulnerabilities', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            name: 'nginx',
+            displayName: 'nginx',
+            security: {
+              scan: {
+                scannedAt: '2026-02-01T10:00:00.000Z',
+                vulnerabilities: [
+                  {
+                    id: 'CVE-2026-0001',
+                    severity: 'CRITICAL',
+                    packageName: 'openssl',
+                    installedVersion: '3.0.0',
+                  },
+                  {
+                    id: 'CVE-2026-0002',
+                    severity: 'HIGH',
+                    packageName: 'zlib',
+                    installedVersion: '1.2.10',
+                  },
+                ],
+              },
+            },
+          }),
+          createContainer({
+            id: 'c2',
+            name: 'redis',
+            displayName: 'redis',
+            security: {
+              scan: {
+                scannedAt: '2026-02-02T10:00:00.000Z',
+                vulnerabilities: [
+                  {
+                    id: 'CVE-2026-0003',
+                    severity: 'MEDIUM',
+                    packageName: 'jemalloc',
+                    installedVersion: '5.2.1',
+                  },
+                ],
+              },
+            },
+          }),
+        ],
+      });
+
+      const res = callGetContainerSecurityVulnerabilities(harness.handlers, {
+        limit: '1',
+        offset: '1',
+      });
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({});
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        totalContainers: 2,
+        scannedContainers: 2,
+        latestScannedAt: '2026-02-02T10:00:00.000Z',
+        total: 3,
+        limit: 1,
+        offset: 1,
+        hasMore: true,
+        _links: {
+          self: '/api/containers/security/vulnerabilities?limit=1&offset=1',
+          next: '/api/containers/security/vulnerabilities?limit=1&offset=2',
+        },
+        images: [
+          {
+            image: 'nginx',
+            containerIds: ['c1'],
+            vulnerabilities: [
               {
                 id: 'CVE-2026-0002',
                 severity: 'HIGH',
@@ -787,6 +883,10 @@ describe('api/container/crud', () => {
         totalContainers: 5,
         scannedContainers: 5,
         latestScannedAt: 'z',
+        total: 2,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
       });
 
       expect(payload.images).toEqual(

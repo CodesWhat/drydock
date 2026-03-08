@@ -149,4 +149,18 @@ describe('OpenAPI document', () => {
       expect(schema).toEqual({ $ref: '#/components/schemas/CollectionResult' });
     }
   });
+
+  test('should compose auth, container, and trigger paths from domain modules', async () => {
+    const [{ authPaths }, { containerPaths }, { triggerPaths }, { openApiPaths }] =
+      await Promise.all([
+        import('./openapi/paths/auth.js'),
+        import('./openapi/paths/containers.js'),
+        import('./openapi/paths/triggers.js'),
+        import('./openapi/paths/index.js'),
+      ]);
+
+    expect(openApiPaths['/auth/login']).toBe(authPaths['/auth/login']);
+    expect(openApiPaths['/api/containers']).toBe(containerPaths['/api/containers']);
+    expect(openApiPaths['/api/triggers']).toBe(triggerPaths['/api/triggers']);
+  });
 });

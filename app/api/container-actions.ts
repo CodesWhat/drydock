@@ -43,6 +43,14 @@ type DockerWatcher = {
   };
 };
 
+/**
+ * Execute a container action (start, stop, restart).
+ *
+ * Security note: these action endpoints are intentionally authentication-gated
+ * only. In current single-operator deployments, any authenticated user can
+ * start, stop, or restart any container. Fine-grained RBAC is planned for a
+ * future enterprise access release.
+ */
 async function executeAction(
   req: Request,
   res: Response,
