@@ -418,14 +418,12 @@ describe('LoginView', () => {
       expect(mockGetStrategies).toHaveBeenCalledTimes(1);
     });
 
-    it('shows upside-down logo and reconnecting text in overlay', async () => {
+    it('shows warning icon and reconnecting text in overlay', async () => {
       mockGetStrategies.mockRejectedValue(new Error('offline'));
       const wrapper = trackWrapper(mountWithPlugins(LoginView));
       await flushPromises();
 
-      const logo = wrapper.find('img[alt=""]');
-      expect(logo.exists()).toBe(true);
-      expect(logo.attributes('style')).toContain('rotate(180deg)');
+      expect(wrapper.find('.app-icon-stub[data-icon="warning"]').exists()).toBe(true);
       expect(wrapper.text()).toContain('Reconnecting');
       wrapper.unmount();
     });
