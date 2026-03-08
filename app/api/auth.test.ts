@@ -1,14 +1,25 @@
-const { mockRouter, mockLokiStore, mockExpressJson, mockJsonMiddleware } = vi.hoisted(() => {
-  const jsonMiddleware = vi.fn();
-  return {
-    mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
-    mockLokiStore: vi.fn(),
-    mockJsonMiddleware: jsonMiddleware,
-    mockExpressJson: vi.fn(() => jsonMiddleware),
-  };
-});
+const { mockRouter, mockLokiStore, mockExpressJson, mockJsonMiddleware, mockFs } = vi.hoisted(
+  () => {
+    const jsonMiddleware = vi.fn();
+    return {
+      mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
+      mockLokiStore: vi.fn(),
+      mockJsonMiddleware: jsonMiddleware,
+      mockExpressJson: vi.fn(() => jsonMiddleware),
+      mockFs: {
+        existsSync: vi.fn(),
+        readFileSync: vi.fn(),
+        writeFileSync: vi.fn(),
+        mkdirSync: vi.fn(),
+      },
+    };
+  },
+);
 const mockGetServerConfiguration = vi.hoisted(() => vi.fn(() => ({ cookie: {} })));
 const mockRecordAuditEvent = vi.hoisted(() => vi.fn());
+const mockValidateOpenApiJsonResponse = vi.hoisted(() =>
+  vi.fn(() => ({ valid: true, errors: [] })),
+);
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter), json: mockExpressJson },
@@ -37,6 +48,10 @@ vi.mock('uuid', () => ({
   v5: vi.fn(() => 'mock-uuid-v5'),
 }));
 
+vi.mock('node:fs', () => ({
+  default: mockFs,
+}));
+
 vi.mock('../store', () => ({
   getConfiguration: vi.fn(() => ({
     path: '/test/store',
@@ -59,6 +74,9 @@ vi.mock('../configuration', () => ({
 vi.mock('./audit-events.js', () => ({
   recordAuditEvent: mockRecordAuditEvent,
 }));
+vi.mock('./openapi-contract.js', () => ({
+  validateOpenApiJsonResponse: mockValidateOpenApiJsonResponse,
+}));
 
 import session from 'express-session';
 import passport from 'passport';
@@ -66,6 +84,9 @@ import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as auth from './auth.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
+
+const lockoutStateFiles = new Map<string, string>();
+const LOCKOUT_STATE_PATH = '/test/store/db.json.auth-lockouts.json';
 
 function createApp() {
   return {
@@ -132,6 +153,21 @@ function getRouteMiddleware(method, path) {
 describe('Auth Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    lockoutStateFiles.clear();
+    mockFs.existsSync.mockImplementation((candidate: unknown) =>
+      lockoutStateFiles.has(`${candidate}`),
+    );
+    mockFs.readFileSync.mockImplementation((candidate: unknown) => {
+      const value = lockoutStateFiles.get(`${candidate}`);
+      if (value === undefined) {
+        throw new Error('ENOENT: lockout file missing');
+      }
+      return value;
+    });
+    mockFs.writeFileSync.mockImplementation((candidate: unknown, content: unknown) => {
+      lockoutStateFiles.set(`${candidate}`, `${content}`);
+    });
+    mockFs.mkdirSync.mockImplementation(() => undefined);
     // Reset the strategy IDs array between tests
     auth._resetStrategyIdsForTests();
     mockGetServerConfiguration.mockReturnValue({ cookie: {} });
@@ -661,6 +697,113 @@ describe('Auth Router', () => {
       }
 
       expect(passport.authenticate).toHaveBeenCalled();
+    });
+
+    test('should persist lockout state after failed login attempts', () => {
+      vi.useFakeTimers();
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      try {
+        const authenticateLoginFn = getLoginMiddleware();
+        authenticateLoginFn(
+          {
+            body: { username: 'persist-user' },
+            ip: '203.0.113.40',
+          },
+          createResponse(),
+          vi.fn(),
+        );
+
+        vi.advanceTimersByTime(1000);
+
+        expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+          LOCKOUT_STATE_PATH,
+          expect.any(String),
+          'utf8',
+        );
+        const persistedState = JSON.parse(lockoutStateFiles.get(LOCKOUT_STATE_PATH) ?? '{}');
+        expect(persistedState.account['persist-user']).toEqual(
+          expect.objectContaining({
+            failedAttempts: 1,
+          }),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('should restore active lockout state from persisted storage on init', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+      lockoutStateFiles.set(
+        LOCKOUT_STATE_PATH,
+        JSON.stringify({
+          account: {
+            'restored-user': {
+              failedAttempts: 5,
+              windowStartAt: Date.parse('2026-01-01T00:00:00.000Z'),
+              lockedUntil: Date.parse('2026-01-01T00:10:00.000Z'),
+              lastAttemptAt: Date.parse('2026-01-01T00:00:00.000Z'),
+            },
+          },
+          ip: {},
+        }),
+      );
+
+      try {
+        const authenticateLoginFn = getLoginMiddleware();
+        const res = createResponse();
+
+        authenticateLoginFn(
+          {
+            body: { username: 'restored-user' },
+            ip: '203.0.113.41',
+          },
+          res,
+          vi.fn(),
+        );
+
+        expect(passport.authenticate).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(423);
+        expect(res.json).toHaveBeenCalledWith({
+          error: 'Account temporarily locked due to repeated failed login attempts',
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('should prune stale lockout entries on a maintenance timer', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+      lockoutStateFiles.set(
+        LOCKOUT_STATE_PATH,
+        JSON.stringify({
+          account: {
+            'timer-user': {
+              failedAttempts: 1,
+              windowStartAt: Date.parse('2026-01-01T00:00:00.000Z'),
+              lockedUntil: 0,
+              lastAttemptAt: Date.parse('2026-01-01T00:00:00.000Z'),
+            },
+          },
+          ip: {},
+        }),
+      );
+
+      try {
+        getLoginMiddleware();
+
+        vi.setSystemTime(new Date('2026-01-01T00:16:00.000Z'));
+        vi.advanceTimersByTime(16 * 60 * 1000);
+
+        const persistedState = JSON.parse(lockoutStateFiles.get(LOCKOUT_STATE_PATH) ?? '{}');
+        expect(persistedState.account['timer-user']).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     test('should clear lockout state after successful authentication', () => {
@@ -1355,7 +1498,7 @@ describe('Auth Router', () => {
       expect(res.json).toHaveBeenCalledWith({ username: 'anonymous' });
     });
 
-    test('login should return user info', () => {
+    test('login should return user info', async () => {
       const handler = getRouteHandler('post', '/login');
       const res = createResponse();
       const req = {
@@ -1363,7 +1506,7 @@ describe('Auth Router', () => {
         session: { cookie: {}, regenerate: vi.fn((done) => done()) },
         login: vi.fn((_user, done) => done()),
       };
-      handler(req, res);
+      await handler(req, res);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ username: 'john' });
       expect(mockRecordAuditEvent).toHaveBeenCalledWith(
@@ -1374,7 +1517,7 @@ describe('Auth Router', () => {
       );
     });
 
-    test('login should regenerate session and rebind authenticated user', () => {
+    test('login should regenerate session and rebind authenticated user', async () => {
       const handler = getRouteHandler('post', '/login');
       const res = createResponse();
       const req = {
@@ -1385,7 +1528,7 @@ describe('Auth Router', () => {
       };
       req.session.regenerate.mockImplementation((done) => done());
 
-      handler(req, res);
+      await handler(req, res);
 
       expect(req.session.regenerate).toHaveBeenCalledTimes(1);
       expect(req.login).toHaveBeenCalledWith({ username: 'john' }, expect.any(Function));
@@ -1393,7 +1536,7 @@ describe('Auth Router', () => {
       expect(res.json).toHaveBeenCalledWith({ username: 'john' });
     });
 
-    test('login should return user without req.login when session is already established', () => {
+    test('login should return user without req.login when session is already established', async () => {
       const handler = getRouteHandler('post', '/login');
       const res = createResponse();
       const req = {
@@ -1401,7 +1544,7 @@ describe('Auth Router', () => {
         session: { regenerate: vi.fn((done) => done()) },
       };
 
-      handler(req, res);
+      await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ username: 'john' });
@@ -1413,7 +1556,7 @@ describe('Auth Router', () => {
       );
     });
 
-    test('login should continue without session-limit enforcement for blank usernames', () => {
+    test('login should continue without session-limit enforcement for blank usernames', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
         user: { username: '   ' },
@@ -1425,7 +1568,7 @@ describe('Auth Router', () => {
       };
       const res = createResponse();
 
-      handler(req, res);
+      await handler(req, res);
 
       expect(req.sessionStore.all).not.toHaveBeenCalled();
       expect(req.sessionStore.destroy).not.toHaveBeenCalled();
@@ -1433,7 +1576,7 @@ describe('Auth Router', () => {
       expect(res.json).toHaveBeenCalledWith({ username: '   ' });
     });
 
-    test('login should continue without session-limit enforcement when username is missing', () => {
+    test('login should continue without session-limit enforcement when username is missing', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
         user: {},
@@ -1445,7 +1588,7 @@ describe('Auth Router', () => {
       };
       const res = createResponse();
 
-      handler(req, res);
+      await handler(req, res);
 
       expect(req.sessionStore.all).not.toHaveBeenCalled();
       expect(req.sessionStore.destroy).not.toHaveBeenCalled();
@@ -1499,7 +1642,7 @@ describe('Auth Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Unable to access session' });
     });
 
-    test('login should apply remember-me cookie max age', () => {
+    test('login should apply remember-me cookie max age', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
         body: { remember: true },
@@ -1509,7 +1652,7 @@ describe('Auth Router', () => {
       };
       const res = createResponse();
 
-      handler(req, res);
+      await handler(req, res);
 
       expect(req.session.rememberMe).toBe(true);
       expect(req.session.cookie.maxAge).toBe(3600 * 1000 * 24 * 30);
@@ -1517,7 +1660,7 @@ describe('Auth Router', () => {
       expect(res.json).toHaveBeenCalledWith({ username: 'john' });
     });
 
-    test('login should convert remember-me cookie to a session cookie when remember is false', () => {
+    test('login should convert remember-me cookie to a session cookie when remember is false', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
         body: { remember: false },
@@ -1531,7 +1674,7 @@ describe('Auth Router', () => {
       };
       const res = createResponse();
 
-      handler(req, res);
+      await handler(req, res);
 
       expect(req.session.rememberMe).toBe(false);
       expect(req.session.cookie.expires).toBe(false);
@@ -1589,14 +1732,173 @@ describe('Auth Router', () => {
       };
       const res = createResponse();
 
-      handler(req, res);
-      await new Promise((resolve) => setImmediate(resolve));
+      await handler(req, res);
 
       expect(req.sessionStore.destroy).toHaveBeenCalledTimes(1);
       expect(req.sessionStore.destroy).toHaveBeenCalledWith('session-oldest', expect.any(Function));
       expect(req.login).toHaveBeenCalledWith({ username: 'john' }, expect.any(Function));
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+    });
+
+    test('login should serialize concurrent session enforcement per user', async () => {
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: {},
+        session: {
+          maxconcurrentsessions: 2,
+        },
+      });
+
+      const handler = getRouteHandler('post', '/login');
+      const sessions = {
+        'session-existing': {
+          passport: {
+            user: JSON.stringify({ username: 'john' }),
+          },
+          cookie: {
+            expires: '2026-01-01T00:00:00.000Z',
+          },
+        },
+      };
+      const sessionStore = {
+        all: vi.fn((done) => done(null, sessions)),
+        destroy: vi.fn((sid, done) => {
+          delete sessions[sid];
+          done();
+        }),
+      };
+      const createLoginRequest = (sessionId) => ({
+        body: { remember: true },
+        user: { username: 'john' },
+        sessionID: sessionId,
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        sessionStore,
+        login: vi.fn((_user, done) => {
+          sessions[sessionId] = {
+            passport: {
+              user: JSON.stringify({ username: 'john' }),
+            },
+            cookie: {
+              expires: '2026-01-04T00:00:00.000Z',
+            },
+          };
+          done();
+        }),
+      });
+      const req1 = createLoginRequest('new-session-1');
+      const req2 = createLoginRequest('new-session-2');
+      const res1 = createResponse();
+      const res2 = createResponse();
+
+      await Promise.all([handler(req1, res1), handler(req2, res2)]);
+
+      const userSessions = Object.values(sessions).filter((storedSession) => {
+        const rawUser = storedSession.passport?.user;
+        if (typeof rawUser !== 'string') {
+          return false;
+        }
+        try {
+          return JSON.parse(rawUser).username === 'john';
+        } catch {
+          return false;
+        }
+      });
+
+      expect(req1.login).toHaveBeenCalledWith({ username: 'john' }, expect.any(Function));
+      expect(req2.login).toHaveBeenCalledWith({ username: 'john' }, expect.any(Function));
+      expect(sessionStore.destroy).toHaveBeenCalledTimes(1);
+      expect(sessionStore.destroy).toHaveBeenCalledWith('session-existing', expect.any(Function));
+      expect(userSessions).toHaveLength(2);
+      expect(res1.status).toHaveBeenCalledWith(200);
+      expect(res1.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(res2.status).toHaveBeenCalledWith(200);
+      expect(res2.json).toHaveBeenCalledWith({ username: 'john' });
+    });
+
+    test('login should keep max=1 cap under concurrent logins that both require eviction', async () => {
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: {},
+        session: {
+          maxconcurrentsessions: 1,
+        },
+      });
+
+      const handler = getRouteHandler('post', '/login');
+      const sessions = {
+        'session-existing': {
+          passport: {
+            user: JSON.stringify({ username: 'john' }),
+          },
+          cookie: {
+            expires: '2026-01-01T00:00:00.000Z',
+          },
+        },
+      };
+      const sessionStore = {
+        all: vi.fn((done) => done(null, sessions)),
+        destroy: vi.fn((sid, done) => {
+          delete sessions[sid];
+          setTimeout(() => done(), 5);
+        }),
+      };
+      const createLoginRequest = (sessionId, expires) => ({
+        body: { remember: true },
+        user: { username: 'john' },
+        sessionID: sessionId,
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        sessionStore,
+        login: vi.fn((_user, done) => {
+          sessions[sessionId] = {
+            passport: {
+              user: JSON.stringify({ username: 'john' }),
+            },
+            cookie: {
+              expires,
+            },
+          };
+          done();
+        }),
+      });
+      const req1 = createLoginRequest('new-session-1', '2026-01-02T00:00:00.000Z');
+      const req2 = createLoginRequest('new-session-2', '2026-01-03T00:00:00.000Z');
+      const res1 = createResponse();
+      const res2 = createResponse();
+
+      await Promise.all([handler(req1, res1), handler(req2, res2)]);
+
+      const userSessionIds = Object.entries(sessions)
+        .filter(([, storedSession]) => {
+          const rawUser = storedSession.passport?.user;
+          if (typeof rawUser !== 'string') {
+            return false;
+          }
+          try {
+            return JSON.parse(rawUser).username === 'john';
+          } catch {
+            return false;
+          }
+        })
+        .map(([sid]) => sid)
+        .sort();
+
+      expect(req1.login).toHaveBeenCalledWith({ username: 'john' }, expect.any(Function));
+      expect(req2.login).toHaveBeenCalledWith({ username: 'john' }, expect.any(Function));
+      expect(sessionStore.destroy).toHaveBeenCalledTimes(2);
+      expect(sessionStore.destroy).toHaveBeenNthCalledWith(
+        1,
+        'session-existing',
+        expect.any(Function),
+      );
+      expect(sessionStore.destroy).toHaveBeenNthCalledWith(
+        2,
+        'new-session-1',
+        expect.any(Function),
+      );
+      expect(userSessionIds).toEqual(['new-session-2']);
+      expect(res1.status).toHaveBeenCalledWith(200);
+      expect(res1.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(res2.status).toHaveBeenCalledWith(200);
+      expect(res2.json).toHaveBeenCalledWith({ username: 'john' });
     });
 
     test('login should return 500 when concurrent session enforcement fails', async () => {
@@ -1632,8 +1934,7 @@ describe('Auth Router', () => {
       };
       const res = createResponse();
 
-      handler(req, res);
-      await new Promise((resolve) => setImmediate(resolve));
+      await handler(req, res);
 
       expect(req.login).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(500);
@@ -1647,14 +1948,14 @@ describe('Auth Router', () => {
       );
     });
 
-    test('login should record failed login audit when session is unavailable', () => {
+    test('login should record failed login audit when session is unavailable', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
         user: { username: 'john' },
       };
       const res = createResponse();
 
-      handler(req, res);
+      await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
@@ -1667,7 +1968,7 @@ describe('Auth Router', () => {
       );
     });
 
-    test('login should record failed login audit when session regeneration fails', () => {
+    test('login should record failed login audit when session regeneration fails', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
         user: { username: 'john' },
@@ -1678,7 +1979,7 @@ describe('Auth Router', () => {
       };
       const res = createResponse();
 
-      handler(req, res);
+      await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
@@ -1691,7 +1992,7 @@ describe('Auth Router', () => {
       );
     });
 
-    test('login should fail when session is unavailable after regenerate callback', () => {
+    test('login should fail when session is unavailable after regenerate callback', async () => {
       const handler = getRouteHandler('post', '/login');
       const req: any = {
         user: { username: 'john' },
@@ -1705,7 +2006,7 @@ describe('Auth Router', () => {
       };
       const res = createResponse();
 
-      handler(req, res);
+      await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
@@ -1718,7 +2019,7 @@ describe('Auth Router', () => {
       );
     });
 
-    test('login should record failed login audit when req.login fails', () => {
+    test('login should record failed login audit when req.login fails', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
         user: { username: 'john' },
@@ -1730,7 +2031,7 @@ describe('Auth Router', () => {
       };
       const res = createResponse();
 
-      handler(req, res);
+      await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
@@ -1739,6 +2040,32 @@ describe('Auth Router', () => {
           action: 'auth-login',
           status: 'error',
           details: expect.stringContaining('persist failed'),
+        }),
+      );
+    });
+
+    test('login should record failed login audit when req.login throws synchronously', async () => {
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        user: { username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn((done) => done()),
+        },
+        login: vi.fn(() => {
+          throw new Error('persist threw');
+        }),
+      };
+      const res = createResponse();
+
+      await expect(handler(req, res)).resolves.toBeUndefined();
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auth-login',
+          status: 'error',
+          details: expect.stringContaining('persist threw'),
         }),
       );
     });

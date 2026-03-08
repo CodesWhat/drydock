@@ -1,4 +1,5 @@
-var { mockArgon2Sync, mockTimingSafeEqual } = vi.hoisted(() => ({
+var { mockArgon2, mockArgon2Sync, mockTimingSafeEqual } = vi.hoisted(() => ({
+  mockArgon2: vi.fn(),
   mockArgon2Sync: vi.fn(),
   mockTimingSafeEqual: vi.fn(
     (left: Buffer, right: Buffer) => left.length === right.length && left.equals(right),
@@ -7,11 +8,19 @@ var { mockArgon2Sync, mockTimingSafeEqual } = vi.hoisted(() => ({
 
 vi.mock('node:crypto', async () => {
   const actual = await vi.importActual<typeof import('node:crypto')>('node:crypto');
+  mockArgon2.mockImplementation(
+    (
+      algorithm: string,
+      options: Record<string, unknown>,
+      callback: (error: Error | null, derived?: Buffer) => void,
+    ) => actual.argon2(algorithm as 'argon2id', options as any, callback),
+  );
   mockArgon2Sync.mockImplementation((algorithm: string, options: Record<string, unknown>) =>
     actual.argon2Sync(algorithm as 'argon2id', options),
   );
   return {
     ...actual,
+    argon2: mockArgon2,
     argon2Sync: mockArgon2Sync,
     timingSafeEqual: mockTimingSafeEqual,
   };
@@ -53,6 +62,7 @@ describe('Basic Authentication', () => {
 
   beforeEach(async () => {
     basic = new Basic();
+    mockArgon2.mockClear();
     mockArgon2Sync.mockClear();
     mockTimingSafeEqual.mockClear();
   });
@@ -112,6 +122,9 @@ describe('Basic Authentication', () => {
       hash: createArgon2Hash('password', params),
     };
 
+    mockArgon2.mockClear();
+    mockArgon2Sync.mockClear();
+
     await new Promise<void>((resolve) => {
       basic.authenticate('testuser', 'password', (_err, result) => {
         expect(result).toEqual({ username: 'testuser' });
@@ -119,7 +132,7 @@ describe('Basic Authentication', () => {
       });
     });
 
-    const verificationCall = mockArgon2Sync.mock.calls.find(
+    const verificationCall = mockArgon2.mock.calls.find(
       (call: unknown[]) =>
         call[1] && typeof call[1] === 'object' && 'memory' in (call[1] as Record<string, unknown>),
     );
@@ -130,6 +143,7 @@ describe('Basic Authentication', () => {
       passes: params.passes,
       parallelism: params.parallelism,
     });
+    expect(mockArgon2Sync).not.toHaveBeenCalled();
   });
 
   test('should reject invalid user', async () => {
@@ -264,8 +278,8 @@ describe('Basic Authentication', () => {
       user: 'testuser',
       hash: createArgon2Hash('password'),
     };
-    mockArgon2Sync.mockImplementationOnce(() => {
-      throw new Error('argon2 unavailable');
+    mockArgon2.mockImplementationOnce((_algorithm, _options, callback) => {
+      callback(new Error('argon2 unavailable'));
     });
 
     await new Promise<void>((resolve) => {
@@ -274,6 +288,26 @@ describe('Basic Authentication', () => {
         resolve();
       });
     });
+  });
+
+  test('should verify argon2id passwords using async crypto.argon2', async () => {
+    basic.configuration = {
+      user: 'testuser',
+      hash: createArgon2Hash('password'),
+    };
+
+    mockArgon2.mockClear();
+    mockArgon2Sync.mockClear();
+
+    await new Promise<void>((resolve) => {
+      basic.authenticate('testuser', 'password', (_err, result) => {
+        expect(result).toEqual({ username: 'testuser' });
+        resolve();
+      });
+    });
+
+    expect(mockArgon2).toHaveBeenCalledTimes(1);
+    expect(mockArgon2Sync).not.toHaveBeenCalled();
   });
 
   test('should reject argon2id hashes with empty base64 segments', async () => {

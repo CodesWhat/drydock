@@ -883,6 +883,25 @@ test('callback should set long-lived cookie when rememberMe is true', async () =
   expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
 });
 
+test('callback should regenerate the session before completing login', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const regenerate = vi.fn((done) => done());
+  const session = createSessionWithPending({
+    'valid-state': createPendingCheck(),
+  });
+  session.regenerate = regenerate;
+
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(regenerate).toHaveBeenCalledTimes(1);
+  expect(req.login).toHaveBeenCalled();
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
 test('callback should convert cookie to session cookie when rememberMe is false', async () => {
   mockSuccessfulGrant(openidClientMock);
 
