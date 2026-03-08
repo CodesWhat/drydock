@@ -14,7 +14,7 @@ services:
       - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
       - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
       - DD_AUTH_BASIC_ADMIN_USER=admin
-      - "DD_AUTH_BASIC_ADMIN_HASH={SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g="
+      - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$H/LzIyo+5tbepUCiuRU2bFai+nbf+y/ZjMYH7h+vf1g=$$GeCkn8cI/+DbKXUiPydlqKUvj5Ujb4wL5sUkSm83rQWyIejvWoejrk6zWmQ2x5an7qvSHYL9gZHpibCXAJNdYw=="
       - DD_SESSION_SECRET=ci-load-test-secret
 
   nginx-test:

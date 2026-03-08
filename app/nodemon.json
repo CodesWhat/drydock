@@ -5,7 +5,7 @@
     "DD_LOG_LEVEL": "debug",
     "DD_WATCHER_LOCAL_WATCHBYDEFAULT": "false",
     "DD_AUTH_BASIC_JOHN_USER": "john",
-    "DD_AUTH_BASIC_JOHN_HASH": "{SHA}1rToTufzHYhhemtgQhRRJy6/Gjo=",
+    "DD_AUTH_BASIC_JOHN_HASH": "argon2id$65536$3$4$/Y21uoNfTJ/Bv+t7Msz6XABip7tBOI55ZgjeCXyhGc0=$MHhv8Tc/0TCnhAeoNQRHII3sbOLIQ+1lMlHk+Ifyv3IUAxT6NkVt+OXT03kJTn8JRzmD24L+qCjcqk2+Ad1dTw==",
     "DD_TRIGGER_COMMAND_TMP_CMD": "bash -c ../test/cmd_test.sh",
     "DD_TRIGGER_COMMAND_TMP_ONCE": "false",
     "DD_TRIGGER_NTFY_ONE_TOPIC": "235ef38e-f1db-414a-964f-ce3f2cc8094d",

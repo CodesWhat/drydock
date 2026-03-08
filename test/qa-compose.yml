@@ -19,7 +19,7 @@ services:
       - DD_TRIGGER_HTTP_MYWEBHOOK_URL=http://httpbin.org/post
       - DD_TRIGGER_HTTP_MYWEBHOOK_METHOD=POST
       - DD_AUTH_BASIC_ADMIN_USER=admin
-      - "DD_AUTH_BASIC_ADMIN_HASH={SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g="
+      - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$zUAK9+ktVWNHyQdv3SaOSgMv3T02F1Zj8D+t1un7D98=$$KEmn6d94w03YxIlw7U7l/ikD9lW+H3IC1N7xbAhOB9yKofA3HoxUBmuvBawvShhv337zDv4+g9hobNWeQEWwkQ=="
       - DD_SERVER_WEBHOOK_ENABLED=true
       - DD_SERVER_WEBHOOK_TOKEN=test-token-12345
       - DD_SESSION_SECRET=qa-test-session-secret

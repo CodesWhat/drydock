@@ -36,7 +36,7 @@ let watchers = {};
 let authentications = {};
 let agents = {};
 const TEST_BASIC_HASH =
-  'scrypt$16384$8$1$ZHJ5ZG9jay1yZWdpc3RyeS10ZXN0LXNhbHQ=$V6hk4ek6v95Iw8L9Gbvfl9hP6jP0EqM5j4dQos2N8lH7mchXNBmYddu9VcofRktmEG+EsRjuNqkN1wjhfhVf8Q==';
+  'argon2id$65536$3$4$ZHJ5ZG9jay1yZWdpc3RyeS10ZXN0LXNhbHQ=$YlkF5heeP1TK+kWW7LNnQbI3ws4zeQpVQc3fcw592ObbdIz+n02qdNC5Z1YhzTXJ8FbgaWo61lPGqB8Za5OYwg==';
 
 // Override the mocked functions
 // We need to cast to jest.Mock or assume they are mocks because of the factory above
