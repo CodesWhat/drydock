@@ -20,9 +20,11 @@ import Anonymous from './Anonymous.js';
 describe('Anonymous Authentication', () => {
   let anonymous: InstanceType<typeof Anonymous>;
   const originalAnonymousConfirmation = process.env.DD_ANONYMOUS_AUTH_CONFIRM;
+  const originalAliasConfirmation = process.env.DD_AUTH_ANONYMOUS_CONFIRM;
 
   beforeEach(async () => {
     delete process.env.DD_ANONYMOUS_AUTH_CONFIRM;
+    delete process.env.DD_AUTH_ANONYMOUS_CONFIRM;
     mockIsUpgrade.mockReturnValue(false);
     vi.clearAllMocks();
     anonymous = new Anonymous();
@@ -31,9 +33,14 @@ describe('Anonymous Authentication', () => {
   afterAll(() => {
     if (originalAnonymousConfirmation === undefined) {
       delete process.env.DD_ANONYMOUS_AUTH_CONFIRM;
-      return;
+    } else {
+      process.env.DD_ANONYMOUS_AUTH_CONFIRM = originalAnonymousConfirmation;
     }
-    process.env.DD_ANONYMOUS_AUTH_CONFIRM = originalAnonymousConfirmation;
+    if (originalAliasConfirmation === undefined) {
+      delete process.env.DD_AUTH_ANONYMOUS_CONFIRM;
+    } else {
+      process.env.DD_AUTH_ANONYMOUS_CONFIRM = originalAliasConfirmation;
+    }
   });
 
   test('should create instance', async () => {
@@ -73,6 +80,18 @@ describe('Anonymous Authentication', () => {
 
     test('should return anonymous strategy with confirmation', () => {
       process.env.DD_ANONYMOUS_AUTH_CONFIRM = 'true';
+      const strategy = anonymous.getStrategy();
+      expect(strategy).toBeDefined();
+      expect(strategy.name).toBe('anonymous');
+    });
+
+    test('should not throw during initAuthentication with DD_AUTH_ANONYMOUS_CONFIRM alias', () => {
+      process.env.DD_AUTH_ANONYMOUS_CONFIRM = 'true';
+      expect(() => anonymous.initAuthentication()).not.toThrow();
+    });
+
+    test('should return anonymous strategy with DD_AUTH_ANONYMOUS_CONFIRM alias', () => {
+      process.env.DD_AUTH_ANONYMOUS_CONFIRM = 'true';
       const strategy = anonymous.getStrategy();
       expect(strategy).toBeDefined();
       expect(strategy.name).toBe('anonymous');
