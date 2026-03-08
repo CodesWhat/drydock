@@ -626,6 +626,46 @@ describe('Dockercompose Trigger', () => {
     expect(updatedCompose).toContain('MIRROR_IMAGE=nginx:1.0.0');
   });
 
+  test('processComposeFile should preserve commented-out fields in compose file', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+
+    const container = makeContainer();
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+
+    const composeWithComments = [
+      '# My production stack',
+      'services:',
+      '  nginx:',
+      '    image: nginx:1.0.0',
+      '    # ports:',
+      '    #   - "8080:80"',
+      '    # volumes:',
+      '    #   - ./html:/usr/share/nginx/html',
+      '    environment:',
+      '      - NGINX_PORT=80',
+      '  redis:',
+      '    image: redis:7.0.0',
+      '',
+    ].join('\n');
+    const { writeComposeFileSpy } = spyOnProcessComposeHelpers(trigger, composeWithComments);
+
+    await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+
+    const [, updatedCompose] = writeComposeFileSpy.mock.calls[0];
+    expect(updatedCompose).toContain('# My production stack');
+    expect(updatedCompose).toContain('    image: nginx:1.1.0');
+    expect(updatedCompose).toContain('    # ports:');
+    expect(updatedCompose).toContain('    #   - "8080:80"');
+    expect(updatedCompose).toContain('    # volumes:');
+    expect(updatedCompose).toContain('    #   - ./html:/usr/share/nginx/html');
+    expect(updatedCompose).toContain('    environment:');
+    expect(updatedCompose).toContain('    image: redis:7.0.0');
+  });
+
   test('processComposeFile should fail when the same service resolves to conflicting image updates', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.backup = false;
@@ -2397,6 +2437,101 @@ describe('Dockercompose Trigger', () => {
     expect(() => testable_updateComposeServiceImageInText(compose, 'redis', 'redis:7.1.0')).toThrow(
       'Unable to locate compose service redis',
     );
+  });
+
+  // -----------------------------------------------------------------------
+  // Comment preservation
+  // -----------------------------------------------------------------------
+
+  test('updateComposeServiceImageInText should preserve commented-out service fields', () => {
+    const compose = [
+      'services:',
+      '  nginx:',
+      '    image: nginx:1.1.0',
+      '    # ports:',
+      '    #   - "8080:80"',
+      '    # volumes:',
+      '    #   - ./html:/usr/share/nginx/html',
+      '    # environment:',
+      '    #   - FOO=bar',
+      '    restart: always',
+      '',
+    ].join('\n');
+
+    const updated = testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0');
+
+    expect(updated).toContain('    image: nginx:1.2.0');
+    expect(updated).toContain('    # ports:');
+    expect(updated).toContain('    #   - "8080:80"');
+    expect(updated).toContain('    # volumes:');
+    expect(updated).toContain('    #   - ./html:/usr/share/nginx/html');
+    expect(updated).toContain('    # environment:');
+    expect(updated).toContain('    #   - FOO=bar');
+    expect(updated).toContain('    restart: always');
+  });
+
+  test('updateComposeServiceImageInText should preserve a commented-out entire service', () => {
+    const compose = [
+      'services:',
+      '  nginx:',
+      '    image: nginx:1.1.0',
+      '  # redis:',
+      '  #   image: redis:7',
+      '  #   ports:',
+      '  #     - "6379:6379"',
+      '',
+    ].join('\n');
+
+    const updated = testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0');
+
+    expect(updated).toContain('    image: nginx:1.2.0');
+    expect(updated).toContain('  # redis:');
+    expect(updated).toContain('  #   image: redis:7');
+    expect(updated).toContain('  #   ports:');
+    expect(updated).toContain('  #     - "6379:6379"');
+  });
+
+  test('updateComposeServiceImageInText should preserve top-level file comments', () => {
+    const compose = [
+      '# My production stack',
+      '# Last updated: 2024-01-01',
+      'services:',
+      '  nginx:',
+      '    image: nginx:1.1.0',
+      '',
+    ].join('\n');
+
+    const updated = testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0');
+
+    expect(updated).toContain('# My production stack');
+    expect(updated).toContain('# Last updated: 2024-01-01');
+    expect(updated).toContain('    image: nginx:1.2.0');
+  });
+
+  test('updateComposeServiceImageInText should preserve mixed inline and block comments', () => {
+    const compose = [
+      '# Stack header',
+      'services:',
+      '  nginx:',
+      '    image: nginx:1.1.0 # web server',
+      '    # ports:',
+      '    #   - "80:80"',
+      '    environment: # env vars',
+      '      - NGINX_PORT=80 # default port',
+      '  redis:',
+      '    image: redis:7.0.0 # cache',
+      '',
+    ].join('\n');
+
+    const updated = testable_updateComposeServiceImageInText(compose, 'nginx', 'nginx:1.2.0');
+
+    expect(updated).toContain('# Stack header');
+    expect(updated).toContain('    image: nginx:1.2.0 # web server');
+    expect(updated).toContain('    # ports:');
+    expect(updated).toContain('    #   - "80:80"');
+    expect(updated).toContain('    environment: # env vars');
+    expect(updated).toContain('      - NGINX_PORT=80 # default port');
+    expect(updated).toContain('    image: redis:7.0.0 # cache');
   });
 
   // -----------------------------------------------------------------------
