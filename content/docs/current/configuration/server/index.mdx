@@ -29,6 +29,7 @@ You can adjust the server configuration with the following environment variables
 | `DD_SESSION_SECRET` | ⚪ | Override the auto-generated session secret for cookie signing | Any string | auto-generated |
 | `DD_SERVER_COOKIE_SAMESITE` | ⚪ | Session cookie SameSite policy for auth flows (`none` requires HTTPS) | `strict`, `lax`, `none` | `lax` |
 | `DD_SERVER_SESSION_MAXCONCURRENTSESSIONS` | ⚪ | Maximum concurrent authenticated sessions per user (oldest sessions are revoked first at login when limit is reached) | integer (`>=1`) | `5` |
+| `DD_SERVER_RATELIMIT_IDENTITYKEYING` | ⚪ | Key authenticated-route rate limits by session/username instead of IP (prevents collisions for multiple users behind shared proxies) | `true`, `false` | `false` |
 | `DD_RUN_AS_ROOT` | ⚪ | Request break-glass root mode (requires `DD_ALLOW_INSECURE_ROOT=true`) | `true`, `false` | `false` |
 | `DD_ALLOW_INSECURE_ROOT` | ⚪ | Explicit acknowledgment for break-glass root mode | `true`, `false` | `false` |
 
@@ -36,7 +37,7 @@ For log output configuration (`DD_LOG_LEVEL`, `DD_LOG_FORMAT`), see [Logs config
 
 ## CORS Security Guidance
 
-When `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` is not set, drydock uses `*` (all origins). This is convenient for local testing, but broad for production.
+When `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` is not set, drydock uses `*` (all origins). This is convenient for local testing, but broad for production. A startup warning is emitted when the wildcard is implicit. In a future release, an explicit `DD_SERVER_CORS_ORIGIN=*` will be required to intentionally allow all origins.
 
 For production deployments, set an explicit trusted origin:
 
