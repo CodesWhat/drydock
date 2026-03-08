@@ -1184,23 +1184,25 @@ onUnmounted(() => {
       </nav>
 
       <!-- Sidebar search -->
-      <div class="shrink-0 px-3 pt-3 pb-3">
+      <div class="shrink-0 pt-3 pb-3" :class="isCollapsed ? 'px-2' : 'px-3'">
         <button aria-label="Search"
-                class="w-full flex items-center gap-2 dd-rounded px-3 py-2 text-xs transition-colors dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
+                class="w-full flex items-center dd-rounded text-xs transition-colors dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
+                :class="isCollapsed ? 'justify-center py-2.5' : 'gap-2 px-3 py-2'"
                 :style="{ border: '1px solid var(--dd-border)' }"
                 @click="showSearch = true; isMobileMenuOpen = false">
-          <AppIcon name="search" :size="12" />
-          <span class="sidebar-label">Search</span>
-          <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-muted">
-            <span class="text-[9px]">&#8984;</span>K
-          </kbd>
+          <AppIcon name="search" :size="12" class="shrink-0" />
+          <template v-if="!isCollapsed">
+            <span class="sidebar-label">Search</span>
+            <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-muted">
+              <span class="text-[9px]">&#8984;</span>K
+            </kbd>
+          </template>
         </button>
       </div>
 
       <!-- Sidebar footer -->
       <div class="shrink-0 px-3 py-2.5 flex items-center gap-1"
-           :class="isCollapsed ? 'flex-col' : 'flex-row justify-between'"
-           :style="{ borderTop: '1px solid var(--dd-border)' }">
+           :class="isCollapsed ? 'flex-col' : 'flex-row justify-between'">
         <button aria-label="About Drydock"
                 class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                 v-tooltip.top="'About Drydock'"
@@ -1346,8 +1348,8 @@ onUnmounted(() => {
               <AppIcon name="xmark" :size="12" />
             </button>
             <div class="flex flex-col items-center pt-6 pb-4 px-6">
-              <div class="w-full h-12 mb-3 relative overflow-hidden">
-                <img :src="whaleLogo" alt="Drydock" class="h-10 w-auto absolute top-1 about-swim"
+              <div class="-mx-6 w-[calc(100%+3rem)] h-12 mb-3 relative">
+                <img :src="whaleLogo" alt="Drydock" class="h-10 w-[65px] absolute top-1 about-swim"
                      :style="isDark ? { filter: 'invert(1)' } : {}" />
               </div>
               <h2 id="about-dialog-title" class="text-base font-bold dd-text">Drydock</h2>
@@ -1512,11 +1514,11 @@ onUnmounted(() => {
 
 <style scoped>
 @keyframes swim {
-  0% { left: -15%; transform: scaleX(1); }
-  45% { left: 105%; transform: scaleX(1); }
-  50% { left: 105%; transform: scaleX(-1); }
-  95% { left: -15%; transform: scaleX(-1); }
-  100% { left: -15%; transform: scaleX(1); }
+  0% { left: 0; transform: scaleX(-1); }
+  45% { left: calc(100% - 65px); transform: scaleX(-1); }
+  50% { left: calc(100% - 65px); transform: scaleX(1); }
+  95% { left: 0; transform: scaleX(1); }
+  100% { left: 0; transform: scaleX(-1); }
 }
 .about-swim {
   animation: swim 6s ease-in-out infinite;
