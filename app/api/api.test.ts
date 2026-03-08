@@ -287,6 +287,8 @@ describe('API Router', () => {
     };
     handler({}, res);
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Route not found' });
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Route not found',
+    });
   });
 });

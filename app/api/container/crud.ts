@@ -474,7 +474,10 @@ export function createCrudHandlers({
     }
 
     const operations = updateOperationStore.getOperationsByContainerName(container.name);
-    res.status(200).json(operations);
+    res.status(200).json({
+      data: operations,
+      total: operations.length,
+    });
   }
 
   /**
@@ -504,9 +507,7 @@ export function createCrudHandlers({
 
     const agent = getAgent(container.agent);
     if (!agent) {
-      res.status(500).json({
-        error: `Agent ${container.agent} not found`,
-      });
+      sendErrorResponse(res, 500, `Agent ${container.agent} not found`);
       return;
     }
 
@@ -519,9 +520,11 @@ export function createCrudHandlers({
         storeContainer.deleteContainer(id);
         res.sendStatus(204);
       } else {
-        res.status(500).json({
-          error: `Error deleting container on agent (${getErrorMessage(error)})`,
-        });
+        sendErrorResponse(
+          res,
+          500,
+          `Error deleting container on agent (${getErrorMessage(error)})`,
+        );
       }
     }
   }
@@ -558,9 +561,11 @@ export function createCrudHandlers({
           const watcherId = resolveWatcherIdForContainer(container);
           const watcher = watcherMap[watcherId];
           if (!watcher) {
-            res.status(500).json({
-              error: `No provider found for container ${container.id} and provider ${watcherId}`,
-            });
+            sendErrorResponse(
+              res,
+              500,
+              `No provider found for container ${container.id} and provider ${watcherId}`,
+            );
             return;
           }
 
@@ -579,9 +584,7 @@ export function createCrudHandlers({
 
       res.status(200).json(buildContainerListResponse(req.query, '/api/containers/watch'));
     } catch (error: unknown) {
-      res.status(500).json({
-        error: `Error when watching images (${getErrorMessage(error)})`,
-      });
+      sendErrorResponse(res, 500, `Error when watching images (${getErrorMessage(error)})`);
     }
   }
 
@@ -603,9 +606,11 @@ export function createCrudHandlers({
     const watcherId = resolveWatcherIdForContainer(container);
     const watcher = getWatchers()[watcherId];
     if (!watcher) {
-      res.status(500).json({
-        error: `No provider found for container ${id} and provider ${watcherId}`,
-      });
+      sendErrorResponse(
+        res,
+        500,
+        `No provider found for container ${id} and provider ${watcherId}`,
+      );
       return;
     }
 
@@ -626,9 +631,7 @@ export function createCrudHandlers({
       const containerReport = await watcher.watchContainer(container);
       res.status(200).json(redactContainerRuntimeEnv(containerReport.container));
     } catch {
-      res.status(500).json({
-        error: `Error when watching container ${id}`,
-      });
+      sendErrorResponse(res, 500, `Error when watching container ${id}`);
     }
   }
 

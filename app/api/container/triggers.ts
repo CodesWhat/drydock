@@ -122,7 +122,10 @@ export function createTriggerHandlers({
       .map((trigger) => resolveTriggerAssociation(trigger, includedTriggers, excludedTriggers))
       .filter((trigger) => trigger !== undefined);
 
-    res.status(200).json(associatedTriggers);
+    res.status(200).json({
+      data: associatedTriggers,
+      total: associatedTriggers.length,
+    });
   }
 
   /**
@@ -146,9 +149,11 @@ export function createTriggerHandlers({
         !triggerAgent &&
         ['docker', 'dockercompose'].includes(triggerType)
       ) {
-        res.status(400).json({
-          error: `Cannot execute local ${triggerType} trigger on remote container ${containerToTrigger.agent}.${containerToTrigger.id}`,
-        });
+        sendErrorResponse(
+          res,
+          400,
+          `Cannot execute local ${triggerType} trigger on remote container ${containerToTrigger.agent}.${containerToTrigger.id}`,
+        );
         return;
       }
       const triggerToRun = getTriggers()[triggerId];
@@ -163,19 +168,17 @@ export function createTriggerHandlers({
           log.warn(
             `Error when running trigger (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}) (${sanitizeLogParam(getErrorMessage(error))})`,
           );
-          res.status(500).json({
-            error: `Error when running trigger (type=${triggerType}, name=${triggerName})`,
-          });
+          sendErrorResponse(
+            res,
+            500,
+            `Error when running trigger (type=${triggerType}, name=${triggerName})`,
+          );
         }
       } else {
-        res.status(404).json({
-          error: 'Trigger not found',
-        });
+        sendErrorResponse(res, 404, 'Trigger not found');
       }
     } else {
-      res.status(404).json({
-        error: 'Container not found',
-      });
+      sendErrorResponse(res, 404, 'Container not found');
     }
   }
 

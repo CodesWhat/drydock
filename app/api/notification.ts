@@ -41,7 +41,10 @@ function getNotificationRules(req, res) {
   const rules = notificationStore
     .getNotificationRules()
     .map((rule) => sanitizeRuleForResponse(rule, allowedTriggerIds));
-  res.status(200).json(rules);
+  res.status(200).json({
+    data: rules,
+    total: rules.length,
+  });
 }
 
 /**
@@ -53,9 +56,7 @@ function updateNotificationRule(req, res) {
     stripUnknown: true,
   });
   if (notificationRuleToUpdate.error) {
-    res.status(400).json({
-      error: notificationRuleToUpdate.error.message,
-    });
+    sendErrorResponse(res, 400, notificationRuleToUpdate.error.message);
     return;
   }
 
@@ -71,9 +72,11 @@ function updateNotificationRule(req, res) {
         const invalidTriggers = triggersRequested.filter(
           (triggerId) => !allowedTriggerIds.has(triggerId),
         );
-        res.status(400).json({
-          error: `Unsupported notification triggers: ${invalidTriggers.join(', ')}`,
-        });
+        sendErrorResponse(
+          res,
+          400,
+          `Unsupported notification triggers: ${invalidTriggers.join(', ')}`,
+        );
         return;
       }
       notificationRuleToUpdate.value.triggers = triggersNormalized;
@@ -90,9 +93,7 @@ function updateNotificationRule(req, res) {
 
     res.status(200).json(sanitizeRuleForResponse(notificationRuleUpdated, allowedTriggerIds));
   } catch (e: unknown) {
-    res.status(400).json({
-      error: getErrorMessage(e),
-    });
+    sendErrorResponse(res, 400, getErrorMessage(e));
   }
 }
 

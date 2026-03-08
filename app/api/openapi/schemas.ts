@@ -5,11 +5,9 @@ export const openApiSchemas = {
     type: 'object',
     properties: {
       error: { type: 'string' },
-      code: { type: 'string' },
-      message: { type: 'string' },
       details: { ...genericObjectSchema },
     },
-    required: ['error', 'code', 'message'],
+    required: ['error'],
     additionalProperties: true,
   },
   GenericObject: genericObjectSchema,

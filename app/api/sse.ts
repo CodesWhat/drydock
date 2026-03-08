@@ -12,6 +12,7 @@ import {
 } from '../event/index.js';
 import log from '../log/index.js';
 import { hashToken } from '../util/crypto.js';
+import { sendErrorResponse } from './error-response.js';
 import {
   type ActiveSseClient,
   ActiveSseClientRegistry,
@@ -137,13 +138,13 @@ function eventsHandler(req: Request, res: Response): void {
 
   if (currentIpCount >= MAX_CONNECTIONS_PER_IP) {
     logger.warn(`SSE connection limit reached for ${ip} (${currentIpCount})`);
-    res.status(429).json({ message: 'Too many SSE connections' });
+    sendErrorResponse(res, 429, 'Too many SSE connections');
     return;
   }
 
   if (currentSessionCount >= MAX_CONNECTIONS_PER_SESSION) {
     logger.warn(`SSE session connection limit reached (${currentSessionCount})`);
-    res.status(429).json({ message: 'Too many SSE connections' });
+    sendErrorResponse(res, 429, 'Too many SSE connections');
     return;
   }
 
