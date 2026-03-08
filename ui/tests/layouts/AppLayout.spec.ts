@@ -397,4 +397,112 @@ describe('AppLayout', () => {
 
     expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(false);
   });
+
+  it('shows a SHA-1 hash deprecation banner when basic auth uses legacy SHA hash', async () => {
+    mockGetAllAuthentications.mockResolvedValue([
+      {
+        id: 'basic.admin',
+        type: 'basic',
+        name: 'admin',
+        configuration: { user: 'admin', hash: '[REDACTED]' },
+        metadata: { usesLegacyHash: true },
+      },
+    ]);
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    const banner = wrapper.find('[data-testid="sha-hash-deprecation-banner"]');
+    expect(banner.exists()).toBe(true);
+    expect(banner.text()).toContain('SHA-1 hashing is deprecated');
+  });
+
+  it('supports dismissing SHA-1 hash deprecation banner for current session', async () => {
+    mockGetAllAuthentications.mockResolvedValue([
+      {
+        id: 'basic.admin',
+        type: 'basic',
+        name: 'admin',
+        configuration: { user: 'admin', hash: '[REDACTED]' },
+        metadata: { usesLegacyHash: true },
+      },
+    ]);
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(true);
+
+    await wrapper
+      .find('[data-testid="sha-hash-deprecation-banner-dismiss-session"]')
+      .trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(false);
+  });
+
+  it('supports permanently dismissing SHA-1 hash deprecation banner', async () => {
+    mockGetAllAuthentications.mockResolvedValue([
+      {
+        id: 'basic.admin',
+        type: 'basic',
+        name: 'admin',
+        configuration: { user: 'admin', hash: '[REDACTED]' },
+        metadata: { usesLegacyHash: true },
+      },
+    ]);
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(true);
+
+    await wrapper
+      .find('[data-testid="sha-hash-deprecation-banner-dismiss-forever"]')
+      .trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(false);
+    expect(localStorage.getItem('dd-banner-sha-hash-v1')).toBe('true');
+  });
+
+  it('does not show SHA-1 hash deprecation banner after permanent dismissal is persisted', async () => {
+    localStorage.setItem('dd-banner-sha-hash-v1', 'true');
+    mockGetAllAuthentications.mockResolvedValue([
+      {
+        id: 'basic.admin',
+        type: 'basic',
+        name: 'admin',
+        configuration: { user: 'admin', hash: '[REDACTED]' },
+        metadata: { usesLegacyHash: true },
+      },
+    ]);
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(false);
+  });
+
+  it('does not show SHA-1 hash deprecation banner when basic auth uses argon2id hash', async () => {
+    mockGetAllAuthentications.mockResolvedValue([
+      {
+        id: 'basic.admin',
+        type: 'basic',
+        name: 'admin',
+        configuration: { user: 'admin', hash: '[REDACTED]' },
+        metadata: { usesLegacyHash: false },
+      },
+    ]);
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(false);
+  });
 });

@@ -253,6 +253,13 @@ const hideOidcHttpBannerPermanently = useStorageRef<boolean>(
   false,
   (value): value is boolean => typeof value === 'boolean',
 );
+const shaHashDetected = ref(false);
+const hideShaHashBannerForSession = ref(false);
+const hideShaHashBannerPermanently = useStorageRef<boolean>(
+  'dd-banner-sha-hash-v1',
+  false,
+  (value): value is boolean => typeof value === 'boolean',
+);
 type SearchScope = 'all' | 'pages' | 'containers' | 'runtime' | 'config';
 type SearchPrefix = '/' | '@' | '#';
 interface SearchScopeOption {
@@ -575,6 +582,36 @@ function dismissOidcHttpBannerPermanently() {
   hideOidcHttpBannerPermanently.value = true;
 }
 
+function isLegacyShaHash(authentication: unknown): boolean {
+  if (!authentication || typeof authentication !== 'object') {
+    return false;
+  }
+  const authRecord = authentication as Record<string, unknown>;
+  if (authRecord.type !== 'basic') {
+    return false;
+  }
+  const metadata = authRecord.metadata;
+  if (!metadata || typeof metadata !== 'object') {
+    return false;
+  }
+  return (metadata as Record<string, unknown>).usesLegacyHash === true;
+}
+
+const showShaHashDeprecationBanner = computed(
+  () =>
+    shaHashDetected.value &&
+    !hideShaHashBannerForSession.value &&
+    !hideShaHashBannerPermanently.value,
+);
+
+function dismissShaHashBannerForSession() {
+  hideShaHashBannerForSession.value = true;
+}
+
+function dismissShaHashBannerPermanently() {
+  hideShaHashBannerPermanently.value = true;
+}
+
 async function refreshSearchResources() {
   searchResourcesLoading.value = true;
   try {
@@ -589,6 +626,9 @@ async function refreshSearchResources() {
       ]);
     oidcHttpDiscoveryDetected.value = Array.isArray(authentications)
       ? authentications.some((authentication) => isHttpOidcDiscovery(authentication))
+      : false;
+    shaHashDetected.value = Array.isArray(authentications)
+      ? authentications.some((authentication) => isLegacyShaHash(authentication))
       : false;
     searchResourceResults.value = buildSearchIndexResults({
       agents,
@@ -1276,6 +1316,16 @@ onUnmounted(() => {
            rel="noopener noreferrer"
            class="underline font-medium"
            :style="{ color: 'var(--dd-warning)' }">Migrate your IdP to HTTPS.</a>
+      </AnnouncementBanner>
+
+      <AnnouncementBanner
+        v-if="showShaHashDeprecationBanner"
+        data-testid="sha-hash-deprecation-banner"
+        title="Insecure SHA-1 password hash detected"
+        permanent-dismiss-label="Don't show again"
+        @dismiss="dismissShaHashBannerForSession"
+        @dismiss-permanent="dismissShaHashBannerPermanently">
+        Your basic authentication uses an insecure SHA-1 password hash. SHA-1 hashing is deprecated and will be removed in v1.6.0. Migrate to argon2id hashing.
       </AnnouncementBanner>
 
       <!-- MAIN CONTENT -->
