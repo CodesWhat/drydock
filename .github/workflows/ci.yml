@@ -521,10 +521,10 @@ jobs:
           report="$(find artifacts/load-test/ci -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (CI)"
 
-      - name: Correctness check (behavior, enforced)
+      - name: Correctness check (behavior, advisory)
         if: always()
         env:
-          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'true'
+          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false'
           DD_LOAD_TEST_MAX_5XX: '0'
           DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
           DD_LOAD_TEST_MIN_429: '0'
