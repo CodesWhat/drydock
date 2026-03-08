@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Socket proxy ECONNREFUSED with `:ro` mount** — Removed `:ro` flag from Docker socket mount in all socket proxy compose examples. The read-only flag can prevent the proxy from connecting to the Docker daemon on some Linux kernels; the proxy's environment variable filtering (`CONTAINERS=1`, `EVENTS=1`, etc.) is the actual security boundary. Added health check and `depends_on: condition: service_healthy` to all socket proxy examples for proper startup ordering. Added FAQ entry for troubleshooting ECONNREFUSED with socket proxies.
 - **Apprise trigger missing Content-Type header** — Apprise notify requests now set explicit `Content-Type: application/json` header, fixing failures with Apprise servers that require it.
 - **Toggle switch contrast** — Improved toggle thumb contrast across all themes for better visibility.
 - **Empty env var values rejected during container validation** — Joi schema on `details.env[].value` used `.string().required()` which implicitly disallows empty strings. Containers with empty environment variable values (e.g. `FOO=`) were silently skipped during watch cycles. Fixed with `.allow('')`. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
