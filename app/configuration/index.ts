@@ -408,6 +408,9 @@ export function getWebhookConfiguration() {
 }
 
 function parseSecuritySeverityList(rawValue: string | undefined): SecuritySeverity[] {
+  if (rawValue !== undefined && rawValue.trim().toUpperCase() === 'NONE') {
+    return [];
+  }
   return parseDelimitedEnumList(
     rawValue,
     DEFAULT_SECURITY_BLOCK_SEVERITY,
@@ -416,7 +419,7 @@ function parseSecuritySeverityList(rawValue: string | undefined): SecuritySeveri
       SECURITY_SEVERITY_VALUES.includes(severity as SecuritySeverity),
     {
       onInvalidValues: ({ invalidValues, parsedValues, defaultValues }) => {
-        const warningBase = `Invalid DD_SECURITY_BLOCK_SEVERITY values: ${invalidValues.join(', ')}. Allowed values: ${SECURITY_SEVERITY_VALUES.join(', ')}.`;
+        const warningBase = `Invalid DD_SECURITY_BLOCK_SEVERITY values: ${invalidValues.join(', ')}. Allowed values: NONE, ${SECURITY_SEVERITY_VALUES.join(', ')}.`;
         if (parsedValues.length === 0) {
           console.warn(`${warningBase} Falling back to defaults: ${defaultValues.join(', ')}.`);
         } else {

@@ -509,7 +509,7 @@ describe('getSecurityConfiguration', () => {
     expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining(
-        'Invalid DD_SECURITY_BLOCK_SEVERITY values: FOO, BAR. Allowed values: UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL. Falling back to defaults: CRITICAL, HIGH.',
+        'Invalid DD_SECURITY_BLOCK_SEVERITY values: FOO, BAR. Allowed values: NONE, UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL. Falling back to defaults: CRITICAL, HIGH.',
       ),
     );
 
@@ -527,7 +527,7 @@ describe('getSecurityConfiguration', () => {
     expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining(
-        'Invalid DD_SECURITY_BLOCK_SEVERITY values: FOO, BAR. Allowed values: UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL. Falling back to defaults: CRITICAL, HIGH.',
+        'Invalid DD_SECURITY_BLOCK_SEVERITY values: FOO, BAR. Allowed values: NONE, UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL. Falling back to defaults: CRITICAL, HIGH.',
       ),
     );
 
@@ -545,7 +545,7 @@ describe('getSecurityConfiguration', () => {
     expect(result.blockSeverities).toEqual(['CRITICAL', 'MEDIUM']);
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining(
-        'Invalid DD_SECURITY_BLOCK_SEVERITY values: FOO. Allowed values: UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL. Invalid values were ignored.',
+        'Invalid DD_SECURITY_BLOCK_SEVERITY values: FOO. Allowed values: NONE, UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL. Invalid values were ignored.',
       ),
     );
 
@@ -560,6 +560,28 @@ describe('getSecurityConfiguration', () => {
 
     const result = configuration.getSecurityConfiguration();
     expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+  });
+
+  test('should return empty block severities when set to NONE (advisory-only mode)', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = 'NONE';
+
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).toEqual([]);
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+  });
+
+  test('should accept NONE case-insensitively with whitespace', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = '  none  ';
+
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).toEqual([]);
 
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
