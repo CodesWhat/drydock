@@ -426,6 +426,71 @@ export const openApiPaths = {
       },
     },
   },
+  '/api/containers/security/vulnerabilities': {
+    get: {
+      tags: ['Containers'],
+      summary: 'Get aggregated vulnerability data grouped by image',
+      operationId: 'getContainerSecurityVulnerabilities',
+      responses: {
+        200: jsonResponse('Security vulnerability overview', {
+          type: 'object',
+          properties: {
+            totalContainers: { type: 'integer', minimum: 0 },
+            scannedContainers: { type: 'integer', minimum: 0 },
+            latestScannedAt: { type: ['string', 'null'] },
+            images: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  image: { type: 'string' },
+                  containerIds: {
+                    type: 'array',
+                    items: { type: 'string' },
+                  },
+                  updateSummary: { $ref: '#/components/schemas/VulnerabilitySummary' },
+                  vulnerabilities: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        severity: { type: 'string' },
+                        package: { type: 'string' },
+                        version: { type: 'string' },
+                        fixedIn: { type: ['string', 'null'] },
+                        title: { type: 'string' },
+                        target: { type: 'string' },
+                        primaryUrl: { type: 'string' },
+                        publishedDate: { type: 'string' },
+                      },
+                      required: [
+                        'id',
+                        'severity',
+                        'package',
+                        'version',
+                        'fixedIn',
+                        'title',
+                        'target',
+                        'primaryUrl',
+                        'publishedDate',
+                      ],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ['image', 'containerIds', 'vulnerabilities'],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ['totalContainers', 'scannedContainers', 'latestScannedAt', 'images'],
+          additionalProperties: false,
+        }),
+        401: errorResponse('Authentication required'),
+      },
+    },
+  },
   '/api/containers/{id}': {
     get: {
       tags: ['Containers'],
