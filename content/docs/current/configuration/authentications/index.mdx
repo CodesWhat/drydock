@@ -39,7 +39,7 @@ On previous versions of drydock (and upstream WUD), the dashboard was accessible
 
 Set `DD_ANONYMOUS_AUTH_CONFIRM=true` to explicitly allow anonymous (unauthenticated) access to the dashboard and API.
 
-<Callout type="info">Use `DD_ANONYMOUS_AUTH_CONFIRM` exactly. Older names like `DD_ANONYMOUS_CONFIRM` and `DD_AUTH_ANONYMOUS_CONFIRM` are legacy and not used by current releases.</Callout>
+<Callout type="info">`DD_AUTH_ANONYMOUS_CONFIRM=true` is also accepted as an alias. `DD_ANONYMOUS_AUTH_CONFIRM` is the canonical name.</Callout>
 
 ```yaml
 environment:

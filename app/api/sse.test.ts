@@ -103,6 +103,17 @@ function createSSEResponse() {
     on: vi.fn((event, handler) => {
       listeners[event] = handler;
     }),
+    once: vi.fn((event, handler) => {
+      listeners[event] = (...args) => {
+        delete listeners[event];
+        handler(...args);
+      };
+    }),
+    off: vi.fn((event, handler) => {
+      if (listeners[event] === handler) {
+        delete listeners[event];
+      }
+    }),
     _listeners: listeners,
   };
 }
@@ -405,6 +416,25 @@ describe('SSE Router', () => {
       vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
 
       expect(res.write).toHaveBeenCalledWith('event: dd:heartbeat\ndata: {}\n\n');
+    });
+
+    test('should skip heartbeat writes while a client is backpressured and resume on drain', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+
+      res.write.mockClear();
+      res.write.mockImplementationOnce(() => false).mockImplementation(() => true);
+
+      vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+      expect(res.write).toHaveBeenCalledTimes(1);
+      expect(res.once).toHaveBeenCalledWith('drain', expect.any(Function));
+
+      vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+      expect(res.write).toHaveBeenCalledTimes(1);
+
+      res._listeners.drain();
+      vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+      expect(res.write).toHaveBeenCalledTimes(2);
     });
 
     test('should use one shared heartbeat interval and clear it when the last client disconnects', () => {

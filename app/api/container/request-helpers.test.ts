@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   getPathParamValue,
+  normalizeLimitOffsetPagination,
   parseBooleanQueryParam,
   parseIntegerQueryParam,
 } from './request-helpers.js';
@@ -55,6 +56,27 @@ describe('api/container/request-helpers', () => {
       expect(parseBooleanQueryParam('yes', false)).toBe(false);
       expect(parseBooleanQueryParam(undefined, true)).toBe(true);
       expect(parseBooleanQueryParam(1, true)).toBe(true);
+    });
+  });
+
+  describe('normalizeLimitOffsetPagination', () => {
+    test('normalizes and clamps limit/offset values', () => {
+      expect(
+        normalizeLimitOffsetPagination(
+          {
+            limit: ['999', '1'],
+            offset: '-5',
+          },
+          { maxLimit: 200 },
+        ),
+      ).toEqual({ limit: 200, offset: 0 });
+    });
+
+    test('returns defaults for non-object query input', () => {
+      expect(normalizeLimitOffsetPagination('' as any, { maxLimit: 200 })).toEqual({
+        limit: 0,
+        offset: 0,
+      });
     });
   });
 });

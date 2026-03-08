@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import whaleLogo from '../assets/whale-logo.png';
+import { ROUTES } from '../router/routes';
+import whaleLogo from '../assets/whale-logo.png?inline';
 import { getOidcRedirection, getStrategies, loginBasic, setRememberMe } from '../services/auth';
 import { useTheme } from '../theme/useTheme';
 
@@ -63,7 +64,7 @@ function navigateAfterLogin() {
   if (next && typeof next === 'string' && next.startsWith('/') && !next.startsWith('//')) {
     router.push(next);
   } else {
-    router.push('/');
+    router.push(ROUTES.DASHBOARD);
   }
 }
 
@@ -285,10 +286,8 @@ onUnmounted(() => {
         <div class="w-full max-w-[320px] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
              :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
           <div class="flex flex-col items-center px-6 py-8 gap-3">
-            <div class="w-10 h-10 rounded-full flex items-center justify-center mb-1"
-                 :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
-              <AppIcon name="warning" :size="18" :style="{ color: 'var(--dd-danger)' }" />
-            </div>
+            <img :src="whaleLogo" alt="" class="h-10 w-auto mb-1"
+                 :style="[{ transform: 'rotate(180deg) scaleX(-1)' }, isDark ? { filter: 'invert(1)' } : {}]" />
             <h2 class="text-sm font-bold dd-text">Connection Lost</h2>
             <p class="text-[11px] dd-text-muted leading-relaxed">
               The server is unreachable. Waiting for it to come back online...

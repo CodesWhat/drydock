@@ -183,6 +183,16 @@ export async function addImageDetailsToContainerOrchestration(
       containerInStore.details = runtimeDetailsToApply;
     }
 
+    // Reconcile container status from Docker summary (covers events missed during reconnect gaps)
+    const summaryStatus = container.State;
+    if (
+      typeof summaryStatus === 'string' &&
+      summaryStatus !== '' &&
+      containerInStore.status !== summaryStatus
+    ) {
+      containerInStore.status = summaryStatus;
+    }
+
     try {
       const currentImage = await watcher.dockerApi.getImage(container.Image).inspect();
       const freshDigestRepo = getRepoDigest(currentImage);

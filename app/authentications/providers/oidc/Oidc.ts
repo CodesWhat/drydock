@@ -260,6 +260,21 @@ async function saveSessionIfPossible(session: OidcSessionLike | undefined) {
   });
 }
 
+async function regenerateSessionIfPossible(session: OidcSessionLike | undefined) {
+  if (!session || typeof session.regenerate !== 'function') {
+    return;
+  }
+  await new Promise((resolve, reject) => {
+    session.regenerate((err) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(undefined);
+      }
+    });
+  });
+}
+
 function getMaxConcurrentSessionsPerUser(): number {
   const serverConfiguration = getServerConfiguration() as Record<string, unknown>;
   const configuredMaxSessions = (serverConfiguration.session as Record<string, unknown> | undefined)
@@ -557,7 +572,10 @@ class Oidc extends Authentication {
         throw new Error('Access token is missing from OIDC authorization response');
       }
 
-      if (req.session?.oidc) {
+      const rememberMePreference = req.session?.rememberMe;
+      const nextOidcChecks =
+        req.session?.oidc && typeof req.session.oidc === 'object' ? { ...req.session.oidc } : {};
+      if (Object.keys(nextOidcChecks).length > 0) {
         const remainingChecks = createPendingChecksRecord();
         Object.entries(pendingChecks).forEach(([state, check]) => {
           if (state !== callbackState) {
@@ -565,11 +583,24 @@ class Oidc extends Authentication {
           }
         });
         if (Object.keys(remainingChecks).length > 0) {
-          req.session.oidc[sessionKey] = {
+          nextOidcChecks[sessionKey] = {
             pending: remainingChecks,
           };
-        } else if (Object.hasOwn(req.session.oidc, sessionKey)) {
+        } else if (Object.hasOwn(nextOidcChecks, sessionKey)) {
+          delete nextOidcChecks[sessionKey];
+        }
+      }
+
+      await regenerateSessionIfPossible(req.session);
+
+      if (req.session) {
+        if (Object.keys(nextOidcChecks).length > 0) {
+          req.session.oidc = nextOidcChecks;
+        } else if (req.session.oidc && Object.hasOwn(req.session.oidc, sessionKey)) {
           delete req.session.oidc[sessionKey];
+        }
+        if (typeof rememberMePreference === 'boolean') {
+          req.session.rememberMe = rememberMePreference;
         }
         await saveSessionIfPossible(req.session);
       }

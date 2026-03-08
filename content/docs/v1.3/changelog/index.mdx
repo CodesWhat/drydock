@@ -1,0 +1,24 @@
+---
+title: "Changelog"
+description: "Changes for the v1.3 release series."
+---
+
+See the [full changelog on GitHub](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md) for all versions.
+
+## v1.3.9
+
+- Fix OIDC HTTP discovery URLs for non-TLS IdP deployments
+- Fix cross-origin IdP redirect URLs
+- Disable HSTS and upgrade-insecure-requests when TLS is off
+- Fix container validation to allow empty env var values
+- Sanitize invalid preference values during migration
+
+## v1.3.8
+
+- Fix anonymous auth config variable naming
+- Add startup migration for existing installs without auth
+
+## v1.3.7
+
+- Add anonymous authentication confirmation flow
+- Fix session cookie handling for OIDC providers

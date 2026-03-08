@@ -6,8 +6,8 @@ import { sendErrorResponse } from '../error-response.js';
 import { buildPaginationLinks, type PaginationLinks } from '../pagination-links.js';
 import {
   getPathParamValue,
+  normalizeLimitOffsetPagination,
   parseBooleanQueryParam,
-  parseIntegerQueryParam,
 } from './request-helpers.js';
 import { isSensitiveKey } from './shared.js';
 
@@ -61,6 +61,11 @@ interface SecurityVulnerabilityOverviewResponse {
   totalContainers: number;
   scannedContainers: number;
   latestScannedAt: string | null;
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  _links?: PaginationLinks;
   images: SecurityImageVulnerabilityGroup[];
 }
 
@@ -92,6 +97,11 @@ interface AuditStoreApi {
     status: string;
     details?: string;
   }) => unknown;
+}
+
+interface FlattenedSecurityVulnerability {
+  image: string;
+  vulnerability: SecurityViewVulnerability;
 }
 
 export interface CrudHandlerDependencies {
@@ -136,12 +146,7 @@ function removeContainerListControlParams(query: Request['query']): Request['que
 }
 
 function normalizeContainerListPagination(query: Request['query']) {
-  const parsedLimit = parseIntegerQueryParam(query.limit, 0);
-  const parsedOffset = parseIntegerQueryParam(query.offset, 0);
-  return {
-    limit: Math.min(CONTAINER_LIST_MAX_LIMIT, Math.max(0, parsedLimit)),
-    offset: Math.max(0, parsedOffset),
-  };
+  return normalizeLimitOffsetPagination(query, { maxLimit: CONTAINER_LIST_MAX_LIMIT });
 }
 
 function parseWatchContainersBody(body: unknown): { body?: WatchContainersBody; error?: string } {
@@ -315,6 +320,19 @@ function resolveSecurityImageName(container: Container): string {
   return 'unknown';
 }
 
+function paginateFlattenedVulnerabilities(
+  vulnerabilities: FlattenedSecurityVulnerability[],
+  pagination: ContainerListPagination,
+): FlattenedSecurityVulnerability[] {
+  if (pagination.limit === 0 && pagination.offset === 0) {
+    return vulnerabilities;
+  }
+  if (pagination.limit === 0) {
+    return vulnerabilities.slice(pagination.offset);
+  }
+  return vulnerabilities.slice(pagination.offset, pagination.offset + pagination.limit);
+}
+
 export function createCrudHandlers({
   storeApi: {
     getContainersFromStore,
@@ -393,11 +411,12 @@ export function createCrudHandlers({
    * @param res
    */
   function getContainerSecurityVulnerabilities(
-    _req: Request,
+    req: Request,
     res: Response<SecurityVulnerabilityOverviewResponse>,
   ) {
     const containers = getContainersFromStore({});
     const images = new Map<string, SecurityImageVulnerabilityGroup>();
+    const flattenedVulnerabilities: FlattenedSecurityVulnerability[] = [];
     let scannedContainers = 0;
     let latestScannedAt: string | null = null;
 
@@ -431,17 +450,72 @@ export function createCrudHandlers({
 
       const vulnerabilityList = Array.isArray(scan.vulnerabilities) ? scan.vulnerabilities : [];
       for (const vulnerability of vulnerabilityList) {
-        existingGroup.vulnerabilities.push(normalizeSecurityVulnerability(vulnerability));
+        const normalizedVulnerability = normalizeSecurityVulnerability(vulnerability);
+        existingGroup.vulnerabilities.push(normalizedVulnerability);
+        flattenedVulnerabilities.push({
+          image,
+          vulnerability: normalizedVulnerability,
+        });
       }
 
       images.set(image, existingGroup);
     }
 
+    const allImageGroups = [...images.values()];
+    const pagination = normalizeContainerListPagination(req.query);
+    const pagedVulnerabilities = paginateFlattenedVulnerabilities(
+      flattenedVulnerabilities,
+      pagination,
+    );
+    const total = flattenedVulnerabilities.length;
+    const hasMore = pagination.limit > 0 && pagination.offset + pagedVulnerabilities.length < total;
+    const links = buildPaginationLinks({
+      basePath: '/api/containers/security/vulnerabilities',
+      query: req.query,
+      limit: pagination.limit,
+      offset: pagination.offset,
+      total,
+      returnedCount: pagedVulnerabilities.length,
+    });
+    const isPaginated = pagination.limit > 0 || pagination.offset > 0;
+
+    const pagedImages = isPaginated
+      ? (() => {
+          const groupedImages = new Map<string, SecurityImageVulnerabilityGroup>();
+          const imageTemplates = new Map(
+            allImageGroups.map((group) => [group.image, group] as const),
+          );
+          for (const { image, vulnerability } of pagedVulnerabilities) {
+            const template = imageTemplates.get(image);
+            if (!template) {
+              continue;
+            }
+            let group = groupedImages.get(image);
+            if (!group) {
+              group = {
+                image: template.image,
+                containerIds: [...template.containerIds],
+                vulnerabilities: [],
+                ...(template.updateSummary ? { updateSummary: template.updateSummary } : {}),
+              };
+              groupedImages.set(image, group);
+            }
+            group.vulnerabilities.push(vulnerability);
+          }
+          return [...groupedImages.values()];
+        })()
+      : allImageGroups;
+
     res.status(200).json({
       totalContainers: containers.length,
       scannedContainers,
       latestScannedAt,
-      images: [...images.values()],
+      total,
+      limit: pagination.limit,
+      offset: pagination.offset,
+      hasMore,
+      ...(links ? { _links: links } : {}),
+      images: pagedImages,
     });
   }
 

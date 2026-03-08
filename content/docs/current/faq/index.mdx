@@ -42,6 +42,32 @@ environment:
 
 Setting only `DD_RUN_AS_ROOT=true` without `DD_ALLOW_INSECURE_ROOT=true` will fail closed at startup. See [Docker Socket Security](/docs/configuration/watchers#docker-socket-security) for details.
 
+## Socket proxy connection refused (ECONNREFUSED)
+
+If you see repeated `Docker event stream connection failure (connect ECONNREFUSED ...)` messages when using a socket proxy like `tecnativa/docker-socket-proxy`, the proxy is not accepting connections. Common causes:
+
+1. **Read-only socket mount (`:ro`)** — Remove the `:ro` flag from the proxy's Docker socket volume mount. The `:ro` flag can prevent the proxy from connecting to the Docker daemon on some Linux kernels. The proxy's environment variables (`CONTAINERS=1`, `EVENTS=1`, etc.) are the actual security boundary, not the mount flag.
+
+2. **Startup ordering** — The proxy may not be ready when drydock tries to connect. Add a health check and `depends_on` condition:
+
+```yaml
+services:
+  drydock:
+    depends_on:
+      socket-proxy:
+        condition: service_healthy
+
+  socket-proxy:
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+```
+
+Drydock automatically retries with exponential backoff (1s → 30s max) and will recover once the proxy becomes available, but the health check prevents unnecessary retries during startup.
+
 ## OIDC callback fails or session lost after login
 
 If your OIDC callback redirects back to the login page or loses the session, the session cookie is likely being blocked by the browser's `SameSite` policy during the cross-origin IdP redirect.

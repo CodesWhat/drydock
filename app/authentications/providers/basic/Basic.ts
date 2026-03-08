@@ -1,4 +1,4 @@
-import { argon2Sync, createHash, timingSafeEqual } from 'node:crypto';
+import { argon2, createHash, timingSafeEqual } from 'node:crypto';
 import Authentication from '../Authentication.js';
 import BasicStrategy from './BasicStrategy.js';
 
@@ -95,21 +95,37 @@ function parseShaHash(rawHash: string): Buffer | undefined {
   return decoded;
 }
 
-function verifyArgon2Password(password: string, encodedHash: string): boolean {
+function deriveArgon2Password(password: string, parsedHash: ParsedArgon2Hash): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    argon2(
+      'argon2id',
+      {
+        message: password,
+        nonce: parsedHash.salt,
+        memory: parsedHash.memory,
+        passes: parsedHash.passes,
+        parallelism: parsedHash.parallelism,
+        tagLength: parsedHash.hash.length,
+      },
+      (error, derived) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(derived);
+      },
+    );
+  });
+}
+
+async function verifyArgon2Password(password: string, encodedHash: string): Promise<boolean> {
   const parsed = parseArgon2Hash(encodedHash);
   if (!parsed) {
     return false;
   }
 
   try {
-    const derived = argon2Sync('argon2id', {
-      message: password,
-      nonce: parsed.salt,
-      memory: parsed.memory,
-      passes: parsed.passes,
-      parallelism: parsed.parallelism,
-      tagLength: parsed.hash.length,
-    });
+    const derived = await deriveArgon2Password(password, parsed);
     return timingSafeEqual(derived, parsed.hash);
   } catch {
     return false;
@@ -130,9 +146,9 @@ function verifyShaPassword(password: string, encodedHash: string): boolean {
   }
 }
 
-function verifyPassword(password: string, encodedHash: string): boolean {
+async function verifyPassword(password: string, encodedHash: string): Promise<boolean> {
   if (parseArgon2Hash(encodedHash)) {
-    return verifyArgon2Password(password, encodedHash);
+    return await verifyArgon2Password(password, encodedHash);
   }
   if (parseShaHash(encodedHash)) {
     return verifyShaPassword(password, encodedHash);
@@ -230,15 +246,20 @@ class Basic extends Authentication {
       return;
     }
 
-    const passwordMatches = verifyPassword(pass, this.configuration.hash);
-    if (!passwordMatches) {
-      done(null, false);
-      return;
-    }
+    void verifyPassword(pass, this.configuration.hash)
+      .then((passwordMatches) => {
+        if (!passwordMatches) {
+          done(null, false);
+          return;
+        }
 
-    done(null, {
-      username: this.configuration.user,
-    });
+        done(null, {
+          username: this.configuration.user,
+        });
+      })
+      .catch(() => {
+        done(null, false);
+      });
   }
 }
 

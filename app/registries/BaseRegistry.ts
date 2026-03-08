@@ -27,6 +27,15 @@ class BaseRegistry extends Registry {
     }
   }
 
+  /**
+   * Additional hosts the provider considers legitimate auth endpoints.
+   * Override in subclasses that delegate auth to a different host
+   * (e.g. lscr.io authenticates against ghcr.io).
+   */
+  protected getTrustedAuthHosts(): string[] {
+    return [];
+  }
+
   private getTrustedRegistryHosts(requestOptions: RegistryRequestOptions): string[] {
     const hosts = new Set<string>();
     const requestHostSource = requestOptions?.url;
@@ -37,6 +46,10 @@ class BaseRegistry extends Registry {
     const configuredHostSource = this.configuration?.url;
     if (typeof configuredHostSource === 'string' && configuredHostSource.trim().length > 0) {
       hosts.add(this.getRegistryHostname(configuredHostSource));
+    }
+
+    for (const host of this.getTrustedAuthHosts()) {
+      hosts.add(host);
     }
 
     return Array.from(hosts);

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import whaleLogo from '@/assets/whale-logo.png';
+import whaleLogo from '@/assets/whale-logo.png?inline';
 import AnnouncementBanner from '@/components/AnnouncementBanner.vue';
 import NotificationBell from '@/components/NotificationBell.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
@@ -20,6 +20,7 @@ import { getAllRegistries } from '@/services/registry';
 import sseService from '@/services/sse';
 import { getAllTriggers } from '@/services/trigger';
 import { getAllWatchers } from '@/services/watcher';
+import { ROUTES } from '@/router/routes';
 import { useTheme } from '@/theme/useTheme';
 
 const router = useRouter();
@@ -103,40 +104,41 @@ const navGroups = computed<NavGroup[]>(() => [
   {
     label: '',
     items: [
-      { label: 'Dashboard', icon: 'dashboard', route: '/' },
+      { label: 'Dashboard', icon: 'dashboard', route: ROUTES.DASHBOARD },
       {
         label: 'Containers',
         icon: 'containers',
-        route: '/containers',
+        route: ROUTES.CONTAINERS,
         badge: containerCount.value || undefined,
         badgeColor: 'blue',
       },
       {
         label: 'Security',
         icon: 'security',
-        route: '/security',
+        route: ROUTES.SECURITY,
         badge: securityIssueCount.value || undefined,
         badgeColor: 'red',
       },
-      { label: 'Audit', icon: 'audit', route: '/audit' },
+      { label: 'Audit', icon: 'audit', route: ROUTES.AUDIT },
+      { label: 'System Logs', icon: 'logs', route: ROUTES.LOGS },
     ],
   },
   {
     label: 'Manage',
     items: [
-      { label: 'Hosts', icon: 'servers', route: '/servers' },
-      { label: 'Registries', icon: 'registries', route: '/registries' },
-      { label: 'Watchers', icon: 'watchers', route: '/watchers' },
+      { label: 'Hosts', icon: 'servers', route: ROUTES.SERVERS },
+      { label: 'Registries', icon: 'registries', route: ROUTES.REGISTRIES },
+      { label: 'Watchers', icon: 'watchers', route: ROUTES.WATCHERS },
     ],
   },
   {
     label: 'Settings',
     items: [
-      { label: 'General', icon: 'config', route: '/config' },
-      { label: 'Notifications', icon: 'notifications', route: '/notifications' },
-      { label: 'Triggers', icon: 'triggers', route: '/triggers' },
-      { label: 'Auth', icon: 'auth', route: '/auth' },
-      { label: 'Agents', icon: 'agents', route: '/agents' },
+      { label: 'General', icon: 'config', route: ROUTES.CONFIG },
+      { label: 'Notifications', icon: 'notifications', route: ROUTES.NOTIFICATIONS },
+      { label: 'Triggers', icon: 'triggers', route: ROUTES.TRIGGERS },
+      { label: 'Auth', icon: 'auth', route: ROUTES.AUTH },
+      { label: 'Agents', icon: 'agents', route: ROUTES.AGENTS },
     ],
   },
 ]);
@@ -185,7 +187,7 @@ const staticSearchResults = computed<SearchResultItem[]>(() => {
       title: 'Appearance Settings',
       subtitle: 'Config · Appearance',
       icon: 'config',
-      route: '/config',
+      route: ROUTES.CONFIG,
       query: { tab: 'appearance' },
       kind: 'setting',
       searchable: 'appearance settings config theme color font icon library',
@@ -195,20 +197,10 @@ const staticSearchResults = computed<SearchResultItem[]>(() => {
       title: 'Profile Settings',
       subtitle: 'Config · Profile',
       icon: 'user',
-      route: '/config',
+      route: ROUTES.CONFIG,
       query: { tab: 'profile' },
       kind: 'setting',
       searchable: 'profile settings config account user',
-    },
-    {
-      id: 'settings:logs',
-      title: 'Application Logs',
-      subtitle: 'Config · Logs',
-      icon: 'logs',
-      route: '/config',
-      query: { tab: 'logs' },
-      kind: 'setting',
-      searchable: 'logs application logs config troubleshooting',
     },
   ];
 
@@ -231,7 +223,7 @@ async function handleSignOut() {
   try {
     await logout();
   } finally {
-    router.push('/login');
+    router.push(ROUTES.LOGIN);
   }
 }
 
@@ -385,7 +377,7 @@ const containerSearchResults = computed<SearchResultItem[]>(() =>
     subtitle: `Container · ${container.image} · ${container.status} · ${container.host}`,
     icon: 'containers',
     containerIcon: container.icon,
-    route: '/containers',
+    route: ROUTES.CONTAINERS,
     query: { q: container.displayName },
     kind: 'container',
     searchable:
@@ -448,7 +440,7 @@ function buildSearchIndexResults(resources: {
       title: name,
       subtitle: `Agent · ${status} · ${hostLabel}`,
       icon: 'agents',
-      route: '/agents',
+      route: ROUTES.AGENTS,
       query: { q: name },
       kind: 'agent',
       searchable: `${name} ${hostLabel} ${status} agent`.toLowerCase(),
@@ -465,7 +457,7 @@ function buildSearchIndexResults(resources: {
       title: name,
       subtitle: `Trigger · ${type}`,
       icon: 'triggers',
-      route: '/triggers',
+      route: ROUTES.TRIGGERS,
       query: { q: name },
       kind: 'trigger',
       searchable: `${name} ${id} ${type} trigger`.toLowerCase(),
@@ -482,7 +474,7 @@ function buildSearchIndexResults(resources: {
       title: name,
       subtitle: `Watcher · ${type}`,
       icon: 'watchers',
-      route: '/watchers',
+      route: ROUTES.WATCHERS,
       query: { q: name },
       kind: 'watcher',
       searchable: `${name} ${id} ${type} watcher`.toLowerCase(),
@@ -499,7 +491,7 @@ function buildSearchIndexResults(resources: {
       title: name,
       subtitle: `Registry · ${type}`,
       icon: 'registries',
-      route: '/registries',
+      route: ROUTES.REGISTRIES,
       query: { q: name },
       kind: 'registry',
       searchable: `${name} ${id} ${type} registry`.toLowerCase(),
@@ -516,7 +508,7 @@ function buildSearchIndexResults(resources: {
       title: name,
       subtitle: `Auth · ${type}`,
       icon: 'auth',
-      route: '/auth',
+      route: ROUTES.AUTH,
       query: { q: name },
       kind: 'auth',
       searchable: `${name} ${id} ${type} auth authentication`.toLowerCase(),
@@ -534,7 +526,7 @@ function buildSearchIndexResults(resources: {
       title: name,
       subtitle: `Notification rule · ${id}`,
       icon: 'notifications',
-      route: '/notifications',
+      route: ROUTES.NOTIFICATIONS,
       query: { q: name },
       kind: 'notification',
       searchable: `${name} ${id} notification rule alerts`.toLowerCase(),
@@ -1098,7 +1090,7 @@ onUnmounted(() => {
 
 <template>
   <div :class="[isDark ? 'dark' : 'light']"
-       class="h-screen flex overflow-hidden font-mono"
+       class="h-dvh flex overflow-hidden font-mono"
        :style="{ background: 'var(--dd-bg)' }">
 
     <!-- Mobile overlay -->
@@ -1118,14 +1110,12 @@ onUnmounted(() => {
         width: isCollapsed ? '56px' : '240px',
         minWidth: isCollapsed ? '56px' : '240px',
         backgroundColor: 'var(--dd-bg-sidebar)',
-        borderRight: '1px solid var(--dd-border)',
         overflowX: 'hidden',
       }">
 
       <!-- Logo -->
       <div class="flex items-center h-12 shrink-0 overflow-hidden"
-           :class="isCollapsed ? 'justify-center px-1' : 'justify-between px-3'"
-           :style="{ borderBottom: '1px solid var(--dd-border)' }">
+           :class="isCollapsed ? 'justify-center px-1' : 'justify-between px-3'">
         <div class="flex items-center overflow-hidden" :class="isCollapsed ? '' : 'gap-2 shrink-0'">
           <img :src="whaleLogo" alt="Drydock"
                class="h-5 w-auto shrink-0 transition-transform duration-300"
@@ -1192,23 +1182,25 @@ onUnmounted(() => {
       </nav>
 
       <!-- Sidebar search -->
-      <div class="shrink-0 px-3 pt-3 pb-3">
+      <div class="shrink-0 pt-3 pb-3" :class="isCollapsed ? 'px-2' : 'px-3'">
         <button aria-label="Search"
-                class="w-full flex items-center gap-2 dd-rounded px-3 py-2 text-xs transition-colors dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
+                class="w-full flex items-center dd-rounded text-xs transition-colors dd-bg-card dd-text-secondary hover:dd-bg-elevated hover:dd-text"
+                :class="isCollapsed ? 'justify-center py-2.5' : 'gap-2 px-3 py-2'"
                 :style="{ border: '1px solid var(--dd-border)' }"
                 @click="showSearch = true; isMobileMenuOpen = false">
-          <AppIcon name="search" :size="12" />
-          <span class="sidebar-label">Search</span>
-          <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-muted">
-            <span class="text-[9px]">&#8984;</span>K
-          </kbd>
+          <AppIcon name="search" :size="12" class="shrink-0" />
+          <template v-if="!isCollapsed">
+            <span class="sidebar-label">Search</span>
+            <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-muted">
+              <span class="text-[9px]">&#8984;</span>K
+            </kbd>
+          </template>
         </button>
       </div>
 
       <!-- Sidebar footer -->
       <div class="shrink-0 px-3 py-2.5 flex items-center gap-1"
-           :class="isCollapsed ? 'flex-col' : 'flex-row justify-between'"
-           :style="{ borderTop: '1px solid var(--dd-border)' }">
+           :class="isCollapsed ? 'flex-col' : 'flex-row justify-between'">
         <button aria-label="About Drydock"
                 class="flex items-center justify-center w-7 h-7 dd-rounded text-xs transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                 v-tooltip.top="'About Drydock'"
@@ -1233,7 +1225,6 @@ onUnmounted(() => {
               style="grid-template-columns: 1fr auto 1fr;"
               :style="{
                 backgroundColor: 'var(--dd-bg)',
-                borderBottom: '1px solid var(--dd-border)',
               }">
         <!-- Left: hamburger + breadcrumb -->
         <div class="flex items-center gap-3">
@@ -1284,7 +1275,7 @@ onUnmounted(() => {
                   {{ currentUser?.username || 'User' }}
                 </div>
                 <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
-                        @click="showUserMenu = false; router.push('/config?tab=profile')">
+                        @click="showUserMenu = false; router.push({ path: ROUTES.CONFIG, query: { tab: 'profile' } })">
                   <AppIcon name="user" :size="11" class="dd-text-muted" />
                   Profile
                 </button>
@@ -1349,12 +1340,15 @@ onUnmounted(() => {
                class="relative w-full max-w-[340px] dd-rounded-lg overflow-hidden shadow-2xl"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <button aria-label="Close"
-                    class="absolute top-3 right-3 w-6 h-6 flex items-center justify-center dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                    class="absolute top-3 right-3 z-10 w-6 h-6 flex items-center justify-center dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                     @click="showAbout = false">
               <AppIcon name="xmark" :size="12" />
             </button>
             <div class="flex flex-col items-center pt-6 pb-4 px-6">
-              <img :src="whaleLogo" alt="Drydock" class="h-12 w-auto mb-3" :style="isDark ? { filter: 'invert(1)' } : {}" />
+              <div class="-mx-6 w-[calc(100%+3rem)] h-12 mb-3 relative pointer-events-none">
+                <img :src="whaleLogo" alt="Drydock" class="h-10 w-[65px] absolute top-1 about-swim"
+                     :style="isDark ? { filter: 'invert(1)' } : {}" />
+              </div>
               <h2 id="about-dialog-title" class="text-base font-bold dd-text">Drydock</h2>
               <span class="text-[11px] dd-text-muted mt-0.5">Docker Container Update Manager</span>
               <span class="badge text-[10px] font-semibold mt-2 dd-bg-elevated dd-text-secondary">v1.4.0</span>
@@ -1495,10 +1489,8 @@ onUnmounted(() => {
           <div class="w-full max-w-[320px] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <div class="flex flex-col items-center px-6 py-8 gap-3">
-              <div class="w-10 h-10 rounded-full flex items-center justify-center mb-1"
-                   :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
-                <AppIcon name="warning" :size="18" :style="{ color: 'var(--dd-danger)' }" />
-              </div>
+              <img :src="whaleLogo" alt="" class="h-10 w-auto mb-1"
+                   :style="[{ transform: 'rotate(180deg) scaleX(-1)' }, isDark ? { filter: 'invert(1)' } : {}]" />
               <h2 class="text-sm font-bold dd-text">{{ connectionOverlayTitle }}</h2>
               <p class="text-[11px] dd-text-muted leading-relaxed">
                 {{ connectionOverlayMessage }}
@@ -1514,3 +1506,16 @@ onUnmounted(() => {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+@keyframes swim {
+  0% { left: 0; transform: scaleX(-1); }
+  45% { left: calc(100% - 65px); transform: scaleX(-1); }
+  50% { left: calc(100% - 65px); transform: scaleX(1); }
+  95% { left: 0; transform: scaleX(1); }
+  100% { left: 0; transform: scaleX(-1); }
+}
+.about-swim {
+  animation: swim 6s ease-in-out infinite;
+}
+</style>

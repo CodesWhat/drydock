@@ -26,20 +26,14 @@ All error responses (HTTP 4xx/5xx) return a consistent JSON structure:
 
 ```json
 {
-  "error": "Container not found",
-  "code": "CONTAINER_NOT_FOUND",
-  "message": "Container not found"
+  "error": "Container not found"
 }
 ```
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `error` | string | Human-readable error message (legacy field, same as `message`) |
-| `code` | string | Machine-readable error code (e.g. `NOT_FOUND`, `UNAUTHORIZED`, `CONTAINER_NOT_FOUND`) |
-| `message` | string | Human-readable error message |
+| `error` | string | Human-readable error message (derived from the HTTP status when not explicitly set) |
 | `details` | object | Optional contextual metadata (present only when additional context is available) |
-
-Error codes are derived from the HTTP status and error message. Common codes include `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONTAINER_NOT_FOUND`, `TOO_MANY_REQUESTS`, and `INTERNAL_SERVER_ERROR`.
 
 ## Authentication
 
@@ -309,50 +303,55 @@ Returns containers grouped by stack or group label. Group priority: `dd.group` >
 ```bash
 curl http://drydock:3000/api/containers/groups
 
-[
-  {
-    "name": "monitoring",
-    "containers": [
-      {
-        "id": "31a61a...",
-        "name": "prometheus",
-        "displayName": "Prometheus",
-        "updateAvailable": false
-      },
-      {
-        "id": "e5f6a7...",
-        "name": "grafana",
-        "displayName": "Grafana",
-        "updateAvailable": true
-      }
-    ],
-    "containerCount": 2,
-    "updatesAvailable": 1
-  },
-  {
-    "name": null,
-    "containers": [
-      {
-        "id": "abc123...",
-        "name": "standalone-app",
-        "displayName": "standalone-app",
-        "updateAvailable": false
-      }
-    ],
-    "containerCount": 1,
-    "updatesAvailable": 0
-  }
-]
+{
+  "data": [
+    {
+      "name": "monitoring",
+      "containers": [
+        {
+          "id": "31a61a...",
+          "name": "prometheus",
+          "displayName": "Prometheus",
+          "updateAvailable": false
+        },
+        {
+          "id": "e5f6a7...",
+          "name": "grafana",
+          "displayName": "Grafana",
+          "updateAvailable": true
+        }
+      ],
+      "containerCount": 2,
+      "updatesAvailable": 1
+    },
+    {
+      "name": null,
+      "containers": [
+        {
+          "id": "abc123...",
+          "name": "standalone-app",
+          "displayName": "standalone-app",
+          "updateAvailable": false
+        }
+      ],
+      "containerCount": 1,
+      "updatesAvailable": 0
+    }
+  ],
+  "total": 2
+}
 ```
 
 ### Response fields
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `name` | string \| null | Group name (`null` for ungrouped containers) |
-| `containers` | array | List of containers with `id`, `name`, `displayName`, `updateAvailable` |
-| `containerCount` | integer | Number of containers in the group |
-| `updatesAvailable` | integer | Number of containers with a pending update |
+| `data` | array | List of container groups |
+| `total` | integer | Number of groups returned |
+| `data[].name` | string \| null | Group name (`null` for ungrouped containers) |
+| `data[].containers` | array | List of containers with `id`, `name`, `displayName`, `updateAvailable` |
+| `data[].containerCount` | integer | Number of containers in the group |
+| `data[].updatesAvailable` | integer | Number of containers with a pending update |
 
 ## Authentication routes
 

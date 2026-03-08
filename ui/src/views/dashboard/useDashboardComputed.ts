@@ -1,4 +1,5 @@
 import { computed, type Ref } from 'vue';
+import { ROUTES } from '../../router/routes';
 import type { Container } from '../../types/container';
 import {
   buildDashboardContainerMetrics,
@@ -368,7 +369,7 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
         icon: 'containers',
         color: 'var(--dd-primary)',
         colorMuted: 'var(--dd-primary-muted)',
-        route: '/containers',
+        route: ROUTES.CONTAINERS,
         detail: `${running} running · ${stopped} stopped`,
       },
       {
@@ -390,7 +391,7 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
           if (ratio >= 0.5) return 'var(--dd-warning-muted)';
           return 'var(--dd-caution-muted)';
         })(),
-        route: { path: '/containers', query: { filterKind: 'any' } },
+        route: { path: ROUTES.CONTAINERS, query: { filterKind: 'any' } },
       },
       {
         id: 'stat-security',
@@ -409,7 +410,7 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
             : securityTotalCount.value > 0
               ? 'var(--dd-success-muted)'
               : 'var(--dd-neutral-muted)',
-        route: '/security',
+        route: ROUTES.SECURITY,
       },
       {
         id: 'stat-registries',
@@ -418,7 +419,7 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
         icon: 'registries',
         color: 'var(--dd-primary)',
         colorMuted: 'var(--dd-primary-muted)',
-        route: '/registries',
+        route: ROUTES.REGISTRIES,
       },
     ];
   });

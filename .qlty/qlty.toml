@@ -115,6 +115,7 @@ name = "trivy"
 drivers = [
   "config",
 ]
+version = "0.69.3"
 
 [[plugin]]
 name = "trufflehog"

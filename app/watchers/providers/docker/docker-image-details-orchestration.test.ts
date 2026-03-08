@@ -206,6 +206,42 @@ describe('docker image details orchestration module', () => {
     expect(containerInStore.image.created).toBe('2025-01-01T00:00:00.000Z');
   });
 
+  test('reconciles container status from Docker summary when it differs from store', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      status: 'stopped',
+      error: undefined,
+      details: {
+        ports: [],
+        volumes: [],
+        env: [],
+      },
+      image: {
+        id: 'image-old',
+        digest: {
+          repo: 'sha256:old',
+          value: 'sha256:old',
+        },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher } = createWatcher({
+      configuration: { watchevents: true },
+    });
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({ State: 'running' }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result).toBe(containerInStore);
+    expect(containerInStore.status).toBe('running');
+  });
+
   test('throws a clear error when image inspection fails for a new container', async () => {
     vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
 

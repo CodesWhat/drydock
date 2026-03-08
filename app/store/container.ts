@@ -399,12 +399,22 @@ function invalidateContainersCacheForMutation(containerBefore, containerAfter) {
 }
 
 function setContainersQueryCache(cacheKey, cacheValue) {
-  if (containersQueryCache.has(cacheKey)) {
+  const cacheEntryExists = containersQueryCache.has(cacheKey);
+  if (cacheEntryExists) {
     deleteContainersQueryCacheEntry(cacheKey);
+  } else {
+    while (containersQueryCache.size >= CONTAINERS_QUERY_CACHE_MAX_ENTRIES) {
+      const oldestCacheKey = containersQueryCache.keys().next().value;
+      if (oldestCacheKey === undefined) {
+        break;
+      }
+      deleteContainersQueryCacheEntry(oldestCacheKey);
+    }
   }
   containersQueryCache.set(cacheKey, cacheValue);
   indexContainerQueryCacheKey(cacheKey);
 
+  // Defensive cap enforcement in case iterator anomalies prevent pre-insert eviction.
   while (containersQueryCache.size > CONTAINERS_QUERY_CACHE_MAX_ENTRIES) {
     const oldestCacheKey = containersQueryCache.keys().next().value;
     if (oldestCacheKey === undefined) {

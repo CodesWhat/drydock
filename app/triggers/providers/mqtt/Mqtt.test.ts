@@ -26,10 +26,12 @@ const configurationValid = {
   url: 'mqtt://host:1883',
   topic: 'dd/container',
   clientid: 'dd',
+  exclude: '',
   hass: {
     discovery: false,
     enabled: false,
     prefix: 'homeassistant',
+    attributes: 'full',
   },
   tls: {
     clientkey: undefined,
@@ -109,6 +111,7 @@ test('validateConfiguration should default hass.discovery to true when hass.enab
     enabled: true,
     prefix: 'homeassistant',
     discovery: true,
+    attributes: 'full',
   });
 });
 
@@ -172,6 +175,8 @@ test.each(containerData)('trigger should format json message payload as expected
 }) => {
   mqtt.configuration = {
     topic: 'dd/container',
+    exclude: '',
+    hass: { attributes: 'full' },
   };
   const container = {
     id: '31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816',
@@ -293,4 +298,153 @@ test('deregister then initTrigger should not duplicate container event callbacks
   await Promise.resolve();
 
   expect(triggerSpy).toHaveBeenCalledTimes(1);
+});
+
+describe('hass.attributes validation', () => {
+  test('should accept hass.attributes short', () => {
+    const validated = mqtt.validateConfiguration({
+      url: configurationValid.url,
+      clientid: 'dd',
+      hass: { attributes: 'short' },
+    });
+    expect(validated.hass.attributes).toBe('short');
+  });
+
+  test('should default hass.attributes to full', () => {
+    const validated = mqtt.validateConfiguration({
+      url: configurationValid.url,
+      clientid: 'dd',
+    });
+    expect(validated.hass.attributes).toBe('full');
+  });
+
+  test('should reject invalid hass.attributes value', () => {
+    expect(() => {
+      mqtt.validateConfiguration({
+        url: configurationValid.url,
+        clientid: 'dd',
+        hass: { attributes: 'invalid' },
+      });
+    }).toThrowError(joi.ValidationError);
+  });
+});
+
+describe('exclude validation', () => {
+  test('should accept exclude as comma-separated string', () => {
+    const validated = mqtt.validateConfiguration({
+      url: configurationValid.url,
+      clientid: 'dd',
+      exclude: 'security.sbom.documents,details,labels',
+    });
+    expect(validated.exclude).toBe('security.sbom.documents,details,labels');
+  });
+
+  test('should default exclude to empty string', () => {
+    const validated = mqtt.validateConfiguration({
+      url: configurationValid.url,
+      clientid: 'dd',
+    });
+    expect(validated.exclude).toBe('');
+  });
+
+  test('should handle empty exclude string', () => {
+    const validated = mqtt.validateConfiguration({
+      url: configurationValid.url,
+      clientid: 'dd',
+      exclude: '',
+    });
+    expect(validated.exclude).toBe('');
+  });
+});
+
+describe('trigger filtering', () => {
+  const containerWithSecurity = {
+    id: 'abc123',
+    name: 'filtered-test',
+    watcher: 'local',
+    details: { ports: ['80/tcp'], volumes: [], env: [] },
+    labels: { 'com.docker.compose.project': 'app' },
+    security: {
+      scan: {
+        scanner: 'trivy',
+        status: 'passed',
+        summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+        vulnerabilities: [{ id: 'CVE-2024-0001' }],
+      },
+      sbom: {
+        format: 'spdx',
+        documents: [{ spdxVersion: 'SPDX-2.3' }],
+      },
+    },
+    image: {
+      id: 'sha256:abc',
+      registry: { url: 'docker.io' },
+      name: 'nginx',
+      tag: { value: '1.25', semver: true },
+      digest: { watch: false },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+    result: { tag: '1.26' },
+  };
+
+  test('should publish filtered container when hass.attributes is short', async () => {
+    mqtt.configuration = {
+      topic: 'dd/container',
+      exclude: '',
+      hass: { attributes: 'short' },
+    };
+    await mqtt.trigger(containerWithSecurity);
+
+    const publishedPayload = JSON.parse(mqtt.client.publish.mock.calls[0][1]);
+    expect(publishedPayload).not.toHaveProperty('details_ports_0');
+    expect(publishedPayload).not.toHaveProperty('labels_com_docker_compose_project');
+    expect(publishedPayload).not.toHaveProperty('security_sbom_documents_0_spdx_version');
+    expect(publishedPayload).not.toHaveProperty('security_scan_vulnerabilities_0_id');
+    expect(publishedPayload).toHaveProperty('security_scan_status', 'passed');
+    expect(publishedPayload).toHaveProperty('security_sbom_format', 'spdx');
+  });
+
+  test('should publish full container when hass.attributes is full', async () => {
+    mqtt.configuration = {
+      topic: 'dd/container',
+      exclude: '',
+      hass: { attributes: 'full' },
+    };
+    await mqtt.trigger(containerWithSecurity);
+
+    const publishedPayload = JSON.parse(mqtt.client.publish.mock.calls[0][1]);
+    expect(publishedPayload).toHaveProperty('security_scan_vulnerabilities_0_id', 'CVE-2024-0001');
+    expect(publishedPayload).toHaveProperty('security_sbom_documents_0_spdx_version', 'SPDX-2.3');
+    expect(publishedPayload).toHaveProperty('details_ports_0', '80/tcp');
+  });
+
+  test('should use exclude over hass.attributes when both set', async () => {
+    mqtt.configuration = {
+      topic: 'dd/container',
+      exclude: 'details',
+      hass: { attributes: 'short' },
+    };
+    await mqtt.trigger(containerWithSecurity);
+
+    const publishedPayload = JSON.parse(mqtt.client.publish.mock.calls[0][1]);
+    // exclude wins: only 'details' stripped, not the full 'short' preset
+    expect(publishedPayload).not.toHaveProperty('details_ports_0');
+    expect(publishedPayload).toHaveProperty('security_sbom_documents_0_spdx_version', 'SPDX-2.3');
+    expect(publishedPayload).toHaveProperty('security_scan_vulnerabilities_0_id', 'CVE-2024-0001');
+  });
+
+  test('should publish full container when both are default', async () => {
+    mqtt.configuration = {
+      topic: 'dd/container',
+      exclude: '',
+      hass: { attributes: 'full' },
+    };
+    await mqtt.trigger(containerWithSecurity);
+
+    const publishedPayload = JSON.parse(mqtt.client.publish.mock.calls[0][1]);
+    expect(publishedPayload).toHaveProperty('security_scan_vulnerabilities_0_id', 'CVE-2024-0001');
+    expect(publishedPayload).toHaveProperty('details_ports_0', '80/tcp');
+    expect(publishedPayload).toHaveProperty('labels_com_docker_compose_project', 'app');
+  });
 });

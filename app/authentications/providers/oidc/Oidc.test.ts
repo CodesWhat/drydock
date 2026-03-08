@@ -764,6 +764,39 @@ test('callback should proceed when session key is removed before cleanup', async
   expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
 });
 
+test('callback should preserve other oidc strategy checks when current strategy key disappears', async () => {
+  openidClientMock.authorizationCodeGrant = vi.fn().mockResolvedValue({ access_token: 'token' });
+  openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'user@example.com' });
+
+  const session = {
+    save: vi.fn((cb) => cb()),
+    oidc: {
+      default: {
+        pending: {
+          'valid-state': createPendingCheck(),
+        },
+      },
+      other: {
+        pending: {
+          'other-state': createPendingCheck('other-code-verifier'),
+        },
+      },
+    },
+  };
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  openidClientMock.authorizationCodeGrant.mockImplementation(async () => {
+    delete req.session.oidc.default;
+    return { access_token: 'token' };
+  });
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(req.session.oidc.default).toBeUndefined();
+  expect(req.session.oidc.other).toBeDefined();
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
 test('callback should fall back to slash redirect when public url is empty', async () => {
   mockSuccessfulGrant(openidClientMock);
 
@@ -881,6 +914,42 @@ test('callback should set long-lived cookie when rememberMe is true', async () =
 
   expect(req.session.cookie.maxAge).toBe(3600 * 1000 * 24 * 30);
   expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+test('callback should regenerate the session before completing login', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const regenerate = vi.fn((done) => done());
+  const session = createSessionWithPending({
+    'valid-state': createPendingCheck(),
+  });
+  session.regenerate = regenerate;
+
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(regenerate).toHaveBeenCalledTimes(1);
+  expect(req.login).toHaveBeenCalled();
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+test('callback should return 401 when session regeneration fails', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const session = createSessionWithPending({
+    'valid-state': createPendingCheck(),
+  });
+  session.regenerate = vi.fn((done) => done(new Error('session regenerate failed')));
+
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(session.regenerate).toHaveBeenCalledTimes(1);
+  expect401Json(res);
 });
 
 test('callback should convert cookie to session cookie when rememberMe is false', async () => {

@@ -4,7 +4,7 @@ import { byString, byValues } from 'sort-es';
 import type { RegistryState } from '../registry/index.js';
 import * as registry from '../registry/index.js';
 import { redactTriggerConfigurationInfrastructureDetails } from '../registry/trigger-config-redaction.js';
-import { parseIntegerQueryParam } from './container/request-helpers.js';
+import { normalizeLimitOffsetPagination } from './container/request-helpers.js';
 import { sendErrorResponse } from './error-response.js';
 
 export interface ApiComponent {
@@ -39,18 +39,6 @@ type ComponentListPagination = {
 };
 
 const COMPONENT_LIST_MAX_LIMIT = 200;
-
-function normalizeComponentListPagination(
-  query: Request['query'] | undefined,
-): ComponentListPagination {
-  const queryParams = query || {};
-  const parsedLimit = parseIntegerQueryParam(queryParams.limit, 0);
-  const parsedOffset = parseIntegerQueryParam(queryParams.offset, 0);
-  return {
-    limit: Math.min(COMPONENT_LIST_MAX_LIMIT, Math.max(0, parsedLimit)),
-    offset: Math.max(0, parsedOffset),
-  };
-}
 
 function paginateComponentList(
   components: ApiComponent[],
@@ -127,7 +115,9 @@ export function mapComponentsToList(
 function getAll(req: Request, res: Response, kind: ComponentKind): void {
   const components = registry.getState()[kind] as unknown as ComponentMap;
   const allItems = mapComponentsToList(components, kind);
-  const pagination = normalizeComponentListPagination(req.query);
+  const pagination = normalizeLimitOffsetPagination(req.query, {
+    maxLimit: COMPONENT_LIST_MAX_LIMIT,
+  });
   const data = paginateComponentList(allItems, pagination);
   res.status(200).json({
     data,

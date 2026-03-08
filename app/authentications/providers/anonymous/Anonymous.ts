@@ -8,7 +8,9 @@ import Authentication from '../Authentication.js';
  */
 class Anonymous extends Authentication {
   private isExplicitlyConfirmed(): boolean {
-    return process.env.DD_ANONYMOUS_AUTH_CONFIRM?.trim().toLowerCase() === 'true';
+    const canonical = process.env.DD_ANONYMOUS_AUTH_CONFIRM?.trim().toLowerCase();
+    const alias = process.env.DD_AUTH_ANONYMOUS_CONFIRM?.trim().toLowerCase();
+    return canonical === 'true' || alias === 'true';
   }
 
   initAuthentication(): void {

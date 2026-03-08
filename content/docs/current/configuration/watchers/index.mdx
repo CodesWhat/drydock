@@ -276,7 +276,8 @@ services:
   drydock:
     image: codeswhat/drydock
     depends_on:
-      - socket-proxy
+      socket-proxy:
+        condition: service_healthy
     environment:
       - DD_WATCHER_LOCAL_HOST=socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
@@ -286,21 +287,32 @@ services:
   socket-proxy:
     image: tecnativa/docker-socket-proxy
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - CONTAINERS=1
       - IMAGES=1
       - EVENTS=1
       - SERVICES=1
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     restart: unless-stopped
 ```
+
+<Callout type="info">The `:ro` (read-only) flag on the Docker socket mount is omitted intentionally. The proxy's environment variables (`CONTAINERS`, `EVENTS`, etc.) control which API endpoints are exposed — that is the actual security boundary. The `:ro` flag on Unix sockets does not prevent API communication and can cause connection failures on some Linux kernels.</Callout>
 
 #### Proxy permissions by feature
 
 | Feature | Required proxy env vars |
 | --- | --- |
 | Watch containers (default) | `CONTAINERS=1`, `IMAGES=1`, `EVENTS=1`, `SERVICES=1` |
+| Container actions (start/stop/restart) | All of the above **plus** `POST=1` and a [Docker trigger](/docs/configuration/triggers/docker) |
 | Docker trigger (auto-updates) | All of the above **plus** `POST=1`, `NETWORKS=1` |
+
+<Callout type="warn">Container actions (start, stop, restart, update) require a Docker trigger to be configured. If you only want container actions without automatic updates, set `DD_TRIGGER_DOCKER_{name}_AUTO=false`. Without a Docker trigger, the UI will show "No docker trigger found for this container" when attempting actions.</Callout>
 
 ### Watch 1 local Docker host and 2 remote docker hosts at the same time
 

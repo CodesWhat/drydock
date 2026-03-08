@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { ROUTES } from '../router/routes';
 import { useStorageRef } from '../composables/useStorageRef';
 import { getAuditLog } from '../services/audit';
 import type { AuditEntry } from '../utils/audit-helpers';
@@ -39,12 +40,12 @@ function toggle() {
 
 function navigateToEntry(entry: AuditEntry) {
   showBell.value = false;
-  router.push(`/audit?container=${encodeURIComponent(entry.containerName)}`);
+  router.push({ path: ROUTES.AUDIT, query: { container: entry.containerName } });
 }
 
 function viewAll() {
   showBell.value = false;
-  router.push('/audit');
+  router.push(ROUTES.AUDIT);
 }
 
 function markAllRead() {

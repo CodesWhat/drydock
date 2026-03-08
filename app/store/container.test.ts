@@ -1573,6 +1573,38 @@ test('getContainers should evict oldest query cache entries when size cap is exc
   expect(collection.find.mock.calls.length).toBe(readCountAfterUniqueQueries + 1);
 });
 
+test('getContainers query cache eviction should happen before inserting new entries at capacity', () => {
+  const collection = {
+    find: vi.fn(() => [{ data: createContainerFixture() }]),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+  collection.find.mockClear();
+
+  const maxEntries = container.CONTAINERS_QUERY_CACHE_MAX_ENTRIES;
+  for (let index = 0; index < maxEntries; index += 1) {
+    container.getContainers({ watcher: `pre-evict-${index}` });
+  }
+
+  const queryCache = container._getContainersQueryCacheForTests();
+  const originalSet = queryCache.set.bind(queryCache);
+  const cacheSizesBeforeSet: number[] = [];
+  const setSpy = vi.spyOn(queryCache, 'set').mockImplementation((cacheKey, cacheValue) => {
+    cacheSizesBeforeSet.push(queryCache.size);
+    return originalSet(cacheKey, cacheValue);
+  });
+
+  try {
+    container.getContainers({ watcher: 'pre-evict-next' });
+    expect(cacheSizesBeforeSet).toEqual([maxEntries - 1]);
+  } finally {
+    setSpy.mockRestore();
+  }
+});
+
 test('getContainers should retain unaffected query caches across inserts', async () => {
   const collection = createFilterableCollection([
     {
@@ -2002,6 +2034,48 @@ test('getContainers query cache eviction should stop when iterator returns undef
   try {
     container.getContainers({ watcher: 'evict-extra' });
     expect(queryCache.size).toBe(maxEntries + 1);
+  } finally {
+    keysSpy.mockRestore();
+  }
+});
+
+test('getContainers defensive cache eviction should remove oldest key after a transient iterator miss', () => {
+  const collection = {
+    find: vi.fn(() => [{ data: createContainerFixture() }]),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+  collection.find.mockClear();
+
+  const maxEntries = container.CONTAINERS_QUERY_CACHE_MAX_ENTRIES;
+  for (let index = 0; index < maxEntries; index += 1) {
+    container.getContainers({ watcher: `defensive-${index}` });
+  }
+
+  const queryCache = container._getContainersQueryCacheForTests();
+  const oldestKey = '[["watcher","defensive-0"]]';
+  const originalKeys = queryCache.keys.bind(queryCache);
+  const keysSpy = vi
+    .spyOn(queryCache, 'keys')
+    .mockImplementationOnce(
+      () =>
+        ({
+          next: () => ({ done: false, value: undefined }),
+          [Symbol.iterator]() {
+            return this;
+          },
+        }) as IterableIterator<string>,
+    )
+    .mockImplementation(() => originalKeys());
+
+  try {
+    container.getContainers({ watcher: 'defensive-next' });
+
+    expect(queryCache.size).toBe(maxEntries);
+    expect(queryCache.has(oldestKey)).toBe(false);
   } finally {
     keysSpy.mockRestore();
   }

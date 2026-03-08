@@ -1,23 +1,16 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { disableIconifyApi } from '../boot/icons';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
-import {
-  LOG_AUTO_FETCH_INTERVALS,
-  useAutoFetchLogs,
-  useLogViewport,
-} from '../composables/useLogViewerBehavior';
 import ConfigAppearanceTab from '../components/config/ConfigAppearanceTab.vue';
 import ConfigGeneralTab from '../components/config/ConfigGeneralTab.vue';
-import ConfigLogsTab from '../components/config/ConfigLogsTab.vue';
 import ConfigProfileTab from '../components/config/ConfigProfileTab.vue';
 import { type IconLibrary, iconMap, libraryLabels } from '../icons';
 import { themeFamilies } from '../theme/palettes';
 import { getAppInfos } from '../services/app';
 import { getUser } from '../services/auth';
-import { getLog, getLogEntries } from '../services/log';
 import { getServer } from '../services/server';
 import { clearIconCache, getSettings, updateSettings } from '../services/settings';
 import { getStore } from '../services/store';
@@ -61,17 +54,9 @@ function setFontSize(scale: number) {
   document.documentElement.style.setProperty('--dd-font-size', String(scale));
 }
 
-const { logContainer, scrollBlocked, scrollToBottom, handleLogScroll, resumeAutoScroll } =
-  useLogViewport();
-const { autoFetchInterval } = useAutoFetchLogs({
-  fetchFn: refreshAppLogs,
-  scrollToBottom,
-  scrollBlocked,
-});
+type SettingsTab = 'general' | 'appearance' | 'profile';
 
-type SettingsTab = 'general' | 'appearance' | 'logs' | 'profile';
-
-const VALID_TABS = new Set<SettingsTab>(['general', 'appearance', 'logs', 'profile']);
+const VALID_TABS = new Set<SettingsTab>(['general', 'appearance', 'profile']);
 
 function tabFromQuery(): SettingsTab {
   const raw = route.query.tab;
@@ -93,7 +78,6 @@ watch(
 const settingsTabs = [
   { id: 'general' as const, label: 'General', icon: 'settings' },
   { id: 'appearance' as const, label: 'Appearance', icon: 'config' },
-  { id: 'logs' as const, label: 'Logs', icon: 'logs' },
   { id: 'profile' as const, label: 'Profile', icon: 'user' },
 ];
 const availableThemeFamilies = themeFamilies;
@@ -250,104 +234,6 @@ function normalizeSessionCount(rawValue: unknown): number {
   return Math.floor(parsed);
 }
 
-// App logs state
-interface AppLogEntry {
-  timestamp?: string | number;
-  level?: string;
-  component?: string;
-  msg?: string;
-  message?: string;
-}
-
-const appLogLevel = ref('unknown');
-const appLogEntries = ref<AppLogEntry[]>([]);
-const appLogsLoading = ref(false);
-const appLogsError = ref('');
-const appLogLevelFilter = ref('all');
-const appLogTail = ref(100);
-const appLogComponent = ref('');
-const appLogsLastFetched = ref('');
-
-function formatLogTimestamp(timestamp: string | number | undefined): string {
-  if (timestamp === undefined || timestamp === null) {
-    return 'unknown';
-  }
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) {
-    return String(timestamp);
-  }
-  return date.toLocaleString();
-}
-
-function formatLastFetched(iso: string): string {
-  if (!iso) {
-    return 'never';
-  }
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return 'never';
-  }
-  return date.toLocaleTimeString();
-}
-
-function logMessage(entry: AppLogEntry): string {
-  return entry.msg || entry.message || '';
-}
-
-function getLevelColor(level: string | undefined): string {
-  const value = (level || '').toLowerCase();
-  if (value === 'error') return 'var(--dd-danger)';
-  if (value === 'warn' || value === 'warning') return 'var(--dd-warning)';
-  if (value === 'info') return 'var(--dd-info)';
-  if (value === 'debug') return 'var(--dd-text-secondary)';
-  return 'var(--dd-text-secondary)';
-}
-
-async function refreshAppLogs() {
-  appLogsLoading.value = true;
-  appLogsError.value = '';
-  try {
-    const [logInfo, entries] = await Promise.all([
-      getLog().catch(() => ({ level: 'unknown' })),
-      getLogEntries({
-        level: appLogLevelFilter.value,
-        component: appLogComponent.value.trim() || undefined,
-        tail: appLogTail.value,
-      }),
-    ]);
-    appLogLevel.value = logInfo?.level ?? 'unknown';
-    appLogEntries.value = Array.isArray(entries) ? entries : [];
-    appLogsLastFetched.value = new Date().toISOString();
-    if (!scrollBlocked.value) {
-      void nextTick(() => scrollToBottom());
-    }
-  } catch (e: unknown) {
-    appLogsError.value = errorMessage(e, 'Failed to load application logs');
-    appLogEntries.value = [];
-  } finally {
-    appLogsLoading.value = false;
-  }
-}
-
-function resetLogFilters() {
-  appLogLevelFilter.value = 'all';
-  appLogTail.value = 100;
-  appLogComponent.value = '';
-  void refreshAppLogs();
-}
-
-watch(
-  () => activeSettingsTab.value,
-  (tab, oldTab) => {
-    if (tab === 'logs' && appLogEntries.value.length === 0 && !appLogsLoading.value) {
-      void refreshAppLogs();
-    }
-    if (oldTab === 'logs') {
-      autoFetchInterval.value = 0;
-    }
-  },
-);
-
 async function loadGeneralSettingsData() {
   loading.value = true;
   serverError.value = '';
@@ -420,10 +306,6 @@ async function loadProfileData() {
 
 onMounted(async () => {
   await Promise.all([loadGeneralSettingsData(), loadProfileData()]);
-
-  if (activeSettingsTab.value === 'logs') {
-    void refreshAppLogs();
-  }
 });
 
 async function toggleInternetlessMode() {
@@ -457,10 +339,6 @@ async function handleClearIconCache() {
   } finally {
     cacheClearing.value = false;
   }
-}
-
-function setAppLogContainer(element: HTMLElement | null) {
-  logContainer.value = element;
 }
 
 function handleSelectThemeFamily(familyId: string, event: Event) {
@@ -542,34 +420,6 @@ function handleSelectIconLibrary(library: string) {
       :active-radius="activeRadius"
       :radius-presets="radiusPresets"
       :on-select-radius="setRadius"
-    />
-
-    <ConfigLogsTab
-      v-if="activeSettingsTab === 'logs'"
-      :log-level="appLogLevel"
-      :entries="appLogEntries"
-      :loading="appLogsLoading"
-      :error="appLogsError"
-      :log-level-filter="appLogLevelFilter"
-      :tail="appLogTail"
-      :auto-fetch-interval="autoFetchInterval"
-      :component-filter="appLogComponent"
-      :auto-fetch-options="LOG_AUTO_FETCH_INTERVALS"
-      :scroll-blocked="scrollBlocked"
-      :last-fetched-iso="appLogsLastFetched"
-      :format-last-fetched="formatLastFetched"
-      :format-timestamp="formatLogTimestamp"
-      :message-for-entry="logMessage"
-      :level-color="getLevelColor"
-      @update:log-level-filter="appLogLevelFilter = $event"
-      @update:tail="appLogTail = $event"
-      @update:auto-fetch-interval="autoFetchInterval = $event"
-      @update:component-filter="appLogComponent = $event"
-      @refresh="refreshAppLogs"
-      @reset="resetLogFilters"
-      @resume-auto-scroll="resumeAutoScroll"
-      @log-scroll="handleLogScroll"
-      @set-log-container="setAppLogContainer"
     />
 
     <ConfigProfileTab

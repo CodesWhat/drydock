@@ -29,6 +29,7 @@ Container actions can be individually toggled with environment variables:
 | `DD_SERVER_FEATURE_DELETE` | ⚪ | Enable container deletion | `true`, `false` | `true` |
 
 <Callout type="info">When a feature flag is disabled, the corresponding buttons are hidden in the UI and the API endpoints return `403 Forbidden`.</Callout>
+<Callout type="warn">Container action endpoints currently use an authentication-only, single-operator trust model. Any authenticated user can start, stop, restart, update, or delete any container. Run drydock behind trusted SSO/access controls until fine-grained RBAC is available.</Callout>
 
 ## Update action
 

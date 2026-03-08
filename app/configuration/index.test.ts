@@ -348,10 +348,24 @@ test('replaceSecrets must read secret in file', async () => {
   const vars = {
     DD_SERVER_X__FILE: `${TEST_DIRECTORY}/secret.txt`,
   };
-  configuration.replaceSecrets(vars);
+  await configuration.replaceSecrets(vars);
   expect(vars).toStrictEqual({
     DD_SERVER_X: 'super_secret',
   });
+});
+
+test('replaceSecrets should avoid synchronous file-system APIs', async () => {
+  const vars = {
+    DD_SERVER_X__FILE: `${TEST_DIRECTORY}/secret.txt`,
+  };
+  const openSyncSpy = vi.spyOn(fs, 'openSync');
+
+  try {
+    await configuration.replaceSecrets(vars);
+    expect(openSyncSpy).not.toHaveBeenCalled();
+  } finally {
+    openSyncSpy.mockRestore();
+  }
 });
 
 test('replaceSecrets must reject secret files larger than 1MB', async () => {
@@ -364,7 +378,7 @@ test('replaceSecrets must reject secret files larger than 1MB', async () => {
   };
 
   try {
-    expect(() => configuration.replaceSecrets(vars)).toThrow(
+    await expect(configuration.replaceSecrets(vars)).rejects.toThrow(
       'exceeds maximum size of 1048576 bytes',
     );
   } finally {

@@ -4,6 +4,7 @@ import type { StaticImageData } from "next/image";
 import NextImage from "next/image";
 import { notFound } from "next/navigation";
 import type React from "react";
+import { isFaqSlug } from "@/lib/docs-faq-route";
 import { source } from "@/lib/source";
 
 function MdxImage(props: React.ComponentProps<"img"> & { src?: string | StaticImageData }) {
@@ -50,7 +51,7 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
     })),
   };
 
-  const isFaqPage = params.slug?.length === 1 && params.slug[0] === "faq";
+  const isFaqPage = isFaqSlug(params.slug);
 
   const faqJsonLd = isFaqPage
     ? {
