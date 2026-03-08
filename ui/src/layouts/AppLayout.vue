@@ -1329,7 +1329,7 @@ onUnmounted(() => {
       </AnnouncementBanner>
 
       <!-- MAIN CONTENT -->
-      <main class="flex-1 min-h-0 overflow-hidden flex flex-col pl-4 pr-1 py-4 sm:pl-6 sm:pr-2 sm:py-6"
+      <main class="flex-1 min-h-0 overflow-auto flex flex-col pl-4 pr-1 py-4 sm:pl-6 sm:pr-2 sm:py-6"
             :style="{ backgroundColor: 'var(--dd-bg)' }">
         <router-view />
       </main>
