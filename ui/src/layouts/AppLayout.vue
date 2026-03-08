@@ -1098,7 +1098,7 @@ onUnmounted(() => {
 
 <template>
   <div :class="[isDark ? 'dark' : 'light']"
-       class="h-screen flex overflow-hidden font-mono"
+       class="h-dvh flex overflow-hidden font-mono"
        :style="{ background: 'var(--dd-bg)' }">
 
     <!-- Mobile overlay -->
