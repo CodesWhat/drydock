@@ -1,6 +1,10 @@
 <div align="center">
 
-<img src="docs/assets/whale-logo.png" alt="drydock" width="220">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/whale-logo-dark.png" />
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/whale-logo.png" />
+  <img src="docs/assets/whale-logo.png" alt="drydock" width="220">
+</picture>
 
 <h1>drydock</h1>
 

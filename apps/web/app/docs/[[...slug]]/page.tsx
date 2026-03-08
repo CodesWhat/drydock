@@ -71,7 +71,7 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
     : null;
 
   return (
-    <DocsPage toc={data.toc} full={data.full}>
+    <DocsPage toc={data.toc} full={data.full} className="!max-w-none">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
