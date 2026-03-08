@@ -92,6 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **HTTP trigger auth schema enforcement at startup** — HTTP trigger Joi schema now conditionally requires `user`+`password` for BASIC auth and `bearer` for BEARER auth at registration time, catching misconfigurations before first trigger execution.
 - **CORS implicit wildcard origin deprecation warning** — Startup warning when `DD_SERVER_CORS_ENABLED=true` without explicit `DD_SERVER_CORS_ORIGIN`. Default wildcard will require explicit opt-in in v1.5.0.
 - **Identity-aware rate limit keying** — Opt-in `DD_SERVER_RATELIMIT_IDENTITYKEYING=true` keys authenticated route rate limits by session/username instead of IP, preventing collisions for multiple users behind shared proxies. Unauthenticated routes remain IP-keyed. Disabled by default.
+- **Reactive server feature flags in UI** — Container action buttons (update, rollback, scan, triggers) are now gated by server-side feature flags via a `useServerFeatures` composable. When features like `DD_SERVER_FEATURE_CONTAINERACTIONS` are disabled, buttons show a disabled state with tooltip explaining why instead of silently failing at runtime.
 
 ### Changed
 
