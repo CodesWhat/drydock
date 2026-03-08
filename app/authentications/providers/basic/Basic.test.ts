@@ -241,6 +241,26 @@ describe('Basic Authentication', () => {
     });
   });
 
+  test('should reject authentication when hash parsing throws during verification dispatch', async () => {
+    const throwingHash = {
+      split() {
+        throw new Error('split failed');
+      },
+    } as unknown as string;
+
+    basic.configuration = {
+      user: 'testuser',
+      hash: throwingHash,
+    };
+
+    await new Promise<void>((resolve) => {
+      basic.authenticate('testuser', 'password', (_err, result) => {
+        expect(result).toBe(false);
+        resolve();
+      });
+    });
+  });
+
   test('should validate configuration schema with argon2id hash', async () => {
     const hash = createArgon2Hash('password');
     expect(

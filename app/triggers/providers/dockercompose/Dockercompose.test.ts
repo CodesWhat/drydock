@@ -706,6 +706,113 @@ describe('Dockercompose Trigger', () => {
     expect(composeUpdateSpy).not.toHaveBeenCalled();
   });
 
+  test('processComposeFile should return original compose text when computed service updates map is empty', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+
+    const container = makeContainer();
+    const composeFileText = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'buildComposeServiceImageUpdates').mockReturnValue(new Map());
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileText));
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const runLifecycleSpy = vi
+      .spyOn(trigger, 'runContainerUpdateLifecycle')
+      .mockResolvedValue(undefined);
+
+    await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+    expect(runLifecycleSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('processComposeFile should parse compose text when cached compose document is unavailable', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+
+    const container = makeContainer();
+    const composeFileText = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileText));
+    vi.spyOn(trigger, 'getCachedComposeDocument').mockReturnValue(null);
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const runLifecycleSpy = vi
+      .spyOn(trigger, 'runContainerUpdateLifecycle')
+      .mockResolvedValue(undefined);
+
+    await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+
+    expect(writeComposeFileSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      expect.stringContaining('image: nginx:1.1.0'),
+    );
+    expect(runLifecycleSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('processComposeFile should fail when computed compose edits overlap', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+
+    const nginxContainer = makeContainer();
+    const redisContainer = makeContainer({
+      name: 'redis',
+      imageName: 'redis',
+      tagValue: '7.0.0',
+      remoteValue: '7.1.0',
+    });
+    const composeFileText = [
+      'services:',
+      '  nginx:',
+      '    image: nginx:1.0.0',
+      '  redis:',
+      '    image: redis:7.0.0',
+      '',
+    ].join('\n');
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({
+        nginx: { image: 'nginx:1.0.0' },
+        redis: { image: 'redis:7.0.0' },
+      }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileText));
+
+    const overlappingDoc = yaml.parseDocument(composeFileText, {
+      keepSourceTokens: true,
+      maxAliasCount: 10_000,
+    });
+    const servicesNode: any = overlappingDoc.get('services', true);
+    const findImageValueNode = (serviceName: string) => {
+      const servicePair = servicesNode.items.find((pair: any) => pair.key?.value === serviceName);
+      return servicePair.value.items.find((pair: any) => pair.key?.value === 'image').value;
+    };
+    const nginxImageValueNode: any = findImageValueNode('nginx');
+    const redisImageValueNode: any = findImageValueNode('redis');
+
+    // Force equal start offsets with different end offsets to create deterministic overlap.
+    nginxImageValueNode.range[0] = redisImageValueNode.range[0];
+    nginxImageValueNode.range[1] = redisImageValueNode.range[0] + 1;
+
+    vi.spyOn(trigger, 'getCachedComposeDocument').mockReturnValue(overlappingDoc);
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const runLifecycleSpy = vi
+      .spyOn(trigger, 'runContainerUpdateLifecycle')
+      .mockResolvedValue(undefined);
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [nginxContainer, redisContainer]),
+    ).rejects.toThrow('Unable to apply overlapping compose edits');
+
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+    expect(runLifecycleSpy).not.toHaveBeenCalled();
+  });
+
   test('processComposeFile should not backup when backup is false', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.backup = false;
@@ -1687,6 +1794,23 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('runServicePostStartHooks should support environment array entries without equals sign', async () => {
+    trigger.configuration.dryrun = false;
+    const container = { name: 'netbox', watcher: 'local' };
+    const { recreatedContainer } = makeExecMocks();
+    mockDockerApi.getContainer.mockReturnValue(recreatedContainer);
+
+    await trigger.runServicePostStartHooks(container, 'netbox', {
+      post_start: [{ command: 'echo hello', environment: ['FOO', 'BAR=1'] }],
+    });
+
+    expect(recreatedContainer.exec).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Env: ['FOO', 'BAR=1'],
+      }),
+    );
+  });
+
   test('runServicePostStartHooks should reject object environment with invalid key', async () => {
     trigger.configuration.dryrun = false;
     const container = { name: 'netbox', watcher: 'local' };
@@ -1976,6 +2100,28 @@ describe('Dockercompose Trigger', () => {
     ).resolves.toBe(false);
   });
 
+  test('waitForComposeFileLockChange should return false when timeout elapses without lock changes', async () => {
+    vi.useFakeTimers();
+    const watcher: any = new EventEmitter();
+    watcher.close = vi.fn();
+    const watchMock = vi.mocked(watch);
+    watchMock.mockImplementation(() => watcher);
+
+    try {
+      const waitForLockChange = trigger.waitForComposeFileLockChange(
+        '/opt/drydock/test/compose.yml.drydock.lock',
+        1_000,
+      );
+
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      await expect(waitForLockChange).resolves.toBe(false);
+      expect(watcher.close).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('waitForComposeFileLockChange should settle when changed path is unavailable', async () => {
     const watcher: any = new EventEmitter();
     watcher.close = vi.fn();
@@ -1997,6 +2143,24 @@ describe('Dockercompose Trigger', () => {
     const watchMock = vi.mocked(watch);
     watchMock.mockImplementation((_directoryPath, onChange: any) => {
       setImmediate(() => onChange('change', Buffer.from('compose.yml.drydock.lock')));
+      return watcher;
+    });
+
+    await expect(
+      trigger.waitForComposeFileLockChange('/opt/drydock/test/compose.yml.drydock.lock', 1_000),
+    ).resolves.toBe(true);
+    expect(watcher.close).toHaveBeenCalledTimes(1);
+  });
+
+  test('waitForComposeFileLockChange should ignore duplicate settle attempts after it resolves', async () => {
+    const watcher: any = new EventEmitter();
+    watcher.close = vi.fn();
+    const watchMock = vi.mocked(watch);
+    watchMock.mockImplementation((_directoryPath, onChange: any) => {
+      setImmediate(() => {
+        onChange('rename', null as any);
+        onChange('change', 'compose.yml.drydock.lock');
+      });
       return watcher;
     });
 

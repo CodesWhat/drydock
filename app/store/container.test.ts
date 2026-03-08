@@ -2039,6 +2039,48 @@ test('getContainers query cache eviction should stop when iterator returns undef
   }
 });
 
+test('getContainers defensive cache eviction should remove oldest key after a transient iterator miss', () => {
+  const collection = {
+    find: vi.fn(() => [{ data: createContainerFixture() }]),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  container.createCollections(db);
+  collection.find.mockClear();
+
+  const maxEntries = container.CONTAINERS_QUERY_CACHE_MAX_ENTRIES;
+  for (let index = 0; index < maxEntries; index += 1) {
+    container.getContainers({ watcher: `defensive-${index}` });
+  }
+
+  const queryCache = container._getContainersQueryCacheForTests();
+  const oldestKey = '[["watcher","defensive-0"]]';
+  const originalKeys = queryCache.keys.bind(queryCache);
+  const keysSpy = vi
+    .spyOn(queryCache, 'keys')
+    .mockImplementationOnce(
+      () =>
+        ({
+          next: () => ({ done: false, value: undefined }),
+          [Symbol.iterator]() {
+            return this;
+          },
+        }) as IterableIterator<string>,
+    )
+    .mockImplementation(() => originalKeys());
+
+  try {
+    container.getContainers({ watcher: 'defensive-next' });
+
+    expect(queryCache.size).toBe(maxEntries);
+    expect(queryCache.has(oldestKey)).toBe(false);
+  } finally {
+    keysSpy.mockRestore();
+  }
+});
+
 test('getValueByPath helper should reject unsafe and invalid traversal paths', () => {
   expect(
     container._getValueByPathForTests({ safe: { value: 'ok' } }, '__proto__.polluted'),

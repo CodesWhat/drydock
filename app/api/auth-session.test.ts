@@ -141,4 +141,74 @@ describe('auth-session', () => {
 
     expect(operation).toHaveBeenCalledTimes(1);
   });
+
+  test('testable_withBasicSessionLock should not let stale cleanup from an older lock delete a newer lock', async () => {
+    const nativeSetTimeout = globalThis.setTimeout;
+    let acceleratedStaleCleanupTimers = 0;
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      handler: TimerHandler,
+      timeout?: number,
+      ...args: unknown[]
+    ) => {
+      if (timeout === 60_000 && acceleratedStaleCleanupTimers === 0) {
+        acceleratedStaleCleanupTimers += 1;
+        return nativeSetTimeout(handler, 0, ...args);
+      }
+      return nativeSetTimeout(handler, timeout, ...args);
+    }) as typeof setTimeout);
+
+    try {
+      let releaseFirst = () => undefined;
+      const firstOperation = vi.fn().mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+          }),
+      );
+      const secondOperation = vi.fn().mockResolvedValue('second-result');
+
+      const firstPromise = testable_withBasicSessionLock('alice', firstOperation);
+      const secondPromise = testable_withBasicSessionLock('alice', secondOperation);
+
+      await vi.waitFor(() => {
+        expect(firstOperation).toHaveBeenCalledTimes(1);
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(testable_basicSessionLocks.has('alice')).toBe(true);
+      expect(secondOperation).not.toHaveBeenCalled();
+
+      releaseFirst();
+
+      await expect(firstPromise).resolves.toBeUndefined();
+      await expect(secondPromise).resolves.toBe('second-result');
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
+  test('testable_withBasicSessionLock should release bookkeeping when wait timer setup throws', async () => {
+    const nativeSetTimeout = globalThis.setTimeout;
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      handler: TimerHandler,
+      timeout?: number,
+      ...args: unknown[]
+    ) => {
+      if (timeout === 10_000) {
+        throw new Error('wait timer unavailable');
+      }
+      return nativeSetTimeout(handler, timeout, ...args);
+    }) as typeof setTimeout);
+
+    try {
+      const operation = vi.fn().mockResolvedValue('ok');
+      await expect(testable_withBasicSessionLock('alice', operation)).rejects.toThrow(
+        'wait timer unavailable',
+      );
+      expect(testable_basicSessionLocks.has('alice')).toBe(false);
+      expect(operation).not.toHaveBeenCalled();
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
 });

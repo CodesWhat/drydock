@@ -36,6 +36,11 @@ describe('filterContainer', () => {
     expect(result).toBe(container);
   });
 
+  test('returns primitive input unchanged when exclusions are requested', () => {
+    const result = filterContainer('container-as-string', ['security.sbom.documents']);
+    expect(result).toBe('container-as-string');
+  });
+
   test('strips single top-level field', () => {
     const result = filterContainer(container, ['details']);
     expect(result).not.toHaveProperty('details');
@@ -72,6 +77,59 @@ describe('filterContainer', () => {
     const shallow = { name: 'test', image: { name: 'nginx' } };
     const result = filterContainer(shallow, ['security.sbom.documents']);
     expect(result).toEqual({ name: 'test', image: { name: 'nginx' } });
+  });
+
+  test('skips delete when the final parent segment resolves to a primitive', () => {
+    const shallow = { security: 'not-an-object' };
+    const result = filterContainer(shallow, ['security.sbom']);
+    expect(result).toEqual({ security: 'not-an-object' });
+  });
+
+  test('ignores proxy keys that do not provide property descriptors', () => {
+    const source = {
+      security: {
+        sbom: {
+          format: 'spdx',
+          documents: [{ id: 'doc-1' }],
+        },
+      },
+    };
+    const proxy = new Proxy(source, {
+      ownKeys(target) {
+        return [...Reflect.ownKeys(target), 'ghost'];
+      },
+      getOwnPropertyDescriptor(target, prop) {
+        if (prop === 'ghost') {
+          return undefined;
+        }
+        return Reflect.getOwnPropertyDescriptor(target, prop);
+      },
+    });
+
+    const result = filterContainer(proxy, ['security.sbom.documents']);
+
+    expect(result.security.sbom).toEqual({ format: 'spdx' });
+  });
+
+  test('returns early when a cloned ancestor path resolves to a non-object value', () => {
+    let reads = 0;
+    const containerWithFlakyGetter = Object.create(null, {
+      security: {
+        get: () => {
+          reads += 1;
+          if (reads === 1) {
+            return { sbom: { format: 'spdx', documents: [{ id: 'doc-1' }] } };
+          }
+          return 'not-an-object';
+        },
+        enumerable: true,
+        configurable: true,
+      },
+    }) as { security: unknown };
+
+    const result = filterContainer(containerWithFlakyGetter, ['security.sbom.documents']);
+
+    expect(result.security).toBe('not-an-object');
   });
 
   test('does not mutate the original container', () => {

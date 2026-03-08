@@ -83,6 +83,7 @@ import passport from 'passport';
 import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as auth from './auth.js';
+import * as authSession from './auth-session.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 const lockoutStateFiles = new Map<string, string>();
@@ -734,6 +735,36 @@ describe('Auth Router', () => {
       }
     });
 
+    test('should warn when persisting lockout state fails', () => {
+      vi.useFakeTimers();
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+      mockFs.writeFileSync.mockImplementation(() => {
+        throw new Error('persist write failed');
+      });
+
+      try {
+        const authenticateLoginFn = getLoginMiddleware();
+        authenticateLoginFn(
+          {
+            body: { username: 'persist-error-user' },
+            ip: '203.0.113.60',
+          },
+          createResponse(),
+          vi.fn(),
+        );
+
+        vi.advanceTimersByTime(1000);
+
+        expect(log.warn).toHaveBeenCalledWith(
+          expect.stringContaining('Unable to persist login lockout state (persist write failed)'),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     test('should restore active lockout state from persisted storage on init', () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
@@ -775,6 +806,99 @@ describe('Auth Router', () => {
       }
     });
 
+    test('should ignore non-object persisted lockout state payloads', () => {
+      lockoutStateFiles.set(LOCKOUT_STATE_PATH, JSON.stringify('not-an-object'));
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const res = createResponse();
+      authenticateLoginFn(
+        {
+          body: { username: 'payload-user' },
+          ip: '203.0.113.61',
+        },
+        res,
+        vi.fn(),
+      );
+
+      expect(passport.authenticate).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    test('should skip hydration for persisted account/ip payloads that are not objects', () => {
+      lockoutStateFiles.set(
+        LOCKOUT_STATE_PATH,
+        JSON.stringify({
+          account: null,
+          ip: 42,
+        }),
+      );
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const res = createResponse();
+      authenticateLoginFn(
+        {
+          body: { username: 'no-hydrate-user' },
+          ip: '203.0.113.62',
+        },
+        res,
+        vi.fn(),
+      );
+
+      expect(passport.authenticate).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    test('should ignore invalid persisted lockout entries during hydration', () => {
+      lockoutStateFiles.set(
+        LOCKOUT_STATE_PATH,
+        JSON.stringify({
+          account: {
+            'invalid-number': 123,
+            'invalid-shape': {
+              failedAttempts: '5',
+              windowStartAt: Date.parse('2026-01-01T00:00:00.000Z'),
+              lockedUntil: Date.parse('2026-01-01T00:10:00.000Z'),
+              lastAttemptAt: Date.parse('2026-01-01T00:00:00.000Z'),
+            },
+          },
+          ip: {},
+        }),
+      );
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const res = createResponse();
+      authenticateLoginFn(
+        {
+          body: { username: 'invalid-number' },
+          ip: '203.0.113.63',
+        },
+        res,
+        vi.fn(),
+      );
+
+      expect(passport.authenticate).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    test('should warn when persisted lockout state cannot be parsed', () => {
+      lockoutStateFiles.set(LOCKOUT_STATE_PATH, '{"account":');
+
+      getLoginMiddleware();
+
+      expect(log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to load login lockout state'),
+      );
+    });
+
     test('should prune stale lockout entries on a maintenance timer', () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
@@ -804,6 +928,26 @@ describe('Auth Router', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    test('should continue successful authentication when identity keys have no existing lockout entries', () => {
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, { username: 'clear-branch-user' }, undefined, 200);
+      });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = {
+        body: { username: 'clear-branch-user' },
+        ip: '203.0.113.64',
+        login: vi.fn((_user, _options, done) => done()),
+      };
+      const next = vi.fn();
+
+      authenticateLoginFn(req, createResponse(), next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(req.user).toEqual({ username: 'clear-branch-user' });
+      expect(mockFs.writeFileSync).not.toHaveBeenCalled();
     });
 
     test('should clear lockout state after successful authentication', () => {
@@ -841,6 +985,21 @@ describe('Auth Router', () => {
       expect(passport.session).toHaveBeenCalled();
       expect(passport.serializeUser).toHaveBeenCalled();
       expect(passport.deserializeUser).toHaveBeenCalled();
+    });
+
+    test('should load persisted lockout state only during the first init call', () => {
+      lockoutStateFiles.set(
+        LOCKOUT_STATE_PATH,
+        JSON.stringify({
+          account: {},
+          ip: {},
+        }),
+      );
+
+      auth.init(createApp());
+      auth.init(createApp());
+
+      expect(mockFs.readFileSync).toHaveBeenCalledTimes(1);
     });
 
     test('should default session cookie sameSite to lax for OIDC compatibility', () => {
@@ -1948,6 +2107,40 @@ describe('Auth Router', () => {
       );
     });
 
+    test('login should return 500 when session-limit enforcement throws synchronously', async () => {
+      const enforceSessionLimitSpy = vi
+        .spyOn(authSession, 'enforceSessionLimitBeforeLogin')
+        .mockImplementation(() => {
+          throw new Error('session limit threw synchronously');
+        });
+
+      try {
+        const handler = getRouteHandler('post', '/login');
+        const req = {
+          body: { remember: true },
+          user: { username: 'john' },
+          session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+          sessionStore: {
+            all: vi.fn(),
+            destroy: vi.fn(),
+          },
+          login: vi.fn((_user, done) => done()),
+        };
+        const res = createResponse();
+
+        await handler(req, res);
+
+        expect(req.login).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
+        expect(log.warn).toHaveBeenCalledWith(
+          'Unable to enforce session limit (session limit threw synchronously)',
+        );
+      } finally {
+        enforceSessionLimitSpy.mockRestore();
+      }
+    });
+
     test('login should record failed login audit when session is unavailable', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
@@ -1988,6 +2181,33 @@ describe('Auth Router', () => {
           action: 'auth-login',
           status: 'error',
           details: expect.stringContaining('regenerate failed'),
+        }),
+      );
+    });
+
+    test('login should resolve when session regenerate callback is invoked more than once', async () => {
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        user: { username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn((done) => {
+            done(new Error('first regeneration failure'));
+            done(new Error('second regeneration failure'));
+          }),
+        },
+      };
+      const res = createResponse();
+
+      await expect(handler(req, res)).resolves.toBeUndefined();
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auth-login',
+          status: 'error',
+          details: expect.stringContaining('first regeneration failure'),
         }),
       );
     });

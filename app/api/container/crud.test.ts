@@ -804,6 +804,265 @@ describe('api/container/crud', () => {
       });
     });
 
+    test('supports offset-only pagination for aggregated vulnerabilities when limit is zero', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            name: 'nginx',
+            displayName: 'nginx',
+            security: {
+              scan: {
+                vulnerabilities: [
+                  {
+                    id: 'CVE-2026-1001',
+                    severity: 'LOW',
+                    packageName: 'openssl',
+                    installedVersion: '3.0.0',
+                  },
+                  {
+                    id: 'CVE-2026-1002',
+                    severity: 'HIGH',
+                    packageName: 'zlib',
+                    installedVersion: '1.2.10',
+                  },
+                ],
+              },
+            },
+          }),
+          createContainer({
+            id: 'c2',
+            name: 'redis',
+            displayName: 'redis',
+            security: {
+              scan: {
+                vulnerabilities: [
+                  {
+                    id: 'CVE-2026-1003',
+                    severity: 'MEDIUM',
+                    packageName: 'jemalloc',
+                    installedVersion: '5.2.1',
+                  },
+                ],
+              },
+            },
+          }),
+        ],
+      });
+
+      const res = callGetContainerSecurityVulnerabilities(harness.handlers, {
+        limit: '0',
+        offset: '1',
+      });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload).toMatchObject({
+        totalContainers: 2,
+        scannedContainers: 2,
+        latestScannedAt: null,
+        total: 3,
+        limit: 0,
+        offset: 1,
+        hasMore: false,
+      });
+      expect(payload).not.toHaveProperty('_links');
+      expect(payload.images).toEqual([
+        {
+          image: 'nginx',
+          containerIds: ['c1'],
+          vulnerabilities: [
+            {
+              id: 'CVE-2026-1002',
+              severity: 'HIGH',
+              package: 'zlib',
+              version: '1.2.10',
+              fixedIn: null,
+              title: '',
+              target: '',
+              primaryUrl: '',
+              publishedDate: '',
+            },
+          ],
+        },
+        {
+          image: 'redis',
+          containerIds: ['c2'],
+          vulnerabilities: [
+            {
+              id: 'CVE-2026-1003',
+              severity: 'MEDIUM',
+              package: 'jemalloc',
+              version: '5.2.1',
+              fixedIn: null,
+              title: '',
+              target: '',
+              primaryUrl: '',
+              publishedDate: '',
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('reuses paginated image groups and carries update summary when multiple rows share an image', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            name: 'nginx',
+            displayName: 'nginx',
+            security: {
+              scan: {
+                vulnerabilities: [
+                  {
+                    id: 'CVE-2026-2001',
+                    severity: 'LOW',
+                    packageName: 'openssl',
+                    installedVersion: '3.0.0',
+                  },
+                  {
+                    id: 'CVE-2026-2002',
+                    severity: 'HIGH',
+                    packageName: 'zlib',
+                    installedVersion: '1.2.10',
+                  },
+                ],
+              },
+              updateScan: {
+                summary: {
+                  unknown: 5,
+                  low: 4,
+                  medium: 3,
+                  high: 2,
+                  critical: 1,
+                },
+              },
+            },
+          }),
+        ],
+      });
+
+      const res = callGetContainerSecurityVulnerabilities(harness.handlers, {
+        limit: '2',
+        offset: '0',
+      });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload).toMatchObject({
+        total: 2,
+        limit: 2,
+        offset: 0,
+        hasMore: false,
+        _links: {
+          self: '/api/containers/security/vulnerabilities?limit=2&offset=0',
+        },
+      });
+      expect(payload.images).toEqual([
+        {
+          image: 'nginx',
+          containerIds: ['c1'],
+          updateSummary: {
+            unknown: 5,
+            low: 4,
+            medium: 3,
+            high: 2,
+            critical: 1,
+          },
+          vulnerabilities: [
+            {
+              id: 'CVE-2026-2001',
+              severity: 'LOW',
+              package: 'openssl',
+              version: '3.0.0',
+              fixedIn: null,
+              title: '',
+              target: '',
+              primaryUrl: '',
+              publishedDate: '',
+            },
+            {
+              id: 'CVE-2026-2002',
+              severity: 'HIGH',
+              package: 'zlib',
+              version: '1.2.10',
+              fixedIn: null,
+              title: '',
+              target: '',
+              primaryUrl: '',
+              publishedDate: '',
+            },
+          ],
+        },
+      ]);
+    });
+
+    test('skips paged rows defensively when template lookup misses during grouping', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            name: 'nginx',
+            displayName: 'nginx',
+            security: {
+              scan: {
+                vulnerabilities: [
+                  {
+                    id: 'CVE-2026-3001',
+                    severity: 'LOW',
+                    packageName: 'openssl',
+                    installedVersion: '3.0.0',
+                  },
+                ],
+              },
+            },
+          }),
+        ],
+      });
+      const originalGet = Map.prototype.get;
+      const getSpy = vi.spyOn(Map.prototype, 'get').mockImplementation(function (
+        this: Map<unknown, unknown>,
+        key: unknown,
+      ) {
+        const value = originalGet.call(this, key);
+        if (
+          value &&
+          typeof value === 'object' &&
+          'image' in (value as Record<string, unknown>) &&
+          Array.isArray((value as Record<string, unknown>).containerIds) &&
+          Array.isArray((value as Record<string, unknown>).vulnerabilities)
+        ) {
+          return undefined;
+        }
+        return value;
+      });
+
+      try {
+        const res = callGetContainerSecurityVulnerabilities(harness.handlers, {
+          limit: '1',
+          offset: '0',
+        });
+        const payload = res.json.mock.calls[0][0];
+
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(payload).toMatchObject({
+          totalContainers: 1,
+          scannedContainers: 1,
+          total: 1,
+          limit: 1,
+          offset: 0,
+          hasMore: false,
+          _links: {
+            self: '/api/containers/security/vulnerabilities?limit=1&offset=0',
+          },
+          images: [],
+        });
+      } finally {
+        getSpy.mockRestore();
+      }
+    });
+
     test('normalizes edge-case scan payloads and resolves image names through all fallbacks', () => {
       const harness = createHarness({
         containers: [

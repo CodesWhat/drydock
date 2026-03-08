@@ -314,3 +314,146 @@ test('enforceConcurrentSessionLimit should avoid full session scans after index 
 
   expect(sessionStore.all).toHaveBeenCalledTimes(1);
 });
+
+test('enforceConcurrentSessionLimit should return 0 when sessions cannot be listed and cache is cold', async () => {
+  const sessionStore = {
+    destroy: vi.fn((_sid, done) => done()),
+  };
+
+  const destroyedCount = await enforceConcurrentSessionLimit({
+    username: 'john',
+    maxConcurrentSessions: 1,
+    currentSessionId: 'new-session',
+    sessionStore,
+  });
+
+  expect(destroyedCount).toBe(0);
+  expect(sessionStore.destroy).not.toHaveBeenCalled();
+});
+
+test('enforceConcurrentSessionLimit should continue using a warmed index when listing is unavailable', async () => {
+  const sessionStore = {
+    all: vi.fn((done) =>
+      done(null, {
+        'existing-session': {
+          passport: { user: JSON.stringify({ username: 'john' }) },
+          cookie: { expires: '2026-01-01T00:00:00.000Z' },
+        },
+      }),
+    ),
+    destroy: vi.fn((_sid, done) => done()),
+  };
+
+  await expect(
+    enforceConcurrentSessionLimit({
+      username: 'john',
+      maxConcurrentSessions: 10,
+      currentSessionId: 'cached-session',
+      sessionStore,
+    }),
+  ).resolves.toBe(0);
+
+  sessionStore.all = undefined;
+
+  const destroyedCount = await enforceConcurrentSessionLimit({
+    username: 'john',
+    maxConcurrentSessions: 1,
+    currentSessionId: 'next-session',
+    sessionStore,
+  });
+
+  expect(destroyedCount).toBe(2);
+  expect(sessionStore.destroy).toHaveBeenNthCalledWith(1, 'existing-session', expect.any(Function));
+  expect(sessionStore.destroy).toHaveBeenNthCalledWith(2, 'cached-session', expect.any(Function));
+});
+
+test('enforceConcurrentSessionLimit should treat missing all callback as an empty session list', async () => {
+  const listSessions = vi.fn((done) =>
+    done(null, {
+      'existing-session': {
+        passport: { user: JSON.stringify({ username: 'john' }) },
+        cookie: { expires: '2026-01-01T00:00:00.000Z' },
+      },
+    }),
+  );
+  let allReads = 0;
+  const sessionStore = {
+    get all() {
+      allReads += 1;
+      return allReads === 1 ? listSessions : undefined;
+    },
+    destroy: vi.fn((_sid, done) => done()),
+  };
+
+  const destroyedCount = await enforceConcurrentSessionLimit({
+    username: 'john',
+    maxConcurrentSessions: 1,
+    currentSessionId: 'new-session',
+    sessionStore,
+  });
+
+  expect(destroyedCount).toBe(0);
+  expect(listSessions).not.toHaveBeenCalled();
+});
+
+test('enforceConcurrentSessionLimit should share in-flight index loading across concurrent calls', async () => {
+  let listCallback: ((error: unknown, sessions?: unknown) => void) | undefined;
+  const sessionStore = {
+    all: vi.fn((done) => {
+      listCallback = done;
+    }),
+    destroy: vi.fn((_sid, done) => done()),
+  };
+
+  const firstPromise = enforceConcurrentSessionLimit({
+    username: 'john',
+    maxConcurrentSessions: 5,
+    currentSessionId: 'session-a',
+    sessionStore,
+  });
+  const secondPromise = enforceConcurrentSessionLimit({
+    username: 'john',
+    maxConcurrentSessions: 5,
+    currentSessionId: 'session-b',
+    sessionStore,
+  });
+
+  expect(sessionStore.all).toHaveBeenCalledTimes(1);
+  listCallback?.(null, {
+    'existing-session': {
+      passport: { user: JSON.stringify({ username: 'john' }) },
+      cookie: { expires: '2026-01-01T00:00:00.000Z' },
+    },
+  });
+
+  await expect(Promise.all([firstPromise, secondPromise])).resolves.toEqual([0, 0]);
+});
+
+test('enforceConcurrentSessionLimit should tolerate concurrent index pruning when no current session is provided', async () => {
+  const sessionStore = {
+    all: vi.fn((done) =>
+      done(null, {
+        'existing-session': {
+          passport: { user: JSON.stringify({ username: 'john' }) },
+          cookie: { expires: '2026-01-01T00:00:00.000Z' },
+        },
+      }),
+    ),
+    destroy: vi.fn((_sid, done) => setTimeout(() => done(), 0)),
+  };
+
+  const firstPromise = enforceConcurrentSessionLimit({
+    username: 'john',
+    maxConcurrentSessions: 1,
+    sessionStore,
+  });
+  const secondPromise = enforceConcurrentSessionLimit({
+    username: 'john',
+    maxConcurrentSessions: 1,
+    sessionStore,
+  });
+
+  await expect(Promise.all([firstPromise, secondPromise])).resolves.toEqual([1, 1]);
+  expect(sessionStore.destroy).toHaveBeenCalledTimes(2);
+  expect(sessionStore.destroy).toHaveBeenCalledWith('existing-session', expect.any(Function));
+});
