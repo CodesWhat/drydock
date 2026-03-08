@@ -52,7 +52,7 @@ export const openApiPaths = {
   },
   '/api/webhook/watch': {
     post: {
-      tags: ['Webhook'],
+      tags: ['Webhook', 'Actions'],
       summary: 'Trigger full watch cycle on all watchers',
       operationId: 'webhookWatchAll',
       security: [{ webhookBearerAuth: [] }],
@@ -68,7 +68,7 @@ export const openApiPaths = {
   },
   '/api/webhook/watch/{containerName}': {
     post: {
-      tags: ['Webhook'],
+      tags: ['Webhook', 'Actions'],
       summary: 'Trigger watch for a specific container by name',
       operationId: 'webhookWatchContainer',
       security: [{ webhookBearerAuth: [] }],
@@ -86,7 +86,7 @@ export const openApiPaths = {
   },
   '/api/webhook/update/{containerName}': {
     post: {
-      tags: ['Webhook'],
+      tags: ['Webhook', 'Actions'],
       summary: 'Trigger update for a specific container by name',
       operationId: 'webhookUpdateContainer',
       security: [{ webhookBearerAuth: [] }],
@@ -124,7 +124,7 @@ export const openApiPaths = {
   },
   '/api/events/ui/self-update/{operationId}/ack': {
     post: {
-      tags: ['Realtime'],
+      tags: ['Realtime', 'Actions'],
       summary: 'Acknowledge self-update event for this SSE client',
       operationId: 'acknowledgeSelfUpdate',
       parameters: [operationIdPathParam],

@@ -33,7 +33,7 @@ export const triggerPaths = {
       },
     },
     post: {
-      tags: ['Triggers'],
+      tags: ['Triggers', 'Actions'],
       summary: 'Run trigger for a provided container payload',
       operationId: 'runTrigger',
       parameters: [componentTypePathParam, componentNamePathParam],
@@ -71,7 +71,7 @@ export const triggerPaths = {
       },
     },
     post: {
-      tags: ['Triggers'],
+      tags: ['Triggers', 'Actions'],
       summary: 'Run remote trigger for a provided container payload',
       operationId: 'runRemoteTrigger',
       parameters: [componentTypePathParam, componentNamePathParam, componentAgentPathParam],
