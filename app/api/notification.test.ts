@@ -184,7 +184,7 @@ describe('Notification Router', () => {
     expect(mockUpdateNotificationRule).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
-      error: expect.any(String),
+      error: 'Invalid request parameters',
     });
   });
 
@@ -203,7 +203,7 @@ describe('Notification Router', () => {
     expect(mockUpdateNotificationRule).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
-      error: expect.any(String),
+      error: 'Invalid request parameters',
     });
   });
 
@@ -243,7 +243,7 @@ describe('Notification Router', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
-      error: 'update failure',
+      error: 'Internal server error',
     });
   });
 
@@ -265,7 +265,7 @@ describe('Notification Router', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
-      error: 'update failure',
+      error: 'Internal server error',
     });
   });
 });

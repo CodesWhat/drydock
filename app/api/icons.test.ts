@@ -1326,7 +1326,7 @@ describe('Icons Router', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
-      error: expect.any(String),
+      error: 'Invalid request parameters',
     });
   });
 
@@ -1338,7 +1338,7 @@ describe('Icons Router', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
-      error: expect.any(String),
+      error: 'Invalid request parameters',
     });
   });
 

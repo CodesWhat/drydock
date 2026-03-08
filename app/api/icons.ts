@@ -5,6 +5,7 @@ import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import * as settingsStore from '../store/settings.js';
 import { sendErrorResponse } from './error-response.js';
+import { sanitizeApiError } from './helpers.js';
 import { fetchAndCacheIconOnce } from './icons/fetch.js';
 import { normalizeSlug, providers } from './icons/providers.js';
 import { sendCachedIcon, sendMissingIconResponse } from './icons/response.js';
@@ -30,7 +31,7 @@ const log = logger.child({ component: 'icons' });
 async function getIcon(req: Request, res: Response) {
   const iconRequest = iconRequestSchema.validate(req.params || {}, { stripUnknown: true });
   if (iconRequest.error) {
-    sendErrorResponse(res, 400, iconRequest.error.message);
+    sendErrorResponse(res, 400, sanitizeApiError(iconRequest.error));
     return;
   }
 

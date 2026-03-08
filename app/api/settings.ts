@@ -1,10 +1,16 @@
 import express, { type Request, type Response } from 'express';
 import joi from 'joi';
 import nocache from 'nocache';
+import logger from '../log/index.js';
 import * as settingsStore from '../store/settings.js';
 import { sendErrorResponse } from './error-response.js';
+import { sanitizeApiError } from './helpers.js';
 
 const router = express.Router();
+const log = logger.child({ component: 'settings' });
+const deprecatedPutWarning = 'PUT /api/settings is deprecated, use PATCH /api/settings instead';
+const deprecatedPutDeprecation = '@1751328000';
+const deprecatedPutSunset = 'Tue, 01 Jul 2025 00:00:00 GMT';
 
 const settingsSchema = joi
   .object({
@@ -31,12 +37,24 @@ function updateSettings(req: Request, res: Response): void {
     stripUnknown: true,
   });
   if (settingsToUpdate.error) {
-    sendErrorResponse(res, 400, settingsToUpdate.error.message);
+    sendErrorResponse(res, 400, sanitizeApiError(settingsToUpdate.error));
     return;
   }
 
   const settingsUpdated = settingsStore.updateSettings(settingsToUpdate.value);
   res.status(200).json(settingsUpdated);
+}
+
+/**
+ * Update settings via deprecated PUT alias.
+ * @param req
+ * @param res
+ */
+function updateSettingsDeprecatedPut(req: Request, res: Response): void {
+  log.warn(deprecatedPutWarning);
+  res.setHeader('Deprecation', deprecatedPutDeprecation);
+  res.setHeader('Sunset', deprecatedPutSunset);
+  updateSettings(req, res);
 }
 
 /**
@@ -48,6 +66,6 @@ export function init() {
   router.get('/', getSettings);
   router.patch('/', updateSettings);
   // Backward compatibility alias: retained temporarily, prefer PATCH semantics.
-  router.put('/', updateSettings);
+  router.put('/', updateSettingsDeprecatedPut);
   return router;
 }
