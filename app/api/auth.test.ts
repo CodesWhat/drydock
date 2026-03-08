@@ -133,7 +133,7 @@ describe('Auth Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset the strategy IDs array between tests
-    auth.getAllIds().length = 0;
+    auth._resetStrategyIdsForTests();
     mockGetServerConfiguration.mockReturnValue({ cookie: {} });
     auth._resetLoginLockoutStateForTests();
   });
@@ -142,6 +142,25 @@ describe('Auth Router', () => {
     test('should return strategy ids array', () => {
       const ids = auth.getAllIds();
       expect(Array.isArray(ids)).toBe(true);
+    });
+
+    test('should not expose internal strategy ids for mutation', () => {
+      const app = createApp();
+      registry.getState.mockReturnValue({
+        authentication: {
+          'basic.default': {
+            getId: vi.fn(() => 'basic.default'),
+            getStrategy: vi.fn(() => ({})),
+            getStrategyDescription: vi.fn(() => ({ type: 'basic', name: 'default' })),
+          },
+        },
+      });
+      auth.init(app);
+
+      const ids = auth.getAllIds();
+      ids.length = 0;
+
+      expect(auth.getAllIds()).toContain('basic.default');
     });
   });
 
@@ -332,6 +351,43 @@ describe('Auth Router', () => {
       expect(lockoutResponse.json).toHaveBeenCalledWith({
         error: 'Account temporarily locked due to repeated failed login attempts',
       });
+    });
+
+    test('should keep lockout pressure after lockout expires when failures continue', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+      passport.authenticate.mockImplementation((_ids, _options, callback) => {
+        return () => callback(null, false, undefined, 401);
+      });
+
+      try {
+        const authenticateLoginFn = getLoginMiddleware();
+        const req = {
+          headers: {
+            authorization: `Basic ${Buffer.from('sustained-user:bad-pass').toString('base64')}`,
+          },
+          ip: '203.0.113.30',
+        };
+        const next = vi.fn();
+
+        for (let index = 0; index < 4; index += 1) {
+          const res = createResponse();
+          authenticateLoginFn(req, res, next);
+          expect(res.status).toHaveBeenCalledWith(401);
+        }
+
+        const firstLockoutRes = createResponse();
+        authenticateLoginFn(req, firstLockoutRes, next);
+        expect(firstLockoutRes.status).toHaveBeenCalledWith(423);
+
+        vi.setSystemTime(new Date('2026-01-01T00:15:00.000Z'));
+        const afterExpiryRes = createResponse();
+        authenticateLoginFn(req, afterExpiryRes, next);
+
+        expect(afterExpiryRes.status).toHaveBeenCalledWith(423);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     test('should reject locked accounts before running authentication middleware', () => {
@@ -1098,7 +1154,7 @@ describe('Auth Router', () => {
         vi.resetModules();
         const freshAuth = await import('./auth.js');
         const freshPassport = (await import('passport')).default as any;
-        freshAuth.getAllIds().length = 0;
+        freshAuth._resetStrategyIdsForTests();
 
         const app = createApp();
         freshAuth.init(app);
@@ -1140,7 +1196,7 @@ describe('Auth Router', () => {
         vi.resetModules();
         const freshAuth = await import('./auth.js');
         const freshPassport = (await import('passport')).default as any;
-        freshAuth.getAllIds().length = 0;
+        freshAuth._resetStrategyIdsForTests();
 
         const app = createApp();
         freshAuth.init(app);

@@ -18,6 +18,7 @@ import { getErrorMessage } from '../util/error.js';
 import { enforceConcurrentSessionLimit } from '../util/session-limit.js';
 import { recordAuditEvent } from './audit-events.js';
 import { sendErrorResponse } from './error-response.js';
+import { getFirstHeaderValue } from './header-value.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
 
 const router = express.Router();
@@ -107,10 +108,6 @@ const ipLockoutPolicy: LoginLockoutPolicy = {
   windowMs: parsePositiveIntegerEnv('DD_AUTH_LOCKOUT_WINDOW_MS', DEFAULT_LOCKOUT_WINDOW_MS),
   lockoutMs: parsePositiveIntegerEnv('DD_AUTH_LOCKOUT_DURATION_MS', DEFAULT_LOCKOUT_DURATION_MS),
 };
-
-function getFirstHeaderValue(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
 
 function normalizeIdentity(value: unknown): string | undefined {
   if (typeof value !== 'string') {
@@ -226,8 +223,6 @@ function registerFailedLoginAttempt(
   existingEntry.failedAttempts += 1;
   existingEntry.lastAttemptAt = now;
   if (existingEntry.failedAttempts >= policy.maxAttempts) {
-    existingEntry.failedAttempts = 0;
-    existingEntry.windowStartAt = now;
     existingEntry.lockedUntil = now + policy.lockoutMs;
   }
 
@@ -282,7 +277,7 @@ function deserializeSessionUser(serializedUser: unknown): SessionUser {
  * @returns {[]}
  */
 export function getAllIds(): string[] {
-  return STRATEGY_IDS;
+  return [...STRATEGY_IDS];
 }
 
 export function requireAuthentication(req: AuthRequest, res: Response, next: NextFunction): void {
@@ -502,6 +497,10 @@ function enforceSessionLimitBeforeLogin(
 export function _resetLoginLockoutStateForTests(): void {
   accountLoginLockouts.clear();
   ipLoginLockouts.clear();
+}
+
+export function _resetStrategyIdsForTests(): void {
+  STRATEGY_IDS.length = 0;
 }
 
 /**
