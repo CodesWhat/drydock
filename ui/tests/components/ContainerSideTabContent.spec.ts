@@ -29,25 +29,55 @@ const selectedContainer = ref({
   },
 });
 const activeDetailTab = ref('environment');
+const selectedComposePaths = ref<string[]>([]);
+const detailPreview = ref<Record<string, unknown> | null>(null);
+const detailComposePreview = ref<{
+  files: string[];
+  service?: string;
+  writableFile?: string;
+  willWrite?: boolean;
+  patch?: string;
+} | null>(null);
 
 vi.mock('@/components/containers/containersViewTemplateContext', () => ({
   useContainersViewTemplateContext: () => ({
     selectedContainer,
     activeDetailTab,
-    selectedRuntimeOrigins: ref([]),
+    selectedRuntimeOrigins: ref({ entrypoint: 'unknown', cmd: 'unknown' }),
     runtimeOriginStyle: () => ({}),
     runtimeOriginLabel: () => '',
     selectedRuntimeDriftWarnings: ref([]),
-    selectedLifecycleHooks: ref([]),
+    selectedComposePaths,
+    selectedLifecycleHooks: ref({
+      preUpdate: undefined,
+      postUpdate: undefined,
+      timeoutLabel: '60000ms (default)',
+      preAbortBehavior: undefined,
+    }),
     lifecycleHookTemplateVariables: ref([]),
-    selectedAutoRollbackConfig: ref(null),
-    selectedImageMetadata: ref(null),
+    selectedAutoRollbackConfig: ref({
+      enabledLabel: 'Disabled (default)',
+      windowLabel: '300000ms',
+      intervalLabel: '10000ms',
+    }),
+    selectedImageMetadata: ref({
+      architecture: undefined,
+      os: undefined,
+      digest: undefined,
+      created: undefined,
+    }),
     formatTimestamp: (v: string) => v,
     detailVulnerabilityLoading: ref(false),
     detailSbomLoading: ref(false),
     loadDetailSecurityData: vi.fn(),
     detailVulnerabilityError: ref(null),
-    vulnerabilitySummary: ref(null),
+    vulnerabilitySummary: ref({
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+      unknown: 0,
+    }),
     vulnerabilityTotal: ref(0),
     vulnerabilityPreview: ref([]),
     severityStyle: () => ({}),
@@ -79,13 +109,14 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     selectedSkipTags: ref([]),
     selectedSkipDigests: ref([]),
     clearSkipsSelected: vi.fn(),
-    selectedUpdatePolicy: ref(null),
+    selectedUpdatePolicy: ref({}),
     clearPolicySelected: vi.fn(),
     policyMessage: ref(null),
     policyError: ref(null),
     removeSkipTagSelected: vi.fn(),
     removeSkipDigestSelected: vi.fn(),
-    detailPreview: ref(null),
+    detailPreview,
+    detailComposePreview,
     previewError: ref(null),
     triggersLoading: ref(false),
     detailTriggers: ref([]),
@@ -110,9 +141,9 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     updateOperationsError: ref(null),
     scanContainer: vi.fn(),
     confirmUpdate: vi.fn(),
-    registryColorBg: ref(''),
-    registryColorText: ref(''),
-    registryLabel: ref(''),
+    registryColorBg: () => 'var(--dd-bg-inset)',
+    registryColorText: () => 'var(--dd-text)',
+    registryLabel: () => 'Docker Hub',
   }),
 }));
 
@@ -132,6 +163,9 @@ function mountComponent() {
 describe('ContainerSideTabContent - Environment Variables', () => {
   afterEach(() => {
     activeDetailTab.value = 'environment';
+    selectedComposePaths.value = [];
+    detailPreview.value = null;
+    detailComposePreview.value = null;
     selectedContainer.value = {
       id: 'container-1',
       name: 'nginx',
@@ -222,5 +256,46 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     const updatedPasswordRow = updatedRows.find((row) => row.text().includes('DB_PASSWORD'));
     expect(updatedPasswordRow?.text()).not.toContain('super-secret');
     expect(updatedPasswordRow?.text()).toContain('\u2022\u2022\u2022\u2022\u2022');
+  });
+
+  it('shows detected compose paths in overview for multi-file stacks', async () => {
+    activeDetailTab.value = 'overview';
+    selectedComposePaths.value = ['/opt/stack/compose.yml', '/opt/stack/compose.override.yml'];
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.text()).toContain('Compose Files');
+    expect(wrapper.text()).toContain('/opt/stack/compose.yml');
+    expect(wrapper.text()).toContain('/opt/stack/compose.override.yml');
+  });
+
+  it('renders compose preview rows without dropping generic preview rows', async () => {
+    activeDetailTab.value = 'actions';
+    detailPreview.value = {
+      currentImage: 'nginx:1.0',
+      newImage: 'nginx:1.1',
+      updateKind: 'tag',
+      isRunning: true,
+      networks: ['bridge'],
+    };
+    detailComposePreview.value = {
+      files: ['/opt/stack/compose.yml'],
+      service: 'web',
+      willWrite: false,
+      patch: '@@ -1,3 +1,3 @@',
+    };
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.text()).toContain('Current:');
+    expect(wrapper.text()).toContain('New:');
+    expect(wrapper.text()).toContain('Compose file:');
+    expect(wrapper.text()).toContain('/opt/stack/compose.yml');
+    expect(wrapper.text()).toContain('Compose service:');
+    expect(wrapper.text()).toContain('web');
+    expect(wrapper.text()).toContain('Writes compose file:');
+    expect(wrapper.text()).toContain('no');
+    expect(wrapper.text()).toContain('Patch preview:');
+    expect(wrapper.text()).toContain('@@ -1,3 +1,3 @@');
   });
 });

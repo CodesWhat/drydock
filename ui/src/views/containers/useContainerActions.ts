@@ -16,6 +16,7 @@ import {
   stopContainer as apiStopContainer,
   updateContainer as apiUpdateContainer,
 } from '../../services/container-actions';
+import type { ContainerComposePreview, ContainerPreviewPayload } from '../../services/preview';
 import { previewContainer } from '../../services/preview';
 import type { ApiContainerTrigger } from '../../types/api';
 import type { Container } from '../../types/container';
@@ -58,7 +59,51 @@ export function useContainerActions(input: UseContainerActionsInput) {
 
   const skippedUpdates = ref(new Set<string>());
 
-  const detailPreview = ref<Record<string, unknown> | null>(null);
+  const detailPreview = ref<ContainerPreviewPayload | null>(null);
+  const detailComposePreview = computed<ContainerComposePreview | null>(() => {
+    const compose = detailPreview.value?.compose;
+    if (!compose || typeof compose !== 'object') {
+      return null;
+    }
+
+    const files = Array.isArray(compose.files)
+      ? compose.files
+          .filter((value): value is string => typeof value === 'string')
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0)
+      : [];
+    const service =
+      typeof compose.service === 'string' && compose.service.trim().length > 0
+        ? compose.service.trim()
+        : undefined;
+    const writableFile =
+      typeof compose.writableFile === 'string' && compose.writableFile.trim().length > 0
+        ? compose.writableFile.trim()
+        : undefined;
+    const patch =
+      typeof compose.patch === 'string' && compose.patch.trim().length > 0
+        ? compose.patch
+        : undefined;
+    const willWrite = typeof compose.willWrite === 'boolean' ? compose.willWrite : undefined;
+
+    if (
+      files.length === 0 &&
+      !service &&
+      !writableFile &&
+      patch === undefined &&
+      willWrite === undefined
+    ) {
+      return null;
+    }
+
+    return {
+      files,
+      ...(service ? { service } : {}),
+      ...(writableFile ? { writableFile } : {}),
+      ...(willWrite !== undefined ? { willWrite } : {}),
+      ...(patch ? { patch } : {}),
+    };
+  });
   const previewLoading = ref(false);
   const previewError = ref<string | null>(null);
 
@@ -836,6 +881,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     confirmStop,
     containerPolicyTooltip,
     detailBackups,
+    detailComposePreview,
     detailPreview,
     detailTriggers,
     detailUpdateOperations,

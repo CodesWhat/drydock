@@ -658,13 +658,39 @@ describe('useContainerActions', () => {
     expect(mocks.previewContainer).not.toHaveBeenCalled();
 
     selectedContainerId.value = 'container-1';
-    mocks.previewContainer.mockResolvedValueOnce({ dryRun: true });
+    mocks.previewContainer.mockResolvedValueOnce({
+      dryRun: true,
+      currentImage: 'nginx:1.0',
+      compose: {
+        files: ['/opt/stack/compose.yml', '/opt/stack/compose.override.yml'],
+        service: 'web',
+        willWrite: false,
+        patch: '@@ -1,3 +1,3 @@',
+      },
+    });
     await composable.runContainerPreview();
-    expect(composable.detailPreview.value).toEqual({ dryRun: true });
+    expect(composable.detailPreview.value).toEqual({
+      dryRun: true,
+      currentImage: 'nginx:1.0',
+      compose: {
+        files: ['/opt/stack/compose.yml', '/opt/stack/compose.override.yml'],
+        service: 'web',
+        willWrite: false,
+        patch: '@@ -1,3 +1,3 @@',
+      },
+    });
+    expect(composable.detailComposePreview.value).toEqual({
+      files: ['/opt/stack/compose.yml', '/opt/stack/compose.override.yml'],
+      service: 'web',
+      willWrite: false,
+      patch: '@@ -1,3 +1,3 @@',
+      writableFile: undefined,
+    });
 
     mocks.previewContainer.mockRejectedValueOnce(new Error('preview failed'));
     await composable.runContainerPreview();
     expect(composable.detailPreview.value).toBeNull();
+    expect(composable.detailComposePreview.value).toBeNull();
     expect(composable.previewError.value).toBe('preview failed');
   });
 
