@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import type { Request } from 'express';
 import joi from 'joi';
 import setValue from 'set-value';
@@ -50,14 +50,12 @@ export async function replaceSecrets(ddEnvVars: Record<string, string | undefine
       label: `${secretFileEnvVar} path`,
     });
 
-    const secretFileStats = await stat(secretFilePath);
-    if (secretFileStats.size > MAX_SECRET_FILE_SIZE_BYTES) {
+    const secretFileValue = await readFile(secretFilePath, 'utf-8');
+    if (Buffer.byteLength(secretFileValue, 'utf-8') > MAX_SECRET_FILE_SIZE_BYTES) {
       throw new Error(
         `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
       );
     }
-
-    const secretFileValue = await readFile(secretFilePath, 'utf-8');
     delete ddEnvVars[secretFileEnvVar];
     ddEnvVars[secretKey] = secretFileValue;
   }
