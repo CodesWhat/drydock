@@ -125,11 +125,14 @@ jobs:
         run: npm run test:unit
         working-directory: ui
 
+      - name: Normalize coverage paths for Codecov
+        run: node scripts/prepare-codecov-reports.mjs
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de  # v5.5.2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: app/coverage/lcov.info,ui/coverage/lcov.info
+          files: coverage/codecov-app.lcov.info,coverage/codecov-ui.lcov.info
           flags: app,ui
           fail_ci_if_error: true
 
