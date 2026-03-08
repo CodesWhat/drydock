@@ -71,6 +71,11 @@
   --ring: 0 0% 83.1%;
 }
 
+/* Let docs content fill the full viewport width */
+#nd-flux-layout {
+  --fd-layout-width: 100vw;
+}
+
 @layer base {
   * {
     border-color: theme(colors.border);
