@@ -1,4 +1,4 @@
-import { createHash, scryptSync, timingSafeEqual } from 'node:crypto';
+import { argon2Sync, createHash, timingSafeEqual } from 'node:crypto';
 import Authentication from '../Authentication.js';
 import BasicStrategy from './BasicStrategy.js';
 
@@ -6,20 +6,20 @@ function hashValue(value: string): Buffer {
   return createHash('sha256').update(value, 'utf8').digest();
 }
 
-const SCRYPT_HASH_PARTS = 6;
+const ARGON2_HASH_PARTS = 6;
 const MIN_SALT_SIZE = 16;
-const MIN_DERIVED_KEY_SIZE = 32;
-const MIN_SCRYPT_N = 16384;
-const MAX_SCRYPT_N = 262144;
-const MIN_SCRYPT_R = 8;
-const MAX_SCRYPT_R = 32;
-const MIN_SCRYPT_P = 1;
-const MAX_SCRYPT_P = 8;
+const MIN_HASH_SIZE = 32;
+const MIN_ARGON2_MEMORY = 19456;
+const MAX_ARGON2_MEMORY = 1048576;
+const MIN_ARGON2_PASSES = 2;
+const MAX_ARGON2_PASSES = 100;
+const MIN_ARGON2_PARALLELISM = 1;
+const MAX_ARGON2_PARALLELISM = 16;
 
-interface ParsedScryptHash {
-  N: number;
-  r: number;
-  p: number;
+interface ParsedArgon2Hash {
+  memory: number;
+  passes: number;
+  parallelism: number;
   salt: Buffer;
   hash: Buffer;
 }
@@ -35,10 +35,6 @@ function parsePositiveInteger(raw: string): number | undefined {
   return parsed;
 }
 
-function isPowerOfTwo(value: number): boolean {
-  return value > 0 && (value & (value - 1)) === 0;
-}
-
 function decodeBase64(raw: string): Buffer | undefined {
   if (raw.length === 0) {
     return undefined;
@@ -50,53 +46,69 @@ function decodeBase64(raw: string): Buffer | undefined {
   return Buffer.from(raw, 'base64');
 }
 
-function parseScryptHash(rawHash: string): ParsedScryptHash | undefined {
+function parseArgon2Hash(rawHash: string): ParsedArgon2Hash | undefined {
   const parts = rawHash.split('$');
-  if (parts.length !== SCRYPT_HASH_PARTS || parts[0] !== 'scrypt') {
+  if (parts.length !== ARGON2_HASH_PARTS || parts[0] !== 'argon2id') {
     return undefined;
   }
 
-  const N = parsePositiveInteger(parts[1]);
-  const r = parsePositiveInteger(parts[2]);
-  const p = parsePositiveInteger(parts[3]);
+  const memory = parsePositiveInteger(parts[1]);
+  const passes = parsePositiveInteger(parts[2]);
+  const parallelism = parsePositiveInteger(parts[3]);
   const salt = decodeBase64(parts[4]);
   const hash = decodeBase64(parts[5]);
 
   if (
-    !N ||
-    !r ||
-    !p ||
+    !memory ||
+    !passes ||
+    !parallelism ||
     !salt ||
     !hash ||
-    !isPowerOfTwo(N) ||
-    N < MIN_SCRYPT_N ||
-    N > MAX_SCRYPT_N ||
-    r < MIN_SCRYPT_R ||
-    r > MAX_SCRYPT_R ||
-    p < MIN_SCRYPT_P ||
-    p > MAX_SCRYPT_P ||
+    memory < MIN_ARGON2_MEMORY ||
+    memory > MAX_ARGON2_MEMORY ||
+    passes < MIN_ARGON2_PASSES ||
+    passes > MAX_ARGON2_PASSES ||
+    parallelism < MIN_ARGON2_PARALLELISM ||
+    parallelism > MAX_ARGON2_PARALLELISM ||
     salt.length < MIN_SALT_SIZE ||
-    hash.length < MIN_DERIVED_KEY_SIZE
+    hash.length < MIN_HASH_SIZE
   ) {
     return undefined;
   }
 
-  return { N, r, p, salt, hash };
+  return { memory, passes, parallelism, salt, hash };
 }
 
-function verifyPassword(password: string, encodedHash: string): boolean {
-  const parsed = parseScryptHash(encodedHash);
+function parseShaHash(rawHash: string): Buffer | undefined {
+  if (rawHash.length < 5) {
+    return undefined;
+  }
+  const prefix = rawHash.substring(0, 5);
+  if (prefix.toLowerCase() !== '{sha}') {
+    return undefined;
+  }
+  const encoded = rawHash.substring(5);
+  const decoded = decodeBase64(encoded);
+  if (!decoded || decoded.length !== 20) {
+    return undefined;
+  }
+  return decoded;
+}
+
+function verifyArgon2Password(password: string, encodedHash: string): boolean {
+  const parsed = parseArgon2Hash(encodedHash);
   if (!parsed) {
     return false;
   }
 
   try {
-    const maxmem = 128 * parsed.N * parsed.r + 1024 * parsed.r * parsed.p + 1024;
-    const derived = scryptSync(password, parsed.salt, parsed.hash.length, {
-      N: parsed.N,
-      r: parsed.r,
-      p: parsed.p,
-      maxmem,
+    const derived = argon2Sync('argon2id', {
+      message: password,
+      nonce: parsed.salt,
+      memory: parsed.memory,
+      passes: parsed.passes,
+      parallelism: parsed.parallelism,
+      tagLength: parsed.hash.length,
     });
     return timingSafeEqual(derived, parsed.hash);
   } catch {
@@ -104,8 +116,37 @@ function verifyPassword(password: string, encodedHash: string): boolean {
   }
 }
 
+function verifyShaPassword(password: string, encodedHash: string): boolean {
+  const expectedHash = parseShaHash(encodedHash);
+  if (!expectedHash) {
+    return false;
+  }
+
+  try {
+    const actualHash = createHash('sha1').update(password).digest();
+    return timingSafeEqual(actualHash, expectedHash);
+  } catch {
+    return false;
+  }
+}
+
+function verifyPassword(password: string, encodedHash: string): boolean {
+  if (parseArgon2Hash(encodedHash)) {
+    return verifyArgon2Password(password, encodedHash);
+  }
+  if (parseShaHash(encodedHash)) {
+    return verifyShaPassword(password, encodedHash);
+  }
+  return false;
+}
+
+function isLegacyShaHash(hash: string): boolean {
+  return parseShaHash(hash) !== undefined;
+}
+
 /**
- * Basic authentication backed by scrypt password hashes.
+ * Basic authentication backed by argon2id password hashes.
+ * Legacy SHA-1 {SHA} hashes are accepted with deprecation warnings.
  */
 class Basic extends Authentication {
   /**
@@ -119,13 +160,27 @@ class Basic extends Authentication {
         .string()
         .required()
         .custom((value: string, helpers: { error: (key: string) => unknown }) => {
-          return parseScryptHash(value) ? value : helpers.error('any.invalid');
-        }, 'scrypt hash validation')
+          if (parseArgon2Hash(value) || parseShaHash(value)) {
+            return value;
+          }
+          return helpers.error('any.invalid');
+        }, 'password hash validation')
         .messages({
           'any.invalid':
-            '"hash" must be a scrypt hash in format scrypt$N$r$p$<salt-base64>$<hash-base64>',
+            '"hash" must be an argon2id hash (argon2id$memory$passes$parallelism$salt$hash) or a legacy {SHA} hash',
         }),
     });
+  }
+
+  /**
+   * Init authentication. Log deprecation warning if SHA hash detected.
+   */
+  initAuthentication(): void {
+    if (isLegacyShaHash(this.configuration.hash)) {
+      this.log.warn(
+        'SHA-1 password hash detected — SHA-1 is deprecated and will be removed in v1.6.0. Migrate to argon2id hashing.',
+      );
+    }
   }
 
   /**
@@ -150,6 +205,12 @@ class Basic extends Authentication {
     return {
       type: 'basic',
       name: 'Login',
+    };
+  }
+
+  getMetadata(): Record<string, unknown> {
+    return {
+      usesLegacyHash: isLegacyShaHash(this.configuration.hash),
     };
   }
 
