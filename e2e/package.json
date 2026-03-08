@@ -2,6 +2,9 @@
   "name": "drydock-e2e",
   "version": "1.0.0",
   "description": "drydock - e2e",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "main": "index.js",
   "scripts": {
     "format": "biome format --write .",

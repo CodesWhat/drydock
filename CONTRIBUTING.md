@@ -7,7 +7,13 @@ Questions or ideas? Start a [GitHub Discussion](https://github.com/CodesWhat/dry
 ## Getting started
 
 1. **Fork** the repository and clone your fork.
-2. **Install dependencies** — each workspace manages its own:
+2. **Use Node.js 24+** (required for local development and tests):
+
+   ```bash
+   nvm use || nvm install
+   ```
+
+3. **Install dependencies** — each workspace manages its own:
 
    ```bash
    cd app && npm install
@@ -15,7 +21,7 @@ Questions or ideas? Start a [GitHub Discussion](https://github.com/CodesWhat/dry
    cd e2e && npm install
    ```
 
-3. **Create a branch** from the appropriate base:
+4. **Create a branch** from the appropriate base:
    - Bug fixes for the current release: branch from `main`
    - New features targeting the next release: branch from the active feature branch (check open branches for the current one)
 

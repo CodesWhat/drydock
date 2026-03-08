@@ -1,4 +1,7 @@
 {
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.4.5"
   }
