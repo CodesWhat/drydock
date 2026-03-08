@@ -104,14 +104,15 @@ describe('Container Service', () => {
       expect(containers).toEqual(mockContainers);
     });
 
-    it('returns empty array for unknown collection payload shape', async () => {
+    it('supports entries payload shape', async () => {
+      const mockContainers = [{ id: 'ignored' }];
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ entries: [{ id: 'ignored' }] }),
+        json: async () => ({ entries: mockContainers }),
       } as any);
 
       const containers = await getAllContainers();
-      expect(containers).toEqual([]);
+      expect(containers).toEqual(mockContainers);
     });
 
     it('returns empty array when payload is not an object', async () => {

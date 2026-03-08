@@ -76,14 +76,15 @@ describe('Authentication Service', () => {
     expect(result).toEqual(mockAuthentications);
   });
 
-  it('returns empty array when auth payload is not a recognized collection shape', async () => {
+  it('supports entries payload shape when fetching all authentications', async () => {
+    const mockAuthentications = [{ name: 'ignored' }];
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ entries: [{ name: 'ignored' }] }),
+      json: async () => ({ entries: mockAuthentications }),
     } as any);
 
     const result = await getAllAuthentications();
-    expect(result).toEqual([]);
+    expect(result).toEqual(mockAuthentications);
   });
 
   it('returns empty array when auth payload is not an object', async () => {

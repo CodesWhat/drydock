@@ -66,14 +66,15 @@ describe('Watcher Service', () => {
     expect(result).toEqual(mockWatchers);
   });
 
-  it('returns empty array for unknown watcher collection payload shape', async () => {
+  it('supports entries payload shape when listing watchers', async () => {
+    const mockWatchers = [{ id: 'ignored' }];
     global.fetch.mockResolvedValue({
       ok: true,
-      json: vi.fn().mockResolvedValue({ entries: [{ id: 'ignored' }] }),
+      json: vi.fn().mockResolvedValue({ entries: mockWatchers }),
     });
 
     const result = await getAllWatchers();
-    expect(result).toEqual([]);
+    expect(result).toEqual(mockWatchers);
   });
 
   it('returns empty array when watcher payload is not an object', async () => {

@@ -18,6 +18,7 @@ export default defineConfig({
         '**/node_modules/**',
         '**/dist/**',
         '**/coverage/**',
+        '**/package.json',
         '**/*.d.ts',
         '**/*.typecheck.ts',
         'vitest.config.ts',

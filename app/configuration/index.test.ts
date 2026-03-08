@@ -772,9 +772,43 @@ describe('getPrometheusConfiguration errors', () => {
 });
 
 describe('getVersion', () => {
-  test('should fall back to package.json version when DD_VERSION is not set', () => {
-    delete configuration.ddEnvVars.DD_VERSION;
-    expect(configuration.getVersion()).toBe(appPackageJson.version);
+  async function importFreshConfiguration() {
+    vi.resetModules();
+    return import('./index.js');
+  }
+
+  test('should fall back to package.json version when DD_VERSION is not set', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    delete freshConfiguration.ddEnvVars.DD_VERSION;
+    expect(freshConfiguration.getVersion()).toBe(appPackageJson.version);
+  });
+
+  test('should reuse cached package version after first lookup', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    delete freshConfiguration.ddEnvVars.DD_VERSION;
+
+    const readFileSpy = vi.spyOn(fs, 'readFileSync');
+    const first = freshConfiguration.getVersion();
+    const second = freshConfiguration.getVersion();
+
+    expect(first).toBe(appPackageJson.version);
+    expect(second).toBe(appPackageJson.version);
+    expect(readFileSpy).toHaveBeenCalledTimes(1);
+
+    readFileSpy.mockRestore();
+  });
+
+  test('should return unknown when package version cannot be resolved', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    delete freshConfiguration.ddEnvVars.DD_VERSION;
+
+    const readFileSpy = vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+      throw new Error('read failure');
+    });
+
+    expect(freshConfiguration.getVersion()).toBe('unknown');
+
+    readFileSpy.mockRestore();
   });
 });
 

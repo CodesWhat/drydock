@@ -131,14 +131,15 @@ describe('Registry Service', () => {
       expect(registries).toEqual(mockRegistries);
     });
 
-    it('returns empty array for unknown collection payload shape', async () => {
+    it('supports entries payload shape', async () => {
+      const mockRegistries = [{ name: 'ignored' }];
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ entries: [{ name: 'ignored' }] }),
+        json: async () => ({ entries: mockRegistries }),
       } as any);
 
       const registries = await getAllRegistries();
-      expect(registries).toEqual([]);
+      expect(registries).toEqual(mockRegistries);
     });
 
     it('returns empty array when payload is not an object', async () => {

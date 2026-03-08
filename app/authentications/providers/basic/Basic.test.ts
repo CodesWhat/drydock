@@ -190,6 +190,43 @@ describe('Basic Authentication', () => {
     });
   });
 
+  test('should reject too-short SHA-style hashes', async () => {
+    basic.configuration = {
+      user: 'testuser',
+      hash: '{S',
+    };
+
+    await new Promise<void>((resolve) => {
+      basic.authenticate('testuser', 'password', (_err, result) => {
+        expect(result).toBe(false);
+        resolve();
+      });
+    });
+  });
+
+  test('should reject when argon2 hash parsing fails during verification', async () => {
+    const validHash = createArgon2Hash('password');
+    let splitCallCount = 0;
+    const flakyHash = {
+      split(separator: string) {
+        splitCallCount += 1;
+        return splitCallCount === 1 ? validHash.split(separator) : ['argon2id'];
+      },
+    } as unknown as string;
+
+    basic.configuration = {
+      user: 'testuser',
+      hash: flakyHash,
+    };
+
+    await new Promise<void>((resolve) => {
+      basic.authenticate('testuser', 'password', (_err, result) => {
+        expect(result).toBe(false);
+        resolve();
+      });
+    });
+  });
+
   test('should validate configuration schema with argon2id hash', async () => {
     const hash = createArgon2Hash('password');
     expect(
@@ -407,6 +444,66 @@ describe('Basic Authentication', () => {
           hash: '{SHA}not*valid*base64',
         }),
       ).toThrow('must be an argon2id hash');
+    });
+
+    test('should reject when SHA hash parsing fails during verification', async () => {
+      const validHash = createShaHash('password');
+      let substringCallCount = 0;
+      const flakyHash = {
+        length: validHash.length,
+        split: () => ['not-argon2'],
+        substring(start: number, end?: number) {
+          substringCallCount += 1;
+          if (substringCallCount === 1) {
+            return '{SHA}';
+          }
+          if (substringCallCount === 2) {
+            return validHash.substring(start, end);
+          }
+          return 'invalid-prefix';
+        },
+      } as unknown as string;
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: flakyHash,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'password', (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
+
+    test('should reject SHA-1 authentication when digest generation throws', async () => {
+      const hash = createShaHash('password');
+      const cryptoModule = await import('node:crypto');
+      const originalCreateHash = cryptoModule.createHash.bind(cryptoModule);
+      let createHashCallCount = 0;
+      const createHashSpy = vi.spyOn(cryptoModule, 'createHash').mockImplementation((...args) => {
+        createHashCallCount += 1;
+        // authenticate() hashes usernames twice before hashing the password digest.
+        if (createHashCallCount === 3) {
+          throw new Error('sha1 unavailable');
+        }
+        return originalCreateHash(...args);
+      });
+
+      basic.configuration = {
+        user: 'testuser',
+        hash,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'password', (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+
+      createHashSpy.mockRestore();
     });
 
     test('should reject unrecognized hash formats', async () => {
