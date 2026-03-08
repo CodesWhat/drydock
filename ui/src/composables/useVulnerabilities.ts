@@ -270,6 +270,7 @@ export function useVulnerabilities({
       latestSecurityScanAt.value = latestScanAt;
     } catch (caught: unknown) {
       error.value = errorMessage(caught, 'Failed to load vulnerability data');
+      securityVulnerabilities.value = [];
       containerIdsByImage.value = {};
       updateScanSummaries.value = {};
       latestSecurityScanAt.value = null;

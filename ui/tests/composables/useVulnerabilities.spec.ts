@@ -820,16 +820,33 @@ describe('useVulnerabilities', () => {
   });
 
   it('sets an error and clears derived state when loading fails', async () => {
-    mockGetSecurityVulnerabilityOverview.mockRejectedValue({ bad: true });
+    mockGetSecurityVulnerabilityOverview
+      .mockResolvedValueOnce({
+        totalContainers: 1,
+        scannedContainers: 1,
+        latestScannedAt: '2026-03-01T10:00:00.000Z',
+        images: [
+          {
+            image: 'nginx',
+            containerIds: ['container-1'],
+            vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', package: 'openssl' }],
+          },
+        ],
+      })
+      .mockRejectedValueOnce({ bad: true });
 
     const state = useVulnerabilities({
       securitySortField: ref('critical'),
       securitySortAsc: ref(false),
     });
     await state.fetchVulnerabilities();
+    expect(state.securityVulnerabilities.value).toHaveLength(1);
+
+    await state.fetchVulnerabilities();
 
     expect(state.loading.value).toBe(false);
     expect(state.error.value).toBe('Failed to load vulnerability data');
+    expect(state.securityVulnerabilities.value).toEqual([]);
     expect(state.containerIdsByImage.value).toEqual({});
     expect(state.latestSecurityScanAt.value).toBeNull();
     expect(state.totalContainerCount.value).toBe(0);
