@@ -80,7 +80,24 @@ describe('Trigger Router', () => {
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
-          error: expect.stringContaining('container is undefined'),
+          error: 'Invalid trigger request body',
+        }),
+      );
+    });
+
+    test('should return 400 when container id is not a string', async () => {
+      const req = {
+        params: { type: 'slack', name: 'default' },
+        body: { id: 123 },
+      };
+      const res = createResponse();
+
+      await runTrigger(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Invalid trigger request body',
         }),
       );
     });
@@ -299,6 +316,11 @@ describe('Trigger Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Invalid trigger request body',
+        }),
+      );
     });
 
     test('should return 400 when container has no id', async () => {
@@ -314,6 +336,35 @@ describe('Trigger Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Invalid trigger request body',
+        }),
+      );
+    });
+
+    test('should return 400 when container id is not a string', async () => {
+      const mockAgentClient = {
+        runRemoteTrigger: vi.fn().mockResolvedValue(undefined),
+      };
+      agent.getAgent.mockReturnValue(mockAgentClient);
+
+      const handler = getRemoteTriggerHandler();
+      const req = {
+        params: { agent: 'my-agent', type: 'slack', name: 'default' },
+        body: { id: 123 },
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Invalid trigger request body',
+        }),
+      );
+      expect(mockAgentClient.runRemoteTrigger).not.toHaveBeenCalled();
     });
 
     test('should run remote trigger successfully', async () => {
