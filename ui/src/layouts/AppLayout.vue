@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import whaleLogo from '@/assets/whale-logo.png';
+import whaleLogo from '@/assets/whale-logo.png?inline';
 import AnnouncementBanner from '@/components/AnnouncementBanner.vue';
 import NotificationBell from '@/components/NotificationBell.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
@@ -1340,12 +1340,12 @@ onUnmounted(() => {
                class="relative w-full max-w-[340px] dd-rounded-lg overflow-hidden shadow-2xl"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <button aria-label="Close"
-                    class="absolute top-3 right-3 w-6 h-6 flex items-center justify-center dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                    class="absolute top-3 right-3 z-10 w-6 h-6 flex items-center justify-center dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                     @click="showAbout = false">
               <AppIcon name="xmark" :size="12" />
             </button>
             <div class="flex flex-col items-center pt-6 pb-4 px-6">
-              <div class="-mx-6 w-[calc(100%+3rem)] h-12 mb-3 relative">
+              <div class="-mx-6 w-[calc(100%+3rem)] h-12 mb-3 relative pointer-events-none">
                 <img :src="whaleLogo" alt="Drydock" class="h-10 w-[65px] absolute top-1 about-swim"
                      :style="isDark ? { filter: 'invert(1)' } : {}" />
               </div>
@@ -1489,10 +1489,8 @@ onUnmounted(() => {
           <div class="w-full max-w-[320px] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <div class="flex flex-col items-center px-6 py-8 gap-3">
-              <div class="w-10 h-10 rounded-full flex items-center justify-center mb-1"
-                   :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
-                <AppIcon name="warning" :size="18" :style="{ color: 'var(--dd-danger)' }" />
-              </div>
+              <img :src="whaleLogo" alt="" class="h-10 w-auto mb-1"
+                   :style="[{ transform: 'rotate(180deg) scaleX(-1)' }, isDark ? { filter: 'invert(1)' } : {}]" />
               <h2 class="text-sm font-bold dd-text">{{ connectionOverlayTitle }}</h2>
               <p class="text-[11px] dd-text-muted leading-relaxed">
                 {{ connectionOverlayMessage }}

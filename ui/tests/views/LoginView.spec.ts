@@ -418,12 +418,14 @@ describe('LoginView', () => {
       expect(mockGetStrategies).toHaveBeenCalledTimes(1);
     });
 
-    it('shows warning icon and reconnecting text in overlay', async () => {
+    it('shows belly-up whale logo and reconnecting text in overlay', async () => {
       mockGetStrategies.mockRejectedValue(new Error('offline'));
       const wrapper = trackWrapper(mountWithPlugins(LoginView));
       await flushPromises();
 
-      expect(wrapper.find('.app-icon-stub[data-icon="warning"]').exists()).toBe(true);
+      const whaleImg = wrapper.find('img[alt=""]');
+      expect(whaleImg.exists()).toBe(true);
+      expect(whaleImg.attributes('style')).toContain('rotate(180deg)');
       expect(wrapper.text()).toContain('Reconnecting');
       wrapper.unmount();
     });
