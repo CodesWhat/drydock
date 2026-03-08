@@ -87,6 +87,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Trigger infrastructure config redaction** — Webhook URLs, hostnames, channels, and usernames are redacted from trigger configuration in API responses.
 - **Website SRI integrity hashes** — Post-build script injects subresource integrity hashes for static assets on the documentation website.
 - **Fail-closed webhook token enforcement** — Per-endpoint webhook tokens now fail closed when a token is configured but the request provides no token or a mismatched token, preventing bypass through missing headers.
+- **API error message sanitization** — API routes no longer expose raw Joi validation or exception messages to clients. New `sanitizeApiError()` helper returns generic messages while logging real details server-side.
+- **Trigger request body schema validation** — `POST /api/triggers/:type/:name` and remote trigger endpoints now validate request bodies with Joi (require `id` string, reject type coercion via `convert: false`).
+- **HTTP trigger auth schema enforcement at startup** — HTTP trigger Joi schema now conditionally requires `user`+`password` for BASIC auth and `bearer` for BEARER auth at registration time, catching misconfigurations before first trigger execution.
+- **CORS implicit wildcard origin deprecation warning** — Startup warning when `DD_SERVER_CORS_ENABLED=true` without explicit `DD_SERVER_CORS_ORIGIN`. Default wildcard will require explicit opt-in in v1.5.0.
+
+### Changed
+
+- **PUT `/api/settings` deprecated** — `PUT /api/settings` now returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` headers. Use `PATCH /api/settings` for partial updates. PUT alias removal targeted for v1.5.0.
+
+### Fixed
+
+- **Backup retention on failed updates** — Backup entries are now pruned on the failure path, not just after successful updates, preventing indefinite accumulation of stale backups.
+- **Backup pruning with undefined maxCount** — `pruneOldBackups()` no longer deletes all backups when `maxCount` is `undefined` (e.g. when `DD_BACKUPCOUNT` is not configured). Now correctly no-ops on invalid or non-finite values.
 
 ## [1.4.0] — 2026-02-28
 
