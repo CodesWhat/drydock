@@ -419,6 +419,8 @@ export const containerPaths = {
     post: {
       tags: ['Containers', 'Actions'],
       summary: 'Preview container update actions',
+      description:
+        'Returns generic docker preview fields and compose mutation metadata when the container is managed by the dockercompose trigger.',
       operationId: 'previewContainerUpdate',
       parameters: [containerIdPathParam],
       responses: {

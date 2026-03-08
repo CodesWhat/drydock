@@ -26,6 +26,33 @@ describe('docker-trigger helper', () => {
     expect(result).toBeUndefined();
   });
 
+  test('ignores compose triggers by default', () => {
+    const composeTrigger = { type: 'dockercompose' };
+
+    const result = findDockerTriggerForContainer(
+      {
+        'dockercompose.default': composeTrigger,
+      },
+      { id: 'c1' },
+    );
+
+    expect(result).toBeUndefined();
+  });
+
+  test('can include compose triggers when requested', () => {
+    const composeTrigger = { type: 'dockercompose' };
+
+    const result = findDockerTriggerForContainer(
+      {
+        'dockercompose.default': composeTrigger,
+      },
+      { id: 'c1' },
+      { triggerTypes: ['docker', 'dockercompose'] },
+    );
+
+    expect(result).toBe(composeTrigger);
+  });
+
   test('skips docker triggers with a different agent than the container', () => {
     const nonMatching = { type: 'docker', agent: 'agent-b' };
     const matching = { type: 'docker', agent: 'agent-a' };

@@ -187,5 +187,36 @@ describe('Preview Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(previewResult);
     });
+
+    test('should use compose trigger when no docker trigger exists', async () => {
+      const previewResult = {
+        containerName: 'my-app',
+        currentImage: 'hub/library/nginx:1.24',
+        newImage: 'hub/library/nginx:1.25',
+        compose: {
+          files: ['/stack/docker-compose.yml'],
+          paths: ['/stack/docker-compose.yml'],
+          service: 'web',
+          mutation: {
+            intent: 'update-compose-service-image',
+            dryRun: true,
+            willWrite: false,
+          },
+        },
+      };
+      const composeTrigger = {
+        type: 'dockercompose',
+        preview: vi.fn().mockResolvedValue(previewResult),
+      };
+      storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local' });
+      registry.getState.mockReturnValue({
+        trigger: { 'dockercompose.default': composeTrigger },
+      });
+
+      const res = await callPreview();
+      expect(composeTrigger.preview).toHaveBeenCalledWith({ id: 'c1', watcher: 'local' });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(previewResult);
+    });
   });
 });
