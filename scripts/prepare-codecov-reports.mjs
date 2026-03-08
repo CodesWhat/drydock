@@ -50,9 +50,7 @@ function validateReportSourcePaths(content) {
 
   if (missing.size > 0) {
     const sample = Array.from(missing).slice(0, 10);
-    throw new Error(
-      `Normalized coverage paths do not exist in repository: ${sample.join(', ')}`,
-    );
+    throw new Error(`Normalized coverage paths do not exist in repository: ${sample.join(', ')}`);
   }
 }
 
