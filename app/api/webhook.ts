@@ -62,8 +62,22 @@ function getTokenForRequest(
   webhookConfig: ReturnType<typeof getWebhookConfiguration>,
 ): string {
   const action = getWebhookActionFromRequest(req);
-  const endpointToken = action ? webhookConfig.tokens?.[action] : undefined;
-  return endpointToken || webhookConfig.token;
+  if (!action) {
+    return webhookConfig.token;
+  }
+
+  const hasAnyEndpointToken = [
+    webhookConfig.tokens?.watchall,
+    webhookConfig.tokens?.watch,
+    webhookConfig.tokens?.update,
+  ].some((token) => typeof token === 'string' && token.length > 0);
+
+  if (hasAnyEndpointToken) {
+    // Fail closed: once endpoint-specific token mode is enabled, each endpoint must set its own token.
+    return webhookConfig.tokens?.[action] || '';
+  }
+
+  return webhookConfig.token;
 }
 
 /**

@@ -355,7 +355,7 @@ describe('Webhook Router', () => {
       expect(res.status).not.toHaveBeenCalled();
     });
 
-    test('should fall back to shared token when endpoint-specific token is not configured', () => {
+    test('should fall back to shared token for action routes when no endpoint-specific tokens are configured', () => {
       mockGetWebhookConfiguration.mockReturnValue({
         enabled: true,
         token: 'shared-token',
@@ -376,6 +376,32 @@ describe('Webhook Router', () => {
 
       expect(next).toHaveBeenCalled();
       expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('should return 500 when endpoint-specific tokens are configured but target endpoint token is missing', () => {
+      mockGetWebhookConfiguration.mockReturnValue({
+        enabled: true,
+        token: 'shared-token',
+        tokens: {
+          watchall: 'watchall-token',
+          watch: '',
+          update: '',
+        },
+      });
+      const middleware = getAuthMiddleware();
+      const req = createMockRequest({
+        path: '/update/my-nginx',
+        headers: { authorization: 'Bearer shared-token' },
+      });
+      const res = createMockResponse();
+      const next = vi.fn();
+      middleware(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.stringContaining('misconfigured') }),
+      );
+      expect(next).not.toHaveBeenCalled();
     });
 
     test('should fall back to shared token when request path is empty', () => {

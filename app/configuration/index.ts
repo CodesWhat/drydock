@@ -68,6 +68,8 @@ export function replaceSecrets(ddEnvVars: Record<string, string | undefined>) {
 // 1. Get a copy of all dd-related env vars (DD_ primary, WUD_ legacy fallback)
 export const ddEnvVars: Record<string, string | undefined> = {};
 const mappedLegacyEnvVars = new Set<string>();
+let packageVersionCache: string | undefined;
+let packageVersionResolved = false;
 
 // First, collect legacy WUD_ vars and remap to DD_ keys
 Object.keys(process.env)
@@ -102,7 +104,33 @@ Object.keys(process.env)
 replaceSecrets(ddEnvVars);
 
 export function getVersion() {
-  return ddEnvVars.DD_VERSION || 'unknown';
+  const configuredVersion = ddEnvVars.DD_VERSION?.trim();
+  if (configuredVersion) {
+    return configuredVersion;
+  }
+
+  if (!packageVersionResolved) {
+    packageVersionResolved = true;
+    const packageJsonCandidates = [
+      new URL('../package.json', import.meta.url),
+      new URL('../../package.json', import.meta.url),
+    ];
+
+    for (const packageJsonUrl of packageJsonCandidates) {
+      try {
+        const packageJsonRaw = fs.readFileSync(packageJsonUrl, 'utf-8');
+        const packageJson = JSON.parse(packageJsonRaw) as { version?: unknown };
+        if (typeof packageJson.version === 'string' && packageJson.version.trim()) {
+          packageVersionCache = packageJson.version.trim();
+          break;
+        }
+      } catch {
+        // Continue until we find a readable package.json with a version field.
+      }
+    }
+  }
+
+  return packageVersionCache || 'unknown';
 }
 
 export function getLogLevel() {
@@ -350,6 +378,24 @@ export function getWebhookConfiguration() {
     configuration.tokens?.watch,
     configuration.tokens?.update,
   ].some((token) => typeof token === 'string' && token.length > 0);
+
+  const endpointTokens = [
+    configuration.tokens?.watchall,
+    configuration.tokens?.watch,
+    configuration.tokens?.update,
+  ];
+  const hasAnyEndpointToken = endpointTokens.some(
+    (token) => typeof token === 'string' && token.length > 0,
+  );
+  const hasAllEndpointTokens = endpointTokens.every(
+    (token) => typeof token === 'string' && token.length > 0,
+  );
+
+  if (configuration.enabled && hasAnyEndpointToken && !hasAllEndpointTokens) {
+    throw new Error(
+      'All endpoint-specific webhook tokens (DD_SERVER_WEBHOOK_TOKENS_WATCHALL, DD_SERVER_WEBHOOK_TOKENS_WATCH, DD_SERVER_WEBHOOK_TOKENS_UPDATE) must be configured together when any DD_SERVER_WEBHOOK_TOKENS_* value is set',
+    );
+  }
 
   if (configuration.enabled && !hasAnyToken) {
     throw new Error(

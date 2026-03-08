@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import log from '../log/index.js';
+import appPackageJson from '../package.json';
 import * as configuration from './index.js';
 
 function getTestDirectory() {
@@ -771,9 +772,9 @@ describe('getPrometheusConfiguration errors', () => {
 });
 
 describe('getVersion', () => {
-  test('should return unknown when DD_VERSION is not set', () => {
+  test('should fall back to package.json version when DD_VERSION is not set', () => {
     delete configuration.ddEnvVars.DD_VERSION;
-    expect(configuration.getVersion()).toBe('unknown');
+    expect(configuration.getVersion()).toBe(appPackageJson.version);
   });
 });
 
@@ -896,6 +897,18 @@ describe('getWebhookConfiguration', () => {
         update: 'update-token',
       },
     });
+  });
+
+  test('should throw when endpoint-specific webhook tokens are partially configured', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN = 'shared-token';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL = 'watchall-token';
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_UPDATE;
+
+    expect(() => configuration.getWebhookConfiguration()).toThrow(
+      'All endpoint-specific webhook tokens (DD_SERVER_WEBHOOK_TOKENS_WATCHALL, DD_SERVER_WEBHOOK_TOKENS_WATCH, DD_SERVER_WEBHOOK_TOKENS_UPDATE) must be configured together when any DD_SERVER_WEBHOOK_TOKENS_* value is set',
+    );
   });
 
   test('should throw when webhook is enabled without shared or endpoint tokens', () => {
