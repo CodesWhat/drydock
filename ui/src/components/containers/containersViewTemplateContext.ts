@@ -93,6 +93,8 @@ type ContainerSecurityContext = Pick<
 type ContainerActionsContext = Pick<
   ReturnType<typeof useContainerActions>,
   | 'actionInProgress'
+  | 'containerActionsDisabledReason'
+  | 'containerActionsEnabled'
   | 'confirmDelete'
   | 'confirmForceUpdate'
   | 'confirmUpdate'

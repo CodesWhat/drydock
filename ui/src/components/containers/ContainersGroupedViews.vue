@@ -9,6 +9,8 @@ const {
   toggleGroupCollapse,
   collapsedGroups,
   groupUpdateInProgress,
+  containerActionsEnabled,
+  containerActionsDisabledReason,
   actionInProgress,
   updateAllInGroup,
   tt,
@@ -73,20 +75,20 @@ const {
             {{ group.updatesAvailable }} update{{ group.updatesAvailable === 1 ? '' : 's' }}
           </span>
           <button
-            v-if="group.updatableCount > 0"
+            v-if="group.updatableCount > 0 || !containerActionsEnabled"
             class="ml-auto inline-flex items-center gap-1 px-2 py-1 dd-rounded border text-[10px] font-semibold transition-colors"
-            :class="groupUpdateInProgress.has(group.key) || actionInProgress
-              ? 'dd-text-muted cursor-wait'
+            :class="!containerActionsEnabled || groupUpdateInProgress.has(group.key) || actionInProgress
+              ? 'dd-text-muted cursor-not-allowed opacity-60'
               : 'dd-text hover:dd-bg-elevated'"
             :style="{ borderColor: 'var(--dd-border-strong)' }"
-            :disabled="groupUpdateInProgress.has(group.key) || actionInProgress !== null"
-            v-tooltip.top="tt('Update all in group')"
+            :disabled="!containerActionsEnabled || groupUpdateInProgress.has(group.key) || actionInProgress !== null"
+            v-tooltip.top="tt(containerActionsEnabled ? 'Update all in group' : containerActionsDisabledReason)"
             @click.stop="updateAllInGroup(group)">
             <AppIcon
-              :name="groupUpdateInProgress.has(group.key) ? 'spinner' : 'cloud-download'"
+              :name="!containerActionsEnabled ? 'lock' : groupUpdateInProgress.has(group.key) ? 'spinner' : 'cloud-download'"
               :size="11"
-              :class="groupUpdateInProgress.has(group.key) ? 'dd-spin' : ''" />
-            <span>Update all</span>
+              :class="!containerActionsEnabled ? '' : groupUpdateInProgress.has(group.key) ? 'dd-spin' : ''" />
+            <span>{{ containerActionsEnabled ? 'Update all' : 'Actions disabled' }}</span>
           </button>
         </div>
 
@@ -279,8 +281,21 @@ const {
         </template>
         <!-- Actions -->
         <template #actions="{ row: c }">
+          <template v-if="!containerActionsEnabled">
+            <div class="flex items-center justify-end gap-2">
+              <span class="text-[10px] dd-text-muted">Actions disabled</span>
+              <button
+                class="w-8 h-8 dd-rounded flex items-center justify-center cursor-not-allowed dd-text-muted opacity-60"
+                :disabled="true"
+                v-tooltip.top="tt(containerActionsDisabledReason)"
+                @click.stop
+              >
+                <AppIcon name="lock" :size="13" />
+              </button>
+            </div>
+          </template>
           <!-- Icon-style actions (compact) -->
-          <template v-if="tableActionStyle === 'icons'">
+          <template v-else-if="tableActionStyle === 'icons'">
             <div class="flex items-center justify-end gap-0.5">
               <button v-if="c.newTag && c.bouncer === 'blocked'"
                       class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] cursor-not-allowed dd-text-muted opacity-50"
@@ -365,7 +380,7 @@ const {
       <!-- Actions dropdown (teleported to body so it renders in all view modes) -->
       <Teleport to="body">
         <template v-for="c in displayContainers" :key="'menu-' + getContainerViewKey(c)">
-          <div v-if="openActionsMenu === c.name"
+          <div v-if="containerActionsEnabled && openActionsMenu === c.name"
                class="z-[200] min-w-[160px] py-1 dd-rounded shadow-lg"
                :style="{
                  ...actionsMenuStyle,
@@ -539,29 +554,42 @@ const {
               {{ c.status }}
             </span>
             <div class="flex items-center gap-1.5">
-              <button v-if="c.status === 'running'"
-                      class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-danger hover:dd-bg-elevated"
-                      v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
-                <AppIcon name="stop" :size="14" />
-              </button>
-              <button v-else
-                      class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-success hover:dd-bg-elevated"
-                      v-tooltip.top="tt('Start')" @click.stop="startContainer(c.name)">
-                <AppIcon name="play" :size="14" />
-              </button>
-              <button class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                      v-tooltip.top="tt('Restart')" @click.stop="confirmRestart(c.name)">
-                <AppIcon name="restart" :size="14" />
-              </button>
-              <button class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-secondary hover:dd-bg-elevated"
-                      v-tooltip.top="tt('Scan')" @click.stop="scanContainer(c.name)">
-                <AppIcon name="security" :size="14" />
-              </button>
-              <button v-if="c.newTag"
-                      class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-success hover:dd-bg-elevated"
-                      v-tooltip.top="tt('Update')" @click.stop="confirmUpdate(c.name)">
-                <AppIcon name="cloud-download" :size="14" />
-              </button>
+              <template v-if="containerActionsEnabled">
+                <button v-if="c.status === 'running'"
+                        class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-danger hover:dd-bg-elevated"
+                        v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
+                  <AppIcon name="stop" :size="14" />
+                </button>
+                <button v-else
+                        class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-success hover:dd-bg-elevated"
+                        v-tooltip.top="tt('Start')" @click.stop="startContainer(c.name)">
+                  <AppIcon name="play" :size="14" />
+                </button>
+                <button class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                        v-tooltip.top="tt('Restart')" @click.stop="confirmRestart(c.name)">
+                  <AppIcon name="restart" :size="14" />
+                </button>
+                <button class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-secondary hover:dd-bg-elevated"
+                        v-tooltip.top="tt('Scan')" @click.stop="scanContainer(c.name)">
+                  <AppIcon name="security" :size="14" />
+                </button>
+                <button v-if="c.newTag"
+                        class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-success hover:dd-bg-elevated"
+                        v-tooltip.top="tt('Update')" @click.stop="confirmUpdate(c.name)">
+                  <AppIcon name="cloud-download" :size="14" />
+                </button>
+              </template>
+              <template v-else>
+                <span class="text-[10px] dd-text-muted">Actions disabled</span>
+                <button
+                  class="w-7 h-7 dd-rounded-sm flex items-center justify-center cursor-not-allowed dd-text-muted opacity-60"
+                  :disabled="true"
+                  v-tooltip.top="tt(containerActionsDisabledReason)"
+                  @click.stop
+                >
+                  <AppIcon name="lock" :size="14" />
+                </button>
+              </template>
             </div>
           </div>
         </template>

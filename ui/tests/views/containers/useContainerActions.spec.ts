@@ -1,5 +1,5 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
-import { defineComponent, h, nextTick, type Ref, ref } from 'vue';
+import { computed, defineComponent, h, nextTick, type Ref, ref } from 'vue';
 import type { ApiContainerTrigger } from '@/types/api';
 import type { Container } from '@/types/container';
 import { useContainerActions } from '@/views/containers/useContainerActions';
@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   stopContainer: vi.fn(),
   updateContainer: vi.fn(),
   previewContainer: vi.fn(),
+  containerActionsEnabled: { value: true },
+  loadServerFeatures: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/composables/useConfirmDialog', () => ({
@@ -50,6 +52,25 @@ vi.mock('@/services/container-actions', () => ({
 
 vi.mock('@/services/preview', () => ({
   previewContainer: mocks.previewContainer,
+}));
+
+vi.mock('@/composables/useServerFeatures', () => ({
+  useServerFeatures: () => ({
+    featureFlags: computed(() => ({
+      containeractions: mocks.containerActionsEnabled.value,
+    })),
+    containerActionsEnabled: computed(() => mocks.containerActionsEnabled.value),
+    containerActionsDisabledReason: computed(
+      () => 'Container actions disabled by server configuration',
+    ),
+    deleteEnabled: computed(() => true),
+    loaded: computed(() => true),
+    loading: computed(() => false),
+    error: computed(() => null),
+    loadServerFeatures: mocks.loadServerFeatures,
+    isFeatureEnabled: (name: string) =>
+      name.toLowerCase() === 'containeractions' ? mocks.containerActionsEnabled.value : false,
+  }),
 }));
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
@@ -156,6 +177,7 @@ describe('useContainerActions', () => {
   beforeEach(() => {
     vi.useRealTimers();
     vi.resetAllMocks();
+    mocks.containerActionsEnabled.value = true;
     mocks.getBackups.mockResolvedValue([]);
     mocks.rollback.mockResolvedValue({});
     mocks.deleteContainer.mockResolvedValue({});
@@ -933,5 +955,52 @@ describe('useContainerActions', () => {
     await flushPromises();
 
     expect(loadContainers).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for action handlers when container actions are disabled', async () => {
+    mocks.containerActionsEnabled.value = false;
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, error } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    await composable.startContainer('web');
+    expect(mocks.startContainer).not.toHaveBeenCalled();
+    expect(error.value).toBe('Container actions disabled by server configuration');
+
+    await composable.runAssociatedTrigger({ type: 'slack', name: 'notify' });
+    expect(mocks.runTrigger).not.toHaveBeenCalled();
+    expect(composable.triggerError.value).toBe(
+      'Container actions disabled by server configuration',
+    );
+
+    await composable.skipCurrentForSelected();
+    expect(mocks.updateContainerPolicy).not.toHaveBeenCalled();
+    expect(composable.policyError.value).toBe('Container actions disabled by server configuration');
+
+    error.value = null;
+    await composable.updateAllInGroup({
+      key: 'group-1',
+      containers: [makeContainer({ id: 'container-2', name: 'api', newTag: '2.0.0' })],
+    });
+    expect(mocks.updateContainer).not.toHaveBeenCalled();
+    expect(error.value).toBe('Container actions disabled by server configuration');
+
+    await composable.rollbackToBackup('backup-1');
+    expect(mocks.rollback).not.toHaveBeenCalled();
+    expect(composable.rollbackError.value).toBe(
+      'Container actions disabled by server configuration',
+    );
+
+    composable.confirmDelete('web');
+    const confirmOptions = mocks.confirmRequire.mock.calls.at(-1)?.[0] as {
+      accept?: () => unknown;
+    };
+    const result = await confirmOptions.accept?.();
+    expect(result).toBe(false);
+    expect(mocks.deleteContainer).not.toHaveBeenCalled();
+    expect(error.value).toBe('Container actions disabled by server configuration');
   });
 });

@@ -1,5 +1,6 @@
 import { computed, onUnmounted, type Ref, ref, watch } from 'vue';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
+import { useServerFeatures } from '../../composables/useServerFeatures';
 import { getBackups, rollback } from '../../services/backup';
 import {
   deleteContainer as apiDeleteContainer,
@@ -53,6 +54,7 @@ const EMPTY_CONTAINER_POLICY_STATE: ContainerListPolicyState = {
 
 export function useContainerActions(input: UseContainerActionsInput) {
   const confirm = useConfirmDialog();
+  const { containerActionsEnabled, containerActionsDisabledReason } = useServerFeatures();
 
   const skippedUpdates = ref(new Set<string>());
 
@@ -106,6 +108,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
     () => selectedUpdatePolicy.value.snoozeUntil as string | undefined,
   );
   const snoozeDateInput = ref('');
+
+  function isContainerActionsEnabled(): boolean {
+    return containerActionsEnabled.value;
+  }
 
   function formatTimestamp(timestamp: string | undefined): string {
     if (!timestamp) {
@@ -273,6 +279,11 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   async function runAssociatedTrigger(trigger: ApiContainerTrigger) {
+    if (!isContainerActionsEnabled()) {
+      triggerMessage.value = null;
+      triggerError.value = containerActionsDisabledReason.value;
+      return;
+    }
     const containerId = input.selectedContainerId.value;
     if (!containerId || triggerRunInProgress.value) {
       return;
@@ -299,6 +310,11 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   async function rollbackToBackup(backupId?: string) {
+    if (!isContainerActionsEnabled()) {
+      rollbackMessage.value = null;
+      rollbackError.value = containerActionsDisabledReason.value;
+      return;
+    }
     const containerId = input.selectedContainerId.value;
     if (!containerId || rollbackInProgress.value) {
       return;
@@ -327,6 +343,11 @@ export function useContainerActions(input: UseContainerActionsInput) {
     payload: Record<string, unknown> = {},
     message: string,
   ) {
+    if (!isContainerActionsEnabled()) {
+      policyMessage.value = null;
+      policyError.value = containerActionsDisabledReason.value;
+      return false;
+    }
     const containerId = input.containerIdMap.value[name];
     if (!containerId || policyInProgress.value) {
       return false;
@@ -546,6 +567,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
   });
 
   async function executeAction(name: string, action: (id: string) => Promise<unknown>) {
+    if (!isContainerActionsEnabled()) {
+      input.error.value = containerActionsDisabledReason.value;
+      return false;
+    }
     const containerId = input.containerIdMap.value[name];
     if (!containerId || actionInProgress.value) {
       return false;
@@ -587,6 +612,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   async function updateAllInGroup(group: ContainerActionGroup) {
+    if (!isContainerActionsEnabled()) {
+      input.error.value = containerActionsDisabledReason.value;
+      return;
+    }
     if (groupUpdateInProgress.value.has(group.key)) {
       return;
     }
@@ -642,6 +671,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   async function deleteContainer(name: string) {
+    if (!isContainerActionsEnabled()) {
+      input.error.value = containerActionsDisabledReason.value;
+      return false;
+    }
     const containerId = input.containerIdMap.value[name];
     if (!containerId || actionInProgress.value) {
       return false;
@@ -791,6 +824,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
     actionInProgress,
     actionPending,
     backupsLoading,
+    containerActionsDisabledReason,
+    containerActionsEnabled,
     clearPolicySelected,
     clearSkipsSelected,
     confirmDelete,
