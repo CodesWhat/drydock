@@ -4,6 +4,10 @@ import BaseRegistry from '../../BaseRegistry.js';
  * Github Container Registry integration.
  */
 class Ghcr extends BaseRegistry {
+  protected getTrustedAuthHosts(): string[] {
+    return ['ghcr.io'];
+  }
+
   private getRejectedCredentialStatus(error) {
     if (!(error instanceof Error)) {
       return undefined;
