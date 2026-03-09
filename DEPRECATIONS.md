@@ -46,7 +46,7 @@ docker run --rm codeswhat/drydock node -e '
 | | |
 | --- | --- |
 | **Deprecated in** | v1.4.0 |
-| **Removed in** | v1.5.0 |
+| **Removed in** | v1.6.0 |
 | **Affects** | API consumers using `PUT /api/settings` |
 
 `PUT /api/settings` is a compatibility alias for `PATCH /api/settings`. Use `PATCH` for partial settings updates.
@@ -74,7 +74,7 @@ Setting `DD_SERVER_CORS_ENABLED=true` without specifying `DD_SERVER_CORS_ORIGIN`
 | | |
 | --- | --- |
 | **Deprecated in** | v1.4.0 |
-| **Removed in** | v2.0.0 |
+| **Removed in** | v1.6.0 |
 | **Affects** | API consumers using `/api/...` instead of `/api/v1/...` |
 
 `/api/*` is a backward-compatible alias for `/api/v1/*`. The alias will be removed in v2.0.0.
@@ -88,7 +88,7 @@ Setting `DD_SERVER_CORS_ENABLED=true` without specifying `DD_SERVER_CORS_ORIGIN`
 | | |
 | --- | --- |
 | **Deprecated in** | v1.2.0 |
-| **Removed in** | v2.0.0 |
+| **Removed in** | v1.6.0 |
 | **Affects** | Containers using `wud.*` labels (e.g., `wud.watch`, `wud.tag.include`) |
 
 Legacy `wud.*` labels from the upstream WUD project are accepted as fallbacks for their `dd.*` equivalents. Each fallback logs a deprecation warning on first use.
@@ -102,7 +102,7 @@ Legacy `wud.*` labels from the upstream WUD project are accepted as fallbacks fo
 | | |
 | --- | --- |
 | **Deprecated in** | v1.2.0 |
-| **Removed in** | v2.0.0 |
+| **Removed in** | v1.6.0 |
 | **Affects** | Configurations using `WUD_*` env vars (e.g., `WUD_AGENT_SECRET`) |
 
 Legacy `WUD_*` environment variables are accepted as fallbacks for their `DD_*` equivalents. Usage is tracked via the `dd_legacy_input_total` Prometheus counter.
@@ -116,7 +116,7 @@ Legacy `WUD_*` environment variables are accepted as fallbacks for their `DD_*` 
 | | |
 | --- | --- |
 | **Deprecated in** | v1.2.0 |
-| **Removed in** | v2.0.0 |
+| **Removed in** | v1.6.0 |
 | **Affects** | Configurations using `DD_WATCHER_{name}_WATCHDIGEST` |
 
 The `WATCHDIGEST` env var is deprecated. Use the `dd.watch.digest=true` container label for per-container digest watching instead.
@@ -130,7 +130,7 @@ The `WATCHDIGEST` env var is deprecated. Use the `dd.watch.digest=true` containe
 | | |
 | --- | --- |
 | **Deprecated in** | v1.2.0 |
-| **Removed in** | v2.0.0 |
+| **Removed in** | v1.6.0 |
 | **Affects** | Configurations using `DD_WATCHER_{name}_WATCHATSTART` |
 
 The `WATCHATSTART` env var is deprecated. Drydock watches at startup by default.
@@ -144,7 +144,7 @@ The `WATCHATSTART` env var is deprecated. Drydock watches at startup by default.
 | | |
 | --- | --- |
 | **Deprecated in** | v1.4.0 |
-| **Removed in** | v2.0.0 |
+| **Removed in** | v1.6.0 |
 | **Affects** | Trigger templates using `$id`, `$name`, `$watcher`, `$kind`, `$semver`, `$local`, `$remote`, `$link`, `$count`, `$raw` |
 
 Several trigger template variable names have been replaced with more descriptive equivalents. The old names are retained as aliases.
@@ -158,7 +158,7 @@ Several trigger template variable names have been replaced with more descriptive
 | | |
 | --- | --- |
 | **Deprecated in** | v1.3.0 |
-| **Removed in** | v2.0.0 |
+| **Removed in** | v1.6.0 |
 | **Affects** | `DD_REGISTRY_HUB_PUBLIC_TOKEN`, `DD_REGISTRY_DHI_TOKEN`, and similar token-auth env vars |
 
 Token-based authentication for public registries has been replaced by password-based authentication for consistency.
