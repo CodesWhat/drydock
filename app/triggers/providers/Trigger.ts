@@ -48,6 +48,9 @@ interface EventDispatchOptions extends notificationStore.NotificationRuleDispatc
   skipThreshold?: boolean;
 }
 
+const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
+const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS * 4;
+
 function buildAgentDisconnectedContainer(agentName: string, reason?: string): Container {
   return {
     id: `agent-${agentName}`,
@@ -131,6 +134,7 @@ class Trigger extends Component {
   private unregisterAgentDisconnected?: () => void;
   private unregisterContainerUpdateAppliedForResolution?: () => void;
   private readonly notificationResults: Map<string, unknown> = new Map();
+  private readonly autoTriggerErrorSeenAt: Map<string, number> = new Map();
 
   static getSupportedThresholds() {
     return [...SUPPORTED_THRESHOLDS];
@@ -239,6 +243,40 @@ class Trigger extends Component {
       .find((container) => fullName(container) === containerName);
   }
 
+  private buildAutoTriggerErrorSignature(
+    ruleId: NotificationRuleId,
+    container: Container | undefined,
+    errorMessage: string,
+  ) {
+    return `${this.getId()}|${ruleId}|${container?.watcher ?? 'unknown'}|${errorMessage}`;
+  }
+
+  private pruneAutoTriggerErrorCache(now: number) {
+    const oldestAllowedTimestamp = now - AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS;
+    for (const [signature, seenAt] of this.autoTriggerErrorSeenAt.entries()) {
+      if (seenAt < oldestAllowedTimestamp) {
+        this.autoTriggerErrorSeenAt.delete(signature);
+      }
+    }
+  }
+
+  private shouldSuppressAutoTriggerError(
+    ruleId: NotificationRuleId,
+    container: Container | undefined,
+    errorMessage: string,
+  ) {
+    const now = Date.now();
+    const signature = this.buildAutoTriggerErrorSignature(ruleId, container, errorMessage);
+    const previousSeenAt = this.autoTriggerErrorSeenAt.get(signature);
+    this.autoTriggerErrorSeenAt.set(signature, now);
+    this.pruneAutoTriggerErrorCache(now);
+
+    return (
+      previousSeenAt !== undefined &&
+      now - previousSeenAt < AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS
+    );
+  }
+
   private async dispatchContainerForEvent(
     ruleId: NotificationRuleId,
     container: Container | undefined,
@@ -271,7 +309,12 @@ class Trigger extends Component {
         await this.trigger(container);
       }
     } catch (e: unknown) {
-      this.log.warn(`Error handling ${ruleId} event (${Trigger.getErrorMessage(e)})`);
+      const errorMessage = Trigger.getErrorMessage(e);
+      if (this.shouldSuppressAutoTriggerError(ruleId, container, errorMessage)) {
+        this.log.debug(`Suppressed repeated error handling ${ruleId} event (${errorMessage})`);
+      } else {
+        this.log.warn(`Error handling ${ruleId} event (${errorMessage})`);
+      }
       this.log.debug(e);
     }
   }
@@ -363,7 +406,18 @@ class Trigger extends Component {
         }
         status = 'success';
       } catch (e: unknown) {
-        logContainer.warn(`Error (${Trigger.getErrorMessage(e)})`);
+        const errorMessage = Trigger.getErrorMessage(e);
+        if (
+          this.shouldSuppressAutoTriggerError(
+            'update-available',
+            containerReport.container,
+            errorMessage,
+          )
+        ) {
+          logContainer.debug(`Suppressed repeated error (${errorMessage})`);
+        } else {
+          logContainer.warn(`Error (${errorMessage})`);
+        }
         logContainer.debug(e);
       } finally {
         getTriggerCounter()?.inc({
@@ -412,7 +466,12 @@ class Trigger extends Component {
         await this.triggerBatch(containersFiltered);
       }
     } catch (e: unknown) {
-      this.log.warn(`Error (${Trigger.getErrorMessage(e)})`);
+      const errorMessage = Trigger.getErrorMessage(e);
+      if (this.shouldSuppressAutoTriggerError('update-available', undefined, errorMessage)) {
+        this.log.debug(`Suppressed repeated error (${errorMessage})`);
+      } else {
+        this.log.warn(`Error (${errorMessage})`);
+      }
       this.log.debug(e);
     }
   }
@@ -550,6 +609,8 @@ class Trigger extends Component {
 
     this.unregisterContainerUpdateAppliedForResolution?.();
     this.unregisterContainerUpdateAppliedForResolution = undefined;
+
+    this.autoTriggerErrorSeenAt.clear();
   }
 
   /**

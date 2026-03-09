@@ -230,6 +230,95 @@ test('handleContainerReport should stringify non-Error failures', async () => {
   expect(spyLog).toHaveBeenCalledWith('Error (string failure)');
 });
 
+test('handleContainerReport should suppress repeated identical errors during a short burst', async () => {
+  trigger.configuration = {
+    threshold: 'all',
+    mode: 'simple',
+  };
+  trigger.trigger = () => {
+    throw new Error('Fail!!!');
+  };
+  await trigger.init();
+
+  const warnSpy = vi.spyOn(log, 'warn');
+  let now = 1_000;
+  vi.spyOn(Date, 'now').mockImplementation(() => now);
+
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      name: 'container1',
+      watcher: 'local',
+      updateAvailable: true,
+      updateKind: {
+        kind: 'tag',
+        semverDiff: 'major',
+      },
+    },
+  });
+  now = 1_500;
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      name: 'container2',
+      watcher: 'local',
+      updateAvailable: true,
+      updateKind: {
+        kind: 'tag',
+        semverDiff: 'major',
+      },
+    },
+  });
+
+  expect(warnSpy).toHaveBeenCalledTimes(1);
+  expect(warnSpy).toHaveBeenCalledWith('Error (Fail!!!)');
+});
+
+test('handleContainerReport should log repeated errors again after suppression window expires', async () => {
+  trigger.configuration = {
+    threshold: 'all',
+    mode: 'simple',
+  };
+  trigger.trigger = () => {
+    throw new Error('Fail!!!');
+  };
+  await trigger.init();
+
+  const warnSpy = vi.spyOn(log, 'warn');
+  let now = 1_000;
+  vi.spyOn(Date, 'now').mockImplementation(() => now);
+
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      name: 'container1',
+      watcher: 'local',
+      updateAvailable: true,
+      updateKind: {
+        kind: 'tag',
+        semverDiff: 'major',
+      },
+    },
+  });
+  now = 60_000;
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      name: 'container2',
+      watcher: 'local',
+      updateAvailable: true,
+      updateKind: {
+        kind: 'tag',
+        semverDiff: 'major',
+      },
+    },
+  });
+
+  expect(warnSpy).toHaveBeenCalledTimes(2);
+  expect(warnSpy).toHaveBeenNthCalledWith(1, 'Error (Fail!!!)');
+  expect(warnSpy).toHaveBeenNthCalledWith(2, 'Error (Fail!!!)');
+});
+
 const handleContainerReportsTestCases = [
   {
     shouldTrigger: true,
@@ -916,6 +1005,35 @@ test('handleContainerUpdateAppliedEvent should skip when container cannot be fou
   await trigger.handleContainerUpdateAppliedEvent('local_missing');
 
   expect(triggerSpy).not.toHaveBeenCalled();
+});
+
+test('handleContainerUpdateAppliedEvent should suppress repeated identical dispatch errors during a short burst', async () => {
+  const containers = [
+    {
+      watcher: 'local',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+    {
+      watcher: 'local',
+      name: 'container2',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  ];
+  storeContainer.getContainers.mockReturnValue(containers);
+  vi.spyOn(trigger, 'trigger').mockRejectedValue(new Error('dispatch failed'));
+  const warnSpy = vi.spyOn(log, 'warn');
+  let now = 1_000;
+  vi.spyOn(Date, 'now').mockImplementation(() => now);
+
+  await trigger.handleContainerUpdateAppliedEvent('local_container1');
+  now = 1_500;
+  await trigger.handleContainerUpdateAppliedEvent('local_container2');
+
+  expect(warnSpy).toHaveBeenCalledTimes(1);
+  expect(warnSpy).toHaveBeenCalledWith('Error handling update-applied event (dispatch failed)');
 });
 
 test('handleContainerUpdateFailedEvent should run batch trigger when configured in batch mode', async () => {
