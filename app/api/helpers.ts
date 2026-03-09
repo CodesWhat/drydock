@@ -28,10 +28,6 @@ function isJoiValidationError(error: unknown): error is JoiValidationErrorLike {
 }
 
 function getJoiValidationDetails(error: JoiValidationErrorLike): string {
-  if (!Array.isArray(error.details)) {
-    return '';
-  }
-
   return error.details
     .map((detail) => (typeof detail?.message === 'string' ? detail.message.trim() : ''))
     .filter((message) => message !== '')

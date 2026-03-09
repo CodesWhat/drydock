@@ -56,15 +56,15 @@ describe('sanitizeApiError', () => {
     );
   });
 
-  test('falls back to generic Joi message when details is not an array', () => {
+  test('treats Joi-like payloads with invalid details shape as internal errors', () => {
     const error = {
       isJoi: true,
       message: '"name" is required',
       details: 'invalid-details-shape',
     };
 
-    expect(sanitizeApiError(error)).toBe('Invalid request parameters');
-    expect(mockLogWarn).toHaveBeenCalledWith(expect.stringContaining('"name" is required'));
+    expect(sanitizeApiError(error)).toBe('Internal server error');
+    expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('"name" is required'));
   });
 
   test('falls back to Joi message when detail messages are empty or non-string', () => {
