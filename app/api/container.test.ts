@@ -10,6 +10,8 @@ const mockBroadcastScanStarted = vi.hoisted(() => vi.fn());
 const mockBroadcastScanCompleted = vi.hoisted(() => vi.fn());
 const mockEmitSecurityAlert = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockGetOperationsByContainerName = vi.hoisted(() => vi.fn());
+const mockCreateAuthenticatedRouteRateLimitKeyGenerator = vi.hoisted(() => vi.fn(() => undefined));
+const mockIsIdentityAwareRateLimitKeyingEnabled = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -88,6 +90,11 @@ vi.mock('../agent/manager', () => ({
 
 vi.mock('../event/index.js', () => ({
   emitSecurityAlert: (...args: unknown[]) => mockEmitSecurityAlert(...args),
+}));
+
+vi.mock('./rate-limit-key.js', () => ({
+  createAuthenticatedRouteRateLimitKeyGenerator: mockCreateAuthenticatedRouteRateLimitKeyGenerator,
+  isIdentityAwareRateLimitKeyingEnabled: mockIsIdentityAwareRateLimitKeyingEnabled,
 }));
 
 vi.mock('./sse', () => ({
@@ -185,6 +192,8 @@ function getUpdatedPolicy() {
 describe('Container Router', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(false);
+    mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(undefined);
     mockGenerateImageSbom.mockResolvedValue({
       generator: 'trivy',
       image: 'registry.example.com/test/app:1.2.3',
@@ -271,6 +280,25 @@ describe('Container Router', () => {
           standardHeaders: true,
           legacyHeaders: false,
           validate: { xForwardedForHeader: false },
+        }),
+      );
+    });
+
+    test('should include identity-aware key generator in env reveal and scan rate limiters when enabled', () => {
+      const keyGenerator = vi.fn(() => 'session:test');
+      mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(true);
+      mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(keyGenerator);
+
+      containerRouter.init();
+
+      expect(rateLimit.mock.calls[0][0]).toEqual(
+        expect.objectContaining({
+          keyGenerator,
+        }),
+      );
+      expect(rateLimit.mock.calls[1][0]).toEqual(
+        expect.objectContaining({
+          keyGenerator,
         }),
       );
     });
