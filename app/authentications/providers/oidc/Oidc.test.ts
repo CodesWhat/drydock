@@ -294,6 +294,22 @@ test('maskConfiguration should mask configuration secrets', async () => {
   });
 });
 
+test('maskConfiguration should include configured logouturl', async () => {
+  oidc.configuration = {
+    ...configurationValid,
+    logouturl: 'https://idp.example.com/logout',
+  };
+
+  expect(oidc.maskConfiguration()).toEqual({
+    clientid: '[REDACTED]',
+    clientsecret: '[REDACTED]',
+    discovery: 'https://idp/.well-known/openid-configuration',
+    redirect: false,
+    logouturl: 'https://idp.example.com/logout',
+    timeout: 5000,
+  });
+});
+
 test('getStrategyDescription should return strategy description', async () => {
   oidc.logoutUrl = 'https://idp/logout';
   expect(oidc.getStrategyDescription()).toEqual({

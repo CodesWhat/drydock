@@ -18,14 +18,14 @@ describe('style.css scrollbar rules', () => {
 
   it('enables overflow overlay for .overflow-auto when supported', () => {
     expect(css).toMatch(/@supports\s*\(overflow:\s*overlay\)/);
-    expect(css).toContain('.overflow-auto { overflow: overlay; }');
+    expect(css).toMatch(/\.overflow-auto\s*\{[^}]*overflow:\s*overlay;/);
   });
 
   it('enables overflow-y overlay for .overflow-y-auto when supported', () => {
-    expect(css).toContain('.overflow-y-auto { overflow-y: overlay; }');
+    expect(css).toMatch(/\.overflow-y-auto\s*\{[^}]*overflow-y:\s*overlay;/);
   });
 
   it('enables overflow-x overlay for .overflow-x-auto when supported', () => {
-    expect(css).toContain('.overflow-x-auto { overflow-x: overlay; }');
+    expect(css).toMatch(/\.overflow-x-auto\s*\{[^}]*overflow-x:\s*overlay;/);
   });
 });
