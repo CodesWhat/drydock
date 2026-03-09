@@ -372,6 +372,7 @@ describe('docker image details orchestration module', () => {
     expect(watcher.log.warn).toHaveBeenCalledWith(
       expect.stringContaining('Image is not a semver and digest watching is disabled'),
     );
+    expect(watcher.log.warn).toHaveBeenCalledWith(expect.stringContaining('container "service"'));
 
     expect(result).toMatchObject({
       normalized: true,

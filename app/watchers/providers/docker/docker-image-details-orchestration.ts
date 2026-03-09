@@ -273,13 +273,13 @@ export async function addImageDetailsToContainerOrchestration(
   } catch {
     // Degrade gracefully to summary details.
   }
+  const containerName = getContainerName(container);
   if (!isSemver && !watchDigest) {
     watcher.ensureLogger();
     watcher.log.warn(
-      "Image is not a semver and digest watching is disabled so drydock won't report any update. Please review the configuration to enable digest watching for this container or exclude this container from being watched",
+      `Image is not a semver and digest watching is disabled so drydock won't report any update for container "${containerName}". Please review the configuration to enable digest watching for this container or exclude this container from being watched`,
     );
   }
-  const containerName = getContainerName(container);
   return helpers.normalizeContainer({
     id: containerId,
     name: containerName,
