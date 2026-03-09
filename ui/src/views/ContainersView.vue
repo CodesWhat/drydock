@@ -68,10 +68,13 @@ const rechecking = ref(false);
 
 async function recheckAll() {
   rechecking.value = true;
+  error.value = null;
   try {
     await refreshAllContainers();
     await new Promise((resolve) => setTimeout(resolve, 2000));
     await loadContainers();
+  } catch (e: unknown) {
+    error.value = errorMessage(e, 'Failed to recheck containers');
   } finally {
     rechecking.value = false;
   }

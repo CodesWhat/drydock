@@ -265,12 +265,14 @@ import {
   getContainerSbom,
   getContainerUpdateOperations,
   getContainerVulnerabilities,
+  refreshAllContainers,
   scanContainer,
   updateContainerPolicy,
 } from '@/services/container';
 import { updateContainer as apiUpdateContainer } from '@/services/container-actions';
 
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
+const mockRefreshAllContainers = refreshAllContainers as ReturnType<typeof vi.fn>;
 const mockGetContainerGroups = getContainerGroups as ReturnType<typeof vi.fn>;
 const mockGetContainerUpdateOperations = getContainerUpdateOperations as ReturnType<typeof vi.fn>;
 const mockGetContainerVulnerabilities = getContainerVulnerabilities as ReturnType<typeof vi.fn>;
@@ -1092,6 +1094,33 @@ describe('ContainersView', () => {
 
       const vm = wrapper.vm as any;
       expect(vm.error).toBe('API down');
+    });
+
+    it('sets error when recheckAll fails', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      mockRefreshAllContainers.mockRejectedValue(new Error('Auth expired'));
+
+      await vm.recheckAll();
+      await flushPromises();
+
+      expect(vm.error).toBe('Auth expired');
+      expect(vm.rechecking).toBe(false);
+    });
+
+    it('clears previous error when recheckAll succeeds', async () => {
+      const containers = [makeContainer()];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      vm.error = 'Previous error';
+      mockRefreshAllContainers.mockResolvedValue([]);
+
+      await vm.recheckAll();
+      await flushPromises();
+
+      expect(vm.error).toBeNull();
     });
   });
 

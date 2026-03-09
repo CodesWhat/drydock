@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 import { revealContainerEnv } from '../../services/container';
+import { errorMessage } from '../../utils/error';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
 const revealedEnvCache = reactive(new Map<string, Map<string, string>>());
 const revealedKeys = reactive(new Set<string>());
 const envRevealLoading = ref(false);
+const envRevealError = ref<string | null>(null);
 
 function revealCacheKey(containerId: string, key: string) {
   return `${containerId}:${key}`;
@@ -26,6 +28,7 @@ async function toggleReveal(containerId: string, key: string) {
   }
 
   envRevealLoading.value = true;
+  envRevealError.value = null;
   try {
     const result = await revealContainerEnv(containerId);
     const envMap = new Map<string, string>();
@@ -34,8 +37,8 @@ async function toggleReveal(containerId: string, key: string) {
     }
     revealedEnvCache.set(containerId, envMap);
     revealedKeys.add(cacheKey);
-  } catch {
-    // silently fail — user can retry
+  } catch (e: unknown) {
+    envRevealError.value = errorMessage(e, 'Failed to reveal value');
   } finally {
     envRevealLoading.value = false;
   }
@@ -574,6 +577,7 @@ const {
                 </div>
               </div>
               <p v-else class="text-[11px] dd-text-muted italic">No environment variables configured</p>
+              <p v-if="envRevealError" class="mt-2 text-[10px]" style="color: var(--dd-danger);">{{ envRevealError }}</p>
             </div>
             <div>
               <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Volumes</div>

@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Silent error on recheck failure** — "Recheck for Updates" button now displays an error banner when the backend request fails instead of silently stopping the spinner with no feedback.
+- **Silent error on env reveal failure** — Environment variable reveal in the container detail panel now shows an inline error message when the API call fails instead of silently failing.
+
 ## [1.4.0] — 2026-02-28
 
 ### Added
