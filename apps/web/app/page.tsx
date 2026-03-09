@@ -508,7 +508,7 @@ export default function Home() {
                     rel="noopener noreferrer"
                   >
                     <img
-                      src="https://img.shields.io/badge/GHCR-27.5K%2B_pulls-2ea44f?logo=github&logoColor=white"
+                      src="https://img.shields.io/badge/GHCR-30K%2B_pulls-2ea44f?logo=github&logoColor=white"
                       alt="GHCR pulls"
                     />
                   </a>
@@ -619,6 +619,16 @@ export default function Home() {
                     <img
                       src="https://img.shields.io/github/discussions/CodesWhat/drydock?style=flat"
                       alt="Discussions"
+                    />
+                  </a>
+                  <a
+                    href="https://github.com/veggiemonk/awesome-docker#container-management"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <img
+                      src="https://awesome.re/mentioned-badge.svg"
+                      alt="Mentioned in Awesome Docker"
                     />
                   </a>
                 </div>
