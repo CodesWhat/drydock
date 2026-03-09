@@ -361,6 +361,23 @@ describe('Dockercompose Trigger', () => {
     expect(result?.service).toBe('beta');
   });
 
+  test('mapCurrentVersionToUpdateVersion should not fall back to image matching when compose service label is unknown', () => {
+    const compose = makeCompose({
+      nginx: { image: 'nginx:1.0.0' },
+    });
+    const container = makeContainer({
+      labels: {
+        'com.docker.compose.project': 'other-stack',
+        'com.docker.compose.service': 'unknown-service',
+      },
+    });
+
+    const result = trigger.mapCurrentVersionToUpdateVersion(compose, container);
+
+    expect(result).toBeUndefined();
+    expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find service'));
+  });
+
   test('mapCurrentVersionToUpdateVersion should return undefined when service not found', () => {
     const compose = makeCompose({ redis: { image: 'redis:7.0.0' } });
     const container = makeContainer();
@@ -715,6 +732,37 @@ describe('Dockercompose Trigger', () => {
     expect(updatedCompose).toContain('MIRROR_IMAGE=nginx:1.0.0');
   });
 
+  test('processComposeFile should not rewrite matching image strings in comments or env vars', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+
+    const container = makeContainer();
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+
+    const composeWithCommentsAndEnv = [
+      'services:',
+      '  nginx:',
+      '    image: nginx:1.0.0',
+      '    # do not touch: nginx:1.0.0',
+      '    environment:',
+      '      - MIRROR_IMAGE=nginx:1.0.0',
+      '      - COMMENT_IMAGE=nginx:1.0.0 # note',
+      '',
+    ].join('\n');
+    const { writeComposeFileSpy } = spyOnProcessComposeHelpers(trigger, composeWithCommentsAndEnv);
+
+    await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+
+    const [, updatedCompose] = writeComposeFileSpy.mock.calls[0];
+    expect(updatedCompose).toContain('    image: nginx:1.1.0');
+    expect(updatedCompose).toContain('# do not touch: nginx:1.0.0');
+    expect(updatedCompose).toContain('MIRROR_IMAGE=nginx:1.0.0');
+    expect(updatedCompose).toContain('COMMENT_IMAGE=nginx:1.0.0 # note');
+  });
+
   test('processComposeFile should preserve commented-out fields in compose file', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.backup = false;
@@ -980,6 +1028,43 @@ describe('Dockercompose Trigger', () => {
       '/opt/drydock/test/stack.yml',
       'nginx',
       container1,
+    );
+  });
+
+  test('processComposeFile should ignore containers with unknown compose service labels even when image matches', async () => {
+    trigger.configuration.dryrun = false;
+
+    const containerInProject = makeContainer({
+      name: 'nginx-main',
+      labels: {
+        'com.docker.compose.project': 'main-stack',
+        'com.docker.compose.service': 'nginx',
+      },
+    });
+    const containerFromOtherProject = makeContainer({
+      name: 'nginx-other',
+      labels: {
+        'com.docker.compose.project': 'other-stack',
+        'com.docker.compose.service': 'unknown-service',
+      },
+    });
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+
+    const { composeUpdateSpy } = spyOnProcessComposeHelpers(trigger);
+
+    await trigger.processComposeFile('/opt/drydock/test/stack.yml', [
+      containerInProject,
+      containerFromOtherProject,
+    ]);
+
+    expect(composeUpdateSpy).toHaveBeenCalledTimes(1);
+    expect(composeUpdateSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      containerInProject,
     );
   });
 

@@ -16,6 +16,7 @@ const COMPOSE_COMMAND_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 const YAML_MAX_ALIAS_COUNT = 10_000;
 const COMPOSE_RENAME_MAX_RETRIES = 5;
 const COMPOSE_RENAME_RETRY_MS = 200;
+const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project';
 const COMPOSE_PROJECT_CONFIG_FILES_LABEL = 'com.docker.compose.project.config_files';
 const COMPOSE_PROJECT_WORKING_DIR_LABEL = 'com.docker.compose.project.working_dir';
 const COMPOSE_CACHE_MAX_ENTRIES = 256;
@@ -107,8 +108,17 @@ function getDockerApiFromWatcher(watcher: unknown): DockerApiLike | undefined {
 
 function getServiceKey(compose, container, currentImage) {
   const composeServiceName = container.labels?.['com.docker.compose.service'];
-  if (composeServiceName && compose.services?.[composeServiceName]) {
-    return composeServiceName;
+  if (composeServiceName) {
+    return compose.services?.[composeServiceName] ? composeServiceName : undefined;
+  }
+
+  const hasComposeIdentityLabels = Boolean(
+    container.labels?.[COMPOSE_PROJECT_LABEL] ||
+      container.labels?.[COMPOSE_PROJECT_CONFIG_FILES_LABEL] ||
+      container.labels?.[COMPOSE_PROJECT_WORKING_DIR_LABEL],
+  );
+  if (hasComposeIdentityLabels) {
+    return undefined;
   }
 
   const matchesServiceImage = (serviceImage, imageToMatch) => {
