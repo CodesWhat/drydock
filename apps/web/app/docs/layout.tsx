@@ -17,8 +17,8 @@ export default function Layout({ children }: { children: ReactNode }) {
             RC
           </span>
           <span>
-            You&apos;re viewing <strong>v1.4.0 release candidate</strong>{" "}
-            docs &mdash; this version is not yet released.
+            You&apos;re viewing <strong>v1.4.0 release candidate</strong> docs &mdash; this version
+            is not yet released.
           </span>
           <Link
             href="https://github.com/CodesWhat/drydock/releases/tag/v1.3.9"
