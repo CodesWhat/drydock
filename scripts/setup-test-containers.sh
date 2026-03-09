@@ -5,7 +5,8 @@ set -e
 echo "🐳 Setting up test containers for local e2e tests..."
 
 # Login to private registries (if credentials available)
-if [ ! -z "$GITLAB_TOKEN" ]; then
+if [ -n "${GITLAB_TOKEN:-}" ]; then
+	# shellcheck disable=SC2153 # GITLAB_USERNAME is an env var, not a typo of GITHUB_USERNAME
 	docker login registry.gitlab.com -u "$GITLAB_USERNAME" -p "$GITLAB_TOKEN"
 fi
 
