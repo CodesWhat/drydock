@@ -53,15 +53,18 @@ pre-push:
         - run: '! command -v zizmor >/dev/null 2>&1'
       priority: 6
 
-    # ── Local security gates (not in CI, skip if tool missing) ───────
+    # ── Local security gates (skip if tool missing or feature branch) ─
+    # Snyk has a 200 scan/month limit — only run on release/main pushes.
     snyk-deps:
       root: app/
       run: ../scripts/snyk-deps-gate.sh --org=codeswhat
       skip:
         - run: '! command -v snyk >/dev/null 2>&1'
+        - run: 'git rev-parse --abbrev-ref HEAD | grep -qvE "^(main|release/)"'
       priority: 7
     snyk-code:
       run: scripts/snyk-code-gate.sh --org=codeswhat
       skip:
         - run: '! command -v snyk >/dev/null 2>&1'
+        - run: 'git rev-parse --abbrev-ref HEAD | grep -qvE "^(main|release/)"'
       priority: 8
