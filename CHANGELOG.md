@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Machine-readable API error contract** — All error responses return a consistent `{ "error": "..." }` JSON structure with an optional `details` object for contextual metadata.
 - **6 color themes** — Replaced original Drydock theme with popular editor palettes: One Dark, GitHub, Dracula, Catppuccin, Gruvbox, and Ayu. Each with dark and light variants.
 - **Argon2id password hashing** — Basic auth now uses argon2id (OWASP recommended) via Node.js built-in `crypto.argon2Sync()` instead of scrypt for password hashing. Default parameters: 64 MiB memory, 3 passes, parallelism 4.
+- **PUT `/api/settings` deprecated** — `PUT /api/settings` now returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` headers. Use `PATCH /api/settings` for partial updates. PUT alias removal targeted for v1.5.0.
 
 ### Fixed
 
@@ -57,6 +58,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Lockout counter reset on failed login** — Brute-force lockout counter could reset prematurely, and strategy IDs were not protected from enumeration. Fixed counter persistence and added strategy ID protection.
 - **Stale vulnerability data on fetch error** — Security view retained stale vulnerability data when a fetch error occurred instead of clearing it, showing outdated information.
 - **Audit service missing limit parameter** — Audit service requests did not always send the `limit` query parameter, causing inconsistent pagination behavior.
+- **Backup retention on failed updates** — Backup entries are now pruned on the failure path, not just after successful updates, preventing indefinite accumulation of stale backups.
+- **Backup pruning with undefined maxCount** — `pruneOldBackups()` no longer deletes all backups when `maxCount` is `undefined` (e.g. when `DD_BACKUPCOUNT` is not configured). Now correctly no-ops on invalid or non-finite values.
+- **Auto-rollback audit fromVersion accuracy** — Rollback audit entries now correctly record `fromVersion` as the failing new image tag (via `updateKind.remoteValue`) instead of the pre-update old tag.
 
 ### Performance
 
@@ -95,16 +99,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Identity-aware rate limit keying** — Opt-in `DD_SERVER_RATELIMIT_IDENTITYKEYING=true` keys authenticated route rate limits by session/username instead of IP, preventing collisions for multiple users behind shared proxies. Unauthenticated routes remain IP-keyed. Disabled by default.
 - **Reactive server feature flags in UI** — Container action buttons (update, rollback, scan, triggers) are now gated by server-side feature flags via a `useServerFeatures` composable. When features like `DD_SERVER_FEATURE_CONTAINERACTIONS` are disabled, buttons show a disabled state with tooltip explaining why instead of silently failing at runtime.
 - **Compose trigger hardening** — Auto compose file detection from container labels (`com.docker.compose.project.config_files`) with Docker inspect fallback, pre-commit `docker compose config --quiet` validation before writes, compose file reconciliation (warn/block modes for runtime vs compose image drift), optional digest pinning (`DIGESTPINNING` trigger config), compose-file-once batch mode for multi-service stacks, multi-file compose chain awareness with deterministic writable target selection, compose metadata in update preview API, and compose file path display in container detail UI.
-
-### Changed
-
-- **PUT `/api/settings` deprecated** — `PUT /api/settings` now returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` headers. Use `PATCH /api/settings` for partial updates. PUT alias removal targeted for v1.5.0.
-
-### Fixed
-
-- **Backup retention on failed updates** — Backup entries are now pruned on the failure path, not just after successful updates, preventing indefinite accumulation of stale backups.
-- **Backup pruning with undefined maxCount** — `pruneOldBackups()` no longer deletes all backups when `maxCount` is `undefined` (e.g. when `DD_BACKUPCOUNT` is not configured). Now correctly no-ops on invalid or non-finite values.
-- **Auto-rollback audit fromVersion accuracy** — Rollback audit entries now correctly record `fromVersion` as the failing new image tag (via `updateKind.remoteValue`) instead of the pre-update old tag.
 
 ## [1.4.0] — 2026-02-28
 
