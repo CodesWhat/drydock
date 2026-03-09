@@ -317,6 +317,7 @@ class Oidc extends Authentication {
       clientid: this.joi.string().required(),
       clientsecret: this.joi.string().required(),
       redirect: this.joi.boolean().default(false),
+      logouturl: this.joi.string().uri({ scheme: ['http', 'https'] }),
       timeout: this.joi.number().greater(500).default(5000),
     });
   }
@@ -341,6 +342,7 @@ class Oidc extends Authentication {
       clientid: Oidc.mask(this.configuration.clientid),
       clientsecret: Oidc.mask(this.configuration.clientsecret),
       redirect: this.configuration.redirect,
+      ...(this.configuration.logouturl ? { logouturl: this.configuration.logouturl } : {}),
       timeout: this.configuration.timeout,
     };
   }
@@ -362,6 +364,7 @@ class Oidc extends Authentication {
         execute,
       },
     );
+    this.logoutUrl = this.configuration.logouturl;
     try {
       this.logoutUrl = openidClient.buildEndSessionUrl(this.client).href;
     } catch (e) {

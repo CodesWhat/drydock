@@ -81,6 +81,19 @@ environment:
 
 Use `strict` only when your IdP is on the same domain as drydock. Use `lax` (default) for all cross-site IdP callback flows. See [Authentication](/docs/configuration/authentications) and [Server configuration](/docs/configuration/server) for details.
 
+## Dex logout only clears local session
+
+If you use Dex as OIDC provider, clicking logout may only end the drydock session and not the upstream IdP session. This is expected when no OIDC end-session URL is available.
+
+**Why:** Dex discovery metadata does not advertise `end_session_endpoint`, so drydock cannot auto-build an IdP logout redirect.
+
+**Options:**
+
+1. Accept local-session-only logout (default behavior).
+2. If your auth stack exposes a real logout URL in front of Dex, set `DD_AUTH_OIDC_DEX_LOGOUTURL=https://<your_logout_endpoint>`.
+
+See the [OIDC configuration guide](/docs/configuration/authentications/oidc#how-to-integrate-with-dex) for examples.
+
 ## Registry auth failures (401/403)
 
 Token exchange is required for most registries, even for public images. Common causes:

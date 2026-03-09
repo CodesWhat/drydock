@@ -18,6 +18,7 @@ The `oidc` authentication lets you protect drydock access using the [Openid Conn
 | `DD_AUTH_OIDC_{auth_name}_CLIENTSECRET` | 🔴 | Client Secret | | |
 | `DD_AUTH_OIDC_{auth_name}_DISCOVERY` | 🔴 | Oidc discovery URL | | |
 | `DD_AUTH_OIDC_{auth_name}_REDIRECT` | ⚪ | Skip internal login page & automatically redirect to the OIDC provider | `true`, `false` | `false` |
+| `DD_AUTH_OIDC_{auth_name}_LOGOUTURL` | ⚪ | Explicit IdP logout URL fallback when discovery metadata has no `end_session_endpoint` | URL | empty |
 | `DD_AUTH_OIDC_{auth_name}_TIMEOUT` | ⚪ | Timeout (in ms) when calling the OIDC provider | Minimum is 500 | `5000` |
 
 <Callout type="info">The callback URL (to configure in the IDP is built as `${drydock_public_url}/auth/oidc/${auth_name}/cb`</Callout>
@@ -30,6 +31,8 @@ If it fails (irregular reverse proxy configuration...), you can enforce the valu
 <Callout type="warn">`http://` OIDC discovery URLs are deprecated and will be removed in v1.6.0. When the discovery URL uses `http:`, drydock passes `allowInsecureRequests` to the OIDC client. Migrate your IdP to HTTPS before upgrading.</Callout>
 
 <Callout type="info">**Redirect URL validation** — Drydock validates all OIDC authorization redirect URLs against an allowlist derived from the configured callback URL origin. This prevents open redirect attacks through crafted callback parameters. No configuration is needed — validation is enforced automatically.</Callout>
+
+<Callout type="info">**OIDC logout URL resolution** — drydock first tries the provider discovery `end_session_endpoint`. If it is missing, you can set `DD_AUTH_OIDC_{auth_name}_LOGOUTURL` when your provider (or proxy) exposes a logout URL outside discovery metadata. If neither is available, `POST /auth/logout` only destroys the local drydock session.</Callout>
 
 ## How to integrate with&nbsp;[Authelia](https://www.authelia.com)
 
@@ -195,6 +198,47 @@ docker run \
   -e DD_AUTH_OIDC_AUTHENTIK_REDIRECT=true # optional (to skip internal login page) \
   ...
   codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+## How to integrate with Dex
+
+<Callout type="warn">Dex does not currently advertise `end_session_endpoint` in discovery metadata. Without an explicit `DD_AUTH_OIDC_DEX_LOGOUTURL`, `POST /auth/logout` clears only the local drydock session.</Callout>
+
+<Callout type="info">Set `DD_AUTH_OIDC_DEX_LOGOUTURL` only if you have a real IdP logout endpoint in front of Dex (for example, via your auth proxy/portal). If you do not, keep it unset and expect local-session logout only.</Callout>
+
+<Tabs items={["Docker Compose (Dex)", "Docker (Dex)"]}>
+<Tab value="Docker Compose (Dex)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_AUTH_OIDC_DEX_CLIENTID=<dex_client_id>
+      - DD_AUTH_OIDC_DEX_CLIENTSECRET=<dex_client_secret>
+      - DD_AUTH_OIDC_DEX_DISCOVERY=https://<your_dex_public_domain>/dex/.well-known/openid-configuration
+      # Optional: only when a real IdP logout endpoint exists
+      # - DD_AUTH_OIDC_DEX_LOGOUTURL=https://<your_logout_endpoint>
+```
+
+</Tab>
+<Tab value="Docker (Dex)">
+```bash
+docker run \
+  -e DD_AUTH_OIDC_DEX_CLIENTID="<dex_client_id>" \
+  -e DD_AUTH_OIDC_DEX_CLIENTSECRET="<dex_client_secret>" \
+  -e DD_AUTH_OIDC_DEX_DISCOVERY="https://<your_dex_public_domain>/dex/.well-known/openid-configuration" \
+  ...
+  codeswhat/drydock
+```
+
+Optional (only when a real IdP logout endpoint exists):
+
+```bash
+-e DD_AUTH_OIDC_DEX_LOGOUTURL="https://<your_logout_endpoint>"
 ```
 </Tab>
 </Tabs>
