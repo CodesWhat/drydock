@@ -456,6 +456,12 @@ class Dockercompose extends Docker {
       return composeFilePath;
     }
 
+    // Absolute compose paths are explicit operator configuration and are valid.
+    // Boundary enforcement is only applied to relative paths to prevent traversal.
+    if (path.isAbsolute(composeFilePathToResolve.trim())) {
+      return composeFilePath;
+    }
+
     return resolveConfiguredPathWithinBase(
       process.cwd(),
       path.relative(process.cwd(), composeFilePath),
@@ -798,7 +804,9 @@ class Dockercompose extends Docker {
     for (const composeFile of composeFiles) {
       const compose =
         composeByFile?.get(composeFile) || (await this.getComposeFileAsObject(composeFile));
-      if (compose?.services?.[service] !== undefined) {
+      const composeServices = (compose as { services?: Record<string, unknown> } | null | undefined)
+        ?.services;
+      if (composeServices && composeServices[service] !== undefined) {
         filesContainingService.push(composeFile);
       }
     }
@@ -813,10 +821,7 @@ class Dockercompose extends Docker {
         lastAccessError = e;
       }
     }
-    if (lastAccessError) {
-      throw lastAccessError;
-    }
-    return composeFiles[0];
+    throw lastAccessError;
   }
 
   async groupComposeUpdatesByWritableFile(
@@ -995,8 +1000,6 @@ class Dockercompose extends Docker {
     } finally {
       await this.cleanupComposeTemporaryFile(validationFilePath);
     }
-
-    throw new Error(`Unable to validate compose configuration for ${composeFilePath}`);
   }
 
   async updateComposeServicesWithCompose(composeFile, services, options = {}) {
@@ -1945,9 +1948,6 @@ class Dockercompose extends Docker {
     cache.set(filePath, value);
     while (cache.size > this._composeCacheMaxEntries) {
       const oldestCacheKey = cache.keys().next().value;
-      if (oldestCacheKey === undefined) {
-        break;
-      }
       cache.delete(oldestCacheKey);
     }
   }
