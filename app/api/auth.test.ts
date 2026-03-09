@@ -1,20 +1,31 @@
-const { mockRouter, mockLokiStore, mockExpressJson, mockJsonMiddleware, mockFs } = vi.hoisted(
-  () => {
-    const jsonMiddleware = vi.fn();
-    return {
-      mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
-      mockLokiStore: vi.fn(),
-      mockJsonMiddleware: jsonMiddleware,
-      mockExpressJson: vi.fn(() => jsonMiddleware),
-      mockFs: {
-        existsSync: vi.fn(),
-        readFileSync: vi.fn(),
-        writeFileSync: vi.fn(),
-        mkdirSync: vi.fn(),
-      },
-    };
-  },
-);
+const {
+  mockRouter,
+  mockLokiStore,
+  mockExpressJson,
+  mockJsonMiddleware,
+  mockFs,
+  mockRateLimit,
+  mockCreateAuthenticatedRouteRateLimitKeyGenerator,
+  mockIsIdentityAwareRateLimitKeyingEnabled,
+} = vi.hoisted(() => {
+  const jsonMiddleware = vi.fn();
+  const rateLimitMiddleware = vi.fn((_, __, next) => next());
+  return {
+    mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
+    mockLokiStore: vi.fn(),
+    mockJsonMiddleware: jsonMiddleware,
+    mockExpressJson: vi.fn(() => jsonMiddleware),
+    mockFs: {
+      existsSync: vi.fn(),
+      readFileSync: vi.fn(),
+      writeFileSync: vi.fn(),
+      mkdirSync: vi.fn(),
+    },
+    mockRateLimit: vi.fn(() => rateLimitMiddleware),
+    mockCreateAuthenticatedRouteRateLimitKeyGenerator: vi.fn(() => undefined),
+    mockIsIdentityAwareRateLimitKeyingEnabled: vi.fn(() => false),
+  };
+});
 const mockGetServerConfiguration = vi.hoisted(() => vi.fn(() => ({ cookie: {} })));
 const mockRecordAuditEvent = vi.hoisted(() => vi.fn());
 const mockValidateOpenApiJsonResponse = vi.hoisted(() =>
@@ -27,6 +38,9 @@ vi.mock('express', () => ({
 
 vi.mock('express-session', () => ({
   default: vi.fn(() => 'session-middleware'),
+}));
+vi.mock('express-rate-limit', () => ({
+  default: mockRateLimit,
 }));
 
 vi.mock('connect-loki', () => ({
@@ -76,6 +90,10 @@ vi.mock('./audit-events.js', () => ({
 }));
 vi.mock('./openapi-contract.js', () => ({
   validateOpenApiJsonResponse: mockValidateOpenApiJsonResponse,
+}));
+vi.mock('./rate-limit-key.js', () => ({
+  createAuthenticatedRouteRateLimitKeyGenerator: mockCreateAuthenticatedRouteRateLimitKeyGenerator,
+  isIdentityAwareRateLimitKeyingEnabled: mockIsIdentityAwareRateLimitKeyingEnabled,
 }));
 
 import session from 'express-session';
@@ -154,6 +172,8 @@ function getRouteMiddleware(method, path) {
 describe('Auth Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(false);
+    mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(undefined);
     lockoutStateFiles.clear();
     mockFs.existsSync.mockImplementation((candidate: unknown) =>
       lockoutStateFiles.has(`${candidate}`),
@@ -1256,6 +1276,21 @@ describe('Auth Router', () => {
 
       const authLimiter = mockRouter.use.mock.calls[0][0];
       expect(app.get).toHaveBeenCalledWith('/api/auth/methods', authLimiter, expect.any(Function));
+    });
+
+    test('should include identity-aware key generator in auth limiter when enabled', () => {
+      const keyGenerator = vi.fn(() => 'session:test');
+      mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(true);
+      mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(keyGenerator);
+      const app = createApp();
+
+      auth.init(app);
+
+      expect(mockRateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          keyGenerator,
+        }),
+      );
     });
 
     test('should configure serialize and deserialize user', () => {
