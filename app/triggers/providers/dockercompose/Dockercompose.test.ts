@@ -378,6 +378,22 @@ describe('Dockercompose Trigger', () => {
     expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find service'));
   });
 
+  test('mapCurrentVersionToUpdateVersion should not fall back to image matching when compose identity labels exist without a service label', () => {
+    const compose = makeCompose({
+      nginx: { image: 'nginx:1.0.0' },
+    });
+    const container = makeContainer({
+      labels: {
+        'com.docker.compose.project': 'other-stack',
+      },
+    });
+
+    const result = trigger.mapCurrentVersionToUpdateVersion(compose, container);
+
+    expect(result).toBeUndefined();
+    expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('Could not find service'));
+  });
+
   test('mapCurrentVersionToUpdateVersion should return undefined when service not found', () => {
     const compose = makeCompose({ redis: { image: 'redis:7.0.0' } });
     const container = makeContainer();
@@ -3905,6 +3921,212 @@ describe('Dockercompose Trigger', () => {
       } else {
         process.env.HOSTNAME = originalHostname;
       }
+    }
+  });
+
+  test('parseHostToContainerBindMount should return null when bind definition is missing source or destination', () => {
+    expect(trigger.parseHostToContainerBindMount('/mnt/volume1/docker/stacks')).toBeNull();
+    expect(trigger.parseHostToContainerBindMount(':/drydock')).toBeNull();
+  });
+
+  test('parseHostToContainerBindMount should return null when source or destination is not absolute', () => {
+    expect(trigger.parseHostToContainerBindMount('relative/path:/drydock')).toBeNull();
+    expect(
+      trigger.parseHostToContainerBindMount('/mnt/volume1/docker/stacks:relative/path'),
+    ).toBeNull();
+  });
+
+  test('ensureHostToContainerBindMountsLoaded should return early when watcher docker api is unavailable', async () => {
+    const originalHostname = process.env.HOSTNAME;
+    process.env.HOSTNAME = 'drydock-self';
+
+    vi.spyOn(trigger, 'getWatcher').mockReturnValue({} as any);
+
+    try {
+      await trigger.ensureHostToContainerBindMountsLoaded({ name: 'monitoring' } as any);
+
+      expect(trigger._hostToContainerBindMountsLoaded).toBe(false);
+      expect(trigger._hostToContainerBindMounts).toEqual([]);
+    } finally {
+      if (originalHostname === undefined) {
+        delete process.env.HOSTNAME;
+      } else {
+        process.env.HOSTNAME = originalHostname;
+      }
+    }
+  });
+
+  test('ensureHostToContainerBindMountsLoaded should skip when bind definitions are not an array', async () => {
+    const originalHostname = process.env.HOSTNAME;
+    process.env.HOSTNAME = 'drydock-self';
+
+    mockDockerApi.getContainer.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        HostConfig: {
+          Binds: null,
+        },
+      }),
+    });
+
+    try {
+      await trigger.ensureHostToContainerBindMountsLoaded({
+        name: 'monitoring',
+        watcher: 'local',
+      } as any);
+
+      expect(trigger._hostToContainerBindMountsLoaded).toBe(true);
+      expect(trigger._hostToContainerBindMounts).toEqual([]);
+    } finally {
+      if (originalHostname === undefined) {
+        delete process.env.HOSTNAME;
+      } else {
+        process.env.HOSTNAME = originalHostname;
+      }
+    }
+  });
+
+  test('ensureHostToContainerBindMountsLoaded should parse and sort bind mounts by source path length', async () => {
+    const originalHostname = process.env.HOSTNAME;
+    process.env.HOSTNAME = 'drydock-self';
+
+    mockDockerApi.getContainer.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        HostConfig: {
+          Binds: ['/mnt/volume1/docker:/drydock-base:rw', '/mnt/volume1/docker/stacks:/drydock:rw'],
+        },
+      }),
+    });
+
+    try {
+      await trigger.ensureHostToContainerBindMountsLoaded({
+        name: 'monitoring',
+        watcher: 'local',
+      } as any);
+
+      expect(trigger._hostToContainerBindMounts).toEqual([
+        {
+          source: '/mnt/volume1/docker/stacks',
+          destination: '/drydock',
+        },
+        {
+          source: '/mnt/volume1/docker',
+          destination: '/drydock-base',
+        },
+      ]);
+    } finally {
+      if (originalHostname === undefined) {
+        delete process.env.HOSTNAME;
+      } else {
+        process.env.HOSTNAME = originalHostname;
+      }
+    }
+  });
+
+  test('ensureHostToContainerBindMountsLoaded should log debug message when inspect fails', async () => {
+    const originalHostname = process.env.HOSTNAME;
+    process.env.HOSTNAME = 'drydock-self';
+
+    mockDockerApi.getContainer.mockReturnValue({
+      inspect: vi.fn().mockRejectedValue(new Error('inspect failed')),
+    });
+
+    try {
+      await trigger.ensureHostToContainerBindMountsLoaded({
+        name: 'monitoring',
+        watcher: 'local',
+      } as any);
+
+      expect(trigger._hostToContainerBindMountsLoaded).toBe(true);
+      expect(mockLog.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to inspect bind mounts for compose host-path remapping'),
+      );
+    } finally {
+      if (originalHostname === undefined) {
+        delete process.env.HOSTNAME;
+      } else {
+        process.env.HOSTNAME = originalHostname;
+      }
+    }
+  });
+
+  test('mapComposePathToContainerBindMount should map exact source paths to destination paths', () => {
+    trigger._hostToContainerBindMounts = [
+      {
+        source: '/mnt/volume1/docker/stacks/monitoring/compose.yaml',
+        destination: '/drydock/monitoring/compose.yaml',
+      },
+    ];
+
+    const mappedPath = trigger.mapComposePathToContainerBindMount(
+      '/mnt/volume1/docker/stacks/monitoring/compose.yaml',
+    );
+
+    expect(mappedPath).toBe('/drydock/monitoring/compose.yaml');
+  });
+
+  test('mapComposePathToContainerBindMount should map nested files when bind source ends with path separator', () => {
+    trigger._hostToContainerBindMounts = [
+      {
+        source: '/mnt/volume1/docker/stacks/',
+        destination: '/drydock/',
+      },
+    ];
+
+    const mappedPath = trigger.mapComposePathToContainerBindMount(
+      '/mnt/volume1/docker/stacks/monitoring/compose.yaml',
+    );
+
+    expect(mappedPath).toBe('/drydock/monitoring/compose.yaml');
+  });
+
+  test('mapComposePathToContainerBindMount should return original path when no bind source matches', () => {
+    trigger._hostToContainerBindMounts = [
+      {
+        source: '/mnt/volume1/docker/stacks/',
+        destination: '/drydock/',
+      },
+    ];
+
+    const composePath = '/opt/other/stack/compose.yaml';
+    const mappedPath = trigger.mapComposePathToContainerBindMount(composePath);
+
+    expect(mappedPath).toBe(composePath);
+  });
+
+  test('mapComposePathToContainerBindMount should return destination root when computed relative path is empty', () => {
+    trigger._hostToContainerBindMounts = [
+      {
+        source: '/mnt/volume1/docker/stacks/',
+        destination: '/drydock/',
+      },
+    ];
+    const relativeSpy = vi.spyOn(path, 'relative').mockReturnValueOnce('');
+
+    try {
+      const mappedPath = trigger.mapComposePathToContainerBindMount(
+        '/mnt/volume1/docker/stacks/monitoring/compose.yaml',
+      );
+      expect(mappedPath).toBe('/drydock/');
+    } finally {
+      relativeSpy.mockRestore();
+    }
+  });
+
+  test('mapComposePathToContainerBindMount should skip unsafe relative compose paths that escape source', () => {
+    trigger._hostToContainerBindMounts = [
+      {
+        source: '/mnt/volume1/docker/stacks/',
+        destination: '/drydock/',
+      },
+    ];
+    const relativeSpy = vi.spyOn(path, 'relative').mockReturnValueOnce('../escape');
+
+    try {
+      const composePath = '/mnt/volume1/docker/stacks/monitoring/compose.yaml';
+      const mappedPath = trigger.mapComposePathToContainerBindMount(composePath);
+      expect(mappedPath).toBe(composePath);
+    } finally {
+      relativeSpy.mockRestore();
     }
   });
 
