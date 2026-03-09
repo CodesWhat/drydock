@@ -160,4 +160,36 @@ describe('preview service', () => {
       dryRun: false,
     });
   });
+
+  it('falls back from blank service values, keeps writable file details, and tolerates non-array parse results', () => {
+    const parseSpy = vi.spyOn(JSON, 'parse').mockReturnValueOnce({ unexpected: true });
+
+    const result = normalizePreviewPayload({
+      composeFiles: '["/opt/stack/compose.yml"]',
+      compose: {
+        service: '   ',
+      },
+      composeService: 'api',
+      composeWritableFile: '/opt/stack/compose.yml',
+      composePatch: '',
+    });
+
+    expect(result.compose).toEqual({
+      files: ['["/opt/stack/compose.yml"]'],
+      service: 'api',
+      writableFile: '/opt/stack/compose.yml',
+    });
+
+    parseSpy.mockRestore();
+  });
+
+  it('drops empty patch arrays from compose preview metadata', () => {
+    const result = normalizePreviewPayload({
+      compose: {
+        patch: ['   ', '', '\t'],
+      },
+    });
+
+    expect(result.compose).toBeUndefined();
+  });
 });

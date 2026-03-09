@@ -646,6 +646,36 @@ describe('useContainerActions', () => {
     expect(composable.updateOperationsError.value).toBe('ops load failed');
   });
 
+  it('clears action-tab detail data when refresh runs without a selected container id', async () => {
+    vi.useFakeTimers();
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, activeDetailTab, selectedContainerId } = await mountActionsHarness({
+      activeDetailTab: 'overview',
+      selectedContainer: container,
+      selectedContainerId: container.id,
+    });
+
+    composable.detailBackups.value = [{ id: 'stale-backup' }];
+    composable.detailUpdateOperations.value = [{ id: 'stale-operation' }];
+    composable.updateOperationsError.value = 'stale error';
+    mocks.getContainerTriggers.mockClear();
+    mocks.getBackups.mockClear();
+    mocks.getContainerUpdateOperations.mockClear();
+
+    selectedContainerId.value = '';
+    activeDetailTab.value = 'actions';
+    await nextTick();
+    vi.advanceTimersByTime(250);
+    await flushPromises();
+
+    expect(mocks.getContainerTriggers).not.toHaveBeenCalled();
+    expect(mocks.getBackups).not.toHaveBeenCalled();
+    expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
+    expect(composable.detailBackups.value).toEqual([]);
+    expect(composable.detailUpdateOperations.value).toEqual([]);
+    expect(composable.updateOperationsError.value).toBeNull();
+  });
+
   it('debounces rapid action-tab detail refresh triggers into one API batch', async () => {
     vi.useFakeTimers();
     const web = makeContainer({ id: 'container-1', name: 'web' });
@@ -699,6 +729,50 @@ describe('useContainerActions', () => {
     expect(mocks.previewContainer).not.toHaveBeenCalled();
 
     selectedContainerId.value = 'container-1';
+    mocks.previewContainer.mockResolvedValueOnce({
+      dryRun: true,
+      currentImage: 'nginx:1.0',
+      compose: {
+        files: ['   '],
+        service: '   ',
+        writableFile: '   ',
+        patch: '   ',
+      },
+    });
+    await composable.runContainerPreview();
+    expect(composable.detailComposePreview.value).toBeNull();
+
+    mocks.previewContainer.mockResolvedValueOnce({
+      dryRun: true,
+      currentImage: 'nginx:1.0',
+      compose: {
+        files: { unexpected: true },
+        writableFile: ' /opt/stack/compose.yml ',
+        willWrite: true,
+        patch: '   ',
+      },
+    });
+    await composable.runContainerPreview();
+    expect(composable.detailComposePreview.value).toEqual({
+      files: [],
+      writableFile: '/opt/stack/compose.yml',
+      willWrite: true,
+    });
+
+    mocks.previewContainer.mockResolvedValueOnce({
+      dryRun: true,
+      currentImage: 'nginx:1.0',
+      compose: {
+        files: ['/opt/stack/compose.yml'],
+        service: 'web',
+      },
+    });
+    await composable.runContainerPreview();
+    expect(composable.detailComposePreview.value).toEqual({
+      files: ['/opt/stack/compose.yml'],
+      service: 'web',
+    });
+
     mocks.previewContainer.mockResolvedValueOnce({
       dryRun: true,
       currentImage: 'nginx:1.0',
