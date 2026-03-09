@@ -365,8 +365,6 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 
 <h2 align="center" id="roadmap">🗺️ Roadmap</h2>
 
-Here's what's coming. WUD `WUD_*` env vars and `wud.*` labels remain fully supported at runtime — see [🔄 Migration](#migration) for details.
-
 | Version | Theme | Highlights |
 | --- | --- | --- |
 | **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Bouncer, SBOM, 7 new registries, 4 new triggers, rollback fixes, GHCR auth, self-hosted TLS, re2js regex engine, compose trigger fixes, DB persistence on shutdown |

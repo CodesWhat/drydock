@@ -59,7 +59,7 @@ docker run --rm codeswhat/drydock node -e '
 
 | | |
 | --- | --- |
-| **Deprecated in** | v1.4.1 |
+| **Deprecated in** | v1.4.0 |
 | **Removed in** | v1.6.0 |
 | **Affects** | `DD_SERVER_CORS_ENABLED=true` without `DD_SERVER_CORS_ORIGIN` |
 
