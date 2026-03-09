@@ -280,6 +280,7 @@ describe('Dockercompose Trigger', () => {
 
     trigger = new Dockercompose();
     trigger.log = mockLog;
+    trigger.resetHostToContainerBindMountCache();
     trigger.configuration = {
       dryrun: true,
       backup: false,
@@ -3929,6 +3930,111 @@ describe('Dockercompose Trigger', () => {
     expect(trigger.parseHostToContainerBindMount(':/drydock')).toBeNull();
   });
 
+  test('parseHostToContainerBindMount should ignore trailing mount options', () => {
+    expect(trigger.parseHostToContainerBindMount('/mnt/volume1/docker/stacks:/drydock:rw')).toEqual(
+      {
+        source: '/mnt/volume1/docker/stacks',
+        destination: '/drydock',
+      },
+    );
+    expect(trigger.parseHostToContainerBindMount('/mnt/volume1/docker/stacks:/drydock:ro')).toEqual(
+      {
+        source: '/mnt/volume1/docker/stacks',
+        destination: '/drydock',
+      },
+    );
+  });
+
+  test('getSelfContainerIdentifier should return null when HOSTNAME contains slash', () => {
+    const originalHostname = process.env.HOSTNAME;
+    process.env.HOSTNAME = 'pod/name';
+
+    try {
+      expect(trigger.getSelfContainerIdentifier()).toBeNull();
+    } finally {
+      if (originalHostname === undefined) {
+        delete process.env.HOSTNAME;
+      } else {
+        process.env.HOSTNAME = originalHostname;
+      }
+    }
+  });
+
+  test('getSelfContainerIdentifier should return null when HOSTNAME is whitespace', () => {
+    const originalHostname = process.env.HOSTNAME;
+    process.env.HOSTNAME = '   ';
+
+    try {
+      expect(trigger.getSelfContainerIdentifier()).toBeNull();
+    } finally {
+      if (originalHostname === undefined) {
+        delete process.env.HOSTNAME;
+      } else {
+        process.env.HOSTNAME = originalHostname;
+      }
+    }
+  });
+
+  test('getSelfContainerIdentifier should return null when HOSTNAME is undefined', () => {
+    const originalHostname = process.env.HOSTNAME;
+    delete process.env.HOSTNAME;
+
+    try {
+      expect(trigger.getSelfContainerIdentifier()).toBeNull();
+    } finally {
+      if (originalHostname === undefined) {
+        delete process.env.HOSTNAME;
+      } else {
+        process.env.HOSTNAME = originalHostname;
+      }
+    }
+  });
+
+  test('getSelfContainerIdentifier should return null when HOSTNAME starts with non-alphanumeric character', () => {
+    const originalHostname = process.env.HOSTNAME;
+    process.env.HOSTNAME = '-drydock-self';
+
+    try {
+      expect(trigger.getSelfContainerIdentifier()).toBeNull();
+    } finally {
+      if (originalHostname === undefined) {
+        delete process.env.HOSTNAME;
+      } else {
+        process.env.HOSTNAME = originalHostname;
+      }
+    }
+  });
+
+  test('getSelfContainerIdentifier should return null when HOSTNAME has unsupported characters', () => {
+    const originalHostname = process.env.HOSTNAME;
+    process.env.HOSTNAME = 'drydock$self';
+
+    try {
+      expect(trigger.getSelfContainerIdentifier()).toBeNull();
+    } finally {
+      if (originalHostname === undefined) {
+        delete process.env.HOSTNAME;
+      } else {
+        process.env.HOSTNAME = originalHostname;
+      }
+    }
+  });
+
+  test('getSelfContainerIdentifier should return trimmed hostname when HOSTNAME is valid', () => {
+    const originalHostname = process.env.HOSTNAME;
+    process.env.HOSTNAME = '  drydock-self  ';
+
+    try {
+      expect(trigger.getSelfContainerIdentifier()).toBe('drydock-self');
+    } finally {
+      if (originalHostname === undefined) {
+        delete process.env.HOSTNAME;
+      } else {
+        process.env.HOSTNAME = originalHostname;
+      }
+    }
+  });
+
   test('parseHostToContainerBindMount should return null when source or destination is not absolute', () => {
     expect(trigger.parseHostToContainerBindMount('relative/path:/drydock')).toBeNull();
     expect(
@@ -3945,8 +4051,67 @@ describe('Dockercompose Trigger', () => {
     try {
       await trigger.ensureHostToContainerBindMountsLoaded({ name: 'monitoring' } as any);
 
-      expect(trigger._hostToContainerBindMountsLoaded).toBe(false);
-      expect(trigger._hostToContainerBindMounts).toEqual([]);
+      expect(trigger.isHostToContainerBindMountCacheLoaded()).toBe(false);
+      expect(trigger.getHostToContainerBindMountCache()).toEqual([]);
+    } finally {
+      if (originalHostname === undefined) {
+        delete process.env.HOSTNAME;
+      } else {
+        process.env.HOSTNAME = originalHostname;
+      }
+    }
+  });
+
+  test('ensureHostToContainerBindMountsLoaded should wait for an in-flight load to finish', async () => {
+    const originalHostname = process.env.HOSTNAME;
+    process.env.HOSTNAME = 'drydock-self';
+
+    let resolveInspect: ((value: any) => void) | undefined;
+    const inspectPromise = new Promise((resolve) => {
+      resolveInspect = resolve;
+    });
+    mockDockerApi.getContainer.mockReturnValue({
+      inspect: vi.fn().mockReturnValue(inspectPromise),
+    });
+
+    try {
+      const firstLoad = trigger.ensureHostToContainerBindMountsLoaded({
+        name: 'monitoring',
+        watcher: 'local',
+      } as any);
+      await Promise.resolve();
+
+      let secondLoadResolved = false;
+      const secondLoad = trigger
+        .ensureHostToContainerBindMountsLoaded({
+          name: 'monitoring',
+          watcher: 'local',
+        } as any)
+        .then(() => {
+          secondLoadResolved = true;
+        });
+
+      await Promise.resolve();
+      expect(secondLoadResolved).toBe(false);
+
+      if (!resolveInspect) {
+        throw new Error('resolveInspect was not initialized');
+      }
+      resolveInspect({
+        HostConfig: {
+          Binds: ['/mnt/volume1/docker/stacks:/drydock:rw'],
+        },
+      });
+
+      await Promise.all([firstLoad, secondLoad]);
+
+      expect(mockDockerApi.getContainer).toHaveBeenCalledTimes(1);
+      expect(trigger.getHostToContainerBindMountCache()).toEqual([
+        {
+          source: '/mnt/volume1/docker/stacks',
+          destination: '/drydock',
+        },
+      ]);
     } finally {
       if (originalHostname === undefined) {
         delete process.env.HOSTNAME;
@@ -3974,8 +4139,8 @@ describe('Dockercompose Trigger', () => {
         watcher: 'local',
       } as any);
 
-      expect(trigger._hostToContainerBindMountsLoaded).toBe(true);
-      expect(trigger._hostToContainerBindMounts).toEqual([]);
+      expect(trigger.isHostToContainerBindMountCacheLoaded()).toBe(true);
+      expect(trigger.getHostToContainerBindMountCache()).toEqual([]);
     } finally {
       if (originalHostname === undefined) {
         delete process.env.HOSTNAME;
@@ -4003,7 +4168,7 @@ describe('Dockercompose Trigger', () => {
         watcher: 'local',
       } as any);
 
-      expect(trigger._hostToContainerBindMounts).toEqual([
+      expect(trigger.getHostToContainerBindMountCache()).toEqual([
         {
           source: '/mnt/volume1/docker/stacks',
           destination: '/drydock',
@@ -4036,7 +4201,7 @@ describe('Dockercompose Trigger', () => {
         watcher: 'local',
       } as any);
 
-      expect(trigger._hostToContainerBindMountsLoaded).toBe(true);
+      expect(trigger.isHostToContainerBindMountCacheLoaded()).toBe(true);
       expect(mockLog.debug).toHaveBeenCalledWith(
         expect.stringContaining('Unable to inspect bind mounts for compose host-path remapping'),
       );
@@ -4050,12 +4215,12 @@ describe('Dockercompose Trigger', () => {
   });
 
   test('mapComposePathToContainerBindMount should map exact source paths to destination paths', () => {
-    trigger._hostToContainerBindMounts = [
+    trigger.setHostToContainerBindMountCache([
       {
         source: '/mnt/volume1/docker/stacks/monitoring/compose.yaml',
         destination: '/drydock/monitoring/compose.yaml',
       },
-    ];
+    ]);
 
     const mappedPath = trigger.mapComposePathToContainerBindMount(
       '/mnt/volume1/docker/stacks/monitoring/compose.yaml',
@@ -4065,12 +4230,12 @@ describe('Dockercompose Trigger', () => {
   });
 
   test('mapComposePathToContainerBindMount should map nested files when bind source ends with path separator', () => {
-    trigger._hostToContainerBindMounts = [
+    trigger.setHostToContainerBindMountCache([
       {
         source: '/mnt/volume1/docker/stacks/',
         destination: '/drydock/',
       },
-    ];
+    ]);
 
     const mappedPath = trigger.mapComposePathToContainerBindMount(
       '/mnt/volume1/docker/stacks/monitoring/compose.yaml',
@@ -4080,12 +4245,12 @@ describe('Dockercompose Trigger', () => {
   });
 
   test('mapComposePathToContainerBindMount should return original path when no bind source matches', () => {
-    trigger._hostToContainerBindMounts = [
+    trigger.setHostToContainerBindMountCache([
       {
         source: '/mnt/volume1/docker/stacks/',
         destination: '/drydock/',
       },
-    ];
+    ]);
 
     const composePath = '/opt/other/stack/compose.yaml';
     const mappedPath = trigger.mapComposePathToContainerBindMount(composePath);
@@ -4094,12 +4259,12 @@ describe('Dockercompose Trigger', () => {
   });
 
   test('mapComposePathToContainerBindMount should return destination root when computed relative path is empty', () => {
-    trigger._hostToContainerBindMounts = [
+    trigger.setHostToContainerBindMountCache([
       {
         source: '/mnt/volume1/docker/stacks/',
         destination: '/drydock/',
       },
-    ];
+    ]);
     const relativeSpy = vi.spyOn(path, 'relative').mockReturnValueOnce('');
 
     try {
@@ -4113,12 +4278,12 @@ describe('Dockercompose Trigger', () => {
   });
 
   test('mapComposePathToContainerBindMount should skip unsafe relative compose paths that escape source', () => {
-    trigger._hostToContainerBindMounts = [
+    trigger.setHostToContainerBindMountCache([
       {
         source: '/mnt/volume1/docker/stacks/',
         destination: '/drydock/',
       },
-    ];
+    ]);
     const relativeSpy = vi.spyOn(path, 'relative').mockReturnValueOnce('../escape');
 
     try {

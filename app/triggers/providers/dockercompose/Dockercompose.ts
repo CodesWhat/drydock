@@ -21,6 +21,7 @@ const COMPOSE_PROJECT_CONFIG_FILES_LABEL = 'com.docker.compose.project.config_fi
 const COMPOSE_PROJECT_WORKING_DIR_LABEL = 'com.docker.compose.project.working_dir';
 const COMPOSE_CACHE_MAX_ENTRIES = 256;
 const POST_START_ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const SELF_CONTAINER_IDENTIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 const ROOT_MODE_BREAK_GLASS_HINT =
   'use socket proxy or adjust file permissions/group_add; break-glass root mode requires DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true';
 
@@ -418,6 +419,7 @@ class Dockercompose extends Docker {
   _composeObjectCache = new Map<string, { mtimeMs: number; compose: unknown }>();
   _composeDocumentCache = new Map<string, { mtimeMs: number; composeDoc: unknown }>();
   _hostToContainerBindMountsLoaded = false;
+  _hostToContainerBindMountsLoadPromise: Promise<void> | null = null;
   _hostToContainerBindMounts: HostToContainerBindMount[] = [];
 
   get _composeFileLocksHeld() {
@@ -462,7 +464,9 @@ class Dockercompose extends Docker {
   }
 
   parseHostToContainerBindMount(bindDefinition: string): HostToContainerBindMount | null {
-    const [sourceRaw, destinationRaw] = bindDefinition.split(':');
+    // Docker bind mounts follow "<source>:<destination>[:options]".
+    // We only need source + destination; mount options (for example :rw/:ro) are ignored.
+    const [sourceRaw, destinationRaw] = bindDefinition.split(':', 2);
     const source = sourceRaw?.trim();
     const destination = destinationRaw?.trim();
     if (!source || !destination) {
@@ -479,44 +483,77 @@ class Dockercompose extends Docker {
 
   getSelfContainerIdentifier(): string | null {
     const hostname = process.env.HOSTNAME?.trim();
-    if (!hostname || hostname.includes('/')) {
+    if (!hostname || !SELF_CONTAINER_IDENTIFIER_PATTERN.test(hostname)) {
       return null;
     }
     return hostname;
   }
 
+  protected isHostToContainerBindMountCacheLoaded(): boolean {
+    return this._hostToContainerBindMountsLoaded;
+  }
+
+  protected getHostToContainerBindMountCache(): HostToContainerBindMount[] {
+    return [...this._hostToContainerBindMounts];
+  }
+
+  protected setHostToContainerBindMountCache(bindMounts: HostToContainerBindMount[]): void {
+    this._hostToContainerBindMounts = [...bindMounts];
+  }
+
+  protected resetHostToContainerBindMountCache(): void {
+    this._hostToContainerBindMountsLoaded = false;
+    this._hostToContainerBindMountsLoadPromise = null;
+    this._hostToContainerBindMounts = [];
+  }
+
   async ensureHostToContainerBindMountsLoaded(container: ComposeContainerReference): Promise<void> {
+    if (this._hostToContainerBindMountsLoadPromise) {
+      await this._hostToContainerBindMountsLoadPromise;
+      return;
+    }
+
     if (this._hostToContainerBindMountsLoaded) {
       return;
     }
 
-    const selfContainerIdentifier = this.getSelfContainerIdentifier();
-    if (!selfContainerIdentifier) {
-      this._hostToContainerBindMountsLoaded = true;
-      return;
-    }
-
-    const watcher = this.getWatcher(container);
-    const dockerApi = getDockerApiFromWatcher(watcher);
-    if (!dockerApi) {
-      return;
-    }
-
-    this._hostToContainerBindMountsLoaded = true;
-    try {
-      const selfContainerInspect = await dockerApi.getContainer(selfContainerIdentifier).inspect();
-      const bindDefinitions = selfContainerInspect?.HostConfig?.Binds;
-      if (!Array.isArray(bindDefinitions)) {
+    this._hostToContainerBindMountsLoadPromise = (async () => {
+      const selfContainerIdentifier = this.getSelfContainerIdentifier();
+      if (!selfContainerIdentifier) {
+        this._hostToContainerBindMountsLoaded = true;
         return;
       }
-      this._hostToContainerBindMounts = bindDefinitions
-        .map((bindDefinition) => this.parseHostToContainerBindMount(bindDefinition))
-        .filter((bindMount): bindMount is HostToContainerBindMount => bindMount !== null)
-        .sort((left, right) => right.source.length - left.source.length);
-    } catch (e) {
-      this.log.debug(
-        `Unable to inspect bind mounts for compose host-path remapping (${e.message})`,
-      );
+
+      const watcher = this.getWatcher(container);
+      const dockerApi = getDockerApiFromWatcher(watcher);
+      if (!dockerApi) {
+        return;
+      }
+
+      this._hostToContainerBindMountsLoaded = true;
+      try {
+        const selfContainerInspect = await dockerApi
+          .getContainer(selfContainerIdentifier)
+          .inspect();
+        const bindDefinitions = selfContainerInspect?.HostConfig?.Binds;
+        if (!Array.isArray(bindDefinitions)) {
+          return;
+        }
+        this._hostToContainerBindMounts = bindDefinitions
+          .map((bindDefinition) => this.parseHostToContainerBindMount(bindDefinition))
+          .filter((bindMount): bindMount is HostToContainerBindMount => bindMount !== null)
+          .sort((left, right) => right.source.length - left.source.length);
+      } catch (e) {
+        this.log.debug(
+          `Unable to inspect bind mounts for compose host-path remapping (${e.message})`,
+        );
+      }
+    })();
+
+    try {
+      await this._hostToContainerBindMountsLoadPromise;
+    } finally {
+      this._hostToContainerBindMountsLoadPromise = null;
     }
   }
 
@@ -1330,15 +1367,11 @@ class Dockercompose extends Docker {
     await this.triggerBatch([container]);
   }
 
-  /**
-   * Update the docker-compose stack.
-   * @param containers the containers
-   * @returns {Promise<void>}
-   */
-  async triggerBatch(containers): Promise<unknown[]> {
-    // Group containers by their ordered compose file chain
+  async resolveAndGroupContainersByComposeFile(
+    containers: ComposeContainerReference[],
+    configuredComposeFilePath: string | null,
+  ): Promise<Map<string, ContainersByComposeFileEntry>> {
     const containersByComposeFile = new Map<string, ContainersByComposeFileEntry>();
-    const configuredComposeFilePath = this.getDefaultComposeFilePath();
 
     for (const container of containers) {
       // Filter on containers running on local host
@@ -1385,16 +1418,33 @@ class Dockercompose extends Docker {
 
       const composeFile = composeFiles[0];
       const composeFileKey = composeFiles.join('\n');
-
-      if (!containersByComposeFile.has(composeFileKey)) {
-        containersByComposeFile.set(composeFileKey, {
-          composeFile,
-          composeFiles,
-          containers: [],
-        });
+      const existingEntry = containersByComposeFile.get(composeFileKey);
+      if (existingEntry) {
+        existingEntry.containers.push(container);
+        continue;
       }
-      containersByComposeFile.get(composeFileKey).containers.push(container);
+
+      containersByComposeFile.set(composeFileKey, {
+        composeFile,
+        composeFiles,
+        containers: [container],
+      });
     }
+
+    return containersByComposeFile;
+  }
+
+  /**
+   * Update the docker-compose stack.
+   * @param containers the containers
+   * @returns {Promise<void>}
+   */
+  async triggerBatch(containers): Promise<unknown[]> {
+    const configuredComposeFilePath = this.getDefaultComposeFilePath();
+    const containersByComposeFile = await this.resolveAndGroupContainersByComposeFile(
+      containers,
+      configuredComposeFilePath,
+    );
 
     // Process each compose file group
     const batchResults: unknown[] = [];
