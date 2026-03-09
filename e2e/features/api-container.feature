@@ -4,7 +4,7 @@ Feature: Drydock Container API Exposure
     When I GET /api/containers
     Then response code should be 200
     And response body should be valid json
-    And response body path $.data should be of type array with minimum length 10
+    And response body path $.data should be of type array with minimum length 9
 
   # Test one representative container per registry type + update pattern
   Scenario Outline: Drydock must handle different registry types and update patterns
@@ -28,7 +28,7 @@ Feature: Drydock Container API Exposure
       | hub.public     | hub_nginx_120            | https://registry-1.docker.io/v2                         | library/nginx                       | 1.20-alpine        | Hub alpine minor update     |
       | hub.public     | hub_nginx_latest         | https://registry-1.docker.io/v2                         | library/nginx                       | latest             | Hub latest tag digest update|
       | hub.public     | hub_traefik_245          | https://registry-1.docker.io/v2                         | library/traefik                     | 2.4.5              | Hub semver major update     |
-      | lscr.private   | lscr_radarr              | https://lscr.io/v2                                      | linuxserver/radarr                  | 5.14.0.9383-ls245  | LSCR complex semver update  |
+      # | lscr.private   | lscr_radarr              | https://lscr.io/v2                                      | linuxserver/radarr                  | 5.14.0.9383-ls245  | LSCR complex semver update  |
       | quay.public    | quay_prometheus          | https://quay.io/v2                                      | prometheus/prometheus               | v2.52.0            | Quay semver major update    |
 
   # Test detailed container inspection (semver)

@@ -28,5 +28,5 @@ Feature: Prometheus exposure
       | hub_nginx_120            | hub.public     | https://registry-1.docker.io/v2                         | library/nginx                       | 1.20-alpine        |
       | hub_nginx_latest         | hub.public     | https://registry-1.docker.io/v2                         | library/nginx                       | latest             |
       | hub_traefik_245          | hub.public     | https://registry-1.docker.io/v2                         | library/traefik                     | 2.4.5              |
-      | lscr_radarr              | lscr.private   | https://lscr.io/v2                                      | linuxserver/radarr                  | 5.14.0.9383-ls245  |
+      # | lscr_radarr              | lscr.private   | https://lscr.io/v2                                      | linuxserver/radarr                  | 5.14.0.9383-ls245  |
       | quay_prometheus          | quay.public    | https://quay.io/v2                                      | prometheus/prometheus               | v2.52.0            |

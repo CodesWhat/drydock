@@ -60,8 +60,12 @@ run_test_container hub_nginx_120 --label "$LABEL_WATCH" --label 'dd.tag.include=
 run_test_container hub_nginx_latest --label "$LABEL_WATCH" --label 'dd.watch.digest=true' --label 'dd.tag.include=^latest$' nginx
 run_test_container hub_traefik_245 --label "$LABEL_WATCH" --label 'dd.tag.include=^\d+\.\d+.\d+$' traefik:2.4.5
 
-# LSCR
-run_test_container lscr_radarr --label "$LABEL_WATCH" --label 'dd.tag.include=^\d+\.\d+\.\d+\.\d+-ls\d+$' lscr.io/linuxserver/radarr:5.14.0.9383-ls245
+# LSCR — requires GHCR credentials to resolve image data
+if [ -n "${GITHUB_USERNAME:-}" ]; then
+	run_test_container lscr_radarr --label "$LABEL_WATCH" --label 'dd.tag.include=^\d+\.\d+\.\d+\.\d+-ls\d+$' lscr.io/linuxserver/radarr:5.14.0.9383-ls245
+else
+	echo "⚠️  Skipping lscr_radarr (no GITHUB_USERNAME set)"
+fi
 
 # TrueForge
 run_test_container trueforge_radarr --label "$LABEL_WATCH" --label 'dd.tag.include=^v\d+\.\d+\.\d+$' --memory 512m --tmpfs /config oci.trueforge.org/containerforge/radarr:6.0.4
@@ -69,5 +73,5 @@ run_test_container trueforge_radarr --label "$LABEL_WATCH" --label 'dd.tag.inclu
 # QUAY
 run_test_container quay_prometheus --label "$LABEL_WATCH" --label 'dd.tag.include=^v\d+\.\d+\.\d+$' --user root --tmpfs /prometheus:rw,mode=777 quay.io/prometheus/prometheus:v2.52.0
 
-echo "✅ Test containers started (11 containers)"
+echo "✅ Test containers started"
 docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}" | grep -E "(ecr_|ghcr_|gitlab_|hub_|lscr_|quay_|trueforge_)"
