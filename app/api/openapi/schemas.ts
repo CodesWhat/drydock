@@ -427,6 +427,42 @@ export const openApiSchemas = {
         type: 'array',
         items: { type: 'string' },
       },
+      compose: {
+        type: 'object',
+        properties: {
+          files: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+          paths: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+          service: { type: 'string' },
+          mutation: {
+            type: 'object',
+            properties: {
+              intent: { type: 'string' },
+              dryRun: { type: 'boolean' },
+              willWrite: { type: 'boolean' },
+            },
+            required: ['intent', 'dryRun', 'willWrite'],
+            additionalProperties: false,
+          },
+          patch: {
+            type: 'object',
+            properties: {
+              path: { type: 'string' },
+              format: { type: 'string' },
+              diff: { type: 'string' },
+            },
+            required: ['path', 'format', 'diff'],
+            additionalProperties: false,
+          },
+        },
+        required: ['files', 'paths', 'service', 'mutation'],
+        additionalProperties: false,
+      },
     },
     additionalProperties: true,
   },

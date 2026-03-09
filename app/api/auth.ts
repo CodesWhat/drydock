@@ -33,6 +33,10 @@ import {
 import type { AuthRequest, SessionUser, UserWithUsername } from './auth-types.js';
 import { sendErrorResponse } from './error-response.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
+import {
+  createAuthenticatedRouteRateLimitKeyGenerator,
+  isIdentityAwareRateLimitKeyingEnabled,
+} from './rate-limit-key.js';
 
 const LokiStore = ConnectLoki(session);
 const router = express.Router();
@@ -247,6 +251,9 @@ export function init(app: Application): void {
   const serverConfiguration = getServerConfiguration();
   configureSessionLimits(serverConfiguration as Record<string, unknown>);
   initializeLoginLockoutState();
+  const identityAwareRateLimitKeyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(
+    isIdentityAwareRateLimitKeyingEnabled(serverConfiguration as Record<string, unknown>),
+  );
   const sessionCookieSameSite = serverConfiguration.cookie?.samesite || 'lax';
   const hasTlsEnabled = serverConfiguration.tls?.enabled === true;
   const hasHttpsConfiguration =
@@ -313,6 +320,9 @@ export function init(app: Application): void {
     standardHeaders: true,
     legacyHeaders: false,
     validate: { xForwardedForHeader: false },
+    ...(identityAwareRateLimitKeyGenerator
+      ? { keyGenerator: identityAwareRateLimitKeyGenerator }
+      : {}),
   });
   router.use(authLimiter);
 

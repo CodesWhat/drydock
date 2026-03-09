@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
+import { getServerConfiguration } from '../configuration/index.js';
 import * as agentRouter from './agent.js';
 import * as appRouter from './app.js';
 import * as auditRouter from './audit.js';
@@ -17,6 +18,10 @@ import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-
 import * as logRouter from './log.js';
 import * as notificationRouter from './notification.js';
 import * as previewRouter from './preview.js';
+import {
+  createAuthenticatedRouteRateLimitKeyGenerator,
+  isIdentityAwareRateLimitKeyingEnabled,
+} from './rate-limit-key.js';
 import * as registryRouter from './registry.js';
 import * as serverRouter from './server.js';
 import * as settingsRouter from './settings.js';
@@ -32,6 +37,10 @@ import * as webhookRouter from './webhook.js';
  */
 export function init(): express.Router {
   const router = express.Router();
+  const serverConfiguration = getServerConfiguration() as Record<string, unknown>;
+  const identityAwareRateLimitKeyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(
+    isIdentityAwareRateLimitKeyingEnabled(serverConfiguration),
+  );
 
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -39,6 +48,9 @@ export function init(): express.Router {
     standardHeaders: true,
     legacyHeaders: false,
     validate: { xForwardedForHeader: false },
+    ...(identityAwareRateLimitKeyGenerator
+      ? { keyGenerator: identityAwareRateLimitKeyGenerator }
+      : {}),
   });
   router.use(apiLimiter);
 

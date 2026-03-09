@@ -78,6 +78,41 @@ describe('OpenAPI document', () => {
     expect(openApiDocument.paths['/api/settings']?.put?.deprecated).toBe(true);
   });
 
+  test('should document compose-specific preview metadata while keeping base preview fields', () => {
+    const previewSchema = openApiDocument.components.schemas.PreviewResponse;
+
+    expect(previewSchema).toMatchObject({
+      type: 'object',
+      properties: {
+        containerName: { type: 'string' },
+        currentImage: { type: 'string' },
+        newImage: { type: 'string' },
+        compose: {
+          type: 'object',
+          properties: {
+            files: {
+              type: 'array',
+              items: { type: 'string' },
+            },
+            paths: {
+              type: 'array',
+              items: { type: 'string' },
+            },
+            service: { type: 'string' },
+            mutation: {
+              type: 'object',
+              properties: {
+                intent: { type: 'string' },
+                dryRun: { type: 'boolean' },
+                willWrite: { type: 'boolean' },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
   test('should keep agent-scoped component routes with agent as the final path segment', () => {
     expect(openApiDocument.paths['/api/triggers/{type}/{name}/{agent}']?.get).toBeDefined();
     expect(openApiDocument.paths['/api/triggers/{agent}/{type}/{name}']).toBeUndefined();

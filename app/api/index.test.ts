@@ -20,6 +20,13 @@ const { mockApp, mockFs, mockHttps, mockGetServerConfiguration } = vi.hoisted(()
     tls: {},
   })),
 }));
+const mockLog = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+const mockDdEnvVars = vi.hoisted(() => ({}) as Record<string, string | undefined>);
 const mockHelmet = vi.hoisted(() => vi.fn(() => 'helmet-middleware'));
 const mockIsInternetlessModeEnabled = vi.hoisted(() => vi.fn(() => false));
 
@@ -56,7 +63,7 @@ vi.mock('helmet', () => ({
 
 vi.mock('../log', () => ({
   default: {
-    child: vi.fn(() => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() })),
+    child: vi.fn(() => mockLog),
   },
 }));
 
@@ -82,6 +89,7 @@ vi.mock('./health', () => ({
 
 vi.mock('../configuration', () => ({
   getServerConfiguration: mockGetServerConfiguration,
+  ddEnvVars: mockDdEnvVars,
 }));
 
 vi.mock('../store/settings', () => ({
@@ -99,6 +107,7 @@ describe('API Index', () => {
     mockApp.listen.mockClear();
     mockHelmet.mockClear();
     mockIsInternetlessModeEnabled.mockReturnValue(false);
+    Object.keys(mockDdEnvVars).forEach((key) => delete mockDdEnvVars[key]);
   });
 
   test('should not start server when disabled', async () => {
@@ -189,6 +198,90 @@ describe('API Index', () => {
     await indexRouter.init();
 
     expect(mockApp.use).toHaveBeenCalledWith('cors-middleware');
+  });
+
+  test('should warn when CORS origin defaults to wildcard without explicit env var', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {
+        enabled: true,
+        origin: '*',
+        methods: 'GET,POST',
+      },
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('default wildcard origin is deprecated'),
+    );
+  });
+
+  test('should not warn when CORS wildcard origin is explicitly set via env var', async () => {
+    mockDdEnvVars.DD_SERVER_CORS_ORIGIN = '*';
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {
+        enabled: true,
+        origin: '*',
+        methods: 'GET,POST',
+      },
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockLog.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('default wildcard origin is deprecated'),
+    );
+  });
+
+  test('should not warn when CORS uses an explicit trusted origin', async () => {
+    mockDdEnvVars.DD_SERVER_CORS_ORIGIN = 'https://example.com';
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {
+        enabled: true,
+        origin: 'https://example.com',
+        methods: 'GET,POST',
+      },
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockLog.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('default wildcard origin is deprecated'),
+    );
+  });
+
+  test('should warn about deprecated unversioned /api/* path at startup', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: { enabled: false },
+      tls: { enabled: false },
+      compression: { enabled: false },
+      trustproxy: false,
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      'Unversioned /api/* path is deprecated and will be removed in v1.6.0. Use /api/v1/* instead.',
+    );
   });
 
   test('should mount all routers', async () => {

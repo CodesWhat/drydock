@@ -68,6 +68,7 @@ type ContainerSecurityContext = Pick<
   | 'runtimeOriginStyle'
   | 'runtimeOriginLabel'
   | 'selectedRuntimeDriftWarnings'
+  | 'selectedComposePaths'
   | 'selectedLifecycleHooks'
   | 'lifecycleHookTemplateVariables'
   | 'selectedAutoRollbackConfig'
@@ -93,6 +94,8 @@ type ContainerSecurityContext = Pick<
 type ContainerActionsContext = Pick<
   ReturnType<typeof useContainerActions>,
   | 'actionInProgress'
+  | 'containerActionsDisabledReason'
+  | 'containerActionsEnabled'
   | 'confirmDelete'
   | 'confirmForceUpdate'
   | 'confirmUpdate'
@@ -101,6 +104,7 @@ type ContainerActionsContext = Pick<
   | 'confirmStop'
   | 'containerPolicyTooltip'
   | 'detailBackups'
+  | 'detailComposePreview'
   | 'detailPreview'
   | 'detailTriggers'
   | 'detailUpdateOperations'

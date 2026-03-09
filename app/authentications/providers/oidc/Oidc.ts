@@ -317,6 +317,7 @@ class Oidc extends Authentication {
       clientid: this.joi.string().required(),
       clientsecret: this.joi.string().required(),
       redirect: this.joi.boolean().default(false),
+      logouturl: this.joi.string().uri({ scheme: ['http', 'https'] }),
       timeout: this.joi.number().greater(500).default(5000),
     });
   }
@@ -341,6 +342,7 @@ class Oidc extends Authentication {
       clientid: Oidc.mask(this.configuration.clientid),
       clientsecret: Oidc.mask(this.configuration.clientsecret),
       redirect: this.configuration.redirect,
+      ...(this.configuration.logouturl ? { logouturl: this.configuration.logouturl } : {}),
       timeout: this.configuration.timeout,
     };
   }
@@ -350,8 +352,13 @@ class Oidc extends Authentication {
     const openidClient = await this.getOpenIdClient();
     const timeoutSeconds = Math.ceil(this.configuration.timeout / 1000);
     const discoveryUrl = new URL(this.configuration.discovery);
-    const execute: Array<typeof openidClient.allowInsecureRequests> =
-      discoveryUrl.protocol === 'http:' ? [openidClient.allowInsecureRequests] : [];
+    let execute: Array<typeof openidClient.allowInsecureRequests> = [];
+    if (discoveryUrl.protocol === 'http:') {
+      this.log.warn(
+        'HTTP OIDC discovery URL is deprecated and will be removed in v1.6.0. Update your Identity Provider to serve discovery over HTTPS.',
+      );
+      execute = [openidClient.allowInsecureRequests];
+    }
     this.client = await openidClient.discovery(
       discoveryUrl,
       this.configuration.clientid,
@@ -362,6 +369,7 @@ class Oidc extends Authentication {
         execute,
       },
     );
+    this.logoutUrl = this.configuration.logouturl;
     try {
       this.logoutUrl = openidClient.buildEndSessionUrl(this.client).href;
     } catch (e) {

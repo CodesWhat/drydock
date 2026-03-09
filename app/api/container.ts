@@ -36,6 +36,10 @@ import {
 import { createTriggerHandlers } from './container/triggers.js';
 import { createUpdatePolicyHandlers } from './container/update-policy.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
+import {
+  createAuthenticatedRouteRateLimitKeyGenerator,
+  isIdentityAwareRateLimitKeyingEnabled,
+} from './rate-limit-key.js';
 import { broadcastScanCompleted, broadcastScanStarted } from './sse.js';
 
 const log = logger.child({ component: 'container' });
@@ -200,6 +204,14 @@ export const getContainerTriggers = triggerHandlers.getContainerTriggers;
  * @returns {*}
  */
 export function init() {
+  const serverConfiguration = getServerConfiguration() as Record<string, unknown>;
+  const identityAwareRateLimitKeyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(
+    isIdentityAwareRateLimitKeyingEnabled(serverConfiguration),
+  );
+  const identityAwareRateLimitOptions = identityAwareRateLimitKeyGenerator
+    ? { keyGenerator: identityAwareRateLimitKeyGenerator }
+    : {};
+
   router.use(nocache());
   router.get('/', crudHandlers.getContainers);
   router.post('/watch', crudHandlers.watchContainers);
@@ -228,6 +240,7 @@ export function init() {
       standardHeaders: true,
       legacyHeaders: false,
       validate: { xForwardedForHeader: false },
+      ...identityAwareRateLimitOptions,
     }),
     crudHandlers.revealContainerEnv,
   );
@@ -239,6 +252,7 @@ export function init() {
       standardHeaders: true,
       legacyHeaders: false,
       validate: { xForwardedForHeader: false },
+      ...identityAwareRateLimitOptions,
     }),
     securityHandlers.scanContainer,
   );

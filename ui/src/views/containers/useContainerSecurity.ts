@@ -74,6 +74,90 @@ function parseBooleanLabelValue(value: string | undefined): boolean | undefined 
   return undefined;
 }
 
+function normalizeComposePathList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+
+  if (typeof value !== 'string') {
+    return [];
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return [];
+  }
+
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return normalizeComposePathList(parsed);
+      }
+    } catch {
+      // Fall through to delimiter-based parsing.
+    }
+  }
+
+  return trimmed
+    .split(/[\n,]+/)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function getComposePathsFromMeta(meta: Record<string, unknown> | undefined): string[] {
+  if (!meta) {
+    return [];
+  }
+
+  const compose = meta.compose as Record<string, unknown> | undefined;
+  const composeContext = meta.composeContext as Record<string, unknown> | undefined;
+  const runtimeContext = meta.runtimeContext as Record<string, unknown> | undefined;
+  const labels = meta.labels as Record<string, unknown> | undefined;
+
+  const detectedPaths = [
+    ...normalizeComposePathList(meta.composePaths),
+    ...normalizeComposePathList(meta.compose_paths),
+    ...normalizeComposePathList(compose?.paths),
+    ...normalizeComposePathList(compose?.files),
+    ...normalizeComposePathList(compose?.composePaths),
+    ...normalizeComposePathList(compose?.composeFiles),
+    ...normalizeComposePathList(compose?.file),
+    ...normalizeComposePathList(compose?.composeFile),
+    ...normalizeComposePathList(composeContext?.paths),
+    ...normalizeComposePathList(composeContext?.files),
+    ...normalizeComposePathList(composeContext?.composePaths),
+    ...normalizeComposePathList(composeContext?.composeFiles),
+    ...normalizeComposePathList(composeContext?.file),
+    ...normalizeComposePathList(composeContext?.composeFile),
+    ...normalizeComposePathList(runtimeContext?.paths),
+    ...normalizeComposePathList(runtimeContext?.files),
+    ...normalizeComposePathList(runtimeContext?.composePaths),
+    ...normalizeComposePathList(runtimeContext?.composeFiles),
+    ...normalizeComposePathList(runtimeContext?.file),
+    ...normalizeComposePathList(runtimeContext?.composeFile),
+    ...normalizeComposePathList(labels?.['com.docker.compose.project.config_files']),
+    ...normalizeComposePathList(labels?.['dd.compose.files']),
+    ...normalizeComposePathList(labels?.['wud.compose.files']),
+    ...normalizeComposePathList(labels?.['dd.compose.file']),
+    ...normalizeComposePathList(labels?.['wud.compose.file']),
+  ].filter((value, index, values) => values.indexOf(value) === index);
+
+  if (detectedPaths.length > 0) {
+    return detectedPaths;
+  }
+
+  const trigger = meta.trigger as Record<string, unknown> | undefined;
+  const triggerConfiguration = (trigger?.configuration ??
+    meta.triggerConfiguration ??
+    meta.configuration) as Record<string, unknown> | undefined;
+
+  return normalizeComposePathList(triggerConfiguration?.file);
+}
+
 function detectSbomComponentCount(document: ApiSbomDocument): number | undefined {
   if (Array.isArray(document?.packages)) {
     return document.packages.length;
@@ -180,6 +264,10 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
       )}. Updates will preserve current values to avoid dropping explicit overrides, which can cause runtime drift.`,
     ];
   });
+
+  const selectedComposePaths = computed<string[]>(() =>
+    getComposePathsFromMeta(input.selectedContainerMeta.value),
+  );
 
   function runtimeOriginLabel(origin: RuntimeOrigin): string {
     if (origin === 'explicit') {
@@ -357,6 +445,7 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
     selectedAutoRollbackConfig,
     selectedImageMetadata,
     selectedLifecycleHooks,
+    selectedComposePaths,
     selectedRuntimeDriftWarnings,
     selectedRuntimeOrigins,
     selectedSbomFormat,

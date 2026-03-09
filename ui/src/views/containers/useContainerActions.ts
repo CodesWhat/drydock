@@ -1,5 +1,6 @@
 import { computed, onUnmounted, type Ref, ref, watch } from 'vue';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
+import { useServerFeatures } from '../../composables/useServerFeatures';
 import { getBackups, rollback } from '../../services/backup';
 import {
   deleteContainer as apiDeleteContainer,
@@ -15,6 +16,7 @@ import {
   stopContainer as apiStopContainer,
   updateContainer as apiUpdateContainer,
 } from '../../services/container-actions';
+import type { ContainerComposePreview, ContainerPreviewPayload } from '../../services/preview';
 import { previewContainer } from '../../services/preview';
 import type { ApiContainerTrigger } from '../../types/api';
 import type { Container } from '../../types/container';
@@ -50,13 +52,59 @@ const EMPTY_CONTAINER_POLICY_STATE: ContainerListPolicyState = {
   skipped: false,
   skipCount: 0,
 };
+const ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS = 250;
 
 export function useContainerActions(input: UseContainerActionsInput) {
   const confirm = useConfirmDialog();
+  const { containerActionsEnabled, containerActionsDisabledReason } = useServerFeatures();
 
   const skippedUpdates = ref(new Set<string>());
 
-  const detailPreview = ref<Record<string, unknown> | null>(null);
+  const detailPreview = ref<ContainerPreviewPayload | null>(null);
+  const detailComposePreview = computed<ContainerComposePreview | null>(() => {
+    const compose = detailPreview.value?.compose;
+    if (!compose || typeof compose !== 'object') {
+      return null;
+    }
+
+    const files = Array.isArray(compose.files)
+      ? compose.files
+          .filter((value): value is string => typeof value === 'string')
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0)
+      : [];
+    const service =
+      typeof compose.service === 'string' && compose.service.trim().length > 0
+        ? compose.service.trim()
+        : undefined;
+    const writableFile =
+      typeof compose.writableFile === 'string' && compose.writableFile.trim().length > 0
+        ? compose.writableFile.trim()
+        : undefined;
+    const patch =
+      typeof compose.patch === 'string' && compose.patch.trim().length > 0
+        ? compose.patch
+        : undefined;
+    const willWrite = typeof compose.willWrite === 'boolean' ? compose.willWrite : undefined;
+
+    if (
+      files.length === 0 &&
+      !service &&
+      !writableFile &&
+      patch === undefined &&
+      willWrite === undefined
+    ) {
+      return null;
+    }
+
+    return {
+      files,
+      ...(service ? { service } : {}),
+      ...(writableFile ? { writableFile } : {}),
+      ...(willWrite !== undefined ? { willWrite } : {}),
+      ...(patch ? { patch } : {}),
+    };
+  });
   const previewLoading = ref(false);
   const previewError = ref<string | null>(null);
 
@@ -106,6 +154,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
     () => selectedUpdatePolicy.value.snoozeUntil as string | undefined,
   );
   const snoozeDateInput = ref('');
+
+  function isContainerActionsEnabled(): boolean {
+    return containerActionsEnabled.value;
+  }
 
   function formatTimestamp(timestamp: string | undefined): string {
     if (!timestamp) {
@@ -255,6 +307,24 @@ export function useContainerActions(input: UseContainerActionsInput) {
     await Promise.all([loadDetailTriggers(), loadDetailBackups(), loadDetailUpdateOperations()]);
   }
 
+  let actionTabDetailRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function clearActionTabDetailRefreshTimer() {
+    if (actionTabDetailRefreshTimer === undefined) {
+      return;
+    }
+    clearTimeout(actionTabDetailRefreshTimer);
+    actionTabDetailRefreshTimer = undefined;
+  }
+
+  function scheduleActionTabDataRefresh() {
+    clearActionTabDetailRefreshTimer();
+    actionTabDetailRefreshTimer = setTimeout(() => {
+      actionTabDetailRefreshTimer = undefined;
+      void refreshActionTabData();
+    }, ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
+  }
+
   async function runContainerPreview() {
     const containerId = input.selectedContainerId.value;
     if (!containerId || previewLoading.value) {
@@ -273,6 +343,11 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   async function runAssociatedTrigger(trigger: ApiContainerTrigger) {
+    if (!isContainerActionsEnabled()) {
+      triggerMessage.value = null;
+      triggerError.value = containerActionsDisabledReason.value;
+      return;
+    }
     const containerId = input.selectedContainerId.value;
     if (!containerId || triggerRunInProgress.value) {
       return;
@@ -299,6 +374,11 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   async function rollbackToBackup(backupId?: string) {
+    if (!isContainerActionsEnabled()) {
+      rollbackMessage.value = null;
+      rollbackError.value = containerActionsDisabledReason.value;
+      return;
+    }
     const containerId = input.selectedContainerId.value;
     if (!containerId || rollbackInProgress.value) {
       return;
@@ -327,6 +407,11 @@ export function useContainerActions(input: UseContainerActionsInput) {
     payload: Record<string, unknown> = {},
     message: string,
   ) {
+    if (!isContainerActionsEnabled()) {
+      policyMessage.value = null;
+      policyError.value = containerActionsDisabledReason.value;
+      return false;
+    }
     const containerId = input.containerIdMap.value[name];
     if (!containerId || policyInProgress.value) {
       return false;
@@ -459,6 +544,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       detailPreview.value = null;
       previewError.value = null;
       if (!containerName) {
+        clearActionTabDetailRefreshTimer();
         detailTriggers.value = [];
         detailBackups.value = [];
         detailUpdateOperations.value = [];
@@ -468,8 +554,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
       }
       if (tabName === 'actions') {
         resetDetailMessages();
-        void refreshActionTabData();
+        scheduleActionTabDataRefresh();
+        return;
       }
+      clearActionTabDetailRefreshTimer();
     },
     { immediate: true },
   );
@@ -542,10 +630,15 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   onUnmounted(() => {
+    clearActionTabDetailRefreshTimer();
     stopPendingActionsPolling();
   });
 
   async function executeAction(name: string, action: (id: string) => Promise<unknown>) {
+    if (!isContainerActionsEnabled()) {
+      input.error.value = containerActionsDisabledReason.value;
+      return false;
+    }
     const containerId = input.containerIdMap.value[name];
     if (!containerId || actionInProgress.value) {
       return false;
@@ -587,6 +680,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   async function updateAllInGroup(group: ContainerActionGroup) {
+    if (!isContainerActionsEnabled()) {
+      input.error.value = containerActionsDisabledReason.value;
+      return;
+    }
     if (groupUpdateInProgress.value.has(group.key)) {
       return;
     }
@@ -642,6 +739,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   async function deleteContainer(name: string) {
+    if (!isContainerActionsEnabled()) {
+      input.error.value = containerActionsDisabledReason.value;
+      return false;
+    }
     const containerId = input.containerIdMap.value[name];
     if (!containerId || actionInProgress.value) {
       return false;
@@ -791,6 +892,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
     actionInProgress,
     actionPending,
     backupsLoading,
+    containerActionsDisabledReason,
+    containerActionsEnabled,
     clearPolicySelected,
     clearSkipsSelected,
     confirmDelete,
@@ -801,6 +904,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     confirmStop,
     containerPolicyTooltip,
     detailBackups,
+    detailComposePreview,
     detailPreview,
     detailTriggers,
     detailUpdateOperations,

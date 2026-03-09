@@ -4,12 +4,31 @@ import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
-const { mockRoute } = vi.hoisted(() => ({
+const { mockRoute, mockContainerActionsEnabled, mockLoadServerFeatures } = vi.hoisted(() => ({
   mockRoute: { query: {} as Record<string, unknown> },
+  mockContainerActionsEnabled: { value: true },
+  mockLoadServerFeatures: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('vue-router', () => ({
   useRoute: () => mockRoute,
+}));
+
+vi.mock('@/composables/useServerFeatures', () => ({
+  useServerFeatures: () => ({
+    featureFlags: computed(() => ({ containeractions: mockContainerActionsEnabled.value })),
+    containerActionsEnabled: computed(() => mockContainerActionsEnabled.value),
+    deleteEnabled: computed(() => true),
+    loaded: computed(() => true),
+    loading: computed(() => false),
+    error: computed(() => null),
+    loadServerFeatures: mockLoadServerFeatures,
+    isFeatureEnabled: (name: string) =>
+      name.toLowerCase() === 'containeractions' ? mockContainerActionsEnabled.value : false,
+    containerActionsDisabledReason: computed(
+      () => 'Container actions disabled by server configuration',
+    ),
+  }),
 }));
 
 // --- Mock all services ---
@@ -321,6 +340,7 @@ async function mountContainersView(
 describe('ContainersView', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockContainerActionsEnabled.value = true;
     mockIsMobile.value = false;
     mockWindowNarrow.value = false;
     mockGetContainerGroups.mockResolvedValue([]);
@@ -453,6 +473,14 @@ describe('ContainersView', () => {
       const wrapper = await mountContainersView([makeContainer()]);
       const dataTable = wrapper.findComponent(childStubs.DataTable as any);
       expect(dataTable.props('showActions')).toBe(true);
+    });
+
+    it('shows disabled action controls when container actions are disabled server-side', async () => {
+      mockContainerActionsEnabled.value = false;
+      const wrapper = await mountContainersView([makeContainer({ newTag: '1.1.0' })]);
+
+      expect(wrapper.text()).toContain('Actions disabled');
+      expect(wrapper.findAll('button[disabled]').length).toBeGreaterThan(0);
     });
 
     it('disables virtual scrolling so the table flows with the page', async () => {
@@ -793,6 +821,7 @@ describe('ContainersView', () => {
     });
 
     it('loads and renders update operation history when opening actions tab', async () => {
+      vi.useFakeTimers();
       const c = makeContainer({ id: 'container-1', name: 'nginx' });
       const wrapper = await mountContainersView([c]);
 
@@ -810,6 +839,8 @@ describe('ContainersView', () => {
       mockDetailPanelOpen.value = true;
       mockActiveDetailTab.value = 'actions';
       await flushPromises();
+      await vi.advanceTimersByTimeAsync(300);
+      await flushPromises();
 
       expect(mockGetContainerUpdateOperations).toHaveBeenCalledWith('container-1');
       expect(wrapper.text()).toContain('Update Operation History');
@@ -817,6 +848,7 @@ describe('ContainersView', () => {
       expect(wrapper.text()).toContain('rolled back');
       expect(wrapper.text()).toContain('rollback failed');
       expect(wrapper.text()).toContain('health gate failed');
+      vi.useRealTimers();
     });
 
     it('shows registry error message when selected container has one', async () => {

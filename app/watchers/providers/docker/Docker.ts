@@ -11,6 +11,7 @@ import parse from 'parse-docker-image-name';
 const debounce: typeof import('just-debounce').default =
   (debounceImport as any).default || (debounceImport as any);
 
+import { ddEnvVars } from '../../../configuration/index.js';
 import { getPreferredLabelValue } from '../../../docker/legacy-label.js';
 import * as event from '../../../event/index.js';
 import log from '../../../log/index.js';
@@ -642,7 +643,13 @@ class Docker extends Watcher {
     this.initWatcher();
     if (this.configuration.watchdigest !== undefined) {
       this.log.warn(
-        "DD_WATCHER_{watcher_name}_WATCHDIGEST environment variable is deprecated and won't be supported in upcoming versions",
+        'DD_WATCHER_{watcher_name}_WATCHDIGEST environment variable is deprecated and will be removed in v1.6.0. Use the dd.watch.digest=true container label instead.',
+      );
+    }
+    const watchAtStartEnvKey = `DD_WATCHER_${this.name.toUpperCase()}_WATCHATSTART`;
+    if (Object.hasOwn(ddEnvVars, watchAtStartEnvKey)) {
+      this.log.warn(
+        `${watchAtStartEnvKey} environment variable is deprecated and will be removed in v1.6.0. Drydock watches at startup by default.`,
       );
     }
     this.log.info(`Cron scheduled (${this.configuration.cron})`);

@@ -16,6 +16,8 @@ const {
   mockIsInternetlessModeEnabled,
   mockGetStoreConfiguration,
   mockResolveFromRuntimeRoot,
+  mockCreateAuthenticatedRouteRateLimitKeyGenerator,
+  mockIsIdentityAwareRateLimitKeyingEnabled,
 } = vi.hoisted(() => ({
   mockRouter: { get: vi.fn(), delete: vi.fn() },
   mockRateLimit: vi.fn(() => 'icon-rate-limit-middleware'),
@@ -32,6 +34,8 @@ const {
   mockIsInternetlessModeEnabled: vi.fn(() => false),
   mockGetStoreConfiguration: vi.fn(() => ({ path: '/store', file: 'dd.json' })),
   mockResolveFromRuntimeRoot: vi.fn(),
+  mockCreateAuthenticatedRouteRateLimitKeyGenerator: vi.fn(() => undefined),
+  mockIsIdentityAwareRateLimitKeyingEnabled: vi.fn(() => false),
 }));
 
 vi.mock('express', () => ({
@@ -86,6 +90,10 @@ vi.mock('../runtime/paths', async () => {
 vi.mock('../log', () => ({
   default: { child: vi.fn(() => ({ warn: vi.fn(), info: vi.fn() })) },
 }));
+vi.mock('./rate-limit-key.js', () => ({
+  createAuthenticatedRouteRateLimitKeyGenerator: mockCreateAuthenticatedRouteRateLimitKeyGenerator,
+  isIdentityAwareRateLimitKeyingEnabled: mockIsIdentityAwareRateLimitKeyingEnabled,
+}));
 
 import { ICON_CACHE_ENFORCEMENT_INTERVAL_MS } from './icons/settings.js';
 import { enforceIconCacheLimits, resetIconCacheEnforcementStateForTests } from './icons/storage.js';
@@ -117,6 +125,8 @@ describe('Icons Router', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     resetIconCacheEnforcementStateForTests();
+    mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(false);
+    mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(undefined);
     mockIsInternetlessModeEnabled.mockReturnValue(false);
     mockGetStoreConfiguration.mockReturnValue({ path: '/store', file: 'dd.json' });
     mockResolveFromRuntimeRoot.mockImplementation((...segments: string[]) =>
@@ -158,6 +168,20 @@ describe('Icons Router', () => {
       '/:provider/:slug',
       'icon-rate-limit-middleware',
       expect.any(Function),
+    );
+  });
+
+  test('should include identity-aware key generator in icon proxy limiter when enabled', () => {
+    const keyGenerator = vi.fn(() => 'session:test');
+    mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(true);
+    mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(keyGenerator);
+
+    iconsRouter.init();
+
+    expect(mockRateLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keyGenerator,
+      }),
     );
   });
 
@@ -1326,7 +1350,7 @@ describe('Icons Router', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
-      error: expect.any(String),
+      error: 'Invalid request parameters',
     });
   });
 
@@ -1338,7 +1362,7 @@ describe('Icons Router', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
-      error: expect.any(String),
+      error: 'Invalid request parameters',
     });
   });
 

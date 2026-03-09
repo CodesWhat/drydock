@@ -311,6 +311,14 @@ class UpdateLifecycleExecutor {
         containerName: this.context.getContainerFullName(container),
         error: errorMessage,
       });
+      try {
+        this.postUpdate.pruneOldBackups(container.name, this.postUpdate.getBackupCount());
+      } catch (pruneError: unknown) {
+        const pruneErrorMessage = String((pruneError as Error)?.message ?? pruneError);
+        containerLogger.warn?.(
+          `Failed to prune old backups after update failure for ${container.name}: ${pruneErrorMessage}`,
+        );
+      }
       throw e;
     }
   }

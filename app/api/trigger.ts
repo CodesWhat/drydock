@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
+import joi from 'joi';
 import * as agent from '../agent/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
+import type { Container } from '../model/container.js';
 import * as registry from '../registry/index.js';
 import { getErrorMessage } from '../util/error.js';
 import * as component from './component.js';
@@ -18,25 +20,63 @@ interface RunRemoteTriggerParams extends RunTriggerParams {
   agent: string;
 }
 
+interface TriggerUpdateKind {
+  kind: string;
+  localValue?: unknown;
+  remoteValue?: unknown;
+  semverDiff?: string;
+}
+
+interface TriggerRequestBody extends Record<string, unknown> {
+  id: string;
+  agent?: string;
+  updateKind?: TriggerUpdateKind;
+}
+
+const triggerRequestBodySchema = joi
+  .object<TriggerRequestBody>({
+    id: joi.string().trim().min(1).required(),
+    agent: joi.string().trim().min(1),
+  })
+  .unknown(true);
+
+const INVALID_TRIGGER_REQUEST_BODY_ERROR = 'Invalid trigger request body';
+
+function validateTriggerRequestBody(body: unknown): {
+  value?: TriggerRequestBody;
+  error?: string;
+} {
+  const validationResult = triggerRequestBodySchema.validate(body, {
+    abortEarly: false,
+    convert: false,
+  });
+
+  if (validationResult.error) {
+    return {
+      error: validationResult.error.message,
+    };
+  }
+
+  return {
+    value: validationResult.value,
+  };
+}
+
 /**
  * Run a specific trigger on a specific container provided in the payload.
  */
 export async function runTrigger(req: Request<RunTriggerParams>, res: Response) {
   const triggerType = req.params.type;
   const triggerName = req.params.name;
-  const containerToTrigger = req.body;
-
-  if (!containerToTrigger) {
+  const validationResult = validateTriggerRequestBody(req.body);
+  if (validationResult.error || !validationResult.value) {
     log.warn(
-      `Trigger cannot be executed without container (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)})`,
+      `Invalid trigger request body (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}, error=${sanitizeLogParam(validationResult.error)})`,
     );
-    sendErrorResponse(
-      res,
-      400,
-      `Error when running trigger ${triggerType}.${triggerName} (container is undefined)`,
-    );
+    sendErrorResponse(res, 400, INVALID_TRIGGER_REQUEST_BODY_ERROR);
     return;
   }
+  const containerToTrigger = validationResult.value as unknown as Container;
 
   // Running local triggers on remote containers is not supported
   if (containerToTrigger.agent) {
@@ -98,7 +138,6 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
  */
 async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Response) {
   const { agent: agentName, type: triggerType, name: triggerName } = req.params;
-  const containerToTrigger = req.body;
 
   const agentClient = agent.getAgent(agentName);
   if (!agentClient) {
@@ -106,10 +145,15 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
     return;
   }
 
-  if (!containerToTrigger?.id) {
-    sendErrorResponse(res, 400, 'Container with ID is required in body');
+  const validationResult = validateTriggerRequestBody(req.body);
+  if (validationResult.error || !validationResult.value) {
+    log.warn(
+      `Invalid remote trigger request body (agent=${sanitizeLogParam(agentName)}, type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}, error=${sanitizeLogParam(validationResult.error)})`,
+    );
+    sendErrorResponse(res, 400, INVALID_TRIGGER_REQUEST_BODY_ERROR);
     return;
   }
+  const containerToTrigger = validationResult.value as unknown as Container;
 
   try {
     await agentClient.runRemoteTrigger(containerToTrigger, triggerType, triggerName);

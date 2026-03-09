@@ -13,6 +13,7 @@ import DetailPanel from './components/DetailPanel.vue';
 import EmptyState from './components/EmptyState.vue';
 import ThemeToggle from './components/ThemeToggle.vue';
 import ToggleSwitch from './components/ToggleSwitch.vue';
+import { loadServerFeatures } from './composables/useServerFeatures';
 import { tooltip as Tooltip } from './directives/tooltip';
 import AppLayout from './layouts/AppLayout.vue';
 import { applyRadius } from './preferences/radius';
@@ -48,6 +49,9 @@ getSettings()
     // Settings unavailable (e.g. backend not ready yet) — leave CDN enabled;
     // the CSP will block fetches anyway if the network is unreachable.
   });
+
+// Load server feature flags once during bootstrap so UI action gating is ready early.
+void loadServerFeatures();
 
 const app = createApp(App);
 app.component('AppIcon', AppIcon);

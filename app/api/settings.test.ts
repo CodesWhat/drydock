@@ -1,10 +1,14 @@
 import { createMockResponse } from '../test/helpers.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
-const { mockRouter, mockGetSettings, mockUpdateSettings } = vi.hoisted(() => ({
+const deprecatedPutDeprecation = '@1798761600';
+const deprecatedPutSunset = 'Wed, 01 Jan 2027 00:00:00 GMT';
+
+const { mockRouter, mockGetSettings, mockUpdateSettings, mockLogWarn } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), put: vi.fn(), patch: vi.fn() },
   mockGetSettings: vi.fn(() => ({ internetlessMode: false })),
   mockUpdateSettings: vi.fn((settings) => ({ internetlessMode: settings.internetlessMode })),
+  mockLogWarn: vi.fn(),
 }));
 
 vi.mock('express', () => ({
@@ -16,6 +20,12 @@ vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 vi.mock('../store/settings', () => ({
   getSettings: mockGetSettings,
   updateSettings: mockUpdateSettings,
+}));
+
+vi.mock('../log/index.js', () => ({
+  default: {
+    child: vi.fn(() => ({ info: vi.fn(), warn: mockLogWarn, debug: vi.fn(), error: vi.fn() })),
+  },
 }));
 
 import * as settingsRouter from './settings.js';
@@ -104,7 +114,7 @@ describe('Settings Router', () => {
     expect(mockUpdateSettings).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
-      error: expect.any(String),
+      error: 'Invalid request parameters',
     });
   });
 
@@ -118,14 +128,17 @@ describe('Settings Router', () => {
     expect(mockUpdateSettings).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
-      error: expect.any(String),
+      error: 'Invalid request parameters',
     });
   });
 
-  test('should keep PUT route as a compatibility alias', () => {
+  test('should keep PUT route as a compatibility alias and return deprecation headers', () => {
     settingsRouter.init();
     const handler = mockRouter.put.mock.calls.find((call) => call[0] === '/')[1];
-    const res = createMockResponse();
+    const res = {
+      ...createMockResponse(),
+      setHeader: vi.fn(),
+    };
 
     handler(
       {
@@ -143,5 +156,32 @@ describe('Settings Router', () => {
     expect(res.json).toHaveBeenCalledWith({
       internetlessMode: true,
     });
+    expect(res.setHeader).toHaveBeenCalledWith('Deprecation', deprecatedPutDeprecation);
+    expect(res.setHeader).toHaveBeenCalledWith('Sunset', deprecatedPutSunset);
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      'PUT /api/settings is deprecated and will be removed in v1.6.0. Use PATCH /api/settings instead.',
+    );
+  });
+
+  test('should not return deprecation headers on PATCH', () => {
+    settingsRouter.init();
+    const handler = mockRouter.patch.mock.calls.find((call) => call[0] === '/')[1];
+    const res = {
+      ...createMockResponse(),
+      setHeader: vi.fn(),
+    };
+
+    handler(
+      {
+        body: {
+          internetlessMode: true,
+        },
+      },
+      res as any,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.setHeader).not.toHaveBeenCalledWith('Deprecation', deprecatedPutDeprecation);
+    expect(res.setHeader).not.toHaveBeenCalledWith('Sunset', deprecatedPutSunset);
   });
 });

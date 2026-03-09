@@ -249,7 +249,11 @@ body {
   font-family: var(--drydock-font, "IBM Plex Mono", monospace);
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling — overlay so scrollbars never shift layout */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--dd-scrollbar) transparent;
+}
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -260,6 +264,17 @@ body {
 ::-webkit-scrollbar-thumb {
   background: var(--dd-scrollbar);
   border-radius: 3px;
+}
+@supports (overflow: overlay) {
+  .overflow-auto {
+    overflow: overlay;
+  }
+  .overflow-y-auto {
+    overflow-y: overlay;
+  }
+  .overflow-x-auto {
+    overflow-x: overlay;
+  }
 }
 
 /* Hidden scrollbar utility (for horizontal tab bars) */

@@ -139,7 +139,12 @@ done
 # name, registry URL, and tag fields are populated asynchronously after
 # discovery and the E2E assertions depend on them.
 AUTH_HEADER="Basic $(echo -n 'john:doe' | base64)"
-EXPECTED_CONTAINERS=${DD_EXPECTED_CONTAINERS:-10}
+DEFAULT_EXPECTED=10
+# ghcr_radarr and lscr_radarr only run when GITHUB_USERNAME is set
+if [ -z "${GITHUB_USERNAME:-}" ]; then
+	DEFAULT_EXPECTED=$((DEFAULT_EXPECTED - 2))
+fi
+EXPECTED_CONTAINERS=${DD_EXPECTED_CONTAINERS:-$DEFAULT_EXPECTED}
 echo "Waiting for drydock to discover ${EXPECTED_CONTAINERS}+ containers with image data (max 90s)..."
 for i in $(seq 1 45); do
 	# Count containers that have a populated image.name (not just discovered)

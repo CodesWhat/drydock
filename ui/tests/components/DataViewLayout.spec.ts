@@ -45,12 +45,31 @@ describe('DataViewLayout', () => {
     expect(root.classes()).toContain('min-h-0');
   });
 
-  it('has a flex row inside for main + panel layout', () => {
+  it('has a flex row inside for main + panel layout with gap-2', () => {
     const wrapper = mount(DataViewLayout, {
       slots: { default: '<p>Content</p>' },
     });
-    const row = wrapper.find('.flex.gap-4');
+    const row = wrapper.find('.flex.gap-2');
     expect(row.exists()).toBe(true);
+    expect(row.classes()).toContain('gap-2');
+  });
+
+  it('does not use gap-4 between content and panel', () => {
+    const wrapper = mount(DataViewLayout, {
+      slots: { default: '<p>Content</p>' },
+    });
+    const row = wrapper
+      .findAll('div')
+      .find(
+        (d) =>
+          d.classes().includes('flex') &&
+          d.classes().includes('min-w-0') &&
+          d.classes().includes('flex-1') &&
+          d.classes().includes('min-h-0') &&
+          !d.classes().includes('flex-col'),
+      );
+    expect(row).toBeDefined();
+    expect(row!.classes()).not.toContain('gap-4');
   });
 
   it('has a scroll container on the main content area', () => {
@@ -60,6 +79,14 @@ describe('DataViewLayout', () => {
     const scrollArea = wrapper.find('.overflow-auto');
     expect(scrollArea.exists()).toBe(true);
     expect(scrollArea.text()).toContain('Scrollable');
+  });
+
+  it('applies pr-[15px] on the scrollable content area for scrollbar centering', () => {
+    const wrapper = mount(DataViewLayout, {
+      slots: { default: '<p>Content</p>' },
+    });
+    const scrollArea = wrapper.find('.overflow-auto');
+    expect(scrollArea.classes()).toContain('sm:pr-[15px]');
   });
 
   it('renders multiple default slot children', () => {

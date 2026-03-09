@@ -393,6 +393,8 @@ End the current session.
 curl -X POST http://drydock:3000/auth/logout
 ```
 
+When the active auth strategy exposes an OIDC end-session URL, the response includes `logoutUrl` so the UI can complete IdP logout. If `logoutUrl` is missing, logout is local-session-only.
+
 ### Remember me
 
 Store a remember-me preference for the current authenticated session.

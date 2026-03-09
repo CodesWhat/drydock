@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => {
     createApp: vi.fn(() => app),
     disableIconifyApi: vi.fn(),
     getSettings: vi.fn(),
+    loadServerFeatures: vi.fn().mockResolvedValue(undefined),
     registerIcons: vi.fn(),
     router: { __name: 'router' },
   };
@@ -33,6 +34,10 @@ vi.mock('@/services/settings', () => ({
   getSettings: mocks.getSettings,
 }));
 
+vi.mock('@/composables/useServerFeatures', () => ({
+  loadServerFeatures: mocks.loadServerFeatures,
+}));
+
 vi.mock('@/router', () => ({
   default: mocks.router,
 }));
@@ -49,6 +54,7 @@ describe('main bootstrap', () => {
     mocks.createApp.mockClear();
     mocks.disableIconifyApi.mockClear();
     mocks.getSettings.mockReset();
+    mocks.loadServerFeatures.mockClear();
     mocks.registerIcons.mockClear();
     mocks.app.component.mockClear();
     mocks.app.directive.mockClear();
@@ -64,6 +70,7 @@ describe('main bootstrap', () => {
     await importMain();
 
     expect(mocks.registerIcons).toHaveBeenCalledTimes(1);
+    expect(mocks.loadServerFeatures).toHaveBeenCalledTimes(1);
     expect(mocks.disableIconifyApi).toHaveBeenCalledTimes(1);
     expect(mocks.createApp).toHaveBeenCalledTimes(1);
     expect(mocks.app.component).toHaveBeenCalledWith('AppIcon', expect.anything());

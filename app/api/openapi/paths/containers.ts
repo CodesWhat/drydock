@@ -38,7 +38,7 @@ export const containerPaths = {
   },
   '/api/containers/watch': {
     post: {
-      tags: ['Containers'],
+      tags: ['Containers', 'Actions'],
       summary: 'Trigger watch cycle for all watchers and return containers',
       operationId: 'watchAllContainers',
       requestBody: {
@@ -206,7 +206,7 @@ export const containerPaths = {
   },
   '/api/containers/{id}/triggers/{triggerType}/{triggerName}': {
     post: {
-      tags: ['Containers'],
+      tags: ['Containers', 'Actions'],
       summary: 'Run a local trigger for a container',
       operationId: 'runContainerTrigger',
       parameters: [containerIdPathParam, triggerTypePathParam, triggerNamePathParam],
@@ -221,7 +221,7 @@ export const containerPaths = {
   },
   '/api/containers/{id}/triggers/{triggerType}/{triggerName}/{triggerAgent}': {
     post: {
-      tags: ['Containers'],
+      tags: ['Containers', 'Actions'],
       summary: 'Run a remote trigger for a container',
       operationId: 'runRemoteContainerTrigger',
       parameters: [
@@ -286,7 +286,7 @@ export const containerPaths = {
   },
   '/api/containers/{id}/watch': {
     post: {
-      tags: ['Containers'],
+      tags: ['Containers', 'Actions'],
       summary: 'Watch a specific container',
       operationId: 'watchContainerById',
       parameters: [containerIdPathParam],
@@ -346,7 +346,7 @@ export const containerPaths = {
   },
   '/api/containers/{id}/env/reveal': {
     post: {
-      tags: ['Containers'],
+      tags: ['Containers', 'Actions'],
       summary: 'Reveal unredacted environment variables for a container',
       operationId: 'revealContainerEnv',
       parameters: [containerIdPathParam],
@@ -363,7 +363,7 @@ export const containerPaths = {
   },
   '/api/containers/{id}/scan': {
     post: {
-      tags: ['Containers'],
+      tags: ['Containers', 'Actions'],
       summary: 'Run on-demand security scan for a container image',
       operationId: 'scanContainer',
       parameters: [containerIdPathParam],
@@ -417,8 +417,10 @@ export const containerPaths = {
   },
   '/api/containers/{id}/preview': {
     post: {
-      tags: ['Containers'],
+      tags: ['Containers', 'Actions'],
       summary: 'Preview container update actions',
+      description:
+        'Returns generic docker preview fields and compose mutation metadata when the container is managed by the dockercompose trigger.',
       operationId: 'previewContainerUpdate',
       parameters: [containerIdPathParam],
       responses: {
@@ -446,7 +448,7 @@ export const containerPaths = {
   },
   '/api/containers/{id}/rollback': {
     post: {
-      tags: ['Containers'],
+      tags: ['Containers', 'Actions'],
       summary: 'Rollback container to backup image',
       operationId: 'rollbackContainer',
       parameters: [containerIdPathParam, destructiveConfirmationHeaderParam('container-rollback')],
@@ -477,7 +479,7 @@ export const containerPaths = {
   },
   '/api/containers/{id}/start': {
     post: {
-      tags: ['Containers'],
+      tags: ['Containers', 'Actions'],
       summary: 'Start container',
       operationId: 'startContainer',
       parameters: [containerIdPathParam],
@@ -494,7 +496,7 @@ export const containerPaths = {
   },
   '/api/containers/{id}/stop': {
     post: {
-      tags: ['Containers'],
+      tags: ['Containers', 'Actions'],
       summary: 'Stop container',
       operationId: 'stopContainer',
       parameters: [containerIdPathParam],
@@ -511,7 +513,7 @@ export const containerPaths = {
   },
   '/api/containers/{id}/restart': {
     post: {
-      tags: ['Containers'],
+      tags: ['Containers', 'Actions'],
       summary: 'Restart container',
       operationId: 'restartContainer',
       parameters: [containerIdPathParam],
@@ -528,7 +530,7 @@ export const containerPaths = {
   },
   '/api/containers/{id}/update': {
     post: {
-      tags: ['Containers'],
+      tags: ['Containers', 'Actions'],
       summary: 'Update container to latest available image',
       operationId: 'updateContainer',
       parameters: [containerIdPathParam],

@@ -29,7 +29,7 @@ export const authPaths = {
   },
   '/auth/login': {
     post: {
-      tags: ['Authentication'],
+      tags: ['Authentication', 'Actions'],
       summary: 'Authenticate and create session',
       operationId: 'login',
       security: [],
@@ -57,7 +57,7 @@ export const authPaths = {
   },
   '/auth/remember': {
     post: {
-      tags: ['Authentication'],
+      tags: ['Authentication', 'Actions'],
       summary: 'Persist remember-me preference for current session',
       operationId: 'setRememberMe',
       requestBody: {
@@ -96,7 +96,7 @@ export const authPaths = {
   },
   '/auth/logout': {
     post: {
-      tags: ['Authentication'],
+      tags: ['Authentication', 'Actions'],
       summary: 'Logout current user',
       operationId: 'logout',
       responses: {

@@ -10,6 +10,10 @@ export const openApiDocument = {
     description:
       'Machine-readable API specification for Drydock. Canonical API base path is /api/v1, with /api available as a compatibility alias. Authentication defaults to session cookie auth. Mutating requests using session auth must also satisfy same-origin CSRF checks.',
   },
+  'x-drydock-conventions': {
+    actionPostEndpoints:
+      'Side-effecting command operations use action-oriented POST endpoints under resource paths (e.g., POST /api/containers/:id/scan).',
+  },
   servers: [
     {
       url: '/',
@@ -21,6 +25,11 @@ export const openApiDocument = {
     { name: 'Authentication', description: 'Authentication and session lifecycle endpoints' },
     { name: 'Containers', description: 'Container inventory and container-scoped operations' },
     { name: 'Triggers', description: 'Trigger discovery and trigger execution' },
+    {
+      name: 'Actions',
+      description:
+        'Side-effecting command operations using action-oriented POST endpoints under resource paths.',
+    },
     { name: 'Watchers', description: 'Watcher component discovery' },
     { name: 'Registries', description: 'Registry component discovery' },
     { name: 'Authentications', description: 'Authentication component discovery' },

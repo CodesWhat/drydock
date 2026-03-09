@@ -7,8 +7,8 @@ import {
 } from '../notifications/trigger-policy.js';
 import * as registry from '../registry/index.js';
 import * as notificationStore from '../store/notification.js';
-import { getErrorMessage } from '../util/error.js';
 import { sendErrorResponse } from './error-response.js';
+import { sanitizeApiError } from './helpers.js';
 
 const router = express.Router();
 
@@ -56,7 +56,7 @@ function updateNotificationRule(req, res) {
     stripUnknown: true,
   });
   if (notificationRuleToUpdate.error) {
-    sendErrorResponse(res, 400, notificationRuleToUpdate.error.message);
+    sendErrorResponse(res, 400, sanitizeApiError(notificationRuleToUpdate.error));
     return;
   }
 
@@ -93,7 +93,7 @@ function updateNotificationRule(req, res) {
 
     res.status(200).json(sanitizeRuleForResponse(notificationRuleUpdated, allowedTriggerIds));
   } catch (e: unknown) {
-    sendErrorResponse(res, 400, getErrorMessage(e));
+    sendErrorResponse(res, 500, sanitizeApiError(e));
   }
 }
 

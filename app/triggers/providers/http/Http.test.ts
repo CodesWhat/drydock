@@ -2,6 +2,11 @@ import Http from './Http.js';
 
 // Mock axios
 vi.mock('axios', () => ({ default: vi.fn() }));
+vi.mock('../../../log/index.js', () => ({
+  default: {
+    child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }),
+  },
+}));
 
 describe('HTTP Trigger', () => {
   let http;
@@ -24,6 +29,68 @@ describe('HTTP Trigger', () => {
   test('should validate configuration with URL', async () => {
     const config = {
       url: 'https://example.com/webhook',
+    };
+
+    expect(() => http.validateConfiguration(config)).not.toThrow();
+  });
+
+  test('should allow configuration without auth object', async () => {
+    const config = {
+      url: 'https://example.com/webhook',
+    };
+
+    expect(() => http.validateConfiguration(config)).not.toThrow();
+  });
+
+  test('should fail validation when BASIC auth is missing credentials', async () => {
+    const config = {
+      url: 'https://example.com/webhook',
+      auth: { type: 'BASIC' },
+    };
+
+    expect(() => http.validateConfiguration(config)).toThrow('"auth.user" is required');
+  });
+
+  test('should fail validation when BEARER auth is missing token', async () => {
+    const config = {
+      url: 'https://example.com/webhook',
+      auth: { type: 'BEARER' },
+    };
+
+    expect(() => http.validateConfiguration(config)).toThrow('"auth.bearer" is required');
+  });
+
+  test('should fail validation when lowercase basic auth is missing credentials', async () => {
+    const config = {
+      url: 'https://example.com/webhook',
+      auth: { type: 'basic' },
+    };
+
+    expect(() => http.validateConfiguration(config)).toThrow('"auth.user" is required');
+  });
+
+  test('should fail validation when lowercase bearer auth is missing token', async () => {
+    const config = {
+      url: 'https://example.com/webhook',
+      auth: { type: 'bearer' },
+    };
+
+    expect(() => http.validateConfiguration(config)).toThrow('"auth.bearer" is required');
+  });
+
+  test('should validate configuration with complete BASIC auth', async () => {
+    const config = {
+      url: 'https://example.com/webhook',
+      auth: { type: 'BASIC', user: 'user', password: 'pass' },
+    };
+
+    expect(() => http.validateConfiguration(config)).not.toThrow();
+  });
+
+  test('should validate configuration with complete BEARER auth', async () => {
+    const config = {
+      url: 'https://example.com/webhook',
+      auth: { type: 'BEARER', bearer: 'token' },
     };
 
     expect(() => http.validateConfiguration(config)).not.toThrow();

@@ -98,8 +98,11 @@ export function deleteBackup(id: string): boolean {
  * @param containerName
  * @param maxCount
  */
-export function pruneOldBackups(containerName: string, maxCount: number): number {
+export function pruneOldBackups(containerName: string, maxCount: number | undefined): number {
   if (!backupCollection) {
+    return 0;
+  }
+  if (typeof maxCount !== 'number' || !Number.isFinite(maxCount)) {
     return 0;
   }
   const docs = backupCollection.find({ 'data.containerName': containerName });

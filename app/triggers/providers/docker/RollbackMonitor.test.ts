@@ -171,7 +171,10 @@ describe('RollbackMonitor', () => {
 
     await monitor.start(
       { api: true },
-      createContainer({ image: { tag: { value: '2.0.0' }, digest: {} } }),
+      createContainer({
+        image: { tag: { value: '1.0.0' }, digest: {} },
+        updateKind: { remoteValue: '2.0.0' },
+      }),
       { autoRollback: true, rollbackWindow: 120_000, rollbackInterval: 3_000 },
       { info, warn: vi.fn() },
     );
@@ -189,5 +192,34 @@ describe('RollbackMonitor', () => {
       log: { info, warn: expect.any(Function) },
     });
     expect(getTriggerInstance).toHaveBeenCalledTimes(1);
+  });
+
+  test('start should use current image tag when update kind has no remote value', async () => {
+    const startHealthMonitor = vi.fn();
+    const newContainer = { id: 'new-container' };
+    const monitor = createMonitor({
+      getCurrentContainer: vi.fn().mockResolvedValue(newContainer),
+      inspectContainer: vi.fn().mockResolvedValue({
+        Id: 'new-container-id',
+        State: { Health: { Status: 'starting' } },
+      }),
+      startHealthMonitor,
+    });
+
+    await monitor.start(
+      { api: true },
+      createContainer({
+        image: { tag: { value: '1.2.3' }, digest: {} },
+        updateKind: undefined,
+      }),
+      { autoRollback: true, rollbackWindow: 120_000, rollbackInterval: 3_000 },
+      { info: vi.fn(), warn: vi.fn() },
+    );
+
+    expect(startHealthMonitor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backupImageTag: '1.2.3',
+      }),
+    );
   });
 });

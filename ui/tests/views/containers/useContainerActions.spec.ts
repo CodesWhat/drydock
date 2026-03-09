@@ -1,5 +1,5 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
-import { defineComponent, h, nextTick, type Ref, ref } from 'vue';
+import { computed, defineComponent, h, nextTick, type Ref, ref } from 'vue';
 import type { ApiContainerTrigger } from '@/types/api';
 import type { Container } from '@/types/container';
 import { useContainerActions } from '@/views/containers/useContainerActions';
@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   stopContainer: vi.fn(),
   updateContainer: vi.fn(),
   previewContainer: vi.fn(),
+  containerActionsEnabled: { value: true },
+  loadServerFeatures: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/composables/useConfirmDialog', () => ({
@@ -50,6 +52,25 @@ vi.mock('@/services/container-actions', () => ({
 
 vi.mock('@/services/preview', () => ({
   previewContainer: mocks.previewContainer,
+}));
+
+vi.mock('@/composables/useServerFeatures', () => ({
+  useServerFeatures: () => ({
+    featureFlags: computed(() => ({
+      containeractions: mocks.containerActionsEnabled.value,
+    })),
+    containerActionsEnabled: computed(() => mocks.containerActionsEnabled.value),
+    containerActionsDisabledReason: computed(
+      () => 'Container actions disabled by server configuration',
+    ),
+    deleteEnabled: computed(() => true),
+    loaded: computed(() => true),
+    loading: computed(() => false),
+    error: computed(() => null),
+    loadServerFeatures: mocks.loadServerFeatures,
+    isFeatureEnabled: (name: string) =>
+      name.toLowerCase() === 'containeractions' ? mocks.containerActionsEnabled.value : false,
+  }),
 }));
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
@@ -156,6 +177,7 @@ describe('useContainerActions', () => {
   beforeEach(() => {
     vi.useRealTimers();
     vi.resetAllMocks();
+    mocks.containerActionsEnabled.value = true;
     mocks.getBackups.mockResolvedValue([]);
     mocks.rollback.mockResolvedValue({});
     mocks.deleteContainer.mockResolvedValue({});
@@ -593,6 +615,7 @@ describe('useContainerActions', () => {
   });
 
   it('handles action-tab detail load guards and API failures', async () => {
+    vi.useFakeTimers();
     const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable, activeDetailTab, selectedContainerId } = await mountActionsHarness({
       activeDetailTab: 'actions',
@@ -614,11 +637,81 @@ describe('useContainerActions', () => {
     activeDetailTab.value = 'overview';
     await nextTick();
     activeDetailTab.value = 'actions';
+    await nextTick();
+    vi.advanceTimersByTime(250);
     await flushPromises();
 
     expect(composable.triggerError.value).toBe('trigger load failed');
     expect(composable.rollbackError.value).toBe('backup load failed');
     expect(composable.updateOperationsError.value).toBe('ops load failed');
+  });
+
+  it('clears action-tab detail data when refresh runs without a selected container id', async () => {
+    vi.useFakeTimers();
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, activeDetailTab, selectedContainerId } = await mountActionsHarness({
+      activeDetailTab: 'overview',
+      selectedContainer: container,
+      selectedContainerId: container.id,
+    });
+
+    composable.detailBackups.value = [{ id: 'stale-backup' }];
+    composable.detailUpdateOperations.value = [{ id: 'stale-operation' }];
+    composable.updateOperationsError.value = 'stale error';
+    mocks.getContainerTriggers.mockClear();
+    mocks.getBackups.mockClear();
+    mocks.getContainerUpdateOperations.mockClear();
+
+    selectedContainerId.value = '';
+    activeDetailTab.value = 'actions';
+    await nextTick();
+    vi.advanceTimersByTime(250);
+    await flushPromises();
+
+    expect(mocks.getContainerTriggers).not.toHaveBeenCalled();
+    expect(mocks.getBackups).not.toHaveBeenCalled();
+    expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
+    expect(composable.detailBackups.value).toEqual([]);
+    expect(composable.detailUpdateOperations.value).toEqual([]);
+    expect(composable.updateOperationsError.value).toBeNull();
+  });
+
+  it('debounces rapid action-tab detail refresh triggers into one API batch', async () => {
+    vi.useFakeTimers();
+    const web = makeContainer({ id: 'container-1', name: 'web' });
+    const api = makeContainer({ id: 'container-2', name: 'api' });
+    const { activeDetailTab, selectedContainer, selectedContainerId } = await mountActionsHarness({
+      activeDetailTab: 'overview',
+      selectedContainer: web,
+      selectedContainerId: web.id,
+    });
+
+    mocks.getContainerTriggers.mockClear();
+    mocks.getBackups.mockClear();
+    mocks.getContainerUpdateOperations.mockClear();
+
+    activeDetailTab.value = 'actions';
+    await nextTick();
+    selectedContainer.value = api;
+    selectedContainerId.value = api.id;
+    await nextTick();
+    selectedContainer.value = web;
+    selectedContainerId.value = web.id;
+    await nextTick();
+
+    expect(mocks.getContainerTriggers).not.toHaveBeenCalled();
+    expect(mocks.getBackups).not.toHaveBeenCalled();
+    expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(250);
+    await flushPromises();
+
+    expect(mocks.getContainerTriggers).toHaveBeenCalledTimes(1);
+    expect(mocks.getBackups).toHaveBeenCalledTimes(1);
+    expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
+    expect(mocks.getContainerTriggers).toHaveBeenCalledWith('container-1');
+    expect(mocks.getBackups).toHaveBeenCalledWith('container-1');
+    expect(mocks.getContainerUpdateOperations).toHaveBeenCalledWith('container-1');
   });
 
   it('handles preview guard, success, and failure flows', async () => {
@@ -636,13 +729,83 @@ describe('useContainerActions', () => {
     expect(mocks.previewContainer).not.toHaveBeenCalled();
 
     selectedContainerId.value = 'container-1';
-    mocks.previewContainer.mockResolvedValueOnce({ dryRun: true });
+    mocks.previewContainer.mockResolvedValueOnce({
+      dryRun: true,
+      currentImage: 'nginx:1.0',
+      compose: {
+        files: ['   '],
+        service: '   ',
+        writableFile: '   ',
+        patch: '   ',
+      },
+    });
     await composable.runContainerPreview();
-    expect(composable.detailPreview.value).toEqual({ dryRun: true });
+    expect(composable.detailComposePreview.value).toBeNull();
+
+    mocks.previewContainer.mockResolvedValueOnce({
+      dryRun: true,
+      currentImage: 'nginx:1.0',
+      compose: {
+        files: { unexpected: true },
+        writableFile: ' /opt/stack/compose.yml ',
+        willWrite: true,
+        patch: '   ',
+      },
+    });
+    await composable.runContainerPreview();
+    expect(composable.detailComposePreview.value).toEqual({
+      files: [],
+      writableFile: '/opt/stack/compose.yml',
+      willWrite: true,
+    });
+
+    mocks.previewContainer.mockResolvedValueOnce({
+      dryRun: true,
+      currentImage: 'nginx:1.0',
+      compose: {
+        files: ['/opt/stack/compose.yml'],
+        service: 'web',
+      },
+    });
+    await composable.runContainerPreview();
+    expect(composable.detailComposePreview.value).toEqual({
+      files: ['/opt/stack/compose.yml'],
+      service: 'web',
+    });
+
+    mocks.previewContainer.mockResolvedValueOnce({
+      dryRun: true,
+      currentImage: 'nginx:1.0',
+      compose: {
+        files: ['/opt/stack/compose.yml', '/opt/stack/compose.override.yml'],
+        service: 'web',
+        willWrite: false,
+        patch: '@@ -1,3 +1,3 @@',
+      },
+    });
+    await composable.runContainerPreview();
+    expect(composable.detailPreview.value).toEqual({
+      dryRun: true,
+      currentImage: 'nginx:1.0',
+      compose: {
+        files: ['/opt/stack/compose.yml', '/opt/stack/compose.override.yml'],
+        service: 'web',
+        willWrite: false,
+        patch: '@@ -1,3 +1,3 @@',
+      },
+    });
+    expect(composable.detailComposePreview.value).toEqual({
+      files: ['/opt/stack/compose.yml', '/opt/stack/compose.override.yml'],
+      service: 'web',
+      willWrite: false,
+      patch: '@@ -1,3 +1,3 @@',
+      writableFile: undefined,
+    });
 
     mocks.previewContainer.mockRejectedValueOnce(new Error('preview failed'));
     await composable.runContainerPreview();
     expect(composable.detailPreview.value).toBeNull();
+    expect(composable.detailComposePreview.value).toBeNull();
     expect(composable.previewError.value).toBe('preview failed');
   });
 
@@ -933,5 +1096,52 @@ describe('useContainerActions', () => {
     await flushPromises();
 
     expect(loadContainers).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for action handlers when container actions are disabled', async () => {
+    mocks.containerActionsEnabled.value = false;
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, error } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    await composable.startContainer('web');
+    expect(mocks.startContainer).not.toHaveBeenCalled();
+    expect(error.value).toBe('Container actions disabled by server configuration');
+
+    await composable.runAssociatedTrigger({ type: 'slack', name: 'notify' });
+    expect(mocks.runTrigger).not.toHaveBeenCalled();
+    expect(composable.triggerError.value).toBe(
+      'Container actions disabled by server configuration',
+    );
+
+    await composable.skipCurrentForSelected();
+    expect(mocks.updateContainerPolicy).not.toHaveBeenCalled();
+    expect(composable.policyError.value).toBe('Container actions disabled by server configuration');
+
+    error.value = null;
+    await composable.updateAllInGroup({
+      key: 'group-1',
+      containers: [makeContainer({ id: 'container-2', name: 'api', newTag: '2.0.0' })],
+    });
+    expect(mocks.updateContainer).not.toHaveBeenCalled();
+    expect(error.value).toBe('Container actions disabled by server configuration');
+
+    await composable.rollbackToBackup('backup-1');
+    expect(mocks.rollback).not.toHaveBeenCalled();
+    expect(composable.rollbackError.value).toBe(
+      'Container actions disabled by server configuration',
+    );
+
+    composable.confirmDelete('web');
+    const confirmOptions = mocks.confirmRequire.mock.calls.at(-1)?.[0] as {
+      accept?: () => unknown;
+    };
+    const result = await confirmOptions.accept?.();
+    expect(result).toBe(false);
+    expect(mocks.deleteContainer).not.toHaveBeenCalled();
+    expect(error.value).toBe('Container actions disabled by server configuration');
   });
 });

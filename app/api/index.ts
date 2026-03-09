@@ -10,7 +10,7 @@ import { getErrorMessage } from '../util/error.js';
 
 const log = logger.child({ component: 'api' });
 
-import { getServerConfiguration } from '../configuration/index.js';
+import { ddEnvVars, getServerConfiguration } from '../configuration/index.js';
 import * as settingsStore from '../store/settings.js';
 import * as apiRouter from './api.js';
 import * as auth from './auth.js';
@@ -48,6 +48,12 @@ function configureCors(app) {
   log.warn(
     `CORS is enabled, please make sure that the provided configuration is not a security breech (${JSON.stringify(configuration.cors)})`,
   );
+  const hasExplicitCorsOrigin = Object.hasOwn(ddEnvVars, 'DD_SERVER_CORS_ORIGIN');
+  if (configuration.cors.origin === '*' && !hasExplicitCorsOrigin) {
+    log.warn(
+      'CORS enabled without explicit origin. The default wildcard origin is deprecated and will be removed in v1.6.0. Set DD_SERVER_CORS_ORIGIN to your trusted origin(s) to silence this warning.',
+    );
+  }
   app.use(
     cors({
       origin: configuration.cors.origin,
@@ -95,6 +101,9 @@ function registerRoutes(app) {
   auth.init(app);
   app.use('/health', healthRouter.init());
   app.use('/api/v1', apiRouter.init());
+  log.warn(
+    'Unversioned /api/* path is deprecated and will be removed in v1.6.0. Use /api/v1/* instead.',
+  );
   app.use('/api', apiRouter.init());
   app.use('/metrics', prometheusRouter.init());
   app.use('/', uiRouter.init());

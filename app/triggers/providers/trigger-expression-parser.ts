@@ -1,4 +1,10 @@
+import logger from '../../log/index.js';
 import type { Container } from '../../model/container.js';
+
+const log = logger.child({ component: 'trigger-expression-parser' });
+const warnedLegacyTemplateVars = new Set<string>();
+const LEGACY_SIMPLE_VARS = ['id', 'name', 'watcher', 'kind', 'semver', 'local', 'remote', 'link'];
+const LEGACY_BATCH_VARS = ['count'];
 
 type TemplateVars = Record<string, unknown>;
 
@@ -320,10 +326,27 @@ function safeInterpolate(template: string | undefined, vars: TemplateVars): stri
   });
 }
 
+function warnLegacyTemplateVars(template: string, legacyVars: string[], replacementPrefix: string) {
+  for (const varName of legacyVars) {
+    if (warnedLegacyTemplateVars.has(varName)) continue;
+    if (template.includes(`\${${varName}}`)) {
+      warnedLegacyTemplateVars.add(varName);
+      const replacement =
+        varName === 'count'
+          ? `\${${replacementPrefix}.length}`
+          : `\${${replacementPrefix}.${varName}}`;
+      log.warn(
+        `Legacy trigger template variable "\${${varName}}" is deprecated and will be removed in v1.6.0. Use "${replacement}" instead.`,
+      );
+    }
+  }
+}
+
 /**
  * Render body or title simple template.
  */
 export function renderSimple(template: string, container: Container): string {
+  if (template) warnLegacyTemplateVars(template, LEGACY_SIMPLE_VARS, 'container');
   const vars: TemplateVars = {
     container,
     // Deprecated vars for backward compatibility
@@ -340,6 +363,7 @@ export function renderSimple(template: string, container: Container): string {
 }
 
 export function renderBatch(template: string, containers: Container[]): string {
+  if (template) warnLegacyTemplateVars(template, LEGACY_BATCH_VARS, 'containers');
   const vars: TemplateVars = {
     containers,
     // Deprecated var for backward compatibility

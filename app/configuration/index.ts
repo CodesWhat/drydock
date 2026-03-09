@@ -85,7 +85,7 @@ if (mappedLegacyEnvVars.size > 0) {
   const additionalCount = legacyEnvVarNames.length - MAX_LEGACY_ENV_WARNING_KEYS;
   const suffix = additionalCount > 0 ? ` (+${additionalCount} more)` : '';
   console.warn(
-    `Detected legacy WUD_* environment variables. Please migrate to DD_* equivalents: ${envVarPreview}${suffix}`,
+    `Detected legacy WUD_* environment variables, deprecated and scheduled for removal in v1.6.0. Please migrate to DD_* equivalents: ${envVarPreview}${suffix}`,
   );
 }
 
@@ -308,6 +308,11 @@ export function getServerConfiguration() {
         maxconcurrentsessions: joi.number().integer().min(1).default(5),
       })
       .default({}),
+    ratelimit: joi
+      .object({
+        identitykeying: joi.boolean(),
+      })
+      .optional(),
     metrics: joi
       .object({
         auth: joi.boolean().default(true),
@@ -403,6 +408,9 @@ export function getWebhookConfiguration() {
 }
 
 function parseSecuritySeverityList(rawValue: string | undefined): SecuritySeverity[] {
+  if (rawValue !== undefined && rawValue.trim().toUpperCase() === 'NONE') {
+    return [];
+  }
   return parseDelimitedEnumList(
     rawValue,
     DEFAULT_SECURITY_BLOCK_SEVERITY,
@@ -411,7 +419,7 @@ function parseSecuritySeverityList(rawValue: string | undefined): SecuritySeveri
       SECURITY_SEVERITY_VALUES.includes(severity as SecuritySeverity),
     {
       onInvalidValues: ({ invalidValues, parsedValues, defaultValues }) => {
-        const warningBase = `Invalid DD_SECURITY_BLOCK_SEVERITY values: ${invalidValues.join(', ')}. Allowed values: ${SECURITY_SEVERITY_VALUES.join(', ')}.`;
+        const warningBase = `Invalid DD_SECURITY_BLOCK_SEVERITY values: ${invalidValues.join(', ')}. Allowed values: NONE, ${SECURITY_SEVERITY_VALUES.join(', ')}.`;
         if (parsedValues.length === 0) {
           console.warn(`${warningBase} Falling back to defaults: ${defaultValues.join(', ')}.`);
         } else {

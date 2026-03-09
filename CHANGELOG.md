@@ -10,84 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- **OpenAPI 3.1.0 specification and endpoint** — Machine-readable API documentation available at `GET /api/openapi.json`, covering all v1.4 endpoints with request/response schemas.
-- **Font size preference** — Adjustable font size slider in Config > Appearance for UI-wide text scaling.
-- **Announcement banner** — Dismissible banner component for surfacing release notes and important notices in the dashboard.
-- **Dashboard vulnerability sort by severity** — Top-5 vulnerability list on the dashboard now sorted by total count descending with critical count as tiebreaker, so the most severe containers appear first.
-- **Watcher agent support initialization** — Watchers now initialize agent support on startup for distributed monitoring readiness.
-- **Security vulnerability overview endpoint** — New `GET /api/containers/security/vulnerabilities` returns pre-aggregated vulnerability data grouped by image with severity summaries, so the Security view no longer needs to load all containers.
-- **Rollback confirmation dialog** — Container rollback actions now require explicit confirmation through a danger-severity dialog before restoring from backup.
-- **Update confirmation dialog** — Container update actions now require explicit confirmation through a dialog before triggering an update.
-- **MQTT attribute filtering for Home Assistant** — MQTT trigger supports attribute-based filtering for Home Assistant integration, allowing selective publishing based on container attributes.
-- **Docker Compose post_start env validation** — Docker Compose trigger validates environment variables in `post_start` hooks before execution, preventing runtime errors from missing or invalid env var references.
-- **SHA-1 hash deprecation banner** — Dashboard shows a dismissible deprecation banner when legacy SHA-1 password hashes are detected, prompting migration to argon2id.
-
-### Changed
-
-- **Standardized API responses with collection pattern** — All collection endpoints (`/api/containers`, `/api/registries`, `/api/watchers`, `/api/authentications`, `/api/audit`) now return `{ data: [...], total }` instead of raw arrays. Supports pagination via `offset`/`limit` query parameters.
-- **Paginated API discoverability links** — Paginated collection responses now include `_links.self` and `_links.next` where applicable (for example `/api/containers` and `/api/audit`) to make page traversal explicit for API consumers.
-- **Versioned API base path with transition alias** — `/api/v1/*` is now the canonical API path for integrations. `/api/*` remains as a backward-compatible alias during migration and is planned for removal in a future major release (target: v2.0.0).
-- **Agent-scoped path order normalized** — Agent-qualified component and trigger routes now use `/:type/:name/:agent` (for example `/api/triggers/:type/:name/:agent` and `/api/containers/:id/triggers/:triggerType/:triggerName/:triggerAgent`) instead of the old agent-first order. This is a breaking change for external API clients using the old path shape.
-- **Machine-readable API error contract** — All error responses return a consistent `{ "error": "..." }` JSON structure with an optional `details` object for contextual metadata.
-- **6 color themes** — Replaced original Drydock theme with popular editor palettes: One Dark, GitHub, Dracula, Catppuccin, Gruvbox, and Ayu. Each with dark and light variants.
-- **Argon2id password hashing** — Basic auth now uses argon2id (OWASP recommended) via Node.js built-in `crypto.argon2Sync()` instead of scrypt for password hashing. Default parameters: 64 MiB memory, 3 passes, parallelism 4.
-
-### Fixed
-
-- **Socket proxy ECONNREFUSED with `:ro` mount** — Removed `:ro` flag from Docker socket mount in all socket proxy compose examples. The read-only flag can prevent the proxy from connecting to the Docker daemon on some Linux kernels; the proxy's environment variable filtering (`CONTAINERS=1`, `EVENTS=1`, etc.) is the actual security boundary. Added health check and `depends_on: condition: service_healthy` to all socket proxy examples for proper startup ordering. Added FAQ entry for troubleshooting ECONNREFUSED with socket proxies.
-- **Apprise trigger missing Content-Type header** — Apprise notify requests now set explicit `Content-Type: application/json` header, fixing failures with Apprise servers that require it.
-- **Toggle switch contrast** — Improved toggle thumb contrast across all themes for better visibility.
-- **Empty env var values rejected during container validation** — Joi schema on `details.env[].value` used `.string().required()` which implicitly disallows empty strings. Containers with empty environment variable values (e.g. `FOO=`) were silently skipped during watch cycles. Fixed with `.allow('')`. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
-- **OIDC login broken by same-origin redirect check** — `LoginView.vue` restricted OIDC redirects to same-origin URLs, but OIDC Identity Provider URLs are always cross-origin (Authentik, Keycloak, etc.). Removed the same-origin check, keeping only HTTP/HTTPS protocol validation.
-- **Blank white screen on plain HTTP deployments** — Helmet.js defaults enabled HSTS and `upgrade-insecure-requests` CSP even when TLS was not configured, causing browsers to block sub-resource loads on plain HTTP. Now conditionally omits `upgrade-insecure-requests` and HSTS when TLS is off. Strict boolean check on `tls.enabled` prevents string coercion. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
-- **Stale theme preferences after upgrade from v1.3** — Preferences migration `deepMerge` overwrote defaults with persisted values unconditionally, so invalid enum values (e.g. removed `drydock` theme family) survived migration and caused rendering failures. Added `sanitize()` pass that strips invalid theme families, variants, font families, icon libraries, scales, radius presets, view modes, and table actions before merge.
-- **OIDC discovery fails on HTTP IdP URLs** — openid-client v6 enforces HTTPS by default for all OIDC requests. Users running IdPs behind reverse proxies or on private networks with HTTP discovery URLs got "only requests to HTTPS are allowed" errors. Now passes `allowInsecureRequests` when the discovery URL protocol is `http:`.
-- **Docker Compose trigger fails with EBUSY on bind-mounted stacks** — `writeComposeFileAtomic()` used a single `fs.rename()` call that failed permanently when another process (e.g. Dockge) held the file or when Docker bind-mount overlay contention blocked the rename. Now retries up to 5 times with 200ms backoff, then falls back to a direct `writeFile` if rename remains blocked. ([#84](https://github.com/CodesWhat/drydock/discussions/84))
-- **Drydock container display name hardcoded** — The Docker watcher hardcoded `drydock` as the display name for drydock's own container instead of using the actual container name like every other container.
-- **Non-existent DD_OIDC_ALLOW_HTTP env var referenced in UI** — The UI OIDC HTTP banner referenced a `DD_OIDC_ALLOW_HTTP` env var that does not exist — the backend auto-detects `http://` discovery URLs and passes `allowInsecureRequests` automatically. Removed the misleading reference.
-- **Load test and start scripts broken by standardized API responses** — `jq` queries in `run-load-test.sh` and `start-drydock.sh` used raw array syntax instead of `.data[]` to match the new collection response pattern.
-- **Container status not reconciled on cron poll** — Containers that changed state between Docker event stream updates (e.g. stopped externally) were not reconciled during periodic cron polls. Now reconciles container status on each poll cycle.
-- **DD_AUTH_ANONYMOUS_CONFIRM env var alias rejected** — `DD_AUTH_ANONYMOUS_CONFIRM` was not accepted as an alias for the canonical `DD_ANONYMOUS_AUTH_CONFIRM` env var, forcing users to use only the non-prefixed form.
-- **LSCR cross-host auth failure** — LinuxServer Container Registry (lscr.io) token exchange failed because the auth flow required cross-host authentication via the ghcr.io token endpoint. Now allows cross-host auth for lscr.io.
-- **iPad sidebar clipping** — Used `dvh` (dynamic viewport height) instead of `vh` for sidebar height to fix clipping on iPad and other mobile browsers where the toolbar reduces available viewport height.
-- **Mobile dashboard scroll clipping** — Dashboard content was clipped on mobile viewports when scrolling, preventing users from reaching all content.
-- **Lockout counter reset on failed login** — Brute-force lockout counter could reset prematurely, and strategy IDs were not protected from enumeration. Fixed counter persistence and added strategy ID protection.
-- **Stale vulnerability data on fetch error** — Security view retained stale vulnerability data when a fetch error occurred instead of clearing it, showing outdated information.
-- **Audit service missing limit parameter** — Audit service requests did not always send the `limit` query parameter, causing inconsistent pagination behavior.
-
-### Performance
-
-- **Vite chunk splitting** — Production build now splits vendor code into `framework`, `icons`, and `vendor` chunks for better browser cache efficiency across deployments.
-- **Session index cache with atomic login locks** — Auth session lookups use an indexed cache for O(1) access. Login operations use atomic locks to prevent race conditions during concurrent authentication attempts.
-- **Proactive store cache eviction** — LokiJS store proactively evicts stale cache entries before insertion, reducing memory pressure during high-throughput container watch cycles.
-- **Async secret file loading** — Secret file loading (`DD_*__FILE` env vars) uses `fs/promises` for non-blocking reads during startup configuration, improving initialization time with many secret files.
-
-### Dependencies
-
-- **cron-parser v2 to v5** — Upgraded `cron-parser` from v2 to v5 (`CronExpressionParser` API). Note: `joi-cron-expression` still uses cron-parser v2 internally as its own dependency.
-- **Removed `pass` package** — Replaced abandoned `pass` password hashing with native `node:crypto` (covered under Security below).
-- **Trivy upgraded to 0.69.3** — Bumped Trivy version in qlty configuration for latest vulnerability database and scanner improvements.
-
-### Deprecated
-
-- **SHA-1 basic auth password hashes** — Legacy `{SHA}<base64>` password hashes are accepted with deprecation warnings. SHA-1 support will be removed in v1.6.0. Migrate to argon2id hashing.
-
-### Security
-
-- **OIDC authorization redirect URL validation** — Added allowlist-based validation for OIDC authorization redirect URLs, preventing open redirect attacks through crafted callback parameters.
-- **Auth, registry token, and log sanitization hardening** — Consolidated security pass hardening authentication flows, registry token validation, and log output sanitization.
-- **Command trigger shell execution warning** — Command trigger now logs a one-time security warning on first execution, reminding operators that commands run with drydock process privileges.
-- **Login brute-force lockout** — Per-account and per-IP lockout after configurable failed login attempts (`DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS`, `DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS`) with configurable window and duration.
-- **Concurrent session limits** — Maximum authenticated sessions per user (default 5, configurable via `DD_SERVER_SESSION_MAXCONCURRENTSESSIONS`). Oldest sessions are revoked first when the limit is reached.
-- **Destructive action confirmation header** — Dangerous operations (delete container, restore backup, delete all containers) now require an `X-DD-Confirm-Action` header, returning 428 when missing.
-- **Native argon2id password hashing** — Replaced abandoned `pass` package with `node:crypto` argon2Sync for Basic auth. OWASP-aligned parameters with timing-safe comparison. Legacy `{SHA}` hashes accepted with deprecation warnings.
-- **Full credential redaction** — `Component.mask()` now returns `[REDACTED]` instead of leaking prefix/suffix characters in logs and API responses.
-- **Trigger infrastructure config redaction** — Webhook URLs, hostnames, channels, and usernames are redacted from trigger configuration in API responses.
-- **Website SRI integrity hashes** — Post-build script injects subresource integrity hashes for static assets on the documentation website.
-- **Fail-closed webhook token enforcement** — Per-endpoint webhook tokens now fail closed when a token is configured but the request provides no token or a mismatched token, preventing bypass through missing headers.
-
 ## [1.4.0] — 2026-02-28
 
 ### Added
@@ -127,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SSE real-time updates** — Server-Sent Events push container state changes to the UI without polling.
 - **Remember-me authentication** — Persistent login sessions via remember-me checkbox on the login form.
 - **Docker Compose trigger** — Refresh compose services via Docker Compose CLI when updates are detected.
+- **Advisory-only security scanning** — `DD_SECURITY_BLOCK_SEVERITY=NONE` runs vulnerability scans without blocking updates. Scan results remain visible in the Security view and audit log.
+- **OpenAPI 3.1.0 specification and endpoint** — Machine-readable API documentation available at `GET /api/openapi.json`, covering all v1.4 endpoints with request/response schemas.
+- **Watcher agent support initialization** — Watchers now initialize agent support on startup for distributed monitoring readiness.
+- **Security vulnerability overview endpoint** — New `GET /api/containers/security/vulnerabilities` returns pre-aggregated vulnerability data grouped by image with severity summaries, so the Security view no longer needs to load all containers.
+- **MQTT attribute filtering for Home Assistant** — MQTT trigger supports attribute-based filtering for Home Assistant integration, allowing selective publishing based on container attributes.
+- **Docker Compose post_start env validation** — Docker Compose trigger validates environment variables in `post_start` hooks before execution, preventing runtime errors from missing or invalid env var references.
 
 #### UI / Dashboard
 
@@ -154,6 +82,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dynamic dashboard stat colors** — Color-coded update and security stats based on severity ratio.
 - **About Drydock modal** — Version info and links accessible from sidebar.
 - **View wiring** — Watcher container counts, trigger Test buttons with success/failure feedback, host images count, and registry self-hosted port matching all wired to live API data.
+- **Font size preference** — Adjustable font size slider in Config > Appearance for UI-wide text scaling.
+- **Announcement banner** — Dismissible banner component for surfacing release notes and important notices in the dashboard.
+- **Dashboard vulnerability sort by severity** — Top-5 vulnerability list on the dashboard now sorted by total count descending with critical count as tiebreaker, so the most severe containers appear first.
+- **Rollback confirmation dialog** — Container rollback actions now require explicit confirmation through a danger-severity dialog before restoring from backup.
+- **Update confirmation dialog** — Container update actions now require explicit confirmation through a dialog before triggering an update.
+- **SHA-1 hash deprecation banner** — Dashboard shows a dismissible deprecation banner when legacy SHA-1 password hashes are detected, prompting migration to argon2id.
 
 ### Changed
 
@@ -173,6 +107,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Fail-closed anonymous auth on fresh installs** — New installs with no authentication configured and no `DD_ANONYMOUS_AUTH_CONFIRM=true` fail closed at startup (all API calls return 401). Users upgrading from a previous version are allowed anonymous access with a startup warning. Set `DD_AUTH_BASIC_<name>_USER` / `DD_AUTH_BASIC_<name>_HASH` to configure authentication, or set `DD_ANONYMOUS_AUTH_CONFIRM=true` to explicitly allow anonymous access.
 - **Dashboard streamlined** — Stat cards reduced from 7 to 4 (Containers, Updates, Security, Registries). Recent Activity widget removed to fit on single viewport. Background refresh prevents loading flicker on SSE events.
 - **Notifications view is full rule management** — Editable notification rules (enable/disable and trigger assignments) that save directly through `/api/notifications`.
+- **Standardized API responses with collection pattern** — All collection endpoints (`/api/containers`, `/api/registries`, `/api/watchers`, `/api/authentications`, `/api/audit`) now return `{ data: [...], total }` instead of raw arrays. Supports pagination via `offset`/`limit` query parameters.
+- **Paginated API discoverability links** — Paginated collection responses now include `_links.self` and `_links.next` where applicable (for example `/api/containers` and `/api/audit`) to make page traversal explicit for API consumers.
+- **Versioned API base path with transition alias** — `/api/v1/*` is now the canonical API path for integrations. `/api/*` remains as a backward-compatible alias during migration and is planned for removal in a future major release (target: v2.0.0).
+- **Agent-scoped path order normalized** — Agent-qualified component and trigger routes now use `/:type/:name/:agent` (for example `/api/triggers/:type/:name/:agent` and `/api/containers/:id/triggers/:triggerType/:triggerName/:triggerAgent`) instead of the old agent-first order. This is a breaking change for external API clients using the old path shape.
+- **Machine-readable API error contract** — All error responses return a consistent `{ "error": "..." }` JSON structure with an optional `details` object for contextual metadata.
+- **6 color themes** — Replaced original Drydock theme with popular editor palettes: One Dark, GitHub, Dracula, Catppuccin, Gruvbox, and Ayu. Each with dark and light variants.
+- **Argon2id password hashing** — Basic auth now uses argon2id (OWASP recommended) via Node.js built-in `crypto.argon2Sync()` instead of scrypt for password hashing. Default parameters: 64 MiB memory, 3 passes, parallelism 4.
+- **PUT `/api/settings` deprecated** — `PUT /api/settings` now returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` headers. Use `PATCH /api/settings` for partial updates. PUT alias removal targeted for v1.5.0.
 
 ### Fixed
 
@@ -205,6 +147,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Trigger test failure shows parsed error message** — Actionable error reason displayed below trigger card on test failure.
 - **Viewport scrollbar eliminated** — Fixed double-nested scroll contexts; long tags truncated with tooltips.
 - **Self-hosted registries ignore port when matching** — Registry matching now respects port numbers in self-hosted registry URLs, preventing mismatches between registries on different ports of the same host.
+- **Socket proxy ECONNREFUSED with `:ro` mount** — Removed `:ro` flag from Docker socket mount in all socket proxy compose examples. The read-only flag can prevent the proxy from connecting to the Docker daemon on some Linux kernels; the proxy's environment variable filtering (`CONTAINERS=1`, `EVENTS=1`, etc.) is the actual security boundary. Added health check and `depends_on: condition: service_healthy` to all socket proxy examples for proper startup ordering. Added FAQ entry for troubleshooting ECONNREFUSED with socket proxies.
+- **Apprise trigger missing Content-Type header** — Apprise notify requests now set explicit `Content-Type: application/json` header, fixing failures with Apprise servers that require it.
+- **Toggle switch contrast** — Improved toggle thumb contrast across all themes for better visibility.
+- **Empty env var values rejected during container validation** — Joi schema on `details.env[].value` used `.string().required()` which implicitly disallows empty strings. Containers with empty environment variable values (e.g. `FOO=`) were silently skipped during watch cycles. Fixed with `.allow('')`. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+- **OIDC login broken by same-origin redirect check** — `LoginView.vue` restricted OIDC redirects to same-origin URLs, but OIDC Identity Provider URLs are always cross-origin (Authentik, Keycloak, etc.). Removed the same-origin check, keeping only HTTP/HTTPS protocol validation.
+- **Blank white screen on plain HTTP deployments** — Helmet.js defaults enabled HSTS and `upgrade-insecure-requests` CSP even when TLS was not configured, causing browsers to block sub-resource loads on plain HTTP. Now conditionally omits `upgrade-insecure-requests` and HSTS when TLS is off. Strict boolean check on `tls.enabled` prevents string coercion. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+- **Stale theme preferences after upgrade from v1.3** — Preferences migration `deepMerge` overwrote defaults with persisted values unconditionally, so invalid enum values (e.g. removed `drydock` theme family) survived migration and caused rendering failures. Added `sanitize()` pass that strips invalid theme families, variants, font families, icon libraries, scales, radius presets, view modes, and table actions before merge.
+- **OIDC discovery fails on HTTP IdP URLs** — openid-client v6 enforces HTTPS by default for all OIDC requests. Users running IdPs behind reverse proxies or on private networks with HTTP discovery URLs got "only requests to HTTPS are allowed" errors. Now passes `allowInsecureRequests` when the discovery URL protocol is `http:`.
+- **Docker Compose trigger fails with EBUSY on bind-mounted stacks** — `writeComposeFileAtomic()` used a single `fs.rename()` call that failed permanently when another process (e.g. Dockge) held the file or when Docker bind-mount overlay contention blocked the rename. Now retries up to 5 times with 200ms backoff, then falls back to a direct `writeFile` if rename remains blocked. ([#84](https://github.com/CodesWhat/drydock/discussions/84))
+- **Drydock container display name hardcoded** — The Docker watcher hardcoded `drydock` as the display name for drydock's own container instead of using the actual container name like every other container.
+- **Non-existent DD_OIDC_ALLOW_HTTP env var referenced in UI** — The UI OIDC HTTP banner referenced a `DD_OIDC_ALLOW_HTTP` env var that does not exist — the backend auto-detects `http://` discovery URLs and passes `allowInsecureRequests` automatically. Removed the misleading reference.
+- **Load test and start scripts broken by standardized API responses** — `jq` queries in `run-load-test.sh` and `start-drydock.sh` used raw array syntax instead of `.data[]` to match the new collection response pattern.
+- **Container status not reconciled on cron poll** — Containers that changed state between Docker event stream updates (e.g. stopped externally) were not reconciled during periodic cron polls. Now reconciles container status on each poll cycle.
+- **DD_AUTH_ANONYMOUS_CONFIRM env var alias rejected** — `DD_AUTH_ANONYMOUS_CONFIRM` was not accepted as an alias for the canonical `DD_ANONYMOUS_AUTH_CONFIRM` env var, forcing users to use only the non-prefixed form.
+- **LSCR cross-host auth failure** — LinuxServer Container Registry (lscr.io) token exchange failed because the auth flow required cross-host authentication via the ghcr.io token endpoint. Now allows cross-host auth for lscr.io.
+- **iPad sidebar clipping** — Used `dvh` (dynamic viewport height) instead of `vh` for sidebar height to fix clipping on iPad and other mobile browsers where the toolbar reduces available viewport height.
+- **Mobile dashboard scroll clipping** — Dashboard content was clipped on mobile viewports when scrolling, preventing users from reaching all content.
+- **Lockout counter reset on failed login** — Brute-force lockout counter could reset prematurely, and strategy IDs were not protected from enumeration. Fixed counter persistence and added strategy ID protection.
+- **Stale vulnerability data on fetch error** — Security view retained stale vulnerability data when a fetch error occurred instead of clearing it, showing outdated information.
+- **Audit service missing limit parameter** — Audit service requests did not always send the `limit` query parameter, causing inconsistent pagination behavior.
+- **Backup retention on failed updates** — Backup entries are now pruned on the failure path, not just after successful updates, preventing indefinite accumulation of stale backups.
+- **Backup pruning with undefined maxCount** — `pruneOldBackups()` no longer deletes all backups when `maxCount` is `undefined` (e.g. when `DD_BACKUPCOUNT` is not configured). Now correctly no-ops on invalid or non-finite values.
+- **Auto-rollback audit fromVersion accuracy** — Rollback audit entries now correctly record `fromVersion` as the failing new image tag (via `updateKind.remoteValue`) instead of the pre-update old tag.
 
 ### Security
 
@@ -228,6 +193,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Server-issued SSE client identity** — Self-update ack requests validated against server-issued tokens, preventing spoofed acknowledgments.
 - **Fail-closed auth across watchers, registries, and triggers** — Token exchange failures no longer fall through to anonymous access.
 - **Runtime env values redacted** — Container environment variable values stripped from API responses to prevent credential leakage.
+- **OIDC authorization redirect URL validation** — Added allowlist-based validation for OIDC authorization redirect URLs, preventing open redirect attacks through crafted callback parameters.
+- **Auth, registry token, and log sanitization hardening** — Consolidated security pass hardening authentication flows, registry token validation, and log output sanitization.
+- **Command trigger shell execution warning** — Command trigger now logs a one-time security warning on first execution, reminding operators that commands run with drydock process privileges.
+- **Login brute-force lockout** — Per-account and per-IP lockout after configurable failed login attempts (`DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS`, `DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS`) with configurable window and duration.
+- **Concurrent session limits** — Maximum authenticated sessions per user (default 5, configurable via `DD_SERVER_SESSION_MAXCONCURRENTSESSIONS`). Oldest sessions are revoked first when the limit is reached.
+- **Destructive action confirmation header** — Dangerous operations (delete container, restore backup, delete all containers) now require an `X-DD-Confirm-Action` header, returning 428 when missing.
+- **Native argon2id password hashing** — Replaced abandoned `pass` package with `node:crypto` argon2Sync for Basic auth. OWASP-aligned parameters with timing-safe comparison. Legacy `{SHA}` hashes accepted with deprecation warnings.
+- **Full credential redaction** — `Component.mask()` now returns `[REDACTED]` instead of leaking prefix/suffix characters in logs and API responses.
+- **Trigger infrastructure config redaction** — Webhook URLs, hostnames, channels, and usernames are redacted from trigger configuration in API responses.
+- **Website SRI integrity hashes** — Post-build script injects subresource integrity hashes for static assets on the documentation website.
+- **Fail-closed webhook token enforcement** — Per-endpoint webhook tokens now fail closed when a token is configured but the request provides no token or a mismatched token, preventing bypass through missing headers.
+- **API error message sanitization** — API routes no longer expose raw Joi validation or exception messages to clients. New `sanitizeApiError()` helper returns generic messages while logging real details server-side.
+- **Trigger request body schema validation** — `POST /api/triggers/:type/:name` and remote trigger endpoints now validate request bodies with Joi (require `id` string, reject type coercion via `convert: false`).
+- **HTTP trigger auth schema enforcement at startup** — HTTP trigger Joi schema now conditionally requires `user`+`password` for BASIC auth and `bearer` for BEARER auth at registration time, catching misconfigurations before first trigger execution.
+- **CORS implicit wildcard origin deprecation warning** — Startup warning when `DD_SERVER_CORS_ENABLED=true` without explicit `DD_SERVER_CORS_ORIGIN`. Default wildcard will require explicit opt-in in v1.5.0.
+- **Identity-aware rate limit keying** — Opt-in `DD_SERVER_RATELIMIT_IDENTITYKEYING=true` keys authenticated route rate limits by session/username instead of IP, preventing collisions for multiple users behind shared proxies. Unauthenticated routes remain IP-keyed. Disabled by default.
+- **Reactive server feature flags in UI** — Container action buttons (update, rollback, scan, triggers) are now gated by server-side feature flags via a `useServerFeatures` composable. When features like `DD_SERVER_FEATURE_CONTAINERACTIONS` are disabled, buttons show a disabled state with tooltip explaining why instead of silently failing at runtime.
+- **Compose trigger hardening** — Auto compose file detection from container labels (`com.docker.compose.project.config_files`) with Docker inspect fallback, pre-commit `docker compose config --quiet` validation before writes, compose file reconciliation (warn/block modes for runtime vs compose image drift), optional digest pinning (`DIGESTPINNING` trigger config), compose-file-once batch mode for multi-service stacks, multi-file compose chain awareness with deterministic writable target selection, compose metadata in update preview API, and compose file path display in container detail UI.
 
 ### Performance
 
@@ -240,6 +223,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Gzip response compression** — API responses compressed above configurable threshold with automatic SSE exclusion.
 - **Skip connectivity polling when SSE connection is active** — Eliminates unnecessary `/auth/user` fetches every 10s during normal operation.
 - **Set-based lookups replace linear scans** — Repeated array lookups converted to Set operations in core paths.
+- **Vite chunk splitting** — Production build now splits vendor code into `framework`, `icons`, and `vendor` chunks for better browser cache efficiency across deployments.
+- **Session index cache with atomic login locks** — Auth session lookups use an indexed cache for O(1) access. Login operations use atomic locks to prevent race conditions during concurrent authentication attempts.
+- **Proactive store cache eviction** — LokiJS store proactively evicts stale cache entries before insertion, reducing memory pressure during high-throughput container watch cycles.
+- **Async secret file loading** — Secret file loading (`DD_*__FILE` env vars) uses `fs/promises` for non-blocking reads during startup configuration, improving initialization time with many secret files.
+
+### Dependencies
+
+- **cron-parser v2 to v5** — Upgraded `cron-parser` from v2 to v5 (`CronExpressionParser` API). Note: `joi-cron-expression` still uses cron-parser v2 internally as its own dependency.
+- **Removed `pass` package** — Replaced abandoned `pass` password hashing with native `node:crypto` (covered under Security below).
+- **Trivy upgraded to 0.69.3** — Bumped Trivy version in qlty configuration for latest vulnerability database and scanner improvements.
+
+### Deprecated
+
+- **SHA-1 basic auth password hashes** — Legacy `{SHA}<base64>` password hashes are accepted with deprecation warnings. SHA-1 support will be removed in v1.6.0. Migrate to argon2id hashing.
 
 ## [1.3.9] — 2026-02-22
 
@@ -693,7 +690,7 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.4.0-rc.5...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.4.0...HEAD
 [1.4.0]: https://github.com/CodesWhat/drydock/compare/v1.3.9...v1.4.0
 [1.3.9]: https://github.com/CodesWhat/drydock/compare/v1.3.8...v1.3.9
 [1.3.8]: https://github.com/CodesWhat/drydock/compare/v1.3.7...v1.3.8

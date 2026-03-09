@@ -3,10 +3,14 @@ const {
   mockInit,
   mockExpressJson,
   mockJsonMiddleware,
+  mockRateLimit,
   mockRouterCallLog,
+  mockCreateAuthenticatedRouteRateLimitKeyGenerator,
+  mockIsIdentityAwareRateLimitKeyingEnabled,
   resetMockRouterCallLog,
 } = vi.hoisted(() => {
   const jsonMiddleware = vi.fn();
+  const rateLimitMiddleware = vi.fn((_, __, next) => next());
   const mockRouterCallLog: Array<{ arg: unknown; type: 'get' | 'post' | 'use' }> = [];
 
   const createTrackedMethod = (type: 'get' | 'post' | 'use') =>
@@ -25,7 +29,10 @@ const {
     mockInit: () => ({ init: vi.fn(() => createMockRouter()) }),
     mockJsonMiddleware: jsonMiddleware,
     mockExpressJson: vi.fn(() => jsonMiddleware),
+    mockRateLimit: vi.fn(() => rateLimitMiddleware),
     mockRouterCallLog,
+    mockCreateAuthenticatedRouteRateLimitKeyGenerator: vi.fn(() => undefined),
+    mockIsIdentityAwareRateLimitKeyingEnabled: vi.fn(() => false),
     resetMockRouterCallLog: () => {
       mockRouterCallLog.length = 0;
     },
@@ -37,6 +44,9 @@ vi.mock('express', () => ({
     Router: vi.fn(() => createMockRouter()),
     json: mockExpressJson,
   },
+}));
+vi.mock('express-rate-limit', () => ({
+  default: mockRateLimit,
 }));
 
 vi.mock('./app', mockInit);
@@ -65,6 +75,10 @@ vi.mock('./auth', () => ({
 vi.mock('./csrf', () => ({
   requireSameOriginForMutations: vi.fn((req, res, next) => next()),
 }));
+vi.mock('./rate-limit-key.js', () => ({
+  createAuthenticatedRouteRateLimitKeyGenerator: mockCreateAuthenticatedRouteRateLimitKeyGenerator,
+  isIdentityAwareRateLimitKeyingEnabled: mockIsIdentityAwareRateLimitKeyingEnabled,
+}));
 
 describe('API Router', () => {
   let api;
@@ -73,6 +87,8 @@ describe('API Router', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     resetMockRouterCallLog();
+    mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(false);
+    mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(undefined);
     vi.resetModules();
     api = await import('./api.js');
     router = api.init();
@@ -320,5 +336,21 @@ describe('API Router', () => {
     expect(res.json).toHaveBeenCalledWith({
       error: 'Route not found',
     });
+  });
+
+  test('should include identity-aware key generator in API rate limiter when enabled', async () => {
+    const keyGenerator = vi.fn(() => 'session:test');
+    mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(true);
+    mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(keyGenerator);
+
+    vi.resetModules();
+    const isolatedApi = await import('./api.js');
+    isolatedApi.init();
+
+    expect(mockRateLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keyGenerator,
+      }),
+    );
   });
 });

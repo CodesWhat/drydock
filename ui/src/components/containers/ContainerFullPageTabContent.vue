@@ -54,6 +54,7 @@ const {
   runtimeOriginStyle,
   runtimeOriginLabel,
   selectedRuntimeDriftWarnings,
+  selectedComposePaths,
   selectedLifecycleHooks,
   lifecycleHookTemplateVariables,
   selectedAutoRollbackConfig,
@@ -102,6 +103,7 @@ const {
   removeSkipTagSelected,
   removeSkipDigestSelected,
   detailPreview,
+  detailComposePreview,
   previewError,
   triggersLoading,
   detailTriggers,
@@ -179,6 +181,31 @@ const {
                 </div>
               </div>
               <p v-else class="text-[11px] dd-text-muted italic">No volumes mounted</p>
+            </div>
+          </div>
+
+          <!-- Compose files card -->
+          <div v-if="selectedComposePaths.length > 0"
+               class="dd-rounded overflow-hidden"
+               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
+            <div class="px-4 py-3 flex items-center gap-2"
+                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+              <AppIcon name="stack" :size="12" class="dd-text-muted" />
+              <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Compose Files</span>
+              <span class="badge text-[9px] ml-auto dd-bg-elevated dd-text-muted">{{ selectedComposePaths.length }}</span>
+            </div>
+            <div class="p-4">
+              <div class="space-y-1.5">
+                <div
+                  v-for="(composePath, index) in selectedComposePaths"
+                  :key="`${composePath}-${index}`"
+                  class="flex items-center gap-2 px-3 py-2 dd-rounded text-[12px] font-mono"
+                  :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
+                >
+                  <span v-if="selectedComposePaths.length > 1" class="text-[9px] dd-text-muted">#{{ index + 1 }}</span>
+                  <span class="truncate dd-text">{{ composePath }}</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -792,6 +819,27 @@ const {
                     </div>
                     <div v-if="Array.isArray(detailPreview.networks)" class="dd-text-muted">
                       Networks: <span class="dd-text font-mono">{{ detailPreview.networks.join(', ') || '-' }}</span>
+                    </div>
+                    <div v-if="detailComposePreview?.files.length" class="dd-text-muted">
+                      Compose file<span v-if="detailComposePreview.files.length > 1">s</span>:
+                      <span class="dd-text font-mono">{{ detailComposePreview.files.join(', ') }}</span>
+                    </div>
+                    <div v-if="detailComposePreview?.service" class="dd-text-muted">
+                      Compose service:
+                      <span class="dd-text font-mono">{{ detailComposePreview.service }}</span>
+                    </div>
+                    <div v-if="detailComposePreview?.writableFile" class="dd-text-muted">
+                      Writable file:
+                      <span class="dd-text font-mono">{{ detailComposePreview.writableFile }}</span>
+                    </div>
+                    <div v-if="typeof detailComposePreview?.willWrite === 'boolean'" class="dd-text-muted">
+                      Writes compose file:
+                      <span class="dd-text">{{ detailComposePreview.willWrite ? 'yes' : 'no' }}</span>
+                    </div>
+                    <div v-if="detailComposePreview?.patch" class="dd-text-muted">
+                      Patch preview:
+                      <pre class="mt-1 p-2 dd-rounded whitespace-pre-wrap break-all text-[11px] dd-text font-mono"
+                           :style="{ backgroundColor: 'var(--dd-bg-inset)' }">{{ detailComposePreview.patch }}</pre>
                     </div>
                   </template>
                 </div>

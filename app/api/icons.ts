@@ -1,10 +1,12 @@
 import axios from 'axios';
 import express, { type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
+import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import * as settingsStore from '../store/settings.js';
 import { sendErrorResponse } from './error-response.js';
+import { sanitizeApiError } from './helpers.js';
 import { fetchAndCacheIconOnce } from './icons/fetch.js';
 import { normalizeSlug, providers } from './icons/providers.js';
 import { sendCachedIcon, sendMissingIconResponse } from './icons/response.js';
@@ -20,6 +22,10 @@ import {
   isCachedIconUsable,
 } from './icons/storage.js';
 import { iconRequestSchema } from './icons/validation.js';
+import {
+  createAuthenticatedRouteRateLimitKeyGenerator,
+  isIdentityAwareRateLimitKeyingEnabled,
+} from './rate-limit-key.js';
 
 const router = express.Router();
 const log = logger.child({ component: 'icons' });
@@ -30,7 +36,7 @@ const log = logger.child({ component: 'icons' });
 async function getIcon(req: Request, res: Response) {
   const iconRequest = iconRequestSchema.validate(req.params || {}, { stripUnknown: true });
   if (iconRequest.error) {
-    sendErrorResponse(res, 400, iconRequest.error.message);
+    sendErrorResponse(res, 400, sanitizeApiError(iconRequest.error));
     return;
   }
 
@@ -105,12 +111,20 @@ async function clearCache(_req: Request, res: Response) {
  * @returns {*}
  */
 export function init() {
+  const serverConfiguration = getServerConfiguration() as Record<string, unknown>;
+  const identityAwareRateLimitKeyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(
+    isIdentityAwareRateLimitKeyingEnabled(serverConfiguration),
+  );
+
   const iconProxyRateLimiter = rateLimit({
     windowMs: ICON_PROXY_RATE_LIMIT_WINDOW_MS,
     max: ICON_PROXY_RATE_LIMIT_MAX,
     standardHeaders: true,
     legacyHeaders: false,
     validate: { xForwardedForHeader: false },
+    ...(identityAwareRateLimitKeyGenerator
+      ? { keyGenerator: identityAwareRateLimitKeyGenerator }
+      : {}),
   });
   router.get('/:provider/:slug', iconProxyRateLimiter, getIcon);
   router.delete('/cache', clearCache);

@@ -1921,7 +1921,7 @@ describe('auto-rollback health monitor integration', () => {
       expect.objectContaining({
         containerId: '123',
         containerName: 'container-name',
-        backupImageTag: '1.0.0',
+        backupImageTag: '4.5.6',
         window: 300000,
         interval: 10000,
       }),

@@ -101,6 +101,47 @@ describe('useContainerSecurity', () => {
     });
   });
 
+  it('returns unknown origins and no drift warning when metadata is absent', async () => {
+    const { composable } = await mountSecurityHarness({
+      selectedContainerMeta: undefined,
+    });
+
+    expect(composable.selectedRuntimeOrigins.value).toEqual({
+      entrypoint: 'unknown',
+      cmd: 'unknown',
+    });
+    expect(composable.selectedRuntimeDriftWarnings.value).toEqual([]);
+    expect(composable.selectedComposePaths.value).toEqual([]);
+  });
+
+  it('returns no drift warning when both runtime origins are known', async () => {
+    const { composable } = await mountSecurityHarness({
+      selectedContainerMeta: {
+        labels: {
+          'wud.runtime.entrypoint.origin': 'inherited',
+          'dd.runtime.cmd.origin': 'explicit',
+        },
+      },
+    });
+
+    expect(composable.selectedRuntimeOrigins.value).toEqual({
+      entrypoint: 'inherited',
+      cmd: 'explicit',
+    });
+    expect(composable.selectedRuntimeDriftWarnings.value).toEqual([]);
+  });
+
+  it('reports drift warning for both entrypoint and cmd when origins are unknown', async () => {
+    const { composable } = await mountSecurityHarness({
+      selectedContainerMeta: {
+        labels: {},
+      },
+    });
+
+    expect(composable.selectedRuntimeDriftWarnings.value).toHaveLength(1);
+    expect(composable.selectedRuntimeDriftWarnings.value[0]).toContain('Entrypoint and Cmd');
+  });
+
   it('parses lifecycle hook and rollback labels with DD keys preferred over WUD keys', async () => {
     const { composable } = await mountSecurityHarness({
       selectedContainerMeta: {
@@ -165,6 +206,26 @@ describe('useContainerSecurity', () => {
     expect(composable.selectedLifecycleHooks.value.postUpdate).toBeUndefined();
   });
 
+  it('handles non-object labels by treating lifecycle and rollback values as unset', async () => {
+    const { composable } = await mountSecurityHarness({
+      selectedContainerMeta: {
+        labels: 'invalid',
+      },
+    });
+
+    expect(composable.selectedLifecycleHooks.value).toEqual({
+      preUpdate: undefined,
+      postUpdate: undefined,
+      timeoutLabel: '60000ms (default)',
+      preAbortBehavior: undefined,
+    });
+    expect(composable.selectedAutoRollbackConfig.value).toEqual({
+      enabledLabel: 'Disabled (default)',
+      windowLabel: '300000ms',
+      intervalLabel: '10000ms',
+    });
+  });
+
   it('falls back to default lifecycle/rollback labels when metadata is missing or invalid', async () => {
     const { composable } = await mountSecurityHarness({
       selectedContainerMeta: {
@@ -189,6 +250,84 @@ describe('useContainerSecurity', () => {
       windowLabel: '300000ms',
       intervalLabel: '10000ms',
     });
+  });
+
+  it('normalizes and deduplicates compose paths from metadata variants', async () => {
+    const { composable } = await mountSecurityHarness({
+      selectedContainerMeta: {
+        composePaths: '/opt/a.yml,/opt/b.yml',
+        compose_paths: '["/opt/b.yml", "/opt/c.yml"]',
+        compose: {
+          paths: ['/opt/c.yml', '/opt/d.yml'],
+          composeFiles: '/opt/e.yml,/opt/a.yml',
+          composeFile: '/opt/f.yml',
+        },
+        composeContext: {
+          composePaths: '["/opt/g.yml", "/opt/d.yml"]',
+          file: '/opt/f.yml',
+        },
+        runtimeContext: {
+          composeFiles: ['/opt/h.yml', '/opt/a.yml'],
+        },
+        labels: {
+          'com.docker.compose.project.config_files': '/opt/i.yml,/opt/h.yml',
+          'dd.compose.files': '["/opt/j.yml", "/opt/i.yml"]',
+          'wud.compose.file': '/opt/k.yml',
+        },
+      },
+    });
+
+    expect(composable.selectedComposePaths.value).toEqual([
+      '/opt/a.yml',
+      '/opt/b.yml',
+      '/opt/c.yml',
+      '/opt/d.yml',
+      '/opt/e.yml',
+      '/opt/f.yml',
+      '/opt/g.yml',
+      '/opt/h.yml',
+      '/opt/i.yml',
+      '/opt/j.yml',
+      '/opt/k.yml',
+    ]);
+  });
+
+  it('falls back to trigger configuration files when no compose paths are detected', async () => {
+    const { composable } = await mountSecurityHarness({
+      selectedContainerMeta: {
+        triggerConfiguration: {
+          file: '/opt/fallback-a.yml,/opt/fallback-b.yml',
+        },
+      },
+    });
+
+    expect(composable.selectedComposePaths.value).toEqual([
+      '/opt/fallback-a.yml',
+      '/opt/fallback-b.yml',
+    ]);
+  });
+
+  it('uses delimiter parsing when bracket-prefixed compose paths are invalid JSON', async () => {
+    const { composable } = await mountSecurityHarness({
+      selectedContainerMeta: {
+        composePaths: '[/opt/malformed-a.yml,/opt/malformed-b.yml',
+      },
+    });
+
+    expect(composable.selectedComposePaths.value).toEqual([
+      '[/opt/malformed-a.yml',
+      '/opt/malformed-b.yml',
+    ]);
+  });
+
+  it('treats blank compose path strings as empty lists', async () => {
+    const { composable } = await mountSecurityHarness({
+      selectedContainerMeta: {
+        composePaths: '   ',
+      },
+    });
+
+    expect(composable.selectedComposePaths.value).toEqual([]);
   });
 
   it('loads vulnerability and sbom data and computes summary projections', async () => {
@@ -225,6 +364,19 @@ describe('useContainerSecurity', () => {
     expect(composable.sbomComponentCount.value).toBe(2);
   });
 
+  it('returns undefined SBOM component count when document lacks components and packages', async () => {
+    mocks.getContainerSbom.mockResolvedValueOnce({
+      generatedAt: '2026-03-05T10:00:00.000Z',
+      document: {},
+    });
+
+    const { composable } = await mountSecurityHarness({
+      selectedContainerId: 'container-1',
+    });
+
+    expect(composable.sbomComponentCount.value).toBeUndefined();
+  });
+
   it('maps severity levels to expected style tokens', async () => {
     const { composable } = await mountSecurityHarness();
 
@@ -243,6 +395,39 @@ describe('useContainerSecurity', () => {
     expect(composable.severityStyle('LOW')).toEqual({
       bg: 'var(--dd-info-muted)',
       text: 'var(--dd-info)',
+    });
+
+    expect(composable.runtimeOriginLabel('inherited')).toBe('Inherited');
+    expect(composable.runtimeOriginStyle('inherited')).toEqual({
+      backgroundColor: 'var(--dd-info-muted)',
+      color: 'var(--dd-info)',
+    });
+    expect(composable.runtimeOriginLabel('unknown')).toBe('Unknown');
+    expect(composable.runtimeOriginStyle('explicit')).toEqual({
+      backgroundColor: 'var(--dd-success-muted)',
+      color: 'var(--dd-success)',
+    });
+  });
+
+  it('derives image metadata and falls back to digest.repo when digest.value is absent', async () => {
+    const { composable } = await mountSecurityHarness({
+      selectedContainerMeta: {
+        image: {
+          architecture: 'amd64',
+          os: 'linux',
+          created: '2026-03-07T12:00:00.000Z',
+          digest: {
+            repo: 'sha256:fallback',
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedImageMetadata.value).toEqual({
+      architecture: 'amd64',
+      os: 'linux',
+      created: '2026-03-07T12:00:00.000Z',
+      digest: 'sha256:fallback',
     });
   });
 

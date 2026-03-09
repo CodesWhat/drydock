@@ -159,6 +159,44 @@ test('validateConfiguration should require DD_PUBLIC_URL when OIDC is configured
   }
 });
 
+test('validateConfiguration should allow optional logouturl override', async () => {
+  const previousPublicUrl = configuration.ddEnvVars.DD_PUBLIC_URL;
+  configuration.ddEnvVars.DD_PUBLIC_URL = 'https://dd.example.com';
+  try {
+    const configWithLogoutUrl = {
+      ...configurationValid,
+      logouturl: 'https://idp.example.com/logout',
+    };
+    const validatedConfiguration = oidc.validateConfiguration(configWithLogoutUrl);
+    expect(validatedConfiguration).toStrictEqual(configWithLogoutUrl);
+  } finally {
+    if (previousPublicUrl === undefined) {
+      delete configuration.ddEnvVars.DD_PUBLIC_URL;
+    } else {
+      configuration.ddEnvVars.DD_PUBLIC_URL = previousPublicUrl;
+    }
+  }
+});
+
+test('validateConfiguration should reject non-http logouturl schemes', async () => {
+  const previousPublicUrl = configuration.ddEnvVars.DD_PUBLIC_URL;
+  configuration.ddEnvVars.DD_PUBLIC_URL = 'https://dd.example.com';
+  try {
+    expect(() => {
+      oidc.validateConfiguration({
+        ...configurationValid,
+        logouturl: 'mailto:security@example.com',
+      });
+    }).toThrowError();
+  } finally {
+    if (previousPublicUrl === undefined) {
+      delete configuration.ddEnvVars.DD_PUBLIC_URL;
+    } else {
+      configuration.ddEnvVars.DD_PUBLIC_URL = previousPublicUrl;
+    }
+  }
+});
+
 test('getStrategy should return an Authentication strategy', async () => {
   const strategy = oidc.getStrategy(app);
   expect(strategy.name).toEqual('oidc');
@@ -252,6 +290,22 @@ test('maskConfiguration should mask configuration secrets', async () => {
     clientsecret: '[REDACTED]',
     discovery: 'https://idp/.well-known/openid-configuration',
     redirect: false,
+    timeout: 5000,
+  });
+});
+
+test('maskConfiguration should include configured logouturl', async () => {
+  oidc.configuration = {
+    ...configurationValid,
+    logouturl: 'https://idp.example.com/logout',
+  };
+
+  expect(oidc.maskConfiguration()).toEqual({
+    clientid: '[REDACTED]',
+    clientsecret: '[REDACTED]',
+    discovery: 'https://idp/.well-known/openid-configuration',
+    redirect: false,
+    logouturl: 'https://idp.example.com/logout',
     timeout: 5000,
   });
 });
@@ -1113,6 +1167,21 @@ test('initAuthentication should pass allowInsecureRequests for HTTP discovery UR
   expect(callArgs[4].execute).toEqual([insecureSymbol]);
 });
 
+test('initAuthentication should log deprecation warning for HTTP discovery URL', async () => {
+  oidc.configuration = {
+    ...configurationValid,
+    discovery: 'http://dex:5556/dex/.well-known/openid-configuration',
+  };
+  openidClientMock.discovery = vi.fn().mockResolvedValue({});
+  openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
+
+  await oidc.initAuthentication();
+
+  expect(oidc.log.warn).toHaveBeenCalledWith(
+    'HTTP OIDC discovery URL is deprecated and will be removed in v1.6.0. Update your Identity Provider to serve discovery over HTTPS.',
+  );
+});
+
 test('initAuthentication should handle missing end session url', async () => {
   const mockClient = {};
   openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
@@ -1141,6 +1210,22 @@ test('initAuthentication should handle non-Error end session url failure', async
   expect(oidc.log.warn).toHaveBeenCalledWith(
     expect.stringContaining('End session url is not supported (unknown error)'),
   );
+});
+
+test('initAuthentication should use configured logouturl when end session url is unsupported', async () => {
+  oidc.configuration = {
+    ...configurationValid,
+    logouturl: 'https://idp.example.com/logout',
+  };
+  const mockClient = {};
+  openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
+  openidClientMock.buildEndSessionUrl = vi.fn().mockImplementation(() => {
+    throw new Error('not supported');
+  });
+
+  await oidc.initAuthentication();
+
+  expect(oidc.logoutUrl).toBe('https://idp.example.com/logout');
 });
 
 test('getSessionKey should return name when set', () => {
