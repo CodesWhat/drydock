@@ -1507,6 +1507,24 @@ describe('Dockercompose Trigger', () => {
     }
   });
 
+  test('resolveComposeFilePath should enforce working directory boundary when requested', () => {
+    const composeFilePathOutsideWorkingDirectory = path.resolve(
+      process.cwd(),
+      '..',
+      'outside',
+      'stack.yml',
+    );
+
+    expect(trigger.resolveComposeFilePath(composeFilePathOutsideWorkingDirectory)).toBe(
+      composeFilePathOutsideWorkingDirectory,
+    );
+    expect(() =>
+      trigger.resolveComposeFilePath(composeFilePathOutsideWorkingDirectory, {
+        enforceWorkingDirectoryBoundary: true,
+      }),
+    ).toThrow(/Compose file path must stay inside/);
+  });
+
   test('runComposeCommand should fall back to docker-compose when docker compose plugin is missing', async () => {
     execFile
       .mockImplementationOnce((_command, _args, _options, callback) => {
@@ -2160,7 +2178,7 @@ describe('Dockercompose Trigger', () => {
       mtimeMs: Date.now(),
     });
     const waitForLockChangeSpy = vi
-      .spyOn(trigger, 'waitForComposeFileLockChange')
+      .spyOn(trigger._composeFileLockManager, 'waitForComposeFileLockChange')
       .mockResolvedValueOnce(true);
     const operation = vi.fn().mockResolvedValue('ok');
 
@@ -2457,6 +2475,36 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('validateComposeConfiguration should validate updated file against full compose file chain', async () => {
+    const executeCommandSpy = vi
+      .spyOn(trigger, 'executeCommand')
+      .mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+    await trigger.validateComposeConfiguration(
+      '/opt/drydock/test/stack.override.yml',
+      'services:\n  nginx:\n    image: nginx:1.1.0\n',
+      {
+        composeFiles: ['/opt/drydock/test/stack.yml', '/opt/drydock/test/stack.override.yml'],
+      },
+    );
+
+    expect(executeCommandSpy).toHaveBeenCalledWith(
+      'docker',
+      [
+        'compose',
+        '-f',
+        '/opt/drydock/test/stack.yml',
+        '-f',
+        expect.stringContaining('.stack.override.yml.validate-'),
+        'config',
+        '--quiet',
+      ],
+      expect.objectContaining({
+        cwd: '/opt/drydock/test',
+      }),
+    );
+  });
+
   test('updateComposeServiceImageInText should throw when compose document has parse errors', () => {
     expect(() =>
       testable_updateComposeServiceImageInText('services:\n  nginx: [\n', 'nginx', 'nginx:2.0.0'),
@@ -2532,6 +2580,44 @@ describe('Dockercompose Trigger', () => {
     expect(parseSpy).toHaveBeenCalledTimes(1);
   });
 
+  test('getComposeFileAsObject should evict least recently used cache entries when max size is reached', async () => {
+    const composeFilePathA = '/opt/drydock/test/a.yml';
+    const composeFilePathB = '/opt/drydock/test/b.yml';
+    const composeFilePathC = '/opt/drydock/test/c.yml';
+    trigger._composeCacheMaxEntries = 2;
+
+    const getComposeFileSpy = vi
+      .spyOn(trigger, 'getComposeFile')
+      .mockImplementation(async (filePath) =>
+        Buffer.from(
+          ['services:', '  nginx:', `    image: ${path.basename(filePath, '.yml')}:1.0.0`, ''].join(
+            '\n',
+          ),
+        ),
+      );
+    const parseSpy = vi.spyOn(yaml, 'parse');
+    fs.stat.mockResolvedValue({
+      mtimeMs: 1700000000000,
+    } as any);
+
+    await trigger.getComposeFileAsObject(composeFilePathA);
+    await trigger.getComposeFileAsObject(composeFilePathB);
+    await trigger.getComposeFileAsObject(composeFilePathA);
+    await trigger.getComposeFileAsObject(composeFilePathC);
+
+    expect(trigger._composeObjectCache.has(composeFilePathA)).toBe(true);
+    expect(trigger._composeObjectCache.has(composeFilePathB)).toBe(false);
+    expect(trigger._composeObjectCache.has(composeFilePathC)).toBe(true);
+
+    await trigger.getComposeFileAsObject(composeFilePathB);
+
+    expect(getComposeFileSpy).toHaveBeenCalledTimes(4);
+    expect(parseSpy).toHaveBeenCalledTimes(4);
+    expect(trigger._composeObjectCache.has(composeFilePathA)).toBe(false);
+    expect(trigger._composeObjectCache.has(composeFilePathB)).toBe(true);
+    expect(trigger._composeObjectCache.has(composeFilePathC)).toBe(true);
+  });
+
   test('getCachedComposeDocument should reuse cached parse when file mtime is unchanged', () => {
     const composeFilePath = '/opt/drydock/test/compose.yml';
     const parseDocumentSpy = vi.spyOn(yaml, 'parseDocument');
@@ -2551,6 +2637,52 @@ describe('Dockercompose Trigger', () => {
 
     expect(secondDocument).toBe(firstDocument);
     expect(parseDocumentSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('getCachedComposeDocument should evict least recently used cache entries when max size is reached', () => {
+    const composeFilePathA = '/opt/drydock/test/a.yml';
+    const composeFilePathB = '/opt/drydock/test/b.yml';
+    const composeFilePathC = '/opt/drydock/test/c.yml';
+    trigger._composeCacheMaxEntries = 2;
+    const parseDocumentSpy = vi.spyOn(yaml, 'parseDocument');
+
+    const firstDocumentA = trigger.getCachedComposeDocument(
+      composeFilePathA,
+      1700000000000,
+      ['services:', '  app-a:', '    image: app-a:1.0.0', ''].join('\n'),
+    );
+    const firstDocumentB = trigger.getCachedComposeDocument(
+      composeFilePathB,
+      1700000000000,
+      ['services:', '  app-b:', '    image: app-b:1.0.0', ''].join('\n'),
+    );
+    const secondDocumentA = trigger.getCachedComposeDocument(
+      composeFilePathA,
+      1700000000000,
+      ['services:', '  app-a:', '    image: app-a:2.0.0', ''].join('\n'),
+    );
+    trigger.getCachedComposeDocument(
+      composeFilePathC,
+      1700000000000,
+      ['services:', '  app-c:', '    image: app-c:1.0.0', ''].join('\n'),
+    );
+
+    expect(secondDocumentA).toBe(firstDocumentA);
+    expect(trigger._composeDocumentCache.has(composeFilePathA)).toBe(true);
+    expect(trigger._composeDocumentCache.has(composeFilePathB)).toBe(false);
+    expect(trigger._composeDocumentCache.has(composeFilePathC)).toBe(true);
+
+    const secondDocumentB = trigger.getCachedComposeDocument(
+      composeFilePathB,
+      1700000000000,
+      ['services:', '  app-b:', '    image: app-b:2.0.0', ''].join('\n'),
+    );
+
+    expect(secondDocumentB).not.toBe(firstDocumentB);
+    expect(parseDocumentSpy).toHaveBeenCalledTimes(4);
+    expect(trigger._composeDocumentCache.has(composeFilePathA)).toBe(false);
+    expect(trigger._composeDocumentCache.has(composeFilePathB)).toBe(true);
+    expect(trigger._composeDocumentCache.has(composeFilePathC)).toBe(true);
   });
 
   test('getComposeFileAsObject should refresh cached parse when file mtime changes', async () => {
@@ -2810,6 +2942,28 @@ describe('Dockercompose Trigger', () => {
     expect(mockLog.warn).toHaveBeenCalledWith(
       expect.stringContaining('Default compose file path is invalid'),
     );
+  });
+
+  test('getComposeFilesForContainer should prefer legacy label over compose project labels', () => {
+    const container = {
+      name: 'with-both-labels',
+      labels: {
+        'dd.compose.file': '/opt/drydock/test/legacy.yml',
+        'com.docker.compose.project.config_files':
+          '/opt/drydock/test/stack.yml,/opt/drydock/test/stack.override.yml',
+      },
+    };
+
+    const result = trigger.getComposeFilesForContainer(container);
+
+    expect(result).toEqual(['/opt/drydock/test/legacy.yml']);
+  });
+
+  test('getWritableComposeFileForService should throw when compose file chain is empty', async () => {
+    await expect(trigger.getWritableComposeFileForService([], 'nginx')).rejects.toThrow(
+      'Cannot resolve writable compose file for service nginx because compose file chain is empty',
+    );
+    expect(fs.access).not.toHaveBeenCalled();
   });
 
   test('triggerBatch should fallback to inspect labels for compose config files when cached labels do not include them', async () => {

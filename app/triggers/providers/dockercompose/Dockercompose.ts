@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { constants as fsConstants, watch } from 'node:fs';
+import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import yaml, { type Pair, type ParsedNode } from 'yaml';
@@ -8,17 +8,16 @@ import { buildComposeCommandEnvironment } from '../../../runtime/child-process-e
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
 import { sleep } from '../../../util/sleep.js';
 import Docker from '../docker/Docker.js';
+import ComposeFileLockManager from './ComposeFileLockManager.js';
 
 const COMPOSE_COMMAND_TIMEOUT_MS = 60_000;
 const COMPOSE_COMMAND_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 const YAML_MAX_ALIAS_COUNT = 10_000;
-const COMPOSE_FILE_LOCK_SUFFIX = '.drydock.lock';
-const COMPOSE_FILE_LOCK_MAX_WAIT_MS = 10_000;
-const COMPOSE_FILE_LOCK_STALE_MS = 120_000;
 const COMPOSE_RENAME_MAX_RETRIES = 5;
 const COMPOSE_RENAME_RETRY_MS = 200;
 const COMPOSE_PROJECT_CONFIG_FILES_LABEL = 'com.docker.compose.project.config_files';
 const COMPOSE_PROJECT_WORKING_DIR_LABEL = 'com.docker.compose.project.working_dir';
+const COMPOSE_CACHE_MAX_ENTRIES = 256;
 const POST_START_ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const ROOT_MODE_BREAK_GLASS_HINT =
   'use socket proxy or adjust file permissions/group_add; break-glass root mode requires DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true';
@@ -49,6 +48,39 @@ interface DockerApiLike {
   };
 }
 
+type ContainersByComposeFileEntry = {
+  composeFile: string;
+  composeFiles: string[];
+  containers: unknown[];
+};
+
+type ComposeContainerReference = {
+  name?: string;
+  labels?: Record<string, string>;
+  watcher?: string;
+};
+
+type RuntimeUpdateContainerReference = {
+  result?: {
+    digest?: unknown;
+  };
+  updateKind?: {
+    kind?: string;
+    remoteValue?: unknown;
+  };
+};
+
+type RegistryImageContainerReference = {
+  image: {
+    registry: {
+      name: string;
+    };
+    tag: {
+      value: string;
+    };
+  };
+};
+
 function getDockerApiFromWatcher(watcher: unknown): DockerApiLike | undefined {
   if (!watcher || typeof watcher !== 'object') {
     return undefined;
@@ -75,12 +107,22 @@ function getServiceKey(compose, container, currentImage) {
       return false;
     }
     const normalizedServiceImage = normalizeImplicitLatest(serviceImage);
-    return (
-      serviceImage === imageToMatch ||
-      normalizedServiceImage === imageToMatch ||
-      serviceImage.includes(imageToMatch) ||
-      normalizedServiceImage.includes(imageToMatch)
-    );
+
+    // Match priority (most strict to most lenient):
+    // 1) Exact `service.image` match.
+    if (serviceImage === imageToMatch) {
+      return true;
+    }
+    // 2) Exact match after normalizing implicit `:latest`.
+    if (normalizedServiceImage === imageToMatch) {
+      return true;
+    }
+    // 3) Substring match against raw `service.image`.
+    if (serviceImage.includes(imageToMatch)) {
+      return true;
+    }
+    // 4) Substring match against normalized `service.image`.
+    return normalizedServiceImage.includes(imageToMatch);
   };
 
   return Object.keys(compose.services).find((serviceKey) => {
@@ -350,9 +392,16 @@ function buildComposePatchPreview(composeFile, service, currentImage, updateImag
  * Update a Docker compose stack with an updated one.
  */
 class Dockercompose extends Docker {
-  _composeFileLocksHeld = new Set<string>();
+  _composeFileLockManager = new ComposeFileLockManager({
+    getLog: () => this.log,
+  });
+  _composeCacheMaxEntries = COMPOSE_CACHE_MAX_ENTRIES;
   _composeObjectCache = new Map<string, { mtimeMs: number; compose: unknown }>();
   _composeDocumentCache = new Map<string, { mtimeMs: number; composeDoc: unknown }>();
+
+  get _composeFileLocksHeld() {
+    return this._composeFileLockManager._composeFileLocksHeld;
+  }
 
   /**
    * Get the Trigger configuration schema.
@@ -391,17 +440,45 @@ class Dockercompose extends Docker {
     }
   }
 
+  resolveComposeFilePath(
+    composeFilePathToResolve: string,
+    options: {
+      enforceWorkingDirectoryBoundary?: boolean;
+      label?: string;
+    } = {},
+  ) {
+    const { enforceWorkingDirectoryBoundary = false, label = 'Compose file path' } = options;
+    const composeFilePath = resolveConfiguredPath(composeFilePathToResolve, {
+      label,
+    });
+
+    if (!enforceWorkingDirectoryBoundary) {
+      return composeFilePath;
+    }
+
+    return resolveConfiguredPathWithinBase(
+      process.cwd(),
+      path.relative(process.cwd(), composeFilePath),
+      {
+        label,
+      },
+    );
+  }
+
   /**
    * Get the compose file path for a specific container.
    * First checks for a label, then falls back to default configuration.
    * @param container
    * @returns {string|null}
    */
-  getComposeFileForContainer(container) {
-    const composeFileLabel = this.configuration.composeFileLabel;
+  getConfiguredComposeFilesForContainer(
+    container: ComposeContainerReference,
+    options: { includeDefaultComposeFile?: boolean } = {},
+  ): string[] {
+    const { includeDefaultComposeFile = true } = options;
     const composeFileFromLegacyLabel = this.getComposeFileFromLegacyLabel(container);
     if (composeFileFromLegacyLabel) {
-      return composeFileFromLegacyLabel;
+      return [composeFileFromLegacyLabel];
     }
 
     const composeFilesFromComposeLabels = this.getComposeFilesFromProjectLabels(
@@ -409,14 +486,26 @@ class Dockercompose extends Docker {
       container.name,
     );
     if (composeFilesFromComposeLabels.length > 0) {
-      return composeFilesFromComposeLabels[0];
+      return composeFilesFromComposeLabels;
     }
 
+    if (!includeDefaultComposeFile) {
+      return [];
+    }
     const composeFileFromDefault = this.getDefaultComposeFilePath();
     if (composeFileFromDefault) {
-      return composeFileFromDefault;
+      return [composeFileFromDefault];
+    }
+    return [];
+  }
+
+  getComposeFileForContainer(container: ComposeContainerReference): string | null {
+    const composeFiles = this.getConfiguredComposeFilesForContainer(container);
+    if (composeFiles.length > 0) {
+      return composeFiles[0];
     }
 
+    const composeFileLabel = this.configuration.composeFileLabel;
     if (!this.configuration.file) {
       return null;
     }
@@ -426,14 +515,14 @@ class Dockercompose extends Docker {
     return null;
   }
 
-  getComposeFileFromLegacyLabel(container) {
+  getComposeFileFromLegacyLabel(container: ComposeContainerReference): string | null {
     // Check if container has a compose file label (dd.* primary, wud.* fallback)
     const composeFileLabel = this.configuration.composeFileLabel;
     const wudFallbackLabel = composeFileLabel.replace(/^dd\./, 'wud.');
     const labelValue = container.labels?.[composeFileLabel] || container.labels?.[wudFallbackLabel];
     if (labelValue) {
       try {
-        return resolveConfiguredPath(labelValue, {
+        return this.resolveComposeFilePath(labelValue, {
           label: `Compose file label ${composeFileLabel}`,
         });
       } catch (e) {
@@ -446,12 +535,12 @@ class Dockercompose extends Docker {
     return null;
   }
 
-  getDefaultComposeFilePath() {
+  getDefaultComposeFilePath(): string | null {
     if (!this.configuration.file) {
       return null;
     }
     try {
-      return resolveConfiguredPath(this.configuration.file, {
+      return this.resolveComposeFilePath(this.configuration.file, {
         label: 'Default compose file path',
       });
     } catch (e) {
@@ -460,7 +549,10 @@ class Dockercompose extends Docker {
     }
   }
 
-  getComposeFilesFromProjectLabels(labels, containerName) {
+  getComposeFilesFromProjectLabels(
+    labels: Record<string, string> | undefined,
+    containerName: string | undefined,
+  ): string[] {
     const composeProjectFilesLabel = labels?.[COMPOSE_PROJECT_CONFIG_FILES_LABEL];
     if (!composeProjectFilesLabel) {
       return [];
@@ -490,7 +582,7 @@ class Dockercompose extends Docker {
           : composeFilePathRaw;
         try {
           composeFiles.add(
-            resolveConfiguredPath(composeFilePath, {
+            this.resolveComposeFilePath(composeFilePath, {
               label: `Compose file label ${COMPOSE_PROJECT_CONFIG_FILES_LABEL}`,
             }),
           );
@@ -504,7 +596,10 @@ class Dockercompose extends Docker {
     return [...composeFiles];
   }
 
-  normalizeComposeFileChain(composeFile, composeFiles) {
+  normalizeComposeFileChain(
+    composeFile: string | null | undefined,
+    composeFiles: string[] | null | undefined,
+  ): string[] {
     const composeFileChain =
       Array.isArray(composeFiles) && composeFiles.length > 0
         ? composeFiles
@@ -520,23 +615,11 @@ class Dockercompose extends Docker {
     return [...uniqueComposeFiles];
   }
 
-  getComposeFilesForContainer(container) {
-    const composeFilesFromLabels = this.getComposeFilesFromProjectLabels(
-      container.labels,
-      container.name,
-    );
-    if (composeFilesFromLabels.length > 0) {
-      return composeFilesFromLabels;
-    }
-
-    const composeFile = this.getComposeFileForContainer(container);
-    if (!composeFile) {
-      return [];
-    }
-    return [composeFile];
+  getComposeFilesForContainer(container: ComposeContainerReference): string[] {
+    return this.getConfiguredComposeFilesForContainer(container);
   }
 
-  async getComposeFilesFromInspect(container) {
+  async getComposeFilesFromInspect(container: ComposeContainerReference): Promise<string[]> {
     const watcher = this.getWatcher(container);
     const dockerApi = getDockerApiFromWatcher(watcher);
     if (!dockerApi) {
@@ -557,18 +640,12 @@ class Dockercompose extends Docker {
     }
   }
 
-  async resolveComposeFilesForContainer(container) {
-    const composeFileFromLegacyLabel = this.getComposeFileFromLegacyLabel(container);
-    if (composeFileFromLegacyLabel) {
-      return [composeFileFromLegacyLabel];
-    }
-
-    const composeFilesFromLabels = this.getComposeFilesFromProjectLabels(
-      container.labels,
-      container.name,
-    );
-    if (composeFilesFromLabels.length > 0) {
-      return composeFilesFromLabels;
+  async resolveComposeFilesForContainer(container: ComposeContainerReference): Promise<string[]> {
+    const composeFilesFromConfiguration = this.getConfiguredComposeFilesForContainer(container, {
+      includeDefaultComposeFile: false,
+    });
+    if (composeFilesFromConfiguration.length > 0) {
+      return composeFilesFromConfiguration;
     }
 
     const composeFilesFromInspect = await this.getComposeFilesFromInspect(container);
@@ -583,7 +660,7 @@ class Dockercompose extends Docker {
     return [composeFileFromDefault];
   }
 
-  normalizeDigestPinningValue(value) {
+  normalizeDigestPinningValue(value: unknown): string | null {
     if (!value || typeof value !== 'string') {
       return null;
     }
@@ -600,7 +677,7 @@ class Dockercompose extends Docker {
     return null;
   }
 
-  getImageNameFromReference(imageReference) {
+  getImageNameFromReference(imageReference: string | null | undefined): string | null | undefined {
     if (!imageReference || typeof imageReference !== 'string') {
       return imageReference;
     }
@@ -613,7 +690,10 @@ class Dockercompose extends Docker {
     return referenceWithoutDigest;
   }
 
-  getComposeMutationImageReference(container, runtimeUpdateImage) {
+  getComposeMutationImageReference(
+    container: RuntimeUpdateContainerReference,
+    runtimeUpdateImage: string,
+  ): string {
     if (this.configuration.digestPinning !== true) {
       return runtimeUpdateImage;
     }
@@ -631,7 +711,7 @@ class Dockercompose extends Docker {
     return `${imageName}@${digestToPin}`;
   }
 
-  getContainerRuntimeImageReference(container) {
+  getContainerRuntimeImageReference(container: RegistryImageContainerReference): string {
     const registry = getState().registry[container.image.registry.name];
     return registry.getImageFullName(container.image, container.image.tag.value);
   }
@@ -709,6 +789,11 @@ class Dockercompose extends Docker {
   }
 
   async getWritableComposeFileForService(composeFiles, service, composeByFile = null) {
+    if (!Array.isArray(composeFiles) || composeFiles.length === 0) {
+      throw new Error(
+        `Cannot resolve writable compose file for service ${service} because compose file chain is empty`,
+      );
+    }
     const filesContainingService = [];
     for (const composeFile of composeFiles) {
       const compose =
@@ -755,107 +840,15 @@ class Dockercompose extends Docker {
   }
 
   async maybeReleaseStaleComposeFileLock(lockFilePath) {
-    try {
-      const lockFileStats = await fs.stat(lockFilePath);
-      const lockAgeMs = Date.now() - lockFileStats.mtimeMs;
-      if (lockAgeMs <= COMPOSE_FILE_LOCK_STALE_MS) {
-        return false;
-      }
-      await fs.unlink(lockFilePath);
-      this.log.warn(`Removed stale compose file lock ${lockFilePath}`);
-      return true;
-    } catch (e) {
-      if (e?.code === 'ENOENT') {
-        return true;
-      }
-      this.log.warn(`Could not inspect compose file lock ${lockFilePath} (${e.message})`);
-      return false;
-    }
+    return this._composeFileLockManager.maybeReleaseStaleComposeFileLock(lockFilePath);
   }
 
   async waitForComposeFileLockChange(lockFilePath, timeoutMs) {
-    if (timeoutMs <= 0) {
-      return false;
-    }
-    const lockDirectoryPath = path.dirname(lockFilePath);
-    const lockFileName = path.basename(lockFilePath);
-
-    return new Promise<boolean>((resolve) => {
-      let settled = false;
-      const settle = (result: boolean) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        clearTimeout(timeoutHandle);
-        watcher?.close();
-        resolve(result);
-      };
-      const timeoutHandle = setTimeout(() => settle(false), timeoutMs);
-      let watcher;
-      try {
-        watcher = watch(lockDirectoryPath, (_eventType, changedPath) => {
-          if (changedPath === null || changedPath === undefined) {
-            settle(true);
-            return;
-          }
-          const changedFileName = Buffer.isBuffer(changedPath)
-            ? changedPath.toString()
-            : changedPath;
-          if (changedFileName === lockFileName) {
-            settle(true);
-          }
-        });
-        watcher.on('error', () => settle(true));
-      } catch {
-        // If watch setup fails, fall back to timeout-based waiting.
-      }
-    });
+    return this._composeFileLockManager.waitForComposeFileLockChange(lockFilePath, timeoutMs);
   }
 
   async withComposeFileLock(file, operation) {
-    const filePath = resolveConfiguredPath(file, {
-      label: 'Compose file path',
-    });
-    if (this._composeFileLocksHeld.has(filePath)) {
-      return operation(filePath);
-    }
-
-    const lockFilePath = `${filePath}${COMPOSE_FILE_LOCK_SUFFIX}`;
-    const lockWaitDeadline = Date.now() + COMPOSE_FILE_LOCK_MAX_WAIT_MS;
-    while (true) {
-      try {
-        await fs.writeFile(lockFilePath, `${process.pid}:${Date.now()}\n`, { flag: 'wx' });
-        this._composeFileLocksHeld.add(filePath);
-        break;
-      } catch (e) {
-        if (e?.code !== 'EEXIST') {
-          throw e;
-        }
-        const staleLockReleased = await this.maybeReleaseStaleComposeFileLock(lockFilePath);
-        if (staleLockReleased) {
-          continue;
-        }
-        const remainingWaitMs = lockWaitDeadline - Date.now();
-        if (remainingWaitMs <= 0) {
-          throw new Error(`Timed out waiting for compose file lock ${lockFilePath}`);
-        }
-        await this.waitForComposeFileLockChange(lockFilePath, remainingWaitMs);
-      }
-    }
-
-    try {
-      return await operation(filePath);
-    } finally {
-      this._composeFileLocksHeld.delete(filePath);
-      try {
-        await fs.unlink(lockFilePath);
-      } catch (e) {
-        if (e?.code !== 'ENOENT') {
-          this.log.warn(`Could not remove compose file lock ${lockFilePath} (${e.message})`);
-        }
-      }
-    }
+    return this._composeFileLockManager.withComposeFileLock(file, operation);
   }
 
   async tryRenameComposeFile(temporaryFilePath, filePath) {
@@ -931,7 +924,15 @@ class Dockercompose extends Docker {
     }
   }
 
-  async validateComposeConfiguration(composeFilePath, composeFileText) {
+  async validateComposeConfiguration(composeFilePath, composeFileText, options = {}) {
+    const composeFileChain = this.normalizeComposeFileChain(
+      composeFilePath,
+      (options as { composeFiles?: string[] }).composeFiles,
+    );
+    const effectiveComposeFileChain = composeFileChain.includes(composeFilePath)
+      ? composeFileChain
+      : [...composeFileChain, composeFilePath];
+
     const composeDirectory = path.dirname(composeFilePath);
     const composeFileName = path.basename(composeFilePath);
     const validationFilePath = path.join(
@@ -940,7 +941,14 @@ class Dockercompose extends Docker {
     );
 
     await fs.writeFile(validationFilePath, composeFileText);
-    const validationArguments = ['-f', validationFilePath, 'config', '--quiet'];
+    const validationArguments = [
+      ...effectiveComposeFileChain.flatMap((composeFile) => [
+        '-f',
+        composeFile === composeFilePath ? validationFilePath : composeFile,
+      ]),
+      'config',
+      '--quiet',
+    ];
     const commandsToTry = [
       {
         command: 'docker',
@@ -1071,10 +1079,14 @@ class Dockercompose extends Docker {
     }
   }
 
-  async mutateComposeFile(file, updateComposeText) {
+  async mutateComposeFile(file, updateComposeText, options = {}) {
     return this.withComposeFileLock(file, async (filePath) => {
       const composeFileText = (await this.getComposeFile(filePath)).toString();
       const composeFileStat = await fs.stat(filePath);
+      const composeFileChain = this.normalizeComposeFileChain(
+        filePath,
+        (options as { composeFiles?: string[] }).composeFiles,
+      );
       const updatedComposeFileText = updateComposeText(composeFileText, {
         filePath,
         mtimeMs: composeFileStat.mtimeMs,
@@ -1082,7 +1094,13 @@ class Dockercompose extends Docker {
       if (updatedComposeFileText === composeFileText) {
         return false;
       }
-      await this.validateComposeConfiguration(filePath, updatedComposeFileText);
+      if (composeFileChain.length > 1) {
+        await this.validateComposeConfiguration(filePath, updatedComposeFileText, {
+          composeFiles: composeFileChain,
+        });
+      } else {
+        await this.validateComposeConfiguration(filePath, updatedComposeFileText);
+      }
       await this.writeComposeFile(filePath, updatedComposeFileText);
       return true;
     });
@@ -1206,7 +1224,7 @@ class Dockercompose extends Docker {
    */
   async triggerBatch(containers): Promise<unknown[]> {
     // Group containers by their ordered compose file chain
-    const containersByComposeFile = new Map();
+    const containersByComposeFile = new Map<string, ContainersByComposeFileEntry>();
 
     for (const container of containers) {
       // Filter on containers running on local host
@@ -1286,7 +1304,7 @@ class Dockercompose extends Docker {
     const composeFileChain = this.normalizeComposeFileChain(composeFile, composeFiles);
     const composeFileChainSummary = composeFileChain.join(', ');
     this.log.info(`Processing compose file: ${composeFileChainSummary}`);
-    const composeByFile = new Map();
+    const composeByFile = new Map<string, unknown>();
     for (const composeFilePath of composeFileChain) {
       composeByFile.set(composeFilePath, await this.getComposeFileAsObject(composeFilePath));
     }
@@ -1365,16 +1383,21 @@ class Dockercompose extends Docker {
 
         // Replace only the targeted compose service image values.
         const serviceImageUpdates = this.buildComposeServiceImageUpdates(composeUpdates);
-        await this.mutateComposeFile(writableComposeFile, (composeFileText, composeFileMetadata) =>
-          updateComposeServiceImagesInText(
-            composeFileText,
-            serviceImageUpdates,
-            this.getCachedComposeDocument(
-              composeFileMetadata.filePath,
-              composeFileMetadata.mtimeMs,
+        await this.mutateComposeFile(
+          writableComposeFile,
+          (composeFileText, composeFileMetadata) =>
+            updateComposeServiceImagesInText(
               composeFileText,
+              serviceImageUpdates,
+              this.getCachedComposeDocument(
+                composeFileMetadata.filePath,
+                composeFileMetadata.mtimeMs,
+                composeFileText,
+              ),
             ),
-          ),
+          {
+            composeFiles: composeFileChain,
+          },
         );
       }
     }
@@ -1452,18 +1475,11 @@ class Dockercompose extends Docker {
 
   async runComposeCommand(composeFile, composeArgs, logContainer, composeFiles = [composeFile]) {
     const composeFileChain = this.normalizeComposeFileChain(composeFile, composeFiles);
-    const composeFilePaths = composeFileChain.map((composeFilePathToResolve) => {
-      const composeFilePathRaw = resolveConfiguredPath(composeFilePathToResolve, {
-        label: 'Compose file path',
-      });
-      return resolveConfiguredPathWithinBase(
-        process.cwd(),
-        path.relative(process.cwd(), composeFilePathRaw),
-        {
-          label: 'Compose file path',
-        },
-      );
-    });
+    const composeFilePaths = composeFileChain.map((composeFilePathToResolve) =>
+      this.resolveComposeFilePath(composeFilePathToResolve, {
+        enforceWorkingDirectoryBoundary: true,
+      }),
+    );
     const composeFileArgs = composeFilePaths.flatMap((composeFilePath) => ['-f', composeFilePath]);
     const composeWorkingDirectory = path.dirname(composeFilePaths[0]);
     const composeFilePathSummary = composeFilePaths.join(', ');
@@ -1549,7 +1565,7 @@ class Dockercompose extends Docker {
       throw new Error(`No compose file configured for ${container.name}`);
     }
 
-    const composeByFile = new Map();
+    const composeByFile = new Map<string, unknown>();
     for (const composeFilePath of composeFiles) {
       composeByFile.set(composeFilePath, await this.getComposeFileAsObject(composeFilePath));
     }
@@ -1710,17 +1726,22 @@ class Dockercompose extends Docker {
       currentImage,
     );
 
-    await this.mutateComposeFile(composeFile, (composeFileText, composeFileMetadata) =>
-      updateComposeServiceImageInText(
-        composeFileText,
-        service,
-        newImage,
-        this.getCachedComposeDocument(
-          composeFileMetadata.filePath,
-          composeFileMetadata.mtimeMs,
+    await this.mutateComposeFile(
+      composeFile,
+      (composeFileText, composeFileMetadata) =>
+        updateComposeServiceImageInText(
           composeFileText,
+          service,
+          newImage,
+          this.getCachedComposeDocument(
+            composeFileMetadata.filePath,
+            composeFileMetadata.mtimeMs,
+            composeFileText,
+          ),
         ),
-      ),
+      {
+        composeFiles,
+      },
     );
 
     const composeUpdateOptions = {
@@ -1895,9 +1916,7 @@ class Dockercompose extends Docker {
    * @returns {Promise<void>}
    */
   async writeComposeFile(file, data) {
-    const filePath = resolveConfiguredPath(file, {
-      label: 'Compose file path',
-    });
+    const filePath = this.resolveComposeFilePath(file);
     try {
       await this.withComposeFileLock(filePath, async () => {
         await this.writeComposeFileAtomic(filePath, data);
@@ -1915,13 +1934,32 @@ class Dockercompose extends Docker {
     this._composeDocumentCache.delete(filePath);
   }
 
+  setComposeCacheEntry(cache, filePath, value) {
+    if (this._composeCacheMaxEntries < 1) {
+      cache.clear();
+      return;
+    }
+    if (cache.has(filePath)) {
+      cache.delete(filePath);
+    }
+    cache.set(filePath, value);
+    while (cache.size > this._composeCacheMaxEntries) {
+      const oldestCacheKey = cache.keys().next().value;
+      if (oldestCacheKey === undefined) {
+        break;
+      }
+      cache.delete(oldestCacheKey);
+    }
+  }
+
   getCachedComposeDocument(filePath, mtimeMs, composeFileText) {
     const cachedComposeDocument = this._composeDocumentCache.get(filePath);
     if (cachedComposeDocument && cachedComposeDocument.mtimeMs === mtimeMs) {
+      this.setComposeCacheEntry(this._composeDocumentCache, filePath, cachedComposeDocument);
       return cachedComposeDocument.composeDoc;
     }
     const composeDoc = parseComposeDocument(composeFileText);
-    this._composeDocumentCache.set(filePath, {
+    this.setComposeCacheEntry(this._composeDocumentCache, filePath, {
       mtimeMs,
       composeDoc,
     });
@@ -1934,9 +1972,7 @@ class Dockercompose extends Docker {
    * @returns {Promise<Buffer>}
    */
   getComposeFile(file = null) {
-    const filePath = resolveConfiguredPath(file || this.configuration.file, {
-      label: 'Compose file path',
-    });
+    const filePath = this.resolveComposeFilePath(file || this.configuration.file);
     try {
       return fs.readFile(filePath);
     } catch (e) {
@@ -1953,18 +1989,17 @@ class Dockercompose extends Docker {
   async getComposeFileAsObject(file = null) {
     const configuredFilePath = file || this.configuration.file;
     try {
-      const filePath = resolveConfiguredPath(configuredFilePath, {
-        label: 'Compose file path',
-      });
+      const filePath = this.resolveComposeFilePath(configuredFilePath);
       const composeFileStat = await fs.stat(filePath);
       const cachedComposeObject = this._composeObjectCache.get(filePath);
       if (cachedComposeObject && cachedComposeObject.mtimeMs === composeFileStat.mtimeMs) {
+        this.setComposeCacheEntry(this._composeObjectCache, filePath, cachedComposeObject);
         return cachedComposeObject.compose;
       }
       const compose = yaml.parse((await this.getComposeFile(filePath)).toString(), {
         maxAliasCount: YAML_MAX_ALIAS_COUNT,
       });
-      this._composeObjectCache.set(filePath, {
+      this.setComposeCacheEntry(this._composeObjectCache, filePath, {
         mtimeMs: composeFileStat.mtimeMs,
         compose,
       });
