@@ -821,6 +821,7 @@ describe('ContainersView', () => {
     });
 
     it('loads and renders update operation history when opening actions tab', async () => {
+      vi.useFakeTimers();
       const c = makeContainer({ id: 'container-1', name: 'nginx' });
       const wrapper = await mountContainersView([c]);
 
@@ -838,6 +839,8 @@ describe('ContainersView', () => {
       mockDetailPanelOpen.value = true;
       mockActiveDetailTab.value = 'actions';
       await flushPromises();
+      await vi.advanceTimersByTimeAsync(300);
+      await flushPromises();
 
       expect(mockGetContainerUpdateOperations).toHaveBeenCalledWith('container-1');
       expect(wrapper.text()).toContain('Update Operation History');
@@ -845,6 +848,7 @@ describe('ContainersView', () => {
       expect(wrapper.text()).toContain('rolled back');
       expect(wrapper.text()).toContain('rollback failed');
       expect(wrapper.text()).toContain('health gate failed');
+      vi.useRealTimers();
     });
 
     it('shows registry error message when selected container has one', async () => {
