@@ -22,6 +22,12 @@ import Docker, {
   testable_shouldUpdateDisplayNameFromContainerName,
 } from './Docker.js';
 
+const mockDdEnvVars = vi.hoisted(() => ({}) as Record<string, string | undefined>);
+vi.mock('../../../configuration/index.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../configuration/index.js')>()),
+  ddEnvVars: mockDdEnvVars,
+}));
+
 // Mock all dependencies
 vi.mock('dockerode');
 vi.mock('node-cron');
@@ -640,6 +646,37 @@ describe('Docker Watcher', () => {
       docker.log = mockLog;
       docker.init();
       expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('deprecated'));
+    });
+
+    test('should warn about deprecated watchatstart when env var is explicitly set', async () => {
+      mockDdEnvVars.DD_WATCHER_TEST_WATCHATSTART = 'true';
+      try {
+        await docker.register('watcher', 'docker', 'test', {
+          watchatstart: true,
+        });
+        const mockLog = { warn: vi.fn(), info: vi.fn() };
+        docker.log = mockLog;
+        docker.init();
+        expect(mockLog.warn).toHaveBeenCalledWith(
+          expect.stringContaining(
+            'DD_WATCHER_TEST_WATCHATSTART environment variable is deprecated',
+          ),
+        );
+      } finally {
+        delete mockDdEnvVars.DD_WATCHER_TEST_WATCHATSTART;
+      }
+    });
+
+    test('should not warn about watchatstart when env var is not explicitly set', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        watchatstart: true,
+      });
+      const mockLog = { warn: vi.fn(), info: vi.fn() };
+      docker.log = mockLog;
+      docker.init();
+      expect(mockLog.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('WATCHATSTART environment variable is deprecated'),
+      );
     });
 
     test('should setup docker events listener', async () => {

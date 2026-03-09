@@ -352,8 +352,13 @@ class Oidc extends Authentication {
     const openidClient = await this.getOpenIdClient();
     const timeoutSeconds = Math.ceil(this.configuration.timeout / 1000);
     const discoveryUrl = new URL(this.configuration.discovery);
-    const execute: Array<typeof openidClient.allowInsecureRequests> =
-      discoveryUrl.protocol === 'http:' ? [openidClient.allowInsecureRequests] : [];
+    let execute: Array<typeof openidClient.allowInsecureRequests> = [];
+    if (discoveryUrl.protocol === 'http:') {
+      this.log.warn(
+        'HTTP OIDC discovery URL is deprecated and will be removed in v1.6.0. Update your Identity Provider to serve discovery over HTTPS.',
+      );
+      execute = [openidClient.allowInsecureRequests];
+    }
     this.client = await openidClient.discovery(
       discoveryUrl,
       this.configuration.clientid,

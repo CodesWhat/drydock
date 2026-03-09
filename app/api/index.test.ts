@@ -265,6 +265,25 @@ describe('API Index', () => {
     );
   });
 
+  test('should warn about deprecated unversioned /api/* path at startup', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: { enabled: false },
+      tls: { enabled: false },
+      compression: { enabled: false },
+      trustproxy: false,
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      'Unversioned /api/* path is deprecated and will be removed in v1.6.0. Use /api/v1/* instead.',
+    );
+  });
+
   test('should mount all routers', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,

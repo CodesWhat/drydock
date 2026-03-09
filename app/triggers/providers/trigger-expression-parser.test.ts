@@ -1,3 +1,8 @@
+const mockLogWarn = vi.hoisted(() => vi.fn());
+vi.mock('../../log/index.js', () => ({
+  default: { child: () => ({ warn: mockLogWarn, info: vi.fn(), debug: vi.fn(), error: vi.fn() }) },
+}));
+
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
 
 const baseContainer = {
@@ -87,5 +92,45 @@ describe('trigger-expression-parser', () => {
       },
     });
     expect(output).toBe('suffix');
+  });
+});
+
+describe('legacy template variable deprecation warnings', () => {
+  beforeEach(() => {
+    mockLogWarn.mockClear();
+  });
+
+  test('renderSimple should warn about legacy template variables', async () => {
+    vi.resetModules();
+    const { renderSimple: freshRenderSimple } = await import('./trigger-expression-parser.js');
+
+    freshRenderSimple('Hello ${name}, id=${id}', baseContainer);
+
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      expect.stringContaining('Legacy trigger template variable "${name}" is deprecated'),
+    );
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      expect.stringContaining('Legacy trigger template variable "${id}" is deprecated'),
+    );
+  });
+
+  test('renderBatch should warn about legacy count variable', async () => {
+    vi.resetModules();
+    const { renderBatch: freshRenderBatch } = await import('./trigger-expression-parser.js');
+
+    freshRenderBatch('Total: ${count}', [baseContainer]);
+
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      expect.stringContaining('Legacy trigger template variable "${count}" is deprecated'),
+    );
+  });
+
+  test('should not warn for non-legacy template variables', async () => {
+    vi.resetModules();
+    const { renderSimple: freshRenderSimple } = await import('./trigger-expression-parser.js');
+
+    freshRenderSimple('Hello ${container.name}', baseContainer);
+
+    expect(mockLogWarn).not.toHaveBeenCalled();
   });
 });

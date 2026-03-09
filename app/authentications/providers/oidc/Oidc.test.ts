@@ -1167,6 +1167,21 @@ test('initAuthentication should pass allowInsecureRequests for HTTP discovery UR
   expect(callArgs[4].execute).toEqual([insecureSymbol]);
 });
 
+test('initAuthentication should log deprecation warning for HTTP discovery URL', async () => {
+  oidc.configuration = {
+    ...configurationValid,
+    discovery: 'http://dex:5556/dex/.well-known/openid-configuration',
+  };
+  openidClientMock.discovery = vi.fn().mockResolvedValue({});
+  openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
+
+  await oidc.initAuthentication();
+
+  expect(oidc.log.warn).toHaveBeenCalledWith(
+    'HTTP OIDC discovery URL is deprecated and will be removed in v1.6.0. Update your Identity Provider to serve discovery over HTTPS.',
+  );
+});
+
 test('initAuthentication should handle missing end session url', async () => {
   const mockClient = {};
   openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
