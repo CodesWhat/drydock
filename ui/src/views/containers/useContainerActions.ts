@@ -52,6 +52,7 @@ const EMPTY_CONTAINER_POLICY_STATE: ContainerListPolicyState = {
   skipped: false,
   skipCount: 0,
 };
+const ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS = 250;
 
 export function useContainerActions(input: UseContainerActionsInput) {
   const confirm = useConfirmDialog();
@@ -306,6 +307,24 @@ export function useContainerActions(input: UseContainerActionsInput) {
     await Promise.all([loadDetailTriggers(), loadDetailBackups(), loadDetailUpdateOperations()]);
   }
 
+  let actionTabDetailRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function clearActionTabDetailRefreshTimer() {
+    if (actionTabDetailRefreshTimer === undefined) {
+      return;
+    }
+    clearTimeout(actionTabDetailRefreshTimer);
+    actionTabDetailRefreshTimer = undefined;
+  }
+
+  function scheduleActionTabDataRefresh() {
+    clearActionTabDetailRefreshTimer();
+    actionTabDetailRefreshTimer = setTimeout(() => {
+      actionTabDetailRefreshTimer = undefined;
+      void refreshActionTabData();
+    }, ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
+  }
+
   async function runContainerPreview() {
     const containerId = input.selectedContainerId.value;
     if (!containerId || previewLoading.value) {
@@ -525,6 +544,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       detailPreview.value = null;
       previewError.value = null;
       if (!containerName) {
+        clearActionTabDetailRefreshTimer();
         detailTriggers.value = [];
         detailBackups.value = [];
         detailUpdateOperations.value = [];
@@ -534,8 +554,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
       }
       if (tabName === 'actions') {
         resetDetailMessages();
-        void refreshActionTabData();
+        scheduleActionTabDataRefresh();
+        return;
       }
+      clearActionTabDetailRefreshTimer();
     },
     { immediate: true },
   );
@@ -608,6 +630,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   onUnmounted(() => {
+    clearActionTabDetailRefreshTimer();
     stopPendingActionsPolling();
   });
 

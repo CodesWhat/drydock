@@ -80,6 +80,44 @@ describe('useServerFeatures', () => {
     expect(second.deleteEnabled.value).toBe(true);
   });
 
+  it('shares one auto-load request across repeated composable mounts', async () => {
+    let resolveServerRequest: ((value: unknown) => void) | null = null;
+    mockGetServer.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveServerRequest = resolve;
+        }),
+    );
+
+    const { useServerFeatures } = await loadComposable();
+    const first = useServerFeatures();
+    const second = useServerFeatures();
+    const third = useServerFeatures();
+
+    expect(mockGetServer).toHaveBeenCalledTimes(1);
+
+    resolveServerRequest?.({
+      configuration: {
+        feature: {
+          containeractions: true,
+          delete: true,
+        },
+      },
+    });
+
+    await Promise.all([
+      first.loadServerFeatures(),
+      second.loadServerFeatures(),
+      third.loadServerFeatures(),
+    ]);
+
+    const fourth = useServerFeatures();
+    await fourth.loadServerFeatures();
+
+    expect(mockGetServer).toHaveBeenCalledTimes(1);
+    expect(fourth.containerActionsEnabled.value).toBe(true);
+  });
+
   it('auto-loads by default and fail-closes invalid feature payloads', async () => {
     mockGetServer.mockResolvedValueOnce({
       configuration: {

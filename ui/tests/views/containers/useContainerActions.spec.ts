@@ -615,6 +615,7 @@ describe('useContainerActions', () => {
   });
 
   it('handles action-tab detail load guards and API failures', async () => {
+    vi.useFakeTimers();
     const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable, activeDetailTab, selectedContainerId } = await mountActionsHarness({
       activeDetailTab: 'actions',
@@ -636,11 +637,51 @@ describe('useContainerActions', () => {
     activeDetailTab.value = 'overview';
     await nextTick();
     activeDetailTab.value = 'actions';
+    await nextTick();
+    vi.advanceTimersByTime(250);
     await flushPromises();
 
     expect(composable.triggerError.value).toBe('trigger load failed');
     expect(composable.rollbackError.value).toBe('backup load failed');
     expect(composable.updateOperationsError.value).toBe('ops load failed');
+  });
+
+  it('debounces rapid action-tab detail refresh triggers into one API batch', async () => {
+    vi.useFakeTimers();
+    const web = makeContainer({ id: 'container-1', name: 'web' });
+    const api = makeContainer({ id: 'container-2', name: 'api' });
+    const { activeDetailTab, selectedContainer, selectedContainerId } = await mountActionsHarness({
+      activeDetailTab: 'overview',
+      selectedContainer: web,
+      selectedContainerId: web.id,
+    });
+
+    mocks.getContainerTriggers.mockClear();
+    mocks.getBackups.mockClear();
+    mocks.getContainerUpdateOperations.mockClear();
+
+    activeDetailTab.value = 'actions';
+    await nextTick();
+    selectedContainer.value = api;
+    selectedContainerId.value = api.id;
+    await nextTick();
+    selectedContainer.value = web;
+    selectedContainerId.value = web.id;
+    await nextTick();
+
+    expect(mocks.getContainerTriggers).not.toHaveBeenCalled();
+    expect(mocks.getBackups).not.toHaveBeenCalled();
+    expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(250);
+    await flushPromises();
+
+    expect(mocks.getContainerTriggers).toHaveBeenCalledTimes(1);
+    expect(mocks.getBackups).toHaveBeenCalledTimes(1);
+    expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
+    expect(mocks.getContainerTriggers).toHaveBeenCalledWith('container-1');
+    expect(mocks.getBackups).toHaveBeenCalledWith('container-1');
+    expect(mocks.getContainerUpdateOperations).toHaveBeenCalledWith('container-1');
   });
 
   it('handles preview guard, success, and failure flows', async () => {

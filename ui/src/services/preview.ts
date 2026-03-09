@@ -93,30 +93,32 @@ function normalizeComposePreview(
   const composeContext = asRecord(payload.composeContext);
 
   const files = [
-    ...normalizeStringList(compose?.files),
-    ...normalizeStringList(compose?.paths),
-    ...normalizeStringList(compose?.composeFiles),
-    ...normalizeStringList(compose?.composePaths),
-    ...normalizeStringList(compose?.file),
-    ...normalizeStringList(compose?.composeFile),
-    ...normalizeStringList(composePreview?.files),
-    ...normalizeStringList(composePreview?.paths),
-    ...normalizeStringList(composePreview?.composeFiles),
-    ...normalizeStringList(composePreview?.composePaths),
-    ...normalizeStringList(composePreview?.file),
-    ...normalizeStringList(composePreview?.composeFile),
-    ...normalizeStringList(composeContext?.files),
-    ...normalizeStringList(composeContext?.paths),
-    ...normalizeStringList(composeContext?.composeFiles),
-    ...normalizeStringList(composeContext?.composePaths),
-    ...normalizeStringList(composeContext?.file),
-    ...normalizeStringList(composeContext?.composeFile),
-    ...normalizeStringList(payload.composeFiles),
-    ...normalizeStringList(payload.composePaths),
-    ...normalizeStringList(payload.compose_paths),
-    ...normalizeStringList(payload.composeFile),
-    ...normalizeStringList(payload.compose_file),
-  ].filter((value, index, values) => values.indexOf(value) === index);
+    ...new Set([
+      ...normalizeStringList(compose?.files),
+      ...normalizeStringList(compose?.paths),
+      ...normalizeStringList(compose?.composeFiles),
+      ...normalizeStringList(compose?.composePaths),
+      ...normalizeStringList(compose?.file),
+      ...normalizeStringList(compose?.composeFile),
+      ...normalizeStringList(composePreview?.files),
+      ...normalizeStringList(composePreview?.paths),
+      ...normalizeStringList(composePreview?.composeFiles),
+      ...normalizeStringList(composePreview?.composePaths),
+      ...normalizeStringList(composePreview?.file),
+      ...normalizeStringList(composePreview?.composeFile),
+      ...normalizeStringList(composeContext?.files),
+      ...normalizeStringList(composeContext?.paths),
+      ...normalizeStringList(composeContext?.composeFiles),
+      ...normalizeStringList(composeContext?.composePaths),
+      ...normalizeStringList(composeContext?.file),
+      ...normalizeStringList(composeContext?.composeFile),
+      ...normalizeStringList(payload.composeFiles),
+      ...normalizeStringList(payload.composePaths),
+      ...normalizeStringList(payload.compose_paths),
+      ...normalizeStringList(payload.composeFile),
+      ...normalizeStringList(payload.compose_file),
+    ]),
+  ];
 
   const service = pickFirstString(
     compose?.service,
@@ -181,8 +183,7 @@ function normalizeComposePreview(
     payload.composeWrite,
   );
 
-  const hasComposeDetails =
-    files.length > 0 || !!service || !!writableFile || !!patch || compose || composePreview;
+  const hasComposeDetails = files.length > 0 || !!service || !!writableFile || !!patch;
   if (willWrite === undefined && hasComposeDetails && typeof payload.dryRun === 'boolean') {
     willWrite = !payload.dryRun;
   }
@@ -204,10 +205,13 @@ export function normalizePreviewPayload(payload: unknown): ContainerPreviewPaylo
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return {};
   }
-  const normalized = { ...(payload as Record<string, unknown>) };
-  const compose = normalizeComposePreview(normalized);
+  const source = payload as Record<string, unknown>;
+  const normalized = { ...source };
+  const compose = normalizeComposePreview(source);
   if (compose) {
     normalized.compose = compose;
+  } else {
+    delete normalized.compose;
   }
   return normalized;
 }

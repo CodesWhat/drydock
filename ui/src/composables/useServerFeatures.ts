@@ -4,6 +4,7 @@ import { errorMessage } from '../utils/error';
 
 type ServerFeatureFlags = Record<string, boolean>;
 
+// Module-level singleton state shared by every composable consumer.
 const featureFlags = ref<ServerFeatureFlags>({});
 const loaded = ref(false);
 const loading = ref(false);
@@ -66,7 +67,7 @@ interface UseServerFeaturesOptions {
 }
 
 export function useServerFeatures(options: UseServerFeaturesOptions = {}) {
-  if (options.autoLoad !== false) {
+  if (options.autoLoad !== false && !loaded.value && !loadPromise) {
     void loadServerFeatures();
   }
 
