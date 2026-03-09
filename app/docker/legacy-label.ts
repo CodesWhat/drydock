@@ -28,7 +28,7 @@ export function getPreferredLabelValue(
   if (!warned.has(wudKey)) {
     warned.add(wudKey);
     options.warn?.(
-      `Legacy Docker label "${wudKey}" is deprecated. Please migrate to "${ddKey}" before fallback support is removed.`,
+      `Legacy Docker label "${wudKey}" is deprecated. Please migrate to "${ddKey}" before removal in v1.6.0.`,
     );
   }
 

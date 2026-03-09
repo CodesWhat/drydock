@@ -51,7 +51,7 @@ function configureCors(app) {
   const hasExplicitCorsOrigin = Object.hasOwn(ddEnvVars, 'DD_SERVER_CORS_ORIGIN');
   if (configuration.cors.origin === '*' && !hasExplicitCorsOrigin) {
     log.warn(
-      'CORS enabled without explicit origin. The default wildcard origin is deprecated and will require explicit DD_SERVER_CORS_ORIGIN=* in v1.5.0. Set DD_SERVER_CORS_ORIGIN to your trusted origin(s) to silence this warning.',
+      'CORS enabled without explicit origin. The default wildcard origin is deprecated and will be removed in v1.6.0. Set DD_SERVER_CORS_ORIGIN to your trusted origin(s) to silence this warning.',
     );
   }
   app.use(
@@ -101,6 +101,9 @@ function registerRoutes(app) {
   auth.init(app);
   app.use('/health', healthRouter.init());
   app.use('/api/v1', apiRouter.init());
+  log.warn(
+    'Unversioned /api/* path is deprecated and will be removed in v1.6.0. Use /api/v1/* instead.',
+  );
   app.use('/api', apiRouter.init());
   app.use('/metrics', prometheusRouter.init());
   app.use('/', uiRouter.init());

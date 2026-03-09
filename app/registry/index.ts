@@ -303,7 +303,7 @@ function sanitizeLegacyPublicTokenAuthConfigurations(
     const configuredCredentialKeysSuffix = ` Configured keys: ${configuredCredentialKeys.join(', ')}.`;
 
     log.warn(
-      `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials for ${provider}.public.${configuredCredentialKeysSuffix} Falling back to anonymous ${provider}.public registry for backward compatibility. This fallback is deprecated; migrate to LOGIN+PASSWORD, LOGIN+TOKEN, AUTH, or no credentials.`,
+      `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials for ${provider}.public.${configuredCredentialKeysSuffix} Falling back to anonymous ${provider}.public registry for backward compatibility. This fallback is deprecated and will be removed in v1.6.0; migrate to LOGIN+PASSWORD, LOGIN+TOKEN, AUTH, or no credentials.`,
     );
 
     sanitizedConfigurations = {

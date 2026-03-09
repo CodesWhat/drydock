@@ -8,9 +8,10 @@ import { sanitizeApiError } from './helpers.js';
 
 const router = express.Router();
 const log = logger.child({ component: 'settings' });
-const deprecatedPutWarning = 'PUT /api/settings is deprecated, use PATCH /api/settings instead';
-const deprecatedPutDeprecation = '@1772236800';
-const deprecatedPutSunset = 'Wed, 01 Jul 2026 00:00:00 GMT';
+const deprecatedPutWarning =
+  'PUT /api/settings is deprecated and will be removed in v1.6.0. Use PATCH /api/settings instead.';
+const deprecatedPutDeprecation = '@1798761600';
+const deprecatedPutSunset = 'Wed, 01 Jan 2027 00:00:00 GMT';
 
 const settingsSchema = joi
   .object({

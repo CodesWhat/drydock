@@ -85,7 +85,7 @@ if (mappedLegacyEnvVars.size > 0) {
   const additionalCount = legacyEnvVarNames.length - MAX_LEGACY_ENV_WARNING_KEYS;
   const suffix = additionalCount > 0 ? ` (+${additionalCount} more)` : '';
   console.warn(
-    `Detected legacy WUD_* environment variables. Please migrate to DD_* equivalents: ${envVarPreview}${suffix}`,
+    `Detected legacy WUD_* environment variables, deprecated and scheduled for removal in v1.6.0. Please migrate to DD_* equivalents: ${envVarPreview}${suffix}`,
   );
 }
 

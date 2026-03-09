@@ -1,8 +1,8 @@
 import { createMockResponse } from '../test/helpers.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
-const deprecatedPutDeprecation = '@1772236800';
-const deprecatedPutSunset = 'Wed, 01 Jul 2026 00:00:00 GMT';
+const deprecatedPutDeprecation = '@1798761600';
+const deprecatedPutSunset = 'Wed, 01 Jan 2027 00:00:00 GMT';
 
 const { mockRouter, mockGetSettings, mockUpdateSettings, mockLogWarn } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), put: vi.fn(), patch: vi.fn() },
@@ -159,7 +159,7 @@ describe('Settings Router', () => {
     expect(res.setHeader).toHaveBeenCalledWith('Deprecation', deprecatedPutDeprecation);
     expect(res.setHeader).toHaveBeenCalledWith('Sunset', deprecatedPutSunset);
     expect(mockLogWarn).toHaveBeenCalledWith(
-      'PUT /api/settings is deprecated, use PATCH /api/settings instead',
+      'PUT /api/settings is deprecated and will be removed in v1.6.0. Use PATCH /api/settings instead.',
     );
   });
 

@@ -38,7 +38,7 @@ describe('getPreferredLabelValue', () => {
     expect(recordLegacyInput).toHaveBeenCalledWith('label', 'wud.watch');
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(
-      'Legacy Docker label "wud.watch" is deprecated. Please migrate to "dd.watch" before fallback support is removed.',
+      'Legacy Docker label "wud.watch" is deprecated. Please migrate to "dd.watch" before removal in v1.6.0.',
     );
   });
 
