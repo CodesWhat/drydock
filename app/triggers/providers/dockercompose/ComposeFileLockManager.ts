@@ -100,13 +100,17 @@ export class ComposeFileLockManager {
 
     const previouslyQueuedLockOperation =
       ComposeFileLockManager.composeFileLockQueue.get(filePath) || Promise.resolve();
-    let releaseQueuedLockOperation: () => void = () => {};
+    let releaseQueuedLockOperation!: () => void;
     const queuedLockOperation = new Promise<void>((resolve) => {
       releaseQueuedLockOperation = resolve;
     });
     ComposeFileLockManager.composeFileLockQueue.set(filePath, queuedLockOperation);
 
-    await previouslyQueuedLockOperation.catch(() => undefined);
+    try {
+      await previouslyQueuedLockOperation;
+    } catch {
+      // Ignore queue failures from previous operations and proceed with lock acquisition.
+    }
 
     try {
       const lockFilePath = `${filePath}${COMPOSE_FILE_LOCK_SUFFIX}`;
