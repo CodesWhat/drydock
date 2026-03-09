@@ -3,6 +3,7 @@ import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import yaml, { type Pair, type ParsedNode } from 'yaml';
+import type { ContainerImage } from '../../../model/container.js';
 import { getState } from '../../../registry/index.js';
 import { buildComposeCommandEnvironment } from '../../../runtime/child-process-env.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
@@ -719,7 +720,7 @@ class Dockercompose extends Docker {
 
   getContainerRuntimeImageReference(container: RegistryImageContainerReference): string {
     const registry = getState().registry[container.image.registry.name];
-    return registry.getImageFullName(container.image, container.image.tag.value);
+    return registry.getImageFullName(container.image as ContainerImage, container.image.tag.value);
   }
 
   reconcileComposeMappings(composeFileChainSummary, versionMappings) {
@@ -1603,7 +1604,8 @@ class Dockercompose extends Docker {
     );
 
     const mapping = this.mapCurrentVersionToUpdateVersion(compose, container);
-    const currentServiceImage = mapping?.current || compose?.services?.[service]?.image;
+    const currentServiceImage =
+      mapping?.current || (compose as Record<string, any>)?.services?.[service]?.image;
     const targetServiceImage = mapping
       ? this.getComposeMutationImageReference(container, mapping.update)
       : preview.newImage;
@@ -1662,7 +1664,10 @@ class Dockercompose extends Docker {
       forceRecreate?: boolean;
       composeFiles?: string[];
     };
-    const composeFileChain = this.normalizeComposeFileChain(composeFile, options?.composeFiles);
+    const composeFileChain = this.normalizeComposeFileChain(
+      composeFile,
+      (options as { composeFiles?: string[] })?.composeFiles,
+    );
     const runWithComposeFileChain = composeFileChain.length > 1;
 
     if (this.configuration.dryrun) {
