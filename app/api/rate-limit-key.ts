@@ -18,7 +18,12 @@ function getTrimmedString(value: unknown): string | undefined {
 }
 
 function getIpRateLimitKey(request: Request): string {
-  const requestIp = getTrimmedString(request.ip);
+  const rawRequestIp = request.ip;
+  if (rawRequestIp === undefined) {
+    return 'ip:unknown';
+  }
+
+  const requestIp = getTrimmedString(rawRequestIp);
   if (!requestIp) {
     return 'ip:unknown';
   }
@@ -58,8 +63,11 @@ export function createAuthenticatedRouteRateLimitKeyGenerator(
 }
 
 export function isIdentityAwareRateLimitKeyingEnabled(
-  serverConfiguration: Record<string, unknown>,
+  serverConfiguration: Record<string, unknown> | null | undefined,
 ): boolean {
+  if (!serverConfiguration || typeof serverConfiguration !== 'object') {
+    return false;
+  }
   const rateLimitConfiguration = serverConfiguration.ratelimit as
     | Record<string, unknown>
     | undefined;

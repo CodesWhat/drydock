@@ -1,5 +1,8 @@
 import type { Request, Response } from 'express';
-import { createAuthenticatedRouteRateLimitKeyGenerator } from './rate-limit-key.js';
+import {
+  createAuthenticatedRouteRateLimitKeyGenerator,
+  isIdentityAwareRateLimitKeyingEnabled,
+} from './rate-limit-key.js';
 
 function createRequest(
   overrides: Partial<
@@ -72,5 +75,93 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
 
     expect(firstKey).toMatch(/^ip:/);
     expect(secondKey).toBe(firstKey);
+  });
+
+  test('should return unknown ip key when unauthenticated request ip is undefined', async () => {
+    const keyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(true);
+    expect(keyGenerator).toBeDefined();
+
+    const key = await keyGenerator!(
+      createRequest({
+        ip: undefined,
+        isAuthenticated: () => false,
+      }),
+      response,
+    );
+
+    expect(key).toBe('ip:unknown');
+  });
+});
+
+describe('isIdentityAwareRateLimitKeyingEnabled', () => {
+  test('should return true when identitykeying is explicitly set to true', () => {
+    expect(
+      isIdentityAwareRateLimitKeyingEnabled({
+        ratelimit: { identitykeying: true },
+      }),
+    ).toBe(true);
+  });
+
+  test('should return false when ratelimit configuration is missing', () => {
+    expect(isIdentityAwareRateLimitKeyingEnabled({})).toBe(false);
+  });
+
+  test('should return false when identitykeying is missing', () => {
+    expect(
+      isIdentityAwareRateLimitKeyingEnabled({
+        ratelimit: {},
+      }),
+    ).toBe(false);
+  });
+
+  test('should return false when identitykeying is explicitly false', () => {
+    expect(
+      isIdentityAwareRateLimitKeyingEnabled({
+        ratelimit: { identitykeying: false },
+      }),
+    ).toBe(false);
+  });
+
+  test('should return false for truthy non-boolean identitykeying values', () => {
+    const nonBooleanTruthyValues: unknown[] = ['true', 1, '1', [], { enabled: true }];
+
+    for (const value of nonBooleanTruthyValues) {
+      expect(
+        isIdentityAwareRateLimitKeyingEnabled({
+          ratelimit: { identitykeying: value },
+        }),
+      ).toBe(false);
+    }
+  });
+
+  test('should return false when ratelimit is not an object', () => {
+    const invalidRateLimitConfigurations: unknown[] = [null, 'enabled', 1, true];
+
+    for (const value of invalidRateLimitConfigurations) {
+      expect(
+        isIdentityAwareRateLimitKeyingEnabled({
+          ratelimit: value,
+        }),
+      ).toBe(false);
+    }
+  });
+
+  test('should return false when server configuration is nullish', () => {
+    expect(isIdentityAwareRateLimitKeyingEnabled(null as unknown as Record<string, unknown>)).toBe(
+      false,
+    );
+    expect(
+      isIdentityAwareRateLimitKeyingEnabled(undefined as unknown as Record<string, unknown>),
+    ).toBe(false);
+  });
+
+  test('should return false when server configuration is a primitive value', () => {
+    const invalidServerConfigurations: unknown[] = ['enabled', 1, true];
+
+    for (const value of invalidServerConfigurations) {
+      expect(
+        isIdentityAwareRateLimitKeyingEnabled(value as unknown as Record<string, unknown>),
+      ).toBe(false);
+    }
   });
 });

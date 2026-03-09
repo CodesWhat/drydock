@@ -225,7 +225,7 @@ describe('Notification Router', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'Notification rule not found' });
   });
 
-  test('should return 400 when store update throws', () => {
+  test('should return 500 when store update throws', () => {
     mockUpdateNotificationRule.mockImplementationOnce(() => {
       throw new Error('update failure');
     });
@@ -241,13 +241,13 @@ describe('Notification Router', () => {
       res,
     );
 
-    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({
       error: 'Internal server error',
     });
   });
 
-  test('should return 400 when store update throws a string', () => {
+  test('should return 500 when store update throws a string', () => {
     mockUpdateNotificationRule.mockImplementationOnce(() => {
       throw 'update failure';
     });
@@ -263,7 +263,7 @@ describe('Notification Router', () => {
       res,
     );
 
-    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({
       error: 'Internal server error',
     });

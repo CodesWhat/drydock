@@ -93,7 +93,7 @@ function updateNotificationRule(req, res) {
 
     res.status(200).json(sanitizeRuleForResponse(notificationRuleUpdated, allowedTriggerIds));
   } catch (e: unknown) {
-    sendErrorResponse(res, 400, sanitizeApiError(e));
+    sendErrorResponse(res, 500, sanitizeApiError(e));
   }
 }
 

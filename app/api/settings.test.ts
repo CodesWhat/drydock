@@ -1,8 +1,8 @@
 import { createMockResponse } from '../test/helpers.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
-const deprecatedPutDeprecation = '@1751328000';
-const deprecatedPutSunset = 'Tue, 01 Jul 2025 00:00:00 GMT';
+const deprecatedPutDeprecation = '@1772236800';
+const deprecatedPutSunset = 'Wed, 01 Jul 2026 00:00:00 GMT';
 
 const { mockRouter, mockGetSettings, mockUpdateSettings, mockLogWarn } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), put: vi.fn(), patch: vi.fn() },
