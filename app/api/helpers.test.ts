@@ -56,6 +56,28 @@ describe('sanitizeApiError', () => {
     );
   });
 
+  test('falls back to generic Joi message when details is not an array', () => {
+    const error = {
+      isJoi: true,
+      message: '"name" is required',
+      details: 'invalid-details-shape',
+    };
+
+    expect(sanitizeApiError(error)).toBe('Invalid request parameters');
+    expect(mockLogWarn).toHaveBeenCalledWith(expect.stringContaining('"name" is required'));
+  });
+
+  test('falls back to Joi message when detail messages are empty or non-string', () => {
+    const error = {
+      isJoi: true,
+      message: '"name" is required',
+      details: [{ message: 42 }, { message: '   ' }],
+    };
+
+    expect(sanitizeApiError(error)).toBe('Invalid request parameters');
+    expect(mockLogWarn).toHaveBeenCalledWith(expect.stringContaining('"name" is required'));
+  });
+
   test('returns generic internal server message for unexpected errors', () => {
     expect(sanitizeApiError(new Error('database offline'))).toBe('Internal server error');
     expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('database offline'));

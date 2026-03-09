@@ -91,6 +91,55 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
 
     expect(key).toBe('ip:unknown');
   });
+
+  test('should use user identity when authenticated session id is blank', async () => {
+    const keyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(true);
+    expect(keyGenerator).toBeDefined();
+
+    const key = await keyGenerator!(
+      createRequest({
+        ip: '203.0.113.30',
+        isAuthenticated: () => true,
+        sessionID: '   ',
+        user: { username: 'alice' },
+      }),
+      response,
+    );
+
+    expect(key).toBe('user:alice');
+  });
+
+  test('should fall back to ip key when authenticated identity values are invalid', async () => {
+    const keyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(true);
+    expect(keyGenerator).toBeDefined();
+
+    const key = await keyGenerator!(
+      createRequest({
+        ip: '   ',
+        isAuthenticated: () => true,
+        sessionID: '   ',
+        user: { username: { raw: 'alice' } },
+      }),
+      response,
+    );
+
+    expect(key).toBe('ip:unknown');
+  });
+
+  test('should fall back to unknown ip key when request ip is non-string', async () => {
+    const keyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(true);
+    expect(keyGenerator).toBeDefined();
+
+    const key = await keyGenerator!(
+      createRequest({
+        ip: 42 as unknown as string,
+        isAuthenticated: () => false,
+      }),
+      response,
+    );
+
+    expect(key).toBe('ip:unknown');
+  });
 });
 
 describe('isIdentityAwareRateLimitKeyingEnabled', () => {

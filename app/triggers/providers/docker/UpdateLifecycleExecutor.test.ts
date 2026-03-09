@@ -415,6 +415,25 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.pruneOldBackups).toHaveBeenCalledWith('web', 3);
   });
 
+  test('stringifies non-Error prune failures while rethrowing original lifecycle error', async () => {
+    const failure = new Error('scan failed hard');
+    const warn = vi.fn();
+    const harness = createHarness({
+      maybeScanAndGateUpdate: vi.fn().mockRejectedValue(failure),
+      pruneOldBackups: vi.fn(() => {
+        throw 503;
+      }),
+    });
+    harness.rootLogger.child.mockReturnValue({ info: vi.fn(), warn, debug: vi.fn() });
+
+    await expect(harness.executor.run(createContainer(), { runtime: true })).rejects.toThrow(
+      'scan failed hard',
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to prune old backups after update failure for web: 503'),
+    );
+  });
+
   test('stringifies non-Error failures when emitting update-failed events', async () => {
     const harness = createHarness({
       maybeScanAndGateUpdate: vi.fn().mockRejectedValue(503),
