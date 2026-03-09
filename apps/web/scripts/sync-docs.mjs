@@ -12,7 +12,7 @@ const targetDir = join(webRoot, "content", "docs");
 
 // Version definitions — order matters (first = default/active tab)
 const versions = [
-  { slug: "v1.4", source: "current", title: "v1.4 (Latest)" },
+  { slug: "v1.4", source: "current", title: "v1.4 (RC)" },
   { slug: "v1.3", source: "v1.3", title: "v1.3" },
 ];
 

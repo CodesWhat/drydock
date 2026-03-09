@@ -8,19 +8,23 @@ import { source } from "@/lib/source";
 export default function Layout({ children }: { children: ReactNode }) {
   return (
     <>
-      <Banner changeLayout={false}>
+      <Banner
+        changeLayout={false}
+        className="border-b border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100"
+      >
         <span className="inline-flex items-center gap-2">
-          <span className="inline-flex items-center rounded-full bg-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+          <span className="inline-flex items-center rounded-full bg-red-200 px-2 py-0.5 text-xs font-semibold text-red-800 dark:bg-red-900 dark:text-red-200">
             RC
           </span>
           <span>
-            You&apos;re viewing <strong>v1.4.0 release candidate</strong> docs.
+            You&apos;re viewing <strong>v1.4.0 release candidate</strong>{" "}
+            docs &mdash; this version is not yet released.
           </span>
           <Link
             href="https://github.com/CodesWhat/drydock/releases/tag/v1.3.9"
-            className="font-medium underline underline-offset-2"
+            className="font-medium text-red-700 underline underline-offset-2 hover:text-red-900 dark:text-red-300 dark:hover:text-red-100"
           >
-            v1.3.9 is the current stable release
+            v1.3.9 stable
           </Link>
         </span>
       </Banner>
