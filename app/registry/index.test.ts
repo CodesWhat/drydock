@@ -11,7 +11,7 @@ import * as prometheusWatcher from '../prometheus/watcher.js';
 import * as store from '../store/index.js';
 import Component from './Component.js';
 
-vi.mock('../configuration', () => ({
+vi.mock('../configuration/index.js', () => ({
   getLogLevel: vi.fn(() => 'info'),
   getLogFormat: vi.fn(() => 'json'),
   getLogBufferEnabled: vi.fn(() => true),
@@ -20,6 +20,7 @@ vi.mock('../configuration', () => ({
   getWatcherConfigurations: vi.fn(),
   getAuthenticationConfigurations: vi.fn(),
   getAgentConfigurations: vi.fn(),
+  ddEnvVars: {},
 }));
 
 vi.mock('../store/index.js', () => ({
