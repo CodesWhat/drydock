@@ -41,6 +41,17 @@ The trigger will:
 
 <Callout type="info">Legacy compatibility: compose file label fallback `wud.compose.file` is still accepted when `dd.compose.file` is not present. Prefer `dd.compose.file` for new configs, and use `node dist/index.js config migrate` to rewrite existing labels.</Callout>
 
+## Auto-detection
+
+When no explicit `FILE` env var or `dd.compose.file` label is set, Drydock auto-detects the compose file path for each container. The detection chain is evaluated in order, and the first match wins:
+
+1. **`dd.compose.file` label** (or legacy `wud.compose.file`) on the container.
+2. **`com.docker.compose.project.config_files`** Docker label — set automatically by Docker Compose on every container it creates.
+3. **Docker inspect fallback** — re-reads the `config_files` label from the Docker inspect API (covers containers whose labels were not available at watcher sync time).
+4. **Trigger-level `FILE` configuration** — the `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_FILE` env var, used as a last resort default.
+
+Most Docker Compose users do not need to configure the file path at all. As long as containers were started with `docker compose up`, the `config_files` label is present and Drydock resolves the path automatically.
+
 <Callout type="warn">This trigger will only work with locally watched containers.</Callout>
 
 <Callout type="warn">Do not forget to mount the docker-compose.yml file in the drydock container.</Callout>
@@ -74,6 +85,20 @@ Before lifecycle execution, Drydock checks the running container image against t
 ## Compose-file-once mode
 
 When `COMPOSEFILEONCE=true` and multiple services in the same compose stack/file require runtime refresh, Drydock executes one grouped compose pull/up pass for that stack and skips repeated per-service compose pull/up calls in that batch.
+
+## Multi-file compose chains
+
+When a container was started with multiple compose files (e.g. `docker-compose.yml` + `docker-compose.override.yml`), Drydock detects the full file chain from the `com.docker.compose.project.config_files` label.
+
+During an update:
+
+1. Drydock searches every file in the chain to find which one declares the target service's `image` key.
+2. The last file in the chain that contains the service definition and is writable is selected as the update target. This matches Docker Compose override semantics where later files take precedence.
+3. All files in the chain are passed to `docker compose -f file1 -f file2 config --quiet` for validation before and after any mutation.
+
+The compose file chain for each container is visible in the container detail view of the UI.
+
+<Callout type="info">If only one compose file is used, the chain is a single entry and the behavior is identical to the single-file case.</Callout>
 
 ## Troubleshooting: `permission denied` (`EACCES`)
 
