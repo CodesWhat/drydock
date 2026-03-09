@@ -1480,9 +1480,7 @@ class Dockercompose extends Docker {
   async runComposeCommand(composeFile, composeArgs, logContainer, composeFiles = [composeFile]) {
     const composeFileChain = this.normalizeComposeFileChain(composeFile, composeFiles);
     const composeFilePaths = composeFileChain.map((composeFilePathToResolve) =>
-      this.resolveComposeFilePath(composeFilePathToResolve, {
-        enforceWorkingDirectoryBoundary: true,
-      }),
+      this.resolveComposeFilePath(composeFilePathToResolve),
     );
     const composeFileArgs = composeFilePaths.flatMap((composeFilePath) => ['-f', composeFilePath]);
     const composeWorkingDirectory = path.dirname(composeFilePaths[0]);

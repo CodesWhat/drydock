@@ -118,6 +118,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Compose trigger rejects compose files mounted outside app directory** — Removed overly strict working-directory boundary enforcement from `runComposeCommand` that rejected compose files bind-mounted outside `/home/node/app`, breaking documented mount patterns like `/drydock/docker-compose.yml`. Compose file paths are operator-configured and already validated during resolution.
 - **Silent error on recheck failure** — "Recheck for Updates" button now displays an error banner when the backend request fails instead of silently stopping the spinner with no feedback.
 - **Silent error on env reveal failure** — Environment variable reveal in the container detail panel now shows an inline error message when the API call fails instead of silently failing.
 - **Security scans persist across navigation** — Navigating away from the Security view no longer cancels in-flight batch scans. Module-scoped scan state survives unmount and the progress banner reappears on return.

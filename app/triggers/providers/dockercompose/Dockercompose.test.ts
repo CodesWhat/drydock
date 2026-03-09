@@ -1572,6 +1572,25 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('runComposeCommand should accept compose files outside the working directory', async () => {
+    execFile.mockImplementationOnce((_command, _args, _options, callback) => {
+      callback(null, '', '');
+      return {};
+    });
+
+    const logContainer = { debug: vi.fn(), warn: vi.fn() };
+    const composeFilePath = path.resolve(process.cwd(), '..', 'external', 'compose.yaml');
+
+    await trigger.runComposeCommand(composeFilePath, ['up', '-d'], logContainer);
+
+    expect(execFile).toHaveBeenCalledWith(
+      'docker',
+      ['compose', '-f', composeFilePath, 'up', '-d'],
+      expect.objectContaining({ cwd: path.dirname(composeFilePath) }),
+      expect.any(Function),
+    );
+  });
+
   test('runComposeCommand should throw when compose command fails', async () => {
     execFile.mockImplementationOnce((_command, _args, _options, callback) => {
       callback(new Error('boom'), '', 'boom');
@@ -1622,14 +1641,23 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
-  test('runComposeCommand should reject compose file path traversal', async () => {
+  test('runComposeCommand should resolve relative compose file paths outside working directory', async () => {
+    execFile.mockImplementationOnce((_command, _args, _options, callback) => {
+      callback(null, '', '');
+      return {};
+    });
+
     const logContainer = { debug: vi.fn(), warn: vi.fn() };
+    const expectedPath = path.resolve(process.cwd(), '../outside/stack.yml');
 
-    await expect(
-      trigger.runComposeCommand('../outside/stack.yml', ['pull', 'nginx'], logContainer),
-    ).rejects.toThrow(/Compose file path must stay inside/);
+    await trigger.runComposeCommand('../outside/stack.yml', ['pull', 'nginx'], logContainer);
 
-    expect(execFile).not.toHaveBeenCalled();
+    expect(execFile).toHaveBeenCalledWith(
+      'docker',
+      ['compose', '-f', expectedPath, 'pull', 'nginx'],
+      expect.objectContaining({ cwd: path.dirname(expectedPath) }),
+      expect.any(Function),
+    );
   });
 
   test('getContainerRunningState should assume running when inspect fails', async () => {
