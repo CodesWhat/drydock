@@ -2843,7 +2843,7 @@ describe('Dockercompose Trigger', () => {
   });
 
   test('triggerBatch should group containers by compose file and process each', async () => {
-    trigger.configuration.file = '/opt/drydock/test/compose.yml';
+    trigger.configuration.file = undefined;
     fs.access.mockResolvedValue(undefined);
 
     const container1 = {
@@ -2867,7 +2867,7 @@ describe('Dockercompose Trigger', () => {
   });
 
   test('triggerBatch should group multiple containers under the same compose file', async () => {
-    trigger.configuration.file = '/opt/drydock/test/compose.yml';
+    trigger.configuration.file = undefined;
     fs.access.mockResolvedValue(undefined);
 
     const container1 = {
@@ -2890,6 +2890,41 @@ describe('Dockercompose Trigger', () => {
       container1,
       container2,
     ]);
+  });
+
+  test('triggerBatch should only process containers matching configured compose file affinity', async () => {
+    trigger.configuration.file = '/opt/drydock/test/monitoring.yml';
+    fs.access.mockImplementation(async (composeFilePath) => {
+      if (`${composeFilePath}`.includes('/opt/drydock/test/mysql.yml')) {
+        const missingComposeError = new Error('ENOENT');
+        missingComposeError.code = 'ENOENT';
+        throw missingComposeError;
+      }
+      return undefined;
+    });
+
+    const monitoringContainer = {
+      name: 'monitoring-app',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/opt/drydock/test/monitoring.yml' },
+    };
+    const mysqlContainer = {
+      name: 'mysql-app',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/opt/drydock/test/mysql.yml' },
+    };
+
+    const processComposeFileSpy = vi.spyOn(trigger, 'processComposeFile').mockResolvedValue();
+
+    await trigger.triggerBatch([monitoringContainer, mysqlContainer]);
+
+    expect(processComposeFileSpy).toHaveBeenCalledTimes(1);
+    expect(processComposeFileSpy).toHaveBeenCalledWith('/opt/drydock/test/monitoring.yml', [
+      monitoringContainer,
+    ]);
+    expect(mockLog.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('/opt/drydock/test/mysql.yml'),
+    );
   });
 
   // -----------------------------------------------------------------------
@@ -3745,6 +3780,47 @@ describe('Dockercompose Trigger', () => {
       '/opt/drydock/test/stack.yml',
       '/opt/drydock/test/stack.override.yml',
     ]);
+  });
+
+  test('resolveComposeFilesForContainer should map compose config file labels from host bind paths to container paths', async () => {
+    const originalHostname = process.env.HOSTNAME;
+    process.env.HOSTNAME = 'drydock-self';
+
+    mockDockerApi.getContainer.mockImplementation((containerName) => {
+      if (containerName === 'drydock-self') {
+        return {
+          inspect: vi.fn().mockResolvedValue({
+            HostConfig: {
+              Binds: ['/mnt/volume1/docker/stacks:/drydock:rw'],
+            },
+          }),
+        };
+      }
+      return {
+        inspect: vi.fn().mockResolvedValue({
+          State: { Running: true },
+        }),
+      };
+    });
+
+    try {
+      const composeFiles = await trigger.resolveComposeFilesForContainer({
+        name: 'monitoring',
+        watcher: 'local',
+        labels: {
+          'com.docker.compose.project.config_files':
+            '/mnt/volume1/docker/stacks/monitoring/compose.yaml',
+        },
+      });
+
+      expect(composeFiles).toEqual(['/drydock/monitoring/compose.yaml']);
+    } finally {
+      if (originalHostname === undefined) {
+        delete process.env.HOSTNAME;
+      } else {
+        process.env.HOSTNAME = originalHostname;
+      }
+    }
   });
 
   test('getImageNameFromReference should parse image names from tags and digests', () => {

@@ -35,6 +35,9 @@ interface DockerApiLike {
       Config?: {
         Labels?: Record<string, string>;
       };
+      HostConfig?: {
+        Binds?: string[];
+      };
     }>;
     exec: (options: unknown) => Promise<{
       start: (options: { Detach: boolean; Tty: boolean }) => Promise<{
@@ -53,6 +56,11 @@ type ContainersByComposeFileEntry = {
   composeFile: string;
   composeFiles: string[];
   containers: unknown[];
+};
+
+type HostToContainerBindMount = {
+  source: string;
+  destination: string;
 };
 
 type ComposeContainerReference = {
@@ -399,6 +407,8 @@ class Dockercompose extends Docker {
   _composeCacheMaxEntries = COMPOSE_CACHE_MAX_ENTRIES;
   _composeObjectCache = new Map<string, { mtimeMs: number; compose: unknown }>();
   _composeDocumentCache = new Map<string, { mtimeMs: number; composeDoc: unknown }>();
+  _hostToContainerBindMountsLoaded = false;
+  _hostToContainerBindMounts: HostToContainerBindMount[] = [];
 
   get _composeFileLocksHeld() {
     return this._composeFileLockManager._composeFileLocksHeld;
@@ -439,6 +449,94 @@ class Dockercompose extends Docker {
         throw e;
       }
     }
+  }
+
+  parseHostToContainerBindMount(bindDefinition: string): HostToContainerBindMount | null {
+    const [sourceRaw, destinationRaw] = bindDefinition.split(':');
+    const source = sourceRaw?.trim();
+    const destination = destinationRaw?.trim();
+    if (!source || !destination) {
+      return null;
+    }
+    if (!path.isAbsolute(source) || !path.isAbsolute(destination)) {
+      return null;
+    }
+    return {
+      source: path.resolve(source),
+      destination: path.resolve(destination),
+    };
+  }
+
+  getSelfContainerIdentifier(): string | null {
+    const hostname = process.env.HOSTNAME?.trim();
+    if (!hostname || hostname.includes('/')) {
+      return null;
+    }
+    return hostname;
+  }
+
+  async ensureHostToContainerBindMountsLoaded(container: ComposeContainerReference): Promise<void> {
+    if (this._hostToContainerBindMountsLoaded) {
+      return;
+    }
+
+    const selfContainerIdentifier = this.getSelfContainerIdentifier();
+    if (!selfContainerIdentifier) {
+      this._hostToContainerBindMountsLoaded = true;
+      return;
+    }
+
+    const watcher = this.getWatcher(container);
+    const dockerApi = getDockerApiFromWatcher(watcher);
+    if (!dockerApi) {
+      return;
+    }
+
+    this._hostToContainerBindMountsLoaded = true;
+    try {
+      const selfContainerInspect = await dockerApi.getContainer(selfContainerIdentifier).inspect();
+      const bindDefinitions = selfContainerInspect?.HostConfig?.Binds;
+      if (!Array.isArray(bindDefinitions)) {
+        return;
+      }
+      this._hostToContainerBindMounts = bindDefinitions
+        .map((bindDefinition) => this.parseHostToContainerBindMount(bindDefinition))
+        .filter((bindMount): bindMount is HostToContainerBindMount => bindMount !== null)
+        .sort((left, right) => right.source.length - left.source.length);
+    } catch (e) {
+      this.log.debug(
+        `Unable to inspect bind mounts for compose host-path remapping (${e.message})`,
+      );
+    }
+  }
+
+  mapComposePathToContainerBindMount(composeFilePath: string): string {
+    if (!path.isAbsolute(composeFilePath) || this._hostToContainerBindMounts.length === 0) {
+      return composeFilePath;
+    }
+    const normalizedComposeFilePath = path.resolve(composeFilePath);
+
+    for (const bindMount of this._hostToContainerBindMounts) {
+      if (normalizedComposeFilePath === bindMount.source) {
+        return bindMount.destination;
+      }
+      const sourcePrefix = bindMount.source.endsWith(path.sep)
+        ? bindMount.source
+        : `${bindMount.source}${path.sep}`;
+      if (!normalizedComposeFilePath.startsWith(sourcePrefix)) {
+        continue;
+      }
+      const relativeComposePath = path.relative(bindMount.source, normalizedComposeFilePath);
+      if (!relativeComposePath || relativeComposePath === '.') {
+        return bindMount.destination;
+      }
+      if (relativeComposePath.startsWith('..') || path.isAbsolute(relativeComposePath)) {
+        continue;
+      }
+      return path.join(bindMount.destination, relativeComposePath);
+    }
+
+    return composeFilePath;
   }
 
   resolveComposeFilePath(
@@ -588,11 +686,10 @@ class Dockercompose extends Docker {
           ? path.resolve(composeWorkingDirectory, composeFilePathRaw)
           : composeFilePathRaw;
         try {
-          composeFiles.add(
-            this.resolveComposeFilePath(composeFilePath, {
-              label: `Compose file label ${COMPOSE_PROJECT_CONFIG_FILES_LABEL}`,
-            }),
-          );
+          const resolvedComposeFilePath = this.resolveComposeFilePath(composeFilePath, {
+            label: `Compose file label ${COMPOSE_PROJECT_CONFIG_FILES_LABEL}`,
+          });
+          composeFiles.add(this.mapComposePathToContainerBindMount(resolvedComposeFilePath));
         } catch (e) {
           this.log.warn(
             `Compose file label ${COMPOSE_PROJECT_CONFIG_FILES_LABEL} on container ${containerName} is invalid (${e.message})`,
@@ -648,6 +745,8 @@ class Dockercompose extends Docker {
   }
 
   async resolveComposeFilesForContainer(container: ComposeContainerReference): Promise<string[]> {
+    await this.ensureHostToContainerBindMountsLoaded(container);
+
     const composeFilesFromConfiguration = this.getConfiguredComposeFilesForContainer(container, {
       includeDefaultComposeFile: false,
     });
@@ -1229,6 +1328,7 @@ class Dockercompose extends Docker {
   async triggerBatch(containers): Promise<unknown[]> {
     // Group containers by their ordered compose file chain
     const containersByComposeFile = new Map<string, ContainersByComposeFileEntry>();
+    const configuredComposeFilePath = this.getDefaultComposeFilePath();
 
     for (const container of containers) {
       // Filter on containers running on local host
@@ -1245,6 +1345,12 @@ class Dockercompose extends Docker {
       if (composeFiles.length === 0) {
         this.log.warn(
           `No compose file found for container ${container.name} (no label '${this.configuration.composeFileLabel}' or '${COMPOSE_PROJECT_CONFIG_FILES_LABEL}' and no default file configured)`,
+        );
+        continue;
+      }
+      if (configuredComposeFilePath && !composeFiles.includes(configuredComposeFilePath)) {
+        this.log.debug(
+          `Skip container ${container.name} because compose files ${composeFiles.join(', ')} do not match configured file ${configuredComposeFilePath}`,
         );
         continue;
       }
