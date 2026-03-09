@@ -155,6 +155,28 @@ describe('AppLayout', () => {
     vi.useRealTimers();
   });
 
+  describe('layout spacing', () => {
+    it('applies asymmetric horizontal padding on main: pl-6 left, pr-[9px] right', async () => {
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      const main = wrapper.find('main');
+      expect(main.exists()).toBe(true);
+      expect(main.classes()).toContain('sm:pl-6');
+      expect(main.classes()).toContain('sm:pr-[9px]');
+    });
+
+    it('does not use symmetric horizontal padding on main', async () => {
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      const main = wrapper.find('main');
+      expect(main.classes()).not.toContain('sm:px-6');
+    });
+  });
+
   it('starts connectivity polling only after a disconnect event', async () => {
     vi.useFakeTimers();
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');

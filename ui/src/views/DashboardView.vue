@@ -68,7 +68,7 @@ const {
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 min-w-0 overflow-y-auto pr-1 sm:pr-2">
+  <div class="flex-1 min-h-0 min-w-0 overflow-y-auto pr-2 sm:pr-[15px]">
       <!-- LOADING STATE -->
       <div v-if="loading" class="flex items-center justify-center py-16">
         <div class="text-sm dd-text-muted">Loading dashboard...</div>

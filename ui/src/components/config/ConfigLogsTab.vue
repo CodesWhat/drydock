@@ -67,34 +67,22 @@ function asEntry(entry: unknown): AppLogEntry {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="flex flex-col flex-1 min-h-0 gap-6">
     <div
-      class="dd-rounded overflow-hidden"
+      class="dd-rounded overflow-hidden flex flex-col flex-1 min-h-0"
       :style="{
         backgroundColor: 'var(--dd-bg-card)',
         border: '1px solid var(--dd-border-strong)',
       }"
     >
-      <div
-        class="px-5 py-3.5 flex items-center justify-between gap-3"
-        :style="{ borderBottom: '1px solid var(--dd-border-strong)' }"
-      >
-        <div class="flex items-center gap-2">
-          <AppIcon name="logs" :size="14" class="text-drydock-secondary" />
-          <h2 class="text-sm font-semibold dd-text">Application Logs</h2>
-        </div>
-        <div class="text-[10px] dd-text-muted">
-          Server Level: <span class="font-semibold dd-text capitalize">{{ props.logLevel }}</span>
-        </div>
-      </div>
-
-      <div class="p-5 space-y-4">
+      <div class="p-5 flex flex-col flex-1 min-h-0 gap-4">
         <LogViewer
+          class="flex-1 min-h-0"
           :entries="props.entries"
           :loading="props.loading"
           :error="props.error"
           empty-message="No log entries found for current filters."
-          container-class="dd-rounded overflow-auto max-h-[420px] font-mono text-[11px]"
+          container-class="dd-rounded overflow-auto flex-1 min-h-0 font-mono text-[11px]"
           :container-style="{
             backgroundColor: 'var(--dd-bg-inset)',
             border: '1px solid var(--dd-border-strong)',
@@ -164,6 +152,9 @@ function asEntry(entry: unknown): AppLogEntry {
               >
                 <AppIcon name="refresh" :size="12" />
               </button>
+              <div class="ml-auto text-[10px] dd-text-muted">
+                Server Level: <span class="font-semibold dd-text capitalize">{{ props.logLevel }}</span>
+              </div>
             </div>
           </template>
 

@@ -211,6 +211,18 @@ describe('DetailPanel', () => {
     });
   });
 
+  describe('layout spacing', () => {
+    it('applies mr-[15px] on desktop to center in the scrollbar gap', () => {
+      const w = factory({ open: true, isMobile: false });
+      expect(w.find('aside').classes()).toContain('mr-[15px]');
+    });
+
+    it('does not apply mr-[15px] on mobile', () => {
+      const w = factory({ open: true, isMobile: true });
+      expect(w.find('aside').classes()).not.toContain('mr-[15px]');
+    });
+  });
+
   describe('slots', () => {
     it('renders header slot', () => {
       const w = factory({}, { header: '<h2 class="test-header">Title</h2>' });

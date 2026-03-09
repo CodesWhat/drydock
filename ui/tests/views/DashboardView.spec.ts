@@ -175,6 +175,31 @@ describe('DashboardView', () => {
     vi.useRealTimers();
   });
 
+  describe('layout spacing', () => {
+    it('applies pr-[15px] on the scrollable container for scrollbar centering', () => {
+      mockGetAllContainers.mockReturnValue(new Promise(() => {}));
+      mockGetAgents.mockReturnValue(new Promise(() => {}));
+      mockGetServer.mockReturnValue(new Promise(() => {}));
+
+      const wrapper = mountDashboardView();
+      const scrollArea = wrapper.find('.overflow-y-auto');
+      expect(scrollArea.exists()).toBe(true);
+      expect(scrollArea.classes()).toContain('sm:pr-[15px]');
+    });
+
+    it('does not use legacy scrollbar compensation padding', () => {
+      mockGetAllContainers.mockReturnValue(new Promise(() => {}));
+      mockGetAgents.mockReturnValue(new Promise(() => {}));
+      mockGetServer.mockReturnValue(new Promise(() => {}));
+
+      const wrapper = mountDashboardView();
+      const scrollArea = wrapper.find('.overflow-y-auto');
+      expect(scrollArea.classes()).not.toContain('sm:pr-2');
+      expect(scrollArea.classes()).not.toContain('sm:pr-4');
+      expect(scrollArea.classes()).not.toContain('sm:pr-5');
+    });
+  });
+
   describe('loading state', () => {
     it('shows loading text before data resolves', () => {
       mockGetAllContainers.mockReturnValue(new Promise(() => {}));

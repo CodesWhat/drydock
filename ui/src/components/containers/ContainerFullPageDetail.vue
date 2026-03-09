@@ -21,7 +21,7 @@ const {
 </script>
 
 <template>
-  <div data-test="container-full-page-detail" class="flex flex-col flex-1 min-h-0">
+  <div data-test="container-full-page-detail" class="flex flex-col flex-1 min-h-0 pr-2 sm:pr-[15px]">
     <div
       class="shrink-0 mb-4 dd-rounded overflow-hidden"
       :style="{
