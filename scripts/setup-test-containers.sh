@@ -47,8 +47,12 @@ run_test_container() {
 # ECR
 run_test_container ecr_sub_sub_test --label "$LABEL_WATCH" 229211676173.dkr.ecr.eu-west-1.amazonaws.com/sub/sub/test:1.0.0
 
-# GHCR
-run_test_container ghcr_radarr --label "$LABEL_WATCH" --label 'dd.tag.include=^\d+\.\d+\.\d+\.\d+-ls\d+$' ghcr.io/linuxserver/radarr:5.14.0.9383-ls245
+# GHCR — requires credentials to resolve image data
+if [ -n "${GITHUB_USERNAME:-}" ]; then
+	run_test_container ghcr_radarr --label "$LABEL_WATCH" --label 'dd.tag.include=^\d+\.\d+\.\d+\.\d+-ls\d+$' ghcr.io/linuxserver/radarr:5.14.0.9383-ls245
+else
+	echo "⚠️  Skipping ghcr_radarr (no GITHUB_USERNAME set)"
+fi
 
 # GITLAB
 run_test_container gitlab_test --label "$LABEL_WATCH" --label 'dd.tag.include=^v16\.[01]\.0$' registry.gitlab.com/gitlab-org/gitlab-runner:v16.0.0

@@ -140,9 +140,9 @@ done
 # discovery and the E2E assertions depend on them.
 AUTH_HEADER="Basic $(echo -n 'john:doe' | base64)"
 DEFAULT_EXPECTED=10
-# lscr_radarr only runs when GITHUB_USERNAME is set
+# ghcr_radarr and lscr_radarr only run when GITHUB_USERNAME is set
 if [ -z "${GITHUB_USERNAME:-}" ]; then
-	DEFAULT_EXPECTED=$((DEFAULT_EXPECTED - 1))
+	DEFAULT_EXPECTED=$((DEFAULT_EXPECTED - 2))
 fi
 EXPECTED_CONTAINERS=${DD_EXPECTED_CONTAINERS:-$DEFAULT_EXPECTED}
 echo "Waiting for drydock to discover ${EXPECTED_CONTAINERS}+ containers with image data (max 90s)..."
