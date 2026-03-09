@@ -10,11 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- **Silent error on recheck failure** — "Recheck for Updates" button now displays an error banner when the backend request fails instead of silently stopping the spinner with no feedback.
-- **Silent error on env reveal failure** — Environment variable reveal in the container detail panel now shows an inline error message when the API call fails instead of silently failing.
-
 ## [1.4.0] — 2026-02-28
 
 ### Added
@@ -123,6 +118,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Silent error on recheck failure** — "Recheck for Updates" button now displays an error banner when the backend request fails instead of silently stopping the spinner with no feedback.
+- **Silent error on env reveal failure** — Environment variable reveal in the container detail panel now shows an inline error message when the API call fails instead of silently failing.
 - **Security scans persist across navigation** — Navigating away from the Security view no longer cancels in-flight batch scans. Module-scoped scan state survives unmount and the progress banner reappears on return.
 - **SSE stale sweep timer on re-initialization** — Stale client sweep interval now starts even when `init()` is called after a hot reload, preventing leaked SSE connections.
 - **About modal documentation icon** — Documentation link in the about modal now shows a book icon instead of the expand/maximize icon.
