@@ -24,7 +24,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             href="https://github.com/CodesWhat/drydock/releases/tag/v1.3.9"
             className="font-medium text-red-700 underline underline-offset-2 hover:text-red-900 dark:text-red-300 dark:hover:text-red-100"
           >
-            v1.3.9 stable
+            v1.3.9 release notes &rarr;
           </Link>
         </span>
       </Banner>
