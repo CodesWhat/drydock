@@ -4,6 +4,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue';
 
 const visible = ref(false);
 const current = ref<any>(null);
+const loading = ref(false);
 const accept = vi.fn();
 const reject = vi.fn();
 const dismiss = vi.fn();
@@ -12,6 +13,7 @@ vi.mock('@/composables/useConfirmDialog', () => ({
   useConfirmDialog: () => ({
     visible,
     current,
+    loading,
     accept,
     reject,
     dismiss,
@@ -32,6 +34,7 @@ describe('ConfirmDialog', () => {
   beforeEach(() => {
     visible.value = false;
     current.value = null;
+    loading.value = false;
     accept.mockClear();
     reject.mockClear();
     dismiss.mockClear();
@@ -72,6 +75,30 @@ describe('ConfirmDialog', () => {
     expect(accept).not.toHaveBeenCalled();
 
     input.remove();
+    wrapper.unmount();
+  });
+
+  it('blocks Escape during loading', async () => {
+    const wrapper = mount(ConfirmDialog);
+    showDialog();
+    loading.value = true;
+    await nextTick();
+
+    globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(dismiss).not.toHaveBeenCalled();
+
+    wrapper.unmount();
+  });
+
+  it('blocks Enter during loading', async () => {
+    const wrapper = mount(ConfirmDialog);
+    showDialog();
+    loading.value = true;
+    await nextTick();
+
+    globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect(accept).not.toHaveBeenCalled();
+
     wrapper.unmount();
   });
 
