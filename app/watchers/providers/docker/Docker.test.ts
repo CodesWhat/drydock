@@ -5526,6 +5526,33 @@ describe('Docker Watcher', () => {
         }),
       );
     });
+
+    test('pruneOldContainers should delete stale entries when a same-name replacement exists', async () => {
+      const dockerApi = {
+        getContainer: vi.fn(),
+      };
+
+      await testable_pruneOldContainers(
+        [
+          {
+            id: 'new-1',
+            watcher: 'docker',
+            name: 'app',
+          },
+        ] as any,
+        [
+          {
+            id: 'old-1',
+            watcher: 'docker',
+            name: 'app',
+          },
+        ] as any,
+        dockerApi as any,
+      );
+
+      expect(dockerApi.getContainer).not.toHaveBeenCalled();
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-1');
+    });
   });
 
   describe('Additional Coverage - maintenance queue internals', () => {

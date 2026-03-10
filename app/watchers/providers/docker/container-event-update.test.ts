@@ -86,6 +86,27 @@ describe('container event update helpers', () => {
     );
   });
 
+  test('processDockerEvent schedules a debounced watch for rename events when container is not in store', async () => {
+    const watchCronDebounced = vi.fn().mockResolvedValue(undefined);
+
+    await processDockerEvent(
+      { Action: 'rename', id: 'container123' },
+      {
+        watchCronDebounced,
+        ensureRemoteAuthHeaders: vi.fn().mockResolvedValue(undefined),
+        inspectContainer: vi.fn().mockResolvedValue({
+          Name: '/renamed-container',
+          State: { Status: 'running' },
+        }),
+        getContainerFromStore: vi.fn().mockReturnValue(undefined),
+        updateContainerFromInspect: vi.fn(),
+        debug: vi.fn(),
+      },
+    );
+
+    expect(watchCronDebounced).toHaveBeenCalledTimes(1);
+  });
+
   test('updateContainerFromInspect updates status/name/displayName and persists', () => {
     const container = createMockContainer({
       status: 'stopped',
