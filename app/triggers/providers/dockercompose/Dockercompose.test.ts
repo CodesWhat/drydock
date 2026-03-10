@@ -1389,6 +1389,36 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('updateContainerWithCompose should fetch auth when runtime context provides newImage without auth', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx' });
+    const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    const resolveRegistryManagerSpy = vi.spyOn(trigger, 'resolveRegistryManager');
+    const getNewImageFullNameSpy = vi.spyOn(trigger, 'getNewImageFullName');
+    const registryGetAuthPull = vi.fn().mockResolvedValue({ from: 'registry-auth' });
+    const runtimeContext = {
+      dockerApi: mockDockerApi,
+      newImage: 'nginx:9.9.9',
+      registry: {
+        getAuthPull: registryGetAuthPull,
+      },
+    };
+
+    await trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container, {
+      runtimeContext,
+    });
+
+    expect(resolveRegistryManagerSpy).not.toHaveBeenCalled();
+    expect(getNewImageFullNameSpy).not.toHaveBeenCalled();
+    expect(registryGetAuthPull).toHaveBeenCalledTimes(1);
+    expect(pullImageSpy).toHaveBeenCalledWith(
+      runtimeContext.dockerApi,
+      { from: 'registry-auth' },
+      runtimeContext.newImage,
+      expect.anything(),
+    );
+  });
+
   test('updateContainerWithCompose should throw when current container cannot be resolved', async () => {
     trigger.configuration.dryrun = false;
     const container = makeContainer({ name: 'nginx' });
@@ -4667,6 +4697,63 @@ describe('Dockercompose Trigger', () => {
         composeFiles: ['/opt/drydock/test/stack.yml', '/opt/drydock/test/stack.override.yml'],
         runtimeContext,
       },
+    );
+  });
+
+  test('performContainerUpdate should pass skipPull in multi-file compose context', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({
+      name: 'nginx',
+    });
+    const updateContainerWithComposeSpy = vi
+      .spyOn(trigger, 'updateContainerWithCompose')
+      .mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+
+    const updated = await trigger.performContainerUpdate({} as any, container as any, mockLog, {
+      composeFile: '/opt/drydock/test/stack.override.yml',
+      composeFiles: ['/opt/drydock/test/stack.yml', '/opt/drydock/test/stack.override.yml'],
+      service: 'nginx',
+      serviceDefinition: {},
+      composeFileOnceApplied: false,
+      skipPull: true,
+    } as any);
+
+    expect(updated).toBe(true);
+    expect(updateContainerWithComposeSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.override.yml',
+      'nginx',
+      container,
+      {
+        composeFiles: ['/opt/drydock/test/stack.yml', '/opt/drydock/test/stack.override.yml'],
+        skipPull: true,
+      },
+    );
+  });
+
+  test('performContainerUpdate should avoid passing runtime context when none is available in single-file path', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({
+      name: 'nginx',
+    });
+    const updateContainerWithComposeSpy = vi
+      .spyOn(trigger, 'updateContainerWithCompose')
+      .mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+
+    const updated = await trigger.performContainerUpdate({} as any, container as any, mockLog, {
+      composeFile: '/opt/drydock/test/stack.yml',
+      service: 'nginx',
+      serviceDefinition: {},
+      composeFileOnceApplied: false,
+    } as any);
+
+    expect(updated).toBe(true);
+    expect(updateContainerWithComposeSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      container,
+      {},
     );
   });
 
