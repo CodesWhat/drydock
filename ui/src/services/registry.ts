@@ -1,14 +1,6 @@
 import { extractCollectionData } from '../utils/api';
 
 /**
- * Get registry component icon.
- * @returns {string}
- */
-function getRegistryIcon() {
-  return 'sh-docker';
-}
-
-/**
  * Get registry provider icon (acr, ecr...).
  * @param provider
  * @returns {string}
@@ -114,10 +106,4 @@ async function getRegistry({ type, name, agent }: RegistryDetailPathOptions) {
   return response.json();
 }
 
-export {
-  getRegistryIcon,
-  getRegistryProviderIcon,
-  getRegistryProviderColor,
-  getAllRegistries,
-  getRegistry,
-};
+export { getRegistryProviderIcon, getRegistryProviderColor, getAllRegistries, getRegistry };

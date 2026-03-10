@@ -1,7 +1,6 @@
 import {
   getAllWatchers,
   getWatcher,
-  getWatcherIcon,
   getWatcherProviderColor,
   getWatcherProviderIcon,
 } from '@/services/watcher';
@@ -9,10 +8,6 @@ import {
 describe('Watcher Service', () => {
   beforeEach(() => {
     global.fetch = vi.fn();
-  });
-
-  it('should return watcher icon', () => {
-    expect(getWatcherIcon()).toBe('sh-eye');
   });
 
   it('returns docker icon for docker provider', () => {

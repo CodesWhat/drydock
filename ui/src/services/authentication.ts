@@ -1,9 +1,5 @@
 import { extractCollectionData } from '../utils/api';
 
-function getAuthenticationIcon() {
-  return 'sh-lock';
-}
-
 interface AuthenticationDetailPathOptions {
   type: string;
   name: string;
@@ -64,10 +60,4 @@ async function getAuthentication({ type, name, agent }: AuthenticationDetailPath
   return response.json();
 }
 
-export {
-  getAuthenticationIcon,
-  getAuthProviderIcon,
-  getAuthProviderColor,
-  getAllAuthentications,
-  getAuthentication,
-};
+export { getAuthProviderIcon, getAuthProviderColor, getAllAuthentications, getAuthentication };

@@ -1,5 +1,5 @@
 import { getAppInfos } from '@/services/app';
-import { getServer, getServerIcon } from '@/services/server';
+import { getServer } from '@/services/server';
 
 describe('App Service', () => {
   beforeEach(() => {
@@ -37,10 +37,6 @@ describe('App Service', () => {
 describe('Server Service', () => {
   beforeEach(() => {
     global.fetch = vi.fn();
-  });
-
-  it('should return server icon', () => {
-    expect(getServerIcon()).toBe('sh-server');
   });
 
   it('should get server data', async () => {

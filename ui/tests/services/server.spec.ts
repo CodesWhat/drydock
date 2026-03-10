@@ -1,14 +1,10 @@
-import { getSecurityRuntime, getServer, getServerIcon } from '@/services/server';
+import { getSecurityRuntime, getServer } from '@/services/server';
 
 global.fetch = vi.fn();
 
 describe('Server Service', () => {
   beforeEach(() => {
     vi.mocked(fetch).mockClear();
-  });
-
-  it('returns server icon', () => {
-    expect(getServerIcon()).toBe('sh-server');
   });
 
   it('fetches server configuration', async () => {

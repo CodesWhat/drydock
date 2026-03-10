@@ -1,10 +1,6 @@
 import { extractCollectionData } from '../utils/api';
 import { ApiError, errorMessage } from '../utils/error';
 
-function getContainerIcon() {
-  return 'sh-docker';
-}
-
 interface ContainerGroupMember {
   id: string;
   name: string;
@@ -358,7 +354,6 @@ async function revealContainerEnv(containerId: string) {
 }
 
 export {
-  getContainerIcon,
   getAllContainers,
   getContainerRecentStatus,
   getContainerSummary,

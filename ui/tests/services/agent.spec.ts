@@ -1,16 +1,10 @@
-import { getAgentIcon, getAgents } from '@/services/agent';
+import { getAgents } from '@/services/agent';
 
 global.fetch = vi.fn();
 
 describe('Agent Service', () => {
   beforeEach(() => {
     vi.mocked(fetch).mockClear();
-  });
-
-  describe('getAgentIcon', () => {
-    it('returns the agent icon', () => {
-      expect(getAgentIcon()).toBe('sh-robot');
-    });
   });
 
   describe('getAgents', () => {

@@ -1,7 +1,3 @@
-function getServerIcon() {
-  return 'sh-server';
-}
-
 async function getServer() {
   const response = await fetch('/api/server', { credentials: 'include' });
   if (!response.ok) {
@@ -25,4 +21,4 @@ async function getSecurityRuntime() {
   return response.json();
 }
 
-export { getServerIcon, getServer, getSecurityRuntime };
+export { getServer, getSecurityRuntime };

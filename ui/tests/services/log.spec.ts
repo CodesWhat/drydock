@@ -1,12 +1,8 @@
-import { getLog, getLogEntries, getLogIcon } from '@/services/log';
+import { getLog, getLogEntries } from '@/services/log';
 
 describe('Log Service', () => {
   beforeEach(() => {
     global.fetch = vi.fn();
-  });
-
-  it('should return log icon', () => {
-    expect(getLogIcon()).toBe('sh-scroll');
   });
 
   it('should get log', async () => {

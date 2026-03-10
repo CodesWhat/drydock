@@ -1,7 +1,6 @@
 import {
   deleteContainer,
   getAllContainers,
-  getContainerIcon,
   getContainerLogs,
   getContainerRecentStatus,
   getContainerSbom,
@@ -25,12 +24,6 @@ global.fetch = vi.fn();
 describe('Container Service', () => {
   beforeEach(() => {
     vi.mocked(fetch).mockClear();
-  });
-
-  describe('getContainerIcon', () => {
-    it('returns the docker icon', () => {
-      expect(getContainerIcon()).toBe('sh-docker');
-    });
   });
 
   describe('getAllContainers', () => {

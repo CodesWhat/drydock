@@ -1,7 +1,6 @@
 import {
   getAllAuthentications,
   getAuthentication,
-  getAuthenticationIcon,
   getAuthProviderColor,
   getAuthProviderIcon,
 } from '@/services/authentication';
@@ -11,10 +10,6 @@ global.fetch = vi.fn();
 describe('Authentication Service', () => {
   beforeEach(() => {
     vi.mocked(fetch).mockClear();
-  });
-
-  it('returns the default authentication icon', () => {
-    expect(getAuthenticationIcon()).toBe('sh-lock');
   });
 
   it('returns provider icon for known authentication types', () => {

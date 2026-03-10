@@ -63,9 +63,3 @@ export function updateKindColor(kind: string | null) {
   if (kind === 'digest') return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)' };
   return { bg: 'transparent', text: 'transparent' };
 }
-
-export function bouncerColor(status: string) {
-  if (status === 'safe') return { bg: 'var(--dd-success-muted)', text: 'var(--dd-success)' };
-  if (status === 'unsafe') return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' };
-  return { bg: 'var(--dd-danger-muted)', text: 'var(--dd-danger)' };
-}
