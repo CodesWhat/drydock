@@ -1153,9 +1153,6 @@ onUnmounted(() => {
                   : 'dd-text-secondary hover:dd-bg-elevated hover:dd-text',
               ]"
               style="padding: 6px 12px;">
-              <div v-if="route.path === item.route"
-                   class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-r-full bg-drydock-secondary"
-                   style="height: 20px;" />
               <AppIcon :name="item.icon" :size="16" class="shrink-0" style="width:20px; text-align:center;" />
               <span class="sidebar-label text-[13px] font-medium">{{ item.label }}</span>
               <span v-if="item.badge && !isCollapsed"
