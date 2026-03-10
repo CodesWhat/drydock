@@ -23,8 +23,13 @@ const failed = ref(false);
  *   other       → treat as selfhst slug
  */
 const resolved = computed(() => {
-  const icon = props.icon;
-  if (!icon) return { type: 'fallback' as const };
+  // Normalize colon-separated prefixes (sh:slug → sh-slug)
+  const raw = props.icon;
+  if (!raw) return { type: 'fallback' as const };
+  const icon =
+    raw.startsWith('sh:') || raw.startsWith('hl:') || raw.startsWith('si:')
+      ? `${raw.slice(0, 2)}-${raw.slice(3)}`
+      : raw;
 
   if (icon.startsWith('sh-')) {
     return { type: 'proxy' as const, src: `/api/icons/selfhst/${icon.slice(3)}` };
