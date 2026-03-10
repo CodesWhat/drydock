@@ -122,7 +122,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Confirm dialog shows loading state during async actions** — Confirm dialog now awaits the async accept callback before closing, showing a spinner on the accept button and disabling all dismiss interactions (buttons, Escape, Enter, backdrop click) while the action runs. Previously, the dialog closed immediately on confirm, causing the UI to appear unresponsive until the action completed in the background.
+- **Action buttons disable and show spinner during in-progress actions** — Container action buttons (Stop, Start, Restart, Update, Delete) now show a disabled state with a spinner while the action runs in the background, providing clear visual feedback. The confirm dialog closes immediately on accept instead of blocking the UI.
+- **Command palette clears stale filter on navigation** — Navigating to a container via Ctrl+K search now clears the active `filterKind`, preventing stale filter state from hiding the navigated container.
 - **Manual update button works with compose triggers** — The update container endpoint now searches for both `docker` and `dockercompose` trigger types, matching the existing preview endpoint behavior. Previously, users with only a compose trigger saw "No docker trigger found for this container".
 - **CI: qlty retry on timeout** — Changed `retry_on` from `error` to `any` so qlty timeouts trigger retries. Increased timeout from 5 to 8 minutes.
 - **OIDC docs clarified `DD_PUBLIC_URL` requirement** — OIDC documentation now explicitly marks `DD_PUBLIC_URL` as required and includes it in all provider example configurations (Authelia, Auth0, Authentik, Dex). Without this variable, the OIDC provider fails to register at startup.
