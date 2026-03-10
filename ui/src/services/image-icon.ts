@@ -19,11 +19,23 @@ function isLegacyOrDefaultIcon(displayIcon: string): boolean {
 }
 
 /** Normalize colon-separated icon prefixes (sh:slug) to dash format (sh-slug). */
-function normalizeIconPrefix(icon: string): string {
-  if (icon.startsWith('sh:')) return `sh-${icon.slice(3)}`;
-  if (icon.startsWith('hl:')) return `hl-${icon.slice(3)}`;
-  if (icon.startsWith('si:')) return `si-${icon.slice(3)}`;
-  return icon;
+export function normalizeIconPrefix(icon: string): string {
+  const normalized = icon.trim();
+  const match = normalized.match(/^(sh|hl|si)[:-](.+)$/i);
+  if (!match) {
+    return normalized;
+  }
+  const provider = match[1].toLowerCase();
+  let slug = match[2].trim();
+
+  // Handle malformed nested values like "si-si:nextcloud" by unwrapping known prefixes.
+  let nestedMatch = slug.match(/^(sh|hl|si)[:-](.+)$/i);
+  while (nestedMatch) {
+    slug = nestedMatch[2].trim();
+    nestedMatch = slug.match(/^(sh|hl|si)[:-](.+)$/i);
+  }
+
+  return `${provider}-${slug}`;
 }
 
 /**

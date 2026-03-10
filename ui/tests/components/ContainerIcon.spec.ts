@@ -55,6 +55,13 @@ describe('ContainerIcon', () => {
     expect(img.attributes('src')).toBe('/api/icons/simple/docker');
   });
 
+  it('normalizes nested si prefixes so proxy slug never contains a colon', () => {
+    const wrapper = factory({ icon: 'si-si:nextcloud' });
+    const img = wrapper.find('img');
+    expect(img.exists()).toBe(true);
+    expect(img.attributes('src')).toBe('/api/icons/simple/nextcloud');
+  });
+
   it('renders direct URL for http:// prefix', () => {
     const wrapper = factory({ icon: 'http://example.com/icon.png' });
     const img = wrapper.find('img');

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { normalizeIconPrefix } from '../services/image-icon';
 
 const props = withDefaults(
   defineProps<{
@@ -23,13 +24,10 @@ const failed = ref(false);
  *   other       → treat as selfhst slug
  */
 const resolved = computed(() => {
-  // Normalize colon-separated prefixes (sh:slug → sh-slug)
   const raw = props.icon;
   if (!raw) return { type: 'fallback' as const };
-  const icon =
-    raw.startsWith('sh:') || raw.startsWith('hl:') || raw.startsWith('si:')
-      ? `${raw.slice(0, 2)}-${raw.slice(3)}`
-      : raw;
+  const icon = normalizeIconPrefix(raw);
+  if (!icon) return { type: 'fallback' as const };
 
   if (icon.startsWith('sh-')) {
     return { type: 'proxy' as const, src: `/api/icons/selfhst/${icon.slice(3)}` };

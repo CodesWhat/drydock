@@ -12,6 +12,7 @@ describe('image-icon service', () => {
     );
     expect(getEffectiveDisplayIcon('hl:nginx', 'library/nginx')).toBe('hl-nginx');
     expect(getEffectiveDisplayIcon('si:docker', 'library/nginx')).toBe('si-docker');
+    expect(getEffectiveDisplayIcon('si-si:nextcloud', 'library/nginx')).toBe('si-nextcloud');
   });
 
   it('auto-resolves legacy mdi icon values from mapped image names', () => {
