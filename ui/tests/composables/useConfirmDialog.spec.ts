@@ -56,7 +56,7 @@ describe('useConfirmDialog', () => {
     expect(dialog.current.value).toBeNull();
   });
 
-  it('accept awaits async callback before closing', async () => {
+  it('closes dialog immediately and runs async callback in background', async () => {
     const useConfirmDialog = await loadComposable();
     const dialog = useConfirmDialog();
     let resolved = false;
@@ -78,82 +78,17 @@ describe('useConfirmDialog', () => {
 
     const acceptPromise = dialog.accept();
 
-    expect(dialog.loading.value).toBe(true);
-    expect(dialog.visible.value).toBe(true);
+    // Dialog closes immediately — no loading state blocks the UI
+    expect(dialog.visible.value).toBe(false);
+    expect(dialog.current.value).toBeNull();
 
     await acceptPromise;
 
     expect(resolved).toBe(true);
-    expect(dialog.loading.value).toBe(false);
-    expect(dialog.visible.value).toBe(false);
-    expect(dialog.current.value).toBeNull();
-  });
-
-  it('blocks reject and dismiss while loading', async () => {
-    const useConfirmDialog = await loadComposable();
-    const dialog = useConfirmDialog();
-    const onReject = vi.fn();
-    let resolveCallback: () => void;
-    const asyncCallback = () =>
-      new Promise<void>((resolve) => {
-        resolveCallback = resolve;
-      });
-
-    dialog.require({
-      header: 'Stop Container',
-      message: 'Stop nginx?',
-      accept: asyncCallback,
-      reject: onReject,
-    });
-
-    const acceptPromise = dialog.accept();
-    expect(dialog.loading.value).toBe(true);
-
-    dialog.reject();
-    expect(onReject).not.toHaveBeenCalled();
-    expect(dialog.visible.value).toBe(true);
-
-    dialog.dismiss();
-    expect(dialog.visible.value).toBe(true);
-
-    resolveCallback!();
-    await acceptPromise;
-
-    expect(dialog.loading.value).toBe(false);
-    expect(dialog.visible.value).toBe(false);
-  });
-
-  it('blocks duplicate accept calls while loading', async () => {
-    const useConfirmDialog = await loadComposable();
-    const dialog = useConfirmDialog();
-    let callCount = 0;
-    let resolveCallback: () => void;
-    const asyncCallback = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          callCount++;
-          resolveCallback = resolve;
-        }),
-    );
-
-    dialog.require({
-      header: 'Restart',
-      message: 'Restart container?',
-      accept: asyncCallback,
-    });
-
-    const firstAccept = dialog.accept();
-    void dialog.accept();
-
     expect(asyncCallback).toHaveBeenCalledTimes(1);
-
-    resolveCallback!();
-    await firstAccept;
-
-    expect(callCount).toBe(1);
   });
 
-  it('clears loading on callback error', async () => {
+  it('swallows callback errors without leaving stale state', async () => {
     const useConfirmDialog = await loadComposable();
     const dialog = useConfirmDialog();
     const failingCallback = vi.fn(() => Promise.reject(new Error('API failed')));
@@ -166,7 +101,6 @@ describe('useConfirmDialog', () => {
 
     await dialog.accept();
 
-    expect(dialog.loading.value).toBe(false);
     expect(dialog.visible.value).toBe(false);
     expect(dialog.current.value).toBeNull();
   });

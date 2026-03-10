@@ -31,15 +31,14 @@ export function useConfirmDialog() {
       current.value = null;
       return;
     }
-    loading.value = true;
+    // Close dialog immediately — the action buttons show disabled/spinner
+    // state via actionInProgress while the operation runs in the background.
+    visible.value = false;
+    current.value = null;
     try {
       await callback();
     } catch {
       // Callback is responsible for its own error handling.
-    } finally {
-      loading.value = false;
-      visible.value = false;
-      current.value = null;
     }
   }
 
