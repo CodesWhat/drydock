@@ -56,9 +56,11 @@ Most Docker Compose users do not need to configure the file path at all. As long
 
 <Callout type="warn">Do not forget to mount the docker-compose.yml file in the drydock container.</Callout>
 
+<Callout type="info">The Docker Compose trigger uses the Docker Engine API directly for all runtime operations (pull, stop, recreate). The `docker compose` / `docker-compose` CLI binary is **not required** inside the drydock container.</Callout>
+
 ## Tag vs digest updates
 
-For **tag-based updates**, the trigger patches the compose file with the new tag and then recreates the container. For **digest-only updates** (same tag, new digest), the compose file is left unchanged and only the container runtime is refreshed via `docker compose pull` + `docker compose up -d`.
+For **tag-based updates**, the trigger patches the compose file with the new tag and then recreates the container. For **digest-only updates** (same tag, new digest), the compose file is left unchanged and only the container runtime is refreshed (pull new image, stop/remove old container, recreate with new image).
 
 When `DIGESTPINNING=true`, compose mutations use digest references (`image@sha256:...`) when a digest is available.
 
@@ -72,7 +74,7 @@ When a tag-based update requires a compose file change, Drydock patches Compose 
 
 <Callout type="info">If a service uses flow-style mapping without an `image` key (for example `nginx: { restart: always }`), Drydock will not auto-insert `image`. Convert that service to block-style YAML first.</Callout>
 
-Before persisting a compose mutation, Drydock validates the candidate file with `docker compose config --quiet` (and falls back to `docker-compose config --quiet` when needed). Invalid candidate configs are not written.
+Before persisting a compose mutation, Drydock validates the candidate file by parsing the full compose chain in-process. Invalid candidate configs are not written.
 
 ## Reconciliation behavior
 
@@ -84,7 +86,7 @@ Before lifecycle execution, Drydock checks the running container image against t
 
 ## Compose-file-once mode
 
-When `COMPOSEFILEONCE=true` and multiple services in the same compose stack/file require runtime refresh, Drydock executes one grouped compose pull/up pass for that stack and skips repeated per-service compose pull/up calls in that batch.
+When `COMPOSEFILEONCE=true` and multiple services in the same compose stack/file require runtime refresh, Drydock performs one runtime refresh per unique service and skips repeated refreshes for subsequent containers sharing the same service in that batch.
 
 ## Multi-file compose chains
 
@@ -94,7 +96,7 @@ During an update:
 
 1. Drydock searches every file in the chain to find which one declares the target service's `image` key.
 2. The last file in the chain that contains the service definition and is writable is selected as the update target. This matches Docker Compose override semantics where later files take precedence.
-3. All files in the chain are passed to `docker compose -f file1 -f file2 config --quiet` for validation before and after any mutation.
+3. All files in the chain are parsed in-process for validation before and after any mutation.
 
 The compose file chain for each container is visible in the container detail view of the UI.
 
