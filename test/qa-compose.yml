@@ -7,6 +7,7 @@ services:
       - "3333:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./qa-compose.yml:/drydock/qa-compose.yml:ro
     environment:
       - DD_RUN_AS_ROOT=true
       - DD_ALLOW_INSECURE_ROOT=true
@@ -38,6 +39,16 @@ services:
       - DD_TRIGGER_SMTP_MYEMAIL_PASS=fakesmtppassword
       - DD_TRIGGER_SMTP_MYEMAIL_FROM=alerts@example.com
       - DD_TRIGGER_SMTP_MYEMAIL_TO=admin@example.com
+      # --- MQTT trigger (Home Assistant mode with filtering) ---
+      - DD_TRIGGER_MQTT_QA_URL=mqtt://mosquitto:1883
+      - DD_TRIGGER_MQTT_QA_HASS_ENABLED=true
+      - DD_TRIGGER_MQTT_QA_HASS_PREFIX=homeassistant
+      - DD_TRIGGER_MQTT_QA_HASS_DISCOVERY=true
+      - DD_TRIGGER_MQTT_QA_HASS_ATTRIBUTES=short
+      - DD_TRIGGER_MQTT_QA_HASS_FILTER_INCLUDE=name,image_name,result_tag,update_kind_kind
+      # --- Docker Compose trigger (manual only) ---
+      - DD_TRIGGER_DOCKERCOMPOSE_QA_FILE=/drydock/qa-compose.yml
+      - DD_TRIGGER_DOCKERCOMPOSE_QA_AUTO=false
       # --- GHCR registry (authenticated) ---
       - DD_REGISTRY_GHCR_PRIVATE_USERNAME=myghuser
       - DD_REGISTRY_GHCR_PRIVATE_TOKEN=ghp_fakeGitHubTokenForTesting123
@@ -52,7 +63,7 @@ services:
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL
       - DD_SECURITY_SBOM_ENABLED=true
       - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json
-      - DD_SECURITY_VERIFY_SIGNATURES=true
+      - DD_SECURITY_VERIFY_SIGNATURES=false
       # --- Maintenance window (QA) ---
       # Uncomment to test; adjust cron to match/not-match current time
       # - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=0 2-6 * * *
@@ -66,6 +77,8 @@ services:
     depends_on:
       docker-remote:
         condition: service_healthy
+      mosquitto:
+        condition: service_healthy
 
   # ── OIDC Identity Provider (Dex) ─────────────────────
   dex:
@@ -76,6 +89,21 @@ services:
     volumes:
       - ./dex-config.yaml:/etc/dex/config.yaml:ro
     command: ["dex", "serve", "/etc/dex/config.yaml"]
+
+  # ── MQTT broker (Mosquitto) ──────────────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -t '$$SYS/#' -C 1 -W 3 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   # ── Trivy vulnerability scanner (client-server mode) ──
   trivy-server:
@@ -119,6 +147,7 @@ services:
   # ── Containers with updates available ──────────────────
 
   # Nginx with lifecycle hooks (tests hooks UI + group view)
+  # Icon uses colon separator with nested prefix (tests Fix 03 + Fix 06)
   nginx-hooked:
     image: nginx:1.25.5
     pull_policy: never
@@ -126,12 +155,14 @@ services:
     labels:
       - dd.watch=true
       - dd.display.name=Nginx (Hooked)
+      - dd.display.icon=si:si:nginx
       - dd.group=web-stack
       - dd.hook.pre=echo "pre-update check"
       - dd.hook.post=echo "post-update cleanup"
       - dd.hook.timeout=30000
 
   # Redis in same group (tests group view)
+  # Icon uses colon separator (tests Fix 06)
   redis-cache:
     image: redis:7.2.0
     pull_policy: never
@@ -139,9 +170,11 @@ services:
     labels:
       - dd.watch=true
       - dd.display.name=Redis Cache
+      - dd.display.icon=si:redis
       - dd.group=web-stack
 
   # Traefik with auto-rollback (tests rollback UI)
+  # Icon uses dash separator (standard format — baseline comparison)
   traefik-proxy:
     image: traefik:v3.0.0
     pull_policy: never
@@ -149,6 +182,7 @@ services:
     labels:
       - dd.watch=true
       - dd.display.name=Traefik Proxy
+      - dd.display.icon=si-traefikproxy
       - dd.group=infra
       - dd.rollback.auto=true
       - dd.rollback.window=120000

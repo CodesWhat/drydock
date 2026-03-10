@@ -34,6 +34,10 @@ export async function processDockerEvent(
 
     if (containerFound) {
       dependencies.updateContainerFromInspect(containerFound, containerInspect);
+    } else if (action === 'rename') {
+      // Rename can race with create and happen before the new container is in store.
+      // Schedule a full refresh so the final human-readable name is captured.
+      await dependencies.watchCronDebounced();
     }
   } catch (e: any) {
     dependencies.debug(

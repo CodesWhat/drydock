@@ -1,9 +1,5 @@
 import { extractCollectionData } from '../utils/api';
 
-function getWatcherIcon() {
-  return 'sh-eye';
-}
-
 interface WatcherDetailPathOptions {
   type: string;
   name: string;
@@ -52,10 +48,4 @@ async function getWatcher({ type, name, agent }: WatcherDetailPathOptions) {
   return response.json();
 }
 
-export {
-  getWatcherIcon,
-  getWatcherProviderIcon,
-  getWatcherProviderColor,
-  getAllWatchers,
-  getWatcher,
-};
+export { getWatcherProviderIcon, getWatcherProviderColor, getAllWatchers, getWatcher };

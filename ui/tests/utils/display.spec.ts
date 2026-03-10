@@ -1,5 +1,4 @@
 import {
-  bouncerColor,
   parseServer,
   registryColorBg,
   registryColorText,
@@ -151,29 +150,6 @@ describe('display utilities', () => {
 
     it('returns transparent for null', () => {
       expect(updateKindColor(null)).toEqual({ bg: 'transparent', text: 'transparent' });
-    });
-  });
-
-  describe('bouncerColor', () => {
-    it('returns success for safe', () => {
-      expect(bouncerColor('safe')).toEqual({
-        bg: 'var(--dd-success-muted)',
-        text: 'var(--dd-success)',
-      });
-    });
-
-    it('returns warning for unsafe', () => {
-      expect(bouncerColor('unsafe')).toEqual({
-        bg: 'var(--dd-warning-muted)',
-        text: 'var(--dd-warning)',
-      });
-    });
-
-    it('returns danger for blocked', () => {
-      expect(bouncerColor('blocked')).toEqual({
-        bg: 'var(--dd-danger-muted)',
-        text: 'var(--dd-danger)',
-      });
     });
   });
 });

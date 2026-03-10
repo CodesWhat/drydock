@@ -1,9 +1,5 @@
 import { extractCollectionData } from '../utils/api';
 
-function getTriggerIcon() {
-  return 'sh-bolt';
-}
-
 interface TriggerDetailPathOptions {
   type: string;
   name: string;
@@ -160,11 +156,4 @@ async function runTrigger({
   return json;
 }
 
-export {
-  getTriggerIcon,
-  getTriggerProviderIcon,
-  getTriggerProviderColor,
-  getAllTriggers,
-  getTrigger,
-  runTrigger,
-};
+export { getTriggerProviderIcon, getTriggerProviderColor, getAllTriggers, getTrigger, runTrigger };

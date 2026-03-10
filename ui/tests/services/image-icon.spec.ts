@@ -6,6 +6,15 @@ describe('image-icon service', () => {
     expect(getEffectiveDisplayIcon('hl-custom', 'library/nginx:latest')).toBe('hl-custom');
   });
 
+  it('normalizes colon-separated icon prefixes to dash format', () => {
+    expect(getEffectiveDisplayIcon('sh:z-wave-js-ui', 'zwavejs/zwave-js-ui')).toBe(
+      'sh-z-wave-js-ui',
+    );
+    expect(getEffectiveDisplayIcon('hl:nginx', 'library/nginx')).toBe('hl-nginx');
+    expect(getEffectiveDisplayIcon('si:docker', 'library/nginx')).toBe('si-docker');
+    expect(getEffectiveDisplayIcon('si-si:nextcloud', 'library/nginx')).toBe('si-nextcloud');
+  });
+
   it('auto-resolves legacy mdi icon values from mapped image names', () => {
     expect(getEffectiveDisplayIcon('mdi:docker', 'library/nginx:latest')).toBe('sh-nginx');
     expect(getEffectiveDisplayIcon('mdi-docker', 'bitnami/postgres:16')).toBe('sh-postgresql');

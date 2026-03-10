@@ -204,7 +204,7 @@ Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and m
 <tr>
 <td align="center">
 <h3>Docker Compose Updates</h3>
-Auto-pull and recreate services via docker-compose with service-scoped compose image patching
+Auto-pull and recreate services via Docker Engine API with YAML-preserving service-scoped image patching
 </td>
 <td align="center">
 <h3>Distributed Agents</h3>

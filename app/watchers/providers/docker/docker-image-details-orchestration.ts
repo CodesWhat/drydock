@@ -7,6 +7,7 @@ import {
   getRepoDigest,
   isDigestToWatch,
   type ResolvedImgset,
+  shouldUpdateDisplayNameFromContainerName,
 } from './docker-helpers.js';
 import {
   areRuntimeDetailsEqual,
@@ -153,6 +154,7 @@ export async function addImageDetailsToContainerOrchestration(
 ): Promise<Container | undefined> {
   const containerId = container.Id;
   const containerLabels: Record<string, string> = container.Labels || {};
+  const dockerContainerName = getContainerName(container);
   const runtimeDetailsFromSummary = getRuntimeDetailsFromContainerSummary(container);
 
   // Is container already in store? Refresh volatile image fields, then return it
@@ -160,6 +162,21 @@ export async function addImageDetailsToContainerOrchestration(
   if (containerInStore !== undefined && containerInStore.error === undefined) {
     watcher.ensureLogger();
     watcher.log.debug(`Container ${containerInStore.id} already in store`);
+    const existingName = containerInStore.name || '';
+    if (dockerContainerName !== '' && existingName !== dockerContainerName) {
+      const shouldUpdateDisplayName = shouldUpdateDisplayNameFromContainerName(
+        dockerContainerName,
+        existingName,
+        containerInStore.displayName,
+      );
+      containerInStore.name = dockerContainerName;
+      if (shouldUpdateDisplayName) {
+        containerInStore.displayName = getContainerDisplayName(
+          dockerContainerName,
+          containerInStore.image?.name || '',
+        );
+      }
+    }
     const cachedRuntimeDetails = normalizeRuntimeDetails(containerInStore.details);
     let runtimeDetailsToApply = mergeRuntimeDetails(
       runtimeDetailsFromSummary,
@@ -273,16 +290,15 @@ export async function addImageDetailsToContainerOrchestration(
   } catch {
     // Degrade gracefully to summary details.
   }
-  const containerName = getContainerName(container);
   if (!isSemver && !watchDigest) {
     watcher.ensureLogger();
     watcher.log.warn(
-      `Image is not a semver and digest watching is disabled so drydock won't report any update for container "${containerName}". Please review the configuration to enable digest watching for this container or exclude this container from being watched`,
+      `Image is not a semver and digest watching is disabled so drydock won't report any update for container "${dockerContainerName}". Please review the configuration to enable digest watching for this container or exclude this container from being watched`,
     );
   }
-  return helpers.normalizeContainer({
+  const containerToReturn = helpers.normalizeContainer({
     id: containerId,
-    name: containerName,
+    name: dockerContainerName,
     status: container.State,
     watcher: watcher.name,
     includeTags: resolvedConfig.includeTags,
@@ -291,7 +307,7 @@ export async function addImageDetailsToContainerOrchestration(
     tagFamily: resolvedConfig.tagFamily,
     linkTemplate: resolvedConfig.linkTemplate,
     displayName: getContainerDisplayName(
-      containerName,
+      dockerContainerName,
       parsedImage.path,
       resolvedConfig.displayName,
     ),
@@ -328,4 +344,12 @@ export async function addImageDetailsToContainerOrchestration(
     updateAvailable: false,
     updateKind: { kind: 'unknown' },
   } as Container);
+  const containersWithSameName = storeContainer.getContainers({
+    watcher: watcher.name,
+    name: containerToReturn.name,
+  });
+  containersWithSameName
+    .filter((staleContainer) => staleContainer.id !== containerToReturn.id)
+    .forEach((staleContainer) => storeContainer.deleteContainer(staleContainer.id));
+  return containerToReturn;
 }

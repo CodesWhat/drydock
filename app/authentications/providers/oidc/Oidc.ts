@@ -1,8 +1,12 @@
+import { readFile } from 'node:fs/promises';
+import type { ConnectionOptions } from 'node:tls';
 import type { Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import * as openidClientLibrary from 'openid-client';
+import { Agent } from 'undici';
 import { v4 as uuid } from 'uuid';
 import { ddEnvVars, getPublicUrl, getServerConfiguration } from '../../../configuration/index.js';
+import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { enforceConcurrentSessionLimit } from '../../../util/session-limit.js';
 import Authentication from '../Authentication.js';
@@ -316,6 +320,8 @@ class Oidc extends Authentication {
       discovery: this.joi.string().uri().required(),
       clientid: this.joi.string().required(),
       clientsecret: this.joi.string().required(),
+      cafile: this.joi.string(),
+      insecure: this.joi.boolean().default(false),
       redirect: this.joi.boolean().default(false),
       logouturl: this.joi.string().uri({ scheme: ['http', 'https'] }),
       timeout: this.joi.number().greater(500).default(5000),
@@ -341,6 +347,10 @@ class Oidc extends Authentication {
       discovery: this.configuration.discovery,
       clientid: Oidc.mask(this.configuration.clientid),
       clientsecret: Oidc.mask(this.configuration.clientsecret),
+      ...(this.configuration.cafile ? { cafile: Oidc.mask(this.configuration.cafile) } : {}),
+      ...(typeof this.configuration.insecure === 'boolean'
+        ? { insecure: this.configuration.insecure }
+        : {}),
       redirect: this.configuration.redirect,
       ...(this.configuration.logouturl ? { logouturl: this.configuration.logouturl } : {}),
       timeout: this.configuration.timeout,
@@ -359,15 +369,39 @@ class Oidc extends Authentication {
       );
       execute = [openidClient.allowInsecureRequests];
     }
+    const discoveryOptions: openidClientLibrary.DiscoveryRequestOptions = {
+      timeout: timeoutSeconds,
+      execute,
+    };
+    if (this.configuration.cafile || this.configuration.insecure) {
+      const connectOptions: ConnectionOptions = {};
+      if (this.configuration.cafile) {
+        const caFilePath = resolveConfiguredPath(this.configuration.cafile, {
+          label: 'OIDC CA certificate path',
+        });
+        connectOptions.ca = await readFile(caFilePath);
+      }
+      if (this.configuration.insecure) {
+        this.log.warn('TLS certificate verification disabled for OIDC - do not use in production');
+        connectOptions.rejectUnauthorized = false;
+      }
+      const dispatcher = new Agent({ connect: connectOptions });
+      const oidcFetch: openidClientLibrary.CustomFetch = (input, init) =>
+        fetch(
+          input as RequestInfo | URL,
+          {
+            ...(init as unknown as RequestInit),
+            dispatcher,
+          } as RequestInit & { dispatcher: Agent },
+        );
+      discoveryOptions[openidClient.customFetch] = oidcFetch;
+    }
     this.client = await openidClient.discovery(
       discoveryUrl,
       this.configuration.clientid,
       this.configuration.clientsecret,
       openidClient.ClientSecretPost(this.configuration.clientsecret),
-      {
-        timeout: timeoutSeconds,
-        execute,
-      },
+      discoveryOptions,
     );
     this.logoutUrl = this.configuration.logouturl;
     try {

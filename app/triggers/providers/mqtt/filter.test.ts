@@ -1,4 +1,9 @@
-import { filterContainer, HASS_ATTRIBUTE_PRESET_VALUES, HASS_ATTRIBUTE_PRESETS } from './filter.js';
+import {
+  filterContainer,
+  filterContainerInclude,
+  HASS_ATTRIBUTE_PRESET_VALUES,
+  HASS_ATTRIBUTE_PRESETS,
+} from './filter.js';
 
 describe('filterContainer', () => {
   const container = {
@@ -174,6 +179,63 @@ describe('filterContainer', () => {
     expect(result?.security.sbom).toHaveProperty('format', 'spdx');
     expect(Object.getOwnPropertyDescriptor(result, 'expensive')).toMatchObject({
       get: expect.any(Function),
+    });
+  });
+});
+
+describe('filterContainerInclude', () => {
+  const flattenedContainer = {
+    name: 'test',
+    watcher: 'local',
+    image_name: 'nginx',
+    result_tag: '1.26',
+    security_scan_status: 'passed',
+    security_scan_vulnerabilities_0_id: 'CVE-2024-0001',
+  };
+
+  test('returns container unchanged (same reference) when includePaths is empty', () => {
+    const result = filterContainerInclude(flattenedContainer, []);
+    expect(result).toBe(flattenedContainer);
+  });
+
+  test('returns primitive input unchanged when includePaths are requested', () => {
+    const result = filterContainerInclude('container-as-string', ['name']);
+    expect(result).toBe('container-as-string');
+  });
+
+  test('keeps only included top-level keys', () => {
+    const result = filterContainerInclude(flattenedContainer, ['name', 'image_name', 'result_tag']);
+    expect(result).toEqual({
+      name: 'test',
+      image_name: 'nginx',
+      result_tag: '1.26',
+    });
+  });
+
+  test('ignores include keys that do not exist', () => {
+    const result = filterContainerInclude(flattenedContainer, ['name', 'does_not_exist']);
+    expect(result).toEqual({
+      name: 'test',
+    });
+  });
+
+  test('does not mutate the original container', () => {
+    const original = JSON.parse(JSON.stringify(flattenedContainer));
+    filterContainerInclude(flattenedContainer, ['name']);
+    expect(flattenedContainer).toEqual(original);
+  });
+
+  test('preserves symbol keys while filtering string keys', () => {
+    const secret = Symbol('secret');
+    const flattenedWithSymbol = {
+      ...flattenedContainer,
+      [secret]: 'value',
+    };
+
+    const result = filterContainerInclude(flattenedWithSymbol, ['name']);
+    expect(result).toEqual({
+      name: 'test',
+      [secret]: 'value',
     });
   });
 });

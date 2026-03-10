@@ -1,7 +1,6 @@
 import {
   getAllTriggers,
   getTrigger,
-  getTriggerIcon,
   getTriggerProviderColor,
   getTriggerProviderIcon,
   runTrigger,
@@ -12,12 +11,6 @@ global.fetch = vi.fn();
 describe('Trigger Service', () => {
   beforeEach(() => {
     vi.mocked(fetch).mockClear();
-  });
-
-  describe('getTriggerIcon', () => {
-    it('returns the trigger icon', () => {
-      expect(getTriggerIcon()).toBe('sh-bolt');
-    });
   });
 
   describe('getTriggerProviderIcon', () => {

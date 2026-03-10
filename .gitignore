@@ -148,6 +148,7 @@ apps/web/content/docs/
 # Storybook build output
 storybook-static/
 
-# Claude Code project instructions
+# Claude Code project instructions and local config
 CLAUDE.md
+.claude/
 artifacts/

@@ -7,6 +7,7 @@ import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 import {
   filterContainer,
+  filterContainerInclude,
   HASS_ATTRIBUTE_PRESET_VALUES,
   HASS_ATTRIBUTE_PRESETS,
   type HassAttributePreset,
@@ -43,6 +44,10 @@ interface MqttConfiguration extends TriggerConfiguration {
     prefix: string;
     discovery: boolean;
     attributes: HassAttributePreset;
+    filter: {
+      include: string;
+      exclude: string;
+    };
   };
   tls: {
     clientkey?: string;
@@ -50,6 +55,22 @@ interface MqttConfiguration extends TriggerConfiguration {
     cachain?: string;
     rejectunauthorized: boolean;
   };
+}
+
+interface MqttFilterConfig {
+  mode: 'include' | 'exclude';
+  stage: 'container' | 'flattened';
+  paths: string[];
+}
+
+function splitFilterPaths(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(',')
+    .map((path) => path.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -66,6 +87,10 @@ class Mqtt extends Trigger {
       prefix: hassDefaultPrefix,
       discovery: false,
       attributes: 'full',
+      filter: {
+        include: '',
+        exclude: '',
+      },
     },
     tls: {
       rejectunauthorized: true,
@@ -85,6 +110,9 @@ class Mqtt extends Trigger {
   }
 
   handleContainerEvent(container) {
+    if (!this.mustTrigger(container)) {
+      return;
+    }
     void this.trigger(container).catch((error) => {
       this.log.warn(`Error (${error.message})`);
       this.log.debug(error);
@@ -117,12 +145,25 @@ class Mqtt extends Trigger {
             .string()
             .valid(...HASS_ATTRIBUTE_PRESET_VALUES)
             .default('full'),
+          filter: this.joi
+            .object({
+              include: this.joi.string().allow('').default(''),
+              exclude: this.joi.string().allow('').default(''),
+            })
+            .default({
+              include: '',
+              exclude: '',
+            }),
         })
         .default({
           enabled: false,
           prefix: hassDefaultPrefix,
           discovery: false,
           attributes: 'full',
+          filter: {
+            include: '',
+            exclude: '',
+          },
         }),
       tls: this.joi
         .object({
@@ -214,14 +255,39 @@ class Mqtt extends Trigger {
     await super.deregisterComponent();
   }
 
-  getExcludePaths(): string[] {
-    if (this.configuration.exclude) {
-      return this.configuration.exclude
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
+  getFilterConfig(): MqttFilterConfig {
+    const includePaths = splitFilterPaths(this.configuration.hass?.filter?.include);
+    if (includePaths.length > 0) {
+      return {
+        mode: 'include',
+        stage: 'flattened',
+        paths: includePaths,
+      };
     }
-    return HASS_ATTRIBUTE_PRESETS[this.configuration.hass.attributes];
+
+    const hassExcludePaths = splitFilterPaths(this.configuration.hass?.filter?.exclude);
+    if (hassExcludePaths.length > 0) {
+      return {
+        mode: 'exclude',
+        stage: 'flattened',
+        paths: hassExcludePaths,
+      };
+    }
+
+    const legacyExcludePaths = splitFilterPaths(this.configuration.exclude);
+    if (legacyExcludePaths.length > 0) {
+      return {
+        mode: 'exclude',
+        stage: 'container',
+        paths: legacyExcludePaths,
+      };
+    }
+
+    return {
+      mode: 'exclude',
+      stage: 'container',
+      paths: HASS_ATTRIBUTE_PRESETS[this.configuration.hass?.attributes ?? 'full'],
+    };
   }
 
   /**
@@ -236,11 +302,21 @@ class Mqtt extends Trigger {
       container,
     });
 
-    const excludePaths = this.getExcludePaths();
-    const containerToPublish = filterContainer(container, excludePaths);
+    const filterConfig = this.getFilterConfig();
+    const containerToPublish =
+      filterConfig.stage === 'container'
+        ? filterContainer(container, filterConfig.paths)
+        : container;
+    const flattenedContainer = flatten(containerToPublish);
+    const containerToPublishFlattened =
+      filterConfig.stage === 'flattened'
+        ? filterConfig.mode === 'include'
+          ? filterContainerInclude(flattenedContainer, filterConfig.paths)
+          : filterContainer(flattenedContainer, filterConfig.paths)
+        : flattenedContainer;
 
     this.log.debug(`Publish container result to ${containerTopic}`);
-    return this.client.publish(containerTopic, JSON.stringify(flatten(containerToPublish)), {
+    return this.client.publish(containerTopic, JSON.stringify(containerToPublishFlattened), {
       retain: true,
     });
   }

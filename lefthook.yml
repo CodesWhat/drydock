@@ -2,9 +2,12 @@
 # Lefthook configuration — mirrors CI pipeline for local/CI parity.
 #
 # Pre-push pipeline (piped = sequential, fail-fast):
+#   0. Clean tree gate — rejects untracked/uncommitted/stashed files
 #   1. Lint gate (~20s) — catches formatting/lint before burning CPU
 #   2. Build + test (~26s parallel) — independent workspaces run concurrently
-#   3. E2E + security (advisory)
+#   3. E2E + advisory scans (zizmor)
+#
+# Snyk scans are CI-only (release workflow) to preserve the 200/month quota.
 #
 # Biome runs directly (not via qlty) because qlty's biome integration
 # does not reliably apply fixes. Qlty handles all other linters.
@@ -24,6 +27,32 @@ pre-commit:
 pre-push:
   piped: true
   commands:
+    # ── Clean tree gate: fail if working tree is dirty ─────────────────
+    # Catches untracked files (which hang qlty on interactive prompts),
+    # uncommitted changes (which pass locally but fail CI), and stashed
+    # changes (which hide work that should be committed or discarded).
+    clean-tree:
+      run: |
+        dirty=$(git status --porcelain 2>/dev/null)
+        stash=$(git stash list 2>/dev/null)
+        fail=0
+        if [ -n "$dirty" ]; then
+          echo "❌ Working tree is not clean:"
+          echo "$dirty"
+          echo ""
+          echo "Commit, stash, or remove these files before pushing."
+          fail=1
+        fi
+        if [ -n "$stash" ]; then
+          echo "⚠️  Stash is not empty:"
+          echo "$stash"
+          echo ""
+          echo "Apply or drop stashed changes — they won't be in CI."
+          fail=1
+        fi
+        exit $fail
+      priority: 0
+
     # ── Lint gate: fast checks that catch formatting/lint issues ──────
     ts-nocheck:
       run: node scripts/check-ts-nocheck-allowlist.mjs
@@ -52,19 +81,3 @@ pre-push:
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
       priority: 6
-
-    # ── Local security gates (skip if tool missing or feature branch) ─
-    # Snyk has a 200 scan/month limit — only run on release/main pushes.
-    snyk-deps:
-      root: app/
-      run: ../scripts/snyk-deps-gate.sh --org=codeswhat
-      skip:
-        - run: '! command -v snyk >/dev/null 2>&1'
-        - run: 'git rev-parse --abbrev-ref HEAD | grep -qvE "^(main|release/)"'
-      priority: 7
-    snyk-code:
-      run: scripts/snyk-code-gate.sh --org=codeswhat
-      skip:
-        - run: '! command -v snyk >/dev/null 2>&1'
-        - run: 'git rev-parse --abbrev-ref HEAD | grep -qvE "^(main|release/)"'
-      priority: 8

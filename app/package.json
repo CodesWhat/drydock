@@ -10,7 +10,6 @@
   "scripts": {
     "build": "tsc && node scripts/copy-static-assets.mjs",
     "start": "nodemon --exec \"ts-node --esm\" index.ts",
-    "doc": ".docsify serve ./docs",
     "format": "biome format --write .",
     "lint:fix": "biome check --fix .",
     "lint": "biome check .",
@@ -63,6 +62,7 @@
     "semver": "7.7.4",
     "set-value": "4.1.0",
     "sort-es": "1.7.18",
+    "undici": "^7.22.0",
     "uuid": "^13.0.0",
     "yaml": "2.8.2"
   },

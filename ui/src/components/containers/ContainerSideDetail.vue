@@ -11,11 +11,13 @@ const {
   openFullPage,
   detailTabs,
   activeDetailTab,
+  actionInProgress,
   confirmStop,
   startContainer,
   confirmRestart,
   scanContainer,
   confirmUpdate,
+  confirmForceUpdate,
   confirmDelete,
   tt,
 } = useContainersViewTemplateContext();
@@ -37,39 +39,61 @@ const {
         <div class="flex items-center gap-0.5">
           <button
             v-if="selectedContainer.status === 'running'"
-            class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95"
+            class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+            :class="actionInProgress === selectedContainer.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
+            :disabled="actionInProgress === selectedContainer.name"
             v-tooltip.top="tt('Stop')"
             @click="confirmStop(selectedContainer.name)">
             <AppIcon name="stop" :size="12" />
           </button>
           <button
             v-else
-            class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
+            class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+            :class="actionInProgress === selectedContainer.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
+            :disabled="actionInProgress === selectedContainer.name"
             v-tooltip.top="tt('Start')"
             @click="startContainer(selectedContainer.name)">
             <AppIcon name="play" :size="12" />
           </button>
           <button
-            class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95"
+            class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+            :class="actionInProgress === selectedContainer.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95'"
+            :disabled="actionInProgress === selectedContainer.name"
             v-tooltip.top="tt('Restart')"
             @click="confirmRestart(selectedContainer.name)">
             <AppIcon name="restart" :size="12" />
           </button>
           <button
-            class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-secondary hover:dd-bg-hover hover:scale-110 active:scale-95"
+            class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+            :class="actionInProgress === selectedContainer.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-secondary hover:dd-bg-hover hover:scale-110 active:scale-95'"
+            :disabled="actionInProgress === selectedContainer.name"
             v-tooltip.top="tt('Scan')"
             @click="scanContainer(selectedContainer.name)">
             <AppIcon name="security" :size="12" />
           </button>
           <button
-            v-if="selectedContainer.newTag"
-            class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
+            v-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
+            class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+            :class="actionInProgress === selectedContainer.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'hover:dd-bg-hover hover:scale-110 active:scale-95'"
+            :style="{ color: 'var(--dd-danger)' }"
+            :disabled="actionInProgress === selectedContainer.name"
+            v-tooltip.top="tt('Blocked — Force Update')"
+            @click="confirmForceUpdate(selectedContainer.name)">
+            <AppIcon name="lock" :size="12" />
+          </button>
+          <button
+            v-else-if="selectedContainer.newTag"
+            class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+            :class="actionInProgress === selectedContainer.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
+            :disabled="actionInProgress === selectedContainer.name"
             v-tooltip.top="tt('Update')"
             @click="confirmUpdate(selectedContainer.name)">
             <AppIcon name="cloud-download" :size="14" />
           </button>
           <button
-            class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95"
+            class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+            :class="actionInProgress === selectedContainer.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
+            :disabled="actionInProgress === selectedContainer.name"
             v-tooltip.top="tt('Delete')"
             @click="confirmDelete(selectedContainer.name)">
             <AppIcon name="trash" :size="12" />

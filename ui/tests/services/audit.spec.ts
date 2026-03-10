@@ -1,4 +1,4 @@
-import { getAuditIcon, getAuditLog } from '@/services/audit';
+import { getAuditLog } from '@/services/audit';
 
 describe('audit service', () => {
   beforeEach(() => {
@@ -139,9 +139,5 @@ describe('audit service', () => {
     });
 
     await expect(getAuditLog()).rejects.toThrow('Failed to fetch audit log: Internal Server Error');
-  });
-
-  it('getAuditIcon returns the correct icon', () => {
-    expect(getAuditIcon()).toBe('sh-clock-rotate-left');
   });
 });

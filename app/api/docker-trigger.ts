@@ -3,7 +3,7 @@ import type Docker from '../triggers/providers/docker/Docker.js';
 import type Trigger from '../triggers/providers/Trigger.js';
 
 export const NO_DOCKER_TRIGGER_FOUND_ERROR = 'No docker trigger found for this container';
-const DEFAULT_TRIGGER_TYPES = ['docker'];
+const DEFAULT_TRIGGER_TYPES = ['docker', 'dockercompose'];
 
 interface FindDockerTriggerForContainerOptions {
   triggerTypes?: string[];

@@ -1,7 +1,3 @@
-function getLogIcon() {
-  return 'sh-scroll';
-}
-
 async function getLog() {
   const response = await fetch('/api/log', { credentials: 'include' });
   if (!response.ok) {
@@ -29,4 +25,4 @@ async function getLogEntries(
   return response.json();
 }
 
-export { getLogIcon, getLog, getLogEntries };
+export { getLog, getLogEntries };

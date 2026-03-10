@@ -1,7 +1,6 @@
 import {
   getAllRegistries,
   getRegistry,
-  getRegistryIcon,
   getRegistryProviderColor,
   getRegistryProviderIcon,
 } from '@/services/registry';
@@ -12,12 +11,6 @@ global.fetch = vi.fn();
 describe('Registry Service', () => {
   beforeEach(() => {
     vi.mocked(fetch).mockClear();
-  });
-
-  describe('getRegistryIcon', () => {
-    it('returns the registry icon', () => {
-      expect(getRegistryIcon()).toBe('sh-docker');
-    });
   });
 
   describe('getRegistryProviderIcon', () => {

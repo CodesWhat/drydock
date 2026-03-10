@@ -18,6 +18,26 @@ function isLegacyOrDefaultIcon(displayIcon: string): boolean {
   return displayIcon.startsWith('mdi:') || displayIcon.startsWith('mdi-');
 }
 
+/** Normalize colon-separated icon prefixes (sh:slug) to dash format (sh-slug). */
+export function normalizeIconPrefix(icon: string): string {
+  const normalized = icon.trim();
+  const match = normalized.match(/^(sh|hl|si)[:-](.+)$/i);
+  if (!match) {
+    return normalized;
+  }
+  const provider = match[1].toLowerCase();
+  let slug = match[2].trim();
+
+  // Handle malformed nested values like "si-si:nextcloud" by unwrapping known prefixes.
+  let nestedMatch = slug.match(/^(sh|hl|si)[:-](.+)$/i);
+  while (nestedMatch) {
+    slug = nestedMatch[2].trim();
+    nestedMatch = slug.match(/^(sh|hl|si)[:-](.+)$/i);
+  }
+
+  return `${provider}-${slug}`;
+}
+
 /**
  * Curated map: Docker image base name -> Dashboard Icons slug.
  * Only needed when the image name differs from the icon slug.
@@ -283,7 +303,7 @@ function resolveIconSlug(imageName: string): string | null {
 export function getEffectiveDisplayIcon(displayIcon: string, imageName: string): string {
   // User set a modern icon (hl-, sh-, si-, fa*, or URL) — respect it
   if (!isLegacyOrDefaultIcon(displayIcon)) {
-    return displayIcon;
+    return normalizeIconPrefix(displayIcon);
   }
 
   // Auto-resolve from image name

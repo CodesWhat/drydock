@@ -38,7 +38,7 @@ function handleKeydown(e: KeyboardEvent) {
     !isTextEntryTarget(e.target)
   ) {
     e.preventDefault();
-    accept();
+    void accept();
   }
 }
 
@@ -76,7 +76,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
           <!-- Footer -->
           <div class="px-5 pt-3 pb-4.5 flex items-center justify-end gap-2.5">
             <button
-              class="px-4 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
+              class="px-4 py-1.5 dd-rounded text-[11px] font-semibold transition-colors cursor-pointer"
               :aria-label="current.rejectLabel || 'Cancel'"
               :style="{
                 backgroundColor: 'var(--dd-bg-inset)',
@@ -87,7 +87,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
               {{ current.rejectLabel || 'Cancel' }}
             </button>
             <button
-              class="px-4 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
+              class="px-4 py-1.5 dd-rounded text-[11px] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
               :aria-label="current.acceptLabel || 'Confirm'"
               :style="current.severity === 'danger'
                 ? {

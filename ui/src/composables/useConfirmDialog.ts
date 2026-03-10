@@ -6,7 +6,7 @@ interface ConfirmOptions {
   acceptLabel?: string;
   rejectLabel?: string;
   severity?: 'danger' | 'warn';
-  accept?: () => void;
+  accept?: () => void | Promise<void>;
   reject?: () => void;
 }
 
@@ -19,10 +19,18 @@ export function useConfirmDialog() {
     visible.value = true;
   }
 
-  function accept() {
-    current.value?.accept?.();
+  async function accept() {
+    const callback = current.value?.accept;
     visible.value = false;
     current.value = null;
+    if (!callback) {
+      return;
+    }
+    try {
+      await callback();
+    } catch {
+      // Callback is responsible for its own error handling.
+    }
   }
 
   function reject() {

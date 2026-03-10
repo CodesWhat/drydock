@@ -320,7 +320,21 @@ async function pruneOldContainers(
   dockerApi: DockerApiContainerInspector,
 ) {
   const containersToRemove = getOldContainers(newContainers, containersFromTheStore);
+  const newContainerNameKeys = new Set(
+    newContainers
+      .filter((container) => typeof container.name === 'string' && container.name !== '')
+      .map((container) => `${container.watcher || ''}::${container.name}`),
+  );
   for (const containerToRemove of containersToRemove) {
+    const staleContainerNameKey = `${containerToRemove.watcher || ''}::${containerToRemove.name || ''}`;
+    if (
+      typeof containerToRemove.name === 'string' &&
+      containerToRemove.name !== '' &&
+      newContainerNameKeys.has(staleContainerNameKey)
+    ) {
+      storeContainer.deleteContainer(containerToRemove.id);
+      continue;
+    }
     try {
       const inspectResult = await dockerApi.getContainer(containerToRemove.id).inspect();
       const newStatus = inspectResult?.State?.Status;

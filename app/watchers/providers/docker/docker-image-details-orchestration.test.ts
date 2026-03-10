@@ -242,6 +242,86 @@ describe('docker image details orchestration module', () => {
     expect(containerInStore.status).toBe('running');
   });
 
+  test('refreshes cached container name from Docker summary when it changes', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      name: 'temp-name-123',
+      displayName: 'temp-name-123',
+      status: 'running',
+      error: undefined,
+      details: {
+        ports: [],
+        volumes: [],
+        env: [],
+      },
+      image: {
+        name: 'acme/service',
+        id: 'image-old',
+        digest: {
+          repo: 'sha256:old',
+          value: 'sha256:old',
+        },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher } = createWatcher({
+      configuration: { watchevents: true },
+    });
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({ Names: ['/service'] }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result).toBe(containerInStore);
+    expect(containerInStore.name).toBe('service');
+    expect(containerInStore.displayName).toBe('service');
+  });
+
+  test('keeps custom displayName when container name changes', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      name: 'temp-name-123',
+      displayName: 'Friendly Service',
+      status: 'running',
+      error: undefined,
+      details: {
+        ports: [],
+        volumes: [],
+        env: [],
+      },
+      image: {
+        name: 'acme/service',
+        id: 'image-old',
+        digest: {
+          repo: 'sha256:old',
+          value: 'sha256:old',
+        },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher } = createWatcher({
+      configuration: { watchevents: true },
+    });
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({ Names: ['/service'] }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result).toBe(containerInStore);
+    expect(containerInStore.name).toBe('service');
+    expect(containerInStore.displayName).toBe('Friendly Service');
+  });
+
   test('throws a clear error when image inspection fails for a new container', async () => {
     vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
 
@@ -428,5 +508,35 @@ describe('docker image details orchestration module', () => {
       env: [],
     });
     expect(watcher.log.warn).not.toHaveBeenCalled();
+  });
+
+  test('removes stale same-name container entries when a new container id is discovered', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+    const getContainersSpy = vi.spyOn(storeContainer, 'getContainers').mockReturnValue([
+      {
+        id: 'old-container-id',
+        watcher: 'docker-test',
+        name: 'service',
+      } as any,
+    ]);
+    const deleteContainerSpy = vi
+      .spyOn(storeContainer, 'deleteContainer')
+      .mockImplementation(() => {});
+
+    const { watcher } = createWatcher();
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Id: 'new-container-id',
+        Names: ['/service'],
+      }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result?.id).toBe('new-container-id');
+    expect(getContainersSpy).toHaveBeenCalledWith({ watcher: 'docker-test', name: 'service' });
+    expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-id');
   });
 });

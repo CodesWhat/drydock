@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { normalizeIconPrefix } from '../services/image-icon';
 
 const props = withDefaults(
   defineProps<{
@@ -23,7 +24,9 @@ const failed = ref(false);
  *   other       → treat as selfhst slug
  */
 const resolved = computed(() => {
-  const icon = props.icon;
+  const raw = props.icon;
+  if (!raw) return { type: 'fallback' as const };
+  const icon = normalizeIconPrefix(raw);
   if (!icon) return { type: 'fallback' as const };
 
   if (icon.startsWith('sh-')) {

@@ -40,7 +40,3 @@ export async function getAuditLog(
   }
   return payload;
 }
-
-export function getAuditIcon() {
-  return 'sh-clock-rotate-left';
-}
