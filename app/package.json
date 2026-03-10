@@ -10,7 +10,6 @@
   "scripts": {
     "build": "tsc && node scripts/copy-static-assets.mjs",
     "start": "nodemon --exec \"ts-node --esm\" index.ts",
-    "doc": ".docsify serve ./docs",
     "format": "biome format --write .",
     "lint:fix": "biome check --fix .",
     "lint": "biome check .",

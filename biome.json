@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!ui/public/index.html", "!website", "!apps/web/app/globals.css"]
+    "includes": ["**", "!ui/public/index.html", "!apps/web/app/globals.css"]
   },
   "formatter": {
     "enabled": true,
