@@ -127,6 +127,7 @@ const {
   updateOperationsError,
   scanContainer,
   confirmUpdate,
+  confirmForceUpdate,
   registryColorBg,
   registryColorText,
   registryLabel,
@@ -679,7 +680,15 @@ const {
                             @click="runContainerPreview">
                       {{ previewLoading ? 'Previewing...' : 'Preview Update' }}
                     </button>
-                    <button class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                    <button v-if="selectedContainer.bouncer === 'blocked'"
+                            class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
+                            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+                            :disabled="actionInProgress === selectedContainer.name"
+                            @click="confirmForceUpdate(selectedContainer.name)">
+                      <AppIcon name="lock" :size="10" class="mr-1 inline" />Force Update
+                    </button>
+                    <button v-else
+                            class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                             :style="{ border: '1px solid var(--dd-border-strong)' }"
                             :disabled="!selectedContainer.newTag || actionInProgress === selectedContainer.name"
                             @click="confirmUpdate(selectedContainer.name)">

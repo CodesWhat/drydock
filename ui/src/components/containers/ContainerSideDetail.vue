@@ -17,6 +17,7 @@ const {
   confirmRestart,
   scanContainer,
   confirmUpdate,
+  confirmForceUpdate,
   confirmDelete,
   tt,
 } = useContainersViewTemplateContext();
@@ -71,7 +72,17 @@ const {
             <AppIcon name="security" :size="12" />
           </button>
           <button
-            v-if="selectedContainer.newTag"
+            v-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
+            class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+            :class="actionInProgress === selectedContainer.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'hover:dd-bg-hover hover:scale-110 active:scale-95'"
+            :style="{ color: 'var(--dd-danger)' }"
+            :disabled="actionInProgress === selectedContainer.name"
+            v-tooltip.top="tt('Blocked — Force Update')"
+            @click="confirmForceUpdate(selectedContainer.name)">
+            <AppIcon name="lock" :size="12" />
+          </button>
+          <button
+            v-else-if="selectedContainer.newTag"
             class="w-7 h-7 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
             :class="actionInProgress === selectedContainer.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
             :disabled="actionInProgress === selectedContainer.name"

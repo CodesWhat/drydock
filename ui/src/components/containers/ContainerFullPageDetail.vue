@@ -10,8 +10,10 @@ const {
   confirmRestart,
   scanContainer,
   confirmUpdate,
+  confirmForceUpdate,
   confirmDelete,
   actionInProgress,
+  error,
   registryColorBg,
   registryColorText,
   registryLabel,
@@ -132,7 +134,18 @@ const {
             Scan
           </button>
           <button
-            v-if="selectedContainer.newTag"
+            v-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold transition-colors"
+            :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : ''"
+            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+            :disabled="actionInProgress === selectedContainer.name"
+            aria-label="Update blocked by security scan"
+            @click="confirmForceUpdate(selectedContainer.name)">
+            <AppIcon name="lock" :size="12" />
+            Blocked
+          </button>
+          <button
+            v-else-if="selectedContainer.newTag"
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
@@ -169,6 +182,17 @@ const {
             class="absolute bottom-0 left-0 right-0 h-[2px] bg-drydock-secondary rounded-t-full" />
         </button>
       </div>
+    </div>
+
+    <div
+      v-if="error"
+      class="shrink-0 mb-4 px-4 py-3 dd-rounded-lg flex items-center gap-3 text-[12px] font-medium"
+      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }">
+      <AppIcon name="warning" :size="14" class="shrink-0" />
+      <span class="min-w-0 break-words">{{ error }}</span>
+      <button class="ml-auto shrink-0 hover:opacity-70 transition-opacity" aria-label="Dismiss error" @click="error = null">
+        <AppIcon name="x" :size="12" />
+      </button>
     </div>
 
     <ContainerFullPageTabContent />
