@@ -374,9 +374,3 @@ export {
 };
 
 export type { ContainerGroup };
-export type {
-  AggregatedSecurityImage,
-  AggregatedSecuritySummary,
-  AggregatedSecurityVulnerability,
-  SecurityVulnerabilityOverview,
-};
