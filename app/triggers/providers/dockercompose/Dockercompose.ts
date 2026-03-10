@@ -88,6 +88,19 @@ type RegistryImageContainerReference = {
   };
 };
 
+type ComposeRuntimeRefreshOptions = {
+  shouldStart?: boolean;
+  skipPull?: boolean;
+  forceRecreate?: boolean;
+  composeFiles?: string[];
+  runtimeContext?: {
+    dockerApi?: unknown;
+    auth?: unknown;
+    newImage?: string;
+    registry?: unknown;
+  };
+};
+
 function getDockerApiFromWatcher(watcher: unknown): DockerApiLike | undefined {
   if (!watcher || typeof watcher !== 'object') {
     return undefined;
@@ -1130,10 +1143,28 @@ class Dockercompose extends Docker {
   }
 
   /**
-   * Override: keep trigger context lightweight. Runtime container state is
-   * resolved on demand inside updateContainerWithCompose().
+   * Override: provide shared runtime dependencies once per lifecycle run.
+   * Runtime container state is still resolved on demand per service refresh.
    */
-  async createTriggerContext(container, logContainer, _composeContext) {
+  async createTriggerContext(container, logContainer, composeContext) {
+    const runtimeContext = (composeContext as { runtimeContext?: unknown } | undefined)
+      ?.runtimeContext as ComposeRuntimeRefreshOptions['runtimeContext'] | undefined;
+    if (
+      runtimeContext?.dockerApi &&
+      runtimeContext?.registry &&
+      runtimeContext?.auth !== undefined &&
+      runtimeContext?.newImage
+    ) {
+      return {
+        dockerApi: runtimeContext.dockerApi,
+        registry: runtimeContext.registry,
+        auth: runtimeContext.auth,
+        newImage: runtimeContext.newImage,
+        currentContainer: null,
+        currentContainerSpec: null,
+      };
+    }
+
     const watcher = this.getWatcher(container);
     const { dockerApi } = watcher;
     const registry = getState().registry[container.image.registry.name];
@@ -1153,10 +1184,26 @@ class Dockercompose extends Docker {
    * Override: apply compose-specific hooks while performing runtime refresh
    * through the Docker Engine API.
    */
-  async performContainerUpdate(_context, container, _logContainer, composeCtx) {
+  async performContainerUpdate(context, container, _logContainer, composeCtx) {
     if (!composeCtx) {
       throw new Error(`Missing compose context for container ${container.name}`);
     }
+    const composeRuntimeContext = (composeCtx as { runtimeContext?: unknown })?.runtimeContext as
+      | ComposeRuntimeRefreshOptions['runtimeContext']
+      | undefined;
+    const runtimeContext = {
+      dockerApi: context?.dockerApi,
+      auth: context?.auth,
+      newImage: context?.newImage,
+      registry: context?.registry,
+      ...(composeRuntimeContext || {}),
+    };
+    const hasRuntimeContext =
+      runtimeContext.dockerApi !== undefined ||
+      runtimeContext.auth !== undefined ||
+      runtimeContext.newImage !== undefined ||
+      runtimeContext.registry !== undefined;
+
     if (composeCtx.composeFileOnceApplied === true) {
       const logContainer = this.log.child({
         container: container.name,
@@ -1172,6 +1219,8 @@ class Dockercompose extends Docker {
           container,
           {
             composeFiles: composeCtx.composeFiles,
+            ...(composeCtx.skipPull === true ? { skipPull: true } : {}),
+            ...(hasRuntimeContext ? { runtimeContext } : {}),
           },
         );
       } else {
@@ -1179,6 +1228,10 @@ class Dockercompose extends Docker {
           composeCtx.composeFile,
           composeCtx.service,
           container,
+          {
+            ...(composeCtx.skipPull === true ? { skipPull: true } : {}),
+            ...(hasRuntimeContext ? { runtimeContext } : {}),
+          },
         );
       }
     }
@@ -1217,8 +1270,11 @@ class Dockercompose extends Docker {
       return false;
     }
 
-    const currentContainer = await this.getCurrentContainer(context.dockerApi, container);
-    const currentContainerSpec = await this.inspectContainer(currentContainer, logContainer);
+    const currentContainer =
+      context?.currentContainer ?? (await this.getCurrentContainer(context.dockerApi, container));
+    const currentContainerSpec =
+      context?.currentContainerSpec ??
+      (await this.inspectContainer(currentContainer, logContainer));
 
     const selfUpdateContext = {
       ...context,
@@ -1444,28 +1500,68 @@ class Dockercompose extends Docker {
     }
 
     const composeFileOnceHandledServices = new Set<string>();
-    if (
-      this.configuration.composeFileOnce === true &&
-      this.configuration.dryrun !== true &&
-      mappingsNeedingRuntimeUpdate.length > 1
-    ) {
-      // TODO: Re-introduce compose-file-once batching with Docker Engine API primitives.
-      this.log.info(
-        `Compose-file-once mode is unavailable in Docker Engine API runtime mode; refreshing containers individually for ${composeFileChainSummary}. This can be re-implemented via Docker Engine API later.`,
+    const composeFileOnceEnabled =
+      this.configuration.composeFileOnce === true && this.configuration.dryrun !== true;
+    const composeFileOnceRuntimeContextByService = new Map<
+      string,
+      NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
+    >();
+    if (composeFileOnceEnabled) {
+      const firstContainerByService = new Map<
+        string,
+        (typeof mappingsNeedingRuntimeUpdate)[number]
+      >();
+      for (const mapping of mappingsNeedingRuntimeUpdate) {
+        if (!firstContainerByService.has(mapping.service)) {
+          firstContainerByService.set(mapping.service, mapping);
+        }
+      }
+      await Promise.all(
+        [...firstContainerByService.entries()].map(async ([service, mapping]) => {
+          const runtimeContainer = mapping.container;
+          const logContainer = this.log.child({
+            container: runtimeContainer.name,
+          });
+          const watcher = this.getWatcher(runtimeContainer);
+          const { dockerApi } = watcher;
+          const registry = this.resolveRegistryManager(runtimeContainer, logContainer, {
+            allowAnonymousFallback: true,
+          });
+          const auth = await registry.getAuthPull();
+          const newImage = this.getNewImageFullName(registry, runtimeContainer);
+          composeFileOnceRuntimeContextByService.set(service, {
+            dockerApi,
+            registry,
+            auth,
+            newImage,
+          });
+          await this.pullImage(dockerApi, auth, newImage, logContainer);
+        }),
       );
     }
 
     // Refresh all containers requiring a runtime update via the shared
     // lifecycle orchestrator (security gate, hooks, prune/backup, events).
     for (const { container, service } of mappingsNeedingRuntimeUpdate) {
+      const composeFileOnceApplied =
+        composeFileOnceEnabled && composeFileOnceHandledServices.has(service);
+      const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);
       const composeContext = {
         composeFile,
         composeFiles: composeFileChain,
         service,
         serviceDefinition: compose.services[service],
-        composeFileOnceApplied: composeFileOnceHandledServices.has(service),
+        composeFileOnceApplied,
+        skipPull:
+          composeFileOnceEnabled &&
+          composeFileOnceApplied !== true &&
+          composeFileOnceRuntimeContext !== undefined,
+        runtimeContext: composeFileOnceRuntimeContext,
       };
       await this.runContainerUpdateLifecycle(container, composeContext);
+      if (composeFileOnceEnabled && !composeFileOnceApplied) {
+        composeFileOnceHandledServices.add(service);
+      }
     }
   }
 
@@ -1556,20 +1652,33 @@ class Dockercompose extends Docker {
   }
 
   async updateContainerWithCompose(composeFile, service, container, options = {}) {
+    await this.refreshComposeServiceWithDockerApi(composeFile, service, container, options);
+  }
+
+  private ensureComposeRuntimeState(currentContainerSpec, composeFile, service): void {
+    if (typeof currentContainerSpec?.State?.Running !== 'boolean') {
+      throw new Error(
+        `Unable to refresh compose service ${service} from ${composeFile} because Docker inspection data is missing runtime state`,
+      );
+    }
+  }
+
+  /**
+   * Refresh one compose-managed service by using the Docker Engine API
+   * directly. Shared by updateContainerWithCompose() and recreateContainer()
+   * to keep the runtime recreation path explicit and non-recursive.
+   */
+  private async refreshComposeServiceWithDockerApi(
+    composeFile,
+    service,
+    container,
+    options: ComposeRuntimeRefreshOptions = {},
+  ) {
     const logContainer = this.log.child({
       container: container.name,
     });
 
-    const {
-      shouldStart = undefined,
-      skipPull = false,
-      forceRecreate = false,
-    } = options as {
-      shouldStart?: boolean;
-      skipPull?: boolean;
-      forceRecreate?: boolean;
-      composeFiles?: string[];
-    };
+    const { shouldStart = undefined, skipPull = false, forceRecreate = false } = options;
 
     if (this.configuration.dryrun) {
       logContainer.info(
@@ -1578,13 +1687,24 @@ class Dockercompose extends Docker {
       return;
     }
 
-    const watcher = this.getWatcher(container);
-    const { dockerApi } = watcher;
-    const registry = this.resolveRegistryManager(container, logContainer, {
-      allowAnonymousFallback: true,
-    });
-    const auth = await registry.getAuthPull();
-    const newImage = this.getNewImageFullName(registry, container);
+    const runtimeContext = options.runtimeContext || {};
+    const dockerApi = runtimeContext.dockerApi || this.getWatcher(container)?.dockerApi;
+    let auth = runtimeContext.auth;
+    let newImage = runtimeContext.newImage;
+
+    if (!newImage || (!skipPull && auth === undefined)) {
+      const registry =
+        runtimeContext.registry ||
+        this.resolveRegistryManager(container, logContainer, {
+          allowAnonymousFallback: true,
+        });
+      if (!newImage) {
+        newImage = this.getNewImageFullName(registry, container);
+      }
+      if (!skipPull && auth === undefined) {
+        auth = await registry.getAuthPull();
+      }
+    }
     const currentContainer = await this.getCurrentContainer(dockerApi, container);
     if (!currentContainer) {
       throw new Error(
@@ -1592,8 +1712,9 @@ class Dockercompose extends Docker {
       );
     }
     const currentContainerSpec = await this.inspectContainer(currentContainer, logContainer);
+    this.ensureComposeRuntimeState(currentContainerSpec, composeFile, service);
     const serviceShouldStart =
-      shouldStart !== undefined ? shouldStart : currentContainerSpec?.State?.Running !== false;
+      shouldStart !== undefined ? shouldStart : currentContainerSpec.State.Running;
 
     logContainer.info(
       `Refresh compose service ${service} from ${composeFile} using Docker Engine API`,
@@ -1612,10 +1733,12 @@ class Dockercompose extends Docker {
     const recreationContainerSpec = {
       ...currentContainerSpec,
       State: {
-        ...currentContainerSpec?.State,
+        ...currentContainerSpec.State,
         Running: serviceShouldStart,
       },
     };
+    // Intentionally bypass Dockercompose.stopAndRemoveContainer() no-op: this
+    // internal Engine API refresh path must perform the real stop/remove.
     await super.stopAndRemoveContainer(
       currentContainer,
       currentContainerSpec,
@@ -1631,6 +1754,15 @@ class Dockercompose extends Docker {
     );
   }
 
+  /**
+   * No-op for generic callers that invoke stop/remove and recreate as two
+   * separate steps (for example health-monitor rollback paths). In compose
+   * mode, recreateContainer() owns the full mutation + runtime refresh and
+   * would otherwise duplicate stop/remove work.
+   *
+   * When a compose refresh must actually stop/remove, we bypass this override
+   * via super.stopAndRemoveContainer() in refreshComposeServiceWithDockerApi().
+   */
   async stopAndRemoveContainer(_currentContainer, _currentContainerSpec, container, logContainer) {
     logContainer.info(
       `Skip direct stop/remove for compose-managed container ${container.name}; using compose lifecycle`,
@@ -1671,17 +1803,17 @@ class Dockercompose extends Docker {
       shouldStart: currentContainerSpec?.State?.Running === true,
       skipPull: true,
       forceRecreate: true,
-    } as {
-      shouldStart: boolean;
-      skipPull: boolean;
-      forceRecreate: boolean;
-      composeFiles?: string[];
-    };
+    } as ComposeRuntimeRefreshOptions;
     if (composeFiles.length > 1) {
       composeUpdateOptions.composeFiles = composeFiles;
     }
 
-    await this.updateContainerWithCompose(composeFile, service, container, composeUpdateOptions);
+    await this.refreshComposeServiceWithDockerApi(
+      composeFile,
+      service,
+      container,
+      composeUpdateOptions,
+    );
   }
 
   async runServicePostStartHooks(container, serviceKey, service) {
