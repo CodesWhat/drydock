@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue';
-import AppIcon from './AppIcon.vue';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 
-const { visible, current, loading, accept, reject, dismiss } = useConfirmDialog();
+const { visible, current, accept, reject, dismiss } = useConfirmDialog();
 const dialogTitleId = 'confirm-dialog-title';
 const dialogDescriptionId = 'confirm-dialog-description';
 
@@ -23,7 +22,7 @@ function isTextEntryTarget(target: EventTarget | null): boolean {
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  if (!visible.value || !current.value || loading.value) {
+  if (!visible.value || !current.value) {
     return;
   }
   if (e.key === 'Escape') {
@@ -77,38 +76,31 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
           <!-- Footer -->
           <div class="px-5 pt-3 pb-4.5 flex items-center justify-end gap-2.5">
             <button
-              class="px-4 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
-              :disabled="loading"
+              class="px-4 py-1.5 dd-rounded text-[11px] font-semibold transition-colors cursor-pointer"
               :aria-label="current.rejectLabel || 'Cancel'"
               :style="{
                 backgroundColor: 'var(--dd-bg-inset)',
                 border: '1px solid var(--dd-border-strong)',
                 color: 'var(--dd-text)',
-                opacity: loading ? '0.5' : '1',
-                cursor: loading ? 'not-allowed' : 'pointer',
               }"
               @click="reject">
               {{ current.rejectLabel || 'Cancel' }}
             </button>
             <button
-              class="px-4 py-1.5 dd-rounded text-[11px] font-semibold transition-colors flex items-center gap-1.5"
-              :disabled="loading"
+              class="px-4 py-1.5 dd-rounded text-[11px] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
               :aria-label="current.acceptLabel || 'Confirm'"
               :style="current.severity === 'danger'
                 ? {
                     backgroundColor: 'var(--dd-danger-muted)',
                     border: '1px solid var(--dd-danger)',
                     color: 'var(--dd-danger)',
-                    cursor: loading ? 'not-allowed' : 'pointer',
                   }
                 : {
                     backgroundColor: 'var(--dd-warning-muted)',
                     border: '1px solid var(--dd-warning)',
                     color: 'var(--dd-warning)',
-                    cursor: loading ? 'not-allowed' : 'pointer',
                   }"
               @click="accept">
-              <AppIcon v-if="loading" name="restart" :size="11" class="animate-spin" />
               {{ current.acceptLabel || 'Confirm' }}
             </button>
           </div>
