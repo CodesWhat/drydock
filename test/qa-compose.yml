@@ -7,6 +7,7 @@ services:
       - "3333:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./qa-compose.yml:/drydock/qa-compose.yml:ro
     environment:
       - DD_RUN_AS_ROOT=true
       - DD_ALLOW_INSECURE_ROOT=true
@@ -38,6 +39,9 @@ services:
       - DD_TRIGGER_SMTP_MYEMAIL_PASS=fakesmtppassword
       - DD_TRIGGER_SMTP_MYEMAIL_FROM=alerts@example.com
       - DD_TRIGGER_SMTP_MYEMAIL_TO=admin@example.com
+      # --- Docker Compose trigger (manual only) ---
+      - DD_TRIGGER_DOCKERCOMPOSE_QA_FILE=/drydock/qa-compose.yml
+      - DD_TRIGGER_DOCKERCOMPOSE_QA_AUTO=false
       # --- GHCR registry (authenticated) ---
       - DD_REGISTRY_GHCR_PRIVATE_USERNAME=myghuser
       - DD_REGISTRY_GHCR_PRIVATE_TOKEN=ghp_fakeGitHubTokenForTesting123
