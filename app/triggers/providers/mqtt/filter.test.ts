@@ -224,6 +224,20 @@ describe('filterContainerInclude', () => {
     filterContainerInclude(flattenedContainer, ['name']);
     expect(flattenedContainer).toEqual(original);
   });
+
+  test('preserves symbol keys while filtering string keys', () => {
+    const secret = Symbol('secret');
+    const flattenedWithSymbol = {
+      ...flattenedContainer,
+      [secret]: 'value',
+    };
+
+    const result = filterContainerInclude(flattenedWithSymbol, ['name']);
+    expect(result).toEqual({
+      name: 'test',
+      [secret]: 'value',
+    });
+  });
 });
 
 describe('HASS_ATTRIBUTE_PRESETS', () => {

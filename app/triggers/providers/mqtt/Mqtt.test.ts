@@ -600,4 +600,22 @@ describe('trigger filtering', () => {
     expect(publishedPayload).toHaveProperty('details_ports_0', '80/tcp');
     expect(publishedPayload).toHaveProperty('labels_com_docker_compose_project', 'app');
   });
+
+  test('should default hass.attributes to full when not provided in runtime config', async () => {
+    mqtt.configuration = {
+      topic: 'dd/container',
+      exclude: '',
+      hass: {
+        filter: {
+          include: '',
+          exclude: '',
+        },
+      },
+    };
+    await mqtt.trigger(containerWithSecurity);
+
+    const publishedPayload = JSON.parse(mqtt.client.publish.mock.calls[0][1]);
+    expect(publishedPayload).toHaveProperty('security_scan_vulnerabilities_0_id', 'CVE-2024-0001');
+    expect(publishedPayload).toHaveProperty('details_ports_0', '80/tcp');
+  });
 });

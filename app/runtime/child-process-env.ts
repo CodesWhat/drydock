@@ -43,9 +43,10 @@ function buildAllowlistedEnvironment(
 export function buildHookCommandEnvironment(
   overrides: Record<string, string> = {},
   parentEnv: NodeJS.ProcessEnv = process.env,
+  allowlistedPrefixes: readonly string[] = [],
 ): ChildProcessEnv {
   return {
-    ...buildAllowlistedEnvironment(parentEnv, BASE_ALLOWLISTED_ENV_KEYS),
+    ...buildAllowlistedEnvironment(parentEnv, BASE_ALLOWLISTED_ENV_KEYS, allowlistedPrefixes),
     ...overrides,
   };
 }

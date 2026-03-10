@@ -38,4 +38,15 @@ describe('runtime/child-process-env', () => {
       SECRET_TOKEN: 'override-only',
     });
   });
+
+  test('buildHookCommandEnvironment can inherit values from allowlisted prefixes', () => {
+    const parentEnv = {
+      DD_HOOK_CUSTOM: 'custom-value',
+      SECRET_TOKEN: 'should-not-leak',
+    };
+
+    expect(buildHookCommandEnvironment({}, parentEnv, ['DD_HOOK_'])).toEqual({
+      DD_HOOK_CUSTOM: 'custom-value',
+    });
+  });
 });
