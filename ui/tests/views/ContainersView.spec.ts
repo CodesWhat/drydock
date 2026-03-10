@@ -424,11 +424,13 @@ describe('ContainersView', () => {
       mockFilterRegistry.value = 'dockerhub';
       mockFilterBouncer.value = 'safe';
       mockFilterServer.value = 'Local';
+      mockFilterKind.value = 'any';
       await mountContainersView([makeContainer()]);
       expect(mockFilterStatus.value).toBe('all');
       expect(mockFilterRegistry.value).toBe('all');
       expect(mockFilterBouncer.value).toBe('all');
       expect(mockFilterServer.value).toBe('all');
+      expect(mockFilterKind.value).toBe('all');
     });
   });
 

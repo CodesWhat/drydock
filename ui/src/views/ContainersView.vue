@@ -296,6 +296,7 @@ function applyFilterSearchFromQuery(queryValue: unknown) {
     filterRegistry.value = 'all';
     filterBouncer.value = 'all';
     filterServer.value = 'all';
+    filterKind.value = 'all';
   }
 }
 
