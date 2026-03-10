@@ -20,11 +20,11 @@ The `oidc` authentication lets you protect drydock access using the [Openid Conn
 | `DD_AUTH_OIDC_{auth_name}_REDIRECT` | ⚪ | Skip internal login page & automatically redirect to the OIDC provider | `true`, `false` | `false` |
 | `DD_AUTH_OIDC_{auth_name}_LOGOUTURL` | ⚪ | Explicit IdP logout URL fallback when discovery metadata has no `end_session_endpoint` | URL | empty |
 | `DD_AUTH_OIDC_{auth_name}_TIMEOUT` | ⚪ | Timeout (in ms) when calling the OIDC provider | Minimum is 500 | `5000` |
+| `DD_PUBLIC_URL` | 🔴 | Public URL of your drydock instance (used to build the OIDC callback URL) | URL | |
 
-<Callout type="info">The callback URL (to configure in the IDP is built as `${drydock_public_url}/auth/oidc/${auth_name}/cb`</Callout>
+<Callout type="info">The callback URL (to configure in the IDP) is built as `${DD_PUBLIC_URL}/auth/oidc/${auth_name}/cb`</Callout>
 
-<Callout type="warn">drydock tries its best to determine the public address to forge redirections on its own.
-If it fails (irregular reverse proxy configuration...), you can enforce the value using the env var `DD_PUBLIC_URL`</Callout>
+<Callout type="warn">`DD_PUBLIC_URL` is **required** when OIDC is configured. Without it, the OIDC provider will fail to register at startup and the login page will show "No authentication methods configured". Check startup logs for the exact error.</Callout>
 
 <Callout type="info">If your IdP is on a different domain and callback fails with `OIDC session is missing or expired`, check `DD_SERVER_COOKIE_SAMESITE` (server config). Default is `lax` for OIDC compatibility; `strict` can break cross-site callbacks. Use `none` only for explicit cross-site/embed cases over HTTPS.</Callout>
 
@@ -88,6 +88,7 @@ services:
     image: codeswhat/drydock
     ...
     environment:
+      - DD_PUBLIC_URL=https://<your_drydock_public_domain>
       - DD_AUTH_OIDC_AUTHELIA_CLIENTID=my-drydock-client-id
       - DD_AUTH_OIDC_AUTHELIA_CLIENTSECRET=this-is-a-very-secure-secret
       - DD_AUTH_OIDC_AUTHELIA_DISCOVERY=https://<your_authelia_public_domain>/.well-known/openid-configuration
@@ -97,6 +98,7 @@ services:
 <Tab value="Docker (Authelia)">
 ```bash
 docker run \
+  -e DD_PUBLIC_URL="https://<your_drydock_public_domain>" \
   -e DD_AUTH_OIDC_AUTHELIA_CLIENTID="my-drydock-client-id" \
   -e DD_AUTH_OIDC_AUTHELIA_CLIENTSECRET="this-is-a-very-secure-secret" \
   -e DD_AUTH_OIDC_AUTHELIA_DISCOVERY="https://<your_authelia_public_domain>/.well-known/openid-configuration" \
@@ -129,6 +131,7 @@ services:
     image: codeswhat/drydock
     ...
     environment:
+      - DD_PUBLIC_URL=https://<your_drydock_public_domain>
       - DD_AUTH_OIDC_AUTH0_CLIENTID=<paste the Client ID from auth0 application settings>
       - DD_AUTH_OIDC_AUTH0_CLIENTSECRET=<paste the Client Secret from auth0 application settings>
       - DD_AUTH_OIDC_AUTH0_DISCOVERY=https://<paste the domain from auth0 application settings>/.well-known/openid-configuration
@@ -138,6 +141,7 @@ services:
 <Tab value="Docker (Auth0)">
 ```bash
 docker run \
+  -e DD_PUBLIC_URL="https://<your_drydock_public_domain>" \
   -e DD_AUTH_OIDC_AUTH0_CLIENTID="<paste the Client ID from auth0 application settings>" \
   -e DD_AUTH_OIDC_AUTH0_CLIENTSECRET="<paste the Client Secret from auth0 application settings>" \
   -e DD_AUTH_OIDC_AUTH0_DISCOVERY="https://<paste the domain from auth0 application settings>/.well-known/openid-configuration" \
@@ -182,6 +186,7 @@ services:
     image: codeswhat/drydock
     ...
     environment:
+      - DD_PUBLIC_URL=https://<your_drydock_public_domain>
       - DD_AUTH_OIDC_AUTHENTIK_CLIENTID=<paste the Client ID from authentik drydock_oidc provider>
       - DD_AUTH_OIDC_AUTHENTIK_CLIENTSECRET=<paste the Client Secret from authentik drydock_oidc provider>
       - DD_AUTH_OIDC_AUTHENTIK_DISCOVERY=<authentik_url>/application/o/<authentik_application_name>/.well-known/openid-configuration
@@ -192,6 +197,7 @@ services:
 <Tab value="Docker (Authentik)">
 ```bash
 docker run \
+  -e DD_PUBLIC_URL="https://<your_drydock_public_domain>" \
   -e DD_AUTH_OIDC_AUTHENTIK_CLIENTID="<paste the Client ID from authentik drydock_oidc provider>" \
   -e DD_AUTH_OIDC_AUTHENTIK_CLIENTSECRET="<paste the Client Secret from authentik drydock_oidc provider>" \
   -e DD_AUTH_OIDC_AUTHENTIK_DISCOVERY="<authentik_url>/application/o/<authentik_application_name>/.well-known/openid-configuration" \
@@ -217,6 +223,7 @@ services:
     image: codeswhat/drydock
     ...
     environment:
+      - DD_PUBLIC_URL=https://<your_drydock_public_domain>
       - DD_AUTH_OIDC_DEX_CLIENTID=<dex_client_id>
       - DD_AUTH_OIDC_DEX_CLIENTSECRET=<dex_client_secret>
       - DD_AUTH_OIDC_DEX_DISCOVERY=https://<your_dex_public_domain>/dex/.well-known/openid-configuration
@@ -228,6 +235,7 @@ services:
 <Tab value="Docker (Dex)">
 ```bash
 docker run \
+  -e DD_PUBLIC_URL="https://<your_drydock_public_domain>" \
   -e DD_AUTH_OIDC_DEX_CLIENTID="<dex_client_id>" \
   -e DD_AUTH_OIDC_DEX_CLIENTSECRET="<dex_client_secret>" \
   -e DD_AUTH_OIDC_DEX_DISCOVERY="https://<your_dex_public_domain>/dex/.well-known/openid-configuration" \
