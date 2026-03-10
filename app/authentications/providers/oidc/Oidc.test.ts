@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import express from 'express';
 import { ClientSecretPost, Configuration } from 'openid-client';
 import * as configuration from '../../../configuration/index.js';
@@ -12,6 +15,18 @@ const configurationValid = {
   redirect: false,
   timeout: 5000,
 };
+
+async function createTemporaryCaFile(
+  contents = '-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----\n',
+) {
+  const tempDirectory = await mkdtemp(path.join(os.tmpdir(), 'oidc-ca-'));
+  const caPath = path.join(tempDirectory, 'ca.pem');
+  await writeFile(caPath, contents);
+  return {
+    caPath,
+    cleanup: async () => rm(tempDirectory, { recursive: true, force: true }),
+  };
+}
 
 // --- Factory helpers for repeated test fixtures ---
 
@@ -101,6 +116,7 @@ beforeEach(() => {
     fetchUserInfo: vi.fn(),
     skipSubjectCheck: Symbol('skip-subject-check'),
     ClientSecretPost: vi.fn(),
+    customFetch: Symbol('customFetch'),
     discovery: vi.fn(),
     buildEndSessionUrl: vi.fn(),
   };
@@ -126,7 +142,10 @@ test('validateConfiguration should return validated configuration when valid', a
   configuration.ddEnvVars.DD_PUBLIC_URL = 'https://dd.example.com';
   try {
     const validatedConfiguration = oidc.validateConfiguration(configurationValid);
-    expect(validatedConfiguration).toStrictEqual(configurationValid);
+    expect(validatedConfiguration).toStrictEqual({
+      ...configurationValid,
+      insecure: false,
+    });
   } finally {
     if (previousPublicUrl === undefined) {
       delete configuration.ddEnvVars.DD_PUBLIC_URL;
@@ -168,7 +187,10 @@ test('validateConfiguration should allow optional logouturl override', async () 
       logouturl: 'https://idp.example.com/logout',
     };
     const validatedConfiguration = oidc.validateConfiguration(configWithLogoutUrl);
-    expect(validatedConfiguration).toStrictEqual(configWithLogoutUrl);
+    expect(validatedConfiguration).toStrictEqual({
+      ...configWithLogoutUrl,
+      insecure: false,
+    });
   } finally {
     if (previousPublicUrl === undefined) {
       delete configuration.ddEnvVars.DD_PUBLIC_URL;
@@ -188,6 +210,29 @@ test('validateConfiguration should reject non-http logouturl schemes', async () 
         logouturl: 'mailto:security@example.com',
       });
     }).toThrowError();
+  } finally {
+    if (previousPublicUrl === undefined) {
+      delete configuration.ddEnvVars.DD_PUBLIC_URL;
+    } else {
+      configuration.ddEnvVars.DD_PUBLIC_URL = previousPublicUrl;
+    }
+  }
+});
+
+test('validateConfiguration should allow cafile and insecure TLS options', async () => {
+  const previousPublicUrl = configuration.ddEnvVars.DD_PUBLIC_URL;
+  configuration.ddEnvVars.DD_PUBLIC_URL = 'https://dd.example.com';
+  try {
+    const validatedConfiguration = oidc.validateConfiguration({
+      ...configurationValid,
+      cafile: '/certs/private-ca.pem',
+      insecure: true,
+    });
+    expect(validatedConfiguration).toStrictEqual({
+      ...configurationValid,
+      cafile: '/certs/private-ca.pem',
+      insecure: true,
+    });
   } finally {
     if (previousPublicUrl === undefined) {
       delete configuration.ddEnvVars.DD_PUBLIC_URL;
@@ -306,6 +351,24 @@ test('maskConfiguration should include configured logouturl', async () => {
     discovery: 'https://idp/.well-known/openid-configuration',
     redirect: false,
     logouturl: 'https://idp.example.com/logout',
+    timeout: 5000,
+  });
+});
+
+test('maskConfiguration should mask configured cafile', async () => {
+  oidc.configuration = {
+    ...configurationValid,
+    cafile: '/etc/ssl/private/oidc-ca.pem',
+    insecure: true,
+  };
+
+  expect(oidc.maskConfiguration()).toEqual({
+    clientid: '[REDACTED]',
+    clientsecret: '[REDACTED]',
+    discovery: 'https://idp/.well-known/openid-configuration',
+    redirect: false,
+    cafile: '[REDACTED]',
+    insecure: true,
     timeout: 5000,
   });
 });
@@ -1147,6 +1210,7 @@ test('initAuthentication should discover and configure client', async () => {
 
   const callArgs = openidClientMock.discovery.mock.calls[0];
   expect(callArgs[4].execute).toEqual([]);
+  expect(callArgs[4][openidClientMock.customFetch]).toBeUndefined();
   expect(oidc.logoutUrl).toBe('https://idp/logout');
 });
 
@@ -1210,6 +1274,74 @@ test('initAuthentication should handle non-Error end session url failure', async
   expect(oidc.log.warn).toHaveBeenCalledWith(
     expect.stringContaining('End session url is not supported (unknown error)'),
   );
+});
+
+test('initAuthentication should configure custom fetch when cafile is set', async () => {
+  const { caPath, cleanup } = await createTemporaryCaFile();
+  const fetchSpy = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(new Response(null, { status: 200 }) as Response);
+  oidc.configuration = {
+    ...configurationValid,
+    cafile: caPath,
+  };
+  const mockClient = {};
+  openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
+  openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
+
+  try {
+    await oidc.initAuthentication();
+
+    const callArgs = openidClientMock.discovery.mock.calls[0];
+    const customFetch = callArgs[4][openidClientMock.customFetch];
+    expect(typeof customFetch).toBe('function');
+
+    await customFetch('https://idp.example.com/.well-known/openid-configuration', {
+      method: 'GET',
+    });
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://idp.example.com/.well-known/openid-configuration',
+      expect.objectContaining({ dispatcher: expect.anything() }),
+    );
+  } finally {
+    fetchSpy.mockRestore();
+    await cleanup();
+  }
+});
+
+test('initAuthentication should configure custom fetch and warn when insecure TLS is enabled', async () => {
+  const fetchSpy = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(new Response(null, { status: 200 }) as Response);
+  oidc.configuration = {
+    ...configurationValid,
+    insecure: true,
+  };
+  const mockClient = {};
+  openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
+  openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
+
+  try {
+    await oidc.initAuthentication();
+
+    expect(oidc.log.warn).toHaveBeenCalledWith(
+      'TLS certificate verification disabled for OIDC - do not use in production',
+    );
+
+    const callArgs = openidClientMock.discovery.mock.calls[0];
+    const customFetch = callArgs[4][openidClientMock.customFetch];
+    expect(typeof customFetch).toBe('function');
+
+    await customFetch('https://idp.example.com/.well-known/openid-configuration', {
+      method: 'GET',
+    });
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://idp.example.com/.well-known/openid-configuration',
+      expect.objectContaining({ dispatcher: expect.anything() }),
+    );
+  } finally {
+    fetchSpy.mockRestore();
+  }
 });
 
 test('initAuthentication should use configured logouturl when end session url is unsupported', async () => {
