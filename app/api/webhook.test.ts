@@ -1051,6 +1051,28 @@ describe('Webhook Router', () => {
       });
     });
 
+    test('should trigger update and return 200 with a dockercompose trigger', async () => {
+      const container = { name: 'my-nginx', image: { name: 'nginx' } };
+      mockGetContainers.mockReturnValue([container]);
+      const mockTrigger = vi.fn().mockResolvedValue(undefined);
+      mockGetState.mockReturnValue({
+        watcher: {},
+        trigger: { 'dockercompose.default': { type: 'dockercompose', trigger: mockTrigger } },
+      });
+
+      const handler = getHandler('post', '/update/:containerName');
+      const req = createMockRequest({ params: { containerName: 'my-nginx' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockTrigger).toHaveBeenCalledWith(container);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Update triggered for container my-nginx',
+        result: { container: 'my-nginx' },
+      });
+    });
+
     test('should sanitize reflected containerName in successful update response', async () => {
       const containerName = '\u001b[31mmy-nginx\u001b[0m\nnext';
       const container = { name: containerName, image: { name: 'nginx' } };
