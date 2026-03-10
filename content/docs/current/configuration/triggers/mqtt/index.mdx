@@ -23,7 +23,9 @@ The `mqtt` trigger lets you send container update notifications to an MQTT broke
 | `DD_TRIGGER_MQTT_{trigger_name}_HASS_DISCOVERY` | ⚪ | Enable [Home-assistant](https://www.home-assistant.io/) integration including discovery | `true`, `false` | `false` |
 | `DD_TRIGGER_MQTT_{trigger_name}_HASS_PREFIX` | ⚪ | Base topic for hass entity discovery | | `homeassistant` |
 | `DD_TRIGGER_MQTT_{trigger_name}_HASS_ATTRIBUTES` | ⚪ | Attribute preset controlling which container fields are included in MQTT payloads. `full` sends everything; `short` excludes large fields like SBOM documents, scan vulnerabilities, details, and labels. | `full`, `short` | `full` |
-| `DD_TRIGGER_MQTT_{trigger_name}_EXCLUDE` | ⚪ | Comma-separated dot-paths to exclude from the MQTT payload. Overrides the `HASS_ATTRIBUTES` preset when set. For example `security.sbom.documents,labels` removes those nested fields before publishing. | Comma-separated dot-paths | |
+| `DD_TRIGGER_MQTT_{trigger_name}_HASS_FILTER_INCLUDE` | ⚪ | Comma-separated list of flattened MQTT attribute keys to keep (include-mode). When set, only these keys are published. | Comma-separated flattened keys | |
+| `DD_TRIGGER_MQTT_{trigger_name}_HASS_FILTER_EXCLUDE` | ⚪ | Comma-separated list of flattened MQTT attribute keys to remove (exclude-mode). Used when `HASS_FILTER_INCLUDE` is empty. | Comma-separated flattened keys | |
+| `DD_TRIGGER_MQTT_{trigger_name}_EXCLUDE` | ⚪ | Legacy comma-separated dot-paths to exclude from the nested container object before flattening. Used only when both `HASS_FILTER_INCLUDE` and `HASS_FILTER_EXCLUDE` are empty. | Comma-separated dot-paths | |
 | `DD_TRIGGER_MQTT_{trigger_name}_TLS_CACHAIN` | ⚪ | The path to the file containing the server CA chain (when TLS with a private Certificate Authority) | Any valid file path | |
 | `DD_TRIGGER_MQTT_{trigger_name}_TLS_CLIENTCERT` | ⚪ | The path to the file containing the client public certificate (when TLS mutual authentication) | Any valid file path | |
 | `DD_TRIGGER_MQTT_{trigger_name}_TLS_CLIENTKEY` | ⚪ | The path to the file containing the client private key (when TLS mutual authentication) | Any valid file path | |
@@ -215,22 +217,42 @@ Entities expose all the details of the container as attributes:
 
 Container MQTT payloads can include large nested fields (SBOM documents, scan vulnerability arrays, environment details, labels) that exceed Home Assistant's `json_attributes_topic` size limits or clutter entity attributes.
 
-Two layers of filtering are available:
+Filtering is applied in this precedence order:
 
-### Layer 1: Attribute preset (`HASS_ATTRIBUTES`)
+1. `HASS_FILTER_INCLUDE` (flattened key include list)
+2. `HASS_FILTER_EXCLUDE` (flattened key exclude list)
+3. `EXCLUDE` (legacy nested dot-path exclude list)
+4. `HASS_ATTRIBUTES` preset fallback
+
+### Include mode (`HASS_FILTER_INCLUDE`)
+
+Set `DD_TRIGGER_MQTT_{trigger_name}_HASS_FILTER_INCLUDE` to keep only selected flattened keys.
+
+```yaml
+environment:
+  - DD_TRIGGER_MQTT_MOSQUITTO_HASS_FILTER_INCLUDE=name,image_name,update_available,result_tag
+```
+
+### Exclude mode (`HASS_FILTER_EXCLUDE`)
+
+Set `DD_TRIGGER_MQTT_{trigger_name}_HASS_FILTER_EXCLUDE` to remove selected flattened keys.
+
+```yaml
+environment:
+  - DD_TRIGGER_MQTT_MOSQUITTO_HASS_FILTER_EXCLUDE=security_sbom_documents_0_spdx_version,security_scan_vulnerabilities_0_id
+```
+
+### Legacy nested exclude (`EXCLUDE`)
+
+`DD_TRIGGER_MQTT_{trigger_name}_EXCLUDE` still supports comma-separated nested dot-paths (for example `security.sbom.documents,labels`). This legacy filter is only used when `HASS_FILTER_INCLUDE` and `HASS_FILTER_EXCLUDE` are both empty.
+
+### Attribute preset fallback (`HASS_ATTRIBUTES`)
+
+When no explicit include/exclude list is configured, `HASS_ATTRIBUTES` is used:
 
 | Preset | Behavior |
 | --- | --- |
 | `full` (default) | Sends the entire container object — no filtering |
 | `short` | Excludes `security.sbom.documents`, `security.updateSbom.documents`, `security.scan.vulnerabilities`, `security.updateScan.vulnerabilities`, `details`, and `labels` |
 
-### Layer 2: Explicit exclude paths (`EXCLUDE`)
-
-Set `DD_TRIGGER_MQTT_{trigger_name}_EXCLUDE` to a comma-separated list of dot-paths to remove from the payload. When `EXCLUDE` is set, it overrides the preset entirely.
-
-```yaml
-environment:
-  - DD_TRIGGER_MQTT_MOSQUITTO_EXCLUDE=security.sbom.documents,security.scan.vulnerabilities,labels
-```
-
-<Callout type="info">Filtering clones only the path ancestors needed for deletion — unrelated fields keep their original references with no deep-clone overhead. When no filtering is configured, the original container object is passed through with zero overhead.</Callout>
+<Callout type="info">`HASS_FILTER_INCLUDE` and `HASS_FILTER_EXCLUDE` match flattened MQTT keys (snake_case + underscore delimiter), because filtering is applied after flattening to the payload shape Home Assistant receives.</Callout>
