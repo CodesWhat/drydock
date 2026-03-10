@@ -121,3 +121,31 @@ export function filterContainer<T>(container: T, excludePaths: string[]): T {
 
   return clone as T;
 }
+
+/**
+ * Filter a flat container object by keeping only the given top-level keys.
+ * Returns the original container when includePaths is empty (zero overhead).
+ */
+export function filterContainerInclude<T>(container: T, includePaths: string[]): T {
+  if (includePaths.length === 0) {
+    return container;
+  }
+  if (!isRecord(container)) {
+    return container;
+  }
+
+  const sourceRoot = container as Record<string, unknown>;
+  const clone = cloneObjectShallow(sourceRoot);
+  const includeSet = new Set(includePaths);
+
+  for (const key of Reflect.ownKeys(sourceRoot)) {
+    if (typeof key !== 'string') {
+      continue;
+    }
+    if (!includeSet.has(key)) {
+      delete clone[key];
+    }
+  }
+
+  return clone as T;
+}

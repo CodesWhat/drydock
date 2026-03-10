@@ -32,6 +32,10 @@ const configurationValid = {
     enabled: false,
     prefix: 'homeassistant',
     attributes: 'full',
+    filter: {
+      include: '',
+      exclude: '',
+    },
   },
   tls: {
     clientkey: undefined,
@@ -112,6 +116,10 @@ test('validateConfiguration should default hass.discovery to true when hass.enab
     prefix: 'homeassistant',
     discovery: true,
     attributes: 'full',
+    filter: {
+      include: '',
+      exclude: '',
+    },
   });
 });
 
@@ -157,6 +165,11 @@ test('initTrigger should init Mqtt client', async () => {
       enabled: true,
       discovery: true,
       prefix: 'homeassistant',
+      attributes: 'full',
+      filter: {
+        include: '',
+        exclude: '',
+      },
     },
   };
   const spy = vi.spyOn(mqttClient, 'connectAsync');
@@ -176,7 +189,13 @@ test.each(containerData)('trigger should format json message payload as expected
   mqtt.configuration = {
     topic: 'dd/container',
     exclude: '',
-    hass: { attributes: 'full' },
+    hass: {
+      attributes: 'full',
+      filter: {
+        include: '',
+        exclude: '',
+      },
+    },
   };
   const container = {
     id: '31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816',
@@ -225,7 +244,16 @@ test('initTrigger should read TLS files when configured', async () => {
       cachain: '/path/to/ca.pem',
       rejectunauthorized: false,
     },
-    hass: { enabled: false },
+    hass: {
+      enabled: false,
+      discovery: false,
+      prefix: 'homeassistant',
+      attributes: 'full',
+      filter: {
+        include: '',
+        exclude: '',
+      },
+    },
   };
   await mqtt.initTrigger();
 
@@ -259,11 +287,31 @@ test('handleContainerEvent should log when trigger fails', async () => {
   expect(debugSpy).toHaveBeenCalledWith(expect.any(Error));
 });
 
+test('handleContainerEvent should skip trigger when mustTrigger is false', async () => {
+  const mustTriggerSpy = vi.spyOn(mqtt, 'mustTrigger').mockReturnValue(false);
+  const triggerSpy = vi.spyOn(mqtt, 'trigger').mockResolvedValue(undefined);
+
+  mqtt.handleContainerEvent({ name: 'ignored', watcher: 'local' });
+  await Promise.resolve();
+
+  expect(mustTriggerSpy).toHaveBeenCalledWith({ name: 'ignored', watcher: 'local' });
+  expect(triggerSpy).not.toHaveBeenCalled();
+});
+
 test('initTrigger should execute registered container event callbacks', async () => {
   mqtt.configuration = {
     ...configurationValid,
     clientid: 'dd',
-    hass: { enabled: false, discovery: false, prefix: 'homeassistant' },
+    hass: {
+      enabled: false,
+      discovery: false,
+      prefix: 'homeassistant',
+      attributes: 'full',
+      filter: {
+        include: '',
+        exclude: '',
+      },
+    },
   };
   vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({
     publish: vi.fn().mockResolvedValue(undefined),
@@ -283,7 +331,16 @@ test('deregister then initTrigger should not duplicate container event callbacks
   mqtt.configuration = {
     ...configurationValid,
     clientid: 'dd',
-    hass: { enabled: false, discovery: false, prefix: 'homeassistant' },
+    hass: {
+      enabled: false,
+      discovery: false,
+      prefix: 'homeassistant',
+      attributes: 'full',
+      filter: {
+        include: '',
+        exclude: '',
+      },
+    },
   };
   vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({
     publish: vi.fn().mockResolvedValue(undefined),
@@ -326,6 +383,36 @@ describe('hass.attributes validation', () => {
         hass: { attributes: 'invalid' },
       });
     }).toThrowError(joi.ValidationError);
+  });
+});
+
+describe('hass.filter validation', () => {
+  test('should default hass.filter include and exclude to empty strings', () => {
+    const validated = mqtt.validateConfiguration({
+      url: configurationValid.url,
+      clientid: 'dd',
+    });
+    expect(validated.hass.filter).toStrictEqual({
+      include: '',
+      exclude: '',
+    });
+  });
+
+  test('should accept hass.filter include and exclude', () => {
+    const validated = mqtt.validateConfiguration({
+      url: configurationValid.url,
+      clientid: 'dd',
+      hass: {
+        filter: {
+          include: 'name,image_name,result_tag',
+          exclude: 'security_sbom_documents_0_spdx_version',
+        },
+      },
+    });
+    expect(validated.hass.filter).toStrictEqual({
+      include: 'name,image_name,result_tag',
+      exclude: 'security_sbom_documents_0_spdx_version',
+    });
   });
 });
 
@@ -392,7 +479,13 @@ describe('trigger filtering', () => {
     mqtt.configuration = {
       topic: 'dd/container',
       exclude: '',
-      hass: { attributes: 'short' },
+      hass: {
+        attributes: 'short',
+        filter: {
+          include: '',
+          exclude: '',
+        },
+      },
     };
     await mqtt.trigger(containerWithSecurity);
 
@@ -409,7 +502,13 @@ describe('trigger filtering', () => {
     mqtt.configuration = {
       topic: 'dd/container',
       exclude: '',
-      hass: { attributes: 'full' },
+      hass: {
+        attributes: 'full',
+        filter: {
+          include: '',
+          exclude: '',
+        },
+      },
     };
     await mqtt.trigger(containerWithSecurity);
 
@@ -423,7 +522,13 @@ describe('trigger filtering', () => {
     mqtt.configuration = {
       topic: 'dd/container',
       exclude: 'details',
-      hass: { attributes: 'short' },
+      hass: {
+        attributes: 'short',
+        filter: {
+          include: '',
+          exclude: '',
+        },
+      },
     };
     await mqtt.trigger(containerWithSecurity);
 
@@ -434,11 +539,59 @@ describe('trigger filtering', () => {
     expect(publishedPayload).toHaveProperty('security_scan_vulnerabilities_0_id', 'CVE-2024-0001');
   });
 
+  test('should use hass.filter.include over all other filters when set', async () => {
+    mqtt.configuration = {
+      topic: 'dd/container',
+      exclude: 'details',
+      hass: {
+        attributes: 'short',
+        filter: {
+          include: 'name,image_name,result_tag',
+          exclude: 'security_scan_vulnerabilities_0_id',
+        },
+      },
+    };
+    await mqtt.trigger(containerWithSecurity);
+
+    const publishedPayload = JSON.parse(mqtt.client.publish.mock.calls[0][1]);
+    expect(publishedPayload).toEqual({
+      name: 'filtered-test',
+      image_name: 'nginx',
+      result_tag: '1.26',
+    });
+  });
+
+  test('should use hass.filter.exclude over legacy exclude and hass.attributes', async () => {
+    mqtt.configuration = {
+      topic: 'dd/container',
+      exclude: 'details',
+      hass: {
+        attributes: 'short',
+        filter: {
+          include: '',
+          exclude: 'security_sbom_documents_0_spdx_version',
+        },
+      },
+    };
+    await mqtt.trigger(containerWithSecurity);
+
+    const publishedPayload = JSON.parse(mqtt.client.publish.mock.calls[0][1]);
+    expect(publishedPayload).not.toHaveProperty('security_sbom_documents_0_spdx_version');
+    expect(publishedPayload).toHaveProperty('details_ports_0', '80/tcp');
+    expect(publishedPayload).toHaveProperty('security_scan_vulnerabilities_0_id', 'CVE-2024-0001');
+  });
+
   test('should publish full container when both are default', async () => {
     mqtt.configuration = {
       topic: 'dd/container',
       exclude: '',
-      hass: { attributes: 'full' },
+      hass: {
+        attributes: 'full',
+        filter: {
+          include: '',
+          exclude: '',
+        },
+      },
     };
     await mqtt.trigger(containerWithSecurity);
 
