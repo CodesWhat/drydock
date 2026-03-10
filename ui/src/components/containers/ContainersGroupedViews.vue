@@ -303,22 +303,32 @@ const {
                 <AppIcon name="lock" :size="13" />
               </button>
               <button v-else-if="c.newTag"
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
+                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                      :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                      :disabled="actionInProgress === c.name"
                       v-tooltip.top="tt('Update')" @click.stop="confirmUpdate(c.name)">
                 <AppIcon name="cloud-download" :size="16" />
               </button>
               <button v-else-if="c.status === 'running'"
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95"
+                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                      :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                      :disabled="actionInProgress === c.name"
                       v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
                 <AppIcon name="stop" :size="14" />
               </button>
               <button v-else
-                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95"
+                      class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                      :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                      :disabled="actionInProgress === c.name"
                       v-tooltip.top="tt('Start')" @click.stop="startContainer(c.name)">
                 <AppIcon name="play" :size="14" />
               </button>
-              <button class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow] dd-text-muted hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95"
-                      :class="openActionsMenu === c.name ? 'dd-bg-elevated dd-text' : ''"
+              <button class="w-8 h-8 dd-rounded flex items-center justify-center transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                      :class="[
+                        actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95',
+                        openActionsMenu === c.name && actionInProgress !== c.name ? 'dd-bg-elevated dd-text' : '',
+                      ]"
+                      :disabled="actionInProgress === c.name"
                       v-tooltip.top="tt('More')" @click.stop="toggleActionsMenu(c.name, $event)">
                 <AppIcon name="more" :size="13" />
               </button>
@@ -343,15 +353,19 @@ const {
               </div>
               <!-- Updatable: split button -->
               <div v-else class="inline-flex dd-rounded overflow-hidden"
+                   :class="actionInProgress === c.name ? 'opacity-50' : ''"
                    :style="{ border: '1px solid var(--dd-success)' }">
                 <button class="inline-flex items-center justify-center whitespace-nowrap px-3 py-1.5 text-[11px] font-bold tracking-wide transition-colors"
+                        :class="actionInProgress === c.name ? 'cursor-not-allowed' : ''"
                         :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }"
+                        :disabled="actionInProgress === c.name"
                         @click.stop="confirmUpdate(c.name)">
                   <AppIcon name="cloud-download" :size="11" class="mr-1" /> Update
                 </button>
                 <button class="inline-flex items-center justify-center w-7 transition-colors"
+                        :class="actionInProgress === c.name ? 'cursor-not-allowed' : openActionsMenu === c.name ? 'brightness-125' : ''"
                         :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', borderLeft: '1px solid var(--dd-success)' }"
-                        :class="openActionsMenu === c.name ? 'brightness-125' : ''"
+                        :disabled="actionInProgress === c.name"
                         @click.stop="toggleActionsMenu(c.name, $event)">
                   <AppIcon name="chevron-down" :size="11" />
                 </button>
@@ -359,16 +373,22 @@ const {
             </div>
             <div v-else class="flex items-center justify-end gap-1">
               <button v-if="c.status === 'running'"
-                      class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-danger hover:dd-bg-hover"
+                      class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors"
+                      :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-danger hover:dd-bg-hover'"
+                      :disabled="actionInProgress === c.name"
                       v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
                 <AppIcon name="stop" :size="11" />
               </button>
               <button v-else
-                      class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-success hover:dd-bg-hover"
+                      class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors"
+                      :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-success hover:dd-bg-hover'"
+                      :disabled="actionInProgress === c.name"
                       v-tooltip.top="tt('Start')" @click.stop="startContainer(c.name)">
                 <AppIcon name="play" :size="11" />
               </button>
-              <button class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text hover:dd-bg-hover"
+              <button class="w-6 h-6 dd-rounded-sm flex items-center justify-center transition-colors"
+                      :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text hover:dd-bg-hover'"
+                      :disabled="actionInProgress === c.name"
                       v-tooltip.top="tt('Restart')" @click.stop="confirmRestart(c.name)">
                 <AppIcon name="restart" :size="11" />
               </button>
@@ -556,25 +576,35 @@ const {
             <div class="flex items-center gap-1.5">
               <template v-if="containerActionsEnabled">
                 <button v-if="c.status === 'running'"
-                        class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-danger hover:dd-bg-elevated"
+                        class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors"
+                        :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-danger hover:dd-bg-elevated'"
+                        :disabled="actionInProgress === c.name"
                         v-tooltip.top="tt('Stop')" @click.stop="confirmStop(c.name)">
                   <AppIcon name="stop" :size="14" />
                 </button>
                 <button v-else
-                        class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-success hover:dd-bg-elevated"
+                        class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors"
+                        :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'"
+                        :disabled="actionInProgress === c.name"
                         v-tooltip.top="tt('Start')" @click.stop="startContainer(c.name)">
                   <AppIcon name="play" :size="14" />
                 </button>
-                <button class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                <button class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors"
+                        :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
+                        :disabled="actionInProgress === c.name"
                         v-tooltip.top="tt('Restart')" @click.stop="confirmRestart(c.name)">
                   <AppIcon name="restart" :size="14" />
                 </button>
-                <button class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-secondary hover:dd-bg-elevated"
+                <button class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors"
+                        :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-secondary hover:dd-bg-elevated'"
+                        :disabled="actionInProgress === c.name"
                         v-tooltip.top="tt('Scan')" @click.stop="scanContainer(c.name)">
                   <AppIcon name="security" :size="14" />
                 </button>
                 <button v-if="c.newTag"
-                        class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors dd-text-muted hover:dd-text-success hover:dd-bg-elevated"
+                        class="w-7 h-7 dd-rounded-sm flex items-center justify-center transition-colors"
+                        :class="actionInProgress === c.name ? 'dd-text-muted opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'"
+                        :disabled="actionInProgress === c.name"
                         v-tooltip.top="tt('Update')" @click.stop="confirmUpdate(c.name)">
                   <AppIcon name="cloud-download" :size="14" />
                 </button>

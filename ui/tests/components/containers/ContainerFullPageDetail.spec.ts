@@ -16,6 +16,7 @@ const selectedContainer = ref({
 });
 
 const activeDetailTab = ref('overview');
+const actionInProgress = ref<string | null>(null);
 const closeFullPage = vi.fn();
 const confirmStop = vi.fn();
 const startContainer = vi.fn();
@@ -34,6 +35,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     scanContainer,
     confirmUpdate,
     confirmDelete,
+    actionInProgress,
     registryColorBg: () => '#eee',
     registryColorText: () => '#333',
     registryLabel: () => 'hub',
@@ -57,6 +59,7 @@ function factory() {
 describe('ContainerFullPageDetail', () => {
   afterEach(() => {
     activeDetailTab.value = 'overview';
+    actionInProgress.value = null;
     selectedContainer.value = {
       id: 'container-1',
       name: 'nginx',
@@ -98,5 +101,67 @@ describe('ContainerFullPageDetail', () => {
     expect(backBtn).toBeDefined();
     await backBtn?.trigger('click');
     expect(closeFullPage).toHaveBeenCalled();
+  });
+
+  describe('aria-labels', () => {
+    it('has aria-label on all action buttons', () => {
+      const wrapper = factory();
+      const labels = ['Stop container', 'Restart container', 'Scan container', 'Delete container'];
+      for (const label of labels) {
+        expect(wrapper.find(`button[aria-label="${label}"]`).exists()).toBe(true);
+      }
+    });
+
+    it('has aria-label on Start button when container is stopped', () => {
+      selectedContainer.value.status = 'stopped';
+      const wrapper = factory();
+      expect(wrapper.find('button[aria-label="Start container"]').exists()).toBe(true);
+    });
+
+    it('has aria-label on Update button when update is available', () => {
+      selectedContainer.value.newTag = '2.0';
+      selectedContainer.value.updateKind = 'major';
+      const wrapper = factory();
+      expect(wrapper.find('button[aria-label="Update container"]').exists()).toBe(true);
+    });
+  });
+
+  describe('disabled state during action', () => {
+    it('disables action buttons when actionInProgress matches container name', () => {
+      actionInProgress.value = 'nginx';
+      const wrapper = factory();
+      const actionButtons = wrapper
+        .findAll('button')
+        .filter((b) => b.attributes('aria-label')?.endsWith('container'));
+      for (const btn of actionButtons) {
+        expect(btn.attributes('disabled')).toBeDefined();
+      }
+    });
+
+    it('does not disable buttons when actionInProgress is a different container', () => {
+      actionInProgress.value = 'other-container';
+      const wrapper = factory();
+      const actionButtons = wrapper
+        .findAll('button')
+        .filter((b) => b.attributes('aria-label')?.endsWith('container'));
+      for (const btn of actionButtons) {
+        expect(btn.attributes('disabled')).toBeUndefined();
+      }
+    });
+
+    it('applies opacity-50 class when disabled', () => {
+      actionInProgress.value = 'nginx';
+      const wrapper = factory();
+      const stopBtn = wrapper.find('button[aria-label="Stop container"]');
+      expect(stopBtn.classes()).toContain('opacity-50');
+      expect(stopBtn.classes()).toContain('cursor-not-allowed');
+    });
+
+    it('does not apply opacity-50 class when not disabled', () => {
+      actionInProgress.value = null;
+      const wrapper = factory();
+      const stopBtn = wrapper.find('button[aria-label="Stop container"]');
+      expect(stopBtn.classes()).not.toContain('opacity-50');
+    });
   });
 });
