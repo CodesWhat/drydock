@@ -4,7 +4,9 @@
 # Pre-push pipeline (piped = sequential, fail-fast):
 #   1. Lint gate (~20s) — catches formatting/lint before burning CPU
 #   2. Build + test (~26s parallel) — independent workspaces run concurrently
-#   3. E2E + security (advisory)
+#   3. E2E + advisory scans (zizmor)
+#
+# Snyk scans are CI-only (release workflow) to preserve the 200/month quota.
 #
 # Biome runs directly (not via qlty) because qlty's biome integration
 # does not reliably apply fixes. Qlty handles all other linters.
@@ -52,19 +54,3 @@ pre-push:
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
       priority: 6
-
-    # ── Local security gates (skip if tool missing or feature branch) ─
-    # Snyk has a 200 scan/month limit — only run on release/main pushes.
-    snyk-deps:
-      root: app/
-      run: ../scripts/snyk-deps-gate.sh --org=codeswhat
-      skip:
-        - run: '! command -v snyk >/dev/null 2>&1'
-        - run: 'git rev-parse --abbrev-ref HEAD | grep -qvE "^(main|release/)"'
-      priority: 7
-    snyk-code:
-      run: scripts/snyk-code-gate.sh --org=codeswhat
-      skip:
-        - run: '! command -v snyk >/dev/null 2>&1'
-        - run: 'git rev-parse --abbrev-ref HEAD | grep -qvE "^(main|release/)"'
-      priority: 8
