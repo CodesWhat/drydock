@@ -1,18 +1,14 @@
-import { execFile } from 'node:child_process';
 import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import yaml, { type Pair, type ParsedNode } from 'yaml';
 import type { ContainerImage } from '../../../model/container.js';
 import { getState } from '../../../registry/index.js';
-import { buildComposeCommandEnvironment } from '../../../runtime/child-process-env.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
 import { sleep } from '../../../util/sleep.js';
 import Docker from '../docker/Docker.js';
 import ComposeFileLockManager from './ComposeFileLockManager.js';
 
-const COMPOSE_COMMAND_TIMEOUT_MS = 60_000;
-const COMPOSE_COMMAND_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 const YAML_MAX_ALIAS_COUNT = 10_000;
 const COMPOSE_RENAME_MAX_RETRIES = 5;
 const COMPOSE_RENAME_RETRY_MS = 200;
@@ -1084,148 +1080,25 @@ class Dockercompose extends Docker {
     const effectiveComposeFileChain = composeFileChain.includes(composeFilePath)
       ? composeFileChain
       : [...composeFileChain, composeFilePath];
-
-    const composeDirectory = path.dirname(composeFilePath);
-    const composeFileName = path.basename(composeFilePath);
-    const validationFilePath = path.join(
-      composeDirectory,
-      `.${composeFileName}.validate-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    );
-
-    await fs.writeFile(validationFilePath, composeFileText);
-    const validationArguments = [
-      ...effectiveComposeFileChain.flatMap((composeFile) => [
-        '-f',
-        composeFile === composeFilePath ? validationFilePath : composeFile,
-      ]),
-      'config',
-      '--quiet',
-    ];
-    const commandsToTry = [
-      {
-        command: 'docker',
-        args: ['compose', ...validationArguments],
-        label: 'docker compose',
-      },
-      {
-        command: 'docker-compose',
-        args: validationArguments,
-        label: 'docker-compose',
-      },
-    ];
-
     try {
-      for (const composeCommand of commandsToTry) {
-        try {
-          await this.executeCommand(composeCommand.command, composeCommand.args, {
-            cwd: composeDirectory,
-            env: buildComposeCommandEnvironment(),
-          });
-          return;
-        } catch (e) {
-          const stderr = `${e?.stderr || ''}`;
-          const dockerComposePluginMissing =
-            composeCommand.command === 'docker' &&
-            /docker: ['"]?compose['"]? is not a docker command/i.test(stderr);
-          const executableMissing = e?.code === 'ENOENT';
-
-          if (
-            composeCommand.command === 'docker' &&
-            (dockerComposePluginMissing || executableMissing)
-          ) {
-            this.log.warn(
-              `Cannot use docker compose for compose validation on ${composeFilePath} (${e.message}); trying docker-compose`,
-            );
-            continue;
-          }
-
-          throw new Error(
-            `Error when validating compose configuration for ${composeFilePath} using ${composeCommand.label} (${e.message})`,
+      const composeByFile = new Map<string, unknown>();
+      for (const composeFile of effectiveComposeFileChain) {
+        if (composeFile === composeFilePath) {
+          composeByFile.set(
+            composeFile,
+            yaml.parse(composeFileText, {
+              maxAliasCount: YAML_MAX_ALIAS_COUNT,
+            }),
           );
+          continue;
         }
+        composeByFile.set(composeFile, await this.getComposeFileAsObject(composeFile));
       }
-    } finally {
-      await this.cleanupComposeTemporaryFile(validationFilePath);
-    }
-  }
-
-  async updateComposeServicesWithCompose(composeFile, services, options = {}) {
-    if (services.length === 0) {
-      return;
-    }
-
-    const { composeFiles = [composeFile], serviceRunningStates = new Map<string, boolean>() } =
-      options as {
-        composeFiles?: string[];
-        serviceRunningStates?: Map<string, boolean>;
-      };
-    const composeFileChain = this.normalizeComposeFileChain(composeFile, composeFiles);
-    const runWithComposeFileChain = composeFileChain.length > 1;
-
-    const logContainer = this.log.child({
-      composeFile,
-      services,
-    });
-
-    if (this.configuration.dryrun) {
-      logContainer.info(
-        `Do not refresh compose services ${services.join(', ')} from ${composeFile} because dry-run mode is enabled`,
+      await this.getComposeFileChainAsObject(effectiveComposeFileChain, composeByFile);
+    } catch (e) {
+      throw new Error(
+        `Error when validating compose configuration for ${composeFilePath} (${e.message})`,
       );
-      return;
-    }
-
-    if (runWithComposeFileChain) {
-      await this.runComposeCommand(
-        composeFile,
-        ['pull', ...services],
-        logContainer,
-        composeFileChain,
-      );
-    } else {
-      await this.runComposeCommand(composeFile, ['pull', ...services], logContainer);
-    }
-
-    const servicesToStart: string[] = [];
-    const servicesToKeepStopped: string[] = [];
-    for (const service of services) {
-      if (serviceRunningStates.get(service) === false) {
-        servicesToKeepStopped.push(service);
-      } else {
-        servicesToStart.push(service);
-      }
-    }
-
-    if (servicesToStart.length > 0) {
-      if (runWithComposeFileChain) {
-        await this.runComposeCommand(
-          composeFile,
-          ['up', '-d', '--no-deps', ...servicesToStart],
-          logContainer,
-          composeFileChain,
-        );
-      } else {
-        await this.runComposeCommand(
-          composeFile,
-          ['up', '-d', '--no-deps', ...servicesToStart],
-          logContainer,
-        );
-      }
-    }
-    if (servicesToKeepStopped.length > 0) {
-      if (runWithComposeFileChain) {
-        await this.runComposeCommand(
-          composeFile,
-          ['up', '--no-start', '--no-deps', ...servicesToKeepStopped],
-          logContainer,
-          composeFileChain,
-        );
-      } else {
-        await this.runComposeCommand(
-          composeFile,
-          ['up', '--no-start', '--no-deps', ...servicesToKeepStopped],
-          logContainer,
-        );
-      }
     }
   }
 
@@ -1257,8 +1130,8 @@ class Dockercompose extends Docker {
   }
 
   /**
-   * Override: compose doesn't need to inspect the existing container
-   * (compose CLI handles the container lifecycle). Lighter context.
+   * Override: keep trigger context lightweight. Runtime container state is
+   * resolved on demand inside updateContainerWithCompose().
    */
   async createTriggerContext(container, logContainer, _composeContext) {
     const watcher = this.getWatcher(container);
@@ -1277,7 +1150,8 @@ class Dockercompose extends Docker {
   }
 
   /**
-   * Override: use compose CLI for pull/recreate instead of Docker API.
+   * Override: apply compose-specific hooks while performing runtime refresh
+   * through the Docker Engine API.
    */
   async performContainerUpdate(_context, container, _logContainer, composeCtx) {
     if (!composeCtx) {
@@ -1329,10 +1203,11 @@ class Dockercompose extends Docker {
   }
 
   /**
-   * Self-update for compose-managed Drydock service. This must stay in compose
-   * lifecycle instead of Docker API recreate to preserve compose ownership.
+   * Self-update for compose-managed Drydock service. Delegate to the parent
+   * self-update transition so the helper container can enforce startup/health
+   * gates and rollback before retiring the old process.
    */
-  async executeSelfUpdate(context, container, logContainer, _operationId, composeCtx) {
+  async executeSelfUpdate(context, container, logContainer, operationId, composeCtx) {
     if (!composeCtx) {
       throw new Error(`Missing compose context for self-update container ${container.name}`);
     }
@@ -1342,20 +1217,16 @@ class Dockercompose extends Docker {
       return false;
     }
 
-    this.insertContainerImageBackup(context, container);
-    if (Array.isArray(composeCtx.composeFiles) && composeCtx.composeFiles.length > 1) {
-      await this.updateContainerWithCompose(composeCtx.composeFile, composeCtx.service, container, {
-        composeFiles: composeCtx.composeFiles,
-      });
-    } else {
-      await this.updateContainerWithCompose(composeCtx.composeFile, composeCtx.service, container);
-    }
-    await this.runServicePostStartHooks(
-      container,
-      composeCtx.service,
-      composeCtx.serviceDefinition,
-    );
-    return true;
+    const currentContainer = await this.getCurrentContainer(context.dockerApi, container);
+    const currentContainerSpec = await this.inspectContainer(currentContainer, logContainer);
+
+    const selfUpdateContext = {
+      ...context,
+      currentContainer,
+      currentContainerSpec,
+    };
+
+    return super.executeSelfUpdate(selfUpdateContext, container, logContainer, operationId);
   }
 
   /**
@@ -1572,34 +1443,15 @@ class Dockercompose extends Docker {
       }
     }
 
-    let composeFileOnceHandledServices = new Set<string>();
+    const composeFileOnceHandledServices = new Set<string>();
     if (
       this.configuration.composeFileOnce === true &&
       this.configuration.dryrun !== true &&
       mappingsNeedingRuntimeUpdate.length > 1
     ) {
-      const serviceRunningStates = new Map<string, boolean>();
-      const servicesToRefresh: string[] = [];
-      for (const { container, service } of mappingsNeedingRuntimeUpdate) {
-        if (serviceRunningStates.has(service)) {
-          continue;
-        }
-        const runningStateLogger = this.log.child({
-          container: container.name,
-        });
-        serviceRunningStates.set(
-          service,
-          await this.getContainerRunningState(container, runningStateLogger),
-        );
-        servicesToRefresh.push(service);
-      }
-      await this.updateComposeServicesWithCompose(composeFile, servicesToRefresh, {
-        composeFiles: composeFileChain,
-        serviceRunningStates,
-      });
-      composeFileOnceHandledServices = new Set(servicesToRefresh);
+      // TODO: Re-introduce compose-file-once batching with Docker Engine API primitives.
       this.log.info(
-        `Compose-file-once mode refreshed ${servicesToRefresh.length} service(s) for ${composeFileChainSummary}`,
+        `Compose-file-once mode is unavailable in Docker Engine API runtime mode; refreshing containers individually for ${composeFileChainSummary}. This can be re-implemented via Docker Engine API later.`,
       );
     }
 
@@ -1614,116 +1466,6 @@ class Dockercompose extends Docker {
         composeFileOnceApplied: composeFileOnceHandledServices.has(service),
       };
       await this.runContainerUpdateLifecycle(container, composeContext);
-    }
-  }
-
-  async executeCommand(command, args, options = {}) {
-    return new Promise((resolve, reject) => {
-      execFile(
-        command,
-        args,
-        {
-          ...options,
-          timeout: COMPOSE_COMMAND_TIMEOUT_MS,
-          maxBuffer: COMPOSE_COMMAND_MAX_BUFFER_BYTES,
-        },
-        (error, stdout, stderr) => {
-          if (error) {
-            error.stdout = stdout;
-            error.stderr = stderr;
-            reject(error);
-            return;
-          }
-          resolve({
-            stdout: stdout || '',
-            stderr: stderr || '',
-          });
-        },
-      );
-    });
-  }
-
-  async runComposeCommand(composeFile, composeArgs, logContainer, composeFiles = [composeFile]) {
-    const composeFileChain = this.normalizeComposeFileChain(composeFile, composeFiles);
-    const composeFilePaths = composeFileChain.map((composeFilePathToResolve) =>
-      this.resolveComposeFilePath(composeFilePathToResolve),
-    );
-    const composeFileArgs = composeFilePaths.flatMap((composeFilePath) => ['-f', composeFilePath]);
-    const composeWorkingDirectory = path.dirname(composeFilePaths[0]);
-    const composeFilePathSummary = composeFilePaths.join(', ');
-    const commandsToTry = [
-      {
-        command: 'docker',
-        args: ['compose', ...composeFileArgs, ...composeArgs],
-        label: 'docker compose',
-      },
-      {
-        command: 'docker-compose',
-        args: [...composeFileArgs, ...composeArgs],
-        label: 'docker-compose',
-      },
-    ];
-
-    for (const composeCommand of commandsToTry) {
-      try {
-        const { stdout, stderr } = (await this.executeCommand(
-          composeCommand.command,
-          composeCommand.args,
-          {
-            cwd: composeWorkingDirectory,
-            env: buildComposeCommandEnvironment(),
-          },
-        )) as { stdout: string; stderr: string };
-        if (stdout.trim()) {
-          logContainer.debug(
-            `${composeCommand.label} ${composeArgs.join(' ')} stdout:\n${stdout.trim()}`,
-          );
-        }
-        if (stderr.trim()) {
-          logContainer.debug(
-            `${composeCommand.label} ${composeArgs.join(' ')} stderr:\n${stderr.trim()}`,
-          );
-        }
-        return;
-      } catch (e) {
-        const stderr = `${e?.stderr || ''}`;
-        const dockerComposePluginMissing =
-          composeCommand.command === 'docker' &&
-          /docker: ['"]?compose['"]? is not a docker command/i.test(stderr);
-        const executableMissing = e?.code === 'ENOENT';
-
-        if (
-          composeCommand.command === 'docker' &&
-          (dockerComposePluginMissing || executableMissing)
-        ) {
-          logContainer.warn(
-            `Cannot use docker compose for ${composeFilePathSummary} (${e.message}); trying docker-compose`,
-          );
-          continue;
-        }
-
-        throw new Error(
-          `Error when running ${composeCommand.label} ${composeArgs.join(' ')} for ${composeFilePathSummary} (${e.message})`,
-        );
-      }
-    }
-  }
-
-  async getContainerRunningState(container, logContainer) {
-    try {
-      const watcher = this.getWatcher(container);
-      const dockerApi = getDockerApiFromWatcher(watcher);
-      if (!dockerApi) {
-        return true;
-      }
-      const containerToInspect = dockerApi.getContainer(container.name);
-      const containerState = await containerToInspect.inspect();
-      return containerState?.State?.Running !== false;
-    } catch (e) {
-      logContainer.warn(
-        `Unable to inspect running state for ${container.name}; assuming running (${e.message})`,
-      );
-      return true;
     }
   }
 
@@ -1828,11 +1570,6 @@ class Dockercompose extends Docker {
       forceRecreate?: boolean;
       composeFiles?: string[];
     };
-    const composeFileChain = this.normalizeComposeFileChain(
-      composeFile,
-      (options as { composeFiles?: string[] })?.composeFiles,
-    );
-    const runWithComposeFileChain = composeFileChain.length > 1;
 
     if (this.configuration.dryrun) {
       logContainer.info(
@@ -1841,43 +1578,57 @@ class Dockercompose extends Docker {
       return;
     }
 
+    const watcher = this.getWatcher(container);
+    const { dockerApi } = watcher;
+    const registry = this.resolveRegistryManager(container, logContainer, {
+      allowAnonymousFallback: true,
+    });
+    const auth = await registry.getAuthPull();
+    const newImage = this.getNewImageFullName(registry, container);
+    const currentContainer = await this.getCurrentContainer(dockerApi, container);
+    if (!currentContainer) {
+      throw new Error(
+        `Unable to refresh compose service ${service} from ${composeFile} because container ${container.name} no longer exists`,
+      );
+    }
+    const currentContainerSpec = await this.inspectContainer(currentContainer, logContainer);
     const serviceShouldStart =
-      shouldStart !== undefined
-        ? shouldStart
-        : await this.getContainerRunningState(container, logContainer);
+      shouldStart !== undefined ? shouldStart : currentContainerSpec?.State?.Running !== false;
 
-    logContainer.info(`Refresh compose service ${service} from ${composeFile}`);
+    logContainer.info(
+      `Refresh compose service ${service} from ${composeFile} using Docker Engine API`,
+    );
     if (!skipPull) {
-      if (runWithComposeFileChain) {
-        await this.runComposeCommand(
-          composeFile,
-          ['pull', service],
-          logContainer,
-          composeFileChain,
-        );
-      } else {
-        await this.runComposeCommand(composeFile, ['pull', service], logContainer);
-      }
+      await this.pullImage(dockerApi, auth, newImage, logContainer);
     } else {
-      logContainer.debug(`Skip compose pull for ${service} from ${composeFile}`);
+      logContainer.debug(`Skip image pull for ${service} from ${composeFile}`);
+    }
+    if (forceRecreate) {
+      logContainer.debug(
+        `Force recreate requested for ${service}; Docker Engine API path always recreates containers`,
+      );
     }
 
-    const upArgs = ['up'];
-    if (serviceShouldStart) {
-      upArgs.push('-d');
-    } else {
-      upArgs.push('--no-start');
-    }
-    upArgs.push('--no-deps');
-    if (forceRecreate) {
-      upArgs.push('--force-recreate');
-    }
-    upArgs.push(service);
-    if (runWithComposeFileChain) {
-      await this.runComposeCommand(composeFile, upArgs, logContainer, composeFileChain);
-    } else {
-      await this.runComposeCommand(composeFile, upArgs, logContainer);
-    }
+    const recreationContainerSpec = {
+      ...currentContainerSpec,
+      State: {
+        ...currentContainerSpec?.State,
+        Running: serviceShouldStart,
+      },
+    };
+    await super.stopAndRemoveContainer(
+      currentContainer,
+      currentContainerSpec,
+      container,
+      logContainer,
+    );
+    await super.recreateContainer(
+      dockerApi,
+      recreationContainerSpec,
+      newImage,
+      container,
+      logContainer,
+    );
   }
 
   async stopAndRemoveContainer(_currentContainer, _currentContainerSpec, container, logContainer) {
