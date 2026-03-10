@@ -460,6 +460,34 @@ describe('Container Actions Router', () => {
       );
     });
 
+    test('should update container successfully with a dockercompose trigger', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      const updatedContainer = { ...container, image: { name: 'nginx:latest' } };
+      mockGetContainer.mockReturnValueOnce(container).mockReturnValueOnce(updatedContainer);
+      const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
+      const trigger = { type: 'dockercompose', trigger: mockTriggerFn };
+      mockGetState.mockReturnValue({ trigger: { 'dockercompose.default': trigger } });
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockTriggerFn).toHaveBeenCalledWith(container);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Container updated successfully',
+          result: updatedContainer,
+        }),
+      );
+    });
+
     test('should return 404 when container not found', async () => {
       mockGetContainer.mockReturnValue(undefined);
 
