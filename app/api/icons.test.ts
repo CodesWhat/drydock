@@ -1076,10 +1076,71 @@ describe('Icons Router', () => {
 
     expect(res.status).not.toHaveBeenCalledWith(404);
     expect(res.json).not.toHaveBeenCalled();
-    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'public, max-age=31536000, immutable');
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'no-store');
     expect(res.type).toHaveBeenCalledWith('image/png');
     expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
       root: '/runtime/assets/icons/selfhst',
+    });
+  });
+
+  test('should use no-store cache headers for fallback images instead of immutable', async () => {
+    const upstreamError = Object.assign(new Error('not found'), {
+      response: { status: 404 },
+    });
+    mockAccess.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/runtime/assets/icons/selfhst/docker.png') {
+        return;
+      }
+      throw new Error('not found');
+    });
+    mockAxiosGet.mockRejectedValue(upstreamError);
+    mockAxiosIsAxiosError.mockReturnValue(true);
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'homarr',
+          slug: 'missing',
+        },
+        headers: {
+          'sec-fetch-dest': 'image',
+        },
+      },
+      res,
+    );
+
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    expect(res.set).not.toHaveBeenCalledWith(
+      'Cache-Control',
+      'public, max-age=31536000, immutable',
+    );
+    expect(res.type).toHaveBeenCalledWith('image/png');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
+      root: '/runtime/assets/icons/selfhst',
+    });
+  });
+
+  test('should use immutable cache headers for successfully cached icons', async () => {
+    mockAccess.mockResolvedValue(undefined);
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'homarr',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'public, max-age=31536000, immutable');
+    expect(res.type).toHaveBeenCalledWith('image/png');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
+      root: '/store/icons/homarr',
     });
   });
 

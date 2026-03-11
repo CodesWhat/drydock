@@ -1,6 +1,7 @@
 import { toPositiveInteger } from '../../util/parse.js';
 
 const CACHE_CONTROL_HEADER = 'public, max-age=31536000, immutable';
+const FALLBACK_CACHE_CONTROL_HEADER = 'no-store';
 const FALLBACK_ICON = 'fab fa-docker';
 const FALLBACK_IMAGE_PROVIDER = 'selfhst';
 const FALLBACK_IMAGE_SLUG = 'docker';
@@ -48,6 +49,7 @@ function getIconInFlightTimeoutMs() {
 
 export {
   CACHE_CONTROL_HEADER,
+  FALLBACK_CACHE_CONTROL_HEADER,
   FALLBACK_ICON,
   FALLBACK_IMAGE_PROVIDER,
   FALLBACK_IMAGE_SLUG,

@@ -51,6 +51,7 @@ describe('icons/response', () => {
     });
 
     expect(mockFindBundledIconPath).toHaveBeenCalledWith('selfhst', 'docker', 'png');
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'no-store');
     expect(res.status).not.toHaveBeenCalled();
     expect(res.json).not.toHaveBeenCalled();
     expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
