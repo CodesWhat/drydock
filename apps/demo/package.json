@@ -1,0 +1,41 @@
+{
+  "name": "drydock-demo",
+  "version": "1.4.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "iconify-icon": "^3.0.2",
+    "msw": "^2.10.2",
+    "tailwindcss": "^4.2.1",
+    "vue": "^3.5.29",
+    "vue-router": "^5.0.2"
+  },
+  "devDependencies": {
+    "@fontsource/comic-mono": "^5.2.5",
+    "@fontsource/commit-mono": "^5.2.5",
+    "@fontsource/inconsolata": "^5.2.7",
+    "@fontsource/jetbrains-mono": "^5.2.7",
+    "@fontsource/source-code-pro": "^5.2.7",
+    "@iconify-json/fa6-solid": "^1.2.4",
+    "@iconify-json/heroicons": "^1.2.3",
+    "@iconify-json/iconoir": "^1.2.10",
+    "@iconify-json/lucide": "^1.2.95",
+    "@iconify-json/ph": "^1.2.2",
+    "@iconify-json/tabler": "^1.2.28",
+    "@tailwindcss/vite": "^4.2.1",
+    "@vitejs/plugin-vue": "^6.0.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
+  }
+}
