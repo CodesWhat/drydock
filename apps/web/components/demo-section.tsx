@@ -13,11 +13,12 @@ export function DemoSection() {
   const inlineRectRef = useRef<DOMRect | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  const isFullscreen = mode === "fullscreen" || mode === "expanding";
-
   // Listen for demo app ready signal, fallback after timeout
   useEffect(() => {
+    const demoOrigin = new URL(DEMO_URL).origin;
+
     function onMessage(e: MessageEvent) {
+      if (e.origin !== demoOrigin) return;
       if (e.data?.type === "drydock-demo-ready") {
         setIframeStatus("ready");
       }
