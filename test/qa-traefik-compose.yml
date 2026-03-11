@@ -1,0 +1,61 @@
+services:
+  # Traefik reverse proxy — TLS-terminating, matching rj10rd/Pangolin stack
+  traefik:
+    image: traefik:latest
+    container_name: qa-traefik
+    command:
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --entrypoints.websecure.address=:443
+    ports:
+      - "8443:443"
+      - "8080:8080"   # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./qa-proxy-certs:/certs:ro
+      - ./qa-traefik-dynamic.yml:/etc/traefik/dynamic.yml:ro
+
+  drydock:
+    image: drydock:dev
+    container_name: drydock-qa-traefik
+    user: root
+    expose:
+      - "3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./qa-traefik-compose.yml:/drydock/qa-compose.yml:rw
+    environment:
+      - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
+      - DD_LOG_FORMAT=text
+      - DD_LOG_LEVEL=debug
+      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+      - DD_WATCHER_LOCAL_CRON=*/2 * * * *
+      # Docker trigger (manual only)
+      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
+      # Compose trigger — file must be writable inside container
+      - DD_TRIGGER_DOCKERCOMPOSE_QA_FILE=/drydock/qa-compose.yml
+      - DD_TRIGGER_DOCKERCOMPOSE_QA_AUTO=false
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$zUAK9+ktVWNHyQdv3SaOSgMv3T02F1Zj8D+t1un7D98=$$KEmn6d94w03YxIlw7U7l/ikD9lW+H3IC1N7xbAhOB9yKofA3HoxUBmuvBawvShhv337zDv4+g9hobNWeQEWwkQ=="
+      - DD_SESSION_SECRET=qa-test-session-secret
+      # Required for reverse proxy
+      - DD_SERVER_TRUSTPROXY=1
+      - DD_PUBLIC_URL=https://localhost:8443
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.drydock.rule=Host(`localhost`)
+      - traefik.http.routers.drydock.entrypoints=websecure
+      - traefik.http.routers.drydock.tls=true
+      - traefik.http.services.drydock.loadbalancer.server.port=3000
+
+  # Test container with compose trigger + watch labels
+  nginx-test:
+    image: nginx:1.25.5
+    pull_policy: never
+    container_name: nginx-compose-test
+    labels:
+      - dd.watch=true
+      - dd.display.name=Nginx Compose Test
