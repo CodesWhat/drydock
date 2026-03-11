@@ -29,6 +29,14 @@ export const metadata: Metadata = {
     siteName: "Drydock",
     locale: "en_US",
     type: "website",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Drydock - Container Update Monitoring",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
@@ -36,6 +44,7 @@ export const metadata: Metadata = {
     description:
       "Open source container update monitoring built in TypeScript. Auto-discover containers, detect image updates, and trigger notifications across 20+ services.",
     creator: "@codeswhat",
+    images: ["/og-image.png"],
   },
   icons: {
     icon: [
