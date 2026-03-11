@@ -86,7 +86,7 @@ class Mqtt extends Trigger {
       enabled: false,
       prefix: hassDefaultPrefix,
       discovery: false,
-      attributes: 'full',
+      attributes: 'short',
       filter: {
         include: '',
         exclude: '',
@@ -144,7 +144,7 @@ class Mqtt extends Trigger {
           attributes: this.joi
             .string()
             .valid(...HASS_ATTRIBUTE_PRESET_VALUES)
-            .default('full'),
+            .default('short'),
           filter: this.joi
             .object({
               include: this.joi.string().allow('').default(''),
@@ -159,7 +159,7 @@ class Mqtt extends Trigger {
           enabled: false,
           prefix: hassDefaultPrefix,
           discovery: false,
-          attributes: 'full',
+          attributes: 'short',
           filter: {
             include: '',
             exclude: '',
@@ -286,7 +286,7 @@ class Mqtt extends Trigger {
     return {
       mode: 'exclude',
       stage: 'container',
-      paths: HASS_ATTRIBUTE_PRESETS[this.configuration.hass?.attributes ?? 'full'],
+      paths: HASS_ATTRIBUTE_PRESETS[this.configuration.hass?.attributes ?? 'short'],
     };
   }
 
