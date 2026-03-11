@@ -43,6 +43,38 @@ test('validatedConfiguration should accept cafile and insecure tls options', asy
   });
 });
 
+test('validatedConfiguration should accept mTLS client certificate options', async () => {
+  expect(
+    custom.validateConfiguration({
+      url: 'http://localhost:5000',
+      clientcert: '/certs/client.pem',
+      clientkey: '/certs/client-key.pem',
+    }),
+  ).toStrictEqual({
+    url: 'http://localhost:5000',
+    clientcert: '/certs/client.pem',
+    clientkey: '/certs/client-key.pem',
+  });
+});
+
+test('validatedConfiguration should reject clientcert without clientkey', async () => {
+  expect(() =>
+    custom.validateConfiguration({
+      url: 'http://localhost:5000',
+      clientcert: '/certs/client.pem',
+    }),
+  ).toThrow();
+});
+
+test('validatedConfiguration should reject clientkey without clientcert', async () => {
+  expect(() =>
+    custom.validateConfiguration({
+      url: 'http://localhost:5000',
+      clientkey: '/certs/client-key.pem',
+    }),
+  ).toThrow();
+});
+
 test('validatedConfiguration should throw error when auth is not base64', async () => {
   expect(() => {
     custom.validateConfiguration({

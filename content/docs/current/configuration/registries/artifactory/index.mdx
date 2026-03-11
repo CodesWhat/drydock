@@ -19,6 +19,8 @@ The `artifactory` registry lets you configure a [JFrog Artifactory](https://jfro
 | `DD_REGISTRY_ARTIFACTORY_{REGISTRY_NAME}_AUTH` | ⚪ | Base64 encoded `login:password` string | DD_REGISTRY_ARTIFACTORY_\{REGISTRY_NAME\}_LOGIN/PASSWORD must not be defined | |
 | `DD_REGISTRY_ARTIFACTORY_{REGISTRY_NAME}_CAFILE` | ⚪ | Path to custom CA certificate file | | |
 | `DD_REGISTRY_ARTIFACTORY_{REGISTRY_NAME}_INSECURE` | ⚪ | Allow insecure (non-TLS) connections | `true`, `false` | `false` |
+| `DD_REGISTRY_ARTIFACTORY_{REGISTRY_NAME}_CLIENTCERT` | ⚪ | Path to client certificate file for mTLS | | |
+| `DD_REGISTRY_ARTIFACTORY_{REGISTRY_NAME}_CLIENTKEY` | ⚪ | Path to client key file for mTLS | DD_REGISTRY_ARTIFACTORY_\{REGISTRY_NAME\}_CLIENTCERT must be defined | |
 
 ## Examples
 

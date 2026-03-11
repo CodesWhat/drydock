@@ -76,7 +76,8 @@ class BaseRegistry extends Registry {
   private getHttpsAgent() {
     const shouldDisableTlsVerification = this.configuration?.insecure === true;
     const hasCaFile = Boolean(this.configuration?.cafile);
-    if (!shouldDisableTlsVerification && !hasCaFile) {
+    const hasMutualTls = Boolean(this.configuration?.clientcert);
+    if (!shouldDisableTlsVerification && !hasCaFile && !hasMutualTls) {
       return undefined;
     }
 
@@ -92,10 +93,25 @@ class BaseRegistry extends Registry {
       ca = fs.readFileSync(caPath);
     }
 
+    let cert;
+    let key;
+    if (hasMutualTls) {
+      const certPath = resolveConfiguredPath(this.configuration.clientcert, {
+        label: `registry ${this.getId()} client certificate file path`,
+      });
+      cert = fs.readFileSync(certPath);
+      const keyPath = resolveConfiguredPath(this.configuration.clientkey, {
+        label: `registry ${this.getId()} client key file path`,
+      });
+      key = fs.readFileSync(keyPath);
+    }
+
     // Intentional opt-in for self-hosted registries with private/self-signed cert chains.
     // lgtm[js/disabling-certificate-validation]
     this.httpsAgent = new https.Agent({
       ca,
+      cert,
+      key,
       rejectUnauthorized: !shouldDisableTlsVerification,
     });
     return this.httpsAgent;

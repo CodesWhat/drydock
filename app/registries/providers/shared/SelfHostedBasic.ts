@@ -18,10 +18,13 @@ class SelfHostedBasic extends BaseRegistry {
         auth: authSchema,
         cafile: this.joi.string(),
         insecure: this.joi.boolean(),
+        clientcert: this.joi.string(),
+        clientkey: this.joi.string(),
       })
       .and('login', 'password')
       .without('login', 'auth')
-      .without('password', 'auth');
+      .without('password', 'auth')
+      .and('clientcert', 'clientkey');
   }
 
   maskConfiguration() {
