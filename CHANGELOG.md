@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Log level setting had no effect** — `DD_LOG_LEVEL=debug` was correctly parsed but debug messages were silently dropped because pino's multistream destinations defaulted to `info` level. Stream destinations now inherit the configured log level. ([#134](https://github.com/CodesWhat/drydock/issues/134))
 - **Server feature flags not loaded after login** — Feature flags (`containeractions`, `delete`) were permanently stuck as disabled when authentication was required, because the pre-login bootstrap fetch failure marked the flags as "loaded" and never retried. Now failed fetches allow automatic retry after login. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
 
 ### Changed
