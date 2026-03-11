@@ -52,7 +52,7 @@
 
 - [📖 Documentation](https://drydock.codeswhat.com/docs)
 - [🚀 Quick Start](#quick-start)
-- [📸 Screenshots](#screenshots)
+- [📸 Screenshots & Live Demo](#screenshots)
 - [✨ Features](#features)
 - [🔌 Supported Integrations](#supported-integrations)
 - [⚖️ Feature Comparison](#feature-comparison)
@@ -92,10 +92,8 @@ See the [Quick Start guide](https://drydock.codeswhat.com/docs/quickstart) for D
 
 <hr>
 
-<h2 align="center" id="screenshots">📸 Screenshots</h2>
+<h2 align="center" id="screenshots">📸 Screenshots & Live Demo</h2>
 
-<details open>
-<summary><strong>Dashboard</strong></summary>
 <table>
 <tr>
 <td width="50%" align="center"><strong>Light</strong></td>
@@ -106,81 +104,16 @@ See the [Quick Start guide](https://drydock.codeswhat.com/docs/quickstart) for D
 <td><img src="docs/assets/drydock-dashboard-dark.png" alt="Dashboard Dark"></td>
 </tr>
 </table>
-</details>
 
-<details>
-<summary><strong>Containers</strong></summary>
-<table>
-<tr>
-<td width="50%" align="center"><strong>Light</strong></td>
-<td width="50%" align="center"><strong>Dark</strong></td>
-</tr>
-<tr>
-<td><img src="docs/assets/drydock-containers-light.png" alt="Containers Light"></td>
-<td><img src="docs/assets/drydock-containers-dark.png" alt="Containers Dark"></td>
-</tr>
-</table>
-</details>
+<div align="center">
 
-<details>
-<summary><strong>Container Detail</strong></summary>
-<table>
-<tr>
-<td width="50%" align="center"><strong>Light</strong></td>
-<td width="50%" align="center"><strong>Dark</strong></td>
-</tr>
-<tr>
-<td><img src="docs/assets/drydock-container-detail-light.png" alt="Container Detail Light"></td>
-<td><img src="docs/assets/drydock-container-detail-dark.png" alt="Container Detail Dark"></td>
-</tr>
-</table>
-</details>
+**Why look at screenshots when you can experience it yourself?**
 
-<details>
-<summary><strong>Security</strong></summary>
-<table>
-<tr>
-<td width="50%" align="center"><strong>Light</strong></td>
-<td width="50%" align="center"><strong>Dark</strong></td>
-</tr>
-<tr>
-<td><img src="docs/assets/drydock-security-light.png" alt="Security Light"></td>
-<td><img src="docs/assets/drydock-security-dark.png" alt="Security Dark"></td>
-</tr>
-</table>
-</details>
+<a href="https://demo.drydock.codeswhat.com"><img src="https://img.shields.io/badge/Try_the_Live_Demo-4f46e5?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlnb24gcG9pbnRzPSI2IDMgMjAgMTIgNiAyMSA2IDMiLz48L3N2Zz4=&logoColor=white" alt="Try the Live Demo" height="36"></a>
 
-<details>
-<summary><strong>Login</strong></summary>
-<table>
-<tr>
-<td width="50%" align="center"><strong>Light</strong></td>
-<td width="50%" align="center"><strong>Dark</strong></td>
-</tr>
-<tr>
-<td><img src="docs/assets/drydock-login-light.png" alt="Login Light"></td>
-<td><img src="docs/assets/drydock-login-dark.png" alt="Login Dark"></td>
-</tr>
-</table>
-</details>
+Fully interactive — real UI, mock data, no install required. Runs entirely in-browser.
 
-<details>
-<summary><strong>Mobile Responsive</strong></summary>
-<table>
-<tr>
-<td width="25%" align="center"><strong>Dashboard Light</strong></td>
-<td width="25%" align="center"><strong>Dashboard Dark</strong></td>
-<td width="25%" align="center"><strong>Containers Light</strong></td>
-<td width="25%" align="center"><strong>Containers Dark</strong></td>
-</tr>
-<tr>
-<td><img src="docs/assets/drydock-mobile-dashboard-light.png" alt="Mobile Dashboard Light"></td>
-<td><img src="docs/assets/drydock-mobile-dashboard-dark.png" alt="Mobile Dashboard Dark"></td>
-<td><img src="docs/assets/drydock-mobile-containers-light.png" alt="Mobile Containers Light"></td>
-<td><img src="docs/assets/drydock-mobile-containers-dark.png" alt="Mobile Containers Dark"></td>
-</tr>
-</table>
-</details>
+</div>
 
 <hr>
 
@@ -388,6 +321,7 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 | Resource | Link |
 | --- | --- |
 | Website | [drydock.codeswhat.com](https://drydock.codeswhat.com/) |
+| Live Demo | [demo.drydock.codeswhat.com](https://demo.drydock.codeswhat.com) |
 | Docs | [drydock.codeswhat.com/docs](https://drydock.codeswhat.com/docs) |
 | Configuration | [Configuration](https://drydock.codeswhat.com/docs/configuration) |
 | Quick Start | [Quick Start](https://drydock.codeswhat.com/docs/quickstart) |
