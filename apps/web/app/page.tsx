@@ -19,8 +19,8 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { RoadmapTimeline } from "@/components/roadmap-timeline";
 import { DemoSection } from "@/components/demo-section";
+import { RoadmapTimeline } from "@/components/roadmap-timeline";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
