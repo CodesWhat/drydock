@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Log level setting had no effect** — `DD_LOG_LEVEL=debug` was correctly parsed but debug messages were silently dropped because pino's multistream destinations defaulted to `info` level. Stream destinations now inherit the configured log level. ([#134](https://github.com/CodesWhat/drydock/issues/134))
 - **Server feature flags not loaded after login** — Feature flags (`containeractions`, `delete`) were permanently stuck as disabled when authentication was required, because the pre-login bootstrap fetch failure marked the flags as "loaded" and never retried. Now failed fetches allow automatic retry after login. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+- **Compose trigger silently skips containers** — Multiple failure paths in the compose trigger were logged at `debug` level, making it nearly impossible to diagnose why a trigger reports success but containers don't update. Key diagnostic messages (compose file mismatch, label inspect failure, no containers matched) promoted to `warn` level, and the "already up to date" message now includes container names. ([#84](https://github.com/CodesWhat/drydock/discussions/84))
+- **Fallback icon cached permanently** — The Docker placeholder icon was served with `immutable` cache headers, causing browsers to cache it permanently even after the real provider icon becomes available. Fallback responses now use `no-store`.
 
 ### Changed
 
