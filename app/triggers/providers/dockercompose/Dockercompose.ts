@@ -15,6 +15,12 @@ const COMPOSE_RENAME_RETRY_MS = 200;
 const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project';
 const COMPOSE_PROJECT_CONFIG_FILES_LABEL = 'com.docker.compose.project.config_files';
 const COMPOSE_PROJECT_WORKING_DIR_LABEL = 'com.docker.compose.project.working_dir';
+const COMPOSE_DIRECTORY_FILE_CANDIDATES = [
+  'compose.yaml',
+  'compose.yml',
+  'docker-compose.yaml',
+  'docker-compose.yml',
+];
 const COMPOSE_CACHE_MAX_ENTRIES = 256;
 const POST_START_ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SELF_CONTAINER_IDENTIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
@@ -815,11 +821,47 @@ class Dockercompose extends Docker {
       return composeFilesFromInspect;
     }
 
-    const composeFileFromDefault = this.getDefaultComposeFilePath();
+    const composeFileFromDefault = await this.resolveDefaultComposeFilePathForRuntime();
     if (!composeFileFromDefault) {
       return [];
     }
     return [composeFileFromDefault];
+  }
+
+  async resolveComposeFilePathFromDirectory(composePath: string): Promise<string | null> {
+    try {
+      const composePathStat = await fs.stat(composePath);
+      if (!composePathStat.isDirectory()) {
+        return composePath;
+      }
+    } catch {
+      // Keep existing behavior for missing/inaccessible files; downstream checks
+      // emit detailed does-not-exist/permission warnings.
+      return composePath;
+    }
+
+    for (const composeFileCandidate of COMPOSE_DIRECTORY_FILE_CANDIDATES) {
+      const composeFileCandidatePath = path.join(composePath, composeFileCandidate);
+      try {
+        await fs.access(composeFileCandidatePath);
+        return composeFileCandidatePath;
+      } catch {
+        // try next candidate
+      }
+    }
+
+    this.log.warn(
+      `Configured compose path ${composePath} is a directory and does not contain a compose file candidate (${COMPOSE_DIRECTORY_FILE_CANDIDATES.join(', ')})`,
+    );
+    return null;
+  }
+
+  async resolveDefaultComposeFilePathForRuntime(): Promise<string | null> {
+    const composeFileFromDefault = this.getDefaultComposeFilePath();
+    if (!composeFileFromDefault) {
+      return null;
+    }
+    return this.resolveComposeFilePathFromDirectory(composeFileFromDefault);
   }
 
   normalizeDigestPinningValue(value: unknown): string | null {
@@ -1291,7 +1333,17 @@ class Dockercompose extends Docker {
    * @returns {Promise<void>}
    */
   async trigger(container) {
-    await this.triggerBatch([container]);
+    const triggerBatchResults = await this.triggerBatch([container]);
+    const hasRuntimeUpdates = triggerBatchResults.some((result) => result === true);
+    if (
+      this.configuration.dryrun !== true &&
+      container?.updateAvailable === true &&
+      !hasRuntimeUpdates
+    ) {
+      throw new Error(
+        `No compose updates were applied for container ${container?.name || 'unknown'}`,
+      );
+    }
   }
 
   async resolveAndGroupContainersByComposeFile(
@@ -1364,10 +1416,10 @@ class Dockercompose extends Docker {
   /**
    * Update the docker-compose stack.
    * @param containers the containers
-   * @returns {Promise<void>}
+   * @returns {Promise<boolean[]>}
    */
-  async triggerBatch(containers): Promise<unknown[]> {
-    const configuredComposeFilePath = this.getDefaultComposeFilePath();
+  async triggerBatch(containers): Promise<boolean[]> {
+    const configuredComposeFilePath = await this.resolveDefaultComposeFilePathForRuntime();
     const containersByComposeFile = await this.resolveAndGroupContainersByComposeFile(
       containers,
       configuredComposeFilePath,
@@ -1378,7 +1430,7 @@ class Dockercompose extends Docker {
     }
 
     // Process each compose file group
-    const batchResults: unknown[] = [];
+    const batchResults: boolean[] = [];
     for (const {
       composeFile,
       composeFiles,
@@ -1399,9 +1451,13 @@ class Dockercompose extends Docker {
    * Process a specific compose file with its associated containers.
    * @param composeFile
    * @param containers
-   * @returns {Promise<void>}
+   * @returns {Promise<boolean>} true if runtime updates were applied, false otherwise
    */
-  async processComposeFile(composeFile, containers, composeFiles = [composeFile]) {
+  async processComposeFile(
+    composeFile,
+    containers,
+    composeFiles = [composeFile],
+  ): Promise<boolean> {
     const composeFileChain = this.normalizeComposeFileChain(composeFile, composeFiles);
     const composeFileChainSummary = composeFileChain.join(', ');
     this.log.info(`Processing compose file: ${composeFileChainSummary}`);
@@ -1424,7 +1480,7 @@ class Dockercompose extends Docker {
 
     if (containersFiltered.length === 0) {
       this.log.warn(`No containers found in compose file ${composeFileChainSummary}`);
-      return;
+      return false;
     }
 
     // [{ container, current: '1.0.0', update: '2.0.0' }, {...}]
@@ -1466,7 +1522,7 @@ class Dockercompose extends Docker {
       this.log.info(
         `All containers in ${composeFileChainSummary} are already up to date (checked: ${versionMappings.map((m) => m.container.name).join(', ') || 'none'})`,
       );
-      return;
+      return false;
     }
 
     // Dry-run?
@@ -1575,6 +1631,7 @@ class Dockercompose extends Docker {
         composeFileOnceHandledServices.add(service);
       }
     }
+    return true;
   }
 
   async resolveComposeServiceContext(container, currentImage) {

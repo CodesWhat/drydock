@@ -3112,6 +3112,41 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('triggerBatch should resolve a configured compose directory to compose.yaml for affinity matching', async () => {
+    trigger.configuration.file = '/opt/drydock/stacks/filebrowser';
+    fs.stat.mockImplementation(async (candidatePath: string) => {
+      if (candidatePath === '/opt/drydock/stacks/filebrowser') {
+        return {
+          isDirectory: () => true,
+          mtimeMs: 1_700_000_000_000,
+        } as any;
+      }
+      return {
+        isDirectory: () => false,
+        mtimeMs: 1_700_000_000_000,
+      } as any;
+    });
+    fs.access.mockResolvedValue(undefined);
+
+    const container = {
+      name: 'filebrowser',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/opt/drydock/stacks/filebrowser/compose.yaml' },
+    };
+    const processComposeFileSpy = vi.spyOn(trigger, 'processComposeFile').mockResolvedValue(true);
+
+    await trigger.triggerBatch([container]);
+
+    expect(processComposeFileSpy).toHaveBeenCalledTimes(1);
+    expect(processComposeFileSpy).toHaveBeenCalledWith(
+      '/opt/drydock/stacks/filebrowser/compose.yaml',
+      [container],
+    );
+    expect(mockLog.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('do not match configured file'),
+    );
+  });
+
   // -----------------------------------------------------------------------
   // getComposeFileForContainer
   // -----------------------------------------------------------------------
@@ -3285,11 +3320,21 @@ describe('Dockercompose Trigger', () => {
 
   test('trigger should delegate to triggerBatch with single container', async () => {
     const container = { name: 'test' };
-    const spy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue();
+    const spy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue([true]);
 
     await trigger.trigger(container);
 
     expect(spy).toHaveBeenCalledWith([container]);
+  });
+
+  test('trigger should throw when update is still available but compose trigger applies no runtime updates', async () => {
+    trigger.configuration.dryrun = false;
+    const container = { name: 'test', updateAvailable: true };
+    vi.spyOn(trigger, 'triggerBatch').mockResolvedValue([false]);
+
+    await expect(trigger.trigger(container)).rejects.toThrow(
+      'No compose updates were applied for container test',
+    );
   });
 
   test('getConfigurationSchema should extend Docker schema with compose hardening options', () => {
