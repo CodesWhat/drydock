@@ -129,7 +129,7 @@ output/
 .scannerwork/
 
 # Demo prototype (standalone showcase, lives on demo branch)
-demo/
+/demo/
 
 # Generated lazy-loaded font assets (built by scripts/extract-fonts.mjs)
 ui/public/fonts/
