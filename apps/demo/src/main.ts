@@ -10,8 +10,7 @@ import { FakeEventSource } from './mocks/sse';
 
 // Patch EventSource BEFORE any UI code loads — the SSE service
 // creates an EventSource in AppLayout, so this must happen first.
-// biome-ignore lint/suspicious/noExplicitAny: intentional global patch
-(globalThis as any).EventSource = FakeEventSource;
+(globalThis as unknown as { EventSource: typeof FakeEventSource }).EventSource = FakeEventSource;
 
 async function boot() {
   // Start MSW — must be running before the UI makes any fetch() calls

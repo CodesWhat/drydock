@@ -4,8 +4,7 @@ import { ExternalLink, Maximize2, Palette, Share, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 
-const DEMO_URL =
-  process.env.NEXT_PUBLIC_DEMO_URL || "https://demo.drydock.codeswhat.com";
+const DEMO_URL = process.env.NEXT_PUBLIC_DEMO_URL || "https://demo.drydock.codeswhat.com";
 
 export function DemoSection() {
   const [mode, setMode] = useState<"inline" | "expanding" | "fullscreen" | "collapsing">("inline");
@@ -101,9 +100,7 @@ export function DemoSection() {
 
     // Find where the placeholder is now
     const placeholder = document.getElementById("demo-placeholder");
-    const target = placeholder
-      ? placeholder.getBoundingClientRect()
-      : inlineRectRef.current;
+    const target = placeholder ? placeholder.getBoundingClientRect() : inlineRectRef.current;
 
     if (!target) {
       setMode("inline");
@@ -178,10 +175,7 @@ export function DemoSection() {
 
   function navigateIframe(path: string) {
     if (iframeRef.current?.contentWindow) {
-      iframeRef.current.contentWindow.postMessage(
-        { type: "navigate", path },
-        DEMO_URL,
-      );
+      iframeRef.current.contentWindow.postMessage({ type: "navigate", path }, DEMO_URL);
     }
     if (iframeRef.current) {
       iframeRef.current.src = `${DEMO_URL}${path}`;
@@ -202,27 +196,18 @@ export function DemoSection() {
             See it in action!
           </h2>
           <p className="relative mx-auto max-w-2xl text-neutral-600 dark:text-neutral-400">
-            Try the fully interactive demo below — real UI, real
-            data*, no install required.
+            Try the fully interactive demo below — real UI, real data*, no install required.
           </p>
         </div>
 
         {/* Action Buttons (inline only) */}
         {mode === "inline" && (
           <div className="mb-4 flex items-center justify-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigateIframe("/config")}
-            >
+            <Button variant="outline" size="sm" onClick={() => navigateIframe("/config")}>
               <Palette className="h-4 w-4" />
               Theme Editor
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={openFullscreen}
-            >
+            <Button variant="outline" size="sm" onClick={openFullscreen}>
               <Maximize2 className="h-4 w-4" />
               Open fullscreen
             </Button>
@@ -239,8 +224,11 @@ export function DemoSection() {
 
         {/* Backdrop */}
         {isFixed && (
-          <div
-            className={`fixed inset-0 z-40 bg-black/50 transition-opacity duration-300 ${
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="Close fullscreen demo"
+            className={`fixed inset-0 z-40 cursor-default border-0 bg-black/50 p-0 transition-opacity duration-300 ${
               mode === "collapsing" ? "opacity-0" : "opacity-100"
             }`}
             onClick={closeFullscreen}
@@ -255,11 +243,7 @@ export function DemoSection() {
               ? "fixed z-50 flex flex-col overflow-hidden bg-white shadow-2xl dark:bg-neutral-950"
               : "isolate overflow-hidden rounded-xl border border-neutral-200 bg-white/50 shadow-sm backdrop-blur-sm hover:shadow-lg hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900/50 dark:hover:border-neutral-700"
           }
-          style={
-            isFixed
-              ? { inset: mode === "fullscreen" ? "0" : undefined }
-              : undefined
-          }
+          style={isFixed ? { inset: mode === "fullscreen" ? "0" : undefined } : undefined}
         >
           {/* Fullscreen header */}
           {isFixed && (
@@ -269,30 +253,18 @@ export function DemoSection() {
               </span>
 
               <div className="flex justify-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={shareDemo}
-                >
+                <Button variant="ghost" size="sm" onClick={shareDemo}>
                   <Share className="h-4 w-4" />
                   <span className="hidden sm:inline">Share</span>
                 </Button>
               </div>
 
               <div className="flex items-center justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => navigateIframe("/config")}
-                >
+                <Button variant="ghost" size="sm" onClick={() => navigateIframe("/config")}>
                   <Palette className="h-4 w-4" />
                   <span className="hidden sm:inline">Theme Editor</span>
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={closeFullscreen}
-                >
+                <Button variant="ghost" size="sm" onClick={closeFullscreen}>
                   <X className="h-4 w-4" />
                   <span className="hidden sm:inline">Back to site</span>
                 </Button>
@@ -300,11 +272,7 @@ export function DemoSection() {
             </div>
           )}
 
-          <div
-            className={`relative ${
-              isFixed ? "flex-1" : "aspect-[16/10] overflow-hidden"
-            }`}
-          >
+          <div className={`relative ${isFixed ? "flex-1" : "aspect-[16/10] overflow-hidden"}`}>
             <iframe
               ref={iframeRef}
               src={DEMO_URL}
@@ -325,11 +293,7 @@ export function DemoSection() {
                   The interactive demo couldn&apos;t load in this browser.
                 </p>
                 <Button variant="outline" size="sm" asChild>
-                  <a
-                    href={DEMO_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                  <a href={DEMO_URL} target="_blank" rel="noopener noreferrer">
                     <ExternalLink className="h-4 w-4" />
                     Open demo directly
                   </a>

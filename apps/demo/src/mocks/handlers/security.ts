@@ -2,8 +2,7 @@ import { HttpResponse, http } from 'msw';
 import { containers } from '../data/containers';
 import { securityOverview } from '../data/vulnerabilities';
 
-// biome-ignore lint/suspicious/noExplicitAny: mock data is untyped
-type MockContainer = (typeof containers)[number] & Record<string, any>;
+type MockContainer = (typeof containers)[number] & Record<string, unknown>;
 
 export const securityHandlers = [
   http.get('/api/containers/security/vulnerabilities', () => HttpResponse.json(securityOverview)),

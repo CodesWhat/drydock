@@ -1,8 +1,7 @@
 import { HttpResponse, http } from 'msw';
 import { containers } from '../data/containers';
 
-// biome-ignore lint/suspicious/noExplicitAny: mock data is untyped
-type MockContainer = (typeof containers)[number] & Record<string, any>;
+type MockContainer = (typeof containers)[number] & Record<string, unknown>;
 
 function groupContainers() {
   const groups = new Map<string | null, MockContainer[]>();
