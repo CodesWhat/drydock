@@ -122,6 +122,17 @@ describe('AgentClient', () => {
       expect(c.axiosOptions.httpsAgent).toBeDefined();
     });
 
+    test('should create https agent when cafile provided without certfile', () => {
+      const c = new AgentClient('a', {
+        host: 'myhost',
+        port: 4000,
+        secret: 's',
+        cafile: '/path/to/ca.pem',
+      });
+      expect(c.baseUrl).toBe('https://myhost:4000');
+      expect(c.axiosOptions.httpsAgent).toBeDefined();
+    });
+
     test('should skip cert file read when resolved cert path is empty', () => {
       mockResolveConfiguredPath.mockImplementation((path, options) => {
         if (options?.label === 'a cert file') {
