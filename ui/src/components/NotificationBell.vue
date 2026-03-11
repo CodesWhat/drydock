@@ -102,7 +102,7 @@ function isUnread(entry: AuditEntry): boolean {
             @click="toggle">
       <AppIcon name="notifications" :size="18" />
       <span v-if="unreadCount > 0"
-            class="badge-pulse absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center rounded-full text-[9px] font-bold text-white"
+            class="badge-pulse absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center rounded-full text-[0.5625rem] font-bold text-white"
             style="background: var(--dd-danger);">
         {{ unreadCount > 9 ? '9+' : unreadCount }}
       </span>
@@ -114,9 +114,9 @@ function isUnread(entry: AuditEntry): boolean {
         <!-- Header -->
         <div class="flex items-center justify-between px-3 py-2"
              :style="{ borderBottom: '1px solid var(--dd-border)' }">
-          <span class="text-[11px] font-semibold uppercase tracking-wider dd-text-muted">Notifications</span>
+          <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Notifications</span>
           <button v-if="unreadCount > 0"
-                  class="text-[10px] font-medium dd-text-secondary hover:dd-text transition-colors"
+                  class="text-[0.625rem] font-medium dd-text-secondary hover:dd-text transition-colors"
                   @click="markAllRead">
             Mark all read
           </button>
@@ -124,10 +124,10 @@ function isUnread(entry: AuditEntry): boolean {
 
         <!-- Scrollable list -->
         <div class="max-h-[400px] overflow-y-auto">
-          <div v-if="loading && entries.length === 0" class="px-3 py-6 text-center text-[11px] dd-text-muted">
+          <div v-if="loading && entries.length === 0" class="px-3 py-6 text-center text-[0.6875rem] dd-text-muted">
             Loading...
           </div>
-          <div v-else-if="entries.length === 0" class="px-3 py-6 text-center text-[11px] dd-text-muted">
+          <div v-else-if="entries.length === 0" class="px-3 py-6 text-center text-[0.6875rem] dd-text-muted">
             No notifications yet
           </div>
           <button v-for="entry in entries"
@@ -140,25 +140,25 @@ function isUnread(entry: AuditEntry): boolean {
                      class="shrink-0 mt-0.5"
                      :style="{ color: statusColor(entry.status) }" />
             <div class="flex-1 min-w-0">
-              <div class="text-[11px] truncate dd-text"
+              <div class="text-[0.6875rem] truncate dd-text"
                    :class="{ 'font-bold': isUnread(entry), 'font-medium': !isUnread(entry) }">
                 {{ actionLabel(entry.action) }}
               </div>
-              <div class="text-[10px] truncate dd-text-muted font-mono mt-0.5">
+              <div class="text-[0.625rem] truncate dd-text-muted font-mono mt-0.5">
                 {{ entry.containerName }}
               </div>
-              <div v-if="versionSummary(entry)" class="text-[10px] dd-text-secondary font-mono mt-0.5">
+              <div v-if="versionSummary(entry)" class="text-[0.625rem] dd-text-secondary font-mono mt-0.5">
                 {{ versionSummary(entry) }}
               </div>
             </div>
-            <span class="text-[10px] dd-text-muted whitespace-nowrap shrink-0 mt-0.5">
+            <span class="text-[0.625rem] dd-text-muted whitespace-nowrap shrink-0 mt-0.5">
               {{ timeAgo(entry.timestamp) }}
             </span>
           </button>
         </div>
 
         <!-- Footer -->
-        <button class="w-full text-center px-3 py-2 text-[11px] font-medium dd-text-secondary hover:dd-text transition-colors"
+        <button class="w-full text-center px-3 py-2 text-[0.6875rem] font-medium dd-text-secondary hover:dd-text transition-colors"
                 :style="{ borderTop: '1px solid var(--dd-border)' }"
                 @click="viewAll">
           View all

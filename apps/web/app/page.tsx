@@ -19,8 +19,8 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { DemoSection } from "@/components/demo-section";
 import { RoadmapTimeline } from "@/components/roadmap-timeline";
-import { ScreenshotsSection } from "@/components/screenshots-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -133,39 +133,6 @@ const features = [
     bg: "bg-violet-100 dark:bg-violet-900/50",
     description:
       "Smart stack detection via compose project or labels. Collapsible groups with batch actions.",
-  },
-];
-
-const screenshots = [
-  {
-    srcLight: "/screenshots/dashboard-light-desktop.png",
-    srcDark: "/screenshots/dashboard-dark-desktop.png",
-    alt: "Drydock Dashboard",
-    label: "Dashboard",
-  },
-  {
-    srcLight: "/screenshots/containers-light-desktop.png",
-    srcDark: "/screenshots/containers-dark-desktop.png",
-    alt: "Container List",
-    label: "Containers",
-  },
-  {
-    srcLight: "/screenshots/container-detail-light-desktop.png",
-    srcDark: "/screenshots/container-detail-dark-desktop.png",
-    alt: "Container Detail View",
-    label: "Detail View",
-  },
-  {
-    srcLight: "/screenshots/security-light-desktop.png",
-    srcDark: "/screenshots/security-dark-desktop.png",
-    alt: "Security Vulnerability Scanner",
-    label: "Security",
-  },
-  {
-    srcLight: "/screenshots/login-light-desktop.png",
-    srcDark: "/screenshots/login-dark-desktop.png",
-    alt: "Login Page",
-    label: "Login",
   },
 ];
 
@@ -797,8 +764,8 @@ export default function Home() {
             </div>
           </section>
 
-          {/* Screenshots Section */}
-          <ScreenshotsSection screenshots={screenshots} />
+          {/* Interactive Demo */}
+          <DemoSection />
 
           {/* Roadmap Timeline */}
           <RoadmapTimeline roadmap={roadmap} />

@@ -32,7 +32,7 @@ export const CommonIcons: Story = {
              class="px-3 py-2 dd-rounded flex items-center gap-2"
              :style="{ border: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-card)' }">
           <AppIcon :name="name" :size="14" />
-          <span class="text-[11px] dd-text-muted">{{ name }}</span>
+          <span class="text-[0.6875rem] dd-text-muted">{{ name }}</span>
         </div>
       </div>
     `,

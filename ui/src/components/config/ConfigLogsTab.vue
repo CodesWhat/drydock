@@ -82,7 +82,7 @@ function asEntry(entry: unknown): AppLogEntry {
           :loading="props.loading"
           :error="props.error"
           empty-message="No log entries found for current filters."
-          container-class="dd-rounded overflow-auto flex-1 min-h-0 font-mono text-[11px]"
+          container-class="dd-rounded overflow-auto flex-1 min-h-0 font-mono text-[0.6875rem]"
           :container-style="{
             backgroundColor: 'var(--dd-bg-inset)',
             border: '1px solid var(--dd-border-strong)',
@@ -94,7 +94,7 @@ function asEntry(entry: unknown): AppLogEntry {
             <div class="flex flex-wrap items-center gap-2">
               <select
                 v-model="logLevelFilterModel"
-                class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong"
+                class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong"
               >
                 <option value="all">All Levels</option>
                 <option value="debug">Debug</option>
@@ -105,7 +105,7 @@ function asEntry(entry: unknown): AppLogEntry {
 
               <select
                 v-model.number="tailModel"
-                class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong"
+                class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong"
               >
                 <option :value="50">Tail 50</option>
                 <option :value="100">Tail 100</option>
@@ -115,7 +115,7 @@ function asEntry(entry: unknown): AppLogEntry {
 
               <select
                 v-model.number="autoFetchIntervalModel"
-                class="px-2 py-1.5 dd-rounded text-[11px] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong"
+                class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong"
               >
                 <option v-for="opt in props.autoFetchOptions" :key="opt.value" :value="opt.value">
                   {{ opt.label }}
@@ -126,19 +126,19 @@ function asEntry(entry: unknown): AppLogEntry {
                 v-model="componentFilterModel"
                 type="text"
                 placeholder="Filter by component..."
-                class="flex-1 min-w-[180px] max-w-[280px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-placeholder dd-border-strong"
+                class="flex-1 min-w-[180px] max-w-[280px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-placeholder dd-border-strong"
                 @keyup.enter="emit('refresh')"
               />
 
               <button
-                class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
+                class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
                 :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
                 @click="emit('refresh')"
               >
                 Apply
               </button>
               <button
-                class="px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text"
+                class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text"
                 :class="props.loading ? 'opacity-50 pointer-events-none' : ''"
                 @click="emit('reset')"
               >
@@ -152,14 +152,14 @@ function asEntry(entry: unknown): AppLogEntry {
               >
                 <AppIcon name="refresh" :size="12" />
               </button>
-              <div class="ml-auto text-[10px] dd-text-muted">
+              <div class="ml-auto text-[0.625rem] dd-text-muted">
                 Server Level: <span class="font-semibold dd-text capitalize">{{ props.logLevel }}</span>
               </div>
             </div>
           </template>
 
           <template #meta>
-            <div class="text-[10px] dd-text-muted">
+            <div class="text-[0.625rem] dd-text-muted">
               Last fetched: {{ props.formatLastFetched(props.lastFetchedIso) }}
             </div>
           </template>
@@ -181,12 +181,12 @@ function asEntry(entry: unknown): AppLogEntry {
           <template #footer>
             <div
               v-if="props.scrollBlocked && props.autoFetchInterval > 0"
-              class="flex items-center justify-between px-3 py-2 text-[10px]"
+              class="flex items-center justify-between px-3 py-2 text-[0.625rem]"
               :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-warning-muted)' }"
             >
               <span class="font-semibold" :style="{ color: 'var(--dd-warning)' }">Auto-scroll paused</span>
               <button
-                class="px-2 py-0.5 dd-rounded text-[10px] font-semibold transition-colors"
+                class="px-2 py-0.5 dd-rounded text-[0.625rem] font-semibold transition-colors"
                 :style="{ backgroundColor: 'var(--dd-warning)', color: 'var(--dd-bg)' }"
                 @click="emit('resume-auto-scroll')"
               >

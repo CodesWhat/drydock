@@ -363,7 +363,7 @@ function handleSelectIconLibrary(library: string) {
       <button
         v-for="tab in settingsTabs"
         :key="tab.id"
-        class="px-4 py-2.5 text-[12px] font-semibold transition-colors relative"
+        class="px-4 py-2.5 text-xs font-semibold transition-colors relative"
         :class="activeSettingsTab === tab.id ? 'text-drydock-secondary' : 'dd-text-muted hover:dd-text'"
         @click="activeSettingsTab = tab.id"
       >

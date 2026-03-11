@@ -1135,7 +1135,7 @@ onUnmounted(() => {
       <nav class="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 space-y-4">
         <div v-for="group in navGroups" :key="group.label">
           <div v-if="group.label && !isCollapsed"
-               class="px-2 mb-1 text-[10px] font-semibold uppercase tracking-wider dd-text-muted">
+               class="px-2 mb-1 text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted">
             {{ group.label }}
           </div>
           <div v-else-if="group.label" class="flex justify-center py-1 w-9 mx-auto">
@@ -1154,9 +1154,9 @@ onUnmounted(() => {
               ]"
               style="padding: 6px 12px;">
               <AppIcon :name="item.icon" :size="16" class="shrink-0" style="width:20px; text-align:center;" />
-              <span class="sidebar-label text-[13px] font-medium">{{ item.label }}</span>
+              <span class="sidebar-label text-[0.8125rem] font-medium">{{ item.label }}</span>
               <span v-if="item.badge && !isCollapsed"
-                    class="sidebar-label ml-auto badge text-[10px]"
+                    class="sidebar-label ml-auto badge text-[0.625rem]"
                     :style="{
                       backgroundColor: item.badgeColor === 'red'
                         ? 'var(--dd-danger-muted)'
@@ -1188,8 +1188,8 @@ onUnmounted(() => {
           <AppIcon name="search" :size="12" class="shrink-0" />
           <template v-if="!isCollapsed">
             <span class="sidebar-label">Search</span>
-            <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-muted">
-              <span class="text-[9px]">&#8984;</span>K
+            <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-[0.625rem] font-medium dd-bg-elevated dd-text-muted">
+              <span class="text-[0.5625rem]">&#8984;</span>K
             </kbd>
           </template>
         </button>
@@ -1235,7 +1235,7 @@ onUnmounted(() => {
             <span class="hamburger-line block w-4 h-[2px] rounded-full" style="background: var(--dd-text-muted)" />
           </button>
 
-          <nav class="flex items-center gap-1.5 text-[13px]">
+          <nav class="flex items-center gap-1.5 text-[0.8125rem]">
             <AppIcon :name="currentPageIcon" :size="16" class="leading-none dd-text-muted" />
             <AppIcon name="chevron-right" :size="13" class="leading-none dd-text-muted" />
             <span class="font-medium leading-none dd-text">
@@ -1267,17 +1267,17 @@ onUnmounted(() => {
               <div v-if="showUserMenu"
                    class="absolute right-0 top-full mt-1 min-w-[160px] py-1 dd-rounded-lg shadow-lg z-50"
                    :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-lg)' }">
-                <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider dd-text-muted"
+                <div class="px-3 py-1.5 text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted"
                      :style="{ borderBottom: '1px solid var(--dd-border)' }">
                   {{ currentUser?.username || 'User' }}
                 </div>
-                <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
+                <button class="w-full text-left px-3 py-1.5 text-[0.6875rem] font-medium transition-colors flex items-center gap-2 dd-text hover:dd-bg-elevated"
                         @click="showUserMenu = false; router.push({ path: ROUTES.CONFIG, query: { tab: 'profile' } })">
                   <AppIcon name="user" :size="11" class="dd-text-muted" />
                   Profile
                 </button>
                 <div class="my-0.5" :style="{ borderTop: '1px solid var(--dd-border)' }" />
-                <button class="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated"
+                <button class="w-full text-left px-3 py-1.5 text-[0.6875rem] font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated"
                         style="color: var(--dd-danger);"
                         @click="handleSignOut">
                   <AppIcon name="sign-out" :size="11" />
@@ -1347,24 +1347,24 @@ onUnmounted(() => {
                      :style="isDark ? { filter: 'invert(1)' } : {}" />
               </div>
               <h2 id="about-dialog-title" class="text-base font-bold dd-text">Drydock</h2>
-              <span class="text-[11px] dd-text-muted mt-0.5">Docker Container Update Manager</span>
-              <span class="badge text-[10px] font-semibold mt-2 dd-bg-elevated dd-text-secondary">v1.4.0</span>
+              <span class="text-[0.6875rem] dd-text-muted mt-0.5">Docker Container Update Manager</span>
+              <span class="badge text-[0.625rem] font-semibold mt-2 dd-bg-elevated dd-text-secondary">v1.4.0</span>
             </div>
             <div class="px-6 pb-5 flex flex-col gap-2"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">
               <div class="pt-3 flex flex-col gap-1.5">
                 <a href="https://drydock.codeswhat.com" target="_blank" rel="noopener"
-                   class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-[12px] font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
+                   class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-xs font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
                   <AppIcon name="book" :size="12" class="dd-text-muted" />
                   Documentation
                 </a>
                 <a href="https://github.com/CodesWhat/drydock" target="_blank" rel="noopener"
-                   class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-[12px] font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
+                   class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-xs font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
                   <AppIcon name="github" :size="12" class="dd-text-muted" />
                   GitHub
                 </a>
                 <a href="https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md" target="_blank" rel="noopener"
-                   class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-[12px] font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
+                   class="flex items-center gap-2.5 px-3 py-2 dd-rounded text-xs font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated no-underline">
                   <AppIcon name="recent-updates" :size="12" class="dd-text-muted" />
                   Changelog
                 </a>
@@ -1398,30 +1398,30 @@ onUnmounted(() => {
                      @keydown.escape="showSearch = false"
                      @keydown="handleSearchInputKeydown" />
               <span v-if="scopePrefixLabel"
-                    class="px-1.5 py-0.5 text-[10px] uppercase tracking-wide font-semibold dd-rounded-sm dd-bg-elevated dd-text-secondary">
+                    class="px-1.5 py-0.5 text-[0.625rem] uppercase tracking-wide font-semibold dd-rounded-sm dd-bg-elevated dd-text-secondary">
                 {{ scopePrefixLabel }}
               </span>
-              <kbd class="px-1.5 py-0.5 dd-rounded-sm text-[10px] font-medium dd-bg-elevated dd-text-muted">ESC</kbd>
+              <kbd class="px-1.5 py-0.5 dd-rounded-sm text-[0.625rem] font-medium dd-bg-elevated dd-text-muted">ESC</kbd>
             </div>
             <div class="px-3 py-2 flex items-center gap-1.5"
                  :style="{ borderBottom: '1px solid var(--dd-border)' }">
               <button
                 v-for="scopeOption in SEARCH_SCOPE_OPTIONS"
                 :key="scopeOption.id"
-                class="inline-flex items-center gap-1 px-2 py-1 text-[10px] uppercase tracking-wide font-semibold border dd-rounded transition-colors"
+                class="inline-flex items-center gap-1 px-2 py-1 text-[0.625rem] uppercase tracking-wide font-semibold border dd-rounded transition-colors"
                 :aria-pressed="String(scopeOption.id === effectiveSearchScope)"
                 :style="searchScopeChipStyles(scopeOption.id, scopeOption.id === effectiveSearchScope)"
                 @click="applySearchScope(scopeOption.id)">
                 {{ scopeOption.label }}
-                <span class="text-[9px] opacity-80">{{ searchScopeCounts[scopeOption.id] }}</span>
+                <span class="text-[0.5625rem] opacity-80">{{ searchScopeCounts[scopeOption.id] }}</span>
               </button>
-              <span class="ml-auto text-[10px] dd-text-muted">
+              <span class="ml-auto text-[0.625rem] dd-text-muted">
                 {{ searchResults.length }} shown
               </span>
             </div>
             <div class="max-h-[360px] overflow-y-auto py-1">
               <template v-for="(group, groupIndex) in groupedSearchResults" :key="group.id">
-                <div class="px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] dd-text-muted"
+                <div class="px-4 py-1.5 text-[0.625rem] font-bold uppercase tracking-[0.12em] dd-text-muted"
                      :style="groupIndex > 0 ? { borderTop: '1px solid var(--dd-border)' } : {}">
                   {{ group.label }}
                 </div>
@@ -1441,8 +1441,8 @@ onUnmounted(() => {
                     <AppIcon v-else :name="result.icon" :size="13" class="dd-text-muted" />
                   </div>
                   <div class="min-w-0 flex-1">
-                    <div class="text-[12px] font-semibold truncate dd-text">{{ result.title }}</div>
-                    <div class="text-[10px] truncate dd-text-muted">{{ result.subtitle }}</div>
+                    <div class="text-xs font-semibold truncate dd-text">{{ result.title }}</div>
+                    <div class="text-[0.625rem] truncate dd-text-muted">{{ result.subtitle }}</div>
                   </div>
                   <AppIcon name="chevron-right" :size="11" class="dd-text-muted shrink-0" />
                 </button>
@@ -1454,7 +1454,7 @@ onUnmounted(() => {
                 <span v-else>Type to search pages, containers, agents, triggers, watchers, and settings.</span>
               </div>
             </div>
-            <div class="px-4 py-2.5 flex items-center justify-between text-[10px] dd-text-muted"
+            <div class="px-4 py-2.5 flex items-center justify-between text-[0.625rem] dd-text-muted"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">
               <span>
                 <span v-if="scopePrefixLabel">Prefix scope active; use </span>
@@ -1489,12 +1489,12 @@ onUnmounted(() => {
               <img :src="whaleLogo" alt="" class="h-10 w-auto mb-1"
                    :style="[{ transform: 'rotate(180deg) scaleX(-1)' }, isDark ? { filter: 'invert(1)' } : {}]" />
               <h2 class="text-sm font-bold dd-text">{{ connectionOverlayTitle }}</h2>
-              <p class="text-[11px] dd-text-muted leading-relaxed">
+              <p class="text-[0.6875rem] dd-text-muted leading-relaxed">
                 {{ connectionOverlayMessage }}
               </p>
               <div class="flex items-center gap-2 mt-1">
                 <AppIcon name="spinner" :size="12" class="dd-spin dd-text-muted" />
-                <span class="text-[10px] dd-text-muted">{{ connectionOverlayStatus }}</span>
+                <span class="text-[0.625rem] dd-text-muted">{{ connectionOverlayStatus }}</span>
               </div>
             </div>
           </div>

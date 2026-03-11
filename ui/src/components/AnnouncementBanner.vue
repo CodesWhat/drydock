@@ -28,10 +28,10 @@ const testIdPrefix = attrs['data-testid'] as string | undefined;
     <div class="flex items-start gap-2.5 min-w-0">
       <AppIcon :name="icon ?? 'warning'" :size="14" class="shrink-0 mt-0.5" :style="{ color: 'var(--dd-warning)' }" />
       <div class="min-w-0">
-        <p class="text-[12px] font-semibold" :style="{ color: 'var(--dd-warning)' }">
+        <p class="text-xs font-semibold" :style="{ color: 'var(--dd-warning)' }">
           {{ title }}
         </p>
-        <p class="text-[11px] mt-0.5" :style="{ color: 'var(--dd-text)' }">
+        <p class="text-[0.6875rem] mt-0.5" :style="{ color: 'var(--dd-text)' }">
           <slot />
         </p>
       </div>
@@ -39,7 +39,7 @@ const testIdPrefix = attrs['data-testid'] as string | undefined;
     <div class="flex items-center gap-2 shrink-0">
       <button
         :data-testid="testIdPrefix ? `${testIdPrefix}-dismiss-session` : undefined"
-        class="text-[11px] px-2.5 py-1.5 dd-rounded transition-colors"
+        class="text-[0.6875rem] px-2.5 py-1.5 dd-rounded transition-colors"
         :style="{
           border: '1px solid var(--dd-warning)',
           color: 'var(--dd-warning)',
@@ -51,7 +51,7 @@ const testIdPrefix = attrs['data-testid'] as string | undefined;
       <button
         v-if="permanentDismissLabel !== undefined"
         :data-testid="testIdPrefix ? `${testIdPrefix}-dismiss-forever` : undefined"
-        class="text-[11px] px-2.5 py-1.5 dd-rounded transition-colors"
+        class="text-[0.6875rem] px-2.5 py-1.5 dd-rounded transition-colors"
         :style="{
           border: '1px solid var(--dd-warning)',
           color: 'var(--dd-bg)',

@@ -336,7 +336,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                 :data-col-key="col.key"
                 :class="[
                   col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-center', 'px-5'],
-                  'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-[10px] select-none transition-colors relative',
+                  'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] select-none transition-colors relative',
                   isSortableColumn(col) ? 'cursor-pointer' : '',
                   sortKey === col.key ? 'dd-text-secondary' : 'dd-text-muted hover:dd-text-secondary',
                 ]"
@@ -346,7 +346,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                 @keydown="handleHeaderKeydown($event, col)"
                 @click="!resizing && isSortableColumn(col) && toggleSort(col.key, sortKey, sortAsc)">
               {{ col.label }}
-              <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-[8px]">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
+              <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-[0.5rem]">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
               <!-- Resize handle -->
               <div v-if="!col.icon && colIdx < columns.length - 1"
                    role="separator"
@@ -357,7 +357,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                      style="background: var(--dd-text-muted)" />
               </div>
             </th>
-            <th v-if="showActions" class="text-center px-4 py-2.5 font-semibold uppercase tracking-wider text-[10px] whitespace-nowrap dd-text-muted relative">
+            <th v-if="showActions" class="text-center px-4 py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] whitespace-nowrap dd-text-muted relative">
               Actions
               <div v-if="lastResizableColumnKey"
                    role="separator"

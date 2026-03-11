@@ -154,12 +154,12 @@ onMounted(fetchServers);
 <template>
   <DataViewLayout>
     <div v-if="error"
-         class="mb-3 px-3 py-2 text-[11px] dd-rounded"
+         class="mb-3 px-3 py-2 text-[0.6875rem] dd-rounded"
          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
       {{ error }}
     </div>
 
-    <div v-if="loading" class="text-[11px] dd-text-muted py-3 px-1">Loading server data...</div>
+    <div v-if="loading" class="text-[0.6875rem] dd-text-muted py-3 px-1">Loading server data...</div>
 
     <!-- Filter bar -->
     <DataFilterBar
@@ -173,9 +173,9 @@ onMounted(fetchServers);
         <input v-model="searchQuery"
                type="text"
                placeholder="Filter by name or address..."
-               class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[11px] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
+               class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
         <button v-if="searchQuery"
-                class="text-[10px] dd-text-muted hover:dd-text transition-colors"
+                class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
                 @click="searchQuery = ''">
           Clear
         </button>
@@ -198,14 +198,14 @@ onMounted(fetchServers);
             </div>
           </template>
           <template #cell-host="{ row }">
-            <span class="font-mono text-[10px] dd-text-secondary">{{ row.host }}</span>
+            <span class="font-mono text-[0.625rem] dd-text-secondary">{{ row.host }}</span>
           </template>
           <template #cell-status="{ row }">
-            <span class="badge px-1.5 py-0 text-[9px] md:!hidden"
+            <span class="badge px-1.5 py-0 text-[0.5625rem] md:!hidden"
                   :style="{ backgroundColor: statusBg(row.status), color: statusColor(row.status) }">
               <AppIcon :name="row.status === 'connected' ? 'check' : 'xmark'" :size="12" />
             </span>
-            <span class="badge text-[9px] font-bold uppercase max-md:!hidden"
+            <span class="badge text-[0.5625rem] font-bold uppercase max-md:!hidden"
                   :style="{ backgroundColor: statusBg(row.status), color: statusColor(row.status) }">
               {{ row.status }}
             </span>
@@ -213,7 +213,7 @@ onMounted(fetchServers);
           <template #cell-containers="{ row }">
             <div class="flex items-center justify-center gap-2">
               <span class="font-semibold dd-text">{{ row.containers.total }}</span>
-              <span class="text-[10px]" :style="{ color: row.containers.running > 0 ? 'var(--dd-success)' : 'var(--dd-text-muted)' }">
+              <span class="text-[0.625rem]" :style="{ color: row.containers.running > 0 ? 'var(--dd-success)' : 'var(--dd-text-muted)' }">
                 {{ row.containers.running }} running
               </span>
             </div>
@@ -238,21 +238,21 @@ onMounted(fetchServers);
               <div class="flex items-center gap-2.5 min-w-0">
                 <AppIcon name="servers" :size="14" class="dd-text-secondary shrink-0 mt-1" />
                 <div class="min-w-0">
-                  <div class="text-[15px] font-semibold truncate dd-text">{{ server.name }}</div>
-                  <div class="text-[11px] truncate mt-0.5 dd-text-muted font-mono">{{ server.host }}</div>
+                  <div class="text-[0.9375rem] font-semibold truncate dd-text">{{ server.name }}</div>
+                  <div class="text-[0.6875rem] truncate mt-0.5 dd-text-muted font-mono">{{ server.host }}</div>
                 </div>
               </div>
-              <span class="badge px-1.5 py-0 text-[9px] shrink-0 ml-2 md:!hidden"
+              <span class="badge px-1.5 py-0 text-[0.5625rem] shrink-0 ml-2 md:!hidden"
                     :style="{ backgroundColor: statusBg(server.status), color: statusColor(server.status) }">
                 <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
               </span>
-              <span class="badge text-[9px] uppercase font-bold shrink-0 ml-2 max-md:!hidden"
+              <span class="badge text-[0.5625rem] uppercase font-bold shrink-0 ml-2 max-md:!hidden"
                     :style="{ backgroundColor: statusBg(server.status), color: statusColor(server.status) }">
                 {{ server.status }}
               </span>
             </div>
             <div class="px-4 py-3">
-              <div class="grid grid-cols-2 gap-2 text-[11px]">
+              <div class="grid grid-cols-2 gap-2 text-[0.6875rem]">
                 <div>
                   <span class="dd-text-muted">Containers</span>
                   <span class="ml-1 font-semibold dd-text">{{ server.containers.total }}</span>
@@ -277,7 +277,7 @@ onMounted(fetchServers);
             </div>
             <div class="px-4 py-2.5 mt-auto"
                  :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
-              <span class="text-[10px]"
+              <span class="text-[0.625rem]"
                     :style="{ color: server.containers.running > 0 ? 'var(--dd-success)' : 'var(--dd-text-muted)' }">
                 {{ server.containers.running }}/{{ server.containers.total }} running
               </span>
@@ -297,17 +297,17 @@ onMounted(fetchServers);
             <AppIcon name="servers" :size="14" class="dd-text-secondary" />
             <div class="flex-1 min-w-0">
               <div class="text-sm font-semibold truncate dd-text">{{ server.name }}</div>
-              <div class="text-[10px] font-mono dd-text-muted truncate mt-0.5">{{ server.host }}</div>
+              <div class="text-[0.625rem] font-mono dd-text-muted truncate mt-0.5">{{ server.host }}</div>
             </div>
             <div class="flex items-center gap-3 shrink-0">
-              <span class="text-[11px] dd-text-muted hidden md:inline">
+              <span class="text-[0.6875rem] dd-text-muted hidden md:inline">
                 <span class="font-semibold dd-text">{{ server.containers.total }}</span> containers
               </span>
-              <span class="text-[11px] hidden md:inline"
+              <span class="text-[0.6875rem] hidden md:inline"
                     :class="server.status === 'connected' ? 'dd-text-muted' : 'dd-text-danger'">
                 {{ server.lastSeen }}
               </span>
-              <span class="badge text-[9px] uppercase font-bold hidden md:inline-flex"
+              <span class="badge text-[0.5625rem] uppercase font-bold hidden md:inline-flex"
                     :style="{ backgroundColor: statusBg(server.status), color: statusColor(server.status) }">
                 {{ server.status }}
               </span>
@@ -336,7 +336,7 @@ onMounted(fetchServers);
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
             <span class="text-sm font-bold truncate dd-text">{{ selectedServer?.name }}</span>
-            <span class="badge text-[9px] uppercase font-bold shrink-0"
+            <span class="badge text-[0.5625rem] uppercase font-bold shrink-0"
                   :style="{
                     backgroundColor: selectedServer ? statusBg(selectedServer.status) : undefined,
                     color: selectedServer ? statusColor(selectedServer.status) : undefined,
@@ -347,21 +347,21 @@ onMounted(fetchServers);
         </template>
 
         <template #subtitle>
-          <span class="text-[11px] font-mono dd-text-secondary">{{ selectedServer?.host }}</span>
+          <span class="text-[0.6875rem] font-mono dd-text-secondary">{{ selectedServer?.host }}</span>
         </template>
 
         <template v-if="selectedServer" #default>
           <div class="p-4 space-y-5">
             <!-- Containers -->
             <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Containers</div>
+              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Containers</div>
               <div class="flex items-baseline gap-3 mt-1">
                 <span class="text-lg font-bold dd-text">{{ selectedServer.containers.total }}</span>
-                <span class="text-[11px] font-medium" :style="{ color: 'var(--dd-success)' }">
+                <span class="text-[0.6875rem] font-medium" :style="{ color: 'var(--dd-success)' }">
                   {{ selectedServer.containers.running }} running
                 </span>
                 <span v-if="selectedServer.containers.stopped > 0"
-                      class="text-[11px] font-medium" style="color: var(--dd-danger);">
+                      class="text-[0.6875rem] font-medium" style="color: var(--dd-danger);">
                   {{ selectedServer.containers.stopped }} stopped
                 </span>
               </div>
@@ -369,14 +369,14 @@ onMounted(fetchServers);
 
             <!-- Images -->
             <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Images</div>
-              <div class="text-[12px] font-mono dd-text">{{ selectedServer.images }}</div>
+              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Images</div>
+              <div class="text-xs font-mono dd-text">{{ selectedServer.images }}</div>
             </div>
 
             <!-- Last Seen -->
             <div>
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Last Seen</div>
-              <div class="text-[12px] font-medium"
+              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-1 dd-text-muted">Last Seen</div>
+              <div class="text-xs font-medium"
                    :class="selectedServer.status === 'connected' ? 'dd-text' : 'dd-text-danger'">
                 {{ selectedServer.lastSeen }}
               </div>
@@ -385,7 +385,7 @@ onMounted(fetchServers);
             <!-- Actions -->
             <div class="pt-2 flex gap-2"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">
-              <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
+              <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
                       :style="{ border: '1px solid var(--dd-border-strong)' }"
                       @click="fetchServers()">
                 <AppIcon name="restart" :size="11" />

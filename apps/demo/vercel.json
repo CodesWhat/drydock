@@ -1,0 +1,19 @@
+{
+  "rewrites": [{ "source": "/((?!mockServiceWorker\\.js).*)", "destination": "/index.html" }],
+  "headers": [
+    {
+      "source": "/mockServiceWorker.js",
+      "headers": [{ "key": "Service-Worker-Allowed", "value": "/" }]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "ALLOW-FROM https://drydock.codeswhat.com" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "frame-ancestors 'self' https://drydock.codeswhat.com https://*.vercel.app"
+        }
+      ]
+    }
+  ]
+}
