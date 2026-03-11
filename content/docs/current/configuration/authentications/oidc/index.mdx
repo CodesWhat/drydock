@@ -214,6 +214,10 @@ docker run \
 </Tab>
 </Tabs>
 
+<Callout type="warn">**Authentik token encryption** — In the Authentik provider's **Advanced protocol settings**, ensure the **Encryption Key** is unset ("Select an encryption key..."). Drydock does not support JWE (encrypted) tokens. If an encryption key is selected, Authentik will encrypt the ID token and Drydock will fail to validate it.</Callout>
+
+<Callout type="info">**Self-signed certificates** — If your Authentik instance uses a self-signed certificate, use `DD_AUTH_OIDC_AUTHENTIK_INSECURE=true` to skip TLS verification for OIDC calls only (does not affect registry or webhook TLS). Alternatively, mount the CA certificate and use `DD_AUTH_OIDC_AUTHENTIK_CAFILE=/path/to/ca.pem`. For the CAFILE approach, ensure the PEM file contains the **full certificate chain** (not just the leaf certificate).</Callout>
+
 ## How to integrate with Dex
 
 <Callout type="warn">Dex does not currently advertise `end_session_endpoint` in discovery metadata. Without an explicit `DD_AUTH_OIDC_DEX_LOGOUTURL`, `POST /auth/logout` clears only the local drydock session.</Callout>
