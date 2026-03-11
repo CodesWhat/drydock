@@ -55,7 +55,27 @@ describe('useServerFeatures', () => {
     );
     expect(features.featureFlags.value).toEqual({});
     expect(features.error.value).toBe('server unavailable');
+    expect(features.loaded.value).toBe(false);
+  });
+
+  it('retries loading after a failed fetch succeeds on next attempt', async () => {
+    mockGetServer.mockRejectedValueOnce(new Error('401 Unauthorized')).mockResolvedValueOnce({
+      configuration: {
+        feature: { containeractions: true, delete: true },
+      },
+    });
+
+    const { useServerFeatures } = await loadComposable();
+    const features = useServerFeatures({ autoLoad: false });
+
+    await features.loadServerFeatures();
+    expect(features.loaded.value).toBe(false);
+    expect(features.containerActionsEnabled.value).toBe(false);
+
+    await features.loadServerFeatures();
     expect(features.loaded.value).toBe(true);
+    expect(features.containerActionsEnabled.value).toBe(true);
+    expect(mockGetServer).toHaveBeenCalledTimes(2);
   });
 
   it('coalesces concurrent loads and caches the first successful payload', async () => {

@@ -43,11 +43,11 @@ async function loadServerFeatures(): Promise<void> {
     try {
       const serverData = await getServer();
       featureFlags.value = normalizeFeatureFlags(serverData?.configuration?.feature);
+      loaded.value = true;
     } catch (e: unknown) {
       featureFlags.value = {};
       error.value = errorMessage(e, 'Failed to load server feature configuration');
     } finally {
-      loaded.value = true;
       loading.value = false;
       loadPromise = null;
     }

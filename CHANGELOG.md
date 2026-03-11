@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Server feature flags not loaded after login** — Feature flags (`containeractions`, `delete`) were permanently stuck as disabled when authentication was required, because the pre-login bootstrap fetch failure marked the flags as "loaded" and never retried. Now failed fetches allow automatic retry after login. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+
+### Changed
+
+- **MQTT HASS_ATTRIBUTES default changed to `short`** — The MQTT trigger `HASS_ATTRIBUTES` preset now defaults to `short` instead of `full`, excluding large SBOM documents, scan vulnerabilities, details, and labels from Home Assistant entity payloads. Users who need the full payload can set `DD_TRIGGER_MQTT_{name}_HASS_ATTRIBUTES=full` explicitly.
+
 ## [1.4.0] — 2026-02-28
 
 ### Added
