@@ -793,7 +793,7 @@ class Dockercompose extends Docker {
         container.name,
       );
     } catch (e) {
-      this.log.debug(
+      this.log.warn(
         `Unable to inspect compose labels for container ${container.name}; falling back to default compose file resolution (${e.message})`,
       );
       return [];
@@ -1319,7 +1319,7 @@ class Dockercompose extends Docker {
         continue;
       }
       if (configuredComposeFilePath && !composeFiles.includes(configuredComposeFilePath)) {
-        this.log.debug(
+        this.log.warn(
           `Skip container ${container.name} because compose files ${composeFiles.join(', ')} do not match configured file ${configuredComposeFilePath}`,
         );
         continue;
@@ -1373,6 +1373,10 @@ class Dockercompose extends Docker {
       configuredComposeFilePath,
     );
 
+    if (containersByComposeFile.size === 0) {
+      this.log.warn('No containers matched any compose file for this trigger');
+    }
+
     // Process each compose file group
     const batchResults: unknown[] = [];
     for (const {
@@ -1408,9 +1412,15 @@ class Dockercompose extends Docker {
     const compose = await this.getComposeFileChainAsObject(composeFileChain, composeByFile);
 
     // Filter containers that belong to this compose file
-    const containersFiltered = containers.filter((container) =>
-      doesContainerBelongToCompose(compose, container),
-    );
+    const containersFiltered = containers.filter((container) => {
+      const belongs = doesContainerBelongToCompose(compose, container);
+      if (!belongs) {
+        this.log.warn(
+          `Container ${container.name} not found in compose file ${composeFileChainSummary} (image mismatch)`,
+        );
+      }
+      return belongs;
+    });
 
     if (containersFiltered.length === 0) {
       this.log.warn(`No containers found in compose file ${composeFileChainSummary}`);
@@ -1453,7 +1463,9 @@ class Dockercompose extends Docker {
     );
 
     if (mappingsNeedingRuntimeUpdate.length === 0) {
-      this.log.info(`All containers in ${composeFileChainSummary} are already up to date`);
+      this.log.info(
+        `All containers in ${composeFileChainSummary} are already up to date (checked: ${versionMappings.map((m) => m.container.name).join(', ') || 'none'})`,
+      );
       return;
     }
 

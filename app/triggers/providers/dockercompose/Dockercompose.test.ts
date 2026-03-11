@@ -708,6 +708,7 @@ describe('Dockercompose Trigger', () => {
     await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
 
     expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('No containers found'));
+    expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('not found in compose file'));
   });
 
   test('processComposeFile should warn and continue on compose/runtime reconciliation mismatch by default', async () => {
@@ -2997,6 +2998,35 @@ describe('Dockercompose Trigger', () => {
     expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('permission denied'));
   });
 
+  test('triggerBatch should warn when container compose file does not match configured file', async () => {
+    trigger.configuration.file = '/opt/drydock/configured.yml';
+    fs.access.mockResolvedValue(undefined);
+
+    const container = {
+      name: 'mismatched',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/opt/drydock/other.yml' },
+    };
+
+    await trigger.triggerBatch([container]);
+
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('do not match configured file'),
+    );
+  });
+
+  test('triggerBatch should warn when no containers matched any compose file', async () => {
+    trigger.configuration.file = undefined;
+
+    const container = { name: 'orphan', watcher: 'local' };
+
+    await trigger.triggerBatch([container]);
+
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      'No containers matched any compose file for this trigger',
+    );
+  });
+
   test('triggerBatch should group containers by compose file and process each', async () => {
     trigger.configuration.file = undefined;
     fs.access.mockResolvedValue(undefined);
@@ -3077,8 +3107,8 @@ describe('Dockercompose Trigger', () => {
     expect(processComposeFileSpy).toHaveBeenCalledWith('/opt/drydock/test/monitoring.yml', [
       monitoringContainer,
     ]);
-    expect(mockLog.warn).not.toHaveBeenCalledWith(
-      expect.stringContaining('/opt/drydock/test/mysql.yml'),
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('do not match configured file'),
     );
   });
 
@@ -3977,7 +4007,7 @@ describe('Dockercompose Trigger', () => {
         name: 'nginx',
       } as any),
     ).resolves.toEqual([]);
-    expect(mockLog.debug).toHaveBeenCalledWith(
+    expect(mockLog.warn).toHaveBeenCalledWith(
       expect.stringContaining('Unable to inspect compose labels'),
     );
   });
