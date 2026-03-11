@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Audit log for container state changes** — External container lifecycle events (start, stop, restart via Portainer or CLI) now generate `container-update` audit entries with the new status, so the audit log reflects all state changes, not just Drydock-initiated actions. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+
 ### Fixed
 
 - **Server feature flags not loaded after login** — Feature flags (`containeractions`, `delete`) were permanently stuck as disabled when authentication was required, because the pre-login bootstrap fetch failure marked the flags as "loaded" and never retried. Now failed fetches allow automatic retry after login. ([#120](https://github.com/CodesWhat/drydock/discussions/120))

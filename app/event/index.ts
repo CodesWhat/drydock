@@ -407,6 +407,7 @@ registerAuditLogSubscriptions({
   registerSecurityAlert,
   registerAgentDisconnected,
   registerContainerAdded,
+  registerContainerUpdated,
   registerContainerRemoved,
 });
 

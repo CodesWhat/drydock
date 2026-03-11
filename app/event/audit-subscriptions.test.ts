@@ -61,6 +61,7 @@ function setupAuditSubscriptions(): {
       handlers.agentDisconnected = handler;
     }),
     registerContainerAdded: registerEvent<ContainerLifecycleEventPayload>(() => {}),
+    registerContainerUpdated: registerEvent<ContainerLifecycleEventPayload>(() => {}),
     registerContainerRemoved: registerEvent<ContainerLifecycleEventPayload>(() => {}),
   };
 
