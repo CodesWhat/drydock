@@ -420,7 +420,7 @@ describe('AppLayout', () => {
     expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(false);
   });
 
-  it('shows a SHA-1 hash deprecation banner when basic auth uses legacy SHA hash', async () => {
+  it('shows a legacy hash deprecation banner when basic auth uses non-argon hash', async () => {
     mockGetAllAuthentications.mockResolvedValue([
       {
         id: 'basic.admin',
@@ -437,10 +437,10 @@ describe('AppLayout', () => {
 
     const banner = wrapper.find('[data-testid="sha-hash-deprecation-banner"]');
     expect(banner.exists()).toBe(true);
-    expect(banner.text()).toContain('SHA-1 hashing is deprecated');
+    expect(banner.text()).toContain('legacy password hash format');
   });
 
-  it('supports dismissing SHA-1 hash deprecation banner for current session', async () => {
+  it('supports dismissing legacy hash deprecation banner for current session', async () => {
     mockGetAllAuthentications.mockResolvedValue([
       {
         id: 'basic.admin',
@@ -465,7 +465,7 @@ describe('AppLayout', () => {
     expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(false);
   });
 
-  it('supports permanently dismissing SHA-1 hash deprecation banner', async () => {
+  it('supports permanently dismissing legacy hash deprecation banner', async () => {
     mockGetAllAuthentications.mockResolvedValue([
       {
         id: 'basic.admin',
@@ -491,7 +491,7 @@ describe('AppLayout', () => {
     expect(localStorage.getItem('dd-banner-sha-hash-v1')).toBe('true');
   });
 
-  it('does not show SHA-1 hash deprecation banner after permanent dismissal is persisted', async () => {
+  it('does not show legacy hash deprecation banner after permanent dismissal is persisted', async () => {
     localStorage.setItem('dd-banner-sha-hash-v1', 'true');
     mockGetAllAuthentications.mockResolvedValue([
       {
@@ -510,7 +510,7 @@ describe('AppLayout', () => {
     expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(false);
   });
 
-  it('does not show SHA-1 hash deprecation banner when basic auth uses argon2id hash', async () => {
+  it('does not show legacy hash deprecation banner when basic auth uses argon2id hash', async () => {
     mockGetAllAuthentications.mockResolvedValue([
       {
         id: 'basic.admin',

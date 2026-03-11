@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Server feature flags not loaded after login** — Feature flags (`containeractions`, `delete`) were permanently stuck as disabled when authentication was required, because the pre-login bootstrap fetch failure marked the flags as "loaded" and never retried. Now failed fetches allow automatic retry after login. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
 - **Compose trigger silently skips containers** — Multiple failure paths in the compose trigger were logged at `debug` level, making it nearly impossible to diagnose why a trigger reports success but containers don't update. Key diagnostic messages (compose file mismatch, label inspect failure, no containers matched) promoted to `warn` level, and the "already up to date" message now includes container names. ([#84](https://github.com/CodesWhat/drydock/discussions/84))
 - **Fallback icon cached permanently** — The Docker placeholder icon was served with `immutable` cache headers, causing browsers to cache it permanently even after the real provider icon becomes available. Fallback responses now use `no-store`.
+- **Basic auth upgrade compatibility restored** — v1.4 now accepts legacy v1.3.9 Basic auth hashes (`{SHA}`, `$apr1$`/`$1$`, `crypt`, and plain fallback) to preserve smooth upgrades. Legacy formats remain deprecated and continue showing a migration banner, with removal still planned for v1.6.0.
 
 ### Changed
 

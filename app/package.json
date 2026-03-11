@@ -24,6 +24,7 @@
     "@slack/web-api": "^7.14.1",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
+    "apache-md5": "^1.1.8",
     "axios": "^1.13.6",
     "capitalize": "2.0.4",
     "change-case": "^5.4.4",
@@ -63,6 +64,7 @@
     "set-value": "4.1.0",
     "sort-es": "1.7.18",
     "undici": "^7.22.0",
+    "unix-crypt-td-js": "^1.1.4",
     "uuid": "^13.0.0",
     "yaml": "2.8.2"
   },

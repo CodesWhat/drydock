@@ -56,6 +56,10 @@ function createShaHash(password: string) {
 
 const VALID_SALT_BASE64 = Buffer.alloc(16, 1).toString('base64');
 const VALID_HASH_BASE64 = Buffer.alloc(32, 1).toString('base64');
+const LEGACY_APR1_HASH = '$apr1$r31.....$HqJZimcKQFAMYayBlzkrA/';
+const LEGACY_MD5_HASH = '$1$saltsalt$2vnaRpHa6Jxjz5n83ok8Z0';
+const LEGACY_CRYPT_HASH = 'rqXexS6ZhobKA';
+const LEGACY_PLAIN_HASH = 'plaintext-password';
 
 describe('Basic Authentication', () => {
   let basic: InstanceType<typeof Basic>;
@@ -393,7 +397,7 @@ describe('Basic Authentication', () => {
     ).toThrow('must be an argon2id hash');
   });
 
-  describe('SHA-1 legacy hash support', () => {
+  describe('legacy v1.3.9 hash support', () => {
     test('should accept SHA-1 hash in configuration schema', async () => {
       const hash = createShaHash('password');
       expect(
@@ -481,23 +485,54 @@ describe('Basic Authentication', () => {
       });
     });
 
-    test('should reject SHA-1 hash with invalid digest length', async () => {
+    test('should accept SHA-1 hash with invalid digest length in schema but reject authentication', async () => {
       const shortDigest = Buffer.alloc(10, 1).toString('base64');
-      expect(() =>
+
+      expect(
         basic.validateConfiguration({
           user: 'testuser',
           hash: `{SHA}${shortDigest}`,
         }),
-      ).toThrow('must be an argon2id hash');
+      ).toEqual({
+        user: 'testuser',
+        hash: `{SHA}${shortDigest}`,
+      });
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: `{SHA}${shortDigest}`,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'password', (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
     });
 
-    test('should reject SHA-1 hash with malformed base64', async () => {
-      expect(() =>
+    test('should accept SHA-1 hash with malformed base64 in schema but reject authentication', async () => {
+      expect(
         basic.validateConfiguration({
           user: 'testuser',
           hash: '{SHA}not*valid*base64',
         }),
-      ).toThrow('must be an argon2id hash');
+      ).toEqual({
+        user: 'testuser',
+        hash: '{SHA}not*valid*base64',
+      });
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: '{SHA}not*valid*base64',
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'password', (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
     });
 
     test('should reject when SHA hash parsing fails during verification', async () => {
@@ -560,14 +595,160 @@ describe('Basic Authentication', () => {
       createHashSpy.mockRestore();
     });
 
-    test('should reject unrecognized hash formats', async () => {
+    test('should accept APR1 hash in configuration schema', async () => {
+      expect(
+        basic.validateConfiguration({
+          user: 'testuser',
+          hash: LEGACY_APR1_HASH,
+        }),
+      ).toEqual({
+        user: 'testuser',
+        hash: LEGACY_APR1_HASH,
+      });
+    });
+
+    test('should authenticate valid user with APR1 hash', async () => {
       basic.configuration = {
         user: 'testuser',
-        hash: 'plaintext-password',
+        hash: LEGACY_APR1_HASH,
       };
 
       await new Promise<void>((resolve) => {
-        basic.authenticate('testuser', 'plaintext-password', (err, result) => {
+        basic.authenticate('testuser', 'myPassword', (_err, result) => {
+          expect(result).toEqual({ username: 'testuser' });
+          resolve();
+        });
+      });
+    });
+
+    test('should reject invalid password with APR1 hash', async () => {
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_APR1_HASH,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'wrongpassword', (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
+
+    test('should accept $1$ MD5 hash in configuration schema', async () => {
+      expect(
+        basic.validateConfiguration({
+          user: 'testuser',
+          hash: LEGACY_MD5_HASH,
+        }),
+      ).toEqual({
+        user: 'testuser',
+        hash: LEGACY_MD5_HASH,
+      });
+    });
+
+    test('should authenticate valid user with $1$ MD5 hash', async () => {
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_MD5_HASH,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'myPassword', (_err, result) => {
+          expect(result).toEqual({ username: 'testuser' });
+          resolve();
+        });
+      });
+    });
+
+    test('should reject invalid password with $1$ MD5 hash', async () => {
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_MD5_HASH,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'wrongpassword', (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
+
+    test('should accept crypt hash in configuration schema', async () => {
+      expect(
+        basic.validateConfiguration({
+          user: 'testuser',
+          hash: LEGACY_CRYPT_HASH,
+        }),
+      ).toEqual({
+        user: 'testuser',
+        hash: LEGACY_CRYPT_HASH,
+      });
+    });
+
+    test('should authenticate valid user with crypt hash', async () => {
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_CRYPT_HASH,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'myPassword', (_err, result) => {
+          expect(result).toEqual({ username: 'testuser' });
+          resolve();
+        });
+      });
+    });
+
+    test('should reject invalid password with crypt hash', async () => {
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_CRYPT_HASH,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'wrongpassword', (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
+
+    test('should accept plain hash fallback in configuration schema', async () => {
+      expect(
+        basic.validateConfiguration({
+          user: 'testuser',
+          hash: LEGACY_PLAIN_HASH,
+        }),
+      ).toEqual({
+        user: 'testuser',
+        hash: LEGACY_PLAIN_HASH,
+      });
+    });
+
+    test('should authenticate valid user with plain hash fallback', async () => {
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_PLAIN_HASH,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', LEGACY_PLAIN_HASH, (_err, result) => {
+          expect(result).toEqual({ username: 'testuser' });
+          resolve();
+        });
+      });
+    });
+
+    test('should reject invalid password with plain hash fallback', async () => {
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_PLAIN_HASH,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'wrongpassword', (_err, result) => {
           expect(result).toBe(false);
           resolve();
         });
@@ -591,6 +772,14 @@ describe('Basic Authentication', () => {
       };
       expect(basic.getMetadata()).toEqual({ usesLegacyHash: true });
     });
+
+    test('should return usesLegacyHash: true for APR1 hash', () => {
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_APR1_HASH,
+      };
+      expect(basic.getMetadata()).toEqual({ usesLegacyHash: true });
+    });
   });
 
   describe('initAuthentication', () => {
@@ -604,7 +793,24 @@ describe('Basic Authentication', () => {
 
       basic.initAuthentication();
 
-      expect(warnFn).toHaveBeenCalledWith(expect.stringContaining('SHA-1 password hash detected'));
+      expect(warnFn).toHaveBeenCalledWith(
+        expect.stringContaining('Legacy password hash format detected (sha1)'),
+      );
+    });
+
+    test('should log deprecation warning when APR1 hash is registered', () => {
+      const warnFn = vi.fn();
+      basic.log = { warn: warnFn, info: vi.fn(), debug: vi.fn(), error: vi.fn() } as any;
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_APR1_HASH,
+      };
+
+      basic.initAuthentication();
+
+      expect(warnFn).toHaveBeenCalledWith(
+        expect.stringContaining('Legacy password hash format detected (apr1)'),
+      );
     });
 
     test('should not log warning when argon2id hash is registered', () => {
