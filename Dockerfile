@@ -12,7 +12,7 @@ ENV WORKDIR=/home/node/app
 ENV DD_LOG_FORMAT=text
 ENV DD_VERSION=$DD_VERSION
 
-HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -z \"$DD_SERVER_ENABLED\" ] || [ \"$DD_SERVER_ENABLED\" = 'true' ]; then curl --fail http://localhost:${DD_SERVER_PORT:-3000}/health || exit 1; else exit 0; fi"]
+HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_ENABLED\" ] && [ \"$DD_SERVER_ENABLED\" != 'true' ]; then exit 0; fi; if [ \"$DD_SERVER_TLS_ENABLED\" = 'true' ]; then curl --fail --insecure https://localhost:${DD_SERVER_PORT:-3000}/health || exit 1; else curl --fail http://localhost:${DD_SERVER_PORT:-3000}/health || exit 1; fi"]
 
 # Install system packages, trivy, and cosign
 # hadolint ignore=DL3018,DL3028,DL4006
