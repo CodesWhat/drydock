@@ -195,7 +195,7 @@ onUnmounted(() => {
         <!-- Basic auth form -->
         <form v-if="hasBasic" @submit.prevent="handleBasicLogin" class="space-y-4">
           <div>
-            <label class="block text-[11px] font-medium uppercase tracking-wider mb-1.5 dd-text-muted">
+            <label class="block text-[0.6875rem] font-medium uppercase tracking-wider mb-1.5 dd-text-muted">
               Username
             </label>
             <input
@@ -210,7 +210,7 @@ onUnmounted(() => {
           </div>
 
           <div>
-            <label class="block text-[11px] font-medium uppercase tracking-wider mb-1.5 dd-text-muted">
+            <label class="block text-[0.6875rem] font-medium uppercase tracking-wider mb-1.5 dd-text-muted">
               Password
             </label>
             <input
@@ -241,7 +241,7 @@ onUnmounted(() => {
         <!-- OIDC separator (only if both basic and OIDC exist) -->
         <div v-if="hasBasic && oidcStrategies.length > 0" class="flex items-center gap-3 my-6">
           <div class="flex-1 h-px" style="background-color: var(--dd-border-strong);" />
-          <span class="text-[11px] dd-text-muted">or continue with</span>
+          <span class="text-[0.6875rem] dd-text-muted">or continue with</span>
           <div class="flex-1 h-px" style="background-color: var(--dd-border-strong);" />
         </div>
 
@@ -268,7 +268,7 @@ onUnmounted(() => {
             type="checkbox"
             class="w-3.5 h-3.5 dd-rounded-sm accent-[var(--dd-primary)]"
           />
-          <span class="text-[11px] dd-text-muted">Remember me</span>
+          <span class="text-[0.6875rem] dd-text-muted">Remember me</span>
         </label>
 
         <!-- No strategies available -->
@@ -289,12 +289,12 @@ onUnmounted(() => {
             <img :src="whaleLogo" alt="" class="h-10 w-auto mb-1"
                  :style="[{ transform: 'rotate(180deg) scaleX(-1)' }, isDark ? { filter: 'invert(1)' } : {}]" />
             <h2 class="text-sm font-bold dd-text">Connection Lost</h2>
-            <p class="text-[11px] dd-text-muted leading-relaxed">
+            <p class="text-[0.6875rem] dd-text-muted leading-relaxed">
               The server is unreachable. Waiting for it to come back online...
             </p>
             <div class="flex items-center gap-2 mt-1">
               <AppIcon name="spinner" :size="12" class="dd-spin dd-text-muted" />
-              <span class="text-[10px] dd-text-muted">Reconnecting</span>
+              <span class="text-[0.625rem] dd-text-muted">Reconnecting</span>
             </div>
           </div>
         </div>

@@ -25,8 +25,8 @@ const props = withDefaults(
     panelStyle: undefined,
     containerClass: '',
     containerStyle: undefined,
-    loadingClass: 'text-[12px] dd-text-muted text-center py-6',
-    errorClass: 'text-[11px] px-3 py-2 dd-rounded',
+    loadingClass: 'text-xs dd-text-muted text-center py-6',
+    errorClass: 'text-[0.6875rem] px-3 py-2 dd-rounded',
     errorStyle: () => ({
       backgroundColor: 'var(--dd-danger-muted)',
       color: 'var(--dd-danger)',

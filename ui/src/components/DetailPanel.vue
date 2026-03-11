@@ -72,7 +72,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
         <div v-if="showSizeControls && !isMobile" class="flex items-center dd-rounded overflow-hidden"
              :style="{ border: '1px solid var(--dd-border-strong)' }">
           <button v-for="s in (['lg', 'md', 'sm'] as const)" :key="s"
-                  class="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors"
+                  class="px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-wide transition-colors"
                   :class="size === s
                     ? 'dd-bg-elevated dd-text'
                     : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
@@ -81,7 +81,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
           </button>
         </div>
         <button v-if="showFullPage"
-                class="flex items-center gap-1.5 px-2 py-1 dd-rounded text-[10px] font-semibold uppercase tracking-wide transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+                class="flex items-center gap-1.5 px-2 py-1 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
                 v-tooltip.top="'Open full page view'"
                 @click="$emit('full-page')">
           <AppIcon name="expand" :size="11" />

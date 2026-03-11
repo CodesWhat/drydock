@@ -34,7 +34,7 @@ const {
       <div class="px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div class="flex items-center gap-4 min-w-0">
           <button
-            class="flex items-center gap-2 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated shrink-0"
+            class="flex items-center gap-2 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated shrink-0"
             :style="{ border: '1px solid var(--dd-border-strong)' }"
             @click="closeFullPage">
             <AppIcon name="arrow-left" :size="11" />
@@ -49,11 +49,11 @@ const {
                 {{ selectedContainer.name }}
               </h1>
               <div class="flex items-center gap-2 mt-0.5 flex-wrap">
-                <span class="text-[11px] sm:text-[12px] font-mono dd-text-secondary truncate max-w-[180px] sm:max-w-none">
+                <span class="text-[0.6875rem] sm:text-xs font-mono dd-text-secondary truncate max-w-[180px] sm:max-w-none">
                   {{ selectedContainer.image }}:{{ selectedContainer.currentTag }}
                 </span>
                 <span
-                  class="badge text-[9px]"
+                  class="badge text-[0.5625rem]"
                   :style="{
                     backgroundColor:
                       selectedContainer.status === 'running'
@@ -64,7 +64,7 @@ const {
                   {{ selectedContainer.status }}
                 </span>
                 <span
-                  class="badge text-[9px] uppercase font-bold max-sm:hidden"
+                  class="badge text-[0.5625rem] uppercase font-bold max-sm:hidden"
                   :style="{
                     backgroundColor: registryColorBg(selectedContainer.registry),
                     color: registryColorText(selectedContainer.registry),
@@ -79,7 +79,7 @@ const {
                 </span>
                 <span
                   v-if="selectedContainer.newTag"
-                  class="badge text-[9px] max-sm:hidden"
+                  class="badge text-[0.5625rem] max-sm:hidden"
                   :style="{
                     backgroundColor: updateKindColor(selectedContainer.updateKind).bg,
                     color: updateKindColor(selectedContainer.updateKind).text,
@@ -93,7 +93,7 @@ const {
         <div class="flex items-center gap-2 shrink-0">
           <button
             v-if="selectedContainer.status === 'running'"
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
             :disabled="actionInProgress === selectedContainer.name"
@@ -104,7 +104,7 @@ const {
           </button>
           <button
             v-else
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
             :disabled="actionInProgress === selectedContainer.name"
@@ -114,7 +114,7 @@ const {
             Start
           </button>
           <button
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
             :style="{ border: '1px solid var(--dd-border-strong)' }"
             :disabled="actionInProgress === selectedContainer.name"
@@ -124,7 +124,7 @@ const {
             Restart
           </button>
           <button
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
             :style="{ border: '1px solid var(--dd-border-strong)' }"
             :disabled="actionInProgress === selectedContainer.name"
@@ -135,7 +135,7 @@ const {
           </button>
           <button
             v-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold transition-colors"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-bold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
             :disabled="actionInProgress === selectedContainer.name"
@@ -146,7 +146,7 @@ const {
           </button>
           <button
             v-else-if="selectedContainer.newTag"
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-bold transition-colors"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-bold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
             :disabled="actionInProgress === selectedContainer.name"
@@ -156,7 +156,7 @@ const {
             Update
           </button>
           <button
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors"
+            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : ''"
             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
             :disabled="actionInProgress === selectedContainer.name"
@@ -172,7 +172,7 @@ const {
         <button
           v-for="tab in detailTabs"
           :key="tab.id"
-          class="whitespace-nowrap shrink-0 px-4 py-3 text-[12px] font-medium transition-colors relative"
+          class="whitespace-nowrap shrink-0 px-4 py-3 text-xs font-medium transition-colors relative"
           :class="activeDetailTab === tab.id ? 'text-drydock-secondary' : 'dd-text-muted hover:dd-text'"
           @click="activeDetailTab = tab.id">
           <AppIcon :name="tab.icon" :size="12" class="mr-1.5" />
@@ -186,7 +186,7 @@ const {
 
     <div
       v-if="error"
-      class="shrink-0 mb-4 px-4 py-3 dd-rounded-lg flex items-center gap-3 text-[12px] font-medium"
+      class="shrink-0 mb-4 px-4 py-3 dd-rounded-lg flex items-center gap-3 text-xs font-medium"
       :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }">
       <AppIcon name="warning" :size="14" class="shrink-0" />
       <span class="min-w-0 break-words">{{ error }}</span>

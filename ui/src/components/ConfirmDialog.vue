@@ -65,18 +65,18 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
           <!-- Header -->
           <div class="px-5 pt-4 pb-3"
                :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <span :id="dialogTitleId" class="text-[13px] font-semibold dd-text">{{ current.header }}</span>
+            <span :id="dialogTitleId" class="text-[0.8125rem] font-semibold dd-text">{{ current.header }}</span>
           </div>
 
           <!-- Body -->
-          <div :id="dialogDescriptionId" class="px-5 py-4.5 text-[12px] leading-relaxed dd-text-secondary">
+          <div :id="dialogDescriptionId" class="px-5 py-4.5 text-xs leading-relaxed dd-text-secondary">
             {{ current.message }}
           </div>
 
           <!-- Footer -->
           <div class="px-5 pt-3 pb-4.5 flex items-center justify-end gap-2.5">
             <button
-              class="px-4 py-1.5 dd-rounded text-[11px] font-semibold transition-colors cursor-pointer"
+              class="px-4 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors cursor-pointer"
               :aria-label="current.rejectLabel || 'Cancel'"
               :style="{
                 backgroundColor: 'var(--dd-bg-inset)',
@@ -87,7 +87,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
               {{ current.rejectLabel || 'Cancel' }}
             </button>
             <button
-              class="px-4 py-1.5 dd-rounded text-[11px] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+              class="px-4 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
               :aria-label="current.acceptLabel || 'Confirm'"
               :style="current.severity === 'danger'
                 ? {

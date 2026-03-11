@@ -111,11 +111,11 @@ const {
         </div>
       </template>
       <template #subtitle>
-        <span class="text-[11px] font-mono dd-text-secondary">
+        <span class="text-[0.6875rem] font-mono dd-text-secondary">
           {{ selectedContainer.image }}:{{ selectedContainer.currentTag }}
         </span>
         <span
-          class="badge text-[9px]"
+          class="badge text-[0.5625rem]"
           :style="{
             backgroundColor:
               selectedContainer.status === 'running'
@@ -126,7 +126,7 @@ const {
           {{ selectedContainer.status }}
         </span>
         <span
-          class="badge text-[9px] font-medium"
+          class="badge text-[0.5625rem] font-medium"
           :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-text-secondary)' }">
           {{ selectedContainer.server }}
         </span>
@@ -138,7 +138,7 @@ const {
           <button
             v-for="tab in detailTabs"
             :key="tab.id"
-            class="whitespace-nowrap shrink-0 py-2.5 text-[11px] font-medium transition-colors relative"
+            class="whitespace-nowrap shrink-0 py-2.5 text-[0.6875rem] font-medium transition-colors relative"
             :class="[
               activeDetailTab === tab.id ? 'text-drydock-secondary' : 'dd-text-muted hover:dd-text',
               panelSize === 'sm' ? 'px-2' : 'px-3',

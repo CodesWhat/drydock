@@ -79,7 +79,7 @@ const {
         <div class="text-sm font-medium dd-text-danger mb-2">Failed to load dashboard</div>
         <div class="text-xs dd-text-muted">{{ error }}</div>
         <button
-          class="mt-4 px-3 py-1.5 dd-rounded text-[11px] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
+          class="mt-4 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-bg-elevated dd-text hover:opacity-90"
           @click="fetchDashboardData">
           Retry
         </button>
@@ -116,7 +116,7 @@ const {
           @drop="onWidgetDrop(stat.id, $event)"
           @dragend="onWidgetDragEnd">
           <div class="flex items-center justify-between mb-2">
-            <span class="text-[11px] font-medium uppercase tracking-wider dd-text-muted">
+            <span class="text-[0.6875rem] font-medium uppercase tracking-wider dd-text-muted">
               {{ stat.label }}
             </span>
             <div class="w-9 h-9 dd-rounded flex items-center justify-center"
@@ -127,7 +127,7 @@ const {
           <div class="text-2xl font-bold dd-text">
             {{ stat.value }}
           </div>
-          <div v-if="stat.detail" class="mt-1 text-[10px] font-medium dd-text-muted">
+          <div v-if="stat.detail" class="mt-1 text-[0.625rem] font-medium dd-text-muted">
             {{ stat.detail }}
           </div>
         </component>
@@ -161,7 +161,7 @@ const {
                 Updates Available
               </h2>
             </div>
-            <button class="text-[11px] font-medium text-drydock-secondary hover:underline"
+            <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
                     @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
           </div>
 
@@ -176,9 +176,9 @@ const {
               <thead>
                 <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <th class="px-0 py-2.5" />
-                  <th class="text-left px-3 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Container</th>
-                  <th class="text-left px-2 sm:px-5 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">Version</th>
-                  <th class="text-center px-1 sm:px-3 py-2.5 font-semibold uppercase tracking-wider text-[10px] dd-text-muted">
+                  <th class="text-left px-3 py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] dd-text-muted">Container</th>
+                  <th class="text-left px-2 sm:px-5 py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] dd-text-muted">Version</th>
+                  <th class="text-center px-1 sm:px-3 py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] dd-text-muted">
                     <span class="hidden sm:inline">Type</span>
                     <span class="sm:hidden inline-flex items-center justify-center"><AppIcon name="info" :size="12" /></span>
                   </th>
@@ -205,8 +205,8 @@ const {
                   </td>
                   <td class="px-3 py-3 align-middle">
                     <div class="font-medium dd-text leading-tight">{{ row.name }}</div>
-                    <div class="text-[10px] dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
-                    <div v-if="row.registryError" class="text-[10px] mt-0.5 truncate" style="color: var(--dd-danger);">
+                    <div class="text-[0.625rem] dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
+                    <div v-if="row.registryError" class="text-[0.625rem] mt-0.5 truncate" style="color: var(--dd-danger);">
                       {{ row.registryError }}
                     </div>
                     <a
@@ -214,7 +214,7 @@ const {
                       :href="row.releaseLink"
                       target="_blank"
                       rel="noopener noreferrer"
-                      class="text-[10px] mt-0.5 inline-flex underline hover:no-underline"
+                      class="text-[0.625rem] mt-0.5 inline-flex underline hover:no-underline"
                       style="color: var(--dd-info);"
                     >
                       Release notes
@@ -223,28 +223,28 @@ const {
                   <td class="px-2 sm:px-5 py-3 align-middle overflow-hidden">
                     <!-- Desktop: horizontal old → new -->
                     <div class="hidden sm:flex items-center justify-center gap-1.5 min-w-0">
-                      <span class="text-[11px] dd-text-secondary truncate max-w-[100px]" v-tooltip.top="row.oldVer">
+                      <span class="text-[0.6875rem] dd-text-secondary truncate max-w-[100px]" v-tooltip.top="row.oldVer">
                         {{ row.oldVer }}
                       </span>
                       <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
-                      <span class="text-[11px] font-semibold truncate max-w-[120px]"
+                      <span class="text-[0.6875rem] font-semibold truncate max-w-[120px]"
                             :style="{ color: getUpdateKindColor(row.updateKind) }">
                         {{ row.newVer }}
                       </span>
                     </div>
                     <!-- Mobile: stacked old ↓ new -->
                     <div class="flex sm:hidden flex-col items-start gap-0.5 min-w-0">
-                      <span class="text-[9px] dd-text-secondary break-all leading-tight">
+                      <span class="text-[0.5625rem] dd-text-secondary break-all leading-tight">
                         {{ row.oldVer }}
                       </span>
-                      <span class="text-[9px] font-semibold break-all leading-tight"
+                      <span class="text-[0.5625rem] font-semibold break-all leading-tight"
                             :style="{ color: getUpdateKindColor(row.updateKind) }">
                         {{ row.newVer }}
                       </span>
                     </div>
                   </td>
                   <td class="px-1 sm:px-3 py-3 text-center align-middle">
-                    <span class="badge px-1.5 py-0 text-[9px] sm:!hidden"
+                    <span class="badge px-1.5 py-0 text-[0.5625rem] sm:!hidden"
                           :style="{
                             backgroundColor: getUpdateKindMutedColor(row.updateKind),
                             color: getUpdateKindColor(row.updateKind),
@@ -263,7 +263,7 @@ const {
                   </td>
                 </tr>
                 <tr v-if="recentUpdates.length === 0">
-                  <td colspan="4" class="px-4 py-6 text-center text-[11px] dd-text-muted">
+                  <td colspan="4" class="px-4 py-6 text-center text-[0.6875rem] dd-text-muted">
                     No updates available
                   </td>
                 </tr>
@@ -298,7 +298,7 @@ const {
                 Security Overview
               </h2>
             </div>
-            <button class="text-[11px] font-medium text-drydock-secondary hover:underline"
+            <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
                     @click="navigateTo(ROUTES.SECURITY)">View all &rarr;</button>
           </div>
 
@@ -323,7 +323,7 @@ const {
                 </svg>
                 <div class="absolute inset-0 flex flex-col items-center justify-center">
                   <span class="text-xl font-bold dd-text">{{ securityTotalCount }}</span>
-                  <span class="text-[10px] dd-text-muted">images</span>
+                  <span class="text-[0.625rem] dd-text-muted">images</span>
                 </div>
               </div>
             </div>
@@ -332,15 +332,15 @@ const {
             <div class="flex justify-center gap-5 mb-5">
               <div class="flex items-center gap-1.5">
                 <div class="w-2.5 h-2.5 rounded-full" style="background:var(--dd-success);" />
-                <span class="text-[11px] dd-text-secondary">{{ securityCleanCount }} Clean</span>
+                <span class="text-[0.6875rem] dd-text-secondary">{{ securityCleanCount }} Clean</span>
               </div>
               <div v-if="securityIssueCount > 0" class="flex items-center gap-1.5">
                 <div class="w-2.5 h-2.5 rounded-full" style="background:var(--dd-danger);" />
-                <span class="text-[11px] dd-text-secondary">{{ securityIssueCount }} Issues</span>
+                <span class="text-[0.6875rem] dd-text-secondary">{{ securityIssueCount }} Issues</span>
               </div>
               <div v-if="securityNotScannedCount > 0" class="flex items-center gap-1.5">
                 <div class="w-2.5 h-2.5 rounded-full" style="background:var(--dd-neutral);" />
-                <span class="text-[11px] dd-text-secondary">
+                <span class="text-[0.6875rem] dd-text-secondary">
                   {{ securityNotScannedCount }} Not Scanned
                 </span>
               </div>
@@ -349,31 +349,31 @@ const {
             <div v-if="showSecuritySeverityBreakdown"
                  data-test="security-severity-breakdown"
                  class="mb-5">
-              <div class="text-[10px] font-semibold uppercase tracking-wider mb-2 dd-text-muted">
+              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-2 dd-text-muted">
                 Severity Breakdown
               </div>
               <div class="grid grid-cols-2 gap-2">
                 <div class="flex items-center justify-between px-2 py-1.5 dd-rounded"
                      :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
-                  <span class="text-[10px] font-semibold" style="color: var(--dd-danger);">
+                  <span class="text-[0.625rem] font-semibold" style="color: var(--dd-danger);">
                     {{ securitySeverityTotals.critical }} Critical
                   </span>
                 </div>
                 <div class="flex items-center justify-between px-2 py-1.5 dd-rounded"
                      :style="{ backgroundColor: 'var(--dd-warning-muted)' }">
-                  <span class="text-[10px] font-semibold" style="color: var(--dd-warning);">
+                  <span class="text-[0.625rem] font-semibold" style="color: var(--dd-warning);">
                     {{ securitySeverityTotals.high }} High
                   </span>
                 </div>
                 <div class="flex items-center justify-between px-2 py-1.5 dd-rounded"
                      :style="{ backgroundColor: 'var(--dd-caution-muted)' }">
-                  <span class="text-[10px] font-semibold" style="color: var(--dd-caution);">
+                  <span class="text-[0.625rem] font-semibold" style="color: var(--dd-caution);">
                     {{ securitySeverityTotals.medium }} Medium
                   </span>
                 </div>
                 <div class="flex items-center justify-between px-2 py-1.5 dd-rounded"
                      :style="{ backgroundColor: 'var(--dd-info-muted)' }">
-                  <span class="text-[10px] font-semibold" style="color: var(--dd-info);">
+                  <span class="text-[0.625rem] font-semibold" style="color: var(--dd-info);">
                     {{ securitySeverityTotals.low }} Low
                   </span>
                 </div>
@@ -383,7 +383,7 @@ const {
             <div class="mb-4" :style="{ borderTop: '1px solid var(--dd-border-strong)' }" />
 
             <!-- Top vulnerabilities -->
-            <div class="text-[10px] font-semibold uppercase tracking-wider mb-3 dd-text-muted">
+            <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-3 dd-text-muted">
               Top Vulnerabilities
             </div>
             <div class="space-y-2.5 overflow-y-auto max-h-[200px]">
@@ -391,7 +391,7 @@ const {
                    class="flex items-start gap-3 p-2.5 dd-rounded"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <div class="shrink-0 mt-0.5">
-                  <span class="badge px-1.5 py-0 text-[9px] md:!hidden"
+                  <span class="badge px-1.5 py-0 text-[0.5625rem] md:!hidden"
                         :style="{
                           backgroundColor: vuln.severity === 'CRITICAL'
                             ? 'var(--dd-danger-muted)'
@@ -400,7 +400,7 @@ const {
                         }">
                     <AppIcon :name="vuln.severity === 'CRITICAL' ? 'warning' : 'chevrons-up'" :size="12" />
                   </span>
-                  <span class="badge text-[9px] max-md:!hidden"
+                  <span class="badge text-[0.5625rem] max-md:!hidden"
                         :style="{
                           backgroundColor: vuln.severity === 'CRITICAL'
                             ? 'var(--dd-danger-muted)'
@@ -411,16 +411,16 @@ const {
                   </span>
                 </div>
                 <div class="flex-1 min-w-0">
-                  <div class="text-[11px] font-semibold truncate dd-text">
+                  <div class="text-[0.6875rem] font-semibold truncate dd-text">
                     {{ vuln.id }}
                   </div>
-                  <div class="text-[10px] mt-0.5 truncate dd-text-muted">
+                  <div class="text-[0.625rem] mt-0.5 truncate dd-text-muted">
                     {{ vuln.package }} &middot; {{ vuln.image }}
                   </div>
                 </div>
               </div>
               <div v-if="vulnerabilities.length === 0"
-                   class="p-2.5 dd-rounded text-[11px] text-center dd-text-muted"
+                   class="p-2.5 dd-rounded text-[0.6875rem] text-center dd-text-muted"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 No vulnerabilities reported
               </div>
@@ -453,7 +453,7 @@ const {
                 Host Status
               </h2>
             </div>
-            <button class="text-[11px] font-medium text-drydock-secondary hover:underline"
+            <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
                     @click="navigateTo(ROUTES.SERVERS)">View all &rarr;</button>
           </div>
 
@@ -462,7 +462,7 @@ const {
                  class="flex items-center gap-3 p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated"
                  :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
                  @click="navigateTo(ROUTES.SERVERS)">
-              <span class="badge px-1.5 py-0 text-[9px] max-md:!hidden"
+              <span class="badge px-1.5 py-0 text-[0.5625rem] max-md:!hidden"
                     :style="{
                       backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                       color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -470,20 +470,20 @@ const {
                 <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
               </span>
               <div class="flex-1 min-w-0">
-                <div class="text-[12px] font-semibold truncate dd-text">{{ server.name }}</div>
-                <div v-if="server.host" class="text-[10px] font-mono dd-text-muted truncate mt-0.5">
+                <div class="text-xs font-semibold truncate dd-text">{{ server.name }}</div>
+                <div v-if="server.host" class="text-[0.625rem] font-mono dd-text-muted truncate mt-0.5">
                   {{ server.host }}
                 </div>
-                <div class="text-[10px] dd-text-muted">{{ server.containers.running }}/{{ server.containers.total }} containers</div>
+                <div class="text-[0.625rem] dd-text-muted">{{ server.containers.running }}/{{ server.containers.total }} containers</div>
               </div>
-              <span class="badge px-1.5 py-0 text-[9px] md:!hidden"
+              <span class="badge px-1.5 py-0 text-[0.5625rem] md:!hidden"
                     :style="{
                       backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                       color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
                     }">
                 <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
               </span>
-              <span class="badge text-[9px] uppercase font-bold max-md:!hidden"
+              <span class="badge text-[0.5625rem] uppercase font-bold max-md:!hidden"
                     :style="{
                       backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
                       color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
@@ -519,13 +519,13 @@ const {
                 Update Breakdown
               </h2>
             </div>
-            <button class="text-[11px] font-medium text-drydock-secondary hover:underline"
+            <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
                     @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
           </div>
 
           <div class="p-5">
             <div v-if="totalUpdates === 0"
-                 class="p-3 dd-rounded text-[11px] text-center dd-text-muted"
+                 class="p-3 dd-rounded text-[0.6875rem] text-center dd-text-muted"
                  :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
               No updates to categorize
             </div>
@@ -538,7 +538,7 @@ const {
                   <AppIcon :name="kind.icon" :size="20" />
                 </div>
                 <div class="text-xl font-bold dd-text">{{ kind.count }}</div>
-                <div class="text-[10px] font-medium uppercase tracking-wider mt-0.5 dd-text-muted">{{ kind.label }}</div>
+                <div class="text-[0.625rem] font-medium uppercase tracking-wider mt-0.5 dd-text-muted">{{ kind.label }}</div>
                 <!-- Mini bar -->
                 <div class="mt-2 h-1.5 dd-rounded-sm overflow-hidden" style="background: var(--dd-bg-elevated);">
                   <div class="h-full dd-rounded-sm transition-[color,background-color,border-color,opacity,transform,box-shadow]"

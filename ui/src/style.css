@@ -364,7 +364,7 @@ body {
   left: 64px;
   padding: 4px 10px;
   border-radius: var(--dd-radius-sm);
-  font-size: 12px;
+  font-size: 0.75rem;
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
@@ -381,7 +381,7 @@ body {
   align-items: center;
   padding: 3px 10px;
   border-radius: var(--dd-radius-sm);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
