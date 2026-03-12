@@ -82,4 +82,4 @@ node -e '
 ' "yourpassword"
 ```
 
-<Callout type="info">Legacy `{SHA}` hashes from WUD/htpasswd are still accepted but deprecated. They will be removed in v1.6.0. Use the commands above to generate an argon2id hash and update your `DD_AUTH_BASIC_*_HASH` values.</Callout>
+<Callout type="info">Legacy htpasswd hash formats from WUD/v1.3.x — `{SHA}` (SHA-1), `$apr1$` (Apache APR1-MD5), `$1$` (MD5-crypt), DES crypt, and plain text — are still accepted at runtime but deprecated. They will be removed in v1.6.0. Use the commands above to generate an argon2id hash and update your `DD_AUTH_BASIC_*_HASH` values.</Callout>
