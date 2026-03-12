@@ -164,7 +164,7 @@ const {
             :columns="[
               { key: 'icon', label: '', icon: true },
               { key: 'container', label: 'Container', sortable: false },
-              { key: 'version', label: 'Version', sortable: false },
+              { key: 'version', label: 'Version', sortable: false, align: 'text-left' },
               { key: 'type', label: 'Type', sortable: false },
             ]"
             :rows="recentUpdates"
@@ -196,7 +196,7 @@ const {
 
             <template #cell-version="{ row }">
               <!-- Desktop: horizontal old → new -->
-              <div class="hidden sm:flex items-center justify-center gap-1.5 min-w-0">
+              <div class="hidden sm:flex items-center justify-start gap-1.5 min-w-0">
                 <span class="text-[0.6875rem] dd-text-secondary truncate max-w-[100px]" v-tooltip.top="row.oldVer">
                   {{ row.oldVer }}
                 </span>
