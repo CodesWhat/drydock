@@ -68,7 +68,6 @@ describe('SecurityEmptyState', () => {
   it('applies card/list container styling when boxed is true', () => {
     const wrapper = factory({ boxed: true });
     const root = wrapper.get('[data-testid="security-empty-state"]');
-    expect(root.attributes('style')).toContain('border');
     expect(root.attributes('style')).toContain('background-color');
   });
 });

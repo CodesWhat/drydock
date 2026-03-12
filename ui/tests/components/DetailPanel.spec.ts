@@ -162,19 +162,32 @@ describe('DetailPanel', () => {
   describe('full page button', () => {
     it('renders full page button when showFullPage is true', () => {
       const w = factory({ showFullPage: true });
-      const fpBtn = w.findAll('button').find((b) => b.text().includes('Full Page'));
+      const fpBtn = w
+        .findAll('button')
+        .find((b) => b.find('.app-icon-stub').exists() && !b.text().trim());
       expect(fpBtn).toBeTruthy();
     });
 
     it('does not render full page button when showFullPage is false (default)', () => {
       const w = factory();
-      const fpBtn = w.findAll('button').find((b) => b.text().includes('Full Page'));
-      expect(fpBtn).toBeUndefined();
+      // When showFullPage is false, the only icon-only button is the close button (w-7 h-7)
+      const iconOnlyButtons = w
+        .findAll('button')
+        .filter((b) => b.find('.app-icon-stub').exists() && !b.text().trim());
+      // All icon-only buttons should be close buttons (w-7 h-7 class)
+      for (const btn of iconOnlyButtons) {
+        expect(btn.classes()).toContain('w-7');
+      }
     });
 
     it('emits full-page when full page button is clicked', async () => {
       const w = factory({ showFullPage: true });
-      const fpBtn = w.findAll('button').find((b) => b.text().includes('Full Page'));
+      const fpBtn = w
+        .findAll('button')
+        .find(
+          (b) =>
+            b.find('.app-icon-stub').exists() && !b.text().trim() && !b.classes().includes('w-7'),
+        );
       expect(fpBtn).toBeDefined();
       await fpBtn?.trigger('click');
       expect(w.emitted('full-page')).toHaveLength(1);

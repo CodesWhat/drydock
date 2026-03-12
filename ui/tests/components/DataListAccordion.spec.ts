@@ -167,11 +167,12 @@ describe('DataListAccordion', () => {
       expect(style).toContain('1.5px solid');
     });
 
-    it('applies normal border to unselected items', () => {
+    it('applies no border to unselected items', () => {
       const w = factory({ selectedKey: '2' });
       const itemDivs = w.findAll('.space-y-2 > div');
-      const style = itemDivs[0].attributes('style');
-      expect(style).toContain('1px solid');
+      const style = itemDivs[0].attributes('style') ?? '';
+      expect(style).not.toContain('1px solid');
+      expect(style).not.toContain('1.5px solid');
     });
   });
 

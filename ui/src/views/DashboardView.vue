@@ -170,9 +170,8 @@ const {
               </colgroup>
               <thead>
                 <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <th class="px-0 py-2.5" />
-                  <th class="text-left px-3 py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] dd-text-muted">Container</th>
-                  <th class="text-left px-2 sm:px-5 py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] dd-text-muted">Version</th>
+                  <th colspan="2" class="text-center px-3 py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] dd-text-muted">Container</th>
+                  <th class="text-center px-2 sm:px-5 py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] dd-text-muted">Version</th>
                   <th class="text-center px-1 sm:px-3 py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] dd-text-muted">
                     <span class="hidden sm:inline">Type</span>
                     <span class="sm:hidden inline-flex items-center justify-center"><AppIcon name="info" :size="12" /></span>
