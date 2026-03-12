@@ -23,6 +23,11 @@ pre-commit:
       glob: '*.{ts,js,json,vue,css}'
       run: npx biome format --write --no-errors-on-unmatched {staged_files} && git add {staged_files}
       priority: 2
+    coverage:
+      glob: '*.{ts,vue}'
+      run: ./scripts/pre-commit-coverage.sh
+      priority: 3
+      timeout: 2m
 
 pre-push:
   piped: true
