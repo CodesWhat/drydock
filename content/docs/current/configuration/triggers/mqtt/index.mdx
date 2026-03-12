@@ -36,6 +36,8 @@ The `mqtt` trigger lets you send container update notifications to an MQTT broke
 <Callout type="info">You want to customize the name & icon of the Home-Assistant entity?
 [Use the `dd.display.name` and `dd.display.icon` labels](/docs/configuration/watchers/#labels).</Callout>
 
+<Callout type="info">For Home Assistant, the `entity_picture` is automatically derived from the `dd.display.icon` label. Icons with `sh:`, `hl:`, or `si:` prefixes map to CDN image URLs. You can also set `dd.display.picture` to provide a direct URL override.</Callout>
+
 ## Examples
 
 ### Post a message to a local mosquitto broker
@@ -133,22 +135,23 @@ docker run \
 
 ```json
 {
-  "id":"31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816",
-  "name":"homeassistant",
-  "watcher":"local",
-  "include_tags":"^\\d+\\.\\d+.\\d+$",
-  "image_id":"sha256:d4a6fafb7d4da37495e5c9be3242590be24a87d7edcc4f79761098889c54fca6",
-  "image_registry_url":"123456789.dkr.ecr.eu-west-1.amazonaws.com",
-  "image_name":"test",
-  "image_tag_value":"2021.6.4",
-  "image_tag_semver":true,
-  "image_digest_watch":false,
-  "image_digest_repo":"sha256:ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72",
-  "image_architecture":"amd64",
-  "image_os":"linux",
-  "image_created":"2021-06-12T05:33:38.440Z",
-  "result_tag":"2021.6.5",
-  "updateAvailable":"2021.6.5"
+  "id": "31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816",
+  "name": "homeassistant",
+  "watcher": "local",
+  "image_id": "sha256:d4a6fafb7d4da37495e5c9be3242590be24a87d7edcc4f79761098889c54fca6",
+  "image_registry_url": "123456789.dkr.ecr.eu-west-1.amazonaws.com",
+  "image_name": "test",
+  "image_tag_value": "2021.6.4",
+  "image_tag_semver": true,
+  "image_digest_watch": false,
+  "image_digest_repo": "sha256:ca0edc3fb0b4647963629bdfccbb3ccfa352184b45a9b4145832000c2878dd72",
+  "image_architecture": "amd64",
+  "image_os": "linux",
+  "image_created": "2021-06-12T05:33:38.440Z",
+  "display_name": "Home Assistant",
+  "display_icon": "sh:homeassistant",
+  "result_tag": "2021.6.5",
+  "update_available": true
 }
 ```
 

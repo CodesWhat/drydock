@@ -10,10 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- **Basic auth argon2id PHC compatibility** — Basic authentication now accepts PHC-format argon2id hashes (`$argon2id$v=19$m=...,t=...,p=...$salt$hash`) in addition to the existing Drydock `argon2id$memory$passes$parallelism$salt$hash` format. Hash-generation guidance now recommends the standard `argon2` CLI command first, with Node.js as a secondary option.
-
 ## [1.4.0] — 2026-02-28
 
 ### Breaking Changes
@@ -66,6 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Security vulnerability overview endpoint** — New `GET /api/containers/security/vulnerabilities` returns pre-aggregated vulnerability data grouped by image with severity summaries, so the Security view no longer needs to load all containers.
 - **MQTT attribute filtering for Home Assistant** — MQTT trigger supports attribute-based filtering for Home Assistant integration, allowing selective publishing based on container attributes.
 - **Docker Compose post_start env validation** — Docker Compose trigger validates environment variables in `post_start` hooks before execution, preventing runtime errors from missing or invalid env var references.
+- **MQTT HASS entity_picture from container icons** — When Home Assistant HASS discovery is enabled, `entity_picture` is now automatically resolved from the container's `dd.display.icon` label. Icons with `sh:`, `hl:`, or `si:` prefixes map to jsDelivr CDN URLs for selfhst, homarr-labs, and simple-icons respectively. Direct HTTP/HTTPS URLs pass through unchanged. ([#138](https://github.com/CodesWhat/drydock/issues/138))
+- **`dd.display.picture` container label** — New label to override the MQTT HASS `entity_picture` URL directly. Takes precedence over icon-derived pictures when set to an HTTP/HTTPS URL.
 
 #### UI / Dashboard
 
@@ -99,6 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rollback confirmation dialog** — Container rollback actions now require explicit confirmation through a danger-severity dialog before restoring from backup.
 - **Update confirmation dialog** — Container update actions now require explicit confirmation through a dialog before triggering an update.
 - **SHA-1 hash deprecation banner** — Dashboard shows a dismissible deprecation banner when legacy SHA-1 password hashes are detected, prompting migration to argon2id.
+- **Config tab URL deep-linking** — Config view tab selection syncs to the URL query parameter, enabling shareable direct links to specific config tabs.
 
 ### Changed
 
@@ -130,6 +129,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **6 color themes** — Replaced original Drydock theme with popular editor palettes: One Dark, GitHub, Dracula, Catppuccin, Gruvbox, and Ayu. Each with dark and light variants.
 - **Argon2id password hashing** — Basic auth now uses argon2id (OWASP recommended) via Node.js built-in `crypto.argon2Sync()` instead of scrypt for password hashing. Default parameters: 64 MiB memory, 3 passes, parallelism 4.
 - **PUT `/api/settings` deprecated** — `PUT /api/settings` now returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` headers. Use `PATCH /api/settings` for partial updates. PUT alias removal targeted for v1.5.0.
+- **Basic auth argon2id PHC compatibility** — Basic authentication now accepts PHC-format argon2id hashes (`$argon2id$v=19$m=...,t=...,p=...$salt$hash`) in addition to the existing Drydock `argon2id$memory$passes$parallelism$salt$hash` format. Hash-generation guidance now recommends the standard `argon2` CLI command first, with Node.js as a secondary option.
+- **Borderless UI redesign** — Removed borders from all views, config tabs, detail panels, and shared data components for a cleaner visual appearance.
+- **Dashboard version column alignment** — Version column in the dashboard updates table is now left-aligned for better readability.
+- **Detail panel expand button redesigned** — Full-page expand button in the detail panel now uses a frame-corners icon instead of the previous maximize icon.
+- **Sidebar active indicator removed** — Removed the blue active indicator bar from sidebar navigation items for a cleaner look.
 
 ### Fixed
 
@@ -209,6 +213,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Backup retention on failed updates** — Backup entries are now pruned on the failure path, not just after successful updates, preventing indefinite accumulation of stale backups.
 - **Backup pruning with undefined maxCount** — `pruneOldBackups()` no longer deletes all backups when `maxCount` is `undefined` (e.g. when `DD_BACKUPCOUNT` is not configured). Now correctly no-ops on invalid or non-finite values.
 - **Auto-rollback audit fromVersion accuracy** — Rollback audit entries now correctly record `fromVersion` as the failing new image tag (via `updateKind.remoteValue`) instead of the pre-update old tag.
+- **HASS entity_picture URL broken after logo rename** — MQTT HASS discovery payload referenced a renamed logo file (`drydock.png` instead of `whale-logo.png`), causing missing entity pictures in Home Assistant. ([#138](https://github.com/CodesWhat/drydock/issues/138))
+- **Watcher crashes on containers with empty names** — Docker watcher's same-name deduplication filter threw errors when containers had empty or missing names. Now skips deduplication for unnamed containers.
+- **Container names not reconciled after external recreate** — Containers recreated externally (via Portainer or `docker compose up`) retained stale names in the store until the next full poll cycle. Now reconciles container names immediately on detection.
+- **Nested icon prefixes fail proxy request** — Icon proxy rejected icons with doubled prefixes like `mdi:mdi-docker`. Now normalizes nested prefixes before proxying.
+- **Colon-separated icon prefixes rejected** — `dd.display.icon` labels using colon separators (e.g., `sh:nextcloud`) were rejected by the API validation pattern. Validation now accepts colon-prefixed icon identifiers.
+- **Bouncer-blocked state missing from container details** — Container detail views didn't reflect bouncer-blocked status. Now correctly wires the blocked state into detail panel display.
 
 ### Security
 
@@ -250,6 +260,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Identity-aware rate limit keying** — Opt-in `DD_SERVER_RATELIMIT_IDENTITYKEYING=true` keys authenticated route rate limits by session/username instead of IP, preventing collisions for multiple users behind shared proxies. Unauthenticated routes remain IP-keyed. Disabled by default.
 - **Reactive server feature flags in UI** — Container action buttons (update, rollback, scan, triggers) are now gated by server-side feature flags via a `useServerFeatures` composable. When features like `DD_SERVER_FEATURE_CONTAINERACTIONS` are disabled, buttons show a disabled state with tooltip explaining why instead of silently failing at runtime.
 - **Compose trigger hardening** — Auto compose file detection from container labels (`com.docker.compose.project.config_files`) with Docker inspect fallback, pre-commit `docker compose config --quiet` validation before writes, compose file reconciliation (warn/block modes for runtime vs compose image drift), optional digest pinning (`DIGESTPINNING` trigger config), compose-file-once batch mode for multi-service stacks, multi-file compose chain awareness with deterministic writable target selection, compose metadata in update preview API, and compose file path display in container detail UI.
+- **Unsupported hash formats fail closed** — Basic auth now rejects unsupported hash formats instead of falling through to plaintext comparison, preventing accidental plaintext password acceptance.
 
 ### Performance
 

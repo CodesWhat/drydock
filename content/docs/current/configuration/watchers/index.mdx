@@ -423,6 +423,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | Label | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
 | `dd.display.icon` | ⚪ | Custom display icon for the container | Valid [Fontawesome Icon](https://fontawesome.com/), [Homarr Labs Icon](https://dashboardicons.com/), [Selfh.st Icon](https://selfh.st/icons/), or [Simple Icon](https://simpleicons.org/) (see details below). `mdi:` icons are auto-resolved but not recommended. | `fab fa-docker` |
+| `dd.display.picture` | ⚪ | Custom entity picture URL for Home Assistant MQTT integration. When set to an HTTP/HTTPS URL, overrides the icon-derived `entity_picture` in HASS discovery payloads. | Valid HTTP or HTTPS URL | |
 | `dd.display.name` | ⚪ | Custom display name for the container | Valid String | Container name |
 | `dd.group` | ⚪ | Group name for stack/group views in the UI (falls back to `com.docker.compose.project` if not set) | Valid String | |
 | `dd.inspect.tag.path` | ⚪ | Docker inspect path used to derive a local semver tag | Slash-separated path in `docker inspect` output | |
