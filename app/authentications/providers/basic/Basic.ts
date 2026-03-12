@@ -11,7 +11,9 @@ function hashValue(value: string): Buffer {
   return createHash('sha256').update(value, 'utf8').digest();
 }
 
-const ARGON2_HASH_PARTS = 6;
+const DRYDOCK_ARGON2_HASH_PARTS = 6;
+const PHC_ARGON2_HASH_PARTS = 6;
+const PHC_ARGON2_VERSION = 19;
 const MIN_SALT_SIZE = 16;
 const MIN_HASH_SIZE = 32;
 const MIN_ARGON2_MEMORY = 19456;
@@ -43,7 +45,6 @@ interface ParsedCryptHash {
 type LegacyHashFormat = 'sha1' | 'apr1' | 'md5' | 'crypt' | 'plain';
 const UNSUPPORTED_PLAIN_FALLBACK_PATTERNS: RegExp[] = [
   /^\$2[abxy]\$/i, // bcrypt variants
-  /^\$argon2(?:id|i|d)\$/i, // PHC-style argon2 hashes
 ];
 
 function normalizeHash(rawHash: string): string {
@@ -65,44 +66,154 @@ function decodeBase64(raw: string): Buffer | undefined {
   if (raw.length === 0) {
     return undefined;
   }
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(raw) || raw.length % 4 !== 0) {
+  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(raw)) {
     return undefined;
   }
 
-  return Buffer.from(raw, 'base64');
+  const normalized = raw.replaceAll('-', '+').replaceAll('_', '/');
+  const firstPaddingIndex = normalized.indexOf('=');
+  if (firstPaddingIndex !== -1) {
+    if (!/^=+$/.test(normalized.substring(firstPaddingIndex)) || normalized.length % 4 !== 0) {
+      return undefined;
+    }
+  } else if (normalized.length % 4 === 1) {
+    return undefined;
+  }
+
+  const padded =
+    firstPaddingIndex === -1
+      ? normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=')
+      : normalized;
+  const decoded = Buffer.from(padded, 'base64');
+  if (decoded.length === 0) {
+    return undefined;
+  }
+
+  return decoded;
 }
 
-function parseArgon2Hash(rawHash: string): ParsedArgon2Hash | undefined {
-  const parts = normalizeHash(rawHash).split('$');
-  if (parts.length !== ARGON2_HASH_PARTS || parts[0] !== 'argon2id') {
-    return undefined;
-  }
-
-  const memory = parsePositiveInteger(parts[1]);
-  const passes = parsePositiveInteger(parts[2]);
-  const parallelism = parsePositiveInteger(parts[3]);
-  const salt = decodeBase64(parts[4]);
-  const hash = decodeBase64(parts[5]);
+function parseArgon2Parameters(
+  rawMemory: string,
+  rawPasses: string,
+  rawParallelism: string,
+): { memory: number; passes: number; parallelism: number } | undefined {
+  const memory = parsePositiveInteger(rawMemory);
+  const passes = parsePositiveInteger(rawPasses);
+  const parallelism = parsePositiveInteger(rawParallelism);
 
   if (
     !memory ||
     !passes ||
     !parallelism ||
-    !salt ||
-    !hash ||
     memory < MIN_ARGON2_MEMORY ||
     memory > MAX_ARGON2_MEMORY ||
     passes < MIN_ARGON2_PASSES ||
     passes > MAX_ARGON2_PASSES ||
     parallelism < MIN_ARGON2_PARALLELISM ||
-    parallelism > MAX_ARGON2_PARALLELISM ||
-    salt.length < MIN_SALT_SIZE ||
-    hash.length < MIN_HASH_SIZE
+    parallelism > MAX_ARGON2_PARALLELISM
   ) {
     return undefined;
   }
 
-  return { memory, passes, parallelism, salt, hash };
+  return { memory, passes, parallelism };
+}
+
+function parsePhcArgon2Parameters(
+  rawParameters: string,
+): { memory: number; passes: number; parallelism: number } | undefined {
+  const entries = rawParameters.split(',');
+  if (entries.length !== 3) {
+    return undefined;
+  }
+
+  let rawMemory: string | undefined;
+  let rawPasses: string | undefined;
+  let rawParallelism: string | undefined;
+
+  for (const entry of entries) {
+    const [key, value, ...extra] = entry.split('=');
+    if (!key || value === undefined || extra.length > 0) {
+      return undefined;
+    }
+
+    switch (key) {
+      case 'm':
+        if (rawMemory !== undefined) {
+          return undefined;
+        }
+        rawMemory = value;
+        break;
+      case 't':
+        if (rawPasses !== undefined) {
+          return undefined;
+        }
+        rawPasses = value;
+        break;
+      case 'p':
+        if (rawParallelism !== undefined) {
+          return undefined;
+        }
+        rawParallelism = value;
+        break;
+      default:
+        return undefined;
+    }
+  }
+
+  if (!rawMemory || !rawPasses || !rawParallelism) {
+    return undefined;
+  }
+
+  return parseArgon2Parameters(rawMemory, rawPasses, rawParallelism);
+}
+
+function parseDrydockArgon2Hash(normalizedHash: string): ParsedArgon2Hash | undefined {
+  const parts = normalizedHash.split('$');
+  if (parts.length !== DRYDOCK_ARGON2_HASH_PARTS || parts[0] !== 'argon2id') {
+    return undefined;
+  }
+
+  const params = parseArgon2Parameters(parts[1], parts[2], parts[3]);
+  const salt = decodeBase64(parts[4]);
+  const hash = decodeBase64(parts[5]);
+
+  if (!params || !salt || !hash || salt.length < MIN_SALT_SIZE || hash.length < MIN_HASH_SIZE) {
+    return undefined;
+  }
+
+  return { ...params, salt, hash };
+}
+
+function parsePhcArgon2Hash(normalizedHash: string): ParsedArgon2Hash | undefined {
+  const parts = normalizedHash.split('$');
+  if (
+    parts.length !== PHC_ARGON2_HASH_PARTS ||
+    parts[0] !== '' ||
+    parts[1] !== 'argon2id' ||
+    parts[2] !== `v=${PHC_ARGON2_VERSION}`
+  ) {
+    return undefined;
+  }
+
+  const params = parsePhcArgon2Parameters(parts[3]);
+  const salt = decodeBase64(parts[4]);
+  const hash = decodeBase64(parts[5]);
+
+  if (!params || !salt || !hash || salt.length < MIN_SALT_SIZE || hash.length < MIN_HASH_SIZE) {
+    return undefined;
+  }
+
+  return { ...params, salt, hash };
+}
+
+function looksLikeArgon2Hash(rawHash: string): boolean {
+  const normalizedHash = normalizeHash(rawHash);
+  return normalizedHash.startsWith('argon2id$') || normalizedHash.startsWith('$argon2id$');
+}
+
+function parseArgon2Hash(rawHash: string): ParsedArgon2Hash | undefined {
+  const normalizedHash = normalizeHash(rawHash);
+  return parseDrydockArgon2Hash(normalizedHash) ?? parsePhcArgon2Hash(normalizedHash);
 }
 
 const SHA1_DIGEST_SIZE = 20;
@@ -183,6 +294,9 @@ function isUnsupportedPlainFallbackHash(hash: string): boolean {
 
 function getLegacyHashFormat(hash: string): LegacyHashFormat | undefined {
   if (parseArgon2Hash(hash)) {
+    return undefined;
+  }
+  if (looksLikeArgon2Hash(hash)) {
     return undefined;
   }
   if (parseShaHash(hash) !== undefined) {
@@ -298,6 +412,9 @@ async function verifyPassword(password: string, encodedHash: string): Promise<bo
   if (parseArgon2Hash(normalizedHash)) {
     return await verifyArgon2Password(password, normalizedHash);
   }
+  if (looksLikeArgon2Hash(normalizedHash)) {
+    return false;
+  }
   if (parseShaHash(normalizedHash)) {
     return verifyShaPassword(password, normalizedHash);
   }
@@ -335,7 +452,7 @@ class Basic extends Authentication {
         .required()
         .custom((value: string, helpers: { error: (key: string) => unknown }) => {
           const normalizedHash = normalizeHash(value);
-          if (normalizedHash.startsWith('argon2id$') && !parseArgon2Hash(normalizedHash)) {
+          if (looksLikeArgon2Hash(normalizedHash) && !parseArgon2Hash(normalizedHash)) {
             return helpers.error('any.invalid');
           }
           if (isUnsupportedPlainFallbackHash(normalizedHash)) {
@@ -345,7 +462,7 @@ class Basic extends Authentication {
         }, 'password hash validation')
         .messages({
           'any.invalid':
-            '"hash" must be an argon2id hash (argon2id$memory$passes$parallelism$salt$hash) or a supported legacy v1.3.9 hash',
+            '"hash" must be an argon2id hash ($argon2id$v=19$m=65536,t=3,p=4$salt$hash) or compatible Drydock format (argon2id$memory$passes$parallelism$salt$hash), or a supported legacy v1.3.9 hash',
         }),
     });
   }

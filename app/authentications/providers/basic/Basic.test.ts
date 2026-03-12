@@ -29,14 +29,16 @@ vi.mock('node:crypto', async () => {
 import { argon2Sync, createHash, randomBytes } from 'node:crypto';
 import Basic from './Basic.js';
 
-function createArgon2Hash(
-  password: string,
-  params: { memory: number; passes: number; parallelism: number } = {
-    memory: 65536,
-    passes: 3,
-    parallelism: 4,
-  },
-) {
+type Argon2Params = { memory: number; passes: number; parallelism: number };
+type PhcParamKey = 'm' | 't' | 'p';
+
+const DEFAULT_ARGON2_PARAMS: Argon2Params = {
+  memory: 65536,
+  passes: 3,
+  parallelism: 4,
+};
+
+function createArgon2Hash(password: string, params: Argon2Params = DEFAULT_ARGON2_PARAMS) {
   const salt = randomBytes(32);
   const derived = argon2Sync('argon2id', {
     message: password,
@@ -49,6 +51,42 @@ function createArgon2Hash(
   return `argon2id$${params.memory}$${params.passes}$${params.parallelism}$${salt.toString('base64')}$${derived.toString('base64')}`;
 }
 
+function toPhcBase64(value: Buffer, padded = false): string {
+  const encoded = value.toString('base64').replaceAll('+', '-').replaceAll('/', '_');
+  return padded ? encoded : encoded.replace(/=+$/u, '');
+}
+
+function createPhcArgon2Hash(
+  password: string,
+  options: {
+    params?: Argon2Params;
+    version?: string;
+    parameterOrder?: PhcParamKey[];
+    paddedSegments?: boolean;
+  } = {},
+) {
+  const params = options.params ?? DEFAULT_ARGON2_PARAMS;
+  const version = options.version ?? 'v=19';
+  const parameterOrder = options.parameterOrder ?? ['m', 't', 'p'];
+  const paramValueByKey: Record<PhcParamKey, number> = {
+    m: params.memory,
+    t: params.passes,
+    p: params.parallelism,
+  };
+  const parameterSegment = parameterOrder.map((key) => `${key}=${paramValueByKey[key]}`).join(',');
+  const salt = randomBytes(32);
+  const derived = argon2Sync('argon2id', {
+    message: password,
+    nonce: salt,
+    memory: params.memory,
+    passes: params.passes,
+    parallelism: params.parallelism,
+    tagLength: 64,
+  });
+
+  return `$argon2id$${version}$${parameterSegment}$${toPhcBase64(salt, options.paddedSegments)}$${toPhcBase64(derived, options.paddedSegments)}`;
+}
+
 function createShaHash(password: string) {
   const digest = createHash('sha1').update(password).digest();
   return `{SHA}${digest.toString('base64')}`;
@@ -56,6 +94,8 @@ function createShaHash(password: string) {
 
 const VALID_SALT_BASE64 = Buffer.alloc(16, 1).toString('base64');
 const VALID_HASH_BASE64 = Buffer.alloc(32, 1).toString('base64');
+const VALID_SALT_BASE64URL = toPhcBase64(Buffer.alloc(16, 1));
+const VALID_HASH_BASE64URL = toPhcBase64(Buffer.alloc(32, 1));
 const LEGACY_APR1_HASH = '$apr1$r31.....$HqJZimcKQFAMYayBlzkrA/';
 const LEGACY_MD5_HASH = '$1$saltsalt$2vnaRpHa6Jxjz5n83ok8Z0';
 const LEGACY_CRYPT_HASH = 'rqXexS6ZhobKA';
@@ -279,6 +319,63 @@ describe('Basic Authentication', () => {
     });
   });
 
+  test('should validate configuration schema with PHC argon2id hash', async () => {
+    const hash = createPhcArgon2Hash('password');
+    expect(
+      basic.validateConfiguration({
+        user: 'testuser',
+        hash,
+      }),
+    ).toEqual({
+      user: 'testuser',
+      hash,
+    });
+  });
+
+  test('should authenticate valid user with PHC argon2id hash', async () => {
+    basic.configuration = {
+      user: 'testuser',
+      hash: createPhcArgon2Hash('password'),
+    };
+
+    await new Promise<void>((resolve) => {
+      basic.authenticate('testuser', 'password', (_err, result) => {
+        expect(result).toEqual({ username: 'testuser' });
+        resolve();
+      });
+    });
+  });
+
+  test.each([
+    ['m=65536,t=3,p=4'],
+    ['t=3,p=4,m=65536'],
+    ['p=4,m=65536,t=3'],
+  ])('should accept PHC argon2id hashes with reordered parameters (%s)', (parameterSegment) => {
+    const hash = `$argon2id$v=19$${parameterSegment}$${VALID_SALT_BASE64URL}$${VALID_HASH_BASE64URL}`;
+    expect(
+      basic.validateConfiguration({
+        user: 'testuser',
+        hash,
+      }),
+    ).toEqual({
+      user: 'testuser',
+      hash,
+    });
+  });
+
+  test('should accept PHC argon2id hashes with padded base64url segments', async () => {
+    const hash = createPhcArgon2Hash('password', { paddedSegments: true });
+    expect(
+      basic.validateConfiguration({
+        user: 'testuser',
+        hash,
+      }),
+    ).toEqual({
+      user: 'testuser',
+      hash,
+    });
+  });
+
   test('should throw on invalid configuration', async () => {
     expect(() => basic.validateConfiguration({})).toThrow('"user" is required');
   });
@@ -396,6 +493,39 @@ describe('Basic Authentication', () => {
         hash: `argon2id$65536$3$17$${VALID_SALT_BASE64}$${VALID_HASH_BASE64}`,
       }),
     ).toThrow('must be an argon2id hash');
+  });
+
+  test('should reject PHC argon2id hashes missing version segment', async () => {
+    expect(() =>
+      basic.validateConfiguration({
+        user: 'testuser',
+        hash: `$argon2id$m=65536,t=3,p=4$${VALID_SALT_BASE64URL}$${VALID_HASH_BASE64URL}`,
+      }),
+    ).toThrow('must be an argon2id hash');
+  });
+
+  test('should reject PHC argon2id hashes with wrong version', async () => {
+    expect(() =>
+      basic.validateConfiguration({
+        user: 'testuser',
+        hash: `$argon2id$v=18$m=65536,t=3,p=4$${VALID_SALT_BASE64URL}$${VALID_HASH_BASE64URL}`,
+      }),
+    ).toThrow('must be an argon2id hash');
+  });
+
+  test('should not treat malformed PHC argon2id hash as plain fallback during authentication', async () => {
+    const malformedPhcHash = `$argon2id$v=18$m=65536,t=3,p=4$${VALID_SALT_BASE64URL}$${VALID_HASH_BASE64URL}`;
+    basic.configuration = {
+      user: 'testuser',
+      hash: malformedPhcHash,
+    };
+
+    await new Promise<void>((resolve) => {
+      basic.authenticate('testuser', malformedPhcHash, (_err, result) => {
+        expect(result).toBe(false);
+        resolve();
+      });
+    });
   });
 
   describe('legacy v1.3.9 hash support', () => {
