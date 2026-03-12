@@ -1,0 +1,204 @@
+# QA E2E — rc.12 tracker fixes
+# Verifies all 14 rc.12 fixes end-to-end against running drydock instances.
+#
+# Usage:
+#   docker build -t drydock:dev .
+#   docker compose -f test/qa-rc12-fixes.yml up -d
+#   docker compose -f test/qa-rc12-fixes.yml ps          # wait for all healthy
+#   # run Playwright MCP scenarios
+#   docker compose -f test/qa-rc12-fixes.yml down -v
+#
+# Scenarios covered:
+#   1.  Compose directory resolution          (208245ec)
+#   2.  docker.io prefix preservation         (16598ba0)
+#   3.  Compose config case-sensitivity       (14b468fe)
+#   4a. Legacy SHA-1 hash login               (8ba1a6f2)
+#   4b. Legacy APR1 hash login                (8ba1a6f2)
+#   4c. Legacy DES crypt hash login           (8ba1a6f2)
+#   4d. Legacy plaintext hash login           (8ba1a6f2)
+#   5.  TLS healthcheck                       (4e6c5d96)
+#   6.  Log level propagation                 (b0e48186)
+#   7.  Feature flags after login             (82aa55d2)
+#   8.  Container-update audit                (632e478c)
+#   9.  MQTT HASS_ATTRIBUTES                  (8401c205)
+#   10. Trigger warn logging                  (98547dd3)
+#   13. Icon cache headers                    (2b342a5e)
+
+services:
+  # ── Main drydock instance ───────────────────────────────
+  # Covers: Scenario 1, 2, 3, 6, 7, 8, 9, 10, 13
+  drydock-rc12:
+    image: drydock:dev
+    container_name: drydock-rc12
+    user: root
+    ports:
+      - "3400:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./qa-rc12-stacks:/drydock/stacks:rw
+    environment:
+      - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
+      - DD_LOG_FORMAT=text
+      # Scenario 6: log level propagation
+      - DD_LOG_LEVEL=debug
+      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+      - DD_WATCHER_LOCAL_CRON=*/2 * * * *
+      - DD_SESSION_SECRET=qa-rc12-session-secret
+      - DD_PUBLIC_URL=http://localhost:3400
+      # Auth (argon2id — normal login for main instance)
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$zUAK9+ktVWNHyQdv3SaOSgMv3T02F1Zj8D+t1un7D98=$$KEmn6d94w03YxIlw7U7l/ikD9lW+H3IC1N7xbAhOB9yKofA3HoxUBmuvBawvShhv337zDv4+g9hobNWeQEWwkQ=="
+      # Scenario 1: compose directory resolution — FILE points to directory
+      - DD_TRIGGER_DOCKERCOMPOSE_DOCKGE_FILE=/drydock/stacks/filebrowser
+      # Scenario 3: lowercase env var keys for compose config
+      - DD_TRIGGER_DOCKERCOMPOSE_DOCKGE_COMPOSEFILEONCE=true
+      - DD_TRIGGER_DOCKERCOMPOSE_DOCKGE_DIGESTPINNING=false
+      - DD_TRIGGER_DOCKERCOMPOSE_DOCKGE_RECONCILIATIONMODE=warn
+      - DD_TRIGGER_DOCKERCOMPOSE_DOCKGE_AUTO=false
+      # Scenario 9: MQTT HASS attributes
+      - DD_TRIGGER_MQTT_QA_URL=mqtt://mosquitto:1883
+      - DD_TRIGGER_MQTT_QA_HASS_ENABLED=true
+      - DD_TRIGGER_MQTT_QA_HASS_PREFIX=homeassistant
+      - DD_TRIGGER_MQTT_QA_HASS_DISCOVERY=true
+      - DD_TRIGGER_MQTT_QA_HASS_ATTRIBUTES=short
+      # Docker trigger (manual only)
+      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+
+  # ── Scenario 4a: Legacy SHA-1 hash login ────────────────
+  # Password: myPassword
+  # Hash: {SHA}VBPuJHI7uixaa6LQGWx4s+5GKNE=
+  drydock-sha1:
+    image: drydock:dev
+    container_name: drydock-sha1
+    user: root
+    ports:
+      - "3401:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
+      - DD_LOG_FORMAT=text
+      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+      - DD_WATCHER_LOCAL_CRON=*/5 * * * *
+      - DD_SESSION_SECRET=qa-sha1-session-secret
+      - DD_PUBLIC_URL=http://localhost:3401
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - "DD_AUTH_BASIC_ADMIN_HASH={SHA}VBPuJHI7uixaa6LQGWx4s+5GKNE="
+
+  # ── Scenario 4b: Legacy APR1 hash login ─────────────────
+  # Password: myPassword
+  # Hash: $apr1$r31.....$HqJZimcKQFAMYayBlzkrA/
+  drydock-apr1:
+    image: drydock:dev
+    container_name: drydock-apr1
+    user: root
+    ports:
+      - "3402:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
+      - DD_LOG_FORMAT=text
+      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+      - DD_WATCHER_LOCAL_CRON=*/5 * * * *
+      - DD_SESSION_SECRET=qa-apr1-session-secret
+      - DD_PUBLIC_URL=http://localhost:3402
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - "DD_AUTH_BASIC_ADMIN_HASH=$$apr1$$r31.....$$HqJZimcKQFAMYayBlzkrA/"
+
+  # ── Scenario 4c: Legacy DES crypt hash login ────────────
+  # Password: myPassword
+  # Hash: rqXexS6ZhobKA
+  drydock-crypt:
+    image: drydock:dev
+    container_name: drydock-crypt
+    user: root
+    ports:
+      - "3403:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
+      - DD_LOG_FORMAT=text
+      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+      - DD_WATCHER_LOCAL_CRON=*/5 * * * *
+      - DD_SESSION_SECRET=qa-crypt-session-secret
+      - DD_PUBLIC_URL=http://localhost:3403
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - DD_AUTH_BASIC_ADMIN_HASH=rqXexS6ZhobKA
+
+  # ── Scenario 4d: Legacy plaintext hash login ────────────
+  # Password: plaintext-password (the hash IS the password)
+  drydock-plain:
+    image: drydock:dev
+    container_name: drydock-plain
+    user: root
+    ports:
+      - "3404:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
+      - DD_LOG_FORMAT=text
+      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+      - DD_WATCHER_LOCAL_CRON=*/5 * * * *
+      - DD_SESSION_SECRET=qa-plain-session-secret
+      - DD_PUBLIC_URL=http://localhost:3404
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - DD_AUTH_BASIC_ADMIN_HASH=plaintext-password
+
+  # ── Scenario 5: TLS backend + healthcheck ───────────────
+  drydock-tls:
+    image: drydock:dev
+    container_name: drydock-tls
+    user: root
+    ports:
+      - "3405:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./qa-proxy-certs:/certs:ro
+    environment:
+      - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
+      - DD_LOG_FORMAT=text
+      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+      - DD_WATCHER_LOCAL_CRON=*/5 * * * *
+      - DD_SESSION_SECRET=qa-tls-session-secret
+      - DD_PUBLIC_URL=https://localhost:3405
+      - DD_SERVER_TLS_ENABLED=true
+      - DD_SERVER_TLS_CERT=/certs/cert.pem
+      - DD_SERVER_TLS_KEY=/certs/key.pem
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$zUAK9+ktVWNHyQdv3SaOSgMv3T02F1Zj8D+t1un7D98=$$KEmn6d94w03YxIlw7U7l/ikD9lW+H3IC1N7xbAhOB9yKofA3HoxUBmuvBawvShhv337zDv4+g9hobNWeQEWwkQ=="
+
+  # ── MQTT broker (Mosquitto) — Scenario 9 ────────────────
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -t '$$SYS/#' -C 1 -W 3 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ── Watched container — Scenario 8 (audit), 10 (warn logging) ──
+  qa-nginx:
+    image: nginx:1.25.5
+    pull_policy: never
+    container_name: qa-nginx
+    labels:
+      - dd.watch=true
+      - dd.display.name=QA Nginx

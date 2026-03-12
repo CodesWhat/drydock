@@ -1,0 +1,7 @@
+services:
+  filebrowser:
+    image: docker.io/filebrowser/filebrowser:v2.30.0
+    container_name: qa-filebrowser
+    labels:
+      - dd.watch=true
+      - dd.display.name=Filebrowser (Dockge)
