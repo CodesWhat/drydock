@@ -13,7 +13,7 @@ The `basic` authentication lets you protect drydock access using the [Http Basic
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
 | `DD_AUTH_BASIC_{auth_name}_USER` | 🔴 | Username | | |
-| `DD_AUTH_BASIC_{auth_name}_HASH` | 🔴 | Argon2id password hash | `argon2id$memory$passes$parallelism$salt$hash` | |
+| `DD_AUTH_BASIC_{auth_name}_HASH` | 🔴 | Argon2id password hash | `$argon2id$v=19$m=65536,t=3,p=4$salt$hash` (preferred) or `argon2id$memory$passes$parallelism$salt$hash` (compatible) | |
 
 <Callout type="warn">Hash values contain `$` characters. In Docker Compose YAML, double each `$` as `$$`. In Bash, use single quotes around the value.</Callout>
 
@@ -58,27 +58,21 @@ docker run \
 
 ## How to create a password hash
 
-### Using the Drydock container
-
-The simplest approach — use the argon2id hasher built into the Drydock image:
+### Using argon2 CLI (recommended)
 
 ```bash
-docker run --rm codeswhat/drydock node -e '
-  const c = require("node:crypto");
-  const s = c.randomBytes(32);
-  const h = c.argon2Sync("argon2id", { message: process.argv[1], nonce: s, memory: 65536, passes: 3, parallelism: 4, tagLength: 64 });
-  console.log("argon2id$65536$3$4$" + s.toString("base64") + "$" + h.toString("base64"));
-' "yourpassword"
+echo -n "yourpassword" | argon2 $(openssl rand -base64 32) -id -m 16 -t 3 -p 4 -l 64 -e
 ```
 
-### Using Node.js locally (requires Node 24+)
+### Alternative: using Node.js locally (requires Node 24+, no argon2 CLI install)
 
 ```bash
 node -e '
   const c = require("node:crypto");
+  const toPhc = (b) => b.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   const s = c.randomBytes(32);
   const h = c.argon2Sync("argon2id", { message: process.argv[1], nonce: s, memory: 65536, passes: 3, parallelism: 4, tagLength: 64 });
-  console.log("argon2id$65536$3$4$" + s.toString("base64") + "$" + h.toString("base64"));
+  console.log("$argon2id$v=19$m=65536,t=3,p=4$" + toPhc(s) + "$" + toPhc(h));
 ' "yourpassword"
 ```
 

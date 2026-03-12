@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > **Fork point:** upstream post-8.1.1 (2025-11-27)
 > **Upstream baseline:** WUD 8.1.1 + 65 merged PRs on `main` (Vue 3 migration, Alpine base image, Rocket.Chat trigger, threshold system, semver improvements, request→axios migration, and more)
 
+## [Unreleased]
+
+### Changed
+
+- **Basic auth argon2id PHC compatibility** — Basic authentication now accepts PHC-format argon2id hashes (`$argon2id$v=19$m=...,t=...,p=...$salt$hash`) in addition to the existing Drydock `argon2id$memory$passes$parallelism$salt$hash` format. Hash-generation guidance now recommends the standard `argon2` CLI command first, with Node.js as a secondary option.
+
 ## [1.4.0] — 2026-02-28
 
 ### Breaking Changes
