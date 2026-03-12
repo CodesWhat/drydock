@@ -24,14 +24,14 @@ describe('Logger with debug level', () => {
 
     log.debug({ component: 'test' }, 'debug-level-message');
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    expect(mockAddEntry).toHaveBeenCalledWith(
-      expect.objectContaining({
-        level: 'debug',
-        msg: 'debug-level-message',
-      }),
-    );
+    await vi.waitFor(() => {
+      expect(mockAddEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'debug',
+          msg: 'debug-level-message',
+        }),
+      );
+    });
   });
 
   test('should deliver info messages when level is debug', async () => {
@@ -39,13 +39,13 @@ describe('Logger with debug level', () => {
 
     log.info({ component: 'test' }, 'info-level-message');
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    expect(mockAddEntry).toHaveBeenCalledWith(
-      expect.objectContaining({
-        level: 'info',
-        msg: 'info-level-message',
-      }),
-    );
+    await vi.waitFor(() => {
+      expect(mockAddEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          level: 'info',
+          msg: 'info-level-message',
+        }),
+      );
+    });
   });
 });
