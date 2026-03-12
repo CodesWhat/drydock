@@ -41,6 +41,10 @@ interface ParsedCryptHash {
 }
 
 type LegacyHashFormat = 'sha1' | 'apr1' | 'md5' | 'crypt' | 'plain';
+const UNSUPPORTED_PLAIN_FALLBACK_PATTERNS: RegExp[] = [
+  /^\$2[abxy]\$/i, // bcrypt variants
+  /^\$argon2(?:id|i|d)\$/i, // PHC-style argon2 hashes
+];
 
 function normalizeHash(rawHash: string): string {
   return rawHash.trim();
@@ -172,6 +176,11 @@ function timingSafeEqualString(left: string, right: string): boolean {
   }
 }
 
+function isUnsupportedPlainFallbackHash(hash: string): boolean {
+  const normalizedHash = normalizeHash(hash);
+  return UNSUPPORTED_PLAIN_FALLBACK_PATTERNS.some((pattern) => pattern.test(normalizedHash));
+}
+
 function getLegacyHashFormat(hash: string): LegacyHashFormat | undefined {
   if (parseArgon2Hash(hash)) {
     return undefined;
@@ -187,6 +196,10 @@ function getLegacyHashFormat(hash: string): LegacyHashFormat | undefined {
 
   if (parseCryptHash(hash)) {
     return 'crypt';
+  }
+
+  if (isUnsupportedPlainFallbackHash(hash)) {
+    return undefined;
   }
 
   return 'plain';
@@ -294,6 +307,9 @@ async function verifyPassword(password: string, encodedHash: string): Promise<bo
   if (parseCryptHash(normalizedHash)) {
     return verifyCryptPassword(password, normalizedHash);
   }
+  if (isUnsupportedPlainFallbackHash(normalizedHash)) {
+    return false;
+  }
   return verifyPlainPassword(password, normalizedHash);
 }
 
@@ -318,7 +334,11 @@ class Basic extends Authentication {
         .trim()
         .required()
         .custom((value: string, helpers: { error: (key: string) => unknown }) => {
-          if (value.startsWith('argon2id$') && !parseArgon2Hash(value)) {
+          const normalizedHash = normalizeHash(value);
+          if (normalizedHash.startsWith('argon2id$') && !parseArgon2Hash(normalizedHash)) {
+            return helpers.error('any.invalid');
+          }
+          if (isUnsupportedPlainFallbackHash(normalizedHash)) {
             return helpers.error('any.invalid');
           }
           return value;

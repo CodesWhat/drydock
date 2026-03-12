@@ -60,6 +60,7 @@ const LEGACY_APR1_HASH = '$apr1$r31.....$HqJZimcKQFAMYayBlzkrA/';
 const LEGACY_MD5_HASH = '$1$saltsalt$2vnaRpHa6Jxjz5n83ok8Z0';
 const LEGACY_CRYPT_HASH = 'rqXexS6ZhobKA';
 const LEGACY_PLAIN_HASH = 'plaintext-password';
+const UNSUPPORTED_BCRYPT_HASH = '$2b$10$123456789012345678901u8Q4W2nLw8Qm7w7fA9sQ3lV7qVQX0w2.';
 
 describe('Basic Authentication', () => {
   let basic: InstanceType<typeof Basic>;
@@ -749,6 +750,295 @@ describe('Basic Authentication', () => {
 
       await new Promise<void>((resolve) => {
         basic.authenticate('testuser', 'wrongpassword', (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
+
+    test('should reject bcrypt-style hash in configuration schema', async () => {
+      expect(() =>
+        basic.validateConfiguration({
+          user: 'testuser',
+          hash: UNSUPPORTED_BCRYPT_HASH,
+        }),
+      ).toThrow('must be an argon2id hash');
+    });
+
+    test('should not treat bcrypt-style hash as plain fallback during authentication', async () => {
+      basic.configuration = {
+        user: 'testuser',
+        hash: UNSUPPORTED_BCRYPT_HASH,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', UNSUPPORTED_BCRYPT_HASH, (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
+
+    test('should classify md5, crypt, plain and unsupported hashes in metadata', () => {
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_MD5_HASH,
+      };
+      expect(basic.getMetadata()).toEqual({ usesLegacyHash: true });
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_CRYPT_HASH,
+      };
+      expect(basic.getMetadata()).toEqual({ usesLegacyHash: true });
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_PLAIN_HASH,
+      };
+      expect(basic.getMetadata()).toEqual({ usesLegacyHash: true });
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: UNSUPPORTED_BCRYPT_HASH,
+      };
+      expect(basic.getMetadata()).toEqual({ usesLegacyHash: false });
+    });
+
+    test('should treat malformed SHA/APR1 prefixes as plain legacy metadata', () => {
+      basic.configuration = {
+        user: 'testuser',
+        hash: '{SHA}',
+      };
+      expect(basic.getMetadata()).toEqual({ usesLegacyHash: true });
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: '$apr1$',
+      };
+      expect(basic.getMetadata()).toEqual({ usesLegacyHash: true });
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: '$apr1$$broken',
+      };
+      expect(basic.getMetadata()).toEqual({ usesLegacyHash: true });
+    });
+
+    test('should reject authentication when argon2 hash cannot be parsed during verification', async () => {
+      const validArgon2Parts = createArgon2Hash('password').split('$');
+      let splitCallCount = 0;
+      const flakyArgon2Hash = {
+        trim() {
+          return this as unknown as string;
+        },
+        split(_separator: string) {
+          splitCallCount += 1;
+          return splitCallCount === 1 ? validArgon2Parts : ['argon2id'];
+        },
+      } as unknown as string;
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: flakyArgon2Hash,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'password', (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
+
+    test('should reject authentication when SHA hash becomes invalid during verification', async () => {
+      const validShaHash = createShaHash('password');
+      let substringCallCount = 0;
+      const flakyShaHash = {
+        trim() {
+          return this as unknown as string;
+        },
+        split() {
+          return ['not-argon2'];
+        },
+        get length() {
+          return validShaHash.length;
+        },
+        substring(start: number, end?: number) {
+          if (start === 0 && end === 5) {
+            return '{SHA}';
+          }
+          substringCallCount += 1;
+          return substringCallCount === 1 ? validShaHash.substring(5) : '';
+        },
+      } as unknown as string;
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: flakyShaHash,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'password', (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
+
+    test('should reject authentication when MD5 hash becomes invalid during verification', async () => {
+      let splitCallCount = 0;
+      const flakyMd5Hash = {
+        trim() {
+          return this as unknown as string;
+        },
+        split() {
+          splitCallCount += 1;
+          if (splitCallCount === 1) {
+            return ['not-argon2'];
+          }
+          if (splitCallCount === 2) {
+            return LEGACY_MD5_HASH.split('$');
+          }
+          return ['', '1'];
+        },
+        get length() {
+          return 4;
+        },
+        startsWith(prefix: string) {
+          return prefix === '$1$';
+        },
+      } as unknown as string;
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: flakyMd5Hash,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'password', (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
+
+    test('should reject authentication when APR1/MD5 verification throws', async () => {
+      const throwingPassword = {
+        [Symbol.toPrimitive]() {
+          throw new Error('password coercion failed');
+        },
+      } as unknown as string;
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_MD5_HASH,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', throwingPassword, (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
+
+    test('should reject authentication when crypt hash becomes invalid during verification', async () => {
+      let lengthReadCount = 0;
+      const flakyCryptHash = {
+        trim() {
+          return this as unknown as string;
+        },
+        split() {
+          return ['not-argon2'];
+        },
+        get length() {
+          lengthReadCount += 1;
+          return lengthReadCount === 3 ? 12 : 13;
+        },
+        substring(start: number, end?: number) {
+          if (start === 0 && end === 5) {
+            return 'crypt';
+          }
+          return LEGACY_CRYPT_HASH.substring(start, end);
+        },
+        startsWith() {
+          return false;
+        },
+      } as unknown as string;
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: flakyCryptHash,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'password', (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
+
+    test('should reject authentication when crypt verification throws', async () => {
+      const throwingPassword = new Proxy(
+        {},
+        {
+          get() {
+            throw new Error('password coercion failed');
+          },
+        },
+      ) as unknown as string;
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_CRYPT_HASH,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', throwingPassword, (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
+
+    test('should reject authentication when plain comparison coercion throws', async () => {
+      const throwingPassword = {
+        [Symbol.toPrimitive]() {
+          throw new Error('password coercion failed');
+        },
+      } as unknown as string;
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_PLAIN_HASH,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', throwingPassword, (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+    });
+
+    test('should reject authentication when timingSafeEqual throws during password comparison', async () => {
+      mockTimingSafeEqual
+        .mockImplementationOnce(
+          (left: Buffer, right: Buffer) => left.length === right.length && left.equals(right),
+        )
+        .mockImplementationOnce(() => {
+          throw new Error('timingSafeEqual failed');
+        });
+
+      basic.configuration = {
+        user: 'testuser',
+        hash: LEGACY_PLAIN_HASH,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', LEGACY_PLAIN_HASH, (_err, result) => {
           expect(result).toBe(false);
           resolve();
         });
