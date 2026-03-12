@@ -70,10 +70,9 @@ function handleFontSizeInput(event: Event) {
       class="dd-rounded overflow-hidden"
       :style="{
         backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
       }"
     >
-      <div class="flex items-center gap-2 px-5 py-3" :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+      <div class="flex items-center gap-2 px-5 py-3" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
         <h2 class="text-sm font-semibold dd-text">Color Theme</h2>
       </div>
@@ -86,7 +85,7 @@ function handleFontSizeInput(event: Event) {
             :class="props.themeFamily === fam.id ? 'ring-2 ring-drydock-secondary' : ''"
             :style="{
               backgroundColor: props.themeFamily === fam.id ? 'var(--dd-primary-muted)' : 'var(--dd-bg-inset)',
-              border: props.themeFamily === fam.id ? '1px solid var(--dd-primary)' : '1px solid var(--dd-border-strong)',
+              border: props.themeFamily === fam.id ? '1px solid var(--dd-primary)' : '1px solid var(--dd-border)',
             }"
             @click="props.onSelectThemeFamily(fam.id, $event)"
           >
@@ -118,10 +117,9 @@ function handleFontSizeInput(event: Event) {
       class="dd-rounded overflow-hidden"
       :style="{
         backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
       }"
     >
-      <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+      <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="terminal" :size="14" class="text-drydock-secondary" />
         <h2 class="text-sm font-semibold dd-text">Font Family</h2>
       </div>
@@ -137,7 +135,7 @@ function handleFontSizeInput(event: Event) {
             ]"
             :style="{
               backgroundColor: props.activeFont === font.id ? 'var(--dd-primary-muted)' : 'var(--dd-bg-inset)',
-              border: props.activeFont === font.id ? '1px solid var(--dd-primary)' : '1px solid var(--dd-border-strong)',
+              border: props.activeFont === font.id ? '1px solid var(--dd-primary)' : '1px solid var(--dd-border)',
             }"
             @click="props.onSelectFont(font.id)"
           >
@@ -181,10 +179,9 @@ function handleFontSizeInput(event: Event) {
       class="dd-rounded overflow-hidden"
       :style="{
         backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
       }"
     >
-      <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+      <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
         <h2 class="text-sm font-semibold dd-text">Font Size</h2>
       </div>
@@ -214,10 +211,9 @@ function handleFontSizeInput(event: Event) {
       class="dd-rounded overflow-hidden"
       :style="{
         backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
       }"
     >
-      <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+      <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="dashboard" :size="14" class="text-drydock-secondary" />
         <h2 class="text-sm font-semibold dd-text">Icon Library</h2>
       </div>
@@ -230,7 +226,7 @@ function handleFontSizeInput(event: Event) {
             :class="props.iconLibrary === lib ? 'ring-2 ring-drydock-secondary' : ''"
             :style="{
               backgroundColor: props.iconLibrary === lib ? 'var(--dd-primary-muted)' : 'var(--dd-bg-inset)',
-              border: props.iconLibrary === lib ? '1px solid var(--dd-primary)' : '1px solid var(--dd-border-strong)',
+              border: props.iconLibrary === lib ? '1px solid var(--dd-primary)' : '1px solid var(--dd-border)',
             }"
             @click="props.onSelectIconLibrary(lib)"
           >
@@ -268,10 +264,9 @@ function handleFontSizeInput(event: Event) {
       class="dd-rounded overflow-hidden"
       :style="{
         backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
       }"
     >
-      <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+      <div class="px-5 py-3.5 flex items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
         <AppIcon name="containers" :size="14" class="text-drydock-secondary" />
         <h2 class="text-sm font-semibold dd-text">Icon Size</h2>
       </div>
@@ -299,11 +294,10 @@ function handleFontSizeInput(event: Event) {
     <!-- Border Radius -->
     <div
       class="dd-rounded overflow-hidden"
-      :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }"
+      :style="{ backgroundColor: 'var(--dd-bg-card)' }"
     >
       <div
         class="px-5 py-3.5 flex items-center gap-2"
-        :style="{ borderBottom: '1px solid var(--dd-border-strong)' }"
       >
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
         <h2 class="text-sm font-semibold dd-text">Border Radius</h2>
@@ -317,7 +311,7 @@ function handleFontSizeInput(event: Event) {
             :class="props.activeRadius === p.id ? 'ring-2 ring-drydock-secondary' : ''"
             :style="{
               backgroundColor: props.activeRadius === p.id ? 'var(--dd-primary-muted)' : 'var(--dd-bg-inset)',
-              border: props.activeRadius === p.id ? '1.5px solid var(--dd-primary)' : '1px solid var(--dd-border-strong)',
+              border: props.activeRadius === p.id ? '1.5px solid var(--dd-primary)' : '1px solid var(--dd-border)',
             }"
             @click="props.onSelectRadius(p.id)"
           >

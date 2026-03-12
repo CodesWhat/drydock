@@ -173,7 +173,7 @@ onMounted(fetchServers);
         <input v-model="searchQuery"
                type="text"
                placeholder="Filter by name or address..."
-               class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
+               class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
         <button v-if="searchQuery"
                 class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
                 @click="searchQuery = ''">
@@ -276,7 +276,7 @@ onMounted(fetchServers);
               </div>
             </div>
             <div class="px-4 py-2.5 mt-auto"
-                 :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
+                 :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
               <span class="text-[0.625rem]"
                     :style="{ color: server.containers.running > 0 ? 'var(--dd-success)' : 'var(--dd-text-muted)' }">
                 {{ server.containers.running }}/{{ server.containers.total }} running
@@ -386,7 +386,6 @@ onMounted(fetchServers);
             <div class="pt-2 flex gap-2"
                  :style="{ borderTop: '1px solid var(--dd-border)' }">
               <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
-                      :style="{ border: '1px solid var(--dd-border-strong)' }"
                       @click="fetchServers()">
                 <AppIcon name="restart" :size="11" />
                 Refresh

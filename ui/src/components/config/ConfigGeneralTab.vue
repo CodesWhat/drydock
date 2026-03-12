@@ -120,12 +120,10 @@ const emit = defineEmits<{
       class="dd-rounded overflow-hidden"
       :style="{
         backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
       }"
     >
       <div
         class="px-5 py-3.5 flex items-center gap-2"
-        :style="{ borderBottom: '1px solid var(--dd-border-strong)' }"
       >
         <AppIcon name="settings" :size="14" class="text-drydock-secondary" />
         <h2 class="text-sm font-semibold dd-text">Application</h2>
@@ -153,12 +151,10 @@ const emit = defineEmits<{
       class="dd-rounded overflow-hidden"
       :style="{
         backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
       }"
     >
       <div
         class="px-5 py-3.5 flex items-center gap-2"
-        :style="{ borderBottom: '1px solid var(--dd-border-strong)' }"
       >
         <AppIcon name="server" :size="14" class="text-drydock-secondary" />
         <h2 class="text-sm font-semibold dd-text">Store</h2>
@@ -180,12 +176,10 @@ const emit = defineEmits<{
       class="dd-rounded overflow-hidden"
       :style="{
         backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
       }"
     >
       <div
         class="px-5 py-3.5 flex items-center justify-between gap-3"
-        :style="{ borderBottom: '1px solid var(--dd-border-strong)' }"
       >
         <div class="flex items-center gap-2">
           <AppIcon name="bolt" :size="14" class="text-drydock-secondary" />
@@ -214,7 +208,7 @@ const emit = defineEmits<{
           configure at least one token (<code class="font-mono">DD_SERVER_WEBHOOK_TOKEN</code> or
           <code class="font-mono">DD_SERVER_WEBHOOK_TOKENS_*</code>) to enable it.
         </p>
-        <div class="overflow-x-auto dd-rounded" :style="{ border: '1px solid var(--dd-border-strong)' }">
+        <div class="overflow-x-auto dd-rounded">
           <table class="w-full text-left text-[0.6875rem]">
             <thead :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
               <tr>
@@ -242,7 +236,6 @@ const emit = defineEmits<{
             class="px-3 py-2 text-[0.6875rem] font-mono dd-rounded overflow-x-auto"
             :style="{
               backgroundColor: 'var(--dd-bg-inset)',
-              border: '1px solid var(--dd-border-strong)',
               color: 'var(--dd-text)',
             }"
           >{{ props.webhookExample }}</pre>
@@ -254,12 +247,10 @@ const emit = defineEmits<{
       class="dd-rounded overflow-hidden"
       :style="{
         backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
       }"
     >
       <div
         class="px-5 py-3.5 flex items-center gap-2"
-        :style="{ borderBottom: '1px solid var(--dd-border-strong)' }"
       >
         <AppIcon name="globe" :size="14" class="text-drydock-secondary" />
         <h2 class="text-sm font-semibold dd-text">Network</h2>
@@ -285,12 +276,10 @@ const emit = defineEmits<{
       class="dd-rounded overflow-hidden"
       :style="{
         backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
       }"
     >
       <div
         class="px-5 py-3.5 flex items-center gap-2"
-        :style="{ borderBottom: '1px solid var(--dd-border-strong)' }"
       >
         <AppIcon name="containers" :size="14" class="text-drydock-secondary" />
         <h2 class="text-sm font-semibold dd-text">Container Icon Cache</h2>

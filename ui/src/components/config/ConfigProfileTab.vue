@@ -24,10 +24,9 @@ const props = defineProps<{
       class="dd-rounded overflow-hidden"
       :style="{
         backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
       }"
     >
-      <div class="px-5 py-5 flex items-center gap-4" :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+      <div class="px-5 py-5 flex items-center gap-4">
         <div
           class="w-12 h-12 rounded-full flex items-center justify-center text-base font-bold text-white shrink-0"
           style="background: linear-gradient(135deg, var(--dd-primary), var(--dd-success));"

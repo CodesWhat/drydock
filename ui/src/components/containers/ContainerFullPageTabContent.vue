@@ -143,9 +143,8 @@ const {
         <div v-if="activeDetailTab === 'overview'" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <!-- Ports card -->
           <div class="dd-rounded overflow-hidden"
-               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <div class="px-4 py-3 flex items-center gap-2"
-                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+            <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="network" :size="12" class="dd-text-muted" />
               <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Ports</span>
               <span class="badge text-[0.5625rem] ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.ports.length }}</span>
@@ -165,9 +164,8 @@ const {
 
           <!-- Volumes card -->
           <div class="dd-rounded overflow-hidden"
-               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <div class="px-4 py-3 flex items-center gap-2"
-                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+            <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="hard-drive" :size="12" class="dd-text-muted" />
               <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Volumes</span>
               <span class="badge text-[0.5625rem] ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.volumes.length }}</span>
@@ -188,9 +186,8 @@ const {
           <!-- Compose files card -->
           <div v-if="selectedComposePaths.length > 0"
                class="dd-rounded overflow-hidden"
-               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <div class="px-4 py-3 flex items-center gap-2"
-                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+            <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="stack" :size="12" class="dd-text-muted" />
               <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Compose Files</span>
               <span class="badge text-[0.5625rem] ml-auto dd-bg-elevated dd-text-muted">{{ selectedComposePaths.length }}</span>
@@ -212,9 +209,8 @@ const {
 
           <!-- Version card -->
           <div class="dd-rounded overflow-hidden"
-               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <div class="px-4 py-3 flex items-center gap-2"
-                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+            <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="updates" :size="12" class="dd-text-muted" />
               <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Version</span>
             </div>
@@ -292,9 +288,8 @@ const {
 
           <!-- Registry card -->
           <div class="dd-rounded overflow-hidden"
-               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <div class="px-4 py-3 flex items-center gap-2"
-                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+            <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="registries" :size="12" class="dd-text-muted" />
               <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Registry</span>
             </div>
@@ -318,9 +313,8 @@ const {
 
           <!-- Runtime process card -->
           <div class="dd-rounded overflow-hidden"
-               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <div class="px-4 py-3 flex items-center gap-2"
-                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+            <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="terminal" :size="12" class="dd-text-muted" />
               <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Runtime Process</span>
             </div>
@@ -354,9 +348,8 @@ const {
 
           <!-- Lifecycle hooks card -->
           <div class="dd-rounded overflow-hidden"
-               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <div class="px-4 py-3 flex items-center gap-2"
-                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+            <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="triggers" :size="12" class="dd-text-muted" />
               <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Lifecycle Hooks</span>
             </div>
@@ -397,9 +390,8 @@ const {
 
           <!-- Auto-rollback card -->
           <div class="dd-rounded overflow-hidden"
-               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <div class="px-4 py-3 flex items-center gap-2"
-                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+            <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="recent-updates" :size="12" class="dd-text-muted" />
               <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Auto-Rollback</span>
             </div>
@@ -424,13 +416,12 @@ const {
 
           <!-- Security card -->
           <div class="dd-rounded overflow-hidden"
-               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <div class="px-4 py-3 flex items-center gap-2"
-                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+            <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="security" :size="12" class="dd-text-muted" />
               <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Security</span>
               <button class="ml-auto px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                      :style="{ border: '1px solid var(--dd-border-strong)' }"
+
                       :disabled="detailVulnerabilityLoading || detailSbomLoading"
                       @click="loadDetailSecurityData">
                 {{ detailVulnerabilityLoading || detailSbomLoading ? 'Refreshing...' : 'Refresh' }}
@@ -486,15 +477,15 @@ const {
               </template>
 
               <div class="pt-1 space-y-1.5"
-                   :style="{ borderTop: '1px solid var(--dd-border-strong)' }">
+                   :style="{ borderTop: '1px solid var(--dd-border)' }">
                 <div class="flex items-center gap-2">
                   <select v-model="selectedSbomFormat"
-                          class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                          class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
                     <option value="spdx-json">spdx-json</option>
                     <option value="cyclonedx-json">cyclonedx-json</option>
                   </select>
                   <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+    
                           :disabled="detailSbomLoading"
                           @click="loadDetailSbom">
                     {{ detailSbomLoading ? 'Loading SBOM...' : 'Refresh SBOM' }}
@@ -547,7 +538,7 @@ const {
               </div>
               <div class="flex items-center gap-2">
                 <select v-model.number="containerAutoFetchInterval"
-                        class="px-1.5 py-1 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                        class="px-1.5 py-1 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
                   <option v-for="opt in LOG_AUTO_FETCH_INTERVALS" :key="opt.value" :value="opt.value">
                     {{ opt.label }}
                   </option>
@@ -582,9 +573,8 @@ const {
         <!-- Environment tab (full page) -->
         <div v-if="activeDetailTab === 'environment'" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div class="dd-rounded overflow-hidden"
-               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <div class="px-4 py-3 flex items-center gap-2"
-                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+            <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="config" :size="12" class="dd-text-muted" />
               <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Environment Variables</span>
               <span class="badge text-[0.5625rem] ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.env.length }}</span>
@@ -612,9 +602,8 @@ const {
             </div>
           </div>
           <div class="dd-rounded overflow-hidden"
-               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <div class="px-4 py-3 flex items-center gap-2"
-                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+            <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="hard-drive" :size="12" class="dd-text-muted" />
               <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Volumes</span>
               <span class="badge text-[0.5625rem] ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.volumes.length }}</span>
@@ -636,9 +625,8 @@ const {
         <!-- Labels tab (full page) -->
         <div v-if="activeDetailTab === 'labels'">
           <div class="dd-rounded overflow-hidden"
-               :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-            <div class="px-4 py-3 flex items-center gap-2"
-                 :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+            <div class="px-4 py-3 flex items-center gap-2">
               <AppIcon name="containers" :size="12" class="dd-text-muted" />
               <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Labels</span>
               <span class="badge text-[0.5625rem] ml-auto dd-bg-elevated dd-text-muted">{{ selectedContainer.details.labels.length }}</span>
@@ -663,9 +651,8 @@ const {
         <div v-if="activeDetailTab === 'actions'" class="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <div class="space-y-4">
             <div class="dd-rounded overflow-hidden"
-                 :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-              <div class="px-4 py-3 flex items-center gap-2"
-                   :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+                 :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+              <div class="px-4 py-3 flex items-center gap-2">
                 <AppIcon name="updates" :size="12" class="dd-text-muted" />
                 <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Update Workflow</span>
               </div>
@@ -675,7 +662,7 @@ const {
                   <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Actions</div>
                   <div class="flex flex-wrap gap-2">
                     <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :style="{ border: '1px solid var(--dd-border-strong)' }"
+      
                             :disabled="previewLoading"
                             @click="runContainerPreview">
                       {{ previewLoading ? 'Previewing...' : 'Preview Update' }}
@@ -689,13 +676,13 @@ const {
                     </button>
                     <button v-else
                             class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :style="{ border: '1px solid var(--dd-border-strong)' }"
+      
                             :disabled="!selectedContainer.newTag || actionInProgress === selectedContainer.name"
                             @click="confirmUpdate(selectedContainer.name)">
                       Update Now
                     </button>
                     <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :style="{ border: '1px solid var(--dd-border-strong)' }"
+      
                             :disabled="actionInProgress === selectedContainer.name"
                             @click="scanContainer(selectedContainer.name)">
                       Scan Now
@@ -707,19 +694,19 @@ const {
                   <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Skip & Snooze</div>
                   <div class="flex flex-wrap gap-2">
                     <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :style="{ border: '1px solid var(--dd-border-strong)' }"
+      
                             :disabled="!selectedContainer.newTag || policyInProgress !== null"
                             @click="skipCurrentForSelected">
                       Skip This Update
                     </button>
                     <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :style="{ border: '1px solid var(--dd-border-strong)' }"
+      
                             :disabled="policyInProgress !== null"
                             @click="snoozeSelected(1)">
                       Snooze 1d
                     </button>
                     <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :style="{ border: '1px solid var(--dd-border-strong)' }"
+      
                             :disabled="policyInProgress !== null"
                             @click="snoozeSelected(7)">
                       Snooze 7d
@@ -727,16 +714,16 @@ const {
                     <input
                       v-model="snoozeDateInput"
                       type="date"
-                      class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] border outline-none dd-bg dd-text dd-border-strong"
+                      class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] outline-none dd-bg dd-text"
                       :disabled="policyInProgress !== null" />
                     <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :style="{ border: '1px solid var(--dd-border-strong)' }"
+      
                             :disabled="!snoozeDateInput || policyInProgress !== null"
                             @click="snoozeSelectedUntilDate">
                       Snooze Until
                     </button>
                     <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :style="{ border: '1px solid var(--dd-border-strong)' }"
+      
                             :disabled="!selectedSnoozeUntil || policyInProgress !== null"
                             @click="unsnoozeSelected">
                       Unsnooze
@@ -748,13 +735,13 @@ const {
                   <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Reset</div>
                   <div class="flex flex-wrap gap-2">
                     <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :style="{ border: '1px solid var(--dd-border-strong)' }"
+      
                             :disabled="selectedSkipTags.length === 0 && selectedSkipDigests.length === 0"
                             @click="clearSkipsSelected">
                       Clear Skips
                     </button>
                     <button class="px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :style="{ border: '1px solid var(--dd-border-strong)' }"
+      
                             :disabled="Object.keys(selectedUpdatePolicy).length === 0"
                             @click="clearPolicySelected">
                       Clear Policy
@@ -807,9 +794,8 @@ const {
             </div>
 
             <div class="dd-rounded overflow-hidden"
-                 :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-              <div class="px-4 py-3 flex items-center gap-2"
-                   :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+                 :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+              <div class="px-4 py-3 flex items-center gap-2">
                 <AppIcon name="info" :size="12" class="dd-text-muted" />
                 <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Preview</span>
               </div>
@@ -862,9 +848,8 @@ const {
 
           <div class="space-y-4">
             <div class="dd-rounded overflow-hidden"
-                 :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-              <div class="px-4 py-3 flex items-center gap-2"
-                   :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+                 :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+              <div class="px-4 py-3 flex items-center gap-2">
                 <AppIcon name="triggers" :size="12" class="dd-text-muted" />
                 <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Associated Triggers</span>
               </div>
@@ -879,7 +864,7 @@ const {
                       <div v-if="trigger.agent" class="text-[0.6875rem] dd-text-muted">agent: {{ trigger.agent }}</div>
                     </div>
                     <button class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :style="{ border: '1px solid var(--dd-border-strong)' }"
+      
                             :disabled="triggerRunInProgress !== null"
                             @click="runAssociatedTrigger(trigger)">
                       {{ triggerRunInProgress === getTriggerKey(trigger) ? 'Running...' : 'Run' }}
@@ -893,16 +878,15 @@ const {
             </div>
 
             <div class="dd-rounded overflow-hidden"
-                 :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-              <div class="px-4 py-3 flex items-center gap-2"
-                   :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+                 :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+              <div class="px-4 py-3 flex items-center gap-2">
                 <AppIcon name="recent-updates" :size="12" class="dd-text-muted" />
                 <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Backups &amp; Rollback</span>
               </div>
               <div class="p-4 space-y-2">
                 <div>
                   <button class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+    
                           :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
                           @click="confirmRollback()">
                     {{ rollbackInProgress === 'latest' ? 'Rolling back...' : 'Rollback Latest' }}
@@ -918,7 +902,7 @@ const {
                       <div class="text-[0.6875rem] dd-text-muted">{{ formatTimestamp(backup.timestamp) }}</div>
                     </div>
                     <button class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                            :style="{ border: '1px solid var(--dd-border-strong)' }"
+      
                             :disabled="rollbackInProgress !== null"
                             @click="confirmRollback(backup.id)">
                       {{ rollbackInProgress === backup.id ? 'Rolling...' : 'Use' }}
@@ -932,9 +916,8 @@ const {
             </div>
 
             <div class="dd-rounded overflow-hidden"
-                 :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
-              <div class="px-4 py-3 flex items-center gap-2"
-                   :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+                 :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+              <div class="px-4 py-3 flex items-center gap-2">
                 <AppIcon name="audit" :size="12" class="dd-text-muted" />
                 <span class="text-[0.6875rem] font-semibold uppercase tracking-wider dd-text-muted">Update Operation History</span>
               </div>

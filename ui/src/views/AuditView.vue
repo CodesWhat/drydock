@@ -231,14 +231,14 @@ onMounted(fetchAudit);
         <input v-model="searchQuery"
                type="text"
                placeholder="Filter by target or event..."
-               class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
+               class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
         <input v-model="containerFilter"
                name="container-name"
                type="text"
                placeholder="Container name..."
-               class="min-w-[140px] max-w-[220px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
+               class="min-w-[140px] max-w-[220px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
         <select v-model="actionFilter"
-                class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-border-strong">
+                class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text">
           <option value="">All events</option>
           <option v-for="a in actionTypes" :key="a" :value="a">{{ actionLabel(a) }}</option>
         </select>
@@ -246,12 +246,12 @@ onMounted(fetchAudit);
                name="from-date"
                type="date"
                aria-label="From date"
-               class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-border-strong" />
+               class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text" />
         <input v-model="toDateFilter"
                name="to-date"
                type="date"
                aria-label="To date"
-               class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-border-strong" />
+               class="px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text" />
         <button v-if="activeFilterCount > 0"
                 class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
                 @click="clearFilters">
@@ -333,7 +333,7 @@ onMounted(fetchAudit);
           </div>
         </div>
         <div class="px-4 py-2.5 mt-auto"
-             :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
+             :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
           <span class="text-[0.625rem] dd-text-muted font-mono">{{ formatTimestamp(entry.timestamp) }}</span>
         </div>
       </template>
@@ -396,12 +396,12 @@ onMounted(fetchAudit);
         Page {{ page }} of {{ totalPages }} ({{ total }} entries)
       </span>
       <div class="flex items-center gap-1.5">
-        <button class="px-2.5 py-1 dd-rounded text-[0.6875rem] font-medium border dd-bg dd-text dd-border-strong disabled:opacity-40"
+        <button class="px-2.5 py-1 dd-rounded text-[0.6875rem] font-medium dd-bg dd-text disabled:opacity-40"
                 :disabled="page <= 1"
                 @click="prevPage">
           <AppIcon name="chevron-left" :size="11" />
         </button>
-        <button class="px-2.5 py-1 dd-rounded text-[0.6875rem] font-medium border dd-bg dd-text dd-border-strong disabled:opacity-40"
+        <button class="px-2.5 py-1 dd-rounded text-[0.6875rem] font-medium dd-bg dd-text disabled:opacity-40"
                 :disabled="page >= totalPages"
                 @click="nextPage">
           <AppIcon name="chevron-right" :size="11" />

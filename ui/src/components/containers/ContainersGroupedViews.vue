@@ -60,7 +60,7 @@ const {
         <!-- Group header (only shown when grouping is active) -->
         <div v-if="groupByStack && group.key !== '__flat__'"
              class="flex items-center gap-2 px-3 py-2.5 mb-3 cursor-pointer select-none dd-rounded transition-colors hover:dd-bg-elevated"
-             :style="{ backgroundColor: 'var(--dd-bg-elevated)', border: '1px solid var(--dd-border-strong)' }"
+             :style="{ backgroundColor: 'var(--dd-bg-elevated)' }"
              :class="group.key === renderGroups[0]?.key ? '' : 'mt-6'"
              role="button"
              tabindex="0"
@@ -80,7 +80,6 @@ const {
             :class="!containerActionsEnabled || groupUpdateInProgress.has(group.key) || actionInProgress
               ? 'dd-text-muted cursor-not-allowed opacity-60'
               : 'dd-text hover:dd-bg-elevated'"
-            :style="{ borderColor: 'var(--dd-border-strong)' }"
             :disabled="!containerActionsEnabled || groupUpdateInProgress.has(group.key) || actionInProgress !== null"
             v-tooltip.top="tt(containerActionsEnabled ? 'Update all in group' : containerActionsDisabledReason)"
             @click.stop="updateAllInGroup(group)">
@@ -339,13 +338,13 @@ const {
             <div v-if="c.newTag" class="inline-flex items-center gap-1">
               <!-- Blocked: muted split button -->
               <div v-if="c.bouncer === 'blocked'" class="inline-flex dd-rounded overflow-hidden" style="min-width: 110px;"
-                   :style="{ border: '1px solid var(--dd-border-strong)' }">
+>
                 <button class="inline-flex items-center justify-center flex-1 whitespace-nowrap px-3 py-1.5 text-[0.6875rem] font-bold tracking-wide cursor-not-allowed"
                         :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-text-muted)' }">
                   <AppIcon name="lock" :size="11" class="mr-1" /> Blocked
                 </button>
                 <button class="inline-flex items-center justify-center w-7 transition-colors dd-text-muted hover:dd-text hover:dd-bg-hover"
-                        :style="{ backgroundColor: 'var(--dd-bg)', borderLeft: '1px solid var(--dd-border-strong)' }"
+                        :style="{ backgroundColor: 'var(--dd-bg)' }"
                         :class="openActionsMenu === c.name ? 'dd-bg-elevated dd-text' : ''"
                         @click.stop="toggleActionsMenu(c.name, $event)">
                   <AppIcon name="chevron-down" :size="11" />
@@ -562,7 +561,7 @@ const {
           <!-- Card footer -->
           <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
                :style="{
-                 borderTop: '1px solid var(--dd-border-strong)',
+                 borderTop: '1px solid var(--dd-border)',
                  backgroundColor: 'var(--dd-bg-elevated)',
                }">
             <span class="badge px-1.5 py-0 text-[0.5625rem] md:!hidden"

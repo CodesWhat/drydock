@@ -221,7 +221,7 @@ onUnmounted(() => {
         :count-label="displayCountLabel">
         <template #filters>
           <select v-model="secFilterSeverity"
-                  class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                  class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
             <option value="all">Severity</option>
             <option value="CRITICAL">Critical</option>
             <option value="HIGH">High</option>
@@ -229,7 +229,7 @@ onUnmounted(() => {
             <option value="LOW">Low</option>
           </select>
           <select v-model="secFilterFix"
-                  class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                  class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
             <option value="all">Fix Available</option>
             <option value="yes">Yes</option>
             <option value="no">No</option>
@@ -276,14 +276,13 @@ onUnmounted(() => {
         </template>
         <template #center>
           <span class="inline-flex" v-tooltip.top="scanDisabledReason">
-            <button class="h-7 dd-rounded flex items-center justify-center gap-1.5 text-[0.6875rem] font-semibold transition-colors border"
+            <button class="h-7 dd-rounded flex items-center justify-center gap-1.5 text-[0.6875rem] font-semibold transition-colors"
                     :class="[
                       scanning || runtimeLoading || !scannerReady
                         ? 'dd-text-muted cursor-not-allowed'
-                        : 'dd-text-muted hover:dd-text hover:dd-bg-elevated',
+                        : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated',
                       isCompact ? 'w-7' : 'px-3',
                     ]"
-                    :style="{ borderColor: 'var(--dd-border-strong)' }"
                     :disabled="scanning || runtimeLoading || !scannerReady"
                     @click="scanAllContainers">
               <AppIcon name="restart" :size="11" :class="{ 'animate-spin': scanning }" />
@@ -438,7 +437,7 @@ onUnmounted(() => {
             <span class="text-[0.5625rem] dd-text-muted ml-auto">vs update</span>
           </div>
           <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
-               :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
+               :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
             <span v-if="summary.fixable > 0" class="text-[0.6875rem] font-medium flex items-center gap-1"
                   :style="{ color: fixableColor(summary.fixable, summary.total) }">
               <AppIcon name="check" :size="11" />
@@ -615,25 +614,22 @@ onUnmounted(() => {
             <div class="flex items-center gap-2 flex-wrap">
               <span class="text-[0.625rem] font-semibold uppercase tracking-wide dd-text-muted">SBOM</span>
               <select v-model="selectedSbomFormat"
-                      class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong"
+                      class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
                       @change="loadDetailSbom">
                 <option value="spdx-json">spdx-json</option>
                 <option value="cyclonedx-json">cyclonedx-json</option>
               </select>
-              <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                      :style="{ border: '1px solid var(--dd-border-strong)' }"
+              <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
                       :disabled="detailSbomLoading"
                       @click="loadDetailSbom">
                 {{ detailSbomLoading ? 'Loading SBOM...' : 'Refresh SBOM' }}
               </button>
-              <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                      :style="{ border: '1px solid var(--dd-border-strong)' }"
+              <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
                       :disabled="!detailSbomDocument"
                       @click="showSbomDocument = !showSbomDocument">
                 {{ showSbomDocument ? 'Hide SBOM' : 'View SBOM' }}
               </button>
-              <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                      :style="{ border: '1px solid var(--dd-border-strong)' }"
+              <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
                       :disabled="!detailSbomDocument"
                       @click="downloadDetailSbom">
                 Download SBOM

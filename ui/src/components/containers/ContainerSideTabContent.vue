@@ -403,9 +403,7 @@ const {
             <div>
               <div class="flex items-center justify-between gap-2 mb-2">
                 <div class="text-[0.625rem] font-semibold uppercase tracking-wider dd-text-muted">Security</div>
-                <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                        :style="{ border: '1px solid var(--dd-border-strong)' }"
-                        :disabled="detailVulnerabilityLoading || detailSbomLoading"
+                <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"                        :disabled="detailVulnerabilityLoading || detailSbomLoading"
                         @click="loadDetailSecurityData">
                   {{ detailVulnerabilityLoading || detailSbomLoading ? 'Refreshing...' : 'Refresh' }}
                 </button>
@@ -466,12 +464,12 @@ const {
               <div class="mt-2 space-y-1.5">
                 <div class="flex items-center gap-2">
                   <select v-model="selectedSbomFormat"
-                          class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                          class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
                     <option value="spdx-json">spdx-json</option>
                     <option value="cyclonedx-json">cyclonedx-json</option>
                   </select>
                   <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :style="{}"
                           :disabled="detailSbomLoading"
                           @click="loadDetailSbom">
                     {{ detailSbomLoading ? 'Loading SBOM...' : 'Refresh SBOM' }}
@@ -523,7 +521,7 @@ const {
                 </span>
                 <div class="flex items-center gap-2">
                   <select v-model.number="containerAutoFetchInterval"
-                          class="px-1.5 py-1 dd-rounded text-[0.5625rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+                          class="px-1.5 py-1 dd-rounded text-[0.5625rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
                     <option v-for="opt in LOG_AUTO_FETCH_INTERVALS" :key="opt.value" :value="opt.value">
                       {{ opt.label }}
                     </option>
@@ -619,7 +617,7 @@ const {
                 <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Actions</div>
                 <div class="flex flex-wrap gap-1.5">
                   <button class="px-2.5 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :style="{}"
                           :disabled="previewLoading"
                           @click="runContainerPreview">
                     {{ previewLoading ? 'Previewing...' : 'Preview Update' }}
@@ -633,13 +631,13 @@ const {
                   </button>
                   <button v-else
                           class="px-2.5 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :style="{}"
                           :disabled="!selectedContainer.newTag || actionInProgress === selectedContainer.name"
                           @click="confirmUpdate(selectedContainer.name)">
                     Update Now
                   </button>
                   <button class="px-2.5 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :style="{}"
                           :disabled="actionInProgress === selectedContainer.name"
                           @click="scanContainer(selectedContainer.name)">
                     Scan Now
@@ -651,19 +649,19 @@ const {
                 <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Skip & Snooze</div>
                 <div class="flex flex-wrap gap-1.5">
                   <button class="px-2.5 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :style="{}"
                           :disabled="!selectedContainer.newTag || policyInProgress !== null"
                           @click="skipCurrentForSelected">
                     Skip This Update
                   </button>
                   <button class="px-2.5 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :style="{}"
                           :disabled="policyInProgress !== null"
                           @click="snoozeSelected(1)">
                     Snooze 1d
                   </button>
                   <button class="px-2.5 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :style="{}"
                           :disabled="policyInProgress !== null"
                           @click="snoozeSelected(7)">
                     Snooze 7d
@@ -671,16 +669,16 @@ const {
                   <input
                     v-model="snoozeDateInput"
                     type="date"
-                    class="px-2 py-1.5 dd-rounded text-[0.625rem] border outline-none dd-bg dd-text dd-border-strong"
+                    class="px-2 py-1.5 dd-rounded text-[0.625rem] outline-none dd-bg dd-text"
                     :disabled="policyInProgress !== null" />
                   <button class="px-2.5 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :style="{}"
                           :disabled="!snoozeDateInput || policyInProgress !== null"
                           @click="snoozeSelectedUntilDate">
                     Snooze Until
                   </button>
                   <button class="px-2.5 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :style="{}"
                           :disabled="!selectedSnoozeUntil || policyInProgress !== null"
                           @click="unsnoozeSelected">
                     Unsnooze
@@ -692,13 +690,13 @@ const {
                 <div class="text-[0.5625rem] uppercase tracking-wider mb-1.5 dd-text-muted">Reset</div>
                 <div class="flex flex-wrap gap-1.5">
                   <button class="px-2.5 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :style="{}"
                           :disabled="selectedSkipTags.length === 0 && selectedSkipDigests.length === 0"
                           @click="clearSkipsSelected">
                     Clear Skips
                   </button>
                   <button class="px-2.5 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :style="{}"
                           :disabled="Object.keys(selectedUpdatePolicy).length === 0"
                           @click="clearPolicySelected">
                     Clear Policy
@@ -814,7 +812,7 @@ const {
                     <div v-if="trigger.agent" class="text-[0.625rem] dd-text-muted">agent: {{ trigger.agent }}</div>
                   </div>
                   <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :style="{}"
                           :disabled="triggerRunInProgress !== null"
                           @click="runAssociatedTrigger(trigger)">
                     {{ triggerRunInProgress === getTriggerKey(trigger) ? 'Running...' : 'Run' }}
@@ -829,9 +827,7 @@ const {
             <div>
               <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-2 dd-text-muted">Backups &amp; Rollback</div>
               <div class="mb-2">
-                <button class="px-2.5 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                        :style="{ border: '1px solid var(--dd-border-strong)' }"
-                        :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
+                <button class="px-2.5 py-1.5 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"                        :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
                         @click="confirmRollback()">
                   {{ rollbackInProgress === 'latest' ? 'Rolling back...' : 'Rollback Latest' }}
                 </button>
@@ -846,7 +842,7 @@ const {
                     <div class="text-[0.625rem] dd-text-muted">{{ formatTimestamp(backup.timestamp) }}</div>
                   </div>
                   <button class="px-2 py-1 dd-rounded text-[0.625rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :style="{ border: '1px solid var(--dd-border-strong)' }"
+                          :style="{}"
                           :disabled="rollbackInProgress !== null"
                           @click="confirmRollback(backup.id)">
                     {{ rollbackInProgress === backup.id ? 'Rolling...' : 'Use' }}

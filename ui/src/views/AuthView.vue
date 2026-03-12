@@ -142,7 +142,7 @@ onMounted(async () => {
           <input v-model="searchQuery"
                  type="text"
                  placeholder="Filter by name..."
-                 class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
+                 class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
           <button v-if="searchQuery"
                   class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
                   @click="searchQuery = ''">
@@ -210,7 +210,7 @@ onMounted(async () => {
             </div>
           </div>
           <div class="px-4 py-2.5 mt-auto"
-               :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
+               :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
             <AppIcon :name="auth.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
                      :style="{ color: auth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
             <span class="badge text-[0.5625rem] font-bold max-md:!hidden"

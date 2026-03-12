@@ -105,10 +105,6 @@ const {
           :style="{
             ...widgetOrderStyle(stat.id),
             backgroundColor: 'var(--dd-bg-card)',
-            borderTop: '1px solid var(--dd-border-strong)',
-            borderRight: '1px solid var(--dd-border-strong)',
-            borderBottom: '1px solid var(--dd-border-strong)',
-            borderLeft: `4px solid ${stat.color}`,
           }"
           @click="stat.route && navigateTo(stat.route)"
           @dragstart="onWidgetDragStart(stat.id, $event)"
@@ -147,14 +143,13 @@ const {
              :style="{
                ...widgetOrderStyle('recent-updates'),
                backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
              }"
              @dragstart="onWidgetDragStart('recent-updates', $event)"
              @dragover="onWidgetDragOver('recent-updates', $event)"
              @drop="onWidgetDrop('recent-updates', $event)"
              @dragend="onWidgetDragEnd">
           <div class="flex items-center justify-between px-5 py-3.5"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ borderBottom: '1px solid var(--dd-border)' }">
             <div class="flex items-center gap-2">
               <AppIcon name="recent-updates" :size="14" class="text-drydock-secondary" />
               <h2 class="text-xs font-semibold dd-text">
@@ -197,7 +192,7 @@ const {
                 <tr v-for="(row, i) in recentUpdates" :key="row.id"
                     :data-update-status="row.status"
                     class="transition-colors hover:dd-bg-elevated"
-                    :style="{ borderBottom: i < recentUpdates.length - 1 ? '1px solid var(--dd-border-strong)' : 'none' }">
+                    :style="{ borderBottom: i < recentUpdates.length - 1 ? '1px solid var(--dd-border)' : 'none' }">
                   <td class="px-0 py-3">
                     <div class="flex items-center justify-center">
                       <ContainerIcon :icon="row.icon" :size="28" />
@@ -284,14 +279,13 @@ const {
              :style="{
                ...widgetOrderStyle('security-overview'),
                backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
              }"
              @dragstart="onWidgetDragStart('security-overview', $event)"
              @dragover="onWidgetDragOver('security-overview', $event)"
              @drop="onWidgetDrop('security-overview', $event)"
              @dragend="onWidgetDragEnd">
           <div class="flex items-center justify-between px-5 py-3.5"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ borderBottom: '1px solid var(--dd-border)' }">
             <div class="flex items-center gap-2">
               <AppIcon name="security" :size="14" class="text-drydock-accent" />
               <h2 class="text-xs font-semibold dd-text">
@@ -380,7 +374,7 @@ const {
               </div>
             </div>
 
-            <div class="mb-4" :style="{ borderTop: '1px solid var(--dd-border-strong)' }" />
+            <div class="mb-4" :style="{ borderTop: '1px solid var(--dd-border)' }" />
 
             <!-- Top vulnerabilities -->
             <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-3 dd-text-muted">
@@ -439,14 +433,13 @@ const {
              :style="{
                ...widgetOrderStyle('host-status'),
                backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
              }"
              @dragstart="onWidgetDragStart('host-status', $event)"
              @dragover="onWidgetDragOver('host-status', $event)"
              @drop="onWidgetDrop('host-status', $event)"
              @dragend="onWidgetDragEnd">
           <div class="flex items-center justify-between px-5 py-3.5"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ borderBottom: '1px solid var(--dd-border)' }">
             <div class="flex items-center gap-2">
               <AppIcon name="servers" :size="14" class="text-drydock-secondary" />
               <h2 class="text-sm font-semibold dd-text">
@@ -505,14 +498,13 @@ const {
              :style="{
                ...widgetOrderStyle('update-breakdown'),
                backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
              }"
              @dragstart="onWidgetDragStart('update-breakdown', $event)"
              @dragover="onWidgetDragOver('update-breakdown', $event)"
              @drop="onWidgetDrop('update-breakdown', $event)"
              @dragend="onWidgetDragEnd">
           <div class="flex items-center justify-between px-5 py-3.5"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ borderBottom: '1px solid var(--dd-border)' }">
             <div class="flex items-center gap-2">
               <AppIcon name="updates" :size="14" class="text-drydock-secondary" />
               <h2 class="text-sm font-semibold dd-text">
