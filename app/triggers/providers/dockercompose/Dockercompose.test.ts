@@ -4558,6 +4558,40 @@ describe('Dockercompose Trigger', () => {
     ).toBe('nginx:1.1.0');
   });
 
+  test('getComposeMutationImageReference should preserve explicit docker.io prefix from compose image', () => {
+    const container = makeContainer({
+      updateKind: 'digest',
+      remoteValue: 'abc123',
+      result: {},
+    });
+
+    trigger.configuration.digestPinning = false;
+    expect(
+      trigger.getComposeMutationImageReference(
+        container as any,
+        'nginx:1.1.0',
+        'docker.io/nginx:1.0.0',
+      ),
+    ).toBe('docker.io/nginx:1.1.0');
+
+    trigger.configuration.digestPinning = true;
+    expect(
+      trigger.getComposeMutationImageReference(
+        container as any,
+        'nginx:1.1.0',
+        'docker.io/nginx:1.0.0',
+      ),
+    ).toBe('docker.io/nginx@sha256:abc123');
+
+    expect(
+      trigger.getComposeMutationImageReference(
+        container as any,
+        'ghcr.io/acme/nginx:1.1.0',
+        'docker.io/nginx:1.0.0',
+      ),
+    ).toBe('ghcr.io/acme/nginx@sha256:abc123');
+  });
+
   test('buildComposeServiceImageUpdates should use runtime update image when compose update override is missing', () => {
     const serviceUpdates = trigger.buildComposeServiceImageUpdates([
       {

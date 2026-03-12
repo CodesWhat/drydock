@@ -180,6 +180,35 @@ function normalizeImplicitLatest(image) {
   return `${image}:latest`;
 }
 
+function hasExplicitRegistryHost(imageReference: string): boolean {
+  if (!imageReference) {
+    return false;
+  }
+  const referenceWithoutDigest = imageReference.split('@')[0];
+  const firstSlashIndex = referenceWithoutDigest.indexOf('/');
+  if (firstSlashIndex < 0) {
+    return false;
+  }
+  const firstSegment = referenceWithoutDigest.slice(0, firstSlashIndex);
+  return firstSegment.includes('.') || firstSegment.includes(':') || firstSegment === 'localhost';
+}
+
+function preserveExplicitDockerIoPrefix(
+  currentComposeImage: string | null | undefined,
+  targetImageReference: string,
+): string {
+  if (!targetImageReference || typeof currentComposeImage !== 'string') {
+    return targetImageReference;
+  }
+  if (!/^docker\.io\//i.test(currentComposeImage.trim())) {
+    return targetImageReference;
+  }
+  if (hasExplicitRegistryHost(targetImageReference)) {
+    return targetImageReference;
+  }
+  return `docker.io/${targetImageReference}`;
+}
+
 function normalizePostStartHooks(postStart) {
   if (!postStart) {
     return [];
@@ -914,22 +943,22 @@ class Dockercompose extends Docker {
   getComposeMutationImageReference(
     container: RuntimeUpdateContainerReference,
     runtimeUpdateImage: string,
+    currentComposeImage?: string,
   ): string {
-    if (this.configuration.digestPinning !== true) {
-      return runtimeUpdateImage;
+    let composeMutationReference = runtimeUpdateImage;
+    if (this.configuration.digestPinning === true) {
+      const digestPinningCandidate =
+        container?.result?.digest ||
+        (container?.updateKind?.kind === 'digest' ? container?.updateKind?.remoteValue : undefined);
+      const digestToPin = this.normalizeDigestPinningValue(digestPinningCandidate);
+      if (digestToPin) {
+        const imageName = this.getImageNameFromReference(runtimeUpdateImage);
+        if (imageName) {
+          composeMutationReference = `${imageName}@${digestToPin}`;
+        }
+      }
     }
-    const digestPinningCandidate =
-      container?.result?.digest ||
-      (container?.updateKind?.kind === 'digest' ? container?.updateKind?.remoteValue : undefined);
-    const digestToPin = this.normalizeDigestPinningValue(digestPinningCandidate);
-    if (!digestToPin) {
-      return runtimeUpdateImage;
-    }
-    const imageName = this.getImageNameFromReference(runtimeUpdateImage);
-    if (!imageName) {
-      return runtimeUpdateImage;
-    }
-    return `${imageName}@${digestToPin}`;
+    return preserveExplicitDockerIoPrefix(currentComposeImage, composeMutationReference);
   }
 
   getContainerRuntimeImageReference(container: RegistryImageContainerReference): string {
@@ -1508,7 +1537,11 @@ class Dockercompose extends Docker {
           return undefined;
         }
         const runtimeImage = this.getContainerRuntimeImageReference(container);
-        const composeUpdate = this.getComposeMutationImageReference(container, map.update);
+        const composeUpdate = this.getComposeMutationImageReference(
+          container,
+          map.update,
+          map.current,
+        );
         return {
           container,
           runtimeImage,
@@ -1695,7 +1728,7 @@ class Dockercompose extends Docker {
     const currentServiceImage =
       mapping?.current || (compose as Record<string, any>)?.services?.[service]?.image;
     const targetServiceImage = mapping
-      ? this.getComposeMutationImageReference(container, mapping.update)
+      ? this.getComposeMutationImageReference(container, mapping.update, currentServiceImage)
       : preview.newImage;
     const composePreview = {
       files: composeFiles,
