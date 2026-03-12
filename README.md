@@ -61,6 +61,7 @@
 - [📖 Documentation](#documentation)
 - [⭐ Star History](#star-history)
 - [🔧 Built With](#built-with)
+- [🤝 Community QA](#community-qa)
 
 <hr>
 
@@ -364,6 +365,12 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 [![Node 24](https://img.shields.io/badge/Node_24_Alpine-339933?logo=nodedotjs&logoColor=fff)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=fff)](https://www.docker.com/)
 [![Anthropic](https://img.shields.io/badge/Anthropic-000000?style=flat&logo=anthropic&logoColor=white)](https://claude.ai/)
+
+### Community QA
+
+Thanks to the users who helped test v1.4.0 release candidates and reported bugs:
+
+[@RK62](https://github.com/RK62) &middot; [@flederohr](https://github.com/flederohr) &middot; [@rj10rd](https://github.com/rj10rd) &middot; [@larueli](https://github.com/larueli) &middot; [@Waler](https://github.com/Waler) &middot; [@ElVit](https://github.com/ElVit) &middot; [@nchieffo](https://github.com/nchieffo)
 
 ---
 
