@@ -6,6 +6,7 @@
  * 3. Boot the real Vue UI (imported from ../../ui/src via Vite alias)
  */
 
+import { DEFAULTS } from '@/preferences/schema';
 import { FakeEventSource } from './mocks/sse';
 
 // Patch EventSource BEFORE any UI code loads — the SSE service
@@ -22,6 +23,18 @@ async function boot() {
 
   // Import demo CSS for Tailwind @source directive
   await import('./demo.css');
+
+  // Default demo theme to 'system' variant so it follows the user's OS
+  // light/dark preference, matching the surrounding website.
+  if (!localStorage.getItem('dd-preferences')) {
+    localStorage.setItem(
+      'dd-preferences',
+      JSON.stringify({
+        ...structuredClone(DEFAULTS),
+        theme: { family: 'one-dark', variant: 'system' },
+      }),
+    );
+  }
 
   // Now boot the real UI
   await import('@/main');
