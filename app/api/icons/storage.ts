@@ -68,10 +68,6 @@ async function findBundledIconPath(provider: string, slug: string, extension: st
 }
 
 async function isCachedIconUsable(iconPath: string) {
-  if (!(await iconExists(iconPath))) {
-    return false;
-  }
-
   try {
     const iconStats = await fs.stat(iconPath);
     if (!iconStats.isFile()) {
