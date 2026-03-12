@@ -97,6 +97,16 @@ function configureSecurityHeaders(app) {
   );
 }
 
+function configurePermissionsPolicy(app) {
+  app.use((_req, res, next) => {
+    res.setHeader(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()',
+    );
+    next();
+  });
+}
+
 function registerRoutes(app) {
   auth.init(app);
   app.use('/health', healthRouter.init());
@@ -170,6 +180,7 @@ function createApp() {
   app.set('json replacer', (key, value) => (value === undefined ? null : value));
 
   configureSecurityHeaders(app);
+  configurePermissionsPolicy(app);
 
   if (configuration.compression?.enabled !== false) {
     app.use(createCompressionMiddleware());

@@ -517,6 +517,41 @@ describe('API Index', () => {
     expect(helmetCallOrder).toBeLessThan(authInitCallOrder);
   });
 
+  test('should set Permissions-Policy header via custom middleware', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    // Find the middleware function that sets Permissions-Policy
+    const permissionsPolicyMiddleware = mockApp.use.mock.calls
+      .filter((call) => typeof call[0] === 'function' && call[0].length === 3)
+      .map((call) => call[0])
+      .find((fn) => {
+        const mockRes = { setHeader: vi.fn() };
+        fn({}, mockRes, vi.fn());
+        return mockRes.setHeader.mock.calls.some((c) => c[0] === 'Permissions-Policy');
+      });
+
+    expect(permissionsPolicyMiddleware).toBeDefined();
+
+    const mockRes = { setHeader: vi.fn() };
+    const mockNext = vi.fn();
+    permissionsPolicyMiddleware({}, mockRes, mockNext);
+
+    expect(mockRes.setHeader).toHaveBeenCalledWith(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()',
+    );
+    expect(mockNext).toHaveBeenCalled();
+  });
+
   test('should not set trust proxy when default (false)', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
