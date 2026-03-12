@@ -203,6 +203,9 @@ describe('Basic Authentication', () => {
         resolve();
       });
     });
+
+    // Argon2 must still be called even on username mismatch (timing side-channel mitigation)
+    expect(mockArgon2).toHaveBeenCalled();
   });
 
   test('should compare usernames with timingSafeEqual', async () => {
@@ -218,7 +221,29 @@ describe('Basic Authentication', () => {
       });
     });
 
-    expect(mockTimingSafeEqual).toHaveBeenCalledTimes(1);
+    // Called twice: once for username comparison, once inside argon2 hash verification
+    // (timing mitigation runs argon2 even on username mismatch)
+    expect(mockTimingSafeEqual).toHaveBeenCalledTimes(2);
+    expect(mockArgon2).toHaveBeenCalledTimes(1);
+  });
+
+  test('should run argon2 even when username does not match (timing mitigation)', async () => {
+    basic.configuration = {
+      user: 'testuser',
+      hash: createArgon2Hash('password'),
+    };
+
+    const callCountBefore = mockArgon2.mock.calls.length;
+
+    await new Promise<void>((resolve) => {
+      basic.authenticate('wronguser', 'wrongpassword', (err, result) => {
+        expect(result).toBe(false);
+        resolve();
+      });
+    });
+
+    // Verify argon2 was invoked despite username mismatch
+    expect(mockArgon2.mock.calls.length).toBe(callCountBefore + 1);
   });
 
   test('should reject invalid password', async () => {

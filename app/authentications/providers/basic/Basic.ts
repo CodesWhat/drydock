@@ -525,9 +525,13 @@ class Basic extends Authentication {
       providedUser.length > 0 &&
       timingSafeEqual(hashValue(providedUser), hashValue(this.configuration.user));
 
-    // No user or different user? => reject
+    // No user or different user? => still run argon2 to prevent timing side-channel,
+    // then reject.  This equalizes response time regardless of whether the username
+    // matched, eliminating username-enumeration via latency measurement.
     if (!userMatches) {
-      done(null, false);
+      void verifyPassword(pass, this.configuration.hash).finally(() => {
+        done(null, false);
+      });
       return;
     }
 
