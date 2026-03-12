@@ -237,7 +237,7 @@ const roadmap = [
     items: [
       "Notification templates",
       "Release notes in notifications",
-      "MS Teams & Matrix triggers",
+      "Deprecation removals",
     ],
   },
   {
