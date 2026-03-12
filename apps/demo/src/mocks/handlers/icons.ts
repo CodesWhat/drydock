@@ -48,6 +48,7 @@ export const iconHandlers = [
 
     // Try primary provider
     let upstream = await tryFetch(config.url(slug));
+    let usedDockerFallback = false;
 
     // Selfhst miss → try homarr fallback
     if (!upstream && provider === 'selfhst') {
@@ -57,6 +58,7 @@ export const iconHandlers = [
     // Still nothing → Docker icon as final fallback
     if (!upstream) {
       upstream = await tryFetch(DOCKER_FALLBACK_URL);
+      usedDockerFallback = upstream !== null;
     }
 
     if (!upstream) {
@@ -69,7 +71,7 @@ export const iconHandlers = [
     return new HttpResponse(buffer, {
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Cache-Control': usedDockerFallback ? 'no-store' : 'public, max-age=31536000, immutable',
       },
     });
   }),

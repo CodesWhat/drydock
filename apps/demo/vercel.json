@@ -8,7 +8,6 @@
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Frame-Options", "value": "ALLOW-FROM https://drydock.codeswhat.com" },
         {
           "key": "Content-Security-Policy",
           "value": "frame-ancestors 'self' https://drydock.codeswhat.com https://*.vercel.app"

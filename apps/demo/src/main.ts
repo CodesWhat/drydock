@@ -13,6 +13,18 @@ import { FakeEventSource } from './mocks/sse';
 // creates an EventSource in AppLayout, so this must happen first.
 (globalThis as unknown as { EventSource: typeof FakeEventSource }).EventSource = FakeEventSource;
 
+function getParentOrigin(): string | null {
+  if (!document.referrer) {
+    return null;
+  }
+
+  try {
+    return new URL(document.referrer).origin;
+  } catch {
+    return null;
+  }
+}
+
 async function boot() {
   // Start MSW — must be running before the UI makes any fetch() calls
   const { worker } = await import('./mocks/browser');
@@ -41,7 +53,11 @@ async function boot() {
 
   // Tell the parent frame (website) we loaded successfully
   if (window.parent !== window) {
-    window.parent.postMessage({ type: 'drydock-demo-ready' }, '*');
+    const parentOrigin = getParentOrigin();
+
+    if (parentOrigin) {
+      window.parent.postMessage({ type: 'drydock-demo-ready' }, parentOrigin);
+    }
   }
 
   // Auto-fill login credentials so demo visitors just click "Sign in".

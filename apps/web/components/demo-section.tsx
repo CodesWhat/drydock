@@ -168,9 +168,23 @@ export function DemoSection() {
     };
 
     if (navigator.share) {
-      await navigator.share(shareData);
-    } else {
-      await navigator.clipboard.writeText(shareData.url);
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (error) {
+        // Ignore user-cancelled share prompts.
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+      }
+    }
+
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(shareData.url);
+      } catch (error) {
+        console.warn("Failed to copy demo URL to clipboard", error);
+      }
     }
   }
 
