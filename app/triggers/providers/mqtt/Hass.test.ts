@@ -96,7 +96,7 @@ test('publishDiscoveryMessage must publish a discovery message expected by HA', 
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'my/state',
       myOption: true,
     }),
@@ -125,7 +125,7 @@ test('addContainerSensor must publish sensor discovery message expected by HA', 
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/watcher-name/container-name',
       force_update: true,
       value_template: '{{ value_json.image_tag_value }}',
@@ -181,7 +181,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/total_count',
     }),
     { retain: true },
@@ -203,7 +203,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/update_count',
     }),
     { retain: true },
@@ -225,7 +225,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/update_status',
       payload_on: 'true',
       payload_off: 'false',
@@ -249,7 +249,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/watcher-name/total_count',
     }),
     { retain: true },
@@ -271,7 +271,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/watcher-name/update_count',
     }),
     { retain: true },
@@ -293,7 +293,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/watcher-name/update_status',
       payload_on: 'true',
       payload_off: 'false',
@@ -406,7 +406,7 @@ test('updateWatcherSensors must publish all watcher sensor messages expected by 
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/watcher-name/running',
       payload_on: 'true',
       payload_off: 'false',

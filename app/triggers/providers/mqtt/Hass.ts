@@ -416,7 +416,7 @@ class Hass {
         device: getHaDevice(),
         icon: icon || sanitizeIcon('mdi:docker'),
         entity_picture:
-          'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+          'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
         state_topic: stateTopic,
         ...options,
       }),
