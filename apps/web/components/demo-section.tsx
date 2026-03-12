@@ -218,7 +218,11 @@ export function DemoSection() {
         {/* Action Buttons (inline only) */}
         {mode === "inline" && (
           <div className="mb-4 flex items-center justify-center gap-3">
-            <Button variant="outline" size="sm" onClick={() => navigateIframe("/config?tab=appearance")}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigateIframe("/config?tab=appearance")}
+            >
               <Palette className="h-4 w-4" />
               Theme Editor
             </Button>
@@ -275,7 +279,11 @@ export function DemoSection() {
               </div>
 
               <div className="flex items-center justify-end gap-2">
-                <Button variant="ghost" size="sm" onClick={() => navigateIframe("/config?tab=appearance")}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigateIframe("/config?tab=appearance")}
+                >
                   <Palette className="h-4 w-4" />
                   <span className="hidden sm:inline">Theme Editor</span>
                 </Button>
