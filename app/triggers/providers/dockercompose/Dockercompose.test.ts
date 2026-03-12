@@ -3354,6 +3354,26 @@ describe('Dockercompose Trigger', () => {
     expect(error).toBeUndefined();
   });
 
+  test('getConfigurationSchema should accept env-normalized compose hardening keys', () => {
+    const schema = trigger.getConfigurationSchema();
+    const { error, value } = schema.validate({
+      prune: false,
+      dryrun: false,
+      autoremovetimeout: 10000,
+      file: '/opt/drydock/test/compose.yml',
+      backup: true,
+      composefilelabel: 'com.example.compose.file',
+      reconciliationmode: 'block',
+      digestpinning: true,
+      composefileonce: true,
+    });
+    expect(error).toBeUndefined();
+    expect(value.composeFileLabel).toBe('com.example.compose.file');
+    expect(value.reconciliationMode).toBe('block');
+    expect(value.digestPinning).toBe(true);
+    expect(value.composeFileOnce).toBe(true);
+  });
+
   test('normalizeImplicitLatest should return input when image is empty or already digest/tag qualified', () => {
     expect(testable_normalizeImplicitLatest('')).toBe('');
     expect(testable_normalizeImplicitLatest('alpine@sha256:abc')).toBe('alpine@sha256:abc');

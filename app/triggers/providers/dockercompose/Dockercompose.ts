@@ -447,16 +447,33 @@ class Dockercompose extends Docker {
    */
   getConfigurationSchema() {
     const schemaDocker = super.getConfigurationSchema();
-    return schemaDocker.append({
-      // Make file optional since we now support per-container compose files
-      file: this.joi.string().optional(),
-      backup: this.joi.boolean().default(false),
-      // Add configuration for the label name to look for
-      composeFileLabel: this.joi.string().default('dd.compose.file'),
-      reconciliationMode: this.joi.string().valid('warn', 'block', 'off').default('warn'),
-      digestPinning: this.joi.boolean().default(false),
-      composeFileOnce: this.joi.boolean().default(false),
-    });
+    return schemaDocker
+      .append({
+        // Make file optional since we now support per-container compose files
+        file: this.joi.string().optional(),
+        backup: this.joi.boolean().default(false),
+        // Add configuration for the label name to look for
+        composeFileLabel: this.joi.string().default('dd.compose.file'),
+        reconciliationMode: this.joi.string().valid('warn', 'block', 'off').default('warn'),
+        digestPinning: this.joi.boolean().default(false),
+        composeFileOnce: this.joi.boolean().default(false),
+      })
+      .rename('composefilelabel', 'composeFileLabel', {
+        ignoreUndefined: true,
+        override: true,
+      })
+      .rename('reconciliationmode', 'reconciliationMode', {
+        ignoreUndefined: true,
+        override: true,
+      })
+      .rename('digestpinning', 'digestPinning', {
+        ignoreUndefined: true,
+        override: true,
+      })
+      .rename('composefileonce', 'composeFileOnce', {
+        ignoreUndefined: true,
+        override: true,
+      });
   }
 
   async initTrigger() {
