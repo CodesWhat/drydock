@@ -282,7 +282,7 @@ describe('Update Operation Store', () => {
       });
 
       for (let i = 0; i < 97; i += 1) {
-        vi.setSystemTime(new Date(2026, 1, 1, 0, 1, i));
+        vi.setSystemTime(new Date(2026, 2, 1, 0, 1, i));
         fresh.updateOperation(third.id, {
           lastError: `error-${i}`,
         });
