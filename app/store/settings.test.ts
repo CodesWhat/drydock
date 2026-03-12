@@ -232,6 +232,28 @@ describe('Settings Store', () => {
     expect(result).not.toHaveProperty('meta');
   });
 
+  test('updateSettings should strip $loki and meta from returned value', () => {
+    const mutatingInsert = vi.fn((obj) => {
+      obj.$loki = 5;
+      obj.meta = { revision: 0, created: Date.now(), version: 0 };
+    });
+    const collection = {
+      findOne: vi.fn(() => ({ internetlessMode: false })),
+      insert: mutatingInsert,
+      remove: vi.fn(),
+    };
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(),
+    };
+
+    settings.createCollections(db);
+    const result = settings.updateSettings({ internetlessMode: true });
+    expect(result).toEqual({ internetlessMode: true });
+    expect(result).not.toHaveProperty('$loki');
+    expect(result).not.toHaveProperty('meta');
+  });
+
   test('updateSettings should not fail before createCollections initializes storage', async () => {
     vi.resetModules();
     const freshSettings = await import('./settings.js');

@@ -98,7 +98,7 @@ export function updateSettings(settingsToUpdate: Partial<Settings> = {}): Settin
     ...settingsToUpdate,
   });
   replaceSettings(settingsUpdated);
-  return settingsUpdated;
+  return cloneSettings(settingsUpdated);
 }
 
 /**
