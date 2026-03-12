@@ -95,13 +95,12 @@ type RegistryImageContainerReference = {
   };
 };
 
-type RegistryManagerLike = Pick<Registry, 'getAuthPull' | 'getImageFullName'>;
 type RegistryPullAuth = Awaited<ReturnType<Registry['getAuthPull']>>;
 type ComposeRuntimeContext = {
-  dockerApi?: DockerApiLike;
+  dockerApi?: unknown;
   auth?: RegistryPullAuth;
   newImage?: string;
-  registry?: RegistryManagerLike;
+  registry?: unknown;
 };
 
 type ComposeUpdateLifecycleContext = {

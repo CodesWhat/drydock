@@ -4,4 +4,4 @@ services:
     container_name: qa-filebrowser
     labels:
       - dd.watch=true
-      - dd.display.name=Filebrowser (Dockge)
+      - dd.display.name=Filebrowser

@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Audit log for container state changes** — External container lifecycle events (start, stop, restart via Portainer or CLI) now generate `container-update` audit entries with the new status, so the audit log reflects all state changes, not just Drydock-initiated actions. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
-- **mTLS client certificate support** — Registry providers now accept `CERTFILE` and `KEYFILE` options for mutual TLS authentication with private registries that require client certificates.
+- **mTLS client certificate support** — Registry providers now accept `CLIENTCERT` and `CLIENTKEY` options for mutual TLS authentication with private registries that require client certificates.
 
 ### Fixed
 
