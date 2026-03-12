@@ -50,8 +50,10 @@ export function createCollections(db: AppStoreDb) {
   saveAppInfosAndMigrate();
 }
 
-export function getAppInfos() {
-  return app.findOne({});
+export function getAppInfos(): AppInfos | null {
+  const doc = app.findOne({});
+  if (!doc) return null;
+  return { name: doc.name, version: doc.version };
 }
 
 export function isUpgrade(): boolean {

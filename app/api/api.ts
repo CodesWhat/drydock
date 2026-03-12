@@ -63,9 +63,6 @@ export function init(): express.Router {
     return next();
   });
 
-  // Mount app router
-  router.use('/app', appRouter.init());
-
   // Mount webhook router (uses its own bearer token auth)
   router.use('/webhook', webhookRouter.init());
 
@@ -78,6 +75,9 @@ export function init(): express.Router {
   // Routes to protect after this line
   router.use(requireAuthentication);
   router.use(requireSameOriginForMutations);
+
+  // Mount app router (authenticated — exposes version info)
+  router.use('/app', appRouter.init());
 
   // Mount SSE events endpoint (authenticated — UI sends session cookie)
   router.use('/events/ui', sseRouter.init());
