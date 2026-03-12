@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Audit log for container state changes** — External container lifecycle events (start, stop, restart via Portainer or CLI) now generate `container-update` audit entries with the new status, so the audit log reflects all state changes, not just Drydock-initiated actions. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+- **mTLS client certificate support** — Registry providers now accept `CERTFILE` and `KEYFILE` options for mutual TLS authentication with private registries that require client certificates.
 
 ### Fixed
 
@@ -21,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Compose trigger silently skips containers** — Multiple failure paths in the compose trigger were logged at `debug` level, making it nearly impossible to diagnose why a trigger reports success but containers don't update. Key diagnostic messages (compose file mismatch, label inspect failure, no containers matched) promoted to `warn` level, and the "already up to date" message now includes container names. ([#84](https://github.com/CodesWhat/drydock/discussions/84))
 - **Fallback icon cached permanently** — The Docker placeholder icon was served with `immutable` cache headers, causing browsers to cache it permanently even after the real provider icon becomes available. Fallback responses now use `no-store`.
 - **Basic auth upgrade compatibility restored** — v1.4 now accepts legacy v1.3.9 Basic auth hashes (`{SHA}`, `$apr1$`/`$1$`, `crypt`, and plain fallback) to preserve smooth upgrades. Legacy formats remain deprecated and continue showing a migration banner, with removal still planned for v1.6.0.
+- **Compose trigger rejects lowercase env var keys** — Configuration keys like `COMPOSEFILEONCE`, `DIGESTPINNING`, and `RECONCILIATIONMODE` were lowercased by the env parser but the Joi schema expected camelCase. Schema now maps lowercase keys to their camelCase equivalents. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+- **Compose trigger strips docker.io prefix** — When a compose file uses an explicit `docker.io/` registry prefix, compose mutations now preserve it instead of stripping it to a bare library path. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+- **Compose trigger fails when FILE points to directory** — `DD_TRIGGER_DOCKERCOMPOSE_{name}_FILE` now accepts directories, automatically probing for `compose.yaml`, `compose.yml`, `docker-compose.yaml`, or `docker-compose.yml` inside the directory. ([#84](https://github.com/CodesWhat/drydock/discussions/84))
+- **Container healthcheck fails with TLS backend** — The Dockerfile healthcheck now detects `DD_SERVER_TLS_ENABLED=true` and switches to `curl --insecure https://` for self-signed certificates. Also skips the healthcheck entirely when `DD_SERVER_ENABLED=false`. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+- **Agent CAFILE ignored without CERTFILE** — The agent subsystem now loads the CA certificate from `CAFILE` even when `CERTFILE` is not provided, fixing TLS verification for agents behind reverse proxies with custom CA chains.
+- **Service worker accepts cross-origin postMessage** — The demo service worker now validates `postMessage` origins against the current host, preventing potential cross-origin message injection.
 
 ### Changed
 
