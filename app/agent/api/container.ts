@@ -23,7 +23,7 @@ type AgentDockerWatcher = {
  * Get Containers (Handshake).
  */
 export function getContainers(req: Request, res: Response) {
-  const containers = storeContainer.getContainers();
+  const containers = storeContainer.getContainersRaw();
   res.json(containers);
 }
 

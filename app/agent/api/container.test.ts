@@ -11,7 +11,7 @@ vi.mock('../../log/index.js', () => ({
 }));
 
 vi.mock('../../store/container.js', () => ({
-  getContainers: vi.fn(),
+  getContainersRaw: vi.fn(),
   getContainer: vi.fn(),
   deleteContainer: vi.fn(),
 }));
@@ -39,11 +39,11 @@ describe('agent API container', () => {
   });
 
   describe('getContainers', () => {
-    test('should return all containers', () => {
+    test('should return raw containers without redaction', () => {
       const containers = [{ id: 'c1' }, { id: 'c2' }];
-      storeContainer.getContainers.mockReturnValue(containers);
+      storeContainer.getContainersRaw.mockReturnValue(containers);
       containerApi.getContainers(req, res);
-      expect(storeContainer.getContainers).toHaveBeenCalled();
+      expect(storeContainer.getContainersRaw).toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith(containers);
     });
   });
