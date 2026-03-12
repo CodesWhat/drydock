@@ -8,6 +8,7 @@ import { getState } from '../../../registry/index.js';
 import * as backupStore from '../../../store/backup.js';
 import { sleep } from '../../../util/sleep.js';
 import Dockercompose, {
+  testable_hasExplicitRegistryHost,
   testable_normalizeImplicitLatest,
   testable_normalizePostStartEnvironmentValue,
   testable_normalizePostStartHooks,
@@ -693,6 +694,28 @@ describe('Dockercompose Trigger', () => {
         }),
       }),
     );
+  });
+
+  test('processComposeFile should report when all mapped containers are already up to date', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({
+      tagValue: '1.0.0',
+      remoteValue: '1.0.0',
+      updateAvailable: false,
+    });
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+
+    const { writeComposeFileSpy, composeUpdateSpy } = spyOnProcessComposeHelpers(trigger);
+
+    const updated = await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+
+    expect(updated).toBe(false);
+    expect(mockLog.info).toHaveBeenCalledWith(expect.stringContaining('already up to date'));
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+    expect(composeUpdateSpy).not.toHaveBeenCalled();
   });
 
   test('processComposeFile should warn when no containers belong to compose', async () => {
@@ -1912,6 +1935,39 @@ describe('Dockercompose Trigger', () => {
     ).not.toThrow();
   });
 
+  test('resolveComposeFilePathFromDirectory should return original path when target is a file', async () => {
+    fs.stat.mockResolvedValueOnce({
+      isDirectory: () => false,
+      mtimeMs: 1_700_000_000_000,
+    } as any);
+
+    const resolved = await trigger.resolveComposeFilePathFromDirectory(
+      '/opt/drydock/test/stack.yml',
+    );
+
+    expect(resolved).toBe('/opt/drydock/test/stack.yml');
+  });
+
+  test('resolveComposeFilePathFromDirectory should warn and return null when directory has no compose candidates', async () => {
+    fs.stat.mockResolvedValueOnce({
+      isDirectory: () => true,
+      mtimeMs: 1_700_000_000_000,
+    } as any);
+    const missingComposeFileError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    fs.access
+      .mockRejectedValueOnce(missingComposeFileError)
+      .mockRejectedValueOnce(missingComposeFileError)
+      .mockRejectedValueOnce(missingComposeFileError)
+      .mockRejectedValueOnce(missingComposeFileError);
+
+    const resolved = await trigger.resolveComposeFilePathFromDirectory('/opt/drydock/test/stack');
+
+    expect(resolved).toBeNull();
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('does not contain a compose file candidate'),
+    );
+  });
+
   test('resolveComposeServiceContext should throw when no compose file is configured', async () => {
     trigger.configuration.file = undefined;
 
@@ -2676,6 +2732,34 @@ describe('Dockercompose Trigger', () => {
     expect(writeSpy).not.toHaveBeenCalled();
   });
 
+  test('mutateComposeFile should forward a pre-parsed compose object to validation', async () => {
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from('services:\n  nginx:\n    image: nginx:1.0.0\n'),
+    );
+    const validateSpy = vi
+      .spyOn(trigger, 'validateComposeConfiguration')
+      .mockResolvedValue(undefined);
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const parsedComposeFileObject = makeCompose({ nginx: { image: 'nginx:1.1.0' } });
+
+    const changed = await trigger.mutateComposeFile(
+      '/opt/drydock/test/compose.yml',
+      (text) => text.replace('nginx:1.0.0', 'nginx:1.1.0'),
+      {
+        parsedComposeFileObject,
+      },
+    );
+
+    expect(changed).toBe(true);
+    expect(validateSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/compose.yml',
+      expect.stringContaining('nginx:1.1.0'),
+      {
+        parsedComposeFileObject,
+      },
+    );
+  });
+
   test('validateComposeConfiguration should validate compose text in-process without shell commands', async () => {
     await trigger.validateComposeConfiguration(
       '/opt/drydock/test/compose.yml',
@@ -2696,6 +2780,25 @@ describe('Dockercompose Trigger', () => {
       },
     );
 
+    expect(getComposeFileAsObjectSpy).toHaveBeenCalledWith('/opt/drydock/test/stack.yml');
+  });
+
+  test('validateComposeConfiguration should reuse a pre-parsed compose object when provided', async () => {
+    const parseSpy = vi.spyOn(yaml, 'parse');
+    const getComposeFileAsObjectSpy = vi
+      .spyOn(trigger, 'getComposeFileAsObject')
+      .mockResolvedValue(makeCompose({ base: { image: 'busybox:1.0.0' } }));
+
+    await trigger.validateComposeConfiguration(
+      '/opt/drydock/test/stack.override.yml',
+      'services:\n  nginx:\n    image: nginx:1.1.0\n',
+      {
+        composeFiles: ['/opt/drydock/test/stack.yml', '/opt/drydock/test/stack.override.yml'],
+        parsedComposeFileObject: makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+      },
+    );
+
+    expect(parseSpy).not.toHaveBeenCalled();
     expect(getComposeFileAsObjectSpy).toHaveBeenCalledWith('/opt/drydock/test/stack.yml');
   });
 
@@ -3077,6 +3180,35 @@ describe('Dockercompose Trigger', () => {
     ]);
   });
 
+  test('triggerBatch should only access each compose file once across containers sharing the same compose chain', async () => {
+    trigger.configuration.file = undefined;
+    fs.access.mockResolvedValue(undefined);
+
+    const sharedComposeLabels = {
+      'com.docker.compose.project.config_files':
+        '/opt/drydock/test/stack.yml,/opt/drydock/test/stack.override.yml',
+    };
+    const container1 = {
+      name: 'app1',
+      watcher: 'local',
+      labels: sharedComposeLabels,
+    };
+    const container2 = {
+      name: 'app2',
+      watcher: 'local',
+      labels: sharedComposeLabels,
+    };
+
+    const processComposeFileSpy = vi.spyOn(trigger, 'processComposeFile').mockResolvedValue();
+
+    await trigger.triggerBatch([container1, container2]);
+
+    expect(processComposeFileSpy).toHaveBeenCalledTimes(1);
+    expect(fs.access).toHaveBeenCalledTimes(2);
+    expect(fs.access).toHaveBeenCalledWith('/opt/drydock/test/stack.yml');
+    expect(fs.access).toHaveBeenCalledWith('/opt/drydock/test/stack.override.yml');
+  });
+
   test('triggerBatch should only process containers matching configured compose file affinity', async () => {
     trigger.configuration.file = '/opt/drydock/test/monitoring.yml';
     fs.access.mockImplementation(async (composeFilePath) => {
@@ -3337,6 +3469,16 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('trigger should use unknown fallback when throwing without a container name', async () => {
+    trigger.configuration.dryrun = false;
+    const container = { updateAvailable: true };
+    vi.spyOn(trigger, 'triggerBatch').mockResolvedValue([false]);
+
+    await expect(trigger.trigger(container as any)).rejects.toThrow(
+      'No compose updates were applied for container unknown',
+    );
+  });
+
   test('getConfigurationSchema should extend Docker schema with compose hardening options', () => {
     const schema = trigger.getConfigurationSchema();
     expect(schema).toBeDefined();
@@ -3382,6 +3524,12 @@ describe('Dockercompose Trigger', () => {
 
   test('normalizeImplicitLatest should append latest even when image path ends with slash', () => {
     expect(testable_normalizeImplicitLatest('repo/')).toBe('repo/:latest');
+  });
+
+  test('hasExplicitRegistryHost should detect empty, host:port, and localhost prefixes', () => {
+    expect(testable_hasExplicitRegistryHost('')).toBe(false);
+    expect(testable_hasExplicitRegistryHost('registry.example.com:5000/nginx:1.1.0')).toBe(true);
+    expect(testable_hasExplicitRegistryHost('localhost/nginx:1.1.0')).toBe(true);
   });
 
   test('normalizePostStartHooks should return empty array when post_start is missing', () => {
@@ -4603,6 +4751,30 @@ describe('Dockercompose Trigger', () => {
     expect(serviceUpdates.get('nginx')).toBe('nginx:1.1.0');
   });
 
+  test('buildUpdatedComposeFileObjectForValidation should return undefined for non-object input', () => {
+    const updated = trigger.buildUpdatedComposeFileObjectForValidation(null, new Map());
+
+    expect(updated).toBeUndefined();
+  });
+
+  test('buildUpdatedComposeFileObjectForValidation should normalize non-object service sections and entries', () => {
+    const updatedFromInvalidServices = trigger.buildUpdatedComposeFileObjectForValidation(
+      { version: '3.9', services: 'invalid' },
+      new Map([['nginx', 'nginx:1.1.0']]),
+    ) as any;
+    const updatedFromScalarService = trigger.buildUpdatedComposeFileObjectForValidation(
+      { services: { nginx: 'legacy' } },
+      new Map([['nginx', 'nginx:1.1.0']]),
+    ) as any;
+
+    expect(updatedFromInvalidServices.services).toEqual({
+      nginx: { image: 'nginx:1.1.0' },
+    });
+    expect(updatedFromScalarService.services.nginx).toEqual({
+      image: 'nginx:1.1.0',
+    });
+  });
+
   test('reconcileComposeMappings should no-op when reconciliation mode is off', () => {
     trigger.configuration.reconciliationMode = 'off';
 
@@ -4757,6 +4929,40 @@ describe('Dockercompose Trigger', () => {
         composeFiles: ['/opt/drydock/test/stack.yml', '/opt/drydock/test/stack.override.yml'],
       },
     );
+  });
+
+  test('buildPerformContainerUpdateOptions should compose options without duplicate spread logic', () => {
+    const runtimeContext = {
+      dockerApi: mockDockerApi,
+      auth: { from: 'context' },
+      newImage: 'nginx:9.9.9',
+      registry: getState().registry.hub,
+    };
+
+    const options = (trigger as any).buildPerformContainerUpdateOptions(
+      {
+        composeFiles: ['/opt/drydock/test/stack.yml', '/opt/drydock/test/stack.override.yml'],
+        skipPull: true,
+      },
+      runtimeContext,
+    );
+
+    expect(options).toEqual({
+      composeFiles: ['/opt/drydock/test/stack.yml', '/opt/drydock/test/stack.override.yml'],
+      skipPull: true,
+      runtimeContext,
+    });
+  });
+
+  test('buildPerformContainerUpdateOptions should omit runtime context and compose chain when not needed', () => {
+    const options = (trigger as any).buildPerformContainerUpdateOptions(
+      {
+        composeFiles: ['/opt/drydock/test/stack.yml'],
+      },
+      {},
+    );
+
+    expect(options).toEqual({});
   });
 
   test('performContainerUpdate should pass compose chain to per-service update', async () => {
