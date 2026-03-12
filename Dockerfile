@@ -62,6 +62,10 @@ RUN npm run build
 FROM base AS release
 ENV DD_LOG_FORMAT=json
 
+# Remove unnecessary network utilities (busybox symlinks) to reduce attack surface.
+# curl is kept for the HEALTHCHECK probe.
+RUN rm -f /usr/bin/wget /usr/bin/nc
+
 # Default entrypoint
 COPY --chmod=755 Docker.entrypoint.sh /usr/bin/entrypoint.sh
 ENTRYPOINT ["tini", "-g", "--", "/usr/bin/entrypoint.sh"]
