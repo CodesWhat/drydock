@@ -296,19 +296,19 @@ class Hass {
     }
 
     // Count all containers
-    const totalCount = containerStore.getContainers().length;
-    const updateCount = containerStore.getContainers({
+    const totalCount = containerStore.getContainerCount();
+    const updateCount = containerStore.getContainerCount({
       updateAvailable: true,
-    }).length;
+    });
 
     // Count all containers belonging to the current watcher
-    const watcherTotalCount = containerStore.getContainers({
+    const watcherTotalCount = containerStore.getContainerCount({
       watcher: container.watcher,
-    }).length;
-    const watcherUpdateCount = containerStore.getContainers({
+    });
+    const watcherUpdateCount = containerStore.getContainerCount({
       watcher: container.watcher,
       updateAvailable: true,
-    }).length;
+    });
 
     // Publish sensors
     await this.updateSensor({

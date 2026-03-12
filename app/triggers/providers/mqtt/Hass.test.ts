@@ -6,6 +6,7 @@ import {
   registerWatcherStop,
 } from '../../../event/index.js';
 import log from '../../../log/index.js';
+import * as containerStore from '../../../store/container.js';
 import Hass from './Hass.js';
 
 const MOCK_VERSION = '1.4.0-test';
@@ -345,6 +346,26 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
     '{}',
     { retain: true },
   );
+});
+
+test('updateContainerSensors should use container count queries instead of full list cloning', async () => {
+  const getContainersSpy = vi.spyOn(containerStore, 'getContainers');
+  const getContainerCountSpy = vi.spyOn(containerStore, 'getContainerCount');
+
+  await hass.updateContainerSensors({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(getContainerCountSpy).toHaveBeenCalledWith();
+  expect(getContainerCountSpy).toHaveBeenCalledWith({ updateAvailable: true });
+  expect(getContainerCountSpy).toHaveBeenCalledWith({ watcher: 'watcher-name' });
+  expect(getContainerCountSpy).toHaveBeenCalledWith({
+    watcher: 'watcher-name',
+    updateAvailable: true,
+  });
+  expect(getContainersSpy).not.toHaveBeenCalled();
 });
 
 test.each(
