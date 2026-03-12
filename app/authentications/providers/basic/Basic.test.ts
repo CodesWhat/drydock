@@ -1271,29 +1271,23 @@ describe('Basic Authentication', () => {
     });
 
     test('should reject base64 that decodes to empty buffer', () => {
-      // Drydock-format hash with a segment that passes regex but decodes to empty.
-      // A padded base64 string "AA==" decodes to a single byte, not empty.
-      // We need something that the Buffer.from('...', 'base64') returns empty.
-      // Padding-only: "====" won't pass regex. But "AA==" decodes to 1 byte (non-empty).
-      // Actually, getting a zero-length decode from valid base64 is near-impossible since
-      // the regex already excludes empty strings. However, we can test this via the
-      // Drydock format where salt/hash segments decode to buffers shorter than MIN sizes.
-      // The empty-buffer branch (line 89) fires when padded base64 produces empty output.
-      // "=" alone won't pass regex. For line 89, we need a string where
-      // Buffer.from(padded, 'base64').length === 0. This can happen with malformed padding
-      // that slips through — e.g., "/w==" decodes to 1 byte, not 0.
-      // In practice, lines 66-81 guard against most cases. Line 89 is a belt-and-suspenders
-      // check. We can verify via the Drydock format with a very short (but non-empty) salt
-      // that fails the MIN_SALT_SIZE check at line 180/202 instead.
-      // To trigger line 89 specifically: a base64url string like "a" has length 1, which
-      // is length % 4 === 1 and would be caught at line 80. But after padding to 4 chars
-      // (line 83-86), if it somehow decoded empty... This is essentially unreachable
-      // through normal strings because valid base64 chars always decode to at least 1 byte.
-      // Instead, test the salt/hash too-short branch at line 202-203 (parsePhcArgon2Hash).
-      // We cover line 89 indirectly through the salt-too-short test below.
+      // Line 89: decodeBase64 returns undefined when decoded.length === 0.
+      // This is a defensive check — valid base64 chars always decode to >=1 byte.
+      // To reach this branch, temporarily mock Buffer.from to return an empty buffer
+      // for the specific padded base64 call while preserving normal behavior elsewhere.
+      const originalFrom = Buffer.from.bind(Buffer);
+      const spy = vi.spyOn(Buffer, 'from').mockImplementation((...args: unknown[]) => {
+        // Intercept the base64 decode of the salt segment "AAAA"
+        if (args[0] === 'AAAA' && args[1] === 'base64') {
+          spy.mockRestore();
+          return Buffer.alloc(0);
+        }
+        return (originalFrom as (...a: unknown[]) => Buffer)(...args);
+      });
 
-      // Use a 2-char unpadded base64url for the salt — decodes to 1 byte (< MIN_SALT_SIZE 16)
-      const hash = `$argon2id$v=19$m=65536,t=3,p=4$Zw$${VALID_HASH_BASE64URL}`;
+      // "AAAA" is a valid 4-char base64 string (length % 4 === 0, no padding needed).
+      // Normally decodes to 3 bytes, but our mock returns empty buffer -> line 89.
+      const hash = `argon2id$65536$3$4$AAAA$${VALID_HASH_BASE64}`;
       expect(() =>
         basic.validateConfiguration({
           user: 'testuser',
@@ -1458,73 +1452,56 @@ describe('Basic Authentication', () => {
   });
 
   describe('verifyShaPassword and verifyMd5Password undefined parse results', () => {
-    test('should reject SHA authentication when parseShaHash returns undefined', async () => {
-      // {SHA} prefix gets past format detection in verifyPassword (parseShaHash returns
-      // a Buffer initially to enter the sha branch), but an edge-case hash where
-      // the base64 content decodes to wrong length.
-      // parseShaHash checks for exactly 20-byte decoded length.
-      // "{SHA}AAAA" decodes to 3 bytes — parseShaHash returns undefined.
-      // But in verifyPassword, the dispatch also calls parseShaHash — if it returns
-      // undefined for the same input, it won't enter the sha branch at all.
-      // Line 362 in verifyShaPassword fires when verifyShaPassword is called but
-      // parseShaHash returns undefined. This happens when verifyPassword at line 418
-      // calls parseShaHash (returns truthy) then calls verifyShaPassword which calls
-      // parseShaHash again (returns undefined). We need the same string to return
-      // different results on different calls.
-      // Actually, looking at the existing test pattern, the test file uses proxy objects
-      // for this. But another approach: "{SHA}!!!invalid-base64!!!" — let's check what
-      // happens. parseShaHash calls Buffer.from(encoded, 'base64'). Node's Buffer.from
-      // silently ignores non-base64 chars, so "!!!invalid-base64!!!" would decode to
-      // something. Let me think about a simpler approach.
-      // Actually the simplest way: "{SHA}" followed by base64 that decodes to exactly
-      // 20 bytes will be accepted by parseShaHash, then inside verifyShaPassword the
-      // digest comparison happens. For line 362 to trigger, parseShaHash must return
-      // undefined INSIDE verifyShaPassword, meaning the dispatch in verifyPassword called
-      // parseShaHash first (got truthy), but verifyShaPassword's own parseShaHash call
-      // returns undefined.
-      // The test at line 669 already uses a flaky object for this. But the task says
-      // line 362 is uncovered, so let me try a cleaner approach.
-      // Looking at parseShaHash: it returns undefined when:
-      // 1. length < 5
-      // 2. prefix != '{sha}'
-      // 3. !encoded (empty after prefix)
-      // 4. decoded.length !== 20
-      // For the dispatch to enter SHA branch but verifyShaPassword to fail, we need
-      // parseShaHash to be called twice with the same string — first returns Buffer,
-      // second returns undefined. With a normal string that's impossible.
-      // Wait — actually let me re-read verifyPassword. At line 418:
-      //   if (parseShaHash(normalizedHash)) { return verifyShaPassword(password, normalizedHash); }
-      // And verifyShaPassword at line 360 calls parseShaHash(encodedHash) again.
-      // With a real string, both calls get the same result. So line 362 is only hit
-      // if the string behaves differently on second parse.
-      // The existing tests at line 669-698 already test this pattern for SHA but
-      // apparently don't cover line 362. Let me check what line 669's test actually exercises.
-      // That test uses a flaky object with a substring that returns different values.
-      // The first parseShaHash call returns the valid encoded part, but the SECOND
-      // parseShaHash call (inside verifyShaPassword at line 360) gets '' from substring,
-      // which causes parseShaHash to return undefined at line 231 (!encoded check).
-      // That SHOULD cover line 362. If it doesn't, maybe the test doesn't reach that path.
-      // Let me look again at the flaky object... Actually, let me just add a clean test
-      // that's guaranteed to hit line 362 using the proxy/flaky approach.
-      let trimCallCount = 0;
+    test('should reject SHA authentication when parseShaHash returns undefined on second call', async () => {
+      // Line 362: verifyShaPassword is called but its internal parseShaHash returns undefined.
+      // verifyPassword calls normalizeHash -> trim() on the hash, then uses the result for
+      // all dispatch checks. If trim() returns `this` (the proxy), we can control substring()
+      // calls to make the first parseShaHash succeed and the second (inside verifyShaPassword) fail.
+      //
+      // Call trace through proxy:
+      //   verifyPassword -> normalizeHash -> trim() [returns self]
+      //   parseArgon2Hash -> normalizeHash -> trim() [returns self]
+      //     parseDrydockArgon2Hash -> split('$') [returns non-argon2]
+      //     parsePhcArgon2Hash -> split('$') [returns non-argon2]
+      //   looksLikeArgon2Hash -> normalizeHash -> trim() [returns self]
+      //     startsWith('argon2id$') -> false
+      //     startsWith('$argon2id$') -> false
+      //   parseShaHash (dispatch) -> normalizeHash -> trim() [returns self]
+      //     substring(0,5) -> '{SHA}', substring(5) -> valid 20-byte base64
+      //   verifyShaPassword -> parseShaHash -> normalizeHash -> trim() [returns self]
+      //     substring(0,5) -> '{SHA}', substring(5) -> '' (fails !encoded check)
+      const validSha20 = Buffer.alloc(20, 1).toString('base64');
+      let substringFromFiveCount = 0;
       const flakyHash = {
         trim() {
-          trimCallCount += 1;
-          // First few trims: looks like valid SHA
-          if (trimCallCount <= 3) {
-            return `{SHA}${Buffer.alloc(20, 1).toString('base64')}` as unknown as string;
-          }
-          // Inside verifyShaPassword's parseShaHash call: return something that fails
-          return '{SHA}' as unknown as string;
-        },
-        startsWith() {
-          return false;
+          return this;
         },
         split() {
           return ['not-argon2'];
         },
+        startsWith() {
+          return false;
+        },
         get length() {
-          return 50;
+          return 100;
+        },
+        substring(start: number, end?: number) {
+          if (start === 0 && end === 5) {
+            return '{SHA}';
+          }
+          if (start === 5) {
+            substringFromFiveCount += 1;
+            // First call (dispatch check): return valid base64 of 20 bytes
+            if (substringFromFiveCount === 1) {
+              return validSha20;
+            }
+            // Second call (inside verifyShaPassword): return empty -> parseShaHash returns undefined
+            return '';
+          }
+          return '';
+        },
+        toLowerCase() {
+          return '{sha}';
         },
       } as unknown as string;
 
@@ -1541,31 +1518,57 @@ describe('Basic Authentication', () => {
       });
     });
 
-    test('should reject MD5 authentication when parseMd5Hash returns undefined', async () => {
-      // Similar to SHA: verifyPassword dispatches to verifyMd5Password (line 421-422),
-      // but parseMd5Hash inside verifyMd5Password returns undefined — line 376.
-      let trimCallCount = 0;
+    test('should reject MD5 authentication when parseMd5Hash returns undefined on second call', async () => {
+      // Line 376: verifyMd5Password is called but its internal parseMd5Hash returns undefined.
+      // Same proxy strategy: trim() returns self so we control all method calls.
+      //
+      // parseMd5Hash checks:
+      //   normalizeHash -> trim() [returns self]
+      //   startsWith('$apr1$') or startsWith('$1$') -> needs true
+      //   split('$') -> needs >= 4 parts with variant='1' and valid salt
+      //
+      // On second call inside verifyMd5Password, split('$') returns < 4 parts.
+      let splitDollarCount = 0;
       const flakyHash = {
         trim() {
-          trimCallCount += 1;
-          // First trims: looks like valid MD5
-          if (trimCallCount <= 4) {
-            return LEGACY_MD5_HASH as unknown as string;
-          }
-          // Inside verifyMd5Password's parseMd5Hash call: return something that fails
-          return '$1$' as unknown as string;
-        },
-        startsWith(prefix: string) {
-          return LEGACY_MD5_HASH.startsWith(prefix);
+          return this;
         },
         split(separator: string) {
           if (separator === '$') {
-            return LEGACY_MD5_HASH.split('$');
+            splitDollarCount += 1;
+            // parseDrydockArgon2Hash & parsePhcArgon2Hash also call split('$')
+            // Calls 1-2: argon2 checks -> return non-argon2
+            if (splitDollarCount <= 2) {
+              return ['not-argon2'];
+            }
+            // parseShaHash does NOT call split — it uses substring.
+            // parseMd5Hash calls split('$'):
+            // Call 3 (dispatch check): return valid MD5 parts
+            if (splitDollarCount === 3) {
+              return LEGACY_MD5_HASH.split('$');
+            }
+            // Call 4 (inside verifyMd5Password): return too few parts -> undefined
+            return ['', '1'];
           }
           return ['not-argon2'];
         },
+        startsWith(prefix: string) {
+          // For looksLikeArgon2Hash
+          if (prefix === 'argon2id$' || prefix === '$argon2id$') {
+            return false;
+          }
+          // For parseMd5Hash: $1$ or $apr1$
+          return prefix === '$1$';
+        },
         get length() {
-          return LEGACY_MD5_HASH.length;
+          return 4;
+        },
+        substring(start: number, end?: number) {
+          // parseShaHash calls substring(0, 5) — needs to NOT match {sha}
+          if (start === 0 && end === 5) {
+            return '$1$sa';
+          }
+          return '';
         },
       } as unknown as string;
 
