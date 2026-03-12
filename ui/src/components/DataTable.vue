@@ -25,6 +25,8 @@ const props = withDefaults(
     virtualRowHeight?: number;
     virtualOverscan?: number;
     virtualMaxHeight?: string;
+    /** Optional max-height for scroll area when virtualScroll is false (e.g., '340px') */
+    maxHeight?: string;
   }>(),
   {
     showActions: false,
@@ -322,9 +324,9 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
     <div
       ref="scrollViewportRef"
       class="overflow-x-auto"
-      :class="virtualScroll ? 'overflow-y-auto' : 'overflow-y-visible'"
+      :class="virtualScroll || maxHeight ? 'overflow-y-auto' : 'overflow-y-visible'"
       :data-test="virtualScroll ? 'data-table-scroll' : undefined"
-      :style="virtualScroll ? { maxHeight: virtualMaxHeight } : {}"
+      :style="virtualScroll ? { maxHeight: virtualMaxHeight } : maxHeight ? { maxHeight } : {}"
       @scroll="handleVirtualScroll">
       <table
         ref="tableRef"
