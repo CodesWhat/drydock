@@ -60,7 +60,6 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
            width: isMobile ? '100%' : panelDesktopWidth,
            maxWidth: isMobile ? '100%' : 'min(calc(100vw - 32px), 920px)',
            backgroundColor: 'var(--dd-bg-card)',
-           border: '1px solid var(--dd-border-strong)',
            height: isMobile ? '100vh' : 'calc(100vh - 96px)',
            minHeight: '480px',
          }">
@@ -69,9 +68,16 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
     <div class="shrink-0 px-4 py-2.5 flex items-center justify-between"
          :style="{ borderBottom: '1px solid var(--dd-border)' }">
       <div class="flex items-center gap-2">
-        <div v-if="showSizeControls && !isMobile" class="flex items-center dd-rounded overflow-hidden"
-             :style="{ border: '1px solid var(--dd-border-strong)' }">
-          <button v-for="s in (['lg', 'md', 'sm'] as const)" :key="s"
+        <div v-if="(showSizeControls && !isMobile) || showFullPage" class="flex items-center dd-rounded overflow-hidden">
+          <button v-if="showFullPage"
+                  class="px-2 py-1 transition-colors"
+                  :class="'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
+                  v-tooltip.top="'Open full page view'"
+                  @click="$emit('full-page')">
+            <AppIcon name="frame-corners" :size="12" />
+          </button>
+          <button v-if="showSizeControls && !isMobile"
+                  v-for="s in (['lg', 'md', 'sm'] as const)" :key="s"
                   class="px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-wide transition-colors"
                   :class="size === s
                     ? 'dd-bg-elevated dd-text'
@@ -80,13 +86,6 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
             {{ s === 'sm' ? 'S' : s === 'md' ? 'M' : 'L' }}
           </button>
         </div>
-        <button v-if="showFullPage"
-                class="flex items-center gap-1.5 px-2 py-1 dd-rounded text-[0.625rem] font-semibold uppercase tracking-wide transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                v-tooltip.top="'Open full page view'"
-                @click="$emit('full-page')">
-          <AppIcon name="expand" :size="11" />
-          Full Page
-        </button>
         <slot name="toolbar" />
       </div>
       <button aria-label="Close details panel"
