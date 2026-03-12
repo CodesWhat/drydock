@@ -14,6 +14,8 @@ const HASS_MANUFACTURER = 'drydock';
 const HASS_ENTITY_VALUE_TEMPLATE = '{{ value_json.image_tag_value }}';
 const HASS_LATEST_VERSION_TEMPLATE =
   '{% if value_json.update_kind_kind == "digest" %}{{ value_json.result_digest[:15] }}{% else %}{{ value_json.result_tag }}{% endif %}';
+const HASS_DEFAULT_ENTITY_PICTURE =
+  'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png';
 
 interface HassClient {
   publish: (
@@ -66,13 +68,79 @@ function getHaDevice() {
  * @return {*}
  */
 function sanitizeIcon(icon) {
-  return icon
-    .replaceAll('mdi-', 'mdi:')
-    .replaceAll('fa-', 'fa:')
-    .replaceAll('fab-', 'fab:')
-    .replaceAll('far-', 'far:')
-    .replaceAll('fas-', 'fas:')
-    .replaceAll('si-', 'si:');
+  if (typeof icon !== 'string') {
+    return '';
+  }
+  const normalized = icon.trim();
+  if (!normalized || normalized.startsWith('http://') || normalized.startsWith('https://')) {
+    return normalized;
+  }
+  return normalized
+    .replace(/^mdi-/i, 'mdi:')
+    .replace(/^fa-/i, 'fa:')
+    .replace(/^fab-/i, 'fab:')
+    .replace(/^far-/i, 'far:')
+    .replace(/^fas-/i, 'fas:')
+    .replace(/^hl-/i, 'hl:')
+    .replace(/^sh-/i, 'sh:')
+    .replace(/^si-/i, 'si:');
+}
+
+function normalizeIconSlug(slug: string, extension: string): string {
+  const normalizedSlug = slug.trim().toLowerCase();
+  const suffix = `.${extension}`;
+  if (normalizedSlug.endsWith(suffix)) {
+    return normalizedSlug.slice(0, -suffix.length);
+  }
+  return normalizedSlug;
+}
+
+function resolveEntityPicture(icon?: string): string {
+  const sanitizedIcon = sanitizeIcon(icon);
+  if (!sanitizedIcon) {
+    return HASS_DEFAULT_ENTITY_PICTURE;
+  }
+  if (sanitizedIcon.startsWith('http://') || sanitizedIcon.startsWith('https://')) {
+    return sanitizedIcon;
+  }
+
+  const iconMatch = sanitizedIcon.match(/^(sh|hl|si):(.+)$/i);
+  if (!iconMatch) {
+    return HASS_DEFAULT_ENTITY_PICTURE;
+  }
+
+  const provider = iconMatch[1].toLowerCase();
+  const rawSlug = iconMatch[2];
+  const cdnMap: Record<string, { ext: string; base: string }> = {
+    sh: { ext: 'png', base: 'https://cdn.jsdelivr.net/gh/selfhst/icons/png' },
+    hl: { ext: 'png', base: 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png' },
+    si: { ext: 'svg', base: 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons' },
+  };
+  // Provider is guaranteed to be sh|hl|si by the regex above
+  const cdn = cdnMap[provider];
+  const slug = normalizeIconSlug(rawSlug, cdn.ext);
+  return `${cdn.base}/${slug}.${cdn.ext}`;
+}
+
+function resolveEntityPictureOverride(container: {
+  displayPicture?: string;
+  labels?: Record<string, string>;
+}): string | undefined {
+  const configuredPicture =
+    container.displayPicture ||
+    container.labels?.['dd.display.picture'] ||
+    container.labels?.['wud.display.picture'];
+  if (typeof configuredPicture !== 'string') {
+    return undefined;
+  }
+  const normalized = configuredPicture.trim();
+  if (!normalized) {
+    return undefined;
+  }
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    return undefined;
+  }
+  return normalized;
 }
 
 class Hass {
@@ -148,6 +216,7 @@ class Hass {
       kind: 'update',
       topic: this.getContainerStateTopic({ container }),
     };
+    const entityPictureOverride = resolveEntityPictureOverride(container);
     this.log.info(`Add hass container update sensor [${containerStateSensor.topic}]`);
     if (this.configuration.hass.discovery) {
       await this.publishDiscoveryMessage({
@@ -159,6 +228,7 @@ class Hass {
         stateTopic: containerStateSensor.topic,
         name: container.displayName,
         icon: sanitizeIcon(container.displayIcon),
+        entityPicture: entityPictureOverride,
         options: {
           force_update: true,
           value_template: HASS_ENTITY_VALUE_TEMPLATE,
@@ -296,19 +366,19 @@ class Hass {
     }
 
     // Count all containers
-    const totalCount = containerStore.getContainers().length;
-    const updateCount = containerStore.getContainers({
+    const totalCount = containerStore.getContainerCount();
+    const updateCount = containerStore.getContainerCount({
       updateAvailable: true,
-    }).length;
+    });
 
     // Count all containers belonging to the current watcher
-    const watcherTotalCount = containerStore.getContainers({
+    const watcherTotalCount = containerStore.getContainerCount({
       watcher: container.watcher,
-    }).length;
-    const watcherUpdateCount = containerStore.getContainers({
+    });
+    const watcherUpdateCount = containerStore.getContainerCount({
       watcher: container.watcher,
       updateAvailable: true,
-    }).length;
+    });
 
     // Publish sensors
     await this.updateSensor({
@@ -388,6 +458,7 @@ class Hass {
    * @param kind
    * @param name
    * @param icon
+   * @param entityPicture
    * @param options
    * @returns {Promise<*>}
    */
@@ -397,6 +468,7 @@ class Hass {
     kind,
     name,
     icon,
+    entityPicture,
     options = {},
   }: {
     discoveryTopic: string;
@@ -404,6 +476,7 @@ class Hass {
     kind: string;
     name: string;
     icon?: string;
+    entityPicture?: string;
     options?: Record<string, unknown>;
   }) {
     const entityId = getHassEntityId(stateTopic);
@@ -415,8 +488,7 @@ class Hass {
         name: name || entityId,
         device: getHaDevice(),
         icon: icon || sanitizeIcon('mdi:docker'),
-        entity_picture:
-          'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        entity_picture: entityPicture || resolveEntityPicture(icon),
         state_topic: stateTopic,
         ...options,
       }),

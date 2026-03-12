@@ -75,13 +75,12 @@ describe('EmptyState', () => {
     expect(wrapper.emitted('clear')).toHaveLength(1);
   });
 
-  it('has the expected background and border styling', () => {
+  it('has the expected background styling', () => {
     const wrapper = mount(EmptyState, {
       props: { message: 'Styled' },
       global: { stubs },
     });
     const root = wrapper.find('div');
     expect(root.attributes('style')).toContain('background-color');
-    expect(root.attributes('style')).toContain('border');
   });
 });

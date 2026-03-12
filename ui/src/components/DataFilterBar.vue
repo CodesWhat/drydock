@@ -34,20 +34,18 @@ function viewModeLabel(id: string): string {
     <div class="px-3 py-2 dd-rounded relative z-20"
          :style="{
            backgroundColor: 'var(--dd-bg-card)',
-           border: '1px solid var(--dd-border-strong)',
          }">
       <div class="flex items-center gap-2.5 relative">
         <!-- Filter toggle button -->
         <div v-if="!hideFilter" class="relative" v-tooltip.top="'Filters'">
           <button type="button"
-                  class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors border"
-                  :class="showFilters || (activeFilterCount ?? 0) > 0 ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
-                  :style="{ borderColor: (activeFilterCount ?? 0) > 0 ? 'var(--dd-primary)' : 'var(--dd-border-strong)' }"
+                  class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors"
+                  :class="showFilters || (activeFilterCount ?? 0) > 0 ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                   aria-label="Toggle filters"
                   :aria-expanded="String(showFilters)"
                   :aria-controls="filterPanelId"
                   @click.stop="emit('update:showFilters', !showFilters)">
-            <AppIcon name="filter" :size="11" />
+            <AppIcon name="filter" :size="13" />
           </button>
           <span v-if="(activeFilterCount ?? 0) > 0"
                 class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-[0.5rem] font-bold flex items-center justify-center text-white pointer-events-none"
@@ -70,15 +68,13 @@ function viewModeLabel(id: string): string {
           <span class="text-[0.625rem] font-semibold tabular-nums shrink-0 px-2 py-1 dd-rounded dd-text-muted dd-bg-card">
             {{ filteredCount }}/{{ totalCount }}<template v-if="countLabel"> {{ countLabel }}</template>
           </span>
-          <div class="flex items-center dd-rounded overflow-hidden border"
+          <div class="flex items-center dd-rounded overflow-hidden"
                role="group"
-               aria-label="View mode"
-               :style="{ borderColor: 'var(--dd-border-strong)' }">
+               aria-label="View mode">
             <button v-for="vm in (viewModes ?? defaultViewModes)" :key="vm.id"
                     type="button"
                     class="w-7 h-7 flex items-center justify-center text-[0.6875rem] transition-colors"
-                    :class="modelValue === vm.id ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
-                    :style="vm.id !== (viewModes ?? defaultViewModes)[0]?.id ? { borderLeft: '1px solid var(--dd-border-strong)' } : {}"
+                    :class="modelValue === vm.id ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                     v-tooltip.top="viewModeLabel(vm.id)"
                     :aria-label="viewModeLabel(vm.id)"
                     :aria-pressed="String(modelValue === vm.id)"

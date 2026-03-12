@@ -31,7 +31,7 @@ const configurationValid = {
     discovery: false,
     enabled: false,
     prefix: 'homeassistant',
-    attributes: 'full',
+    attributes: 'short',
     filter: {
       include: '',
       exclude: '',
@@ -115,7 +115,7 @@ test('validateConfiguration should default hass.discovery to true when hass.enab
     enabled: true,
     prefix: 'homeassistant',
     discovery: true,
-    attributes: 'full',
+    attributes: 'short',
     filter: {
       include: '',
       exclude: '',
@@ -165,7 +165,7 @@ test('initTrigger should init Mqtt client', async () => {
       enabled: true,
       discovery: true,
       prefix: 'homeassistant',
-      attributes: 'full',
+      attributes: 'short',
       filter: {
         include: '',
         exclude: '',
@@ -248,7 +248,7 @@ test('initTrigger should read TLS files when configured', async () => {
       enabled: false,
       discovery: false,
       prefix: 'homeassistant',
-      attributes: 'full',
+      attributes: 'short',
       filter: {
         include: '',
         exclude: '',
@@ -306,7 +306,7 @@ test('initTrigger should execute registered container event callbacks', async ()
       enabled: false,
       discovery: false,
       prefix: 'homeassistant',
-      attributes: 'full',
+      attributes: 'short',
       filter: {
         include: '',
         exclude: '',
@@ -335,7 +335,7 @@ test('deregister then initTrigger should not duplicate container event callbacks
       enabled: false,
       discovery: false,
       prefix: 'homeassistant',
-      attributes: 'full',
+      attributes: 'short',
       filter: {
         include: '',
         exclude: '',
@@ -367,12 +367,12 @@ describe('hass.attributes validation', () => {
     expect(validated.hass.attributes).toBe('short');
   });
 
-  test('should default hass.attributes to full', () => {
+  test('should default hass.attributes to short', () => {
     const validated = mqtt.validateConfiguration({
       url: configurationValid.url,
       clientid: 'dd',
     });
-    expect(validated.hass.attributes).toBe('full');
+    expect(validated.hass.attributes).toBe('short');
   });
 
   test('should reject invalid hass.attributes value', () => {
@@ -601,7 +601,7 @@ describe('trigger filtering', () => {
     expect(publishedPayload).toHaveProperty('labels_com_docker_compose_project', 'app');
   });
 
-  test('should default hass.attributes to full when not provided in runtime config', async () => {
+  test('should default hass.attributes to short when not provided in runtime config', async () => {
     mqtt.configuration = {
       topic: 'dd/container',
       exclude: '',
@@ -615,7 +615,8 @@ describe('trigger filtering', () => {
     await mqtt.trigger(containerWithSecurity);
 
     const publishedPayload = JSON.parse(mqtt.client.publish.mock.calls[0][1]);
-    expect(publishedPayload).toHaveProperty('security_scan_vulnerabilities_0_id', 'CVE-2024-0001');
-    expect(publishedPayload).toHaveProperty('details_ports_0', '80/tcp');
+    expect(publishedPayload).not.toHaveProperty('security_scan_vulnerabilities_0_id');
+    expect(publishedPayload).not.toHaveProperty('details_ports_0');
+    expect(publishedPayload).toHaveProperty('name', 'filtered-test');
   });
 });

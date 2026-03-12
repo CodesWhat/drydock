@@ -65,11 +65,11 @@ function asLog(entry: unknown): AgentLog {
       empty-class="px-3 py-4 text-[0.6875rem] dd-text-muted text-center"
     >
       <template #controls>
-        <div class="px-3 py-2 flex flex-wrap items-center gap-2" :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+        <div class="px-3 py-2 flex flex-wrap items-center gap-2">
           <select
             v-model="logLevelFilterModel"
             data-testid="agent-log-level-filter"
-            class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong"
+            class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
           >
             <option value="all">All Levels</option>
             <option value="debug">Debug</option>
@@ -81,7 +81,7 @@ function asLog(entry: unknown): AgentLog {
           <select
             v-model.number="tailModel"
             data-testid="agent-log-tail-filter"
-            class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong"
+            class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
           >
             <option :value="50">Tail 50</option>
             <option :value="100">Tail 100</option>
@@ -94,7 +94,7 @@ function asLog(entry: unknown): AgentLog {
             data-testid="agent-log-component-filter"
             type="text"
             placeholder="Filter by component..."
-            class="flex-1 min-w-[160px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-placeholder dd-border-strong"
+            class="flex-1 min-w-[160px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder"
             @keyup.enter="emit('refresh')"
           />
 

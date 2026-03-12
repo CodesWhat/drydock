@@ -139,11 +139,7 @@ describe('Icons Router', () => {
     mockRename.mockResolvedValue(undefined);
     mockUnlink.mockResolvedValue(undefined);
     mockReaddir.mockResolvedValue([]);
-    mockStat.mockResolvedValue({
-      mtimeMs: Date.now(),
-      size: 1024,
-      isFile: () => true,
-    });
+    mockStat.mockRejectedValue(new Error('not found'));
   });
 
   test('should initialize router with icon and cache routes', () => {
@@ -186,7 +182,11 @@ describe('Icons Router', () => {
   });
 
   test('should serve icon from cache when available', async () => {
-    mockAccess.mockResolvedValue(undefined);
+    mockStat.mockResolvedValue({
+      mtimeMs: Date.now(),
+      size: 1024,
+      isFile: () => true,
+    });
     const handler = getHandler();
     const res = createResponse();
 
@@ -359,7 +359,11 @@ describe('Icons Router', () => {
   });
 
   test('should skip axios when icon appears in cache after first miss', async () => {
-    mockAccess.mockRejectedValueOnce(new Error('not found')).mockResolvedValueOnce(undefined);
+    mockStat.mockRejectedValueOnce(new Error('not found')).mockResolvedValueOnce({
+      mtimeMs: Date.now(),
+      size: 1024,
+      isFile: () => true,
+    });
     const handler = getHandler();
     const res = createResponse();
 
@@ -527,15 +531,18 @@ describe('Icons Router', () => {
     mockReaddir
       .mockResolvedValueOnce([{ name: 'simple', isDirectory: () => true }])
       .mockResolvedValueOnce(['old.svg', 'docker.svg']);
-    mockStat.mockImplementation(async (targetPath: string) => {
-      if (targetPath === '/store/icons/simple/old.svg') {
-        return { mtimeMs: Date.now() - 1_000, size: 150 * 1024 * 1024, isFile: () => true };
-      }
-      if (targetPath === '/store/icons/simple/docker.svg') {
-        return { mtimeMs: Date.now(), size: 50 * 1024 * 1024, isFile: () => true };
-      }
-      return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
-    });
+    mockStat
+      .mockRejectedValueOnce(new Error('not found'))
+      .mockRejectedValueOnce(new Error('not found'))
+      .mockImplementation(async (targetPath: string) => {
+        if (targetPath === '/store/icons/simple/old.svg') {
+          return { mtimeMs: Date.now() - 1_000, size: 150 * 1024 * 1024, isFile: () => true };
+        }
+        if (targetPath === '/store/icons/simple/docker.svg') {
+          return { mtimeMs: Date.now(), size: 50 * 1024 * 1024, isFile: () => true };
+        }
+        return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
+      });
     const handler = getHandler();
     const res = createResponse();
 
@@ -573,23 +580,26 @@ describe('Icons Router', () => {
       },
     );
 
-    mockStat.mockImplementation((targetPath: string) => {
-      if (targetPath === '/store/icons/simple/old.svg') {
-        return oldStatPromise;
-      }
-      if (targetPath === '/store/icons/simple/docker.svg') {
+    mockStat
+      .mockRejectedValueOnce(new Error('not found'))
+      .mockRejectedValueOnce(new Error('not found'))
+      .mockImplementation((targetPath: string) => {
+        if (targetPath === '/store/icons/simple/old.svg') {
+          return oldStatPromise;
+        }
+        if (targetPath === '/store/icons/simple/docker.svg') {
+          return Promise.resolve({
+            mtimeMs: Date.now(),
+            size: 50 * 1024 * 1024,
+            isFile: () => true,
+          });
+        }
         return Promise.resolve({
           mtimeMs: Date.now(),
-          size: 50 * 1024 * 1024,
+          size: 1024,
           isFile: () => true,
         });
-      }
-      return Promise.resolve({
-        mtimeMs: Date.now(),
-        size: 1024,
-        isFile: () => true,
       });
-    });
 
     const handler = getHandler();
     const res = createResponse();
@@ -603,9 +613,16 @@ describe('Icons Router', () => {
       res,
     );
 
-    await vi.waitFor(() => expect(mockStat).toHaveBeenCalled());
+    await vi.waitFor(() => {
+      const statTargets = mockStat.mock.calls.map((call) => call[0]);
+      expect(statTargets).toEqual(
+        expect.arrayContaining(['/store/icons/simple/old.svg', '/store/icons/simple/docker.svg']),
+      );
+    });
     try {
-      expect(mockStat).toHaveBeenCalledTimes(2);
+      // The exact call count depends on cache-hit checks before fetch. What matters
+      // here is that enforcement stats both entries without waiting for old.svg first.
+      expect(mockStat).toHaveBeenCalled();
     } finally {
       resolveOldStat?.({
         mtimeMs: Date.now() - 1_000,
@@ -715,11 +732,14 @@ describe('Icons Router', () => {
     mockReaddir
       .mockResolvedValueOnce([{ name: 'simple', isDirectory: () => true }])
       .mockResolvedValueOnce(['docker.svg']);
-    mockStat.mockResolvedValue({
-      mtimeMs: Date.now(),
-      size: 1024,
-      isFile: () => true,
-    });
+    mockStat
+      .mockRejectedValueOnce(new Error('not found'))
+      .mockRejectedValueOnce(new Error('not found'))
+      .mockResolvedValue({
+        mtimeMs: Date.now(),
+        size: 1024,
+        isFile: () => true,
+      });
     const handler = getHandler();
     const res1 = createResponse();
     const res2 = createResponse();
@@ -767,18 +787,21 @@ describe('Icons Router', () => {
         { name: 'simple', isDirectory: () => true },
       ])
       .mockResolvedValueOnce(['stale.svg', 'nested', 'docker.svg']);
-    mockStat.mockImplementation(async (targetPath: string) => {
-      if (targetPath === '/store/icons/simple/stale.svg') {
-        return { mtimeMs: 0, size: 1024, isFile: () => true };
-      }
-      if (targetPath === '/store/icons/simple/nested') {
-        return { mtimeMs: Date.now(), size: 0, isFile: () => false };
-      }
-      if (targetPath === '/store/icons/simple/docker.svg') {
+    mockStat
+      .mockRejectedValueOnce(new Error('not found'))
+      .mockRejectedValueOnce(new Error('not found'))
+      .mockImplementation(async (targetPath: string) => {
+        if (targetPath === '/store/icons/simple/stale.svg') {
+          return { mtimeMs: 0, size: 1024, isFile: () => true };
+        }
+        if (targetPath === '/store/icons/simple/nested') {
+          return { mtimeMs: Date.now(), size: 0, isFile: () => false };
+        }
+        if (targetPath === '/store/icons/simple/docker.svg') {
+          return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
+        }
         return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
-      }
-      return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
-    });
+      });
     const handler = getHandler();
     const res = createResponse();
 
@@ -888,15 +911,18 @@ describe('Icons Router', () => {
     mockReaddir
       .mockResolvedValueOnce([{ name: 'simple', isDirectory: () => true }])
       .mockResolvedValueOnce(['stale.svg', 'docker.svg']);
-    mockStat.mockImplementation(async (targetPath: string) => {
-      if (targetPath === '/store/icons/simple/stale.svg') {
-        return { mtimeMs: 0, size: 1024, isFile: () => true };
-      }
-      if (targetPath === '/store/icons/simple/docker.svg') {
+    mockStat
+      .mockRejectedValueOnce(new Error('not found'))
+      .mockRejectedValueOnce(new Error('not found'))
+      .mockImplementation(async (targetPath: string) => {
+        if (targetPath === '/store/icons/simple/stale.svg') {
+          return { mtimeMs: 0, size: 1024, isFile: () => true };
+        }
+        if (targetPath === '/store/icons/simple/docker.svg') {
+          return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
+        }
         return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
-      }
-      return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
-    });
+      });
     mockUnlink.mockRejectedValue(new Error('permission denied'));
     const handler = getHandler();
     const res = createResponse();
@@ -925,15 +951,18 @@ describe('Icons Router', () => {
     mockReaddir
       .mockResolvedValueOnce([{ name: 'simple', isDirectory: () => true }])
       .mockResolvedValueOnce(['old.svg', 'docker.svg']);
-    mockStat.mockImplementation(async (targetPath: string) => {
-      if (targetPath === '/store/icons/simple/old.svg') {
-        return { mtimeMs: Date.now() - 1_000, size: 150 * 1024 * 1024, isFile: () => true };
-      }
-      if (targetPath === '/store/icons/simple/docker.svg') {
-        return { mtimeMs: Date.now(), size: 50 * 1024 * 1024, isFile: () => true };
-      }
-      return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
-    });
+    mockStat
+      .mockRejectedValueOnce(new Error('not found'))
+      .mockRejectedValueOnce(new Error('not found'))
+      .mockImplementation(async (targetPath: string) => {
+        if (targetPath === '/store/icons/simple/old.svg') {
+          return { mtimeMs: Date.now() - 1_000, size: 150 * 1024 * 1024, isFile: () => true };
+        }
+        if (targetPath === '/store/icons/simple/docker.svg') {
+          return { mtimeMs: Date.now(), size: 50 * 1024 * 1024, isFile: () => true };
+        }
+        return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
+      });
     mockUnlink.mockImplementation(async (targetPath: string) => {
       if (targetPath === '/store/icons/simple/old.svg') {
         throw new Error('unlink failed');
@@ -1076,10 +1105,75 @@ describe('Icons Router', () => {
 
     expect(res.status).not.toHaveBeenCalledWith(404);
     expect(res.json).not.toHaveBeenCalled();
-    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'public, max-age=31536000, immutable');
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'no-store');
     expect(res.type).toHaveBeenCalledWith('image/png');
     expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
       root: '/runtime/assets/icons/selfhst',
+    });
+  });
+
+  test('should use no-store cache headers for fallback images instead of immutable', async () => {
+    const upstreamError = Object.assign(new Error('not found'), {
+      response: { status: 404 },
+    });
+    mockAccess.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/runtime/assets/icons/selfhst/docker.png') {
+        return;
+      }
+      throw new Error('not found');
+    });
+    mockAxiosGet.mockRejectedValue(upstreamError);
+    mockAxiosIsAxiosError.mockReturnValue(true);
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'homarr',
+          slug: 'missing',
+        },
+        headers: {
+          'sec-fetch-dest': 'image',
+        },
+      },
+      res,
+    );
+
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    expect(res.set).not.toHaveBeenCalledWith(
+      'Cache-Control',
+      'public, max-age=31536000, immutable',
+    );
+    expect(res.type).toHaveBeenCalledWith('image/png');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
+      root: '/runtime/assets/icons/selfhst',
+    });
+  });
+
+  test('should use immutable cache headers for successfully cached icons', async () => {
+    mockStat.mockResolvedValue({
+      mtimeMs: Date.now(),
+      size: 1024,
+      isFile: () => true,
+    });
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'homarr',
+          slug: 'docker',
+        },
+      },
+      res,
+    );
+
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'public, max-age=31536000, immutable');
+    expect(res.type).toHaveBeenCalledWith('image/png');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
+      root: '/store/icons/homarr',
     });
   });
 

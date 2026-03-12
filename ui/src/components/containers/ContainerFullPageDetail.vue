@@ -29,13 +29,11 @@ const {
       class="shrink-0 mb-4 dd-rounded overflow-hidden"
       :style="{
         backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
       }">
       <div class="px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div class="flex items-center gap-4 min-w-0">
           <button
             class="flex items-center gap-2 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated shrink-0"
-            :style="{ border: '1px solid var(--dd-border-strong)' }"
             @click="closeFullPage">
             <AppIcon name="arrow-left" :size="11" />
             Back
@@ -116,7 +114,6 @@ const {
           <button
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
-            :style="{ border: '1px solid var(--dd-border-strong)' }"
             :disabled="actionInProgress === selectedContainer.name"
             aria-label="Restart container"
             @click="confirmRestart(selectedContainer.name)">
@@ -126,7 +123,6 @@ const {
           <button
             class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-semibold transition-colors"
             :class="actionInProgress === selectedContainer.name ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
-            :style="{ border: '1px solid var(--dd-border-strong)' }"
             :disabled="actionInProgress === selectedContainer.name"
             aria-label="Scan container"
             @click="scanContainer(selectedContainer.name)">

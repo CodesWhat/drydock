@@ -81,6 +81,20 @@ describe('icons/storage', () => {
     expect(mockUnlink).toHaveBeenCalledWith('/store/icons/simple/stale.svg');
   });
 
+  test('checks cached icon usability via stat without pre-access syscall', async () => {
+    mockStat.mockResolvedValue({
+      mtimeMs: Date.now(),
+      size: 1024,
+      isFile: () => true,
+    });
+
+    const usable = await isCachedIconUsable('/store/icons/simple/fresh.svg');
+
+    expect(usable).toBe(true);
+    expect(mockStat).toHaveBeenCalledWith('/store/icons/simple/fresh.svg');
+    expect(mockAccess).not.toHaveBeenCalled();
+  });
+
   test('evicts oldest cache entry when byte budget is exceeded', async () => {
     const nowSpy = vi.spyOn(Date, 'now');
     nowSpy.mockReturnValue(2_000_000_000_000);
@@ -130,6 +144,43 @@ describe('icons/storage', () => {
     }
 
     expect(mockUnlink).toHaveBeenCalledWith('/store/icons/simple/old.svg');
+    expect(mockUnlink).not.toHaveBeenCalledWith('/store/icons/simple/protected.svg');
+  });
+
+  test('ignores cache entries that fail stat between directory scan and stat call', async () => {
+    mockReaddir
+      .mockResolvedValueOnce([{ name: 'simple', isDirectory: () => true }])
+      .mockResolvedValueOnce(['vanished.svg', 'fresh.svg']);
+    mockStat.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/store/icons/simple/vanished.svg') {
+        throw new Error('ENOENT');
+      }
+      return { mtimeMs: Date.now(), size: 1024, isFile: () => true };
+    });
+
+    await enforceIconCacheLimits();
+
+    expect(mockUnlink).not.toHaveBeenCalledWith('/store/icons/simple/vanished.svg');
+  });
+
+  test('keeps protected cache entry when no other eviction candidate is available', async () => {
+    const nowSpy = vi.spyOn(Date, 'now');
+    nowSpy.mockReturnValue(2_000_000_000_000);
+    mockReaddir
+      .mockResolvedValueOnce([{ name: 'simple', isDirectory: () => true }])
+      .mockResolvedValueOnce(['protected.svg']);
+    mockStat.mockResolvedValue({
+      mtimeMs: Date.now() - 1_000,
+      size: 150 * 1024 * 1024,
+      isFile: () => true,
+    });
+
+    try {
+      await enforceIconCacheLimits({ protectedPath: '/store/icons/simple/protected.svg' });
+    } finally {
+      nowSpy.mockRestore();
+    }
+
     expect(mockUnlink).not.toHaveBeenCalledWith('/store/icons/simple/protected.svg');
   });
 

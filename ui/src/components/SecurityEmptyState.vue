@@ -33,7 +33,6 @@ defineEmits<{
       boxed
         ? {
             backgroundColor: 'var(--dd-bg-card)',
-            border: '1px solid var(--dd-border-strong)',
           }
         : undefined
     "

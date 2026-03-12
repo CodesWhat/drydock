@@ -54,7 +54,7 @@ export class AgentClient {
     let candidateUrl = `${this.config.host}:${port}`;
     // Add protocol if not present
     if (!candidateUrl.startsWith('http')) {
-      const useHttps = Boolean(this.config.certfile) || port === 443;
+      const useHttps = Boolean(this.config.certfile) || Boolean(this.config.cafile) || port === 443;
       candidateUrl = `http${useHttps ? 's' : ''}://${candidateUrl}`;
     }
     // Validate the URL to prevent request forgery (CodeQL js/request-forgery)
@@ -70,17 +70,17 @@ export class AgentClient {
       },
     };
 
-    if (this.config.certfile) {
+    if (this.config.certfile || this.config.cafile) {
       const caPath = this.config.cafile
         ? resolveConfiguredPath(this.config.cafile, { label: `${name} ca file` })
         : undefined;
-      const certPath = resolveConfiguredPath(this.config.certfile, {
-        label: `${name} cert file`,
-      });
+      const certPath = this.config.certfile
+        ? resolveConfiguredPath(this.config.certfile, { label: `${name} cert file` })
+        : undefined;
       const keyPath = this.config.keyfile
         ? resolveConfiguredPath(this.config.keyfile, { label: `${name} key file` })
         : undefined;
-      // Intentional: mTLS with optional self-signed CA for agent communication
+      // Intentional: custom CA / mTLS for agent communication
       // lgtm[js/disabling-certificate-validation]
       this.axiosOptions.httpsAgent = new https.Agent({
         ca: caPath ? fs.readFileSync(caPath) : undefined,

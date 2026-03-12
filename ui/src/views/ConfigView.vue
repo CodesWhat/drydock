@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { disableIconifyApi } from '../boot/icons';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
@@ -21,6 +21,7 @@ import { useTheme } from '../theme/useTheme';
 import { errorMessage } from '../utils/error';
 
 const route = useRoute();
+const router = useRouter();
 const { themeFamily, themeVariant, isDark, setThemeFamily, transitionTheme } = useTheme();
 
 // --- Border Radius ---
@@ -359,13 +360,13 @@ function handleSelectIconLibrary(library: string) {
 
 <template>
   <DataViewLayout>
-    <div class="flex gap-1 mb-6" :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+    <div class="flex gap-1 mb-6" :style="{ borderBottom: '1px solid var(--dd-border)' }">
       <button
         v-for="tab in settingsTabs"
         :key="tab.id"
         class="px-4 py-2.5 text-xs font-semibold transition-colors relative"
         :class="activeSettingsTab === tab.id ? 'text-drydock-secondary' : 'dd-text-muted hover:dd-text'"
-        @click="activeSettingsTab = tab.id"
+        @click="router.replace({ query: { tab: tab.id } })"
       >
         <AppIcon :name="tab.icon" :size="12" class="mr-1.5" />
         {{ tab.label }}

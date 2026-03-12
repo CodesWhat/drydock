@@ -171,7 +171,7 @@ onUnmounted(() => {
       <div
         v-if="!loading"
         class="w-full dd-rounded-lg overflow-hidden"
-        style="max-width: 420px; background-color: var(--dd-bg-card); border: 1px solid var(--dd-border-strong); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);"
+        style="max-width: 420px; background-color: var(--dd-bg-card); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);"
       >
       <div class="p-8">
         <!-- Logo -->
@@ -193,9 +193,9 @@ onUnmounted(() => {
         </div>
 
         <!-- Basic auth form -->
-        <form v-if="hasBasic" @submit.prevent="handleBasicLogin" class="space-y-4">
+        <form v-if="hasBasic" @submit.prevent="handleBasicLogin" class="space-y-5">
           <div>
-            <label class="block text-[0.6875rem] font-medium uppercase tracking-wider mb-1.5 dd-text-muted">
+            <label class="block text-[0.6875rem] font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
               Username
             </label>
             <input
@@ -203,14 +203,14 @@ onUnmounted(() => {
               type="text"
               autocomplete="username"
               required
-              class="w-full px-3 py-2 text-sm dd-rounded dd-text dd-placeholder outline-none transition-colors"
-              style="background-color: var(--dd-bg-inset); border: 1px solid var(--dd-border-strong);"
+              class="w-full px-3 py-2.5 text-sm dd-rounded dd-text dd-placeholder outline-none transition-colors"
+              style="background-color: var(--dd-bg-inset);"
               placeholder="Enter your username"
             />
           </div>
 
           <div>
-            <label class="block text-[0.6875rem] font-medium uppercase tracking-wider mb-1.5 dd-text-muted">
+            <label class="block text-[0.6875rem] font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
               Password
             </label>
             <input
@@ -218,8 +218,8 @@ onUnmounted(() => {
               type="password"
               autocomplete="current-password"
               required
-              class="w-full px-3 py-2 text-sm dd-rounded dd-text dd-placeholder outline-none transition-colors"
-              style="background-color: var(--dd-bg-inset); border: 1px solid var(--dd-border-strong);"
+              class="w-full px-3 py-2.5 text-sm dd-rounded dd-text dd-placeholder outline-none transition-colors"
+              style="background-color: var(--dd-bg-inset);"
               placeholder="Enter your password"
             />
           </div>
@@ -252,7 +252,7 @@ onUnmounted(() => {
             :key="strategy.name"
             type="button"
             class="flex items-center justify-center gap-2 py-2 text-xs font-medium dd-rounded dd-text-secondary transition-colors hover:dd-bg-elevated cursor-pointer"
-            style="background-color: var(--dd-bg-inset); border: 1px solid var(--dd-border-strong);"
+            style="background-color: var(--dd-bg-inset);"
             @click="handleOidc(strategy.name)"
           >
             <AppIcon :name="oidcIcon(strategy.name)" :size="13" />

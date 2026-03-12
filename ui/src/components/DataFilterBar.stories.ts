@@ -26,7 +26,7 @@ const renderWithFilters = (args: Story['args']) => ({
           <input
             type="text"
             placeholder="Filter by name..."
-            class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder"
+            class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder"
           />
           <button class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors">Clear</button>
         </template>

@@ -156,6 +156,41 @@ describe('event default audit listeners', () => {
     expect(mockInc).toHaveBeenCalledWith({ action: 'container-removed' });
   });
 
+  test('should record container-update audit with status details', async () => {
+    const event = await loadEventModule();
+
+    event.emitContainerUpdated({
+      name: 'nginx',
+      status: 'running',
+      image: { name: 'library/nginx' },
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'container-update',
+        containerName: 'nginx',
+        containerImage: 'library/nginx',
+        status: 'info',
+        details: 'status: running',
+      }),
+    );
+    expect(mockInc).toHaveBeenCalledWith({ action: 'container-update' });
+  });
+
+  test('should record container-update audit with id fallback and no status', async () => {
+    const event = await loadEventModule();
+
+    event.emitContainerUpdated({ id: 'abc123' });
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'container-update',
+        containerName: 'abc123',
+        details: undefined,
+      }),
+    );
+  });
+
   test('should record security-alert audits', async () => {
     const event = await loadEventModule();
 

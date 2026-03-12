@@ -304,7 +304,7 @@ onMounted(async () => {
         <input v-model="searchQuery"
                type="text"
                placeholder="Filter by name, description, or trigger..."
-               class="flex-1 min-w-[120px] max-w-[320px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
+               class="flex-1 min-w-[120px] max-w-[320px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
         <button v-if="searchQuery"
                 class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
                 @click="clearFilters">
@@ -382,7 +382,7 @@ onMounted(async () => {
           />
         </div>
         <div class="px-4 py-2.5 flex flex-wrap gap-1.5 mt-auto"
-             :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
+             :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
           <span v-for="triggerId in notif.triggers" :key="triggerId"
                 class="badge text-[0.5625rem] font-semibold"
                 :style="{ backgroundColor: 'var(--dd-neutral-muted)', color: 'var(--dd-text-secondary)' }">
@@ -491,7 +491,7 @@ onMounted(async () => {
               <div v-else class="space-y-2">
                 <label v-for="trigger in triggersSorted" :key="trigger.id"
                        class="flex items-center gap-2.5 px-2.5 py-2 dd-rounded cursor-pointer"
-                       :style="{ border: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-elevated)' }">
+                       :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
                   <input type="checkbox"
                          :checked="isTriggerSelected(trigger.id)"
                          :disabled="detailSaving"

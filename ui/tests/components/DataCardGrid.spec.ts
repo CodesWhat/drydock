@@ -61,10 +61,11 @@ describe('DataCardGrid', () => {
       expect(style).toContain('1.5px solid');
     });
 
-    it('applies normal border to unselected cards', () => {
+    it('applies no border to unselected cards', () => {
       const w = factory({ selectedKey: '1' });
-      const style = w.findAll('.container-card')[1].attributes('style');
-      expect(style).toContain('1px solid');
+      const style = w.findAll('.container-card')[1].attributes('style') ?? '';
+      expect(style).not.toContain('1px solid');
+      expect(style).not.toContain('1.5px solid');
     });
   });
 

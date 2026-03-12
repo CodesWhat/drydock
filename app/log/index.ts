@@ -37,9 +37,10 @@ function createMainLogStream() {
 }
 
 function createLogStreams() {
-  const streams: { stream: Writable }[] = [{ stream: createMainLogStream() }];
+  const level = getLogLevel();
+  const streams: { stream: Writable; level: string }[] = [{ stream: createMainLogStream(), level }];
   if (getLogBufferEnabled()) {
-    streams.push({ stream: bufferStream });
+    streams.push({ stream: bufferStream, level });
   }
   return streams;
 }

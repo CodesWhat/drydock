@@ -26,7 +26,7 @@ The trigger will:
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_FILE` | ⚪ | The docker-compose.yml file location (can also be set per container via the `dd.compose.file` label) | | |
+| `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_FILE` | ⚪ | The docker-compose.yml file location or directory (can also be set per container via the `dd.compose.file` label). When a directory is given, Drydock probes for `compose.yaml`, `compose.yml`, `docker-compose.yaml`, and `docker-compose.yml` in order. | | |
 | `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_BACKUP` | ⚪ | Backup the docker-compose.yml file as `.back` before updating? | `true`, `false` | `false` |
 | `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_PRUNE` | ⚪ | If the old image must be pruned after upgrade | `true`, `false` | `false` |
 | `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_DRYRUN` | ⚪ | When enabled, only pull the new image ahead of time | `true`, `false` | `false` |
@@ -38,6 +38,8 @@ The trigger will:
 | `DD_TRIGGER_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILEONCE` | ⚪ | Batch compose runtime refresh to one grouped pull/up pass per compose stack/file | `true`, `false` | `false` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). but only supports the `batch` mode.</Callout>
+
+<Callout type="info">The env var keys for `COMPOSEFILEONCE`, `COMPOSEFILELABEL`, `RECONCILIATIONMODE`, and `DIGESTPINNING` are case-insensitive — both the lowercased form (e.g. `composefileonce`) and the camelCase form (e.g. `composeFileOnce`) are accepted.</Callout>
 
 <Callout type="info">Legacy compatibility: compose file label fallback `wud.compose.file` is still accepted when `dd.compose.file` is not present. Prefer `dd.compose.file` for new configs, and use `node dist/index.js config migrate` to rewrite existing labels.</Callout>
 

@@ -53,17 +53,17 @@ const {
           v-model="filterSearch"
           type="text"
           placeholder="Search name or image..."
-          class="flex-1 min-w-[140px] max-w-[260px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
+          class="flex-1 min-w-[140px] max-w-[260px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
         <select
           v-model="filterStatus"
-          class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+          class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
           <option value="all">Status</option>
           <option value="running">Running</option>
           <option value="stopped">Stopped</option>
         </select>
         <select
           v-model="filterBouncer"
-          class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+          class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
           <option value="all">Bouncer</option>
           <option value="safe">Safe</option>
           <option value="unsafe">Unsafe</option>
@@ -71,7 +71,7 @@ const {
         </select>
         <select
           v-model="filterRegistry"
-          class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+          class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
           <option value="all">Registry</option>
           <option value="dockerhub">Docker Hub</option>
           <option value="ghcr">GHCR</option>
@@ -79,7 +79,7 @@ const {
         </select>
         <select
           v-model="filterServer"
-          class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+          class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
           <option value="all">Host</option>
           <option v-for="serverName in serverNames" :key="serverName" :value="serverName">
             {{ serverName }}
@@ -87,7 +87,7 @@ const {
         </select>
         <select
           v-model="filterKind"
-          class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong">
+          class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
           <option value="all">Update</option>
           <option value="any">Has Update</option>
           <option value="major">Major</option>
@@ -105,32 +105,29 @@ const {
       <template #extra-buttons>
         <div v-if="containerViewMode === 'table'">
           <button
-            class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors border"
-            :class="showColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
-            :style="{ borderColor: 'var(--dd-border-strong)' }"
+            class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors"
+            :class="showColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
             v-tooltip.top="tt('Toggle columns')"
             @click.stop="toggleColumnPicker($event)">
-            <AppIcon name="config" :size="10" />
+            <AppIcon name="config" :size="12" />
           </button>
         </div>
       </template>
       <template #left>
         <button
-          class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors border"
-          :class="groupByStack ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
-          :style="{ borderColor: groupByStack ? 'var(--dd-primary)' : 'var(--dd-border-strong)' }"
+          class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors"
+          :class="groupByStack ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
           v-tooltip.top="tt('Group by stack')"
           @click="groupByStack = !groupByStack">
-          <AppIcon name="stack" :size="11" />
+          <AppIcon name="stack" :size="13" />
         </button>
         <button
-          class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors border"
-          :class="rechecking ? 'dd-text-muted cursor-wait' : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
-          :style="{ borderColor: 'var(--dd-border-strong)' }"
+          class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors"
+          :class="rechecking ? 'dd-text-muted cursor-wait' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
           :disabled="rechecking"
           v-tooltip.top="tt('Recheck for updates')"
           @click="recheckAll">
-          <AppIcon name="restart" :size="11" :class="{ 'animate-spin': rechecking }" />
+          <AppIcon name="restart" :size="13" :class="{ 'animate-spin': rechecking }" />
         </button>
       </template>
     </DataFilterBar>

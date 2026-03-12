@@ -5,6 +5,10 @@ import viteConfig from './vite.config';
 export default mergeConfig(
   viteConfig,
   defineConfig({
+    server: {
+      port: 0,
+      hmr: false,
+    },
     resolve: {
       alias: {
         '@vue/devtools-api': fileURLToPath(

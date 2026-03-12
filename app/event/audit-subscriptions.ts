@@ -31,6 +31,7 @@ export interface AuditSubscriptionRegistrars {
   registerSecurityAlert: OrderedEventRegistrarFn<SecurityAlertEventPayload>;
   registerAgentDisconnected: OrderedEventRegistrarFn<AgentDisconnectedEventPayload>;
   registerContainerAdded: EventRegistrarFn<ContainerLifecycleEventPayload>;
+  registerContainerUpdated: EventRegistrarFn<ContainerLifecycleEventPayload>;
   registerContainerRemoved: EventRegistrarFn<ContainerLifecycleEventPayload>;
 }
 
@@ -163,6 +164,19 @@ export function registerAuditLogSubscriptions(registrars: AuditSubscriptionRegis
       status: 'info',
     });
     getAuditCounter()?.inc({ action: 'container-added' });
+  });
+
+  registrars.registerContainerUpdated((containerUpdated) => {
+    auditStore.insertAudit({
+      id: '',
+      timestamp: new Date().toISOString(),
+      action: 'container-update',
+      containerName: containerUpdated.name || containerUpdated.id || '',
+      containerImage: containerUpdated.image?.name,
+      status: 'info',
+      details: containerUpdated.status ? `status: ${containerUpdated.status}` : undefined,
+    });
+    getAuditCounter()?.inc({ action: 'container-update' });
   });
 
   registrars.registerContainerRemoved((containerRemoved) => {

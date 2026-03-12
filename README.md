@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.4.0-blue" alt="Version"></a>
-  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-30K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
+  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-32K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
   <a href="https://quay.io/repository/codeswhat/drydock"><img src="https://img.shields.io/badge/Quay.io-image-ee0000?logo=redhat&logoColor=white" alt="Quay.io"></a>
   <br>
@@ -52,7 +52,7 @@
 
 - [📖 Documentation](https://drydock.codeswhat.com/docs)
 - [🚀 Quick Start](#quick-start)
-- [📸 Screenshots](#screenshots)
+- [📸 Screenshots & Live Demo](#screenshots)
 - [✨ Features](#features)
 - [🔌 Supported Integrations](#supported-integrations)
 - [⚖️ Feature Comparison](#feature-comparison)
@@ -61,6 +61,7 @@
 - [📖 Documentation](#documentation)
 - [⭐ Star History](#star-history)
 - [🔧 Built With](#built-with)
+- [🤝 Community QA](#community-qa)
 
 <hr>
 
@@ -82,7 +83,7 @@ docker run -d \
 > node -e 'const c=require("node:crypto");const s=c.randomBytes(32);const h=c.argon2Sync("argon2id",{message:process.argv[1],nonce:s,memory:65536,passes:3,parallelism:4,tagLength:64});console.log("argon2id$65536$3$4$"+s.toString("base64")+"$"+h.toString("base64"));' "yourpassword"
 > ```
 >
-> Legacy `{SHA}` hashes are accepted but deprecated (removed in v1.6.0). MD5/crypt/plain htpasswd hashes are not supported.
+> Legacy v1.3.9 Basic auth hashes (`{SHA}`, `$apr1$`/`$1$`, `crypt`, and plain) are accepted for upgrade compatibility but deprecated (removed in v1.6.0). Argon2id is recommended for all new configurations.
 > Authentication is **required by default**. See the [auth docs](https://drydock.codeswhat.com/docs/configuration/authentications) for OIDC, anonymous access, and other options.
 > To explicitly allow anonymous access on fresh installs, set `DD_ANONYMOUS_AUTH_CONFIRM=true`.
 
@@ -92,10 +93,8 @@ See the [Quick Start guide](https://drydock.codeswhat.com/docs/quickstart) for D
 
 <hr>
 
-<h2 align="center" id="screenshots">📸 Screenshots</h2>
+<h2 align="center" id="screenshots">📸 Screenshots & Live Demo</h2>
 
-<details open>
-<summary><strong>Dashboard</strong></summary>
 <table>
 <tr>
 <td width="50%" align="center"><strong>Light</strong></td>
@@ -106,81 +105,16 @@ See the [Quick Start guide](https://drydock.codeswhat.com/docs/quickstart) for D
 <td><img src="docs/assets/drydock-dashboard-dark.png" alt="Dashboard Dark"></td>
 </tr>
 </table>
-</details>
 
-<details>
-<summary><strong>Containers</strong></summary>
-<table>
-<tr>
-<td width="50%" align="center"><strong>Light</strong></td>
-<td width="50%" align="center"><strong>Dark</strong></td>
-</tr>
-<tr>
-<td><img src="docs/assets/drydock-containers-light.png" alt="Containers Light"></td>
-<td><img src="docs/assets/drydock-containers-dark.png" alt="Containers Dark"></td>
-</tr>
-</table>
-</details>
+<div align="center">
 
-<details>
-<summary><strong>Container Detail</strong></summary>
-<table>
-<tr>
-<td width="50%" align="center"><strong>Light</strong></td>
-<td width="50%" align="center"><strong>Dark</strong></td>
-</tr>
-<tr>
-<td><img src="docs/assets/drydock-container-detail-light.png" alt="Container Detail Light"></td>
-<td><img src="docs/assets/drydock-container-detail-dark.png" alt="Container Detail Dark"></td>
-</tr>
-</table>
-</details>
+**Why look at screenshots when you can experience it yourself?**
 
-<details>
-<summary><strong>Security</strong></summary>
-<table>
-<tr>
-<td width="50%" align="center"><strong>Light</strong></td>
-<td width="50%" align="center"><strong>Dark</strong></td>
-</tr>
-<tr>
-<td><img src="docs/assets/drydock-security-light.png" alt="Security Light"></td>
-<td><img src="docs/assets/drydock-security-dark.png" alt="Security Dark"></td>
-</tr>
-</table>
-</details>
+<a href="https://demo.drydock.codeswhat.com"><img src="https://img.shields.io/badge/Try_the_Live_Demo-4f46e5?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlnb24gcG9pbnRzPSI2IDMgMjAgMTIgNiAyMSA2IDMiLz48L3N2Zz4=&logoColor=white" alt="Try the Live Demo" height="36"></a>
 
-<details>
-<summary><strong>Login</strong></summary>
-<table>
-<tr>
-<td width="50%" align="center"><strong>Light</strong></td>
-<td width="50%" align="center"><strong>Dark</strong></td>
-</tr>
-<tr>
-<td><img src="docs/assets/drydock-login-light.png" alt="Login Light"></td>
-<td><img src="docs/assets/drydock-login-dark.png" alt="Login Dark"></td>
-</tr>
-</table>
-</details>
+Fully interactive — real UI, mock data, no install required. Runs entirely in-browser.
 
-<details>
-<summary><strong>Mobile Responsive</strong></summary>
-<table>
-<tr>
-<td width="25%" align="center"><strong>Dashboard Light</strong></td>
-<td width="25%" align="center"><strong>Dashboard Dark</strong></td>
-<td width="25%" align="center"><strong>Containers Light</strong></td>
-<td width="25%" align="center"><strong>Containers Dark</strong></td>
-</tr>
-<tr>
-<td><img src="docs/assets/drydock-mobile-dashboard-light.png" alt="Mobile Dashboard Light"></td>
-<td><img src="docs/assets/drydock-mobile-dashboard-dark.png" alt="Mobile Dashboard Dark"></td>
-<td><img src="docs/assets/drydock-mobile-containers-light.png" alt="Mobile Containers Light"></td>
-<td><img src="docs/assets/drydock-mobile-containers-dark.png" alt="Mobile Containers Dark"></td>
-</tr>
-</table>
-</details>
+</div>
 
 <hr>
 
@@ -388,6 +322,7 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 | Resource | Link |
 | --- | --- |
 | Website | [drydock.codeswhat.com](https://drydock.codeswhat.com/) |
+| Live Demo | [demo.drydock.codeswhat.com](https://demo.drydock.codeswhat.com) |
 | Docs | [drydock.codeswhat.com/docs](https://drydock.codeswhat.com/docs) |
 | Configuration | [Configuration](https://drydock.codeswhat.com/docs/configuration) |
 | Quick Start | [Quick Start](https://drydock.codeswhat.com/docs/quickstart) |
@@ -430,6 +365,12 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 [![Node 24](https://img.shields.io/badge/Node_24_Alpine-339933?logo=nodedotjs&logoColor=fff)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=fff)](https://www.docker.com/)
 [![Anthropic](https://img.shields.io/badge/Anthropic-000000?style=flat&logo=anthropic&logoColor=white)](https://claude.ai/)
+
+### Community QA
+
+Thanks to the users who helped test v1.4.0 release candidates and reported bugs:
+
+[@RK62](https://github.com/RK62) &middot; [@flederohr](https://github.com/flederohr) &middot; [@rj10rd](https://github.com/rj10rd) &middot; [@larueli](https://github.com/larueli) &middot; [@Waler](https://github.com/Waler) &middot; [@ElVit](https://github.com/ElVit) &middot; [@nchieffo](https://github.com/nchieffo)
 
 ---
 

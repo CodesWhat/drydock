@@ -25,6 +25,8 @@ const props = withDefaults(
     virtualRowHeight?: number;
     virtualOverscan?: number;
     virtualMaxHeight?: string;
+    /** Optional max-height for scroll area when virtualScroll is false (e.g., '340px') */
+    maxHeight?: string;
   }>(),
   {
     showActions: false,
@@ -318,20 +320,20 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
 
 <template>
   <div class="dd-rounded overflow-hidden"
-       :style="{ border: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-bg-card)' }">
+       :style="{ backgroundColor: 'var(--dd-bg-card)' }">
     <div
       ref="scrollViewportRef"
       class="overflow-x-auto"
-      :class="virtualScroll ? 'overflow-y-auto' : 'overflow-y-visible'"
+      :class="virtualScroll || maxHeight ? 'overflow-y-auto' : 'overflow-y-visible'"
       :data-test="virtualScroll ? 'data-table-scroll' : undefined"
-      :style="virtualScroll ? { maxHeight: virtualMaxHeight } : {}"
+      :style="virtualScroll ? { maxHeight: virtualMaxHeight } : maxHeight ? { maxHeight } : {}"
       @scroll="handleVirtualScroll">
       <table
         ref="tableRef"
         class="w-full text-xs"
-        :style="Object.keys(colWidths).length > 0 ? { tableLayout: 'fixed' } : {}">
+        :style="{ borderCollapse: 'separate', borderSpacing: '0', ...(Object.keys(colWidths).length > 0 ? { tableLayout: 'fixed' } : {}) }">
         <thead>
-          <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+          <tr :style="{ backgroundColor: 'var(--dd-bg-inset)', borderBottom: 'none' }">
             <th v-for="(col, colIdx) in columns" :key="col.key"
                 :data-col-key="col.key"
                 :class="[
@@ -384,7 +386,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                 backgroundColor: selectedKey != null && getRowKey(row, rowKey) === selectedKey
                   ? 'var(--dd-bg-elevated)'
                   : (rowAbsoluteIndex(i) % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)'),
-                borderBottom: rowAbsoluteIndex(i) < rows.length - 1 ? '1px solid var(--dd-border-strong)' : 'none',
+                borderBottom: 'none',
               }"
               tabindex="0"
               @keydown="handleRowKeydown($event, row)"

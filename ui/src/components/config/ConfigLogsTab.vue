@@ -72,7 +72,6 @@ function asEntry(entry: unknown): AppLogEntry {
       class="dd-rounded overflow-hidden flex flex-col flex-1 min-h-0"
       :style="{
         backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
       }"
     >
       <div class="p-5 flex flex-col flex-1 min-h-0 gap-4">
@@ -85,7 +84,6 @@ function asEntry(entry: unknown): AppLogEntry {
           container-class="dd-rounded overflow-auto flex-1 min-h-0 font-mono text-[0.6875rem]"
           :container-style="{
             backgroundColor: 'var(--dd-bg-inset)',
-            border: '1px solid var(--dd-border-strong)',
           }"
           @container-ready="(element) => emit('set-log-container', element)"
           @scroll="emit('log-scroll')"
@@ -94,7 +92,7 @@ function asEntry(entry: unknown): AppLogEntry {
             <div class="flex flex-wrap items-center gap-2">
               <select
                 v-model="logLevelFilterModel"
-                class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong"
+                class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
               >
                 <option value="all">All Levels</option>
                 <option value="debug">Debug</option>
@@ -105,7 +103,7 @@ function asEntry(entry: unknown): AppLogEntry {
 
               <select
                 v-model.number="tailModel"
-                class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong"
+                class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
               >
                 <option :value="50">Tail 50</option>
                 <option :value="100">Tail 100</option>
@@ -115,7 +113,7 @@ function asEntry(entry: unknown): AppLogEntry {
 
               <select
                 v-model.number="autoFetchIntervalModel"
-                class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide border outline-none cursor-pointer dd-bg dd-text dd-border-strong"
+                class="px-2 py-1.5 dd-rounded text-[0.6875rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
               >
                 <option v-for="opt in props.autoFetchOptions" :key="opt.value" :value="opt.value">
                   {{ opt.label }}
@@ -126,7 +124,7 @@ function asEntry(entry: unknown): AppLogEntry {
                 v-model="componentFilterModel"
                 type="text"
                 placeholder="Filter by component..."
-                class="flex-1 min-w-[180px] max-w-[280px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-placeholder dd-border-strong"
+                class="flex-1 min-w-[180px] max-w-[280px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder"
                 @keyup.enter="emit('refresh')"
               />
 
@@ -167,7 +165,7 @@ function asEntry(entry: unknown): AppLogEntry {
           <template #entry="{ entry, index }">
             <div
               class="px-3 py-2 flex gap-3 items-start"
-              :style="{ borderBottom: index < props.entries.length - 1 ? '1px solid var(--dd-border)' : 'none' }"
+              :style="{ backgroundColor: index % 2 === 0 ? 'var(--dd-bg-inset)' : 'var(--dd-bg-card)' }"
             >
               <span class="shrink-0 tabular-nums dd-text-muted">{{ props.formatTimestamp(asEntry(entry).timestamp) }}</span>
               <span class="shrink-0 uppercase font-semibold" :style="{ color: props.levelColor(asEntry(entry).level) }">
@@ -182,7 +180,7 @@ function asEntry(entry: unknown): AppLogEntry {
             <div
               v-if="props.scrollBlocked && props.autoFetchInterval > 0"
               class="flex items-center justify-between px-3 py-2 text-[0.625rem]"
-              :style="{ borderTop: '1px solid var(--dd-border-strong)', backgroundColor: 'var(--dd-warning-muted)' }"
+              :style="{ backgroundColor: 'var(--dd-warning-muted)' }"
             >
               <span class="font-semibold" :style="{ color: 'var(--dd-warning)' }">Auto-scroll paused</span>
               <button

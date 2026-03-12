@@ -20,7 +20,6 @@ defineEmits<{
   <div class="flex flex-col items-center justify-center py-16 dd-rounded"
        :style="{
          backgroundColor: 'var(--dd-bg-card)',
-         border: '1px solid var(--dd-border-strong)',
        }">
     <AppIcon :name="icon" :size="24" class="mb-3 dd-text-muted" />
     <p class="text-sm font-medium mb-1 dd-text-secondary">

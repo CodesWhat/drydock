@@ -105,10 +105,6 @@ const {
           :style="{
             ...widgetOrderStyle(stat.id),
             backgroundColor: 'var(--dd-bg-card)',
-            borderTop: '1px solid var(--dd-border-strong)',
-            borderRight: '1px solid var(--dd-border-strong)',
-            borderBottom: '1px solid var(--dd-border-strong)',
-            borderLeft: `4px solid ${stat.color}`,
           }"
           @click="stat.route && navigateTo(stat.route)"
           @dragstart="onWidgetDragStart(stat.id, $event)"
@@ -147,14 +143,13 @@ const {
              :style="{
                ...widgetOrderStyle('recent-updates'),
                backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
              }"
              @dragstart="onWidgetDragStart('recent-updates', $event)"
              @dragover="onWidgetDragOver('recent-updates', $event)"
              @drop="onWidgetDrop('recent-updates', $event)"
              @dragend="onWidgetDragEnd">
           <div class="flex items-center justify-between px-5 py-3.5"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ borderBottom: '1px solid var(--dd-border)' }">
             <div class="flex items-center gap-2">
               <AppIcon name="recent-updates" :size="14" class="text-drydock-secondary" />
               <h2 class="text-xs font-semibold dd-text">
@@ -165,112 +160,91 @@ const {
                     @click="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })">View all &rarr;</button>
           </div>
 
-          <div>
-            <table class="w-full text-xs table-fixed">
-              <colgroup>
-                <col class="w-12" />
-                <col />
-                <col />
-                <col class="w-16 sm:w-24" />
-              </colgroup>
-              <thead>
-                <tr :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <th class="px-0 py-2.5" />
-                  <th class="text-left px-3 py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] dd-text-muted">Container</th>
-                  <th class="text-left px-2 sm:px-5 py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] dd-text-muted">Version</th>
-                  <th class="text-center px-1 sm:px-3 py-2.5 font-semibold uppercase tracking-wider text-[0.625rem] dd-text-muted">
-                    <span class="hidden sm:inline">Type</span>
-                    <span class="sm:hidden inline-flex items-center justify-center"><AppIcon name="info" :size="12" /></span>
-                  </th>
-                </tr>
-              </thead>
-            </table>
-            <div class="sm:overflow-y-auto sm:max-h-[340px]">
-            <table class="w-full text-xs table-fixed">
-              <colgroup>
-                <col class="w-12" />
-                <col />
-                <col />
-                <col class="w-16 sm:w-24" />
-              </colgroup>
-              <tbody>
-                <tr v-for="(row, i) in recentUpdates" :key="row.id"
-                    :data-update-status="row.status"
-                    class="transition-colors hover:dd-bg-elevated"
-                    :style="{ borderBottom: i < recentUpdates.length - 1 ? '1px solid var(--dd-border-strong)' : 'none' }">
-                  <td class="px-0 py-3">
-                    <div class="flex items-center justify-center">
-                      <ContainerIcon :icon="row.icon" :size="28" />
-                    </div>
-                  </td>
-                  <td class="px-3 py-3 align-middle">
-                    <div class="font-medium dd-text leading-tight">{{ row.name }}</div>
-                    <div class="text-[0.625rem] dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
-                    <div v-if="row.registryError" class="text-[0.625rem] mt-0.5 truncate" style="color: var(--dd-danger);">
-                      {{ row.registryError }}
-                    </div>
-                    <a
-                      v-if="row.releaseLink"
-                      :href="row.releaseLink"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="text-[0.625rem] mt-0.5 inline-flex underline hover:no-underline"
-                      style="color: var(--dd-info);"
-                    >
-                      Release notes
-                    </a>
-                  </td>
-                  <td class="px-2 sm:px-5 py-3 align-middle overflow-hidden">
-                    <!-- Desktop: horizontal old → new -->
-                    <div class="hidden sm:flex items-center justify-center gap-1.5 min-w-0">
-                      <span class="text-[0.6875rem] dd-text-secondary truncate max-w-[100px]" v-tooltip.top="row.oldVer">
-                        {{ row.oldVer }}
-                      </span>
-                      <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
-                      <span class="text-[0.6875rem] font-semibold truncate max-w-[120px]"
-                            :style="{ color: getUpdateKindColor(row.updateKind) }">
-                        {{ row.newVer }}
-                      </span>
-                    </div>
-                    <!-- Mobile: stacked old ↓ new -->
-                    <div class="flex sm:hidden flex-col items-start gap-0.5 min-w-0">
-                      <span class="text-[0.5625rem] dd-text-secondary break-all leading-tight">
-                        {{ row.oldVer }}
-                      </span>
-                      <span class="text-[0.5625rem] font-semibold break-all leading-tight"
-                            :style="{ color: getUpdateKindColor(row.updateKind) }">
-                        {{ row.newVer }}
-                      </span>
-                    </div>
-                  </td>
-                  <td class="px-1 sm:px-3 py-3 text-center align-middle">
-                    <span class="badge px-1.5 py-0 text-[0.5625rem] sm:!hidden"
-                          :style="{
-                            backgroundColor: getUpdateKindMutedColor(row.updateKind),
-                            color: getUpdateKindColor(row.updateKind),
-                          }">
-                      <AppIcon :name="getUpdateKindIcon(row.updateKind)" :size="12" />
-                    </span>
-                    <span class="badge max-sm:!hidden"
-                          :style="{
-                            backgroundColor: getUpdateKindMutedColor(row.updateKind),
-                            color: getUpdateKindColor(row.updateKind),
-                          }">
-                      <AppIcon :name="getUpdateKindIcon(row.updateKind)"
-                         :size="12" class="mr-1" />
-                      {{ row.updateKind ?? 'unknown' }}
-                    </span>
-                  </td>
-                </tr>
-                <tr v-if="recentUpdates.length === 0">
-                  <td colspan="4" class="px-4 py-6 text-center text-[0.6875rem] dd-text-muted">
-                    No updates available
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            </div>
-          </div>
+          <DataTable
+            :columns="[
+              { key: 'icon', label: '', icon: true },
+              { key: 'container', label: 'Container', sortable: false },
+              { key: 'version', label: 'Version', sortable: false, align: 'text-left' },
+              { key: 'type', label: 'Type', sortable: false },
+            ]"
+            :rows="recentUpdates"
+            row-key="id"
+            compact
+            max-height="340px"
+          >
+            <template #cell-icon="{ row }">
+              <ContainerIcon :icon="row.icon" :size="28" />
+            </template>
+
+            <template #cell-container="{ row }">
+              <div class="font-medium dd-text leading-tight">{{ row.name }}</div>
+              <div class="text-[0.625rem] dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
+              <div v-if="row.registryError" class="text-[0.625rem] mt-0.5 truncate" style="color: var(--dd-danger);">
+                {{ row.registryError }}
+              </div>
+              <a
+                v-if="row.releaseLink"
+                :href="row.releaseLink"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="text-[0.625rem] mt-0.5 inline-flex underline hover:no-underline"
+                style="color: var(--dd-info);"
+              >
+                Release notes
+              </a>
+            </template>
+
+            <template #cell-version="{ row }">
+              <!-- Desktop: horizontal old → new -->
+              <div class="hidden sm:flex items-center justify-start gap-1.5 min-w-0">
+                <span class="text-[0.6875rem] dd-text-secondary truncate max-w-[100px]" v-tooltip.top="row.oldVer">
+                  {{ row.oldVer }}
+                </span>
+                <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
+                <span class="text-[0.6875rem] font-semibold truncate max-w-[120px]"
+                      :style="{ color: getUpdateKindColor(row.updateKind) }">
+                  {{ row.newVer }}
+                </span>
+              </div>
+              <!-- Mobile: stacked old ↓ new -->
+              <div class="flex sm:hidden flex-col items-start gap-0.5 min-w-0">
+                <span class="text-[0.5625rem] dd-text-secondary break-all leading-tight">
+                  {{ row.oldVer }}
+                </span>
+                <span class="text-[0.5625rem] font-semibold break-all leading-tight"
+                      :style="{ color: getUpdateKindColor(row.updateKind) }">
+                  {{ row.newVer }}
+                </span>
+              </div>
+            </template>
+
+            <template #cell-type="{ row }">
+              <!-- Mobile: icon-only badge -->
+              <span class="badge px-1.5 py-0 text-[0.5625rem] sm:!hidden"
+                    :style="{
+                      backgroundColor: getUpdateKindMutedColor(row.updateKind),
+                      color: getUpdateKindColor(row.updateKind),
+                    }">
+                <AppIcon :name="getUpdateKindIcon(row.updateKind)" :size="12" />
+              </span>
+              <!-- Desktop: icon + text badge -->
+              <span class="badge max-sm:!hidden"
+                    :style="{
+                      backgroundColor: getUpdateKindMutedColor(row.updateKind),
+                      color: getUpdateKindColor(row.updateKind),
+                    }">
+                <AppIcon :name="getUpdateKindIcon(row.updateKind)"
+                   :size="12" class="mr-1" />
+                {{ row.updateKind ?? 'unknown' }}
+              </span>
+            </template>
+
+            <template #empty>
+              <div class="px-4 py-6 text-center text-[0.6875rem] dd-text-muted">
+                No updates available
+              </div>
+            </template>
+          </DataTable>
         </div>
 
         <!-- Security Summary Widget (1/3) -->
@@ -284,14 +258,13 @@ const {
              :style="{
                ...widgetOrderStyle('security-overview'),
                backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
              }"
              @dragstart="onWidgetDragStart('security-overview', $event)"
              @dragover="onWidgetDragOver('security-overview', $event)"
              @drop="onWidgetDrop('security-overview', $event)"
              @dragend="onWidgetDragEnd">
           <div class="flex items-center justify-between px-5 py-3.5"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ borderBottom: '1px solid var(--dd-border)' }">
             <div class="flex items-center gap-2">
               <AppIcon name="security" :size="14" class="text-drydock-accent" />
               <h2 class="text-xs font-semibold dd-text">
@@ -380,7 +353,7 @@ const {
               </div>
             </div>
 
-            <div class="mb-4" :style="{ borderTop: '1px solid var(--dd-border-strong)' }" />
+            <div class="mb-4" :style="{ borderTop: '1px solid var(--dd-border)' }" />
 
             <!-- Top vulnerabilities -->
             <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-3 dd-text-muted">
@@ -439,14 +412,13 @@ const {
              :style="{
                ...widgetOrderStyle('host-status'),
                backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
              }"
              @dragstart="onWidgetDragStart('host-status', $event)"
              @dragover="onWidgetDragOver('host-status', $event)"
              @drop="onWidgetDrop('host-status', $event)"
              @dragend="onWidgetDragEnd">
           <div class="flex items-center justify-between px-5 py-3.5"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ borderBottom: '1px solid var(--dd-border)' }">
             <div class="flex items-center gap-2">
               <AppIcon name="servers" :size="14" class="text-drydock-secondary" />
               <h2 class="text-sm font-semibold dd-text">
@@ -505,14 +477,13 @@ const {
              :style="{
                ...widgetOrderStyle('update-breakdown'),
                backgroundColor: 'var(--dd-bg-card)',
-               border: '1px solid var(--dd-border-strong)',
              }"
              @dragstart="onWidgetDragStart('update-breakdown', $event)"
              @dragover="onWidgetDragOver('update-breakdown', $event)"
              @drop="onWidgetDrop('update-breakdown', $event)"
              @dragend="onWidgetDragEnd">
           <div class="flex items-center justify-between px-5 py-3.5"
-               :style="{ borderBottom: '1px solid var(--dd-border-strong)' }">
+               :style="{ borderBottom: '1px solid var(--dd-border)' }">
             <div class="flex items-center gap-2">
               <AppIcon name="updates" :size="14" class="text-drydock-secondary" />
               <h2 class="text-sm font-semibold dd-text">

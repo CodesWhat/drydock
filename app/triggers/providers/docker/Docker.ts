@@ -807,7 +807,7 @@ class Docker extends Trigger {
         const oldImage = registry.getImageFullName(container.image, container.image.digest.repo);
         await this.removeImage(dockerApi, oldImage, logContainer);
       } catch (e) {
-        logContainer.debug(`Unable to remove previous digest image (${e.message})`);
+        logContainer.warn(`Unable to remove previous digest image (${e.message})`);
       }
     }
   }

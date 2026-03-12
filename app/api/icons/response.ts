@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { providers } from './providers.js';
 import {
   CACHE_CONTROL_HEADER,
+  FALLBACK_CACHE_CONTROL_HEADER,
   FALLBACK_ICON,
   FALLBACK_IMAGE_PROVIDER,
   FALLBACK_IMAGE_SLUG,
@@ -50,7 +51,9 @@ async function sendMissingIconResponse({
       providers[FALLBACK_IMAGE_PROVIDER].extension,
     );
     if (fallbackPath) {
-      sendCachedIcon(res, fallbackPath, providers[FALLBACK_IMAGE_PROVIDER].contentType);
+      res.set('Cache-Control', FALLBACK_CACHE_CONTROL_HEADER);
+      res.type(providers[FALLBACK_IMAGE_PROVIDER].contentType);
+      res.sendFile(path.basename(fallbackPath), { root: path.dirname(fallbackPath) });
       return;
     }
   }

@@ -6,6 +6,7 @@ import {
   registerWatcherStop,
 } from '../../../event/index.js';
 import log from '../../../log/index.js';
+import * as containerStore from '../../../store/container.js';
 import Hass from './Hass.js';
 
 const MOCK_VERSION = '1.4.0-test';
@@ -95,7 +96,7 @@ test('publishDiscoveryMessage must publish a discovery message expected by HA', 
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'my/state',
       myOption: true,
     }),
@@ -124,7 +125,7 @@ test('addContainerSensor must publish sensor discovery message expected by HA', 
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/watcher-name/container-name',
       force_update: true,
       value_template: '{{ value_json.image_tag_value }}',
@@ -135,6 +136,114 @@ test('addContainerSensor must publish sensor discovery message expected by HA', 
     }),
     { retain: true },
   );
+});
+
+test.each([
+  {
+    displayIcon: 'sh:nextcloud',
+    expectedPicture: 'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+  },
+  {
+    displayIcon: 'hl:nextcloud',
+    expectedPicture: 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/nextcloud.png',
+  },
+  {
+    displayIcon: 'si:nextcloud',
+    expectedPicture: 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/nextcloud.svg',
+  },
+  {
+    displayIcon: 'sh:   ',
+    expectedPicture:
+      'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
+  },
+])('addContainerSensor should map $displayIcon to entity_picture URL', async ({
+  displayIcon,
+  expectedPicture,
+}) => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon,
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe(expectedPicture);
+});
+
+test('addContainerSensor should use direct URL icon as entity_picture', async () => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'https://example.com/custom/icon.png',
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe('https://example.com/custom/icon.png');
+});
+
+test('addContainerSensor should strip file extension from icon slug', async () => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'sh:nextcloud.png',
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe(
+    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+  );
+});
+
+test('addContainerSensor should ignore empty dd.display.picture', async () => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'sh:nextcloud',
+    labels: {
+      'dd.display.picture': '   ',
+    },
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe(
+    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+  );
+});
+
+test('addContainerSensor should ignore non-URL dd.display.picture', async () => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'sh:nextcloud',
+    labels: {
+      'dd.display.picture': 'not-a-url',
+    },
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe(
+    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+  );
+});
+
+test('addContainerSensor should prefer dd.display.picture over icon-derived entity_picture', async () => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'sh:nextcloud',
+    labels: {
+      'dd.display.picture': 'https://images.example.com/nextcloud.png',
+    },
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe('https://images.example.com/nextcloud.png');
 });
 
 test.each(
@@ -180,7 +289,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/total_count',
     }),
     { retain: true },
@@ -202,7 +311,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/update_count',
     }),
     { retain: true },
@@ -224,7 +333,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/update_status',
       payload_on: 'true',
       payload_off: 'false',
@@ -248,7 +357,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/watcher-name/total_count',
     }),
     { retain: true },
@@ -270,7 +379,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/watcher-name/update_count',
     }),
     { retain: true },
@@ -292,7 +401,7 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/watcher-name/update_status',
       payload_on: 'true',
       payload_off: 'false',
@@ -347,6 +456,26 @@ test.each(containerData)('updateContainerSensors must publish all sensors expect
   );
 });
 
+test('updateContainerSensors should use container count queries instead of full list cloning', async () => {
+  const getContainersSpy = vi.spyOn(containerStore, 'getContainers');
+  const getContainerCountSpy = vi.spyOn(containerStore, 'getContainerCount');
+
+  await hass.updateContainerSensors({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(getContainerCountSpy).toHaveBeenCalledWith();
+  expect(getContainerCountSpy).toHaveBeenCalledWith({ updateAvailable: true });
+  expect(getContainerCountSpy).toHaveBeenCalledWith({ watcher: 'watcher-name' });
+  expect(getContainerCountSpy).toHaveBeenCalledWith({
+    watcher: 'watcher-name',
+    updateAvailable: true,
+  });
+  expect(getContainersSpy).not.toHaveBeenCalled();
+});
+
 test.each(
   containerData,
 )('removeContainerSensor must publish all sensor removal messages expected by HA', async ({
@@ -385,7 +514,7 @@ test('updateWatcherSensors must publish all watcher sensor messages expected by 
       },
       icon: 'mdi:docker',
       entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/drydock.png',
+        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/watcher-name/running',
       payload_on: 'true',
       payload_off: 'false',

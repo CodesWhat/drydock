@@ -466,7 +466,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               <input v-model="searchQuery"
                      type="text"
                      placeholder="Filter by name..."
-                     class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder" />
+                     class="flex-1 min-w-[120px] max-w-[240px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder" />
               <button v-if="searchQuery"
                       class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"
                       @click="searchQuery = ''">
@@ -475,12 +475,11 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
             </template>
             <template #extra-buttons>
               <div v-if="agentViewMode === 'table'" class="relative">
-                <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors border"
-                        :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-muted hover:dd-text dd-bg-card'"
-                        :style="{ borderColor: 'var(--dd-border-strong)' }"
+                <button class="w-7 h-7 dd-rounded flex items-center justify-center text-[0.6875rem] transition-colors"
+                        :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                         v-tooltip.top="'Toggle columns'"
                         @click.stop="showAgentColumnPicker = !showAgentColumnPicker">
-                  <AppIcon name="config" :size="10" />
+                  <AppIcon name="config" :size="12" />
                 </button>
                 <div v-if="showAgentColumnPicker" @click.stop
                      class="absolute right-0 top-9 z-50 min-w-[160px] py-1.5 dd-rounded shadow-lg"
@@ -625,7 +624,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               <!-- Card footer -->
               <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
                    :style="{
-                     borderTop: '1px solid var(--dd-border-strong)',
+                     borderTop: '1px solid var(--dd-border)',
                      backgroundColor: 'var(--dd-bg-elevated)',
                    }">
                 <div class="flex items-center gap-3 text-[0.6875rem]">
@@ -702,9 +701,8 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                 </div>
               </div>
               <!-- Action buttons -->
-              <div class="mt-4 pt-3 flex items-center gap-2" :style="{ borderTop: '1px solid var(--dd-border-strong)' }">
-                <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-medium transition-colors dd-text-secondary hover:dd-bg-elevated"
-                        :style="{ border: '1px solid var(--dd-border-strong)' }"
+              <div class="mt-4 pt-3 flex items-center gap-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
+                <button class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-[0.6875rem] font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
                         @click.stop="selectAgent(agent)">
                   <AppIcon name="info" :size="11" />
                   Details

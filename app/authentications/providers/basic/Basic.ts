@@ -1,12 +1,19 @@
 import { argon2, createHash, timingSafeEqual } from 'node:crypto';
+import { createRequire } from 'node:module';
 import Authentication from '../Authentication.js';
 import BasicStrategy from './BasicStrategy.js';
+
+const require = createRequire(import.meta.url);
+const apacheMd5 = require('apache-md5') as (password: string, salt: string) => string;
+const unixCrypt = require('unix-crypt-td-js') as (password: string, salt: string) => string;
 
 function hashValue(value: string): Buffer {
   return createHash('sha256').update(value, 'utf8').digest();
 }
 
-const ARGON2_HASH_PARTS = 6;
+const DRYDOCK_ARGON2_HASH_PARTS = 6;
+const PHC_ARGON2_HASH_PARTS = 6;
+const PHC_ARGON2_VERSION = 19;
 const MIN_SALT_SIZE = 16;
 const MIN_HASH_SIZE = 32;
 const MIN_ARGON2_MEMORY = 19456;
@@ -24,6 +31,26 @@ interface ParsedArgon2Hash {
   hash: Buffer;
 }
 
+interface ParsedMd5Hash {
+  variant: 'apr1' | '1';
+  salt: string;
+  encodedHash: string;
+}
+
+interface ParsedCryptHash {
+  salt: string;
+  encodedHash: string;
+}
+
+type LegacyHashFormat = 'sha1' | 'apr1' | 'md5' | 'crypt' | 'plain';
+const UNSUPPORTED_PLAIN_FALLBACK_PATTERNS: RegExp[] = [
+  /^\$2[abxy]\$/i, // bcrypt variants
+];
+
+function normalizeHash(rawHash: string): string {
+  return rawHash.trim();
+}
+
 function parsePositiveInteger(raw: string): number | undefined {
   if (!/^\d+$/.test(raw)) {
     return undefined;
@@ -39,60 +66,257 @@ function decodeBase64(raw: string): Buffer | undefined {
   if (raw.length === 0) {
     return undefined;
   }
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(raw) || raw.length % 4 !== 0) {
+  if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(raw)) {
     return undefined;
   }
 
-  return Buffer.from(raw, 'base64');
+  const normalized = raw.replaceAll('-', '+').replaceAll('_', '/');
+  const firstPaddingIndex = normalized.indexOf('=');
+  if (firstPaddingIndex !== -1) {
+    if (!/^=+$/.test(normalized.substring(firstPaddingIndex)) || normalized.length % 4 !== 0) {
+      return undefined;
+    }
+  } else if (normalized.length % 4 === 1) {
+    return undefined;
+  }
+
+  const padded =
+    firstPaddingIndex === -1
+      ? normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=')
+      : normalized;
+  const decoded = Buffer.from(padded, 'base64');
+  if (decoded.length === 0) {
+    return undefined;
+  }
+
+  return decoded;
 }
 
-function parseArgon2Hash(rawHash: string): ParsedArgon2Hash | undefined {
-  const parts = rawHash.split('$');
-  if (parts.length !== ARGON2_HASH_PARTS || parts[0] !== 'argon2id') {
-    return undefined;
-  }
-
-  const memory = parsePositiveInteger(parts[1]);
-  const passes = parsePositiveInteger(parts[2]);
-  const parallelism = parsePositiveInteger(parts[3]);
-  const salt = decodeBase64(parts[4]);
-  const hash = decodeBase64(parts[5]);
+function parseArgon2Parameters(
+  rawMemory: string,
+  rawPasses: string,
+  rawParallelism: string,
+): { memory: number; passes: number; parallelism: number } | undefined {
+  const memory = parsePositiveInteger(rawMemory);
+  const passes = parsePositiveInteger(rawPasses);
+  const parallelism = parsePositiveInteger(rawParallelism);
 
   if (
     !memory ||
     !passes ||
     !parallelism ||
-    !salt ||
-    !hash ||
     memory < MIN_ARGON2_MEMORY ||
     memory > MAX_ARGON2_MEMORY ||
     passes < MIN_ARGON2_PASSES ||
     passes > MAX_ARGON2_PASSES ||
     parallelism < MIN_ARGON2_PARALLELISM ||
-    parallelism > MAX_ARGON2_PARALLELISM ||
-    salt.length < MIN_SALT_SIZE ||
-    hash.length < MIN_HASH_SIZE
+    parallelism > MAX_ARGON2_PARALLELISM
   ) {
     return undefined;
   }
 
-  return { memory, passes, parallelism, salt, hash };
+  return { memory, passes, parallelism };
 }
 
-function parseShaHash(rawHash: string): Buffer | undefined {
-  if (rawHash.length < 5) {
+function parsePhcArgon2Parameters(
+  rawParameters: string,
+): { memory: number; passes: number; parallelism: number } | undefined {
+  const entries = rawParameters.split(',');
+  if (entries.length !== 3) {
     return undefined;
   }
-  const prefix = rawHash.substring(0, 5);
+
+  let rawMemory: string | undefined;
+  let rawPasses: string | undefined;
+  let rawParallelism: string | undefined;
+
+  for (const entry of entries) {
+    const [key, value, ...extra] = entry.split('=');
+    if (!key || value === undefined || extra.length > 0) {
+      return undefined;
+    }
+
+    switch (key) {
+      case 'm':
+        if (rawMemory !== undefined) {
+          return undefined;
+        }
+        rawMemory = value;
+        break;
+      case 't':
+        if (rawPasses !== undefined) {
+          return undefined;
+        }
+        rawPasses = value;
+        break;
+      case 'p':
+        if (rawParallelism !== undefined) {
+          return undefined;
+        }
+        rawParallelism = value;
+        break;
+      default:
+        return undefined;
+    }
+  }
+
+  if (!rawMemory || !rawPasses || !rawParallelism) {
+    return undefined;
+  }
+
+  return parseArgon2Parameters(rawMemory, rawPasses, rawParallelism);
+}
+
+function parseDrydockArgon2Hash(normalizedHash: string): ParsedArgon2Hash | undefined {
+  const parts = normalizedHash.split('$');
+  if (parts.length !== DRYDOCK_ARGON2_HASH_PARTS || parts[0] !== 'argon2id') {
+    return undefined;
+  }
+
+  const params = parseArgon2Parameters(parts[1], parts[2], parts[3]);
+  const salt = decodeBase64(parts[4]);
+  const hash = decodeBase64(parts[5]);
+
+  if (!params || !salt || !hash || salt.length < MIN_SALT_SIZE || hash.length < MIN_HASH_SIZE) {
+    return undefined;
+  }
+
+  return { ...params, salt, hash };
+}
+
+function parsePhcArgon2Hash(normalizedHash: string): ParsedArgon2Hash | undefined {
+  const parts = normalizedHash.split('$');
+  if (
+    parts.length !== PHC_ARGON2_HASH_PARTS ||
+    parts[0] !== '' ||
+    parts[1] !== 'argon2id' ||
+    parts[2] !== `v=${PHC_ARGON2_VERSION}`
+  ) {
+    return undefined;
+  }
+
+  const params = parsePhcArgon2Parameters(parts[3]);
+  const salt = decodeBase64(parts[4]);
+  const hash = decodeBase64(parts[5]);
+
+  if (!params || !salt || !hash || salt.length < MIN_SALT_SIZE || hash.length < MIN_HASH_SIZE) {
+    return undefined;
+  }
+
+  return { ...params, salt, hash };
+}
+
+function looksLikeArgon2Hash(rawHash: string): boolean {
+  const normalizedHash = normalizeHash(rawHash);
+  return normalizedHash.startsWith('argon2id$') || normalizedHash.startsWith('$argon2id$');
+}
+
+function parseArgon2Hash(rawHash: string): ParsedArgon2Hash | undefined {
+  const normalizedHash = normalizeHash(rawHash);
+  return parseDrydockArgon2Hash(normalizedHash) ?? parsePhcArgon2Hash(normalizedHash);
+}
+
+const SHA1_DIGEST_SIZE = 20;
+
+function parseShaHash(rawHash: string): Buffer | undefined {
+  const normalizedHash = normalizeHash(rawHash);
+  if (normalizedHash.length < 5) {
+    return undefined;
+  }
+  const prefix = normalizedHash.substring(0, 5);
   if (prefix.toLowerCase() !== '{sha}') {
     return undefined;
   }
-  const encoded = rawHash.substring(5);
-  const decoded = decodeBase64(encoded);
-  if (!decoded || decoded.length !== 20) {
+  const encoded = normalizedHash.substring(5);
+  if (!encoded) {
+    return undefined;
+  }
+  const decoded = Buffer.from(encoded, 'base64');
+  if (decoded.length !== SHA1_DIGEST_SIZE) {
     return undefined;
   }
   return decoded;
+}
+
+function parseMd5Hash(rawHash: string): ParsedMd5Hash | undefined {
+  const normalizedHash = normalizeHash(rawHash);
+  if (!normalizedHash.startsWith('$apr1$') && !normalizedHash.startsWith('$1$')) {
+    return undefined;
+  }
+
+  const parts = normalizedHash.split('$');
+  if (parts.length < 4) {
+    return undefined;
+  }
+
+  const variant = parts[1];
+  const salt = parts[2];
+  if ((variant !== 'apr1' && variant !== '1') || !salt) {
+    return undefined;
+  }
+
+  return {
+    variant,
+    salt,
+    encodedHash: normalizedHash,
+  };
+}
+
+function parseCryptHash(rawHash: string): ParsedCryptHash | undefined {
+  const normalizedHash = normalizeHash(rawHash);
+  if (normalizedHash.length !== 13) {
+    return undefined;
+  }
+  return {
+    salt: normalizedHash.substring(0, 2),
+    encodedHash: normalizedHash,
+  };
+}
+
+function timingSafeEqualString(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left, 'utf8');
+  const rightBuffer = Buffer.from(right, 'utf8');
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+
+  try {
+    return timingSafeEqual(leftBuffer, rightBuffer);
+  } catch {
+    return false;
+  }
+}
+
+function isUnsupportedPlainFallbackHash(hash: string): boolean {
+  const normalizedHash = normalizeHash(hash);
+  return UNSUPPORTED_PLAIN_FALLBACK_PATTERNS.some((pattern) => pattern.test(normalizedHash));
+}
+
+function getLegacyHashFormat(hash: string): LegacyHashFormat | undefined {
+  if (parseArgon2Hash(hash)) {
+    return undefined;
+  }
+  if (looksLikeArgon2Hash(hash)) {
+    return undefined;
+  }
+  if (parseShaHash(hash) !== undefined) {
+    return 'sha1';
+  }
+
+  const md5Hash = parseMd5Hash(hash);
+  if (md5Hash) {
+    return md5Hash.variant === 'apr1' ? 'apr1' : 'md5';
+  }
+
+  if (parseCryptHash(hash)) {
+    return 'crypt';
+  }
+
+  if (isUnsupportedPlainFallbackHash(hash)) {
+    return undefined;
+  }
+
+  return 'plain';
 }
 
 function deriveArgon2Password(password: string, parsedHash: ParsedArgon2Hash): Promise<Buffer> {
@@ -132,37 +356,92 @@ async function verifyArgon2Password(password: string, encodedHash: string): Prom
   }
 }
 
+// Legacy SHA-1 verification for v1.3.x upgrade compatibility only.
+// SHA-1 is intentionally used here to match existing stored hashes — not as a
+// new hashing strategy. Users are prompted to migrate to argon2id on login.
+// Removal planned for v1.6.0.
 function verifyShaPassword(password: string, encodedHash: string): boolean {
-  const expectedHash = parseShaHash(encodedHash);
-  if (!expectedHash) {
+  const expectedDigest = parseShaHash(encodedHash);
+  if (!expectedDigest) {
     return false;
   }
 
   try {
-    const actualHash = createHash('sha1').update(password).digest();
-    return timingSafeEqual(actualHash, expectedHash);
+    // codeql[js/insufficient-password-hash]
+    const actualDigest = createHash('sha1').update(password).digest();
+    return timingSafeEqual(actualDigest, expectedDigest);
+  } catch {
+    return false;
+  }
+}
+
+function verifyMd5Password(password: string, encodedHash: string): boolean {
+  const parsedHash = parseMd5Hash(encodedHash);
+  if (!parsedHash) {
+    return false;
+  }
+
+  try {
+    const salt = `$${parsedHash.variant}$${parsedHash.salt}$`;
+    const actualHash = apacheMd5(password, salt);
+    return timingSafeEqualString(actualHash, parsedHash.encodedHash);
+  } catch {
+    return false;
+  }
+}
+
+function verifyCryptPassword(password: string, encodedHash: string): boolean {
+  const parsedHash = parseCryptHash(encodedHash);
+  if (!parsedHash) {
+    return false;
+  }
+
+  try {
+    const actualHash = unixCrypt(password, parsedHash.salt);
+    return timingSafeEqualString(actualHash, parsedHash.encodedHash);
+  } catch {
+    return false;
+  }
+}
+
+function verifyPlainPassword(password: string, encodedHash: string): boolean {
+  try {
+    return timingSafeEqualString(password, normalizeHash(encodedHash));
   } catch {
     return false;
   }
 }
 
 async function verifyPassword(password: string, encodedHash: string): Promise<boolean> {
-  if (parseArgon2Hash(encodedHash)) {
-    return await verifyArgon2Password(password, encodedHash);
+  const normalizedHash = normalizeHash(encodedHash);
+  if (parseArgon2Hash(normalizedHash)) {
+    return await verifyArgon2Password(password, normalizedHash);
   }
-  if (parseShaHash(encodedHash)) {
-    return verifyShaPassword(password, encodedHash);
+  if (looksLikeArgon2Hash(normalizedHash)) {
+    return false;
   }
-  return false;
+  if (parseShaHash(normalizedHash)) {
+    return verifyShaPassword(password, normalizedHash);
+  }
+  if (parseMd5Hash(normalizedHash)) {
+    return verifyMd5Password(password, normalizedHash);
+  }
+  if (parseCryptHash(normalizedHash)) {
+    return verifyCryptPassword(password, normalizedHash);
+  }
+  if (isUnsupportedPlainFallbackHash(normalizedHash)) {
+    return false;
+  }
+  return verifyPlainPassword(password, normalizedHash);
 }
 
-function isLegacyShaHash(hash: string): boolean {
-  return parseShaHash(hash) !== undefined;
+function isLegacyHash(hash: string): boolean {
+  return getLegacyHashFormat(hash) !== undefined;
 }
 
 /**
  * Basic authentication backed by argon2id password hashes.
- * Legacy SHA-1 {SHA} hashes are accepted with deprecation warnings.
+ * Legacy v1.3.9 hash formats are accepted with deprecation warnings.
  */
 class Basic extends Authentication {
   /**
@@ -174,27 +453,33 @@ class Basic extends Authentication {
       user: this.joi.string().required(),
       hash: this.joi
         .string()
+        .trim()
         .required()
         .custom((value: string, helpers: { error: (key: string) => unknown }) => {
-          if (parseArgon2Hash(value) || parseShaHash(value)) {
-            return value;
+          const normalizedHash = normalizeHash(value);
+          if (looksLikeArgon2Hash(normalizedHash) && !parseArgon2Hash(normalizedHash)) {
+            return helpers.error('any.invalid');
           }
-          return helpers.error('any.invalid');
+          if (isUnsupportedPlainFallbackHash(normalizedHash)) {
+            return helpers.error('any.invalid');
+          }
+          return value;
         }, 'password hash validation')
         .messages({
           'any.invalid':
-            '"hash" must be an argon2id hash (argon2id$memory$passes$parallelism$salt$hash) or a legacy {SHA} hash',
+            '"hash" must be an argon2id hash ($argon2id$v=19$m=65536,t=3,p=4$salt$hash) or compatible Drydock format (argon2id$memory$passes$parallelism$salt$hash), or a supported legacy v1.3.9 hash',
         }),
     });
   }
 
   /**
-   * Init authentication. Log deprecation warning if SHA hash detected.
+   * Init authentication. Log deprecation warning if legacy hash is detected.
    */
   initAuthentication(): void {
-    if (isLegacyShaHash(this.configuration.hash)) {
+    const format = getLegacyHashFormat(this.configuration.hash);
+    if (format) {
       this.log.warn(
-        'SHA-1 password hash detected — SHA-1 is deprecated and will be removed in v1.6.0. Migrate to argon2id hashing.',
+        `Legacy password hash format detected (${format}) — v1.3.9 formats (SHA, APR1/MD5, crypt, plain) are deprecated and will be removed in v1.6.0. Migrate to argon2id hashing.`,
       );
     }
   }
@@ -226,7 +511,7 @@ class Basic extends Authentication {
 
   getMetadata(): Record<string, unknown> {
     return {
-      usesLegacyHash: isLegacyShaHash(this.configuration.hash),
+      usesLegacyHash: isLegacyHash(this.configuration.hash),
     };
   }
 

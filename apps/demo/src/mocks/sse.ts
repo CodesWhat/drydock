@@ -75,6 +75,9 @@ export class FakeEventSource {
 
   private dispatch(type: string, data: string): void {
     const event = new MessageEvent(type, { data });
+    if (type === 'message') {
+      this.onmessage?.(event);
+    }
     this.listeners.get(type)?.forEach((fn) => fn(event));
   }
 }

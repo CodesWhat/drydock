@@ -64,7 +64,7 @@ function onItemKeydown(event: KeyboardEvent, item: Record<string, unknown>) {
            backgroundColor: 'var(--dd-bg-card)',
            border: selectedKey != null && getKey(item, itemKey) === selectedKey
              ? '1.5px solid var(--color-drydock-secondary)'
-             : '1px solid var(--dd-border-strong)',
+             : 'none',
          }"
          @keydown="onItemKeydown($event, item)"
          @click="activateItem(item)">
@@ -78,7 +78,7 @@ function onItemKeydown(event: KeyboardEvent, item: Record<string, unknown>) {
       <!-- Details (expandable mode only) -->
       <div v-if="expandable && isExpanded(item)"
            class="px-5 pb-4 pt-1"
-           :style="{ borderTop: '1px solid var(--dd-border-strong)' }">
+           :style="{ borderTop: '1px solid var(--dd-border)' }">
         <slot name="details" :item="item" />
       </div>
     </div>

@@ -35,7 +35,7 @@ vi.mock('@/boot/icons', () => ({
   disableIconifyApi: (...args: any[]) => mockDisableIconifyApi(...args),
 }));
 
-const mockRouteQuery = vi.hoisted(() => ({ value: {} as Record<string, string> }));
+const mockRouteQuery = vi.hoisted(() => ({ value: {} as Record<string, string | string[]> }));
 
 const {
   mockFontOptions,
@@ -124,11 +124,27 @@ const {
   };
 });
 
-vi.mock('vue-router', () => ({
-  useRoute: () => ({
-    query: mockRouteQuery.value,
-  }),
-}));
+vi.mock('vue-router', async () => {
+  const { reactive } = await import('vue');
+  const routeState = reactive({ query: {} as Record<string, string | string[]> });
+  return {
+    useRoute: () => {
+      // Sync reactive state from hoisted ref (clear stale keys first)
+      for (const key of Object.keys(routeState.query)) delete routeState.query[key];
+      Object.assign(routeState.query, mockRouteQuery.value);
+      return routeState;
+    },
+    useRouter: () => ({
+      replace: (to: { query?: Record<string, string | string[]> }) => {
+        if (to.query) {
+          for (const key of Object.keys(routeState.query)) delete routeState.query[key];
+          Object.assign(routeState.query, to.query);
+          mockRouteQuery.value = { ...to.query };
+        }
+      },
+    }),
+  };
+});
 
 vi.mock('@/theme/useTheme', () => ({
   useTheme: () => ({

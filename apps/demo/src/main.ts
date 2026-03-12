@@ -6,11 +6,24 @@
  * 3. Boot the real Vue UI (imported from ../../ui/src via Vite alias)
  */
 
+import { DEFAULTS } from '@/preferences/schema';
 import { FakeEventSource } from './mocks/sse';
 
 // Patch EventSource BEFORE any UI code loads — the SSE service
 // creates an EventSource in AppLayout, so this must happen first.
 (globalThis as unknown as { EventSource: typeof FakeEventSource }).EventSource = FakeEventSource;
+
+function getParentOrigin(): string | null {
+  if (!document.referrer) {
+    return null;
+  }
+
+  try {
+    return new URL(document.referrer).origin;
+  } catch {
+    return null;
+  }
+}
 
 async function boot() {
   // Start MSW — must be running before the UI makes any fetch() calls
@@ -23,12 +36,28 @@ async function boot() {
   // Import demo CSS for Tailwind @source directive
   await import('./demo.css');
 
+  // Default demo theme to 'system' variant so it follows the user's OS
+  // light/dark preference, matching the surrounding website.
+  if (!localStorage.getItem('dd-preferences')) {
+    localStorage.setItem(
+      'dd-preferences',
+      JSON.stringify({
+        ...structuredClone(DEFAULTS),
+        theme: { family: 'one-dark', variant: 'system' },
+      }),
+    );
+  }
+
   // Now boot the real UI
   await import('@/main');
 
   // Tell the parent frame (website) we loaded successfully
   if (window.parent !== window) {
-    window.parent.postMessage({ type: 'drydock-demo-ready' }, '*');
+    const parentOrigin = getParentOrigin();
+
+    if (parentOrigin) {
+      window.parent.postMessage({ type: 'drydock-demo-ready' }, parentOrigin);
+    }
   }
 
   // Auto-fill login credentials so demo visitors just click "Sign in".

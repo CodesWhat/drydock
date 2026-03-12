@@ -245,9 +245,9 @@ const hideOidcHttpBannerPermanently = useStorageRef<boolean>(
   false,
   (value): value is boolean => typeof value === 'boolean',
 );
-const shaHashDetected = ref(false);
-const hideShaHashBannerForSession = ref(false);
-const hideShaHashBannerPermanently = useStorageRef<boolean>(
+const legacyHashDetected = ref(false);
+const hideLegacyHashBannerForSession = ref(false);
+const hideLegacyHashBannerPermanently = useStorageRef<boolean>(
   'dd-banner-sha-hash-v1',
   false,
   (value): value is boolean => typeof value === 'boolean',
@@ -574,7 +574,7 @@ function dismissOidcHttpBannerPermanently() {
   hideOidcHttpBannerPermanently.value = true;
 }
 
-function isLegacyShaHash(authentication: unknown): boolean {
+function isLegacyBasicHash(authentication: unknown): boolean {
   if (!authentication || typeof authentication !== 'object') {
     return false;
   }
@@ -589,19 +589,19 @@ function isLegacyShaHash(authentication: unknown): boolean {
   return (metadata as Record<string, unknown>).usesLegacyHash === true;
 }
 
-const showShaHashDeprecationBanner = computed(
+const showLegacyHashDeprecationBanner = computed(
   () =>
-    shaHashDetected.value &&
-    !hideShaHashBannerForSession.value &&
-    !hideShaHashBannerPermanently.value,
+    legacyHashDetected.value &&
+    !hideLegacyHashBannerForSession.value &&
+    !hideLegacyHashBannerPermanently.value,
 );
 
-function dismissShaHashBannerForSession() {
-  hideShaHashBannerForSession.value = true;
+function dismissLegacyHashBannerForSession() {
+  hideLegacyHashBannerForSession.value = true;
 }
 
-function dismissShaHashBannerPermanently() {
-  hideShaHashBannerPermanently.value = true;
+function dismissLegacyHashBannerPermanently() {
+  hideLegacyHashBannerPermanently.value = true;
 }
 
 async function refreshSearchResources() {
@@ -619,8 +619,8 @@ async function refreshSearchResources() {
     oidcHttpDiscoveryDetected.value = Array.isArray(authentications)
       ? authentications.some((authentication) => isHttpOidcDiscovery(authentication))
       : false;
-    shaHashDetected.value = Array.isArray(authentications)
-      ? authentications.some((authentication) => isLegacyShaHash(authentication))
+    legacyHashDetected.value = Array.isArray(authentications)
+      ? authentications.some((authentication) => isLegacyBasicHash(authentication))
       : false;
     searchResourceResults.value = buildSearchIndexResults({
       agents,
@@ -1222,6 +1222,7 @@ onUnmounted(() => {
               style="grid-template-columns: 1fr auto 1fr;"
               :style="{
                 backgroundColor: 'var(--dd-bg)',
+                borderBottom: '1px solid var(--dd-border)',
               }">
         <!-- Left: hamburger + breadcrumb -->
         <div class="flex items-center gap-3">
@@ -1307,13 +1308,13 @@ onUnmounted(() => {
       </AnnouncementBanner>
 
       <AnnouncementBanner
-        v-if="showShaHashDeprecationBanner"
+        v-if="showLegacyHashDeprecationBanner"
         data-testid="sha-hash-deprecation-banner"
-        title="Insecure SHA-1 password hash detected"
+        title="Legacy password hash detected"
         permanent-dismiss-label="Don't show again"
-        @dismiss="dismissShaHashBannerForSession"
-        @dismiss-permanent="dismissShaHashBannerPermanently">
-        Your basic authentication uses an insecure SHA-1 password hash. SHA-1 hashing is deprecated and will be removed in v1.6.0. Migrate to argon2id hashing.
+        @dismiss="dismissLegacyHashBannerForSession"
+        @dismiss-permanent="dismissLegacyHashBannerPermanently">
+        Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0. Migrate to argon2id hashing.
       </AnnouncementBanner>
 
       <!-- MAIN CONTENT -->

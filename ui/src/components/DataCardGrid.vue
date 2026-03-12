@@ -46,7 +46,7 @@ function onCardKeydown(event: KeyboardEvent, item: Record<string, unknown>) {
            backgroundColor: 'var(--dd-bg-card)',
            border: selectedKey != null && getKey(item, itemKey) === selectedKey
              ? '1.5px solid var(--color-drydock-secondary)'
-             : '1px solid var(--dd-border-strong)',
+             : 'none',
            borderRadius: 'var(--dd-radius)',
            overflow: 'hidden',
          }"

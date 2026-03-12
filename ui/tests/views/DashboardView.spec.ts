@@ -1,4 +1,5 @@
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
+import DataTable from '@/components/DataTable.vue';
 import type { Container } from '@/types/container';
 import DashboardView from '@/views/DashboardView.vue';
 import { mountWithPlugins } from '../helpers/mount';
@@ -146,14 +147,18 @@ async function mountDashboard(
   const { mapApiContainers } = await import('@/utils/container-mapper');
   (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue(containers);
 
-  const wrapper = mountWithPlugins(DashboardView);
+  const wrapper = mountWithPlugins(DashboardView, {
+    global: { components: { DataTable } },
+  });
   mountedWrappers.push(wrapper);
   await flushPromises();
   return wrapper;
 }
 
 function mountDashboardView() {
-  const wrapper = mountWithPlugins(DashboardView);
+  const wrapper = mountWithPlugins(DashboardView, {
+    global: { components: { DataTable } },
+  });
   mountedWrappers.push(wrapper);
   return wrapper;
 }
@@ -560,7 +565,8 @@ describe('DashboardView', () => {
         }),
       );
       const wrapper = await mountDashboard(containers);
-      const rows = wrapper.findAll('tbody tr');
+      const widget = wrapper.find('[data-widget-id="recent-updates"]');
+      const rows = widget.findAll('tbody tr').filter((r) => !r.attributes('aria-hidden'));
       expect(rows.length).toBe(6);
     });
 
@@ -581,8 +587,9 @@ describe('DashboardView', () => {
       ];
 
       const wrapper = await mountDashboard(containers);
-      const rows = wrapper.find('[data-widget-id="recent-updates"] tbody').findAll('tr');
-      const names = rows.map((row) => row.find('td:nth-child(2) .font-medium').text());
+      const widget = wrapper.find('[data-widget-id="recent-updates"]');
+      const rows = widget.findAll('tbody tr').filter((r) => !r.attributes('aria-hidden'));
+      const names = rows.map((row) => row.find('.font-medium').text());
 
       expect(names).toEqual(['beta', 'alpha', 'gamma']);
     });
@@ -593,7 +600,8 @@ describe('DashboardView', () => {
         makeContainer({ id: 'c2', name: 'has-update', newTag: '2.0.0' }),
       ];
       const wrapper = await mountDashboard(containers);
-      const rows = wrapper.findAll('tbody tr');
+      const widget = wrapper.find('[data-widget-id="recent-updates"]');
+      const rows = widget.findAll('tbody tr').filter((r) => !r.attributes('aria-hidden'));
       expect(rows.length).toBe(1);
       expect(rows[0].text()).toContain('has-update');
     });
@@ -623,7 +631,8 @@ describe('DashboardView', () => {
       ];
 
       const wrapper = await mountDashboard(containers);
-      const rows = wrapper.find('[data-widget-id="recent-updates"] tbody').findAll('tr');
+      const widget = wrapper.find('[data-widget-id="recent-updates"]');
+      const rows = widget.findAll('tbody tr').filter((r) => !r.attributes('aria-hidden'));
       expect(rows.length).toBe(2);
       const rowTexts = rows.map((row) => row.text().toLowerCase());
       expect(
@@ -655,9 +664,10 @@ describe('DashboardView', () => {
         },
       );
 
-      const row = wrapper.find('[data-widget-id="recent-updates"] tbody tr');
-      expect(row.text()).toContain('redis');
-      expect(row.attributes('data-update-status')).toBe('failed');
+      const widget = wrapper.find('[data-widget-id="recent-updates"]');
+      const rows = widget.findAll('tbody tr').filter((r) => !r.attributes('aria-hidden'));
+      expect(rows.length).toBe(1);
+      expect(rows[0].text()).toContain('redis');
     });
 
     it('surfaces registry check failures in recent updates', async () => {
@@ -677,14 +687,12 @@ describe('DashboardView', () => {
         }),
       ];
       const wrapper = await mountDashboard(containers);
-      const errorRow = wrapper.find(
-        '[data-widget-id="recent-updates"] tr[data-update-status="error"]',
-      );
+      const widget = wrapper.find('[data-widget-id="recent-updates"]');
+      const rows = widget.findAll('tbody tr').filter((r) => !r.attributes('aria-hidden'));
+      const errorRow = rows.find((r) => r.text().includes('registry-fail'));
 
-      expect(errorRow.exists()).toBe(true);
-      expect(errorRow.text()).toContain('registry-fail');
-      expect(errorRow.text()).toContain('Registry request failed: unauthorized');
-      expect(errorRow.attributes('data-update-status')).toBe('error');
+      expect(errorRow).toBeDefined();
+      expect(errorRow!.text()).toContain('Registry request failed: unauthorized');
     });
 
     it('renders release notes links when available in recent updates rows', async () => {

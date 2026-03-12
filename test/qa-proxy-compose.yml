@@ -1,0 +1,47 @@
+services:
+  # Nginx reverse proxy — TLS-terminating proxy in front of drydock
+  # Simulates the common self-hosted setup (NPM, Traefik, Caddy, etc.)
+  proxy:
+    image: nginx:alpine
+    container_name: qa-proxy
+    ports:
+      - "8443:443"
+    volumes:
+      - ./qa-proxy-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./qa-proxy-certs:/etc/nginx/certs:ro
+    depends_on:
+      - drydock
+
+  drydock:
+    image: drydock:dev
+    container_name: drydock-qa-proxy
+    user: root
+    ports:
+      - "3333:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./qa-proxy-compose.yml:/drydock/qa-compose.yml:rw
+    environment:
+      - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
+      - DD_LOG_FORMAT=text
+      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+      - DD_WATCHER_LOCAL_CRON=*/2 * * * *
+      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
+      - DD_TRIGGER_DOCKERCOMPOSE_QA_FILE=/drydock/qa-compose.yml
+      - DD_TRIGGER_DOCKERCOMPOSE_QA_AUTO=false
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$zUAK9+ktVWNHyQdv3SaOSgMv3T02F1Zj8D+t1un7D98=$$KEmn6d94w03YxIlw7U7l/ikD9lW+H3IC1N7xbAhOB9yKofA3HoxUBmuvBawvShhv337zDv4+g9hobNWeQEWwkQ=="
+      - DD_SESSION_SECRET=qa-test-session-secret
+      # Test scenario: trustproxy=1 (required for reverse proxy)
+      - DD_SERVER_TRUSTPROXY=1
+      - DD_PUBLIC_URL=https://localhost:8443
+
+  # Test container with compose trigger label
+  nginx-test:
+    image: nginx:1.25.5
+    pull_policy: never
+    container_name: nginx-compose-test
+    labels:
+      - dd.watch=true
+      - dd.display.name=Nginx Compose Test
