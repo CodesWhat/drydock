@@ -344,12 +344,14 @@ export async function addImageDetailsToContainerOrchestration(
     updateAvailable: false,
     updateKind: { kind: 'unknown' },
   } as Container);
-  const containersWithSameName = storeContainer.getContainers({
-    watcher: watcher.name,
-    name: containerToReturn.name,
-  });
-  containersWithSameName
-    .filter((staleContainer) => staleContainer.id !== containerToReturn.id)
-    .forEach((staleContainer) => storeContainer.deleteContainer(staleContainer.id));
+  if (typeof containerToReturn.name === 'string' && containerToReturn.name !== '') {
+    const containersWithSameName = storeContainer.getContainers({
+      watcher: watcher.name,
+      name: containerToReturn.name,
+    });
+    containersWithSameName
+      .filter((staleContainer) => staleContainer.id !== containerToReturn.id)
+      .forEach((staleContainer) => storeContainer.deleteContainer(staleContainer.id));
+  }
   return containerToReturn;
 }

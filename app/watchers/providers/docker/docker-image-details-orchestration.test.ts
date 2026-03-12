@@ -539,4 +539,35 @@ describe('docker image details orchestration module', () => {
     expect(getContainersSpy).toHaveBeenCalledWith({ watcher: 'docker-test', name: 'service' });
     expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-id');
   });
+
+  test('skips same-name dedupe when the discovered container name is empty', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+    const getContainersSpy = vi.spyOn(storeContainer, 'getContainers').mockReturnValue([
+      {
+        id: 'old-container-id',
+        watcher: 'docker-test',
+        name: '',
+      } as any,
+    ]);
+    const deleteContainerSpy = vi
+      .spyOn(storeContainer, 'deleteContainer')
+      .mockImplementation(() => {});
+
+    const { watcher } = createWatcher();
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Id: 'new-container-id',
+        Names: [],
+      }),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result?.id).toBe('new-container-id');
+    expect(result?.name).toBe('');
+    expect(getContainersSpy).not.toHaveBeenCalled();
+    expect(deleteContainerSpy).not.toHaveBeenCalled();
+  });
 });
