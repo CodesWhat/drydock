@@ -176,7 +176,7 @@ export const IntegratedWorkspace: Story = {
               v-model="query"
               type="text"
               placeholder="Filter by name or server..."
-              class="flex-1 min-w-[120px] max-w-[260px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium border outline-none dd-bg dd-text dd-border-strong dd-placeholder"
+              class="flex-1 min-w-[120px] max-w-[260px] px-2.5 py-1.5 dd-rounded text-[0.6875rem] font-medium outline-none dd-bg dd-text dd-placeholder"
             />
             <button
               class="text-[0.625rem] dd-text-muted hover:dd-text transition-colors"

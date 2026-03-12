@@ -1222,6 +1222,7 @@ onUnmounted(() => {
               style="grid-template-columns: 1fr auto 1fr;"
               :style="{
                 backgroundColor: 'var(--dd-bg)',
+                borderBottom: '1px solid var(--dd-border)',
               }">
         <!-- Left: hamburger + breadcrumb -->
         <div class="flex items-center gap-3">
