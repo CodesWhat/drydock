@@ -138,6 +138,114 @@ test('addContainerSensor must publish sensor discovery message expected by HA', 
   );
 });
 
+test.each([
+  {
+    displayIcon: 'sh:nextcloud',
+    expectedPicture: 'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+  },
+  {
+    displayIcon: 'hl:nextcloud',
+    expectedPicture: 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/nextcloud.png',
+  },
+  {
+    displayIcon: 'si:nextcloud',
+    expectedPicture: 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/nextcloud.svg',
+  },
+  {
+    displayIcon: 'sh:   ',
+    expectedPicture:
+      'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
+  },
+])('addContainerSensor should map $displayIcon to entity_picture URL', async ({
+  displayIcon,
+  expectedPicture,
+}) => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon,
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe(expectedPicture);
+});
+
+test('addContainerSensor should use direct URL icon as entity_picture', async () => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'https://example.com/custom/icon.png',
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe('https://example.com/custom/icon.png');
+});
+
+test('addContainerSensor should strip file extension from icon slug', async () => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'sh:nextcloud.png',
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe(
+    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+  );
+});
+
+test('addContainerSensor should ignore empty dd.display.picture', async () => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'sh:nextcloud',
+    labels: {
+      'dd.display.picture': '   ',
+    },
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe(
+    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+  );
+});
+
+test('addContainerSensor should ignore non-URL dd.display.picture', async () => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'sh:nextcloud',
+    labels: {
+      'dd.display.picture': 'not-a-url',
+    },
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe(
+    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+  );
+});
+
+test('addContainerSensor should prefer dd.display.picture over icon-derived entity_picture', async () => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'sh:nextcloud',
+    labels: {
+      'dd.display.picture': 'https://images.example.com/nextcloud.png',
+    },
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe('https://images.example.com/nextcloud.png');
+});
+
 test.each(
   containerData,
 )('removeContainerSensor must publish sensor discovery message expected by HA', async ({
