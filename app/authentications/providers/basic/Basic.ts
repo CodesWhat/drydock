@@ -356,6 +356,10 @@ async function verifyArgon2Password(password: string, encodedHash: string): Prom
   }
 }
 
+// Legacy SHA-1 verification for v1.3.x upgrade compatibility only.
+// SHA-1 is intentionally used here to match existing stored hashes — not as a
+// new hashing strategy. Users are prompted to migrate to argon2id on login.
+// Removal planned for v1.6.0.
 function verifyShaPassword(password: string, encodedHash: string): boolean {
   const expectedDigest = parseShaHash(encodedHash);
   if (!expectedDigest) {
@@ -363,6 +367,7 @@ function verifyShaPassword(password: string, encodedHash: string): boolean {
   }
 
   try {
+    // codeql[js/insufficient-password-hash]
     const actualDigest = createHash('sha1').update(password).digest();
     return timingSafeEqual(actualDigest, expectedDigest);
   } catch {
