@@ -27,18 +27,21 @@ pre-commit:
 pre-push:
   piped: true
   commands:
-    # ── Clean tree advisory: warn about dirty files but don't block ────
-    # Other agents may have work in progress. Warn so the pusher knows
-    # CI will only see committed state, but don't fail the pipeline.
+    # ── Clean tree gate: block push if uncommitted changes exist ───────
+    # CI only sees committed state. Hard-fail so you don't push code
+    # that hasn't been tested in its committed form.
     clean-tree:
       run: |
         dirty=$(git status --porcelain 2>/dev/null)
         if [ -n "$dirty" ]; then
-          echo "⚠️  Working tree has uncommitted changes (CI won't see these):"
+          echo "❌ Working tree has uncommitted changes (CI won't see these):"
+          echo ""
           echo "$dirty"
           echo ""
+          echo "What do we want to do with these files?"
+          exit 1
         fi
-        exit 0
+      fail_text: "Uncommitted changes detected — decide what to do with them before pushing"
       priority: 0
       timeout: 10s
 
@@ -54,7 +57,7 @@ pre-push:
     qlty:
       run: CI=1 qlty check --all --no-progress </dev/null
       priority: 3
-      timeout: 60s
+      timeout: 2m
 
     # ── Build + test: parallel across independent workspaces ─────────
     build-and-test:
