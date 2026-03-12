@@ -31,10 +31,12 @@ type OrderedEventHandlerFn<TPayload> = (payload: TPayload) => void | Promise<voi
 function setupAuditSubscriptions(): {
   securityAlertHandler: OrderedEventHandlerFn<SecurityAlertEventPayload>;
   agentDisconnectedHandler: OrderedEventHandlerFn<AgentDisconnectedEventPayload>;
+  containerUpdatedHandler: (payload: ContainerLifecycleEventPayload) => void;
 } {
   const handlers: {
     securityAlert?: OrderedEventHandlerFn<SecurityAlertEventPayload>;
     agentDisconnected?: OrderedEventHandlerFn<AgentDisconnectedEventPayload>;
+    containerUpdated?: (payload: ContainerLifecycleEventPayload) => void;
   } = {};
 
   const registerOrdered =
@@ -61,19 +63,22 @@ function setupAuditSubscriptions(): {
       handlers.agentDisconnected = handler;
     }),
     registerContainerAdded: registerEvent<ContainerLifecycleEventPayload>(() => {}),
-    registerContainerUpdated: registerEvent<ContainerLifecycleEventPayload>(() => {}),
+    registerContainerUpdated: registerEvent<ContainerLifecycleEventPayload>((handler) => {
+      handlers.containerUpdated = handler;
+    }),
     registerContainerRemoved: registerEvent<ContainerLifecycleEventPayload>(() => {}),
   };
 
   registerAuditLogSubscriptions(registrars);
 
-  if (!handlers.securityAlert || !handlers.agentDisconnected) {
+  if (!handlers.securityAlert || !handlers.agentDisconnected || !handlers.containerUpdated) {
     throw new Error('Expected audit handlers to be registered');
   }
 
   return {
     securityAlertHandler: handlers.securityAlert,
     agentDisconnectedHandler: handlers.agentDisconnected,
+    containerUpdatedHandler: handlers.containerUpdated,
   };
 }
 
@@ -153,5 +158,23 @@ describe('audit-subscriptions dedupe windows', () => {
 
     expect(mockInsertAudit).toHaveBeenCalledTimes(2);
     expect(mockInc).toHaveBeenCalledTimes(2);
+  });
+
+  test('records container update audit with empty containerName fallback when name and id are missing', () => {
+    const { containerUpdatedHandler } = setupAuditSubscriptions();
+
+    containerUpdatedHandler({
+      image: { name: 'nginx' },
+      status: 'running',
+    } as unknown as ContainerLifecycleEventPayload);
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'container-update',
+        containerName: '',
+        details: 'status: running',
+      }),
+    );
+    expect(mockInc).toHaveBeenCalledWith({ action: 'container-update' });
   });
 });
