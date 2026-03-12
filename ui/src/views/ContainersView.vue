@@ -30,6 +30,18 @@ import { useContainerActions } from './containers/useContainerActions';
 import { useContainerLogs } from './containers/useContainerLogs';
 import { useContainerSecurity } from './containers/useContainerSecurity';
 
+const UPDATE_KIND_SORT_ORDER: Readonly<Record<string, number>> = Object.freeze({
+  major: 0,
+  minor: 1,
+  patch: 2,
+  digest: 3,
+});
+const BOUNCER_SORT_ORDER: Readonly<Record<string, number>> = Object.freeze({
+  blocked: 0,
+  unsafe: 1,
+  safe: 2,
+});
+
 const loading = ref(true);
 const error = ref<string | null>(null);
 
@@ -342,8 +354,6 @@ const sortedContainers = computed(() => {
   const list = [...filteredContainers.value];
   const key = containerSortKey.value;
   const dir = containerSortAsc.value ? 1 : -1;
-  const kindOrder: Record<string, number> = { major: 0, minor: 1, patch: 2, digest: 3 };
-  const bouncerOrder: Record<string, number> = { blocked: 0, unsafe: 1, safe: 2 };
   return list.sort((left, right) => {
     let leftValue: string | number;
     let rightValue: string | number;
@@ -363,11 +373,11 @@ const sortedContainers = computed(() => {
       leftValue = left.registry;
       rightValue = right.registry;
     } else if (key === 'bouncer') {
-      leftValue = bouncerOrder[left.bouncer] ?? 9;
-      rightValue = bouncerOrder[right.bouncer] ?? 9;
+      leftValue = BOUNCER_SORT_ORDER[left.bouncer] ?? 9;
+      rightValue = BOUNCER_SORT_ORDER[right.bouncer] ?? 9;
     } else if (key === 'kind') {
-      leftValue = kindOrder[left.updateKind ?? ''] ?? 9;
-      rightValue = kindOrder[right.updateKind ?? ''] ?? 9;
+      leftValue = UPDATE_KIND_SORT_ORDER[left.updateKind ?? ''] ?? 9;
+      rightValue = UPDATE_KIND_SORT_ORDER[right.updateKind ?? ''] ?? 9;
     } else if (key === 'version') {
       leftValue = left.currentTag;
       rightValue = right.currentTag;
