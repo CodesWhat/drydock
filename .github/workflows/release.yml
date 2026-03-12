@@ -102,12 +102,36 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Retry push on transient registry failure
+        id: build-retry
+        if: failure() && steps.build.outcome == 'failure'
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+        with:
+          context: .
+          push: true
+          platforms: ${{ env.DOCKER_PLATFORMS }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: DD_VERSION=${{ steps.meta.outputs.version }}
+          sbom: true
+          cache-from: type=gha
+
+      - name: Resolve image digest
+        id: digest
+        if: always() && (steps.build.outcome == 'success' || steps.build-retry.outcome == 'success')
+        env:
+          RETRY_DIGEST: ${{ steps.build-retry.outputs.digest }}
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+        run: echo "value=${RETRY_DIGEST:-$BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
+
       - name: Install cosign
+        if: always() && (steps.build.outcome == 'success' || steps.build-retry.outcome == 'success')
         uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad  # v4.0.0
 
       - name: Sign container images
+        if: always() && steps.digest.outputs.value
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ steps.digest.outputs.value }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           images=()
@@ -200,8 +224,9 @@ jobs:
             --clobber
 
       - name: Attest build provenance
+        if: steps.digest.outputs.value
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
         with:
           subject-name: ghcr.io/${{ github.repository }}
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-digest: ${{ steps.digest.outputs.value }}
           push-to-registry: true

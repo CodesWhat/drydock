@@ -134,7 +134,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage/codecov-app.lcov.info,coverage/codecov-ui.lcov.info
           flags: app,ui
-          fail_ci_if_error: true
+          fail_ci_if_error: false  # coverage upload is informational — don't block CI on transient Codecov infra failures
 
   build:
     name: Build
