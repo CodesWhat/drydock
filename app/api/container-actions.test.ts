@@ -488,6 +488,52 @@ describe('Container Actions Router', () => {
       );
     });
 
+    test('should select the dockercompose trigger matching container compose labels', async () => {
+      const container = {
+        id: 'c1',
+        name: 'apprise',
+        image: { name: 'apprise' },
+        updateAvailable: true,
+        labels: {
+          'com.docker.compose.project.config_files': '/opt/drydock/test/monitoring.yml',
+        },
+      };
+      const updatedContainer = { ...container, image: { name: 'apprise:latest' } };
+      mockGetContainer.mockReturnValueOnce(container).mockReturnValueOnce(updatedContainer);
+
+      const mysqlTriggerFn = vi.fn().mockResolvedValue(undefined);
+      const monitoringTriggerFn = vi.fn().mockResolvedValue(undefined);
+      const mysqlTrigger = {
+        type: 'dockercompose',
+        configuration: { file: '/opt/drydock/test/mysql.yml' },
+        getDefaultComposeFilePath: vi.fn(() => '/opt/drydock/test/mysql.yml'),
+        getComposeFilesForContainer: vi.fn(() => ['/opt/drydock/test/monitoring.yml']),
+        trigger: mysqlTriggerFn,
+      };
+      const monitoringTrigger = {
+        type: 'dockercompose',
+        configuration: { file: '/opt/drydock/test/monitoring.yml' },
+        getDefaultComposeFilePath: vi.fn(() => '/opt/drydock/test/monitoring.yml'),
+        getComposeFilesForContainer: vi.fn(() => ['/opt/drydock/test/monitoring.yml']),
+        trigger: monitoringTriggerFn,
+      };
+      mockGetState.mockReturnValue({
+        trigger: {
+          'dockercompose.mysql': mysqlTrigger,
+          'dockercompose.monitoring': monitoringTrigger,
+        },
+      });
+
+      const handler = getHandler('post', '/:id/update');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(monitoringTriggerFn).toHaveBeenCalledWith(container);
+      expect(mysqlTriggerFn).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
     test('should return 404 when container not found', async () => {
       mockGetContainer.mockReturnValue(undefined);
 
