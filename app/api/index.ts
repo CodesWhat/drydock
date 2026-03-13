@@ -80,12 +80,16 @@ function configureSecurityHeaders(app) {
       // try to upgrade all future requests to HTTPS, breaking plain-HTTP
       // deployments (see #105).
       strictTransportSecurity: tlsEnabled,
+      crossOriginEmbedderPolicy: { policy: 'require-corp' },
       contentSecurityPolicy: {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          'style-src': ["'self'", "'unsafe-inline'"],
+          // Keep inline styles limited to element attributes to reduce CSP exposure.
+          'style-src': ["'self'"],
+          'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
+          'font-src': ["'self'", 'data:'],
           'connect-src': connectSources,
           // Prevent browsers from upgrading HTTP sub-resource requests to
           // HTTPS when TLS is not configured (#105).

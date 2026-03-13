@@ -335,12 +335,15 @@ describe('API Index', () => {
 
     expect(mockHelmet).toHaveBeenCalledWith({
       strictTransportSecurity: false,
+      crossOriginEmbedderPolicy: { policy: 'require-corp' },
       contentSecurityPolicy: {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          'style-src': ["'self'", "'unsafe-inline'"],
+          'style-src': ["'self'"],
+          'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
+          'font-src': ["'self'", 'data:'],
           'connect-src': [
             "'self'",
             'https://api.iconify.design',
@@ -369,12 +372,15 @@ describe('API Index', () => {
 
     expect(mockHelmet).toHaveBeenCalledWith({
       strictTransportSecurity: false,
+      crossOriginEmbedderPolicy: { policy: 'require-corp' },
       contentSecurityPolicy: {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          'style-src': ["'self'", "'unsafe-inline'"],
+          'style-src': ["'self'"],
+          'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
+          'font-src': ["'self'", 'data:'],
           'connect-src': ["'self'"],
           'upgrade-insecure-requests': null,
         },
@@ -397,12 +403,15 @@ describe('API Index', () => {
 
     expect(mockHelmet).toHaveBeenCalledWith({
       strictTransportSecurity: true,
+      crossOriginEmbedderPolicy: { policy: 'require-corp' },
       contentSecurityPolicy: {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          'style-src': ["'self'", "'unsafe-inline'"],
+          'style-src': ["'self'"],
+          'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
+          'font-src': ["'self'", 'data:'],
           'connect-src': [
             "'self'",
             'https://api.iconify.design',
