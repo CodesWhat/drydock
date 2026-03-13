@@ -46,6 +46,20 @@ describe('agent API container', () => {
       expect(storeContainer.getContainersRaw).toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith(containers);
     });
+
+    test('should strip LokiJS metadata from response containers', () => {
+      const containers = [
+        { id: 'c1', status: 'running', $loki: 123, meta: { revision: 0, created: 1000 } },
+      ];
+      storeContainer.getContainersRaw.mockReturnValue(containers);
+
+      containerApi.getContainers(req, res);
+
+      const responseContainers = res.json.mock.calls[0][0];
+      expect(responseContainers).toEqual([{ id: 'c1', status: 'running' }]);
+      expect(responseContainers[0]).not.toHaveProperty('$loki');
+      expect(responseContainers[0]).not.toHaveProperty('meta');
+    });
   });
 
   describe('getContainerLogs', () => {

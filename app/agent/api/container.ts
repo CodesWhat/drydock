@@ -19,11 +19,18 @@ type AgentDockerWatcher = {
   };
 };
 
+function stripLokiMetadata(container: Record<string, unknown>) {
+  const { $loki: _loki, meta: _meta, ...containerWithoutMetadata } = container;
+  return containerWithoutMetadata;
+}
+
 /**
  * Get Containers (Handshake).
  */
 export function getContainers(req: Request, res: Response) {
-  const containers = storeContainer.getContainersRaw();
+  const containers = storeContainer
+    .getContainersRaw()
+    .map((container) => stripLokiMetadata(container as Record<string, unknown>));
   res.json(containers);
 }
 
