@@ -11,7 +11,7 @@ vi.mock('../../log/index.js', () => ({
 }));
 
 vi.mock('../../store/container.js', () => ({
-  getContainers: vi.fn(),
+  getContainersRaw: vi.fn(),
   getContainer: vi.fn(),
   deleteContainer: vi.fn(),
 }));
@@ -39,12 +39,26 @@ describe('agent API container', () => {
   });
 
   describe('getContainers', () => {
-    test('should return all containers', () => {
+    test('should return raw containers without redaction', () => {
       const containers = [{ id: 'c1' }, { id: 'c2' }];
-      storeContainer.getContainers.mockReturnValue(containers);
+      storeContainer.getContainersRaw.mockReturnValue(containers);
       containerApi.getContainers(req, res);
-      expect(storeContainer.getContainers).toHaveBeenCalled();
+      expect(storeContainer.getContainersRaw).toHaveBeenCalled();
       expect(res.json).toHaveBeenCalledWith(containers);
+    });
+
+    test('should strip LokiJS metadata from response containers', () => {
+      const containers = [
+        { id: 'c1', status: 'running', $loki: 123, meta: { revision: 0, created: 1000 } },
+      ];
+      storeContainer.getContainersRaw.mockReturnValue(containers);
+
+      containerApi.getContainers(req, res);
+
+      const responseContainers = res.json.mock.calls[0][0];
+      expect(responseContainers).toEqual([{ id: 'c1', status: 'running' }]);
+      expect(responseContainers[0]).not.toHaveProperty('$loki');
+      expect(responseContainers[0]).not.toHaveProperty('meta');
     });
   });
 

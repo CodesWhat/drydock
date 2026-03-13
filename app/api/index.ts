@@ -80,12 +80,16 @@ function configureSecurityHeaders(app) {
       // try to upgrade all future requests to HTTPS, breaking plain-HTTP
       // deployments (see #105).
       strictTransportSecurity: tlsEnabled,
+      crossOriginEmbedderPolicy: { policy: 'require-corp' },
       contentSecurityPolicy: {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          'style-src': ["'self'", "'unsafe-inline'"],
+          // Keep inline styles limited to element attributes to reduce CSP exposure.
+          'style-src': ["'self'"],
+          'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
+          'font-src': ["'self'", 'data:'],
           'connect-src': connectSources,
           // Prevent browsers from upgrading HTTP sub-resource requests to
           // HTTPS when TLS is not configured (#105).
@@ -95,6 +99,16 @@ function configureSecurityHeaders(app) {
       },
     }),
   );
+}
+
+function configurePermissionsPolicy(app) {
+  app.use((_req, res, next) => {
+    res.setHeader(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()',
+    );
+    next();
+  });
 }
 
 function registerRoutes(app) {
@@ -170,6 +184,7 @@ function createApp() {
   app.set('json replacer', (key, value) => (value === undefined ? null : value));
 
   configureSecurityHeaders(app);
+  configurePermissionsPolicy(app);
 
   if (configuration.compression?.enabled !== false) {
     app.use(createCompressionMiddleware());

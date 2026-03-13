@@ -335,12 +335,15 @@ describe('API Index', () => {
 
     expect(mockHelmet).toHaveBeenCalledWith({
       strictTransportSecurity: false,
+      crossOriginEmbedderPolicy: { policy: 'require-corp' },
       contentSecurityPolicy: {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          'style-src': ["'self'", "'unsafe-inline'"],
+          'style-src': ["'self'"],
+          'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
+          'font-src': ["'self'", 'data:'],
           'connect-src': [
             "'self'",
             'https://api.iconify.design',
@@ -369,12 +372,15 @@ describe('API Index', () => {
 
     expect(mockHelmet).toHaveBeenCalledWith({
       strictTransportSecurity: false,
+      crossOriginEmbedderPolicy: { policy: 'require-corp' },
       contentSecurityPolicy: {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          'style-src': ["'self'", "'unsafe-inline'"],
+          'style-src': ["'self'"],
+          'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
+          'font-src': ["'self'", 'data:'],
           'connect-src': ["'self'"],
           'upgrade-insecure-requests': null,
         },
@@ -397,12 +403,15 @@ describe('API Index', () => {
 
     expect(mockHelmet).toHaveBeenCalledWith({
       strictTransportSecurity: true,
+      crossOriginEmbedderPolicy: { policy: 'require-corp' },
       contentSecurityPolicy: {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          'style-src': ["'self'", "'unsafe-inline'"],
+          'style-src': ["'self'"],
+          'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
+          'font-src': ["'self'", 'data:'],
           'connect-src': [
             "'self'",
             'https://api.iconify.design',
@@ -515,6 +524,41 @@ describe('API Index', () => {
     const helmetCallOrder = mockApp.use.mock.invocationCallOrder[helmetCallIndex];
     const authInitCallOrder = freshAuth.init.mock.invocationCallOrder[0];
     expect(helmetCallOrder).toBeLessThan(authInitCallOrder);
+  });
+
+  test('should set Permissions-Policy header via custom middleware', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    // Find the middleware function that sets Permissions-Policy
+    const permissionsPolicyMiddleware = mockApp.use.mock.calls
+      .filter((call) => typeof call[0] === 'function' && call[0].length === 3)
+      .map((call) => call[0])
+      .find((fn) => {
+        const mockRes = { setHeader: vi.fn() };
+        fn({}, mockRes, vi.fn());
+        return mockRes.setHeader.mock.calls.some((c) => c[0] === 'Permissions-Policy');
+      });
+
+    expect(permissionsPolicyMiddleware).toBeDefined();
+
+    const mockRes = { setHeader: vi.fn() };
+    const mockNext = vi.fn();
+    permissionsPolicyMiddleware({}, mockRes, mockNext);
+
+    expect(mockRes.setHeader).toHaveBeenCalledWith(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()',
+    );
+    expect(mockNext).toHaveBeenCalled();
   });
 
   test('should not set trust proxy when default (false)', async () => {

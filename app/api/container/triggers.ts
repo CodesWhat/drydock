@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import type { Container } from '../../model/container.js';
 import type { ApiComponent } from '../component.js';
+import { isTriggerCompatibleWithContainer } from '../docker-trigger.js';
 import { sendErrorResponse } from '../error-response.js';
 import { getPathParamValue } from './request-helpers.js';
 
@@ -14,6 +15,7 @@ interface ParsedTriggerReference {
 }
 
 interface TriggerComponent {
+  id?: string;
   agent?: string;
   type: string;
   name: string;
@@ -65,16 +67,6 @@ export function createTriggerHandlers({
       .map((entry) => Trigger.parseIncludeOrIncludeTriggerString(entry));
   }
 
-  function isTriggerAgentCompatible(trigger: TriggerComponent, container: Container): boolean {
-    if (trigger.agent && trigger.agent !== container.agent) {
-      return false;
-    }
-    if (container.agent && !trigger.agent && ['docker', 'dockercompose'].includes(trigger.type)) {
-      return false;
-    }
-    return true;
-  }
-
   function resolveTriggerAssociation(
     trigger: TriggerComponent,
     includedTriggers: ParsedTriggerReference[] | undefined,
@@ -113,12 +105,20 @@ export function createTriggerHandlers({
       return;
     }
 
-    const allTriggers = mapComponentsToList(getTriggers());
+    const triggerMap = getTriggers();
+    const allTriggers = mapComponentsToList(triggerMap);
     const includedTriggers = parseTriggerList(container.triggerInclude);
     const excludedTriggers = parseTriggerList(container.triggerExclude);
 
     const associatedTriggers = allTriggers
-      .filter((trigger) => isTriggerAgentCompatible(trigger, container))
+      .filter((trigger) => {
+        const triggerId = trigger.id || `${trigger.type}.${trigger.name}`;
+        const runtimeTrigger = triggerMap[triggerId];
+        return isTriggerCompatibleWithContainer(
+          (runtimeTrigger || trigger) as unknown as TriggerComponent,
+          container,
+        );
+      })
       .map((trigger) => resolveTriggerAssociation(trigger, includedTriggers, excludedTriggers))
       .filter((trigger) => trigger !== undefined);
 

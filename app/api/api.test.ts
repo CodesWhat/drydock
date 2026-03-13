@@ -289,6 +289,18 @@ describe('API Router', () => {
     expect(router.use).toHaveBeenCalledWith(auth.requireAuthentication);
   });
 
+  test('should mount /app after requireAuthentication middleware', async () => {
+    const auth = await import('./auth.js');
+    const useCalls = router.use.mock.calls;
+
+    const authIndex = useCalls.findIndex((c) => c[0] === auth.requireAuthentication);
+    const appIndex = useCalls.findIndex((c) => c[0] === '/app');
+
+    expect(authIndex).toBeGreaterThan(-1);
+    expect(appIndex).toBeGreaterThan(-1);
+    expect(appIndex).toBeGreaterThan(authIndex);
+  });
+
   test('should use CSRF middleware', async () => {
     const csrf = await import('./csrf.js');
     expect(router.use).toHaveBeenCalledWith(csrf.requireSameOriginForMutations);

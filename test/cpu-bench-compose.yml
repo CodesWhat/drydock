@@ -1,13 +1,13 @@
-# CPU idle benchmark: WUD latest vs Drydock 1.3.9 vs Drydock 1.4.0-rc.5
+# CPU idle benchmark: WUD latest vs Drydock 1.3.9 vs Drydock 1.4.0
 #
 # All configured identically where possible:
 # - cron-only (hourly), no watchbydefault
-# - Drydock RC.5 uses optimization toggles
+# - Drydock 1.4.0 uses optimization toggles
 #
 # Usage:
 #   docker compose -f test/cpu-bench-compose.yml up -d
 #   sleep 180   # let containers settle for 3 minutes
-#   docker stats --no-stream cpu-wud-latest cpu-drydock-139 cpu-drydock-rc5
+#   docker stats --no-stream cpu-wud-latest cpu-drydock-139 cpu-drydock-140
 
 services:
   wud-latest:
@@ -33,9 +33,9 @@ services:
       - DD_WATCHER_LOCAL_CRON=0 * * * *
       - DD_SESSION_SECRET=bench-139
 
-  drydock-rc5:
-    image: codeswhat/drydock:1.4.0-rc.5
-    container_name: cpu-drydock-rc5
+  drydock-140:
+    image: codeswhat/drydock:1.4.0
+    container_name: cpu-drydock-140
     user: root
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -47,4 +47,4 @@ services:
       - DD_WATCHER_LOCAL_CRON=0 * * * *
       - DD_WATCHER_LOCAL_WATCHEVENTS=false
       - DD_LOG_BUFFER_ENABLED=false
-      - DD_SESSION_SECRET=bench-rc5
+      - DD_SESSION_SECRET=bench-140

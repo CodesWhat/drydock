@@ -41,31 +41,16 @@ describe('DataCardGrid', () => {
   });
 
   describe('selection', () => {
-    it('applies ring highlight to selected card', () => {
-      const w = factory({ selectedKey: '2' });
-      const cards = w.findAll('.container-card');
-      expect(cards[1].classes()).toContain('ring-2');
-      expect(cards[1].classes()).toContain('ring-drydock-secondary');
-    });
-
-    it('does not apply ring to unselected cards', () => {
-      const w = factory({ selectedKey: '2' });
-      const cards = w.findAll('.container-card');
-      expect(cards[0].classes()).not.toContain('ring-2');
-      expect(cards[2].classes()).not.toContain('ring-2');
-    });
-
-    it('applies thicker border to selected card', () => {
+    it('applies visible border to selected card', () => {
       const w = factory({ selectedKey: '1' });
-      const style = w.findAll('.container-card')[0].attributes('style');
-      expect(style).toContain('1.5px solid');
+      const style = w.findAll('.container-card')[0].attributes('style') ?? '';
+      expect(style).toContain('1.5px solid var(--color-drydock-secondary)');
     });
 
-    it('applies no border to unselected cards', () => {
+    it('applies transparent border to unselected cards', () => {
       const w = factory({ selectedKey: '1' });
       const style = w.findAll('.container-card')[1].attributes('style') ?? '';
-      expect(style).not.toContain('1px solid');
-      expect(style).not.toContain('1.5px solid');
+      expect(style).toContain('1.5px solid transparent');
     });
   });
 
@@ -89,6 +74,19 @@ describe('DataCardGrid', () => {
       const w = factory();
       const labels = w.findAll('.container-card').map((card) => card.attributes('aria-label'));
       expect(labels).toEqual(['Select Alpha', 'Select Beta', 'Select Gamma']);
+    });
+
+    it('uses itemLabel callback for aria-label when provided', () => {
+      const w = factory({ itemLabel: (item: any) => `Custom ${item.id}` });
+      const labels = w.findAll('.container-card').map((card) => card.attributes('aria-label'));
+      expect(labels).toEqual(['Select Custom 1', 'Select Custom 2', 'Select Custom 3']);
+    });
+
+    it('falls back to empty string for aria-label when item has no name', () => {
+      const namelessItems = [{ id: '1' }, { id: '2' }];
+      const w = mount(DataCardGrid, { props: { items: namelessItems, itemKey: 'id' } });
+      const labels = w.findAll('.container-card').map((card) => card.attributes('aria-label'));
+      expect(labels).toEqual(['Select ', 'Select ']);
     });
   });
 

@@ -91,6 +91,40 @@ test('getAppInfos should return collection content', async () => {
   });
 });
 
+test('getAppInfos should strip $loki and meta from collection document', async () => {
+  const db = {
+    getCollection: () => ({
+      findOne: () => ({
+        name: 'drydock',
+        version: '1.0.0',
+        $loki: 1,
+        meta: { revision: 0, created: 1234567890, version: 0 },
+      }),
+      insert: () => {},
+      remove: () => {},
+    }),
+    addCollection: () => null,
+  };
+  app.createCollections(db);
+  const result = app.getAppInfos();
+  expect(result).toStrictEqual({ name: 'drydock', version: '1.0.0' });
+  expect(result).not.toHaveProperty('$loki');
+  expect(result).not.toHaveProperty('meta');
+});
+
+test('getAppInfos should return null when collection is empty', async () => {
+  const db = {
+    getCollection: () => ({
+      findOne: () => null,
+      insert: () => {},
+      remove: () => {},
+    }),
+    addCollection: () => null,
+  };
+  app.createCollections(db);
+  expect(app.getAppInfos()).toBeNull();
+});
+
 test('isUpgrade should return false when app collection is empty (fresh install)', () => {
   const db = {
     getCollection: () => null,

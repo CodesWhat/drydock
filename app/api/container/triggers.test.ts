@@ -196,6 +196,46 @@ describe('api/container/triggers', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ data: [], total: 0 });
     });
+
+    test('filters dockercompose triggers by compose file affinity from container labels', async () => {
+      const mysqlComposeTrigger = createTrigger({
+        id: 'dockercompose.mysql',
+        type: 'dockercompose',
+        name: 'mysql',
+        configuration: { file: '/opt/drydock/test/mysql.yml' },
+        getDefaultComposeFilePath: () => '/opt/drydock/test/mysql.yml',
+        getComposeFilesForContainer: () => ['/opt/drydock/test/monitoring.yml'],
+      });
+      const monitoringComposeTrigger = createTrigger({
+        id: 'dockercompose.monitoring',
+        type: 'dockercompose',
+        name: 'monitoring',
+        configuration: { file: '/opt/drydock/test/monitoring.yml' },
+        getDefaultComposeFilePath: () => '/opt/drydock/test/monitoring.yml',
+        getComposeFilesForContainer: () => ['/opt/drydock/test/monitoring.yml'],
+      });
+
+      const harness = createHarness({
+        container: {
+          id: 'c1',
+          labels: {
+            'com.docker.compose.project.config_files': '/opt/drydock/test/monitoring.yml',
+          },
+        },
+        triggerMap: {
+          'dockercompose.mysql': mysqlComposeTrigger,
+          'dockercompose.monitoring': monitoringComposeTrigger,
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+      const associatedTriggers = payload.data;
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.total).toBe(1);
+      expect(associatedTriggers.map((trigger) => trigger.id)).toEqual(['dockercompose.monitoring']);
+    });
   });
 
   describe('runTrigger', () => {
