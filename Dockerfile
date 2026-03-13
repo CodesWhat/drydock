@@ -26,6 +26,7 @@ RUN apk add --no-cache \
     tini \
     tzdata \
     && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing cosign trivy \
+    && apk upgrade --no-cache zlib \
     && mkdir /store && chown node:node /store
 
 # Build stage for backend app
@@ -62,9 +63,10 @@ RUN npm run build
 FROM base AS release
 ENV DD_LOG_FORMAT=json
 
-# Remove unnecessary network utilities (busybox symlinks) to reduce attack surface.
-# curl is kept for the HEALTHCHECK probe.
-RUN rm -f /usr/bin/wget /usr/bin/nc
+# Remove unnecessary network utilities (busybox symlinks) and npm to reduce attack surface.
+# curl is kept for the HEALTHCHECK probe; npm is only needed during build stages.
+RUN rm -f /usr/bin/wget /usr/bin/nc \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Default entrypoint
 COPY --chmod=755 Docker.entrypoint.sh /usr/bin/entrypoint.sh
