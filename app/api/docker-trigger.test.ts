@@ -157,6 +157,24 @@ describe('docker-trigger helper', () => {
     expect(result).toBe(true);
   });
 
+  test('treats compose trigger as compatible when configured directory has trailing slash', () => {
+    const trigger = {
+      type: 'dockercompose',
+      configuration: { file: '/opt/drydock/test/monitoring/' },
+      getDefaultComposeFilePath: () => '/opt/drydock/test/monitoring/',
+      getComposeFilesForContainer: () => ['/opt/drydock/test/monitoring/compose.yaml'],
+    };
+
+    const result = isTriggerCompatibleWithContainer(trigger, {
+      id: 'c1',
+      labels: {
+        'com.docker.compose.project.config_files': '/opt/drydock/test/monitoring/compose.yaml',
+      },
+    });
+
+    expect(result).toBe(true);
+  });
+
   test('rejects compose trigger when configured directory does not match container compose file', () => {
     const trigger = {
       type: 'dockercompose',
