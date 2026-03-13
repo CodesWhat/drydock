@@ -63,3 +63,9 @@ export function updateKindColor(kind: string | null) {
   if (kind === 'digest') return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)' };
   return { bg: 'transparent', text: 'transparent' };
 }
+
+export function maturityColor(maturity: string | null) {
+  if (maturity === 'fresh') return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' };
+  if (maturity === 'settled') return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)' };
+  return { bg: 'transparent', text: 'transparent' };
+}

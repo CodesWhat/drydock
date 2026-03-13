@@ -720,4 +720,22 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     heroicons: 'heroicons:computer-desktop',
     iconoir: 'iconoir:windows',
   },
+  flame: {
+    'fa6-solid': 'fa6-solid:fire',
+    ph: 'ph:fire',
+    'ph-duotone': 'ph:fire-duotone',
+    lucide: 'lucide:flame',
+    tabler: 'tabler:flame',
+    heroicons: 'heroicons:fire',
+    iconoir: 'iconoir:fire-flame',
+  },
+  clock: {
+    'fa6-solid': 'fa6-solid:clock',
+    ph: 'ph:clock',
+    'ph-duotone': 'ph:clock-duotone',
+    lucide: 'lucide:clock',
+    tabler: 'tabler:clock',
+    heroicons: 'heroicons:clock',
+    iconoir: 'iconoir:clock',
+  },
 };

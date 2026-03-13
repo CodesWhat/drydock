@@ -1,4 +1,5 @@
 import {
+  maturityColor,
   parseServer,
   registryColorBg,
   registryColorText,
@@ -150,6 +151,26 @@ describe('display utilities', () => {
 
     it('returns transparent for null', () => {
       expect(updateKindColor(null)).toEqual({ bg: 'transparent', text: 'transparent' });
+    });
+  });
+
+  describe('maturityColor', () => {
+    it('returns warning colors for fresh', () => {
+      expect(maturityColor('fresh')).toEqual({
+        bg: 'var(--dd-warning-muted)',
+        text: 'var(--dd-warning)',
+      });
+    });
+
+    it('returns info colors for settled', () => {
+      expect(maturityColor('settled')).toEqual({
+        bg: 'var(--dd-info-muted)',
+        text: 'var(--dd-info)',
+      });
+    });
+
+    it('returns transparent for null', () => {
+      expect(maturityColor(null)).toEqual({ bg: 'transparent', text: 'transparent' });
     });
   });
 });

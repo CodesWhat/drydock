@@ -663,6 +663,40 @@ describe('container-mapper', () => {
       expect(c.updateDetectedAt).toBeUndefined();
     });
 
+    it('sets updateMaturity to fresh when update is recent', () => {
+      const recentDate = new Date(Date.now() - 2 * 86_400_000).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'minor' },
+          result: { tag: '2.0.0' },
+          updateDetectedAt: recentDate,
+        }),
+      );
+      expect(c.updateMaturity).toBe('fresh');
+      expect(c.updateMaturityTooltip).toMatch(/^Available for 2 days?$/);
+    });
+
+    it('sets updateMaturity to settled when update is old', () => {
+      const oldDate = new Date(Date.now() - 14 * 86_400_000).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'minor' },
+          result: { tag: '2.0.0' },
+          updateDetectedAt: oldDate,
+        }),
+      );
+      expect(c.updateMaturity).toBe('settled');
+      expect(c.updateMaturityTooltip).toMatch(/^Available for 14 days$/);
+    });
+
+    it('sets updateMaturity to null when no update available', () => {
+      const c = mapApiContainer(makeApiContainer());
+      expect(c.updateMaturity).toBeNull();
+      expect(c.updateMaturityTooltip).toBeUndefined();
+    });
+
     it('extracts labels from object', () => {
       const c = mapApiContainer(
         makeApiContainer({
@@ -728,6 +762,13 @@ describe('container-mapper', () => {
     it('returns empty labels when labels is null', () => {
       const c = mapApiContainer(makeApiContainer({ labels: null }));
       expect(c.details.labels).toEqual([]);
+    });
+
+    it('renders label key alone when value is null or undefined', () => {
+      const c = mapApiContainer(
+        makeApiContainer({ labels: { 'flag-a': null, 'flag-b': undefined, normal: 'val' } }),
+      );
+      expect(c.details.labels).toEqual(['flag-a', 'flag-b', 'normal=val']);
     });
 
     it('maps runtime details from api payload', () => {

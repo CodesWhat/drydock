@@ -21,6 +21,7 @@ import type {
   ContainerSecuritySummary,
 } from '../types/container';
 import { normalizeSeverityCount } from '../views/security/securityViewUtils';
+import { formatUpdateAge, getUpdateMaturity } from './update-maturity';
 
 interface ApiContainerImage {
   name?: unknown;
@@ -421,10 +422,17 @@ function deriveLabels(apiContainer: ApiContainerInput): string[] {
   const labels = apiContainer.labels;
   if (!labels || typeof labels !== 'object') return [];
   return Object.entries(labels).map(([k, v]) => {
-    if (v === null || v === undefined || v === '' || v === false || v === 0) {
+    if (v == null) {
       return k;
     }
-    return `${k}=${String(v)}`;
+    switch (v) {
+      case '':
+      case false:
+      case 0:
+        return k;
+      default:
+        return `${k}=${String(v)}`;
+    }
   });
 }
 
@@ -495,6 +503,14 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     imageTagSemver: asOptionalBoolean(apiContainer.image?.tag?.semver),
     releaseLink: deriveReleaseLink(apiContainer),
     updateDetectedAt: deriveUpdateDetectedAt(apiContainer),
+    updateMaturity: getUpdateMaturity(
+      deriveUpdateDetectedAt(apiContainer),
+      !!apiContainer.updateAvailable,
+    ),
+    updateMaturityTooltip: formatUpdateAge(
+      deriveUpdateDetectedAt(apiContainer),
+      !!apiContainer.updateAvailable,
+    ),
     updatePolicyState,
     suppressedUpdateTag: deriveSuppressedUpdateTag(apiContainer, updatePolicyState),
     status: apiContainer.status === 'running' ? 'running' : 'stopped',
