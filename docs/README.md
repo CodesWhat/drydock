@@ -6,7 +6,7 @@ The published documentation is available at **[drydock.codeswhat.com/docs](https
 
 Documentation content is now versioned at:
 
-- `/content/docs/current` (`1.4`, in release candidate)
+- `/content/docs/current` (`1.4`, stable)
 - `/content/docs/v1.3` (previous stable)
 
 The site/docs app lives in `/apps/web` and reads from `/content/docs/current`.
