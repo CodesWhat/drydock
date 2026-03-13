@@ -77,7 +77,13 @@ docker run -d \
   codeswhat/drydock:latest
 ```
 
-> Generate a secure hash with Node.js argon2id (requires Node 24+, replace `yourpassword`):
+> Generate a password hash (`argon2` CLI — install via your package manager):
+>
+> ```bash
+> echo -n "yourpassword" | argon2 $(openssl rand -base64 32) -id -m 16 -t 3 -p 4 -l 64 -e
+> ```
+>
+> Or with Node.js 24+ (no extra packages needed):
 >
 > ```bash
 > node -e 'const c=require("node:crypto");const s=c.randomBytes(32);const h=c.argon2Sync("argon2id",{message:process.argv[1],nonce:s,memory:65536,passes:3,parallelism:4,tagLength:64});console.log("argon2id$65536$3$4$"+s.toString("base64")+"$"+h.toString("base64"));' "yourpassword"
