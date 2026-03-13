@@ -529,9 +529,11 @@ class Basic extends Authentication {
     // then reject.  This equalizes response time regardless of whether the username
     // matched, eliminating username-enumeration via latency measurement.
     if (!userMatches) {
-      void verifyPassword(pass, this.configuration.hash).finally(() => {
-        done(null, false);
-      });
+      void verifyPassword(pass, this.configuration.hash)
+        .catch(() => {})
+        .finally(() => {
+          done(null, false);
+        });
       return;
     }
 

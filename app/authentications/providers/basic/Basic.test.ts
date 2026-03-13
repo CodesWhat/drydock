@@ -232,8 +232,7 @@ describe('Basic Authentication', () => {
       user: 'testuser',
       hash: createArgon2Hash('password'),
     };
-
-    const callCountBefore = mockArgon2.mock.calls.length;
+    mockArgon2.mockClear();
 
     await new Promise<void>((resolve) => {
       basic.authenticate('wronguser', 'wrongpassword', (err, result) => {
@@ -243,7 +242,40 @@ describe('Basic Authentication', () => {
     });
 
     // Verify argon2 was invoked despite username mismatch
-    expect(mockArgon2.mock.calls.length).toBe(callCountBefore + 1);
+    expect(mockArgon2).toHaveBeenCalledTimes(1);
+  });
+
+  test('should avoid unhandled rejections when timing mitigation verification rejects', async () => {
+    basic.configuration = {
+      user: 'testuser',
+      hash: {
+        trim() {
+          throw new Error('corrupt hash');
+        },
+      } as unknown as string,
+    };
+
+    const unhandledRejections: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown) => {
+      unhandledRejections.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandledRejection);
+
+    try {
+      await new Promise<void>((resolve) => {
+        basic.authenticate('wronguser', 'password', (_err, result) => {
+          expect(result).toBe(false);
+          resolve();
+        });
+      });
+
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+      expect(unhandledRejections).toHaveLength(0);
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection);
+    }
   });
 
   test('should reject invalid password', async () => {
