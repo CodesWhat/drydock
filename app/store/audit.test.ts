@@ -327,6 +327,19 @@ describe('Audit Store', () => {
     }
   });
 
+  test('createCollections should tolerate timer handles without unref support', () => {
+    const setIntervalSpy = vi
+      .spyOn(globalThis, 'setInterval')
+      .mockReturnValue(0 as unknown as NodeJS.Timeout);
+
+    try {
+      expect(() => audit.createCollections(db)).not.toThrow();
+      expect(setIntervalSpy).toHaveBeenCalled();
+    } finally {
+      setIntervalSpy.mockRestore();
+    }
+  });
+
   test('getAuditEntries should return all entries', () => {
     audit.insertAudit({ action: 'update-available', containerName: 'nginx', status: 'info' });
     audit.insertAudit({ action: 'update-applied', containerName: 'redis', status: 'success' });
