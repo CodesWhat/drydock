@@ -8,11 +8,11 @@ interface TooltipBinding {
 type BindingValue = string | TooltipBinding;
 
 interface TooltipState {
-  el: HTMLElement;
-  tip: HTMLElement | null;
-  timer: ReturnType<typeof setTimeout> | null;
   text: string;
   delay: number;
+  timer: ReturnType<typeof setTimeout> | null;
+  hadTitle: boolean;
+  originalTitle: string | null;
   show: () => void;
   hide: () => void;
 }
@@ -20,106 +20,72 @@ interface TooltipState {
 const stateMap = new WeakMap<HTMLElement, TooltipState>();
 
 function parse(binding: DirectiveBinding<BindingValue>): { text: string; delay: number } {
-  const v = binding.value;
-  if (v == null || v === '') return { text: '', delay: 0 };
-  if (typeof v === 'string') return { text: v, delay: 0 };
-  return { text: v.value ?? '', delay: v.showDelay ?? 0 };
+  const value = binding.value;
+  if (value == null || value === '') return { text: '', delay: 0 };
+  if (typeof value === 'string') return { text: value, delay: 0 };
+  return { text: value.value ?? '', delay: value.showDelay ?? 0 };
 }
 
-function createTip(state: TooltipState) {
-  const tip = document.createElement('div');
-  tip.setAttribute('role', 'tooltip');
-  tip.textContent = state.text;
-  Object.assign(tip.style, {
-    position: 'fixed',
-    zIndex: '9999',
-    pointerEvents: 'none',
-    fontFamily: 'var(--drydock-font, "IBM Plex Mono", monospace)',
-    fontSize: '11px',
-    padding: '4px 8px',
-    background: 'var(--dd-bg-card)',
-    color: 'var(--dd-text)',
-    border: '1px solid var(--dd-border-strong)',
-    borderRadius: 'var(--dd-radius-sm)',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-    whiteSpace: 'nowrap',
-    opacity: '0',
-    transition: 'opacity 0.15s ease',
-  });
-  return tip;
-}
-
-function position(tip: HTMLElement, el: HTMLElement) {
-  const rect = el.getBoundingClientRect();
-  const tipRect = tip.getBoundingClientRect();
-  let left = rect.left + (rect.width - tipRect.width) / 2;
-
-  // Prefer above, flip below if not enough room
-  let top = rect.top - tipRect.height - 6;
-  if (top < 4) {
-    top = rect.bottom + 6;
+function applyTooltipText(el: HTMLElement, text: string) {
+  if (text) {
+    el.setAttribute('data-dd-tooltip', text);
+  } else {
+    el.removeAttribute('data-dd-tooltip');
   }
-
-  // Clamp horizontal position to viewport
-  if (left < 4) left = 4;
-  if (left + tipRect.width > window.innerWidth - 4) {
-    left = window.innerWidth - tipRect.width - 4;
-  }
-
-  tip.style.left = `${left}px`;
-  tip.style.top = `${top}px`;
 }
 
-function makeShow(state: TooltipState): () => void {
+function makeShow(el: HTMLElement, state: TooltipState): () => void {
   return () => {
     if (!state.text) return;
-    const tip = createTip(state);
-    state.tip = tip;
 
-    const reveal = () => {
-      document.body.appendChild(tip);
-      // Force layout then position and fade in
-      position(tip, state.el);
-      requestAnimationFrame(() => {
-        tip.style.opacity = '1';
-        position(tip, state.el);
-      });
-    };
+    if (state.timer != null) {
+      clearTimeout(state.timer);
+      state.timer = null;
+    }
 
     if (state.delay > 0) {
-      state.timer = setTimeout(reveal, state.delay);
-    } else {
-      reveal();
+      state.timer = setTimeout(() => {
+        state.timer = null;
+        el.classList.add('dd-tooltip-visible');
+      }, state.delay);
+      return;
     }
+
+    el.classList.add('dd-tooltip-visible');
   };
 }
 
-function makeHide(state: TooltipState): () => void {
+function makeHide(el: HTMLElement, state: TooltipState): () => void {
   return () => {
     if (state.timer != null) {
       clearTimeout(state.timer);
       state.timer = null;
     }
-    if (state.tip?.parentNode) {
-      state.tip.remove();
-    }
-    state.tip = null;
+    el.classList.remove('dd-tooltip-visible');
   };
 }
 
 function bind(el: HTMLElement, binding: DirectiveBinding<BindingValue>) {
   const { text, delay } = parse(binding);
   const state: TooltipState = {
-    el,
-    tip: null,
-    timer: null,
     text,
     delay,
+    timer: null,
+    hadTitle: el.hasAttribute('title'),
+    originalTitle: el.getAttribute('title'),
     show: undefined as unknown as () => void,
     hide: undefined as unknown as () => void,
   };
-  state.show = makeShow(state);
-  state.hide = makeHide(state);
+
+  // Avoid native browser tooltip duplication while custom tooltip is active.
+  if (state.hadTitle) {
+    el.removeAttribute('title');
+  }
+
+  el.classList.add('dd-tooltip-anchor');
+  applyTooltipText(el, text);
+  state.show = makeShow(el, state);
+  state.hide = makeHide(el, state);
 
   el.addEventListener('mouseenter', state.show);
   el.addEventListener('mouseleave', state.hide);
@@ -132,12 +98,24 @@ function bind(el: HTMLElement, binding: DirectiveBinding<BindingValue>) {
 function unbind(el: HTMLElement) {
   const state = stateMap.get(el);
   if (!state) return;
+
   state.hide();
   el.removeEventListener('mouseenter', state.show);
   el.removeEventListener('mouseleave', state.hide);
   el.removeEventListener('mousedown', state.hide);
   el.removeEventListener('focus', state.show);
   el.removeEventListener('blur', state.hide);
+
+  el.classList.remove('dd-tooltip-anchor');
+  el.classList.remove('dd-tooltip-visible');
+  el.removeAttribute('data-dd-tooltip');
+
+  if (state.hadTitle && state.originalTitle != null) {
+    el.setAttribute('title', state.originalTitle);
+  } else if (!state.hadTitle) {
+    el.removeAttribute('title');
+  }
+
   stateMap.delete(el);
 }
 
@@ -149,9 +127,15 @@ export const tooltip: Directive<HTMLElement, BindingValue> = {
       bind(el, binding);
       return;
     }
+
     const { text, delay } = parse(binding);
     state.text = text;
     state.delay = delay;
+    applyTooltipText(el, text);
+
+    if (!text) {
+      state.hide();
+    }
   },
   beforeUnmount: unbind,
 };

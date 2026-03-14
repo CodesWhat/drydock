@@ -14,6 +14,7 @@ import { getUser } from '../services/auth';
 import { getServer } from '../services/server';
 import { clearIconCache, getSettings, updateSettings } from '../services/settings';
 import { getStore } from '../services/store';
+import { applyFontSize } from '../preferences/font-size';
 import { applyRadius, type RadiusPresetId, RADIUS_PRESET_VALUES } from '../preferences/radius';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
@@ -52,7 +53,7 @@ const activeFontSize = usePreference(
 
 function setFontSize(scale: number) {
   activeFontSize.value = scale;
-  document.documentElement.style.setProperty('--dd-font-size', String(scale));
+  applyFontSize(scale);
 }
 
 type SettingsTab = 'general' | 'appearance' | 'profile';

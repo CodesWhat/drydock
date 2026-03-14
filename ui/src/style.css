@@ -28,6 +28,94 @@ html {
   font-size: calc(16px * var(--dd-font-size));
 }
 
+/* Font scale presets (80% to 130%, 5% steps) */
+html.dd-font-size-80 {
+  --dd-font-size: 0.8;
+}
+html.dd-font-size-85 {
+  --dd-font-size: 0.85;
+}
+html.dd-font-size-90 {
+  --dd-font-size: 0.9;
+}
+html.dd-font-size-95 {
+  --dd-font-size: 0.95;
+}
+html.dd-font-size-100 {
+  --dd-font-size: 1;
+}
+html.dd-font-size-105 {
+  --dd-font-size: 1.05;
+}
+html.dd-font-size-110 {
+  --dd-font-size: 1.1;
+}
+html.dd-font-size-115 {
+  --dd-font-size: 1.15;
+}
+html.dd-font-size-120 {
+  --dd-font-size: 1.2;
+}
+html.dd-font-size-125 {
+  --dd-font-size: 1.25;
+}
+html.dd-font-size-130 {
+  --dd-font-size: 1.3;
+}
+
+/* Radius presets */
+html.dd-radius-none {
+  --dd-radius: 0px;
+  --dd-radius-sm: 0px;
+  --dd-radius-lg: 0px;
+}
+html.dd-radius-sharp {
+  --dd-radius: 3px;
+  --dd-radius-sm: 2px;
+  --dd-radius-lg: 4px;
+}
+html.dd-radius-modern {
+  --dd-radius: 8px;
+  --dd-radius-sm: 4px;
+  --dd-radius-lg: 12px;
+}
+html.dd-radius-soft {
+  --dd-radius: 12px;
+  --dd-radius-sm: 6px;
+  --dd-radius-lg: 16px;
+}
+html.dd-radius-round {
+  --dd-radius: 16px;
+  --dd-radius-sm: 8px;
+  --dd-radius-lg: 24px;
+}
+
+/* Font family presets */
+html.dd-font-ibm-plex-mono {
+  --drydock-font: "IBM Plex Mono", monospace;
+  --font-mono: "IBM Plex Mono", monospace;
+}
+html.dd-font-jetbrains-mono {
+  --drydock-font: "JetBrains Mono", monospace;
+  --font-mono: "JetBrains Mono", monospace;
+}
+html.dd-font-source-code-pro {
+  --drydock-font: "Source Code Pro", monospace;
+  --font-mono: "Source Code Pro", monospace;
+}
+html.dd-font-inconsolata {
+  --drydock-font: "Inconsolata", monospace;
+  --font-mono: "Inconsolata", monospace;
+}
+html.dd-font-commit-mono {
+  --drydock-font: "Commit Mono", monospace;
+  --font-mono: "Commit Mono", monospace;
+}
+html.dd-font-comic-mono {
+  --drydock-font: "Comic Mono", monospace;
+  --font-mono: "Comic Mono", monospace;
+}
+
 @theme {
   --color-drydock-primary: #00355e;
   --color-drydock-secondary: var(--dd-primary);
@@ -249,6 +337,42 @@ body {
   font-family: var(--drydock-font, "IBM Plex Mono", monospace);
 }
 
+body.dd-col-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* Tooltip directive */
+.dd-tooltip-anchor {
+  position: relative;
+}
+.dd-tooltip-anchor::after {
+  content: attr(data-dd-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translate(-50%, 2px);
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.1;
+  padding: 4px 8px;
+  border-radius: var(--dd-radius-sm);
+  border: 1px solid var(--dd-border-strong);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 20%);
+  background: var(--dd-bg-card);
+  color: var(--dd-text);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+.dd-tooltip-anchor.dd-tooltip-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 /* Scrollbar styling — overlay so scrollbars never shift layout */
 * {
   scrollbar-width: thin;
@@ -457,10 +581,10 @@ html.dd-transitioning::view-transition-new(root) {
 
 @keyframes theme-circle-reveal {
   0% {
-    clip-path: circle(0% at var(--x) var(--y));
+    clip-path: circle(0% at 50% 50%);
   }
   100% {
-    clip-path: circle(150% at var(--x) var(--y));
+    clip-path: circle(150% at 50% 50%);
   }
 }
 

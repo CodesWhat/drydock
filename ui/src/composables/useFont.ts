@@ -64,6 +64,8 @@ export const fontOptions: FontOption[] = [
 
 const DEFAULT_FONT_ID: FontId = 'ibm-plex-mono';
 const FONT_IDS = new Set<FontId>(fontOptions.map((option) => option.id));
+const FONT_CLASS_PREFIX = 'dd-font-';
+const FONT_CLASS_NAMES = new Set(fontOptions.map((option) => `${FONT_CLASS_PREFIX}${option.id}`));
 
 function isFontId(value: unknown): value is FontId {
   return typeof value === 'string' && FONT_IDS.has(value as FontId);
@@ -86,11 +88,15 @@ watch(activeFont, (id) => {
 
 function applyFont(id: FontId) {
   const opt = fontOptions.find((f) => f.id === id);
-  if (opt) {
-    document.documentElement.style.setProperty('--drydock-font', opt.family);
-    // Tailwind's `font-mono` utility resolves from this token.
-    document.documentElement.style.setProperty('--font-mono', opt.family);
+  if (!opt) {
+    return;
   }
+
+  const root = document.documentElement;
+  for (const className of FONT_CLASS_NAMES) {
+    root.classList.remove(className);
+  }
+  root.classList.add(`${FONT_CLASS_PREFIX}${opt.id}`);
 }
 
 /**
