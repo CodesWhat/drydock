@@ -5,27 +5,6 @@ description: "Frequently asked questions and common troubleshooting tips for dry
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-## Core dumped on Raspberry PI
-
-If at startup you face an issue looking like
-
-```text
-#
-# Fatal error in , line 0
-# unreachable code
-#
-#
-#
-#FailureMessage Object: 0x7eace25c
-```
-
-Add the `--security-opt seccomp=unconfined` option to your docker command
-Example
-
-```bash
-docker run ... --security-opt seccomp=unconfined codeswhat/drydock
-```
-
 ## Socket permission errors (EACCES)
 
 Drydock runs as a non-root user by default. The entrypoint automatically detects the Docker socket GID and adds the `node` user to the matching group. If the socket is owned by GID 0 (root), the entrypoint refuses to start implicitly as root.

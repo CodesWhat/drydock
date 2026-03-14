@@ -60,10 +60,10 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
         mainEntity: [
           {
             "@type": "Question",
-            name: "Core dumped on Raspberry PI",
+            name: "Socket permission errors (EACCES)",
             acceptedAnswer: {
               "@type": "Answer",
-              text: 'If at startup you face a "Fatal error: unreachable code" crash, add the --security-opt seccomp=unconfined option to your docker command. Example: docker run ... --security-opt seccomp=unconfined codeswhat/drydock',
+              text: "Drydock runs as a non-root user by default. Use a Docker socket proxy so drydock never needs direct socket access. If you cannot use a socket proxy, set both DD_RUN_AS_ROOT=true and DD_ALLOW_INSECURE_ROOT=true environment variables.",
             },
           },
         ],
