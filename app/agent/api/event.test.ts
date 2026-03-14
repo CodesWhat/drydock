@@ -48,6 +48,7 @@ vi.mock('../../store/container.js', () => ({
     { id: 'c2', status: 'exited', image: { id: 'img-2' } },
     { id: 'c3', status: 'running', image: { id: 'img-1' } },
   ]),
+  getContainerRaw: vi.fn(),
 }));
 
 describe('agent API event', () => {
@@ -230,6 +231,114 @@ describe('agent API event', () => {
       expect(res.write).toHaveBeenCalled();
       const payload = res.write.mock.calls[0][0];
       expect(payload).toContain('dd:container-updated');
+    });
+
+    test('container-added handler should emit schema-safe env entries without sensitive metadata', () => {
+      storeContainer.getContainerRaw.mockReturnValue({
+        id: 'c1',
+        details: {
+          ports: [],
+          volumes: [],
+          env: [{ key: 'API_TOKEN', value: 'super-secret' }],
+        },
+      });
+
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler({
+        id: 'c1',
+        details: {
+          env: [{ key: 'API_TOKEN', value: '[REDACTED]', sensitive: true }],
+        },
+      });
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:container-added');
+      expect(payload).toContain('"key":"API_TOKEN"');
+      expect(payload).toContain('"value":"super-secret"');
+      expect(payload).not.toContain('"sensitive"');
+    });
+
+    test('container-updated handler should strip sensitive metadata when raw payload lookup misses', () => {
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updatedHandler = event.registerContainerUpdated.mock.calls[0][0];
+      updatedHandler({
+        id: 'missing-container',
+        details: {
+          ports: [],
+          volumes: [],
+          env: [{ key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true }],
+        },
+      });
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:container-updated');
+      expect(payload).toContain('"key":"DB_PASSWORD"');
+      expect(payload).toContain('"value":"[REDACTED]"');
+      expect(payload).not.toContain('"sensitive"');
+    });
+
+    test('container-updated handler should keep non-array env details unchanged on fallback sanitization', () => {
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updatedHandler = event.registerContainerUpdated.mock.calls[0][0];
+      updatedHandler({
+        id: 'missing-container',
+        details: {
+          env: 'not-an-array',
+        },
+      });
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:container-updated');
+      expect(payload).toContain('"env":"not-an-array"');
+    });
+
+    test('container-updated handler should keep non-object details unchanged on fallback sanitization', () => {
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updatedHandler = event.registerContainerUpdated.mock.calls[0][0];
+      updatedHandler({
+        id: 'missing-container',
+        details: 'opaque-details',
+      });
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:container-updated');
+      expect(payload).toContain('"details":"opaque-details"');
+    });
+
+    test('container-added handler should not crash on non-object payload', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler(undefined);
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:container-added');
     });
 
     test('container-removed handler should send SSE with container id', () => {

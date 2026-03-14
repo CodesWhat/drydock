@@ -30,6 +30,11 @@ interface ContainerSummaryCache {
 
 const CONTAINER_SUMMARY_CACHE_TTL_MS = 2_000;
 
+interface RuntimeEnvEntry {
+  key: string;
+  value: string;
+}
+
 // SSE Clients
 let sseClients: SseClient[] = [];
 let nextSseClientId = 0;
@@ -57,6 +62,75 @@ function sendSseEvent(eventName: string, data: any) {
   sseClients.forEach((client) => {
     client.res.write(`data: ${payload}\n\n`);
   });
+}
+
+function toAgentRuntimeEnvEntries(env: unknown): RuntimeEnvEntry[] | undefined {
+  if (!Array.isArray(env)) {
+    return undefined;
+  }
+
+  return env
+    .filter(
+      (entry): entry is RuntimeEnvEntry =>
+        !!entry &&
+        typeof entry === 'object' &&
+        typeof (entry as { key?: unknown }).key === 'string' &&
+        typeof (entry as { value?: unknown }).value === 'string',
+    )
+    .map((entry) => ({
+      key: entry.key,
+      value: entry.value,
+    }));
+}
+
+function sanitizeContainerDetailsForAgentSse(details: unknown): unknown {
+  if (!details || typeof details !== 'object') {
+    return details;
+  }
+
+  const detailsWithEnv = details as { env?: unknown };
+  const env = toAgentRuntimeEnvEntries(detailsWithEnv.env);
+  if (!env) {
+    return details;
+  }
+
+  return {
+    ...detailsWithEnv,
+    env,
+  };
+}
+
+function sanitizeContainerLifecyclePayloadForAgentSse(
+  payload: event.ContainerLifecycleEventPayload,
+): event.ContainerLifecycleEventPayload {
+  if (!payload || typeof payload !== 'object') {
+    return payload;
+  }
+
+  const payloadWithDetails = payload as event.ContainerLifecycleEventPayload & {
+    details?: unknown;
+  };
+  if (!payloadWithDetails.details) {
+    return payload;
+  }
+
+  return {
+    ...payloadWithDetails,
+    details: sanitizeContainerDetailsForAgentSse(payloadWithDetails.details),
+  };
+}
+
+function getAgentContainerSsePayload(
+  payload: event.ContainerLifecycleEventPayload,
+): event.ContainerLifecycleEventPayload {
+  const containerId = typeof payload?.id === 'string' ? payload.id : undefined;
+  if (containerId) {
+    const containerRaw = storeContainer.getContainerRaw(containerId);
+    if (containerRaw) {
+      return containerRaw;
+    }
+  }
+  return sanitizeContainerLifecyclePayloadForAgentSse(payload);
 }
 
 function computeContainerSummary(): ContainerSummary {
@@ -137,10 +211,10 @@ export function subscribeEvents(req: Request, res: Response) {
  */
 export function initEvents() {
   event.registerContainerAdded((container: event.ContainerLifecycleEventPayload) =>
-    sendSseEvent('dd:container-added', container),
+    sendSseEvent('dd:container-added', getAgentContainerSsePayload(container)),
   );
   event.registerContainerUpdated((container: event.ContainerLifecycleEventPayload) =>
-    sendSseEvent('dd:container-updated', container),
+    sendSseEvent('dd:container-updated', getAgentContainerSsePayload(container)),
   );
   event.registerContainerRemoved((container: event.ContainerLifecycleEventPayload) =>
     sendSseEvent('dd:container-removed', { id: container.id }),
