@@ -13,6 +13,7 @@ You can adjust the server configuration with the following environment variables
 | --- | :---: | --- | --- | --- |
 | `DD_PUBLIC_URL` | ⚪ | Public-facing URL for OIDC callbacks and links (auto-detected from request if not set) | URL (e.g., `https://drydock.example.com`) | auto-detected |
 | `DD_SERVER_ENABLED` | ⚪ | If REST API must be exposed | `true`, `false` | `true` |
+| `DD_SERVER_UI_ENABLED` | ⚪ | Serve the web UI (set to `false` for headless/API-only mode) | `true`, `false` | `true` |
 | `DD_SERVER_PORT` | ⚪ | Http listener port | from `0` to `65535` | `3000` |
 | `DD_SERVER_TRUSTPROXY` | ⚪ | Trust X-Forwarded-For headers when behind a reverse proxy | `true`, `false`, or hop count (`1`, `2`, etc.) | `false` |
 | `DD_SERVER_TLS_ENABLED` | ⚪ | Enable HTTPS+TLS | `true`, `false` | `false` |
