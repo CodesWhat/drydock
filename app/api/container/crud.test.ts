@@ -1313,6 +1313,33 @@ describe('api/container/crud', () => {
       });
     });
 
+    test('applies offset-only pagination when limit is zero for update-operations', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'edge-api' })],
+      });
+      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([
+        { id: 'op-1' },
+        { id: 'op-2' },
+        { id: 'op-3' },
+      ]);
+
+      const res = callGetContainerUpdateOperations(harness.handlers, 'c1', {
+        limit: '0',
+        offset: '1',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [{ id: 'op-2' }, { id: 'op-3' }],
+          total: 3,
+          limit: 0,
+          offset: 1,
+          hasMore: false,
+        }),
+      );
+    });
+
     test('returns 404 for update-operation lookup when container is missing', () => {
       const harness = createHarness();
 

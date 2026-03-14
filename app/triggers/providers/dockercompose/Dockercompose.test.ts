@@ -2882,6 +2882,7 @@ describe('Dockercompose Trigger', () => {
     const composeFilePathB = '/opt/drydock/test/b.yml';
     const composeFilePathC = '/opt/drydock/test/c.yml';
     trigger._composeCacheMaxEntries = 2;
+    expect(trigger._composeCacheMaxEntries).toBe(2);
 
     const getComposeFileSpy = vi
       .spyOn(trigger, 'getComposeFile')
