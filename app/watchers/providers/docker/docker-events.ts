@@ -65,9 +65,10 @@ function logReconnectScheduled(
 }
 
 function logReconnectFailure(state: DockerEventsState, reconnectError: any) {
+  const errorMessage = reconnectError?.message ? ` (${reconnectError.message})` : '';
   if (state.log && typeof state.log.warn === 'function') {
     state.log.warn(
-      `Docker event stream reconnect attempt #${state.dockerEventsReconnectAttempt} failed (${reconnectError.message})`,
+      `Docker event stream reconnect attempt #${state.dockerEventsReconnectAttempt} failed${errorMessage}`,
     );
   }
 }

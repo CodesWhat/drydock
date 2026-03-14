@@ -141,14 +141,14 @@ export async function registerComponent(options: RegisterComponentOptions): Prom
     // if the file structure and inheritance are correct
     (state[kind] as any)[component.getId()] = component;
     return componentRegistered;
-  } catch (e: any) {
+  } catch (e: unknown) {
     const availableProviders = getAvailableProviders(componentPath, (message) =>
       log.debug(message),
     );
     const helpfulMessage = getHelpfulErrorMessage(
       kind,
       providerLowercase,
-      e.message,
+      getErrorMessage(e),
       availableProviders,
     );
     throw new Error(helpfulMessage);
@@ -400,8 +400,8 @@ async function registerWatchers(options: RegistrationOptions = {}) {
       );
     }
     await Promise.all(watchersToRegister);
-  } catch (e: any) {
-    log.warn(`Some watchers failed to register (${e.message})`);
+  } catch (e: unknown) {
+    log.warn(`Some watchers failed to register (${getErrorMessage(e)})`);
     log.debug(e);
   }
 }
@@ -433,8 +433,8 @@ async function registerTriggers(options: RegistrationOptions = {}) {
     });
     try {
       await registerComponents('trigger', filteredConfigurations, 'triggers/providers');
-    } catch (e: any) {
-      log.warn(`Some triggers failed to register (${e.message})`);
+    } catch (e: unknown) {
+      log.warn(`Some triggers failed to register (${getErrorMessage(e)})`);
       log.debug(e);
     }
     return;

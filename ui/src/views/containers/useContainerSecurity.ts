@@ -144,10 +144,11 @@ function getComposePathsFromMeta(meta: Record<string, unknown> | undefined): str
     ...normalizeComposePathList(labels?.['wud.compose.files']),
     ...normalizeComposePathList(labels?.['dd.compose.file']),
     ...normalizeComposePathList(labels?.['wud.compose.file']),
-  ].filter((value, index, values) => values.indexOf(value) === index);
+  ];
+  const deduplicatedPaths = [...new Set(detectedPaths)];
 
-  if (detectedPaths.length > 0) {
-    return detectedPaths;
+  if (deduplicatedPaths.length > 0) {
+    return deduplicatedPaths;
   }
 
   const trigger = meta.trigger as Record<string, unknown> | undefined;

@@ -275,6 +275,30 @@ describe('docker events helpers extraction', () => {
     expect(listenDockerEvents).toHaveBeenCalledTimes(2);
   });
 
+  test('handles reconnect failures with malformed error payloads', async () => {
+    vi.useFakeTimers();
+    const cleanup = vi.fn();
+    const listenDockerEvents = vi.fn().mockRejectedValueOnce(undefined).mockResolvedValueOnce(undefined);
+    const state = createState();
+
+    scheduleDockerEventsReconnect(
+      state,
+      {
+        cleanupDockerEventsStream: cleanup,
+        listenDockerEvents,
+      },
+      'stream error',
+    );
+    state.log.warn.mockClear();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(state.log.warn).toHaveBeenCalledWith('Docker event stream reconnect attempt #1 failed');
+    expect(state.dockerEventsReconnectAttempt).toBe(2);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(listenDockerEvents).toHaveBeenCalledTimes(2);
+  });
+
   test('ignores stream failure callback for stale stream references', () => {
     const state = createState();
     const currentStream = {};
