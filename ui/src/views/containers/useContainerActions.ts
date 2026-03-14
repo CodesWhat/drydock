@@ -27,16 +27,23 @@ interface ContainerActionGroup {
   containers: Container[];
 }
 
-interface ContainerListPolicyState {
+type ContainerListPolicyState = {
   snoozed: boolean;
   skipped: boolean;
   skipCount: number;
   snoozeUntil?: string;
-  maturityMode?: 'all' | 'mature';
-  maturityMinAgeDays?: number;
   maturityBlocked: boolean;
   updateDetectedAt?: string;
-}
+} & (
+  | {
+      maturityMode?: undefined;
+      maturityMinAgeDays?: undefined;
+    }
+  | {
+      maturityMode: 'all' | 'mature';
+      maturityMinAgeDays: number;
+    }
+);
 
 interface UseContainerActionsInput {
   activeDetailTab: Readonly<Ref<string>>;
@@ -251,8 +258,11 @@ function deriveContainerListPolicyState(
   containerName: string,
 ): ContainerListPolicyState {
   const meta = containerMetaMap[containerName];
-  const updatePolicy =
-    meta && typeof meta === 'object' ? (meta as Record<string, unknown>).updatePolicy : undefined;
+  if (!meta || typeof meta !== 'object') {
+    return EMPTY_CONTAINER_POLICY_STATE;
+  }
+  const metaRecord = meta as Record<string, unknown>;
+  const updatePolicy = metaRecord.updatePolicy;
   if (!updatePolicy || typeof updatePolicy !== 'object') {
     return EMPTY_CONTAINER_POLICY_STATE;
   }
@@ -264,22 +274,15 @@ function deriveContainerListPolicyState(
   const maturityMode = normalizeMaturityMode(policy.maturityMode);
   const maturityMinAgeDays =
     normalizeMaturityMinAgeDays(policy.maturityMinAgeDays) ?? DEFAULT_MATURITY_MIN_AGE_DAYS;
-  const updateDetectedAt = normalizeUpdateDetectedAt(
-    meta && typeof meta === 'object'
-      ? (meta as Record<string, unknown>).updateDetectedAt
-      : undefined,
-  );
+  const updateDetectedAt = normalizeUpdateDetectedAt(metaRecord.updateDetectedAt);
   const updateDetectedAtMs = updateDetectedAt ? Date.parse(updateDetectedAt) : Number.NaN;
   const hasSuppressedUpdateCandidate = Boolean(
-    meta &&
-      typeof meta === 'object' &&
-      (meta as Record<string, unknown>).updateAvailable === false &&
-      (meta as Record<string, unknown>).updateKind &&
-      typeof (meta as Record<string, unknown>).updateKind === 'object' &&
-      ((meta as Record<string, unknown>).updateKind as Record<string, unknown>).kind &&
-      (((meta as Record<string, unknown>).updateKind as Record<string, unknown>).kind === 'tag' ||
-        ((meta as Record<string, unknown>).updateKind as Record<string, unknown>).kind ===
-          'digest'),
+    metaRecord.updateAvailable === false &&
+      metaRecord.updateKind &&
+      typeof metaRecord.updateKind === 'object' &&
+      (metaRecord.updateKind as Record<string, unknown>).kind &&
+      ((metaRecord.updateKind as Record<string, unknown>).kind === 'tag' ||
+        (metaRecord.updateKind as Record<string, unknown>).kind === 'digest'),
   );
 
   const rawSnoozeUntil = typeof policy.snoozeUntil === 'string' ? policy.snoozeUntil : undefined;
@@ -318,7 +321,7 @@ function buildContainerPolicyTooltip(
   }
   if (kind === 'maturity') {
     if (state.maturityMode === 'mature') {
-      const minAgeDays = state.maturityMinAgeDays ?? DEFAULT_MATURITY_MIN_AGE_DAYS;
+      const minAgeDays = state.maturityMinAgeDays;
       return state.maturityBlocked
         ? `Mature-only policy blocks updates younger than ${minAgeDays} day${minAgeDays === 1 ? '' : 's'}`
         : `Mature-only policy active (${minAgeDays} day${minAgeDays === 1 ? '' : 's'} minimum age)`;
