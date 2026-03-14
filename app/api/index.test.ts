@@ -360,7 +360,7 @@ describe('API Index', () => {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          'style-src': ["'self'"],
+          'style-src': ["'self'", "'unsafe-inline'"],
           'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
           'font-src': ["'self'", 'data:'],
@@ -397,7 +397,7 @@ describe('API Index', () => {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          'style-src': ["'self'"],
+          'style-src': ["'self'", "'unsafe-inline'"],
           'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
           'font-src': ["'self'", 'data:'],
@@ -428,7 +428,7 @@ describe('API Index', () => {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          'style-src': ["'self'"],
+          'style-src': ["'self'", "'unsafe-inline'"],
           'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
           'font-src': ["'self'", 'data:'],

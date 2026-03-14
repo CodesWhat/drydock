@@ -85,8 +85,9 @@ function configureSecurityHeaders(app) {
         directives: {
           'default-src': ["'self'"],
           'script-src': ["'self'"],
-          // Keep inline styles limited to element attributes to reduce CSP exposure.
-          'style-src': ["'self'"],
+          // unsafe-inline required for vendor libraries (iconify-icon, Vue
+          // Transition) that set element.style programmatically.
+          'style-src': ["'self'", "'unsafe-inline'"],
           'style-src-attr': ["'unsafe-inline'"],
           'img-src': ["'self'", 'data:'],
           'font-src': ["'self'", 'data:'],
