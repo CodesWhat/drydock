@@ -2,7 +2,12 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { computed, defineComponent, h, nextTick, type Ref, ref } from 'vue';
 import type { ApiContainerTrigger } from '@/types/api';
 import type { Container } from '@/types/container';
-import { useContainerActions } from '@/views/containers/useContainerActions';
+import { daysToMs } from '@/utils/maturity-policy';
+import {
+  ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS,
+  PENDING_ACTIONS_POLL_INTERVAL_MS,
+  useContainerActions,
+} from '@/views/containers/useContainerActions';
 
 const mocks = vi.hoisted(() => ({
   confirmRequire: vi.fn(),
@@ -437,32 +442,42 @@ describe('useContainerActions', () => {
     expect(loadContainers).toHaveBeenCalledTimes(1);
   });
 
-  it('updates all eligible containers in a group', async () => {
+  it('updates all eligible containers in a group and reloads once after the batch', async () => {
     const c1 = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0', bouncer: 'safe' });
     const c2 = makeContainer({
       id: 'container-2',
       name: 'api',
       newTag: '2.0.0',
+      bouncer: 'safe',
+    });
+    const c3 = makeContainer({
+      id: 'container-3',
+      name: 'worker',
+      newTag: '2.0.0',
       bouncer: 'blocked',
     });
-    const c3 = makeContainer({ id: 'container-3', name: 'worker', newTag: null, bouncer: 'safe' });
+    const c4 = makeContainer({ id: 'container-4', name: 'cron', newTag: null, bouncer: 'safe' });
 
-    const { composable } = await mountActionsHarness({
-      containers: [c1, c2, c3],
+    const { composable, loadContainers } = await mountActionsHarness({
+      containers: [c1, c2, c3, c4],
       containerIdMap: {
         web: 'container-1',
         api: 'container-2',
         worker: 'container-3',
+        cron: 'container-4',
       },
     });
+    loadContainers.mockClear();
 
     await composable.updateAllInGroup({
       key: 'group-1',
-      containers: [c1, c2, c3],
+      containers: [c1, c2, c3, c4],
     });
 
-    expect(mocks.updateContainer).toHaveBeenCalledTimes(1);
-    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.updateContainer).toHaveBeenCalledTimes(2);
+    expect(mocks.updateContainer).toHaveBeenNthCalledWith(1, 'container-1');
+    expect(mocks.updateContainer).toHaveBeenNthCalledWith(2, 'container-2');
+    expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
   });
 
@@ -482,13 +497,13 @@ describe('useContainerActions', () => {
     await composable.startContainer('web');
     expect(composable.actionPending.value.has('web')).toBe(true);
 
-    vi.advanceTimersByTime(2000);
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
     await flushPromises();
 
     expect(loadContainers).toHaveBeenCalledTimes(2);
     expect(composable.actionPending.value.has('web')).toBe(false);
 
-    vi.advanceTimersByTime(4000);
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS * 2);
     await flushPromises();
     expect(loadContainers).toHaveBeenCalledTimes(2);
   });
@@ -573,7 +588,7 @@ describe('useContainerActions', () => {
       containerMetaMap: {
         web: {
           updateAvailable: false,
-          updateDetectedAt: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+          updateDetectedAt: new Date(now - daysToMs(2)).toISOString(),
           updateKind: {
             kind: 'tag',
             remoteValue: '2.0.0',
@@ -585,7 +600,7 @@ describe('useContainerActions', () => {
         },
         api: {
           updateAvailable: false,
-          updateDetectedAt: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
+          updateDetectedAt: new Date(now - daysToMs(10)).toISOString(),
           updateKind: {
             kind: 'tag',
             remoteValue: '5.0.0',
@@ -639,6 +654,45 @@ describe('useContainerActions', () => {
       maturityBlocked: false,
     });
     expect(composable.containerPolicyTooltip('web', 'maturity')).toBe('Maturity policy active');
+  });
+
+  it('memoizes list policy state for repeated row reads', async () => {
+    const dateNowSpy = vi
+      .spyOn(Date, 'now')
+      .mockReturnValue(Date.parse('2026-03-15T12:00:00.000Z'));
+    try {
+      const { composable } = await mountActionsHarness({
+        containerMetaMap: {
+          web: {
+            updateAvailable: false,
+            updateDetectedAt: '2026-03-14T12:00:00.000Z',
+            updateKind: {
+              kind: 'tag',
+              remoteValue: '2.0.0',
+            },
+            updatePolicy: {
+              maturityMode: 'mature',
+              maturityMinAgeDays: 7,
+              snoozeUntil: '2026-03-16T00:00:00.000Z',
+            },
+          },
+        },
+      });
+
+      dateNowSpy.mockClear();
+
+      const firstState = composable.getContainerListPolicyState('web');
+      const secondState = composable.getContainerListPolicyState('web');
+      const maturityTooltip = composable.containerPolicyTooltip('web', 'maturity');
+      const snoozeTooltip = composable.containerPolicyTooltip('web', 'snoozed');
+
+      expect(firstState).toBe(secondState);
+      expect(maturityTooltip).toContain('Mature-only policy');
+      expect(snoozeTooltip).toContain('Updates snoozed until');
+      expect(dateNowSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      dateNowSpy.mockRestore();
+    }
   });
 
   it('guards selected skip policy arrays and returns values when arrays are present', async () => {
@@ -728,7 +782,7 @@ describe('useContainerActions', () => {
         },
         api: {
           updateAvailable: false,
-          updateDetectedAt: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+          updateDetectedAt: new Date(now - daysToMs(2)).toISOString(),
           updateKind: {
             kind: 'digest',
             remoteValue: 'sha256:newer',
@@ -920,7 +974,7 @@ describe('useContainerActions', () => {
     await nextTick();
     activeDetailTab.value = 'actions';
     await nextTick();
-    vi.advanceTimersByTime(250);
+    vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
     await flushPromises();
 
     expect(composable.triggerError.value).toBe('trigger load failed');
@@ -947,7 +1001,7 @@ describe('useContainerActions', () => {
     selectedContainerId.value = '';
     activeDetailTab.value = 'actions';
     await nextTick();
-    vi.advanceTimersByTime(250);
+    vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
     await flushPromises();
 
     expect(mocks.getContainerTriggers).not.toHaveBeenCalled();
@@ -985,7 +1039,7 @@ describe('useContainerActions', () => {
     expect(mocks.getBackups).not.toHaveBeenCalled();
     expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
 
-    vi.advanceTimersByTime(250);
+    vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
     await flushPromises();
 
     expect(mocks.getContainerTriggers).toHaveBeenCalledTimes(1);
@@ -1436,11 +1490,11 @@ describe('useContainerActions', () => {
     await composable.startContainer('web');
     expect(composable.actionPending.value.has('web')).toBe(true);
 
-    vi.advanceTimersByTime(2000);
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
     await flushPromises();
     expect(loadCallCount).toBe(2);
 
-    vi.advanceTimersByTime(2000);
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
     await flushPromises();
     expect(loadCallCount).toBe(2);
 
@@ -1466,7 +1520,7 @@ describe('useContainerActions', () => {
     wrapper.unmount();
 
     loadContainers.mockClear();
-    vi.advanceTimersByTime(6000);
+    vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS * 3);
     await flushPromises();
 
     expect(loadContainers).not.toHaveBeenCalled();

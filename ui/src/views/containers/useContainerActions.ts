@@ -1,14 +1,9 @@
 import { computed, onUnmounted, type Ref, ref, watch } from 'vue';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
 import { useServerFeatures } from '../../composables/useServerFeatures';
-import { getBackups, rollback } from '../../services/backup';
 import {
   deleteContainer as apiDeleteContainer,
   scanContainer as apiScanContainer,
-  getContainerUpdateOperations as fetchContainerUpdateOperations,
-  getContainerTriggers,
-  runTrigger as runContainerTrigger,
-  updateContainerPolicy,
 } from '../../services/container';
 import {
   restartContainer as apiRestartContainer,
@@ -16,34 +11,17 @@ import {
   stopContainer as apiStopContainer,
   updateContainer as apiUpdateContainer,
 } from '../../services/container-actions';
-import type { ContainerComposePreview, ContainerPreviewPayload } from '../../services/preview';
-import { previewContainer } from '../../services/preview';
-import type { ApiContainerTrigger } from '../../types/api';
 import type { Container } from '../../types/container';
 import { errorMessage } from '../../utils/error';
+import { useContainerBackups } from './useContainerBackups';
+import { useContainerPolicy } from './useContainerPolicy';
+import { useContainerPreview } from './useContainerPreview';
+import { useContainerTriggers } from './useContainerTriggers';
 
 interface ContainerActionGroup {
   key: string;
   containers: Container[];
 }
-
-type ContainerListPolicyState = {
-  snoozed: boolean;
-  skipped: boolean;
-  skipCount: number;
-  snoozeUntil?: string;
-  maturityBlocked: boolean;
-  updateDetectedAt?: string;
-} & (
-  | {
-      maturityMode?: undefined;
-      maturityMinAgeDays?: undefined;
-    }
-  | {
-      maturityMode: 'all' | 'mature';
-      maturityMinAgeDays: number;
-    }
-);
 
 interface UseContainerActionsInput {
   activeDetailTab: Readonly<Ref<string>>;
@@ -58,521 +36,8 @@ interface UseContainerActionsInput {
   selectedContainerId: Readonly<Ref<string | undefined>>;
 }
 
-const EMPTY_CONTAINER_POLICY_STATE: ContainerListPolicyState = {
-  snoozed: false,
-  skipped: false,
-  skipCount: 0,
-  maturityBlocked: false,
-};
-const ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS = 250;
-const DEFAULT_MATURITY_MIN_AGE_DAYS = 7;
-
-function buildDetailComposePreview(
-  preview: ContainerPreviewPayload | null,
-): ContainerComposePreview | null {
-  const compose = preview?.compose;
-  if (!compose || typeof compose !== 'object') {
-    return null;
-  }
-
-  const files = Array.isArray(compose.files)
-    ? compose.files
-        .filter((value): value is string => typeof value === 'string')
-        .map((value) => value.trim())
-        .filter((value) => value.length > 0)
-    : [];
-  const service =
-    typeof compose.service === 'string' && compose.service.trim().length > 0
-      ? compose.service.trim()
-      : undefined;
-  const writableFile =
-    typeof compose.writableFile === 'string' && compose.writableFile.trim().length > 0
-      ? compose.writableFile.trim()
-      : undefined;
-  const patch =
-    typeof compose.patch === 'string' && compose.patch.trim().length > 0
-      ? compose.patch
-      : undefined;
-  const willWrite = typeof compose.willWrite === 'boolean' ? compose.willWrite : undefined;
-
-  const hasComposePreviewContent = [
-    files.length > 0,
-    service !== undefined,
-    writableFile !== undefined,
-    patch !== undefined,
-    willWrite !== undefined,
-  ].some(Boolean);
-
-  if (!hasComposePreviewContent) {
-    return null;
-  }
-
-  return {
-    files,
-    ...(service ? { service } : {}),
-    ...(writableFile ? { writableFile } : {}),
-    ...(willWrite !== undefined ? { willWrite } : {}),
-    ...(patch ? { patch } : {}),
-  };
-}
-
-function formatTimestamp(timestamp: string | undefined): string {
-  if (!timestamp) {
-    return 'Unknown';
-  }
-  const parsed = new Date(timestamp);
-  if (Number.isNaN(parsed.getTime())) {
-    return timestamp;
-  }
-  return parsed.toLocaleString();
-}
-
-function formatOperationValue(value: unknown): string {
-  if (typeof value !== 'string') {
-    return 'unknown';
-  }
-  return value.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').toLowerCase();
-}
-
-function formatOperationPhase(phase: unknown): string {
-  return formatOperationValue(phase);
-}
-
-function formatRollbackReason(reason: unknown): string {
-  return formatOperationValue(reason);
-}
-
-function formatOperationStatus(status: unknown): string {
-  return formatOperationValue(status);
-}
-
-function getOperationStatusStyle(status: unknown) {
-  const normalized = String(status || '').toLowerCase();
-  if (normalized === 'succeeded') {
-    return {
-      backgroundColor: 'var(--dd-success-muted)',
-      color: 'var(--dd-success)',
-    };
-  }
-  if (normalized === 'rolled-back') {
-    return {
-      backgroundColor: 'var(--dd-warning-muted)',
-      color: 'var(--dd-warning)',
-    };
-  }
-  if (normalized === 'failed') {
-    return {
-      backgroundColor: 'var(--dd-danger-muted)',
-      color: 'var(--dd-danger)',
-    };
-  }
-  return {
-    backgroundColor: 'var(--dd-info-muted)',
-    color: 'var(--dd-info)',
-  };
-}
-
-function toDateInputValue(timestamp: string | undefined): string {
-  if (!timestamp) {
-    return '';
-  }
-  const parsed = new Date(timestamp);
-  if (Number.isNaN(parsed.getTime())) {
-    return '';
-  }
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, '0');
-  const day = String(parsed.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function getTriggerKey(trigger: ApiContainerTrigger): string {
-  if (trigger.id) {
-    return trigger.id;
-  }
-  const prefix = trigger.agent ? `${trigger.agent}.` : '';
-  return `${prefix}${trigger.type}.${trigger.name}`;
-}
-
-function resolveSnoozeUntilFromInput(dateInput: string): string | undefined {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
-    return undefined;
-  }
-  const parsed = new Date(`${dateInput}T23:59:59`);
-  if (Number.isNaN(parsed.getTime())) {
-    return undefined;
-  }
-  return parsed.toISOString();
-}
-
-function normalizePolicyEntries(values: unknown): string[] {
-  if (!Array.isArray(values)) {
-    return [];
-  }
-  return values
-    .filter((value): value is string => typeof value === 'string')
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
-}
-
-function normalizeMaturityMode(value: unknown): 'all' | 'mature' | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-  const normalized = value.trim().toLowerCase();
-  if (normalized === 'all' || normalized === 'mature') {
-    return normalized;
-  }
-  return undefined;
-}
-
-function normalizeMaturityMinAgeDays(value: unknown): number | undefined {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 1 || parsed > 365) {
-    return undefined;
-  }
-  return parsed;
-}
-
-function resolveMaturityMinAgeDaysInput(value: unknown): number | undefined {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 1 || parsed > 365) {
-    return undefined;
-  }
-  return parsed;
-}
-
-function normalizeUpdateDetectedAt(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-  const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) {
-    return undefined;
-  }
-  return new Date(parsed).toISOString();
-}
-
-function deriveContainerListPolicyState(
-  containerMetaMap: Record<string, unknown>,
-  containerName: string,
-): ContainerListPolicyState {
-  const meta = containerMetaMap[containerName];
-  if (!meta || typeof meta !== 'object') {
-    return EMPTY_CONTAINER_POLICY_STATE;
-  }
-  const metaRecord = meta as Record<string, unknown>;
-  const updatePolicy = metaRecord.updatePolicy;
-  if (!updatePolicy || typeof updatePolicy !== 'object') {
-    return EMPTY_CONTAINER_POLICY_STATE;
-  }
-
-  const policy = updatePolicy as Record<string, unknown>;
-  const skipCount =
-    normalizePolicyEntries(policy.skipTags).length +
-    normalizePolicyEntries(policy.skipDigests).length;
-  const maturityMode = normalizeMaturityMode(policy.maturityMode);
-  const maturityMinAgeDays =
-    normalizeMaturityMinAgeDays(policy.maturityMinAgeDays) ?? DEFAULT_MATURITY_MIN_AGE_DAYS;
-  const updateDetectedAt = normalizeUpdateDetectedAt(metaRecord.updateDetectedAt);
-  const updateDetectedAtMs = updateDetectedAt ? Date.parse(updateDetectedAt) : Number.NaN;
-  const hasSuppressedUpdateCandidate = Boolean(
-    metaRecord.updateAvailable === false &&
-      metaRecord.updateKind &&
-      typeof metaRecord.updateKind === 'object' &&
-      (metaRecord.updateKind as Record<string, unknown>).kind &&
-      ((metaRecord.updateKind as Record<string, unknown>).kind === 'tag' ||
-        (metaRecord.updateKind as Record<string, unknown>).kind === 'digest'),
-  );
-
-  const rawSnoozeUntil = typeof policy.snoozeUntil === 'string' ? policy.snoozeUntil : undefined;
-  const snoozeUntilMs = rawSnoozeUntil ? new Date(rawSnoozeUntil).getTime() : Number.NaN;
-  const snoozed = Number.isFinite(snoozeUntilMs) && snoozeUntilMs > Date.now();
-  const maturityBlocked =
-    maturityMode === 'mature' &&
-    hasSuppressedUpdateCandidate &&
-    (!Number.isFinite(updateDetectedAtMs) ||
-      Date.now() - updateDetectedAtMs < maturityMinAgeDays * 24 * 60 * 60 * 1000);
-
-  if (!snoozed && skipCount === 0 && !maturityMode) {
-    return EMPTY_CONTAINER_POLICY_STATE;
-  }
-
-  return {
-    snoozed,
-    skipped: skipCount > 0,
-    skipCount,
-    snoozeUntil: snoozed ? rawSnoozeUntil : undefined,
-    ...(maturityMode ? { maturityMode } : {}),
-    ...(maturityMode ? { maturityMinAgeDays } : {}),
-    ...(updateDetectedAt ? { updateDetectedAt } : {}),
-    maturityBlocked,
-  };
-}
-
-function buildContainerPolicyTooltip(
-  state: ContainerListPolicyState,
-  kind: 'snoozed' | 'skipped' | 'maturity',
-): string {
-  if (kind === 'snoozed') {
-    return state.snoozeUntil
-      ? `Updates snoozed until ${formatTimestamp(state.snoozeUntil)}`
-      : 'Updates snoozed';
-  }
-  if (kind === 'maturity') {
-    if (state.maturityMode === 'mature') {
-      const minAgeDays = state.maturityMinAgeDays;
-      return state.maturityBlocked
-        ? `Mature-only policy blocks updates younger than ${minAgeDays} day${minAgeDays === 1 ? '' : 's'}`
-        : `Mature-only policy active (${minAgeDays} day${minAgeDays === 1 ? '' : 's'} minimum age)`;
-    }
-    if (state.maturityMode === 'all') {
-      return 'Maturity policy allows all updates';
-    }
-    return 'Maturity policy active';
-  }
-  if (state.skipCount <= 0) {
-    return 'Skipped updates policy active';
-  }
-  return `Skipped updates policy active (${state.skipCount} entr${state.skipCount === 1 ? 'y' : 'ies'})`;
-}
-
-function resetDetailMessagesState(state: {
-  triggerMessage: Ref<string | null>;
-  triggerError: Ref<string | null>;
-  rollbackMessage: Ref<string | null>;
-  rollbackError: Ref<string | null>;
-  policyMessage: Ref<string | null>;
-  policyError: Ref<string | null>;
-  updateOperationsError: Ref<string | null>;
-}) {
-  state.triggerMessage.value = null;
-  state.triggerError.value = null;
-  state.rollbackMessage.value = null;
-  state.rollbackError.value = null;
-  state.policyMessage.value = null;
-  state.policyError.value = null;
-  state.updateOperationsError.value = null;
-}
-
-function handleSelectedContainerOrTabChange(args: {
-  containerName: string | undefined;
-  tabName: string;
-  detailPreview: Ref<ContainerPreviewPayload | null>;
-  previewError: Ref<string | null>;
-  detailTriggers: Ref<Record<string, unknown>[]>;
-  detailBackups: Ref<Record<string, unknown>[]>;
-  detailUpdateOperations: Ref<Record<string, unknown>[]>;
-  updateOperationsError: Ref<string | null>;
-  clearActionTabDetailRefreshTimer: () => void;
-  resetDetailMessages: () => void;
-  scheduleActionTabDataRefresh: () => void;
-}) {
-  args.detailPreview.value = null;
-  args.previewError.value = null;
-  if (!args.containerName) {
-    args.clearActionTabDetailRefreshTimer();
-    args.detailTriggers.value = [];
-    args.detailBackups.value = [];
-    args.detailUpdateOperations.value = [];
-    args.updateOperationsError.value = null;
-    args.resetDetailMessages();
-    return;
-  }
-  if (args.tabName === 'actions') {
-    args.resetDetailMessages();
-    args.scheduleActionTabDataRefresh();
-    return;
-  }
-  args.clearActionTabDetailRefreshTimer();
-}
-
-async function loadDetailUpdateOperationsState(args: {
-  containerId: string | undefined;
-  detailUpdateOperations: Ref<Record<string, unknown>[]>;
-  updateOperationsLoading: Ref<boolean>;
-  updateOperationsError: Ref<string | null>;
-}) {
-  if (!args.containerId) {
-    args.detailUpdateOperations.value = [];
-    args.updateOperationsError.value = null;
-    return;
-  }
-
-  args.updateOperationsLoading.value = true;
-  args.updateOperationsError.value = null;
-  try {
-    args.detailUpdateOperations.value = await fetchContainerUpdateOperations(args.containerId);
-  } catch (e: unknown) {
-    args.detailUpdateOperations.value = [];
-    args.updateOperationsError.value = errorMessage(e, 'Failed to load update operation history');
-  } finally {
-    args.updateOperationsLoading.value = false;
-  }
-}
-
-async function loadContainerDetailListState(args: {
-  containerId: string | undefined;
-  loading: Ref<boolean>;
-  error: Ref<string | null>;
-  value: Ref<Record<string, unknown>[]>;
-  loader: (containerId: string) => Promise<Record<string, unknown>[]>;
-  failureMessage: string;
-}) {
-  if (!args.containerId) {
-    args.value.value = [];
-    return;
-  }
-
-  args.loading.value = true;
-  args.error.value = null;
-  try {
-    args.value.value = await args.loader(args.containerId);
-  } catch (e: unknown) {
-    args.value.value = [];
-    args.error.value = errorMessage(e, args.failureMessage);
-  } finally {
-    args.loading.value = false;
-  }
-}
-
-async function runContainerPreviewState(args: {
-  containerId: string | undefined;
-  previewLoading: Ref<boolean>;
-  previewError: Ref<string | null>;
-  detailPreview: Ref<ContainerPreviewPayload | null>;
-}) {
-  if (!args.containerId || args.previewLoading.value) {
-    return;
-  }
-  args.previewLoading.value = true;
-  args.previewError.value = null;
-  try {
-    args.detailPreview.value = await previewContainer(args.containerId);
-  } catch (e: unknown) {
-    args.detailPreview.value = null;
-    args.previewError.value = errorMessage(e, 'Failed to generate update preview');
-  } finally {
-    args.previewLoading.value = false;
-  }
-}
-
-async function runAssociatedTriggerState(args: {
-  containerActionsEnabled: boolean;
-  containerActionsDisabledReason: string;
-  containerId: string | undefined;
-  trigger: ApiContainerTrigger;
-  triggerRunInProgress: Ref<string | null>;
-  triggerMessage: Ref<string | null>;
-  triggerError: Ref<string | null>;
-  loadContainers: () => Promise<void>;
-  refreshActionTabData: () => Promise<void>;
-}) {
-  if (!args.containerActionsEnabled) {
-    args.triggerMessage.value = null;
-    args.triggerError.value = args.containerActionsDisabledReason;
-    return;
-  }
-  if (!args.containerId || args.triggerRunInProgress.value) {
-    return;
-  }
-  const triggerKey = getTriggerKey(args.trigger);
-  args.triggerRunInProgress.value = triggerKey;
-  args.triggerMessage.value = null;
-  args.triggerError.value = null;
-  try {
-    await runContainerTrigger({
-      containerId: args.containerId,
-      triggerType: args.trigger.type,
-      triggerName: args.trigger.name,
-      triggerAgent: args.trigger.agent,
-    });
-    args.triggerMessage.value = `Trigger ${triggerKey} ran successfully`;
-    await args.loadContainers();
-    await args.refreshActionTabData();
-  } catch (e: unknown) {
-    args.triggerError.value = errorMessage(e, `Failed to run ${triggerKey}`);
-  } finally {
-    args.triggerRunInProgress.value = null;
-  }
-}
-
-async function rollbackToBackupState(args: {
-  containerActionsEnabled: boolean;
-  containerActionsDisabledReason: string;
-  containerId: string | undefined;
-  backupId?: string;
-  rollbackInProgress: Ref<string | null>;
-  rollbackMessage: Ref<string | null>;
-  rollbackError: Ref<string | null>;
-  skippedUpdates: Ref<Set<string>>;
-  selectedContainerName: string | undefined;
-  loadContainers: () => Promise<void>;
-  loadDetailBackups: () => Promise<void>;
-  loadDetailUpdateOperations: () => Promise<void>;
-}) {
-  if (!args.containerActionsEnabled) {
-    args.rollbackMessage.value = null;
-    args.rollbackError.value = args.containerActionsDisabledReason;
-    return;
-  }
-  if (!args.containerId || args.rollbackInProgress.value) {
-    return;
-  }
-  args.rollbackInProgress.value = args.backupId || 'latest';
-  args.rollbackMessage.value = null;
-  args.rollbackError.value = null;
-  try {
-    await rollback(args.containerId, args.backupId);
-    args.rollbackMessage.value = args.backupId
-      ? 'Rollback completed from selected backup'
-      : 'Rollback completed from latest backup';
-    args.skippedUpdates.value.delete(args.selectedContainerName || '');
-    await args.loadContainers();
-    await Promise.all([args.loadDetailBackups(), args.loadDetailUpdateOperations()]);
-  } catch (e: unknown) {
-    args.rollbackError.value = errorMessage(e, 'Rollback failed');
-  } finally {
-    args.rollbackInProgress.value = null;
-  }
-}
-
-async function applyPolicyState(args: {
-  containerActionsEnabled: boolean;
-  containerActionsDisabledReason: string;
-  containerIdMap: Record<string, string>;
-  name: string;
-  action: string;
-  payload: Record<string, unknown>;
-  message: string;
-  policyInProgress: Ref<string | null>;
-  policyMessage: Ref<string | null>;
-  policyError: Ref<string | null>;
-  loadContainers: () => Promise<void>;
-}): Promise<boolean> {
-  if (!args.containerActionsEnabled) {
-    args.policyMessage.value = null;
-    args.policyError.value = args.containerActionsDisabledReason;
-    return false;
-  }
-  const containerId = args.containerIdMap[args.name];
-  if (!containerId || args.policyInProgress.value) {
-    return false;
-  }
-  args.policyInProgress.value = `${args.action}:${args.name}`;
-  args.policyError.value = null;
-  try {
-    await updateContainerPolicy(containerId, args.action, args.payload);
-    args.policyMessage.value = args.message;
-    await args.loadContainers();
-    return true;
-  } catch (e: unknown) {
-    args.policyError.value = errorMessage(e, 'Failed to update policy');
-    return false;
-  } finally {
-    args.policyInProgress.value = null;
-  }
-}
+export const ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS = 250;
+export const PENDING_ACTIONS_POLL_INTERVAL_MS = 2000;
 
 async function executeContainerActionState(args: {
   containerActionsEnabled: boolean;
@@ -584,6 +49,7 @@ async function executeContainerActionState(args: {
   containers: Readonly<Ref<Container[]>>;
   action: (id: string) => Promise<unknown>;
   loadContainers: () => Promise<void>;
+  reloadContainers?: boolean;
   actionPending: Ref<Map<string, Container>>;
   startPolling: (name: string) => void;
   selectedContainerName: string | undefined;
@@ -600,14 +66,17 @@ async function executeContainerActionState(args: {
   }
   args.actionInProgress.value = args.name;
   args.inputError.value = null;
+  const shouldReloadContainers = args.reloadContainers ?? true;
   const snapshot = args.containers.value.find((container) => container.name === args.name);
   try {
     await args.action(containerId);
-    await args.loadContainers();
-    const stillPresent = args.containers.value.find((container) => container.name === args.name);
-    if (!stillPresent && snapshot) {
-      args.actionPending.value.set(args.name, snapshot);
-      args.startPolling(args.name);
+    if (shouldReloadContainers) {
+      await args.loadContainers();
+      const stillPresent = args.containers.value.find((container) => container.name === args.name);
+      if (!stillPresent && snapshot) {
+        args.actionPending.value.set(args.name, snapshot);
+        args.startPolling(args.name);
+      }
     }
     if (args.selectedContainerName === args.name && args.activeDetailTab === 'actions') {
       await args.refreshActionTabData();
@@ -641,7 +110,12 @@ async function updateAllInGroupState(args: {
   inputError: Ref<string | null>;
   groupUpdateInProgress: Ref<Set<string>>;
   group: ContainerActionGroup;
-  executeAction: (name: string, action: (id: string) => Promise<unknown>) => Promise<boolean>;
+  executeAction: (
+    name: string,
+    action: (id: string) => Promise<unknown>,
+    options?: { reloadContainers?: boolean },
+  ) => Promise<boolean>;
+  loadContainers: () => Promise<void>;
 }) {
   if (!args.containerActionsEnabled) {
     args.inputError.value = args.containerActionsDisabledReason;
@@ -658,8 +132,17 @@ async function updateAllInGroupState(args: {
   }
   setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, true);
   try {
+    let updatedAny = false;
     for (const container of updatableContainers) {
-      await args.executeAction(container.name, apiUpdateContainer);
+      const updated = await args.executeAction(container.name, apiUpdateContainer, {
+        reloadContainers: false,
+      });
+      if (updated) {
+        updatedAny = true;
+      }
+    }
+    if (updatedAny) {
+      await args.loadContainers();
     }
   } finally {
     setGroupUpdateStateValue(args.groupUpdateInProgress, args.group.key, false);
@@ -703,17 +186,6 @@ async function deleteContainerState(args: {
   } finally {
     args.actionInProgress.value = null;
   }
-}
-
-async function runForSelectedContainer(
-  selectedContainer: Readonly<Ref<Container | null | undefined>>,
-  run: (containerName: string) => Promise<void>,
-) {
-  const containerName = selectedContainer.value?.name;
-  if (!containerName) {
-    return;
-  }
-  await run(containerName);
 }
 
 function stopPendingActionsPollingState(
@@ -793,146 +265,13 @@ function startPollingState(args: {
   }, args.pollInterval);
 }
 
-function createSelectedPolicyActions(args: {
-  selectedContainer: Readonly<Ref<Container | null | undefined>>;
-  skippedUpdates: Ref<Set<string>>;
-  applyPolicy: (
-    name: string,
-    action: string,
-    payload: Record<string, unknown>,
-    message: string,
-  ) => Promise<boolean>;
-  refreshActionTabData: () => Promise<void>;
-  policyError: Ref<string | null>;
-  snoozeDateInput: Ref<string>;
-  maturityMinAgeDaysInput: Ref<number>;
-}) {
-  async function skipCurrentForSelected() {
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
-      const applied = await args.applyPolicy(
-        containerName,
-        'skip-current',
-        {},
-        `Skipped current update for ${containerName}`,
-      );
-      if (applied) {
-        args.skippedUpdates.value.add(containerName);
-        await args.refreshActionTabData();
-      }
-    });
-  }
-
-  async function snoozeSelected(days: number) {
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
-      await args.applyPolicy(
-        containerName,
-        'snooze',
-        { days },
-        `Snoozed updates for ${days} day${days === 1 ? '' : 's'}`,
-      );
-    });
-  }
-
-  async function snoozeSelectedUntilDate() {
-    const snoozeUntil = resolveSnoozeUntilFromInput(args.snoozeDateInput.value);
-    if (!snoozeUntil) {
-      args.policyError.value = 'Select a valid snooze date';
-      return;
-    }
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
-      await args.applyPolicy(
-        containerName,
-        'snooze',
-        { snoozeUntil },
-        `Snoozed until ${args.snoozeDateInput.value}`,
-      );
-    });
-  }
-
-  async function unsnoozeSelected() {
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
-      await args.applyPolicy(containerName, 'unsnooze', {}, 'Snooze cleared');
-    });
-  }
-
-  async function clearSkipsSelected() {
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
-      args.skippedUpdates.value.delete(containerName);
-      await args.applyPolicy(containerName, 'clear-skips', {}, 'Skipped updates cleared');
-    });
-  }
-
-  async function clearPolicySelected() {
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
-      args.skippedUpdates.value.delete(containerName);
-      await args.applyPolicy(containerName, 'clear', {}, 'Update policy cleared');
-    });
-  }
-
-  async function setMaturityPolicySelected(mode: 'all' | 'mature') {
-    const minAgeDays = resolveMaturityMinAgeDaysInput(args.maturityMinAgeDaysInput.value);
-    if (minAgeDays === undefined) {
-      args.policyError.value = 'Enter a maturity age between 1 and 365 days';
-      return;
-    }
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
-      await args.applyPolicy(
-        containerName,
-        'set-maturity-policy',
-        { mode, minAgeDays },
-        mode === 'mature'
-          ? `Maturity policy set to mature-only (${minAgeDays} day${minAgeDays === 1 ? '' : 's'})`
-          : 'Maturity policy set to allow all updates',
-      );
-    });
-  }
-
-  async function clearMaturityPolicySelected() {
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
-      await args.applyPolicy(containerName, 'clear-maturity-policy', {}, 'Maturity policy cleared');
-    });
-  }
-
-  async function removeSkipSelected(kind: 'tag' | 'digest', value: string) {
-    if (!value) {
-      return;
-    }
-    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
-      args.skippedUpdates.value.delete(containerName);
-      await args.applyPolicy(
-        containerName,
-        'remove-skip',
-        { kind, value },
-        `Removed skipped ${kind} ${value}`,
-      );
-    });
-  }
-
-  async function removeSkipTagSelected(value: string) {
-    await removeSkipSelected('tag', value);
-  }
-
-  async function removeSkipDigestSelected(value: string) {
-    await removeSkipSelected('digest', value);
-  }
-
-  return {
-    clearPolicySelected,
-    clearMaturityPolicySelected,
-    clearSkipsSelected,
-    removeSkipDigestSelected,
-    removeSkipTagSelected,
-    setMaturityPolicySelected,
-    skipCurrentForSelected,
-    snoozeSelected,
-    snoozeSelectedUntilDate,
-    unsnoozeSelected,
-  };
-}
-
 function createConfirmHandlers(args: {
   confirm: ReturnType<typeof useConfirmDialog>;
-  executeAction: (name: string, action: (id: string) => Promise<unknown>) => Promise<boolean>;
+  executeAction: (
+    name: string,
+    action: (id: string) => Promise<unknown>,
+    options?: { reloadContainers?: boolean },
+  ) => Promise<boolean>;
   forceUpdate: (name: string) => Promise<void>;
   deleteContainer: (name: string) => Promise<boolean>;
   selectedContainer: Readonly<Ref<Container | null | undefined>>;
@@ -945,7 +284,7 @@ function createConfirmHandlers(args: {
       rejectLabel: 'Cancel',
       acceptLabel: 'Stop',
       severity: 'danger',
-      accept: () => args.executeAction(name, apiStopContainer),
+      accept: () => args.executeAction(name, apiStopContainer) as unknown as Promise<void>,
     });
   }
 
@@ -956,7 +295,7 @@ function createConfirmHandlers(args: {
       rejectLabel: 'Cancel',
       acceptLabel: 'Restart',
       severity: 'warn',
-      accept: () => args.executeAction(name, apiRestartContainer),
+      accept: () => args.executeAction(name, apiRestartContainer) as unknown as Promise<void>,
     });
   }
 
@@ -978,7 +317,7 @@ function createConfirmHandlers(args: {
       rejectLabel: 'Cancel',
       acceptLabel: 'Update',
       severity: 'warn',
-      accept: () => args.executeAction(name, apiUpdateContainer),
+      accept: () => args.executeAction(name, apiUpdateContainer) as unknown as Promise<void>,
     });
   }
 
@@ -989,7 +328,7 @@ function createConfirmHandlers(args: {
       rejectLabel: 'Cancel',
       acceptLabel: 'Delete',
       severity: 'danger',
-      accept: () => args.deleteContainer(name),
+      accept: () => args.deleteContainer(name) as unknown as Promise<void>,
     });
   }
 
@@ -1020,7 +359,11 @@ function createConfirmHandlers(args: {
 }
 
 function createContainerActionHandlers(args: {
-  executeAction: (name: string, action: (id: string) => Promise<unknown>) => Promise<boolean>;
+  executeAction: (
+    name: string,
+    action: (id: string) => Promise<unknown>,
+    options?: { reloadContainers?: boolean },
+  ) => Promise<boolean>;
   applyPolicy: (
     name: string,
     action: string,
@@ -1078,124 +421,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
   const { containerActionsEnabled, containerActionsDisabledReason } = useServerFeatures();
 
   const skippedUpdates = ref(new Set<string>());
-
-  const detailPreview = ref<ContainerPreviewPayload | null>(null);
-  const detailComposePreview = computed<ContainerComposePreview | null>(() =>
-    buildDetailComposePreview(detailPreview.value),
-  );
-  const previewLoading = ref(false);
-  const previewError = ref<string | null>(null);
-
-  const detailTriggers = ref<Record<string, unknown>[]>([]);
-  const triggersLoading = ref(false);
-  const triggerRunInProgress = ref<string | null>(null);
-  const triggerMessage = ref<string | null>(null);
-  const triggerError = ref<string | null>(null);
-
-  const detailBackups = ref<Record<string, unknown>[]>([]);
-  const backupsLoading = ref(false);
-  const rollbackInProgress = ref<string | null>(null);
-  const rollbackMessage = ref<string | null>(null);
-  const rollbackError = ref<string | null>(null);
-  const detailUpdateOperations = ref<Record<string, unknown>[]>([]);
-  const updateOperationsLoading = ref(false);
-  const updateOperationsError = ref<string | null>(null);
-
-  const policyInProgress = ref<string | null>(null);
-  const policyMessage = ref<string | null>(null);
-  const policyError = ref<string | null>(null);
-
-  const selectedUpdatePolicy = computed<Record<string, unknown>>(() => {
-    const selectedName = input.selectedContainer.value?.name;
-    if (!selectedName) {
-      return {};
-    }
-    const meta = input.containerMetaMap.value[selectedName];
-    if (!meta || typeof meta !== 'object') {
-      return {};
-    }
-    const updatePolicy = (meta as Record<string, unknown>).updatePolicy;
-    return updatePolicy && typeof updatePolicy === 'object'
-      ? (updatePolicy as Record<string, unknown>)
-      : {};
-  });
-
-  const selectedSkipTags = computed<string[]>(() =>
-    Array.isArray(selectedUpdatePolicy.value.skipTags) ? selectedUpdatePolicy.value.skipTags : [],
-  );
-  const selectedSkipDigests = computed<string[]>(() =>
-    Array.isArray(selectedUpdatePolicy.value.skipDigests)
-      ? selectedUpdatePolicy.value.skipDigests
-      : [],
-  );
-  const selectedMaturityMode = computed<'all' | 'mature' | undefined>(() =>
-    normalizeMaturityMode(selectedUpdatePolicy.value.maturityMode),
-  );
-  const selectedMaturityMinAgeDays = computed<number>(
-    () =>
-      normalizeMaturityMinAgeDays(selectedUpdatePolicy.value.maturityMinAgeDays) ??
-      DEFAULT_MATURITY_MIN_AGE_DAYS,
-  );
-  const selectedHasMaturityPolicy = computed<boolean>(
-    () => selectedMaturityMode.value !== undefined,
-  );
-  const selectedSnoozeUntil = computed<string | undefined>(
-    () => selectedUpdatePolicy.value.snoozeUntil as string | undefined,
-  );
-  const snoozeDateInput = ref('');
-  const maturityModeInput = ref<'all' | 'mature'>('all');
-  const maturityMinAgeDaysInput = ref<number>(DEFAULT_MATURITY_MIN_AGE_DAYS);
-
-  function isContainerActionsEnabled(): boolean {
-    return containerActionsEnabled.value;
-  }
-
-  function resetDetailMessages() {
-    resetDetailMessagesState({
-      triggerMessage,
-      triggerError,
-      rollbackMessage,
-      rollbackError,
-      policyMessage,
-      policyError,
-      updateOperationsError,
-    });
-  }
-
-  async function loadDetailTriggers() {
-    await loadContainerDetailListState({
-      containerId: input.selectedContainerId.value,
-      loading: triggersLoading,
-      error: triggerError,
-      value: detailTriggers,
-      loader: getContainerTriggers,
-      failureMessage: 'Failed to load associated triggers',
-    });
-  }
-
-  async function loadDetailBackups() {
-    await loadContainerDetailListState({
-      containerId: input.selectedContainerId.value,
-      loading: backupsLoading,
-      error: rollbackError,
-      value: detailBackups,
-      loader: getBackups,
-      failureMessage: 'Failed to load backups',
-    });
-  }
-
-  async function loadDetailUpdateOperations() {
-    await loadDetailUpdateOperationsState({
-      containerId: input.selectedContainerId.value,
-      detailUpdateOperations,
-      updateOperationsLoading,
-      updateOperationsError,
-    });
-  }
-
-  async function refreshActionTabData() {
-    await Promise.all([loadDetailTriggers(), loadDetailBackups(), loadDetailUpdateOperations()]);
-  }
+  const selectedContainerName = computed(() => input.selectedContainer.value?.name);
 
   let actionTabDetailRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -1207,6 +433,46 @@ export function useContainerActions(input: UseContainerActionsInput) {
     actionTabDetailRefreshTimer = undefined;
   }
 
+  const preview = useContainerPreview({
+    selectedContainerId: input.selectedContainerId,
+  });
+
+  const refreshActionTabData = async () => {
+    await Promise.all([
+      triggers.loadDetailTriggers(),
+      backups.loadDetailBackups(),
+      backups.loadDetailUpdateOperations(),
+    ]);
+  };
+
+  const triggers = useContainerTriggers({
+    selectedContainerId: input.selectedContainerId,
+    containerActionsEnabled,
+    containerActionsDisabledReason,
+    loadContainers: input.loadContainers,
+    refreshActionTabData,
+  });
+
+  const backups = useContainerBackups({
+    selectedContainerId: input.selectedContainerId,
+    selectedContainerName,
+    skippedUpdates,
+    containerActionsEnabled,
+    containerActionsDisabledReason,
+    loadContainers: input.loadContainers,
+  });
+
+  const policy = useContainerPolicy({
+    selectedContainer: input.selectedContainer,
+    containerMetaMap: input.containerMetaMap,
+    containerIdMap: input.containerIdMap,
+    loadContainers: input.loadContainers,
+    skippedUpdates,
+    containerActionsEnabled,
+    containerActionsDisabledReason,
+    refreshActionTabData,
+  });
+
   function scheduleActionTabDataRefresh() {
     clearActionTabDetailRefreshTimer();
     actionTabDetailRefreshTimer = setTimeout(() => {
@@ -1215,128 +481,30 @@ export function useContainerActions(input: UseContainerActionsInput) {
     }, ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
   }
 
-  async function runContainerPreview() {
-    await runContainerPreviewState({
-      containerId: input.selectedContainerId.value,
-      previewLoading,
-      previewError,
-      detailPreview,
-    });
-  }
-
-  async function runAssociatedTrigger(trigger: ApiContainerTrigger) {
-    await runAssociatedTriggerState({
-      containerActionsEnabled: isContainerActionsEnabled(),
-      containerActionsDisabledReason: containerActionsDisabledReason.value,
-      containerId: input.selectedContainerId.value,
-      trigger,
-      triggerRunInProgress,
-      triggerMessage,
-      triggerError,
-      loadContainers: input.loadContainers,
-      refreshActionTabData,
-    });
-  }
-
-  async function rollbackToBackup(backupId?: string) {
-    await rollbackToBackupState({
-      containerActionsEnabled: isContainerActionsEnabled(),
-      containerActionsDisabledReason: containerActionsDisabledReason.value,
-      containerId: input.selectedContainerId.value,
-      backupId,
-      rollbackInProgress,
-      rollbackMessage,
-      rollbackError,
-      skippedUpdates,
-      selectedContainerName: input.selectedContainer.value?.name,
-      loadContainers: input.loadContainers,
-      loadDetailBackups,
-      loadDetailUpdateOperations,
-    });
-  }
-
-  async function applyPolicy(
-    name: string,
-    action: string,
-    payload: Record<string, unknown> = {},
-    message: string,
-  ) {
-    return applyPolicyState({
-      containerActionsEnabled: isContainerActionsEnabled(),
-      containerActionsDisabledReason: containerActionsDisabledReason.value,
-      containerIdMap: input.containerIdMap.value,
-      name,
-      action,
-      payload,
-      message,
-      policyInProgress,
-      policyMessage,
-      policyError,
-      loadContainers: input.loadContainers,
-    });
-  }
-
-  const {
-    clearPolicySelected,
-    clearMaturityPolicySelected,
-    clearSkipsSelected,
-    removeSkipDigestSelected,
-    removeSkipTagSelected,
-    setMaturityPolicySelected,
-    skipCurrentForSelected,
-    snoozeSelected,
-    snoozeSelectedUntilDate,
-    unsnoozeSelected,
-  } = createSelectedPolicyActions({
-    selectedContainer: input.selectedContainer,
-    skippedUpdates,
-    applyPolicy,
-    refreshActionTabData,
-    policyError,
-    snoozeDateInput,
-    maturityMinAgeDaysInput,
-  });
-
   watch(
     () => [input.selectedContainer.value?.name, input.activeDetailTab.value],
     ([containerName, tabName]) => {
-      handleSelectedContainerOrTabChange({
-        containerName,
-        tabName,
-        detailPreview,
-        previewError,
-        detailTriggers,
-        detailBackups,
-        detailUpdateOperations,
-        updateOperationsError,
-        clearActionTabDetailRefreshTimer,
-        resetDetailMessages,
-        scheduleActionTabDataRefresh,
-      });
-    },
-    { immediate: true },
-  );
+      preview.resetPreview();
 
-  watch(
-    () => selectedSnoozeUntil.value,
-    (snoozeUntil) => {
-      snoozeDateInput.value = toDateInputValue(snoozeUntil);
-    },
-    { immediate: true },
-  );
+      if (!containerName) {
+        clearActionTabDetailRefreshTimer();
+        triggers.clearTriggerDetails();
+        backups.clearBackupsDetails();
+        triggers.resetTriggerMessages();
+        backups.resetBackupsMessages();
+        policy.resetPolicyMessages();
+        return;
+      }
 
-  watch(
-    () => selectedMaturityMode.value,
-    (mode) => {
-      maturityModeInput.value = mode ?? 'all';
-    },
-    { immediate: true },
-  );
+      if (tabName === 'actions') {
+        triggers.resetTriggerMessages();
+        backups.resetBackupsMessages();
+        policy.resetPolicyMessages();
+        scheduleActionTabDataRefresh();
+        return;
+      }
 
-  watch(
-    () => selectedMaturityMinAgeDays.value,
-    (minAgeDays) => {
-      maturityMinAgeDaysInput.value = minAgeDays;
+      clearActionTabDetailRefreshTimer();
     },
     { immediate: true },
   );
@@ -1347,7 +515,6 @@ export function useContainerActions(input: UseContainerActionsInput) {
   const pendingActionsPollTimer = ref<ReturnType<typeof setInterval> | null>(null);
   const pendingActionsPollInFlight = ref(false);
   const groupUpdateInProgress = ref(new Set<string>());
-  const POLL_INTERVAL = 2000;
   const POLL_TIMEOUT = 30000;
 
   function stopPendingActionsPolling() {
@@ -1378,7 +545,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       name,
       actionPendingStartTimes,
       pendingActionsPollTimer,
-      pollInterval: POLL_INTERVAL,
+      pollInterval: PENDING_ACTIONS_POLL_INTERVAL_MS,
       pollPendingActions,
     });
   }
@@ -1388,9 +555,13 @@ export function useContainerActions(input: UseContainerActionsInput) {
     stopPendingActionsPolling();
   });
 
-  async function executeAction(name: string, action: (id: string) => Promise<unknown>) {
+  async function executeAction(
+    name: string,
+    action: (id: string) => Promise<unknown>,
+    options?: { reloadContainers?: boolean },
+  ) {
     return executeContainerActionState({
-      containerActionsEnabled: isContainerActionsEnabled(),
+      containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containerIdMap: input.containerIdMap.value,
       name,
@@ -1399,6 +570,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       containers: input.containers,
       action,
       loadContainers: input.loadContainers,
+      reloadContainers: options?.reloadContainers,
       actionPending,
       startPolling,
       selectedContainerName: input.selectedContainer.value?.name,
@@ -1409,19 +581,20 @@ export function useContainerActions(input: UseContainerActionsInput) {
 
   async function updateAllInGroup(group: ContainerActionGroup) {
     await updateAllInGroupState({
-      containerActionsEnabled: isContainerActionsEnabled(),
+      containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       inputError: input.error,
       groupUpdateInProgress,
       group,
       executeAction,
+      loadContainers: input.loadContainers,
     });
   }
 
   const { forceUpdate, scanContainer, skipUpdate, startContainer, updateContainer } =
     createContainerActionHandlers({
       executeAction,
-      applyPolicy,
+      applyPolicy: policy.applyPolicy,
       skippedUpdates,
       selectedContainer: input.selectedContainer,
       activeDetailTab: input.activeDetailTab,
@@ -1430,7 +603,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
 
   async function deleteContainer(name: string) {
     return deleteContainerState({
-      containerActionsEnabled: isContainerActionsEnabled(),
+      containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containerIdMap: input.containerIdMap.value,
       name,
@@ -1457,90 +630,78 @@ export function useContainerActions(input: UseContainerActionsInput) {
     forceUpdate,
     deleteContainer,
     selectedContainer: input.selectedContainer,
-    rollbackToBackup,
+    rollbackToBackup: backups.rollbackToBackup,
   });
-
-  function getContainerListPolicyState(containerName: string): ContainerListPolicyState {
-    return deriveContainerListPolicyState(input.containerMetaMap.value, containerName);
-  }
-
-  function containerPolicyTooltip(
-    containerName: string,
-    kind: 'snoozed' | 'skipped' | 'maturity',
-  ): string {
-    const state = getContainerListPolicyState(containerName);
-    return buildContainerPolicyTooltip(state, kind);
-  }
 
   return {
     actionInProgress,
     actionPending,
-    backupsLoading,
+    backupsLoading: backups.backupsLoading,
     containerActionsDisabledReason,
     containerActionsEnabled,
-    clearPolicySelected,
-    clearMaturityPolicySelected,
-    clearSkipsSelected,
-    maturityMinAgeDaysInput,
-    maturityModeInput,
+    clearPolicySelected: policy.clearPolicySelected,
+    clearMaturityPolicySelected: policy.clearMaturityPolicySelected,
+    clearSkipsSelected: policy.clearSkipsSelected,
+    maturityMinAgeDaysInput: policy.maturityMinAgeDaysInput,
+    maturityModeInput: policy.maturityModeInput,
     confirmDelete,
     confirmForceUpdate,
     confirmUpdate,
     confirmRollback,
     confirmRestart,
     confirmStop,
-    containerPolicyTooltip,
-    detailBackups,
-    detailComposePreview,
-    detailPreview,
-    detailTriggers,
-    detailUpdateOperations,
+    containerPolicyTooltip: policy.containerPolicyTooltip,
+    detailBackups: backups.detailBackups,
+    detailComposePreview: preview.detailComposePreview,
+    detailPreview: preview.detailPreview,
+    detailTriggers: triggers.detailTriggers,
+    detailUpdateOperations: backups.detailUpdateOperations,
     executeAction,
-    formatOperationPhase,
-    formatOperationStatus,
-    formatRollbackReason,
-    formatTimestamp,
-    getContainerListPolicyState,
-    getOperationStatusStyle,
-    getTriggerKey,
+    formatOperationPhase: backups.formatOperationPhase,
+    formatOperationStatus: backups.formatOperationStatus,
+    formatRollbackReason: backups.formatRollbackReason,
+    formatTimestamp: backups.formatTimestamp,
+    getContainerListPolicyState: policy.getContainerListPolicyState,
+    getOperationStatusStyle: backups.getOperationStatusStyle,
+    getTriggerKey: triggers.getTriggerKey,
     groupUpdateInProgress,
-    policyError,
-    policyInProgress,
-    policyMessage,
-    previewError,
-    previewLoading,
-    removeSkipDigestSelected,
-    removeSkipTagSelected,
-    rollbackError,
-    rollbackInProgress,
-    rollbackMessage,
-    rollbackToBackup,
-    runAssociatedTrigger,
-    runContainerPreview,
+    policyError: policy.policyError,
+    policyInProgress: policy.policyInProgress,
+    policyMessage: policy.policyMessage,
+    previewError: preview.previewError,
+    previewLoading: preview.previewLoading,
+    removeSkipDigestSelected: policy.removeSkipDigestSelected,
+    removeSkipTagSelected: policy.removeSkipTagSelected,
+    rollbackError: backups.rollbackError,
+    rollbackInProgress: backups.rollbackInProgress,
+    rollbackMessage: backups.rollbackMessage,
+    rollbackToBackup: backups.rollbackToBackup,
+    runAssociatedTrigger: triggers.runAssociatedTrigger,
+    runContainerPreview: preview.runContainerPreview,
     scanContainer,
-    selectedHasMaturityPolicy,
-    selectedMaturityMinAgeDays,
-    selectedMaturityMode,
-    selectedSkipDigests,
-    selectedSkipTags,
-    selectedSnoozeUntil,
-    selectedUpdatePolicy,
-    setMaturityPolicySelected,
-    skipCurrentForSelected,
+    selectedHasMaturityPolicy: policy.selectedHasMaturityPolicy,
+    selectedMaturityMinAgeDays: policy.selectedMaturityMinAgeDays,
+    selectedMaturityMode: policy.selectedMaturityMode,
+    selectedSkipDigests: policy.selectedSkipDigests,
+    selectedSkipTags: policy.selectedSkipTags,
+    selectedSnoozeUntil: policy.selectedSnoozeUntil,
+    selectedUpdatePolicy: policy.selectedUpdatePolicy,
+    setMaturityPolicySelected: policy.setMaturityPolicySelected,
+    skipCurrentForSelected: policy.skipCurrentForSelected,
     skipUpdate,
     skippedUpdates,
-    snoozeDateInput,
-    snoozeSelected,
-    snoozeSelectedUntilDate,
+    snoozeDateInput: policy.snoozeDateInput,
+    snoozeSelected: policy.snoozeSelected,
+    snoozeSelectedUntilDate: policy.snoozeSelectedUntilDate,
     startContainer,
-    triggerError,
-    triggerMessage,
-    triggerRunInProgress,
-    triggersLoading,
-    unsnoozeSelected,
+    triggerError: triggers.triggerError,
+    triggerMessage: triggers.triggerMessage,
+    triggerRunInProgress: triggers.triggerRunInProgress,
+    triggersLoading: triggers.triggersLoading,
+    unsnoozeSelected: policy.unsnoozeSelected,
     updateAllInGroup,
     updateContainer,
-    updateOperationsError,
-    updateOperationsLoading,
+    updateOperationsError: backups.updateOperationsError,
+    updateOperationsLoading: backups.updateOperationsLoading,
   };
 }
