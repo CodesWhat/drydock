@@ -365,6 +365,28 @@ describe('Audit Store', () => {
     expect(result.entries[0].containerName).toBe('new');
   });
 
+  test('getAuditEntries should exclude fallback entries newer than the upper date bound', () => {
+    audit.insertAudit({
+      action: 'update-available',
+      containerName: 'old',
+      status: 'info',
+      timestamp: '2024-01-01T00:00:00.000Z',
+    });
+    audit.insertAudit({
+      action: 'update-available',
+      containerName: 'new',
+      status: 'info',
+      timestamp: '2024-06-15T00:00:00.000Z',
+    });
+
+    const result = audit.getAuditEntries({
+      to: '2024-03-01T00:00:00.000Z',
+    });
+
+    expect(result.total).toBe(1);
+    expect(result.entries[0].containerName).toBe('old');
+  });
+
   test('getAuditEntries should return empty when from/to timestamps are invalid', () => {
     audit.insertAudit({ action: 'update-available', containerName: 'nginx', status: 'info' });
 
@@ -536,6 +558,21 @@ describe('Audit Store', () => {
       from: '1970-01-01T00:00:00.001Z',
     });
     expect(result.total).toBe(0);
+  });
+
+  test('insertAudit should return normalized entry when collection is not initialized', async () => {
+    vi.resetModules();
+    const freshAudit = await import('./audit.js');
+
+    const result = freshAudit.insertAudit({
+      action: 'update-applied',
+      containerName: 'standalone',
+      status: 'success',
+    });
+
+    expect(result.id).toBeDefined();
+    expect(result.timestamp).toBeDefined();
+    expect(result.containerName).toBe('standalone');
   });
 
   test('getAuditEntries should return empty when collection not initialized', async () => {
