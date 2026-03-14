@@ -11,6 +11,11 @@
  *   updateDetectedAt, details?: { ports, volumes, env }
  */
 
+/** Return an ISO-8601 timestamp `daysAgo` days before now. */
+function daysAgo(days: number): string {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
 function c(opts: {
   id: string;
   name: string;
@@ -86,7 +91,7 @@ export const containers = [
     registryType: 'hub',
     newTag: '11.4.0',
     semverDiff: 'minor',
-    updateDetectedAt: '2026-03-08T14:22:00.000Z',
+    updateDetectedAt: daysAgo(2),
     scanStatus: 'scanned',
     scanSummary: { unknown: 0, low: 3, medium: 1, high: 0, critical: 0 },
     group: 'monitoring',
@@ -125,7 +130,7 @@ export const containers = [
     registryType: 'hub',
     newTag: '3.3.1',
     semverDiff: 'minor',
-    updateDetectedAt: '2026-03-07T09:15:00.000Z',
+    updateDetectedAt: daysAgo(10),
     scanStatus: 'scanned',
     scanSummary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
     group: 'monitoring',
@@ -169,7 +174,7 @@ export const containers = [
     registryType: 'hub',
     newTag: '10.10.6',
     semverDiff: 'patch',
-    updateDetectedAt: '2026-03-09T11:30:00.000Z',
+    updateDetectedAt: daysAgo(4),
     scanStatus: 'scanned',
     scanSummary: { unknown: 0, low: 5, medium: 2, high: 1, critical: 0 },
     group: 'media',
@@ -233,7 +238,7 @@ export const containers = [
     registryUrl: 'https://lscr.io',
     newTag: '1.26.1',
     semverDiff: 'minor',
-    updateDetectedAt: '2026-03-06T16:45:00.000Z',
+    updateDetectedAt: daysAgo(14),
     scanStatus: 'scanned',
     scanSummary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
     group: 'media',
@@ -274,7 +279,7 @@ export const containers = [
     registryUrl: 'https://ghcr.io',
     newTag: '4.39.0',
     semverDiff: 'minor',
-    updateDetectedAt: '2026-03-09T08:00:00.000Z',
+    updateDetectedAt: daysAgo(1),
     scanStatus: 'scanned',
     scanSummary: { unknown: 0, low: 1, medium: 0, high: 0, critical: 0 },
     updateScanStatus: 'scanned',
