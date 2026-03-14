@@ -1161,6 +1161,30 @@ describe('ContainersView', () => {
       expect(vm.groupByStack).toBe(false);
     });
 
+    it('applies groupByStack=true from route query', async () => {
+      mockRoute.query = { groupByStack: 'true' };
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect((wrapper.vm as any).groupByStack).toBe(true);
+    });
+
+    it('applies groupByStack=1 from route query', async () => {
+      mockRoute.query = { groupByStack: '1' };
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect((wrapper.vm as any).groupByStack).toBe(true);
+    });
+
+    it('does not override groupByStack preference when query param is absent', async () => {
+      mockRoute.query = {};
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect((wrapper.vm as any).groupByStack).toBe(false);
+    });
+
+    it('sets groupByStack to false for invalid query values', async () => {
+      mockRoute.query = { groupByStack: 'yes' };
+      const wrapper = await mountContainersView([makeContainer()]);
+      expect((wrapper.vm as any).groupByStack).toBe(false);
+    });
+
     it('renderGroups returns a single flat group when groupByStack is false', async () => {
       const containers = [makeContainer(), makeContainer({ id: 'c2', name: 'redis' })];
       const wrapper = await mountContainersView(containers);
@@ -1388,16 +1412,19 @@ describe('ContainersView', () => {
 
   describe('coverage guards (view internals)', () => {
     it('reacts to route query changes after mount', async () => {
-      const query = reactive({ q: 'nginx', filterKind: 'major' });
+      const query = reactive({ q: 'nginx', filterKind: 'major', groupByStack: '' });
       mockRoute.query = query as unknown as Record<string, unknown>;
-      await mountContainersView([makeContainer()]);
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
 
       query.q = 'redis';
       query.filterKind = 'minor';
+      query.groupByStack = 'true';
       await flushPromises();
 
       expect(mockFilterSearch.value).toBe('redis');
       expect(mockFilterKind.value).toBe('minor');
+      expect(vm.groupByStack).toBe(true);
     });
 
     it('handles non-string filterKind query values', async () => {

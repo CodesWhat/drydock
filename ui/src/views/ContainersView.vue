@@ -432,6 +432,20 @@ watch(
   },
 );
 
+function applyGroupByStackFromQuery(queryValue: unknown) {
+  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
+  if (typeof raw !== 'string') {
+    return;
+  }
+  groupByStack.value = raw === 'true' || raw === '1';
+}
+
+applyGroupByStackFromQuery(route.query.groupByStack);
+watch(
+  () => route.query.groupByStack,
+  (value) => applyGroupByStackFromQuery(value),
+);
+
 function toggleGroupCollapse(key: string) {
   const next = new Set(collapsedGroups.value);
   if (next.has(key)) {
