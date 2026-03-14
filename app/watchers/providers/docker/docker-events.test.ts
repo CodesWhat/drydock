@@ -278,7 +278,10 @@ describe('docker events helpers extraction', () => {
   test('handles reconnect failures with malformed error payloads', async () => {
     vi.useFakeTimers();
     const cleanup = vi.fn();
-    const listenDockerEvents = vi.fn().mockRejectedValueOnce(undefined).mockResolvedValueOnce(undefined);
+    const listenDockerEvents = vi
+      .fn()
+      .mockRejectedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
     const state = createState();
 
     scheduleDockerEventsReconnect(

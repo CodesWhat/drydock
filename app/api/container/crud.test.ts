@@ -1217,6 +1217,23 @@ describe('api/container/crud', () => {
       );
     });
 
+    test('returns empty overview when container count is zero', () => {
+      const harness = createHarness({ containers: [] });
+      harness.deps.getContainerCountFromStore.mockReturnValue(0);
+
+      const res = callGetContainerSecurityVulnerabilities(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload).toMatchObject({
+        totalContainers: 0,
+        scannedContainers: 0,
+        total: 0,
+        images: [],
+      });
+      expect(harness.deps.getContainersFromStore).not.toHaveBeenCalled();
+    });
+
     test('returns redacted container when id exists', () => {
       const redacted = { id: 'c1', details: { env: [{ key: 'TOKEN', value: '[REDACTED]' }] } };
       const harness = createHarness({

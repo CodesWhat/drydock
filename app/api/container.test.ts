@@ -2337,7 +2337,7 @@ describe('Container Router', () => {
       const res = await callWatchContainer();
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Error when watching container c1 (watch error)',
+        error: 'Error when watching container c1',
       });
     });
 

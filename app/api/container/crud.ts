@@ -372,9 +372,9 @@ function getContainerSecurityVulnerabilitiesHandler(
     return;
   }
   const containers = context.getContainersFromStore({});
-  res.status(200).json(
-    buildSecurityVulnerabilityOverviewResponse(containers, req.query, totalContainers),
-  );
+  res
+    .status(200)
+    .json(buildSecurityVulnerabilityOverviewResponse(containers, req.query, totalContainers));
 }
 
 function getContainerHandler(context: CrudHandlerContext, req: Request, res: Response) {
