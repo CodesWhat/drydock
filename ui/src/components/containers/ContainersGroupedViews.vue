@@ -87,7 +87,7 @@ function updateMaturityFallbackTooltip(
           </span>
           <button
             v-if="group.updatableCount > 0 || !containerActionsEnabled"
-            class="ml-auto inline-flex items-center gap-1 px-2 py-1 dd-rounded border text-[0.625rem] font-semibold transition-colors"
+            class="ml-auto inline-flex items-center justify-center px-2 py-1 dd-rounded border text-[0.625rem] font-semibold transition-colors"
             :class="!containerActionsEnabled || groupUpdateInProgress.has(group.key) || actionInProgress
               ? 'dd-text-muted cursor-not-allowed opacity-60'
               : 'dd-text hover:dd-bg-elevated'"
@@ -97,8 +97,9 @@ function updateMaturityFallbackTooltip(
             <AppIcon
               :name="!containerActionsEnabled ? 'lock' : groupUpdateInProgress.has(group.key) ? 'spinner' : 'cloud-download'"
               :size="11"
+              class="mr-1"
               :class="!containerActionsEnabled ? '' : groupUpdateInProgress.has(group.key) ? 'dd-spin' : ''" />
-            <span>{{ containerActionsEnabled ? 'Update all' : 'Actions disabled' }}</span>
+            {{ containerActionsEnabled ? 'Update all' : 'Actions disabled' }}
           </button>
         </div>
 
