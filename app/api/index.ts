@@ -120,7 +120,11 @@ function registerRoutes(app) {
   );
   app.use('/api', apiRouter.init());
   app.use('/metrics', prometheusRouter.init());
-  app.use('/', uiRouter.init());
+  if (configuration.ui?.enabled !== false) {
+    app.use('/', uiRouter.init());
+    return;
+  }
+  log.info('UI router disabled by DD_SERVER_UI_ENABLED=false');
 }
 
 function registerErrorHandler(app) {
