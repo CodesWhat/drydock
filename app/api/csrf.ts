@@ -15,13 +15,45 @@ function parseOrigin(value: unknown): string | undefined {
   }
 }
 
+function getFirstForwardedValue(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const firstValue = value
+    .split(',')
+    .map((candidate) => candidate.trim())
+    .find((candidate) => candidate.length > 0);
+  return firstValue || undefined;
+}
+
+function parseProtocol(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalizedValue = value.trim().toLowerCase().replace(/:$/, '');
+  if (normalizedValue !== 'http' && normalizedValue !== 'https') {
+    return undefined;
+  }
+
+  return normalizedValue;
+}
+
 function getExpectedOrigin(req: Request): string | undefined {
-  const host = req.get('host');
+  const protocol =
+    parseProtocol(getFirstForwardedValue(req.get('x-forwarded-proto'))) ??
+    parseProtocol(req.protocol);
+  if (!protocol) {
+    return undefined;
+  }
+
+  const host = getFirstForwardedValue(req.get('x-forwarded-host')) ?? req.get('host');
   if (typeof host !== 'string' || host.trim() === '') {
     return undefined;
   }
 
-  return parseOrigin(`${req.protocol}://${host}`);
+  return parseOrigin(`${protocol}://${host}`);
 }
 
 function getRequestOrigin(req: Request): string | undefined {
