@@ -592,7 +592,7 @@ function resolveTargetedWatchTargets(
   context: CrudHandlerContext,
   containerIds: string[],
   watcherMap: Record<string, LocalContainerWatcher>,
-): { targets?: WatchTarget[]; status?: number; error?: string } {
+): { targets: WatchTarget[] } | { targets?: undefined; status: number; error: string } {
   const selectedTargets: WatchTarget[] = [];
 
   for (const containerId of containerIds) {
@@ -744,8 +744,8 @@ async function watchContainersHandler(context: CrudHandlerContext, req: Request,
   try {
     if (Array.isArray(containerIds) && containerIds.length > 0) {
       const selected = resolveTargetedWatchTargets(context, containerIds, watcherMap);
-      if (!selected.targets) {
-        sendErrorResponse(res, selected.status ?? 500, selected.error ?? 'Unknown watch error');
+      if ('error' in selected) {
+        sendErrorResponse(res, selected.status, selected.error);
         return;
       }
       await Promise.all(
