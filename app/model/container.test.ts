@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import * as container from './container.js';
+import { daysToMs } from './maturity-policy.js';
 
 function createContainerWithError(errorMessage) {
   return {
@@ -316,7 +317,7 @@ test('model should suppress tag update when remote tag is skipped', async () => 
 });
 
 test('model should suppress updates when snoozed in the future', async () => {
-  const snoozeUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const snoozeUntil = new Date(Date.now() + daysToMs(1)).toISOString();
   const containerValidated = container.validate({
     id: 'container-123456789',
     name: 'test',
@@ -352,7 +353,7 @@ test('model should suppress updates when snoozed in the future', async () => {
 });
 
 test('model should suppress fresh updates when maturity mode requires mature updates', async () => {
-  const updateDetectedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const updateDetectedAt = new Date(Date.now() - daysToMs(2)).toISOString();
   const containerValidated = container.validate({
     id: 'container-123456789',
     name: 'test',
@@ -428,7 +429,7 @@ test('model should suppress when maturity mode is set but updateDetectedAt is mi
 });
 
 test('model should default maturityMinAgeDays to 7 when not provided', async () => {
-  const updateDetectedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const updateDetectedAt = new Date(Date.now() - daysToMs(2)).toISOString();
   const containerValidated = container.validate({
     id: 'container-123456789',
     name: 'test',
@@ -466,7 +467,7 @@ test('model should default maturityMinAgeDays to 7 when not provided', async () 
 });
 
 test('model should allow mature updates when maturity threshold has elapsed', async () => {
-  const updateDetectedAt = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+  const updateDetectedAt = new Date(Date.now() - daysToMs(10)).toISOString();
   const containerValidated = container.validate({
     id: 'container-123456789',
     name: 'test',
@@ -585,7 +586,7 @@ test('model should flag updateAvailable when created is different', async () => 
 });
 
 test('model should suppress created-only update when snoozed', async () => {
-  const snoozeUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const snoozeUntil = new Date(Date.now() + daysToMs(1)).toISOString();
   const containerValidated = container.validate({
     id: 'container-123456789',
     name: 'test',
@@ -1363,7 +1364,7 @@ test('model should return false for updateAvailable when no image', async () => 
 });
 
 test('model should not suppress update when snoozeUntil is in the past', async () => {
-  const pastSnooze = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const pastSnooze = new Date(Date.now() - daysToMs(1)).toISOString();
   const containerValidated = container.validate({
     id: 'container-123456789',
     name: 'test',

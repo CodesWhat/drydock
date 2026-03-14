@@ -1,5 +1,6 @@
 import { CronExpressionParser } from 'cron-parser';
 import { vi } from 'vitest';
+import { MS_PER_DAY } from '../model/maturity-policy.js';
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
 const mockGetContainers = vi.hoisted(() => vi.fn());
@@ -723,10 +724,10 @@ describe('runScheduledScans', () => {
 
     await runScheduledScans();
 
-    // 0 3 * * * → 24 * 60 * 60 * 1000 = 86400000
+    // 0 3 * * * → 24h interval
     expect(mockScanImageWithDedup).toHaveBeenCalledWith(
       expect.objectContaining({ digest: 'sha256:abc123' }),
-      86400000,
+      MS_PER_DAY,
     );
   });
 

@@ -1,3 +1,4 @@
+import { daysToMs } from '../../model/maturity-policy.js';
 import { toPositiveInteger } from '../../util/parse.js';
 
 const CACHE_CONTROL_HEADER = 'public, max-age=31536000, immutable';
@@ -7,7 +8,7 @@ const FALLBACK_IMAGE_PROVIDER = 'selfhst';
 const FALLBACK_IMAGE_SLUG = 'docker';
 const MISSING_UPSTREAM_STATUS_CODES = new Set([403, 404]);
 
-const DEFAULT_ICON_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const DEFAULT_ICON_CACHE_TTL_MS = daysToMs(30);
 const DEFAULT_ICON_CACHE_MAX_FILES = 5000;
 const DEFAULT_ICON_CACHE_MAX_BYTES = 100 * 1024 * 1024;
 const DEFAULT_ICON_CACHE_ENFORCEMENT_INTERVAL_MS = 10 * 1000;

@@ -1,3 +1,5 @@
+import { daysToMs } from '../../model/maturity-policy.js';
+
 const ICON_ENV_KEYS = [
   'DD_ICON_CACHE_TTL_MS',
   'DD_ICON_CACHE_MAX_FILES',
@@ -38,7 +40,7 @@ describe('icons/settings', () => {
   test('uses documented defaults when icon cache env vars are unset', async () => {
     const settings = await importSettingsModule();
 
-    expect(settings.ICON_CACHE_TTL_MS).toBe(30 * 24 * 60 * 60 * 1000);
+    expect(settings.ICON_CACHE_TTL_MS).toBe(daysToMs(30));
     expect(settings.ICON_CACHE_MAX_FILES).toBe(5000);
     expect(settings.ICON_CACHE_MAX_BYTES).toBe(100 * 1024 * 1024);
     expect(settings.ICON_CACHE_ENFORCEMENT_INTERVAL_MS).toBe(10 * 1000);
@@ -74,7 +76,7 @@ describe('icons/settings', () => {
 
     const settings = await importSettingsModule();
 
-    expect(settings.ICON_CACHE_TTL_MS).toBe(30 * 24 * 60 * 60 * 1000);
+    expect(settings.ICON_CACHE_TTL_MS).toBe(daysToMs(30));
     expect(settings.ICON_CACHE_MAX_FILES).toBe(5000);
     expect(settings.ICON_CACHE_MAX_BYTES).toBe(100 * 1024 * 1024);
     expect(settings.ICON_CACHE_ENFORCEMENT_INTERVAL_MS).toBe(10 * 1000);

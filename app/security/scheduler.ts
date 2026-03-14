@@ -9,6 +9,7 @@ import { getSecurityConfiguration } from '../configuration/index.js';
 import log from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import type { Container } from '../model/container.js';
+import { MS_PER_DAY } from '../model/maturity-policy.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { getErrorMessage } from '../util/error.js';
@@ -16,7 +17,7 @@ import { getTrivyDatabaseStatus } from './runtime.js';
 import { clearDigestScanCache, scanImageWithDedup } from './scan.js';
 
 const logScheduler = log.child({ component: 'security.scheduler' });
-const DEFAULT_CRON_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_CRON_INTERVAL_MS = MS_PER_DAY;
 const CRON_INTERVAL_SAMPLE_SIZE = 64;
 
 let cronTask: ReturnType<typeof cron.schedule> | undefined;

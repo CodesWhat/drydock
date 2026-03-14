@@ -1,3 +1,5 @@
+import { daysToMs } from '../../utils/time';
+
 /**
  * Mock container data in the **API format** expected by mapApiContainer().
  *
@@ -13,7 +15,7 @@
 
 /** Return an ISO-8601 timestamp `daysAgo` days before now. */
 function daysAgo(days: number): string {
-  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  return new Date(Date.now() - daysToMs(days)).toISOString();
 }
 
 function c(opts: {

@@ -49,6 +49,18 @@ describe('api/container/update-policy', () => {
     vi.useRealTimers();
   });
 
+  describe('request validation', () => {
+    test('returns 400 when body is a primitive and action cannot be read', () => {
+      const harness = createHarness();
+
+      const res = callPatchContainerUpdatePolicy(harness.handlers, 42);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Action is required' });
+      expect(harness.storeContainer.updateContainer).not.toHaveBeenCalled();
+    });
+  });
+
   describe('policy normalization', () => {
     test('normalizes existing policy arrays and snooze date before applying actions', () => {
       const harness = createHarness({
@@ -98,6 +110,29 @@ describe('api/container/update-policy', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(getUpdatedPolicy(harness.storeContainer)).toEqual({
         skipTags: ['2.0.0'],
+      });
+    });
+  });
+
+  describe('skip policy actions', () => {
+    test('removes digest skip entries when action is remove-skip for digest kind', () => {
+      const harness = createHarness({
+        updatePolicy: {
+          skipTags: ['2.0.0'],
+          skipDigests: ['sha256:abc', 'sha256:def', 'sha256:def'],
+        },
+      });
+
+      const res = callPatchContainerUpdatePolicy(harness.handlers, {
+        action: 'remove-skip',
+        kind: 'digest',
+        value: 'sha256:abc',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(getUpdatedPolicy(harness.storeContainer)).toEqual({
+        skipTags: ['2.0.0'],
+        skipDigests: ['sha256:def'],
       });
     });
   });
@@ -241,6 +276,11 @@ describe('api/container/update-policy', () => {
       [
         'minAgeDays is above max',
         { action: 'set-maturity-policy', mode: 'mature', minAgeDays: 366 },
+        'Invalid maturity minAgeDays value',
+      ],
+      [
+        'minAgeDays is fractional',
+        { action: 'set-maturity-policy', mode: 'mature', minAgeDays: 3.5 },
         'Invalid maturity minAgeDays value',
       ],
     ])('returns 400 when %s', (_label, body, expectedError) => {

@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
+import { daysToMs } from '../model/maturity-policy.js';
 import { toPositiveInteger } from '../util/parse.js';
 import { initCollection } from './util.js';
 
@@ -109,7 +110,7 @@ function pruneOperationsForRetention(
     return 0;
   }
 
-  const retentionWindowMs = UPDATE_OPERATION_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const retentionWindowMs = daysToMs(UPDATE_OPERATION_RETENTION_DAYS);
   const cutoffTimestamp = nowMs - retentionWindowMs;
 
   const retainedTerminalIds = new Set(

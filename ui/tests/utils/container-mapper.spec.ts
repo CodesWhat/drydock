@@ -3,6 +3,7 @@ vi.mock('@/services/image-icon', () => ({
 }));
 
 import { computeSecurityDelta, mapApiContainer, mapApiContainers } from '@/utils/container-mapper';
+import { daysToMs } from '@/utils/maturity-policy';
 
 function makeApiContainer(overrides: Record<string, any> = {}) {
   return {
@@ -570,7 +571,7 @@ describe('container-mapper', () => {
     });
 
     it('marks updates as maturity-blocked when mature-only policy hides a fresh update', () => {
-      const freshDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+      const freshDate = new Date(Date.now() - daysToMs(2)).toISOString();
       const c = mapApiContainer(
         makeApiContainer({
           updateAvailable: false,
@@ -612,7 +613,7 @@ describe('container-mapper', () => {
     });
 
     it('does not mark maturity-blocked when mature-only policy threshold is met', () => {
-      const oldDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+      const oldDate = new Date(Date.now() - daysToMs(10)).toISOString();
       const c = mapApiContainer(
         makeApiContainer({
           updateAvailable: false,
@@ -626,6 +627,29 @@ describe('container-mapper', () => {
           updatePolicy: {
             maturityMode: 'mature',
             maturityMinAgeDays: 7,
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBeUndefined();
+      expect((c as any).suppressedUpdateTag).toBeUndefined();
+    });
+
+    it('falls back to default maturity min age when configured threshold is out of bounds', () => {
+      const oldDate = new Date(Date.now() - daysToMs(10)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+            remoteValue: '1.26',
+          },
+          result: { tag: '1.26' },
+          updateDetectedAt: oldDate,
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 366,
           },
         }),
       );

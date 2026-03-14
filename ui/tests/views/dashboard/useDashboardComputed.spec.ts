@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import type { Container } from '@/types/container';
+import { daysToMs } from '@/utils/maturity-policy';
 import type {
   DashboardAgent,
   DashboardContainerSummary,
@@ -268,7 +269,7 @@ describe('useDashboardComputed update summary', () => {
   it('shows new and mature counts in the updates stat detail when new updates exist', () => {
     const now = Date.now();
     const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000).toISOString();
-    const tenDaysAgo = new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const tenDaysAgo = new Date(now - daysToMs(10)).toISOString();
     const state = createState({
       containers: [
         makeBaseContainer({ id: 'fresh-1', updateKind: 'minor', updateDetectedAt: twoHoursAgo }),
@@ -282,7 +283,7 @@ describe('useDashboardComputed update summary', () => {
   });
 
   it('omits detail on updates stat when no fresh updates exist', () => {
-    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const tenDaysAgo = new Date(Date.now() - daysToMs(10)).toISOString();
     const state = createState({
       containers: [
         makeBaseContainer({ id: 'settled-1', updateKind: 'minor', updateDetectedAt: tenDaysAgo }),

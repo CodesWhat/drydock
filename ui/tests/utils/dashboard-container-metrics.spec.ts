@@ -1,5 +1,6 @@
 import type { Container, ContainerSecuritySummary } from '@/types/container';
 import { buildDashboardContainerMetrics } from '@/utils/dashboard-container-metrics';
+import { daysToMs } from '@/utils/maturity-policy';
 
 function makeContainer(
   overrides: Partial<Container> = {},
@@ -156,7 +157,7 @@ describe('buildDashboardContainerMetrics', () => {
   it('counts fresh updates from containers with recent updateDetectedAt', () => {
     const now = Date.now();
     const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000).toISOString();
-    const tenDaysAgo = new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const tenDaysAgo = new Date(now - daysToMs(10)).toISOString();
     const metrics = buildDashboardContainerMetrics([
       makeContainer({ id: 'c1', updateKind: 'minor', updateDetectedAt: twoHoursAgo }),
       makeContainer({ id: 'c2', updateKind: 'patch', updateDetectedAt: tenDaysAgo }),

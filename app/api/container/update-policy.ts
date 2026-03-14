@@ -1,5 +1,12 @@
 import type { Request, Response } from 'express';
 import type { Container, ContainerUpdatePolicy } from '../../model/container.js';
+import {
+  DEFAULT_MATURITY_MIN_AGE_DAYS,
+  daysToMs,
+  normalizeMaturityMode,
+  parseMaturityMinAgeDays,
+  resolveMaturityMinAgeDays,
+} from '../../model/maturity-policy.js';
 import { sendErrorResponse } from '../error-response.js';
 import { getPathParamValue } from './request-helpers.js';
 
@@ -20,7 +27,6 @@ const INVALID_SNOOZE_DAYS_ERROR = 'Invalid snooze days value';
 const INVALID_MATURITY_MODE_ERROR = 'Invalid maturity mode; expected "all" or "mature"';
 const INVALID_MATURITY_DAYS_ERROR = 'Invalid maturity minAgeDays value';
 const GENERIC_UPDATE_POLICY_ERROR = 'Failed to update container policy';
-const DEFAULT_MATURITY_MIN_AGE_DAYS = 7;
 const SAFE_CLIENT_ERRORS = new Set([
   INVALID_SNOOZE_UNTIL_ERROR,
   INVALID_SNOOZE_DAYS_ERROR,
@@ -58,17 +64,13 @@ function normalizeUpdatePolicy(
     }
   }
 
-  if (updatePolicy.maturityMode === 'all' || updatePolicy.maturityMode === 'mature') {
-    normalizedPolicy.maturityMode = updatePolicy.maturityMode;
+  const maturityMode = normalizeMaturityMode(updatePolicy.maturityMode);
+  if (maturityMode) {
+    normalizedPolicy.maturityMode = maturityMode;
   }
 
-  const maturityMinAgeDays = Number(updatePolicy.maturityMinAgeDays);
-  if (
-    Number.isFinite(maturityMinAgeDays) &&
-    Number.isInteger(maturityMinAgeDays) &&
-    maturityMinAgeDays >= 1 &&
-    maturityMinAgeDays <= 365
-  ) {
+  const maturityMinAgeDays = parseMaturityMinAgeDays(updatePolicy.maturityMinAgeDays);
+  if (maturityMinAgeDays !== undefined) {
     normalizedPolicy.maturityMinAgeDays = maturityMinAgeDays;
   }
 
@@ -99,7 +101,7 @@ function getSnoozeUntilFromActionPayload(payload: Record<string, unknown> = {}):
   if (!Number.isFinite(days) || days <= 0 || days > 365) {
     throw new Error(INVALID_SNOOZE_DAYS_ERROR);
   }
-  const snoozeUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  const snoozeUntil = new Date(Date.now() + daysToMs(days));
   return snoozeUntil.toISOString();
 }
 
@@ -107,14 +109,11 @@ function getMaturityMinAgeDaysFromActionPayload(
   payload: Record<string, unknown> = {},
   fallbackDays: number = DEFAULT_MATURITY_MIN_AGE_DAYS,
 ): number {
-  const rawValue = payload.minAgeDays ?? fallbackDays;
-  const minAgeDays = Number(rawValue);
-  if (
-    !Number.isFinite(minAgeDays) ||
-    !Number.isInteger(minAgeDays) ||
-    minAgeDays < 1 ||
-    minAgeDays > 365
-  ) {
+  if (payload.minAgeDays === undefined) {
+    return resolveMaturityMinAgeDays(undefined, fallbackDays);
+  }
+  const minAgeDays = parseMaturityMinAgeDays(payload.minAgeDays);
+  if (minAgeDays === undefined) {
     throw new Error(INVALID_MATURITY_DAYS_ERROR);
   }
   return minAgeDays;
@@ -200,8 +199,8 @@ function applyPolicyAction(
     case 'clear':
       return { policy: {} };
     case 'set-maturity-policy': {
-      const mode = typeof body.mode === 'string' ? body.mode.trim().toLowerCase() : '';
-      if (mode !== 'all' && mode !== 'mature') {
+      const mode = normalizeMaturityMode(body.mode);
+      if (!mode) {
         throw new TypeError(INVALID_MATURITY_MODE_ERROR);
       }
       updatePolicy.maturityMode = mode;

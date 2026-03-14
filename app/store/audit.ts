@@ -1,12 +1,15 @@
 import crypto from 'node:crypto';
 import type { AuditEntry } from '../model/audit.js';
+import { daysToMs } from '../model/maturity-policy.js';
 import { initCollection } from './util.js';
 
 let auditCollection;
 const AUDIT_COLLECTION_INDICES = ['data.action', 'data.timestamp', 'timestampMs'];
 const AUDIT_RETENTION_DAYS = 30;
 const AUDIT_PRUNE_INSERT_INTERVAL = 100;
+const AUDIT_PRUNE_TIMER_INTERVAL_MS = 60 * 60 * 1000;
 let auditInsertsSincePrune = 0;
+let auditPruneTimer: ReturnType<typeof setInterval> | undefined;
 
 type AuditCollectionEntry = {
   data: AuditEntry;
@@ -164,6 +167,25 @@ function migrateMissingTimestampIndex() {
   });
 }
 
+function stopPeriodicPruneTimer() {
+  if (auditPruneTimer !== undefined) {
+    clearInterval(auditPruneTimer);
+    auditPruneTimer = undefined;
+  }
+}
+
+function startPeriodicPruneTimer() {
+  stopPeriodicPruneTimer();
+  auditPruneTimer = setInterval(() => {
+    pruneOldEntries(AUDIT_RETENTION_DAYS);
+    auditInsertsSincePrune = 0;
+  }, AUDIT_PRUNE_TIMER_INTERVAL_MS);
+
+  if (typeof (auditPruneTimer as { unref?: () => void }).unref === 'function') {
+    (auditPruneTimer as { unref: () => void }).unref();
+  }
+}
+
 /**
  * Create audit collections.
  * @param db
@@ -173,6 +195,7 @@ export function createCollections(db) {
   auditInsertsSincePrune = 0;
   migrateMissingTimestampIndex();
   pruneOldEntries(AUDIT_RETENTION_DAYS);
+  startPeriodicPruneTimer();
 }
 
 /**
@@ -241,7 +264,7 @@ export function pruneOldEntries(days: number): number {
     return 0;
   }
 
-  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - daysToMs(days);
   if (typeof auditCollection.chain === 'function') {
     const chained = auditCollection.chain().find({
       timestampMs: { $lt: cutoff },

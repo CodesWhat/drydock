@@ -7,6 +7,12 @@ import type {
   ContainerSignatureVerification,
 } from '../security/scan.js';
 import * as tag from '../tag/index.js';
+import {
+  MATURITY_MIN_AGE_DAYS_MAX,
+  MATURITY_MIN_AGE_DAYS_MIN,
+  maturityMinAgeDaysToMilliseconds,
+  resolveMaturityMinAgeDays,
+} from './maturity-policy.js';
 
 const { parse: parseSemver, diff: diffSemver, transform: transformTag } = tag;
 
@@ -189,7 +195,11 @@ const schema = joi.object({
     skipDigests: joi.array().items(joi.string()),
     snoozeUntil: joi.string().isoDate(),
     maturityMode: joi.string().valid('all', 'mature'),
-    maturityMinAgeDays: joi.number().integer().min(1).max(365),
+    maturityMinAgeDays: joi
+      .number()
+      .integer()
+      .min(MATURITY_MIN_AGE_DAYS_MIN)
+      .max(MATURITY_MIN_AGE_DAYS_MAX),
   }),
   security: joi.object({
     scan: containerSecurityScanSchema,
@@ -440,13 +450,8 @@ function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKin
 
   if (updatePolicy.maturityMode === 'mature') {
     const updateDetectedAtMs = Date.parse(container.updateDetectedAt || '');
-    const maturityMinAgeDays =
-      typeof updatePolicy.maturityMinAgeDays === 'number' &&
-      Number.isInteger(updatePolicy.maturityMinAgeDays) &&
-      updatePolicy.maturityMinAgeDays >= 1
-        ? updatePolicy.maturityMinAgeDays
-        : 7;
-    const maturityMinAgeMs = maturityMinAgeDays * 24 * 60 * 60 * 1000;
+    const maturityMinAgeDays = resolveMaturityMinAgeDays(updatePolicy.maturityMinAgeDays);
+    const maturityMinAgeMs = maturityMinAgeDaysToMilliseconds(maturityMinAgeDays);
     if (
       !Number.isFinite(updateDetectedAtMs) ||
       Date.now() - updateDetectedAtMs < maturityMinAgeMs

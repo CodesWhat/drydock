@@ -21,6 +21,11 @@ import type {
   ContainerSecuritySummary,
 } from '../types/container';
 import { normalizeSeverityCount } from '../views/security/securityViewUtils';
+import {
+  maturityMinAgeDaysToMilliseconds,
+  normalizeMaturityMode,
+  resolveMaturityMinAgeDays,
+} from './maturity-policy';
 import { formatUpdateAge, getUpdateMaturity } from './update-maturity';
 
 interface ApiContainerImage {
@@ -80,6 +85,16 @@ interface ApiContainerSecurityScan {
 }
 
 type SecurityScanType = 'scan' | 'updateScan';
+
+/**
+ * Domain term used by UI templates.
+ *
+ * "bouncer" is the security gate verdict for a container image:
+ * - `safe`: no high/critical vulnerabilities were found.
+ * - `unsafe`: one or more high/critical vulnerabilities were found.
+ * - `blocked`: update or deployment is blocked by policy.
+ */
+type BouncerStatus = 'safe' | 'unsafe' | 'blocked';
 
 interface ApiContainerInput {
   id?: unknown;
@@ -191,9 +206,7 @@ function getSecurityScan(
   return apiContainer.security?.[scanType] ?? undefined;
 }
 
-function deriveBouncerFromScan(
-  scan: ApiContainerSecurityScan | undefined,
-): 'safe' | 'unsafe' | 'blocked' {
+function deriveBouncerFromScan(scan: ApiContainerSecurityScan | undefined): BouncerStatus {
   if (!scan) return 'safe';
   if (scan.status === 'blocked') return 'blocked';
   const summary = scan.summary;
@@ -234,8 +247,8 @@ function deriveSecuritySummaryFromScan(
   return normalizeSecuritySummary(scan?.summary);
 }
 
-/** Derive bouncer status from security scan data. */
-function deriveBouncer(apiContainer: ApiContainerInput): 'safe' | 'unsafe' | 'blocked' {
+/** Derive `bouncer` (security gate verdict) from current-image scan data. */
+function deriveBouncer(apiContainer: ApiContainerInput): BouncerStatus {
   return deriveBouncerFromScan(getSecurityScan(apiContainer, 'scan'));
 }
 
@@ -250,10 +263,8 @@ function deriveSecuritySummary(
   return deriveSecuritySummaryFromScan(getSecurityScan(apiContainer, 'scan'));
 }
 
-/** Derive bouncer status from update scan data. */
-function deriveUpdateBouncer(
-  apiContainer: ApiContainerInput,
-): 'safe' | 'unsafe' | 'blocked' | undefined {
+/** Derive `updateBouncer` (security gate verdict) from candidate-update scan data. */
+function deriveUpdateBouncer(apiContainer: ApiContainerInput): BouncerStatus | undefined {
   const updateScan = getSecurityScan(apiContainer, 'updateScan');
   if (!updateScan) return undefined;
   return deriveBouncerFromScan(updateScan);
@@ -383,19 +394,12 @@ function deriveUpdatePolicyState(apiContainer: ApiContainerInput): Container['up
     return 'skipped';
   }
 
-  const maturityMode = asNonEmptyString(updatePolicy.maturityMode);
+  const maturityMode = normalizeMaturityMode(updatePolicy.maturityMode);
   if (maturityMode === 'mature') {
-    const defaultMinAgeDays = 7;
-    const configuredMinAgeDays = Number(updatePolicy.maturityMinAgeDays);
-    const minAgeDays =
-      Number.isFinite(configuredMinAgeDays) &&
-      Number.isInteger(configuredMinAgeDays) &&
-      configuredMinAgeDays >= 1
-        ? configuredMinAgeDays
-        : defaultMinAgeDays;
+    const minAgeDays = resolveMaturityMinAgeDays(updatePolicy.maturityMinAgeDays);
     const updateDetectedAt = deriveUpdateDetectedAt(apiContainer);
     const detectedAtMs = Date.parse(updateDetectedAt || '');
-    const minAgeMs = minAgeDays * 24 * 60 * 60 * 1000;
+    const minAgeMs = maturityMinAgeDaysToMilliseconds(minAgeDays);
     if (!Number.isFinite(detectedAtMs) || Date.now() - detectedAtMs < minAgeMs) {
       return 'maturity-blocked';
     }

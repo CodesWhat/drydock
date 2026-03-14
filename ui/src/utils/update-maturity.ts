@@ -1,8 +1,9 @@
 /** Update maturity classification based on how long an update has been available. */
+import { daysToMs, MS_PER_DAY } from './maturity-policy';
 
 export type UpdateMaturity = 'fresh' | 'settled' | null;
 
-const DEFAULT_MATURITY_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const DEFAULT_MATURITY_THRESHOLD_MS = daysToMs(7);
 
 /**
  * Classify an available update as "fresh" (recently detected) or "settled" (available for a while).
@@ -48,7 +49,7 @@ export function formatUpdateAge(
   const ageMs = Math.max(0, nowMs - detectedMs);
   const minutes = Math.floor(ageMs / 60_000);
   const hours = Math.floor(ageMs / 3_600_000);
-  const days = Math.floor(ageMs / 86_400_000);
+  const days = Math.floor(ageMs / MS_PER_DAY);
 
   if (days > 0) {
     return `Available for ${days} day${days === 1 ? '' : 's'}`;
