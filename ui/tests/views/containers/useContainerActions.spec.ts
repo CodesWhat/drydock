@@ -394,10 +394,22 @@ describe('useContainerActions', () => {
       {},
     );
 
+    composable.maturityMinAgeDaysInput.value = 1;
+    await composable.setMaturityPolicySelected('mature');
+    expect(mocks.updateContainerPolicy).toHaveBeenNthCalledWith(
+      4,
+      'container-1',
+      'set-maturity-policy',
+      {
+        mode: 'mature',
+        minAgeDays: 1,
+      },
+    );
+
     composable.maturityMinAgeDaysInput.value = 0;
     await composable.setMaturityPolicySelected('mature');
     expect(composable.policyError.value).toBe('Enter a maturity age between 1 and 365 days');
-    expect(mocks.updateContainerPolicy).toHaveBeenCalledTimes(3);
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledTimes(4);
   });
 
   it('deletes selected container and closes detail views', async () => {
@@ -597,6 +609,9 @@ describe('useContainerActions', () => {
       maturityBlocked: false,
     });
     expect(composable.containerPolicyTooltip('web', 'maturity')).toContain('Mature-only policy');
+    expect(composable.containerPolicyTooltip('api', 'maturity')).toBe(
+      'Mature-only policy active (7 days minimum age)',
+    );
   });
 
   it('normalizes unknown maturity mode strings and falls back to generic maturity tooltip text', async () => {
@@ -690,6 +705,50 @@ describe('useContainerActions', () => {
     expect(composable.getContainerListPolicyState('web')).not.toHaveProperty('updateDetectedAt');
     expect(composable.containerPolicyTooltip('api', 'maturity')).toBe(
       'Maturity policy allows all updates',
+    );
+  });
+
+  it('uses singular maturity and skipped tooltip wording when min age and skip count are one', async () => {
+    const now = Date.now();
+    const { composable } = await mountActionsHarness({
+      containerMetaMap: {
+        web: {
+          updateAvailable: false,
+          updateDetectedAt: new Date(now - 12 * 60 * 60 * 1000).toISOString(),
+          updateKind: {
+            kind: 'digest',
+            remoteValue: 'sha256:new',
+          },
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 1,
+            skipTags: [],
+            skipDigests: ['sha256:old'],
+          },
+        },
+        api: {
+          updateAvailable: false,
+          updateDetectedAt: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+          updateKind: {
+            kind: 'digest',
+            remoteValue: 'sha256:newer',
+          },
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 1,
+          },
+        },
+      },
+    });
+
+    expect(composable.containerPolicyTooltip('web', 'maturity')).toBe(
+      'Mature-only policy blocks updates younger than 1 day',
+    );
+    expect(composable.containerPolicyTooltip('api', 'maturity')).toBe(
+      'Mature-only policy active (1 day minimum age)',
+    );
+    expect(composable.containerPolicyTooltip('web', 'skipped')).toBe(
+      'Skipped updates policy active (1 entry)',
     );
   });
 
@@ -1153,6 +1212,82 @@ describe('useContainerActions', () => {
       skipCount: 0,
       maturityBlocked: false,
     });
+  });
+
+  it('exposes selected skip arrays and supports direct update/scan action handlers', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, containerMetaMap } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containers: [container],
+      containerIdMap: { web: 'container-1' },
+      containerMetaMap: {
+        web: {
+          updatePolicy: {
+            skipTags: ['v1', 'v2'],
+            skipDigests: ['sha256:abc'],
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedSkipTags.value).toEqual(['v1', 'v2']);
+    expect(composable.selectedSkipDigests.value).toEqual(['sha256:abc']);
+
+    containerMetaMap.value = {
+      web: {
+        updatePolicy: {
+          skipTags: { invalid: true },
+          skipDigests: null,
+        },
+      },
+    };
+    await nextTick();
+
+    expect(composable.selectedSkipTags.value).toEqual([]);
+    expect(composable.selectedSkipDigests.value).toEqual([]);
+
+    mocks.updateContainer.mockClear();
+    mocks.scanContainer.mockClear();
+    await composable.updateContainer('web');
+    await composable.scanContainer('web');
+    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.scanContainer).toHaveBeenCalledWith('container-1');
+  });
+
+  it('falls back for non-object selected policies and skips action-tab refresh when not on actions tab', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      activeDetailTab: 'overview',
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containers: [container],
+      containerIdMap: { web: 'container-1' },
+      containerMetaMap: {
+        web: {
+          updatePolicy: 'invalid',
+        },
+      },
+    });
+
+    expect(composable.selectedUpdatePolicy.value).toEqual({});
+    expect(composable.selectedSkipTags.value).toEqual([]);
+    expect(composable.selectedSkipDigests.value).toEqual([]);
+    expect(composable.getContainerListPolicyState('missing')).toEqual({
+      snoozed: false,
+      skipped: false,
+      skipCount: 0,
+      maturityBlocked: false,
+    });
+
+    mocks.getContainerTriggers.mockClear();
+    mocks.getBackups.mockClear();
+    mocks.getContainerUpdateOperations.mockClear();
+    await composable.skipUpdate('web');
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledWith('container-1', 'skip-current', {});
+    expect(mocks.getContainerTriggers).not.toHaveBeenCalled();
+    expect(mocks.getBackups).not.toHaveBeenCalled();
+    expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
   });
 
   it('refreshes actions-tab detail data after action execution and skip updates', async () => {
