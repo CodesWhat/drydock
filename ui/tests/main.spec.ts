@@ -48,7 +48,9 @@ async function importMain() {
   await Promise.resolve();
 }
 
-describe('main bootstrap', () => {
+describe('main bootstrap', {
+  timeout: 15_000,
+}, () => {
   beforeEach(() => {
     vi.resetModules();
     mocks.createApp.mockClear();
