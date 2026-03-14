@@ -1487,8 +1487,10 @@ onUnmounted(() => {
           <div class="w-full max-w-[320px] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"
                :style="{ backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)' }">
             <div class="flex flex-col items-center px-6 py-8 gap-3">
-              <img :src="whaleLogo" alt="" class="h-10 w-auto mb-1"
-                   :style="[{ transform: 'rotate(180deg) scaleX(-1)' }, isDark ? { filter: 'invert(1)' } : {}]" />
+              <div class="disconnect-bounce h-10 mb-1">
+                <img :src="whaleLogo" alt="" class="h-10 w-auto"
+                     :style="[{ transform: 'rotate(180deg) scaleX(-1)' }, isDark ? { filter: 'invert(1)' } : {}]" />
+              </div>
               <h2 class="text-sm font-bold dd-text">{{ connectionOverlayTitle }}</h2>
               <p class="text-[0.6875rem] dd-text-muted leading-relaxed">
                 {{ connectionOverlayMessage }}
@@ -1515,5 +1517,12 @@ onUnmounted(() => {
 }
 .about-swim {
   animation: swim 6s ease-in-out infinite;
+}
+.disconnect-bounce {
+  animation: disconnect-bounce 2s ease-in-out infinite;
+}
+@keyframes disconnect-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
 }
 </style>
