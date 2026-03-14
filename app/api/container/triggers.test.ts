@@ -148,6 +148,25 @@ describe('api/container/triggers', () => {
       ]);
     });
 
+    test('uses type/name fallback when a listed trigger has no explicit id', async () => {
+      const triggerWithoutId = createTrigger({
+        id: undefined,
+        name: 'orphan',
+      });
+      const harness = createHarness({
+        container: { id: 'c1' },
+        triggerMap: {},
+      });
+      harness.deps.mapComponentsToList.mockReturnValue([triggerWithoutId]);
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.total).toBe(1);
+      expect(payload.data[0].name).toBe('orphan');
+    });
+
     test('applies include thresholds and trims include entries before parsing', async () => {
       const harness = createHarness({
         container: { id: 'c1', triggerInclude: ' notify:patch , slack.alert : all ' },
@@ -197,6 +216,43 @@ describe('api/container/triggers', () => {
       expect(res.json).toHaveBeenCalledWith({ data: [], total: 0 });
     });
 
+    test('drops triggers that are not present in the include list', async () => {
+      const harness = createHarness({
+        container: {
+          id: 'c1',
+          triggerInclude: 'slack.alert:major',
+        },
+        triggerMap: {
+          'slack.notify': createTrigger({ id: 'slack.notify', name: 'notify' }),
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ data: [], total: 0 });
+    });
+
+    test('excludes triggers when only an exclude list is configured', async () => {
+      const harness = createHarness({
+        container: {
+          id: 'c1',
+          triggerExclude: 'notify',
+        },
+        triggerMap: {
+          'slack.notify': createTrigger({ id: 'slack.notify', name: 'notify' }),
+          'slack.alert': createTrigger({ id: 'slack.alert', name: 'alert' }),
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.total).toBe(1);
+      expect(payload.data.map((trigger) => trigger.id)).toEqual(['slack.alert']);
+    });
+
     test('filters dockercompose triggers by compose file affinity from container labels', async () => {
       const mysqlComposeTrigger = createTrigger({
         id: 'dockercompose.mysql',
@@ -239,6 +295,21 @@ describe('api/container/triggers', () => {
   });
 
   describe('runTrigger', () => {
+    test('returns 404 when the container does not exist', async () => {
+      const harness = createHarness();
+      harness.storeContainer.getContainer.mockReturnValue(undefined);
+
+      const res = await callRunTrigger(harness.handlers, {
+        id: 'c1',
+        triggerType: 'slack',
+        triggerName: 'notify',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+      expect(harness.deps.getTriggers).not.toHaveBeenCalled();
+    });
+
     test('blocks local docker trigger execution for remote containers', async () => {
       const harness = createHarness({
         container: { id: 'c1', agent: 'agent-1' },
@@ -255,6 +326,45 @@ describe('api/container/triggers', () => {
         error: 'Cannot execute local docker trigger on remote container agent-1.c1',
       });
       expect(harness.deps.getTriggers).not.toHaveBeenCalled();
+    });
+
+    test('allows non-docker triggers for remote containers without an explicit trigger agent', async () => {
+      const trigger = createTrigger({
+        id: 'slack.notify',
+        name: 'notify',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      });
+      const harness = createHarness({
+        container: { id: 'c1', agent: 'agent-1' },
+        triggerMap: {
+          'slack.notify': trigger,
+        },
+      });
+
+      const res = await callRunTrigger(harness.handlers, {
+        id: 'c1',
+        triggerType: 'slack',
+        triggerName: 'notify',
+      });
+
+      expect(trigger.trigger).toHaveBeenCalledWith(harness.container);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({});
+    });
+
+    test('returns 404 when the trigger cannot be found', async () => {
+      const harness = createHarness({
+        container: { id: 'c1' },
+      });
+
+      const res = await callRunTrigger(harness.handlers, {
+        id: 'c1',
+        triggerType: 'slack',
+        triggerName: 'missing',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Trigger not found' });
     });
 
     test('resolves and executes an agent-qualified trigger id', async () => {
@@ -280,6 +390,35 @@ describe('api/container/triggers', () => {
       expect(trigger.trigger).toHaveBeenCalledWith(harness.container);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({});
+    });
+
+    test('returns 500 when trigger execution throws', async () => {
+      const trigger = createTrigger({
+        id: 'slack.notify',
+        name: 'notify',
+        trigger: vi.fn().mockRejectedValue(new Error('trigger exploded')),
+      });
+      const harness = createHarness({
+        container: { id: 'c1' },
+        triggerMap: {
+          'slack.notify': trigger,
+        },
+      });
+
+      const res = await callRunTrigger(harness.handlers, {
+        id: 'c1',
+        triggerType: 'slack',
+        triggerName: 'notify',
+      });
+
+      expect(trigger.trigger).toHaveBeenCalledWith(harness.container);
+      expect(harness.deps.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('trigger exploded'),
+      );
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Error when running trigger (type=slack, name=notify)',
+      });
     });
   });
 });
