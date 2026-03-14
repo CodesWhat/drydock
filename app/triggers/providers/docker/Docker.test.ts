@@ -3322,10 +3322,30 @@ describe('additional direct wrapper coverage', () => {
       });
     const container = { name: 'web', image: { name: 'nginx' } } as any;
 
-    docker.recordRollbackTelemetry(container, 'info', '', 'missing reason');
-    docker.recordRollbackTelemetry(container, 'info', '!!!', 'sanitized reason');
-    docker.recordRollbackTelemetry(container, 'success', 'manual', 'success reason');
-    docker.recordRollbackTelemetry(container, 'error', 'manual', 'error reason');
+    docker.recordRollbackTelemetry({
+      container,
+      outcome: 'info',
+      reason: '',
+      details: 'missing reason',
+    });
+    docker.recordRollbackTelemetry({
+      container,
+      outcome: 'info',
+      reason: '!!!',
+      details: 'sanitized reason',
+    });
+    docker.recordRollbackTelemetry({
+      container,
+      outcome: 'success',
+      reason: 'manual',
+      details: 'success reason',
+    });
+    docker.recordRollbackTelemetry({
+      container,
+      outcome: 'error',
+      reason: 'manual',
+      details: 'error reason',
+    });
 
     expect(rollbackCounterInc).toHaveBeenNthCalledWith(
       1,

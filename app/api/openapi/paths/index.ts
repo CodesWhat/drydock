@@ -14,6 +14,43 @@ import { componentReadPaths } from './component-read.js';
 import { containerPaths } from './containers.js';
 import { triggerPaths } from './triggers.js';
 
+type ErrorResponses = Record<number, ReturnType<typeof errorResponse>>;
+
+function createWebhookContainerActionPost({
+  summary,
+  operationId,
+  successDescription,
+  notFoundMessage,
+}: {
+  summary: string;
+  operationId: string;
+  successDescription: string;
+  notFoundMessage: string;
+}) {
+  const errorResponses: ErrorResponses = {
+    401: errorResponse('Missing or invalid webhook authorization header'),
+    403: errorResponse('Webhooks are disabled for container'),
+    404: errorResponse(notFoundMessage),
+    500: errorResponse('Webhook execution failed'),
+  };
+
+  return {
+    post: {
+      tags: ['Webhook', 'Actions'],
+      summary,
+      operationId,
+      security: [{ webhookBearerAuth: [] }],
+      parameters: [containerNamePathParam],
+      responses: {
+        200: jsonResponse(successDescription, {
+          $ref: '#/components/schemas/WebhookContainerActionResponse',
+        }),
+        ...errorResponses,
+      },
+    },
+  };
+}
+
 export const openApiPaths = {
   '/health': {
     get: {
@@ -66,42 +103,18 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/webhook/watch/{containerName}': {
-    post: {
-      tags: ['Webhook', 'Actions'],
-      summary: 'Trigger watch for a specific container by name',
-      operationId: 'webhookWatchContainer',
-      security: [{ webhookBearerAuth: [] }],
-      parameters: [containerNamePathParam],
-      responses: {
-        200: jsonResponse('Container watch triggered', {
-          $ref: '#/components/schemas/WebhookContainerActionResponse',
-        }),
-        401: errorResponse('Missing or invalid webhook authorization header'),
-        403: errorResponse('Webhooks are disabled for container'),
-        404: errorResponse('Container not found'),
-        500: errorResponse('Webhook execution failed'),
-      },
-    },
-  },
-  '/api/webhook/update/{containerName}': {
-    post: {
-      tags: ['Webhook', 'Actions'],
-      summary: 'Trigger update for a specific container by name',
-      operationId: 'webhookUpdateContainer',
-      security: [{ webhookBearerAuth: [] }],
-      parameters: [containerNamePathParam],
-      responses: {
-        200: jsonResponse('Container update triggered', {
-          $ref: '#/components/schemas/WebhookContainerActionResponse',
-        }),
-        401: errorResponse('Missing or invalid webhook authorization header'),
-        403: errorResponse('Webhooks are disabled for container'),
-        404: errorResponse('Container or docker trigger not found'),
-        500: errorResponse('Webhook execution failed'),
-      },
-    },
-  },
+  '/api/webhook/watch/{containerName}': createWebhookContainerActionPost({
+    summary: 'Trigger watch for a specific container by name',
+    operationId: 'webhookWatchContainer',
+    successDescription: 'Container watch triggered',
+    notFoundMessage: 'Container not found',
+  }),
+  '/api/webhook/update/{containerName}': createWebhookContainerActionPost({
+    summary: 'Trigger update for a specific container by name',
+    operationId: 'webhookUpdateContainer',
+    successDescription: 'Container update triggered',
+    notFoundMessage: 'Container or docker trigger not found',
+  }),
   ...authPaths,
   '/api/events/ui': {
     get: {

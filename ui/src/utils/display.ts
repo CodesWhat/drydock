@@ -65,7 +65,17 @@ export function updateKindColor(kind: string | null) {
 }
 
 export function maturityColor(maturity: string | null) {
-  if (maturity === 'fresh') return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' };
-  if (maturity === 'settled') return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)' };
+  if (maturity === 'fresh') {
+    return {
+      bg: 'color-mix(in srgb, var(--dd-warning) 35%, var(--dd-bg-card))',
+      text: 'var(--dd-text)',
+    };
+  }
+  if (maturity === 'settled') {
+    return {
+      bg: 'color-mix(in srgb, var(--dd-info) 35%, var(--dd-bg-card))',
+      text: 'var(--dd-text)',
+    };
+  }
   return { bg: 'transparent', text: 'transparent' };
 }

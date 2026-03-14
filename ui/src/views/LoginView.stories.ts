@@ -23,75 +23,119 @@ interface LoginPayload {
 let loginPayloads: LoginPayload[] = [];
 let rememberPayloads: Array<{ remember?: boolean }> = [];
 
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+type LoginMockRequestContext = {
+  path: string;
+  method: string;
+  init?: RequestInit;
+  options: LoginMockOptions;
+};
+
+function createJsonResponse(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: JSON_HEADERS,
+  });
+}
+
+function getLoginMockRequestDetails(input: RequestInfo | URL, init?: RequestInit) {
+  const raw =
+    typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+  const url = raw.startsWith('http') ? new URL(raw) : new URL(raw, 'http://localhost');
+  const method =
+    init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET');
+
+  return { path: url.pathname, method };
+}
+
+function parseJsonBody<T>(init?: RequestInit): T {
+  return (init?.body ? JSON.parse(String(init.body)) : {}) as T;
+}
+
+function handleStrategiesRequest(context: LoginMockRequestContext): Response | undefined {
+  if (context.path !== '/auth/strategies' || context.method !== 'GET') {
+    return undefined;
+  }
+
+  return createJsonResponse(context.options.strategies, 200);
+}
+
+function handleLoginRequest(context: LoginMockRequestContext): Response | undefined {
+  if (context.path !== '/auth/login' || context.method !== 'POST') {
+    return undefined;
+  }
+
+  const payload = parseJsonBody<LoginPayload>(context.init);
+  loginPayloads.push(payload);
+
+  if (context.options.allowBasicLogin === false) {
+    return createJsonResponse({ error: 'Unauthorized' }, 401);
+  }
+
+  return createJsonResponse(
+    {
+      username: payload.username ?? 'unknown',
+      role: 'admin',
+    },
+    200,
+  );
+}
+
+function handleRememberRequest(context: LoginMockRequestContext): Response | undefined {
+  if (context.path !== '/auth/remember' || context.method !== 'POST') {
+    return undefined;
+  }
+
+  const payload = parseJsonBody<{ remember?: boolean }>(context.init);
+  rememberPayloads.push(payload);
+
+  return createJsonResponse({ ok: true }, 200);
+}
+
+function handleOidcRedirectRequest(context: LoginMockRequestContext): Response | undefined {
+  const isOidcRedirectRequest =
+    context.path.startsWith('/auth/oidc/') &&
+    context.path.endsWith('/redirect') &&
+    context.method === 'GET';
+
+  if (!isOidcRedirectRequest) {
+    return undefined;
+  }
+
+  return createJsonResponse(
+    {
+      redirect: context.options.oidcRedirectUrl ?? 'https://example.com/oidc/redirect',
+    },
+    200,
+  );
+}
+
+function routeLoginMockRequest(context: LoginMockRequestContext): Response {
+  const handlers = [
+    handleStrategiesRequest,
+    handleLoginRequest,
+    handleRememberRequest,
+    handleOidcRedirectRequest,
+  ];
+
+  for (const handler of handlers) {
+    const response = handler(context);
+    if (response) {
+      return response;
+    }
+  }
+
+  return createJsonResponse({ error: `No mock for ${context.method} ${context.path}` }, 404);
+}
+
 function installLoginMock(options: LoginMockOptions) {
   loginPayloads = [];
   rememberPayloads = [];
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const raw =
-      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-    const url = raw.startsWith('http') ? new URL(raw) : new URL(raw, 'http://localhost');
-    const path = url.pathname;
-    const method =
-      init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET');
-
-    if (path === '/auth/strategies' && method === 'GET') {
-      return new Response(JSON.stringify(options.strategies), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (path === '/auth/login' && method === 'POST') {
-      const payload = (init?.body ? JSON.parse(String(init.body)) : {}) as LoginPayload;
-      loginPayloads.push(payload);
-
-      if (options.allowBasicLogin === false) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-
-      return new Response(
-        JSON.stringify({
-          username: payload.username ?? 'unknown',
-          role: 'admin',
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      );
-    }
-
-    if (path === '/auth/remember' && method === 'POST') {
-      const payload = (init?.body ? JSON.parse(String(init.body)) : {}) as {
-        remember?: boolean;
-      };
-      rememberPayloads.push(payload);
-      return new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (path.startsWith('/auth/oidc/') && path.endsWith('/redirect') && method === 'GET') {
-      return new Response(
-        JSON.stringify({
-          redirect: options.oidcRedirectUrl ?? 'https://example.com/oidc/redirect',
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      );
-    }
-
-    return new Response(JSON.stringify({ error: `No mock for ${method} ${path}` }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const requestDetails = getLoginMockRequestDetails(input, init);
+    return routeLoginMockRequest({ ...requestDetails, init, options });
   };
 }
 

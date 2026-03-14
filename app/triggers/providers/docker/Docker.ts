@@ -135,6 +135,15 @@ type DockerTriggerCallbackName =
 
 type DockerTriggerOrchestrator = Pick<Docker, DockerTriggerCallbackName>;
 
+type RollbackTelemetryPayload = {
+  container: unknown;
+  outcome: 'success' | 'error' | 'info';
+  reason: string;
+  details: string;
+  fromVersion?: string;
+  toVersion?: string;
+};
+
 function buildOrchestratorCallback<K extends keyof DockerTriggerOrchestrator>(
   orchestrator: DockerTriggerOrchestrator,
   callbackName: K,
@@ -874,14 +883,14 @@ class Docker extends Trigger {
     getAuditCounter()?.inc({ action: 'rollback' });
   }
 
-  recordRollbackTelemetry(
+  recordRollbackTelemetry({
     container,
-    outcome: 'success' | 'error' | 'info',
-    reason: string,
-    details: string,
-    fromVersion?: string,
-    toVersion?: string,
-  ) {
+    outcome,
+    reason,
+    details,
+    fromVersion,
+    toVersion,
+  }: RollbackTelemetryPayload) {
     const reasonLabel = String(reason || 'unspecified')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '_')

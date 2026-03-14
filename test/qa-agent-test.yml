@@ -1,0 +1,56 @@
+services:
+  # Controller — connects to the agent
+  controller:
+    image: drydock:v1.4.1-fix
+    container_name: drydock-controller
+    user: root
+    ports:
+      - "3334:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
+      - DD_LOG_FORMAT=text
+      - DD_LOG_LEVEL=debug
+      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=true
+      - DD_WATCHER_LOCAL_CRON=*/2 * * * *
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$zUAK9+ktVWNHyQdv3SaOSgMv3T02F1Zj8D+t1un7D98=$$KEmn6d94w03YxIlw7U7l/ikD9lW+H3IC1N7xbAhOB9yKofA3HoxUBmuvBawvShhv337zDv4+g9hobNWeQEWwkQ=="
+      - DD_SESSION_SECRET=qa-agent-test-session
+      - DD_AGENT_TESTAGENT_SECRET=test-agent-secret-123
+      - DD_AGENT_TESTAGENT_HOST=agent
+      - DD_AGENT_TESTAGENT_PORT=3000
+    depends_on:
+      agent:
+        condition: service_started
+
+  # Agent — watches containers and reports back
+  agent:
+    image: drydock:v1.4.1-fix
+    container_name: drydock-agent
+    user: root
+    command: --agent
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
+      - DD_LOG_FORMAT=text
+      - DD_LOG_LEVEL=debug
+      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=true
+      - DD_WATCHER_LOCAL_CRON=*/2 * * * *
+      - DD_AGENT_SECRET=test-agent-secret-123
+
+  # Test container with sensitive env vars (triggers the sensitive field classification)
+  test-with-env:
+    image: redis:7.2.0
+    pull_policy: never
+    container_name: test-with-env
+    environment:
+      - REDIS_PASSWORD=supersecretpassword
+      - API_KEY=sk-test-1234567890
+      - DATABASE_URL=postgres://user:pass@db:5432/app
+    labels:
+      - dd.watch=true
+      - dd.display.name=Redis (With Secrets)

@@ -268,6 +268,51 @@ class ContainerRuntimeConfigManager {
     return { logContainer: runtimeOptionsOrLogContainer };
   }
 
+  shouldDropClonedRuntimeField(
+    runtimeField: RuntimeProcessField,
+    clonedValue: unknown,
+    sourceImageConfig: RuntimeConfigObject | undefined,
+    targetImageConfig: RuntimeConfigObject | undefined,
+    runtimeFieldOrigins: RuntimeFieldOrigins | undefined,
+    logContainer: RuntimeConfigLogger | undefined,
+  ) {
+    if (clonedValue === undefined) {
+      return false;
+    }
+
+    const runtimeOrigin = this.normalizeRuntimeFieldOrigin(runtimeFieldOrigins?.[runtimeField]);
+    const inheritedFromSource = this.areContainerProcessArgsEqual(
+      clonedValue,
+      sourceImageConfig?.[runtimeField],
+    );
+    if (
+      !this.isInheritedRuntimeField(runtimeField, runtimeOrigin, inheritedFromSource, logContainer)
+    ) {
+      return false;
+    }
+
+    return !this.areContainerProcessArgsEqual(clonedValue, targetImageConfig?.[runtimeField]);
+  }
+
+  isInheritedRuntimeField(
+    runtimeField: RuntimeProcessField,
+    runtimeOrigin: RuntimeFieldOrigin,
+    inheritedFromSource: boolean,
+    logContainer: RuntimeConfigLogger | undefined,
+  ) {
+    if (runtimeOrigin === RUNTIME_ORIGIN_INHERITED) {
+      return inheritedFromSource;
+    }
+
+    if (runtimeOrigin === RUNTIME_ORIGIN_UNKNOWN && inheritedFromSource) {
+      logContainer?.debug?.(
+        `Preserving ${runtimeField} because runtime origin is unknown; avoiding stale-default cleanup to prevent dropping explicit pins`,
+      );
+    }
+
+    return false;
+  }
+
   sanitizeClonedRuntimeConfig(
     containerConfig: RuntimeConfigObject | undefined,
     sourceImageConfig: RuntimeConfigObject | undefined,
@@ -279,33 +324,16 @@ class ContainerRuntimeConfigManager {
 
     for (const runtimeField of RUNTIME_PROCESS_FIELDS) {
       const clonedValue = containerConfig?.[runtimeField];
-      if (clonedValue === undefined) {
-        continue;
-      }
-
-      const runtimeOrigin = this.normalizeRuntimeFieldOrigin(runtimeFieldOrigins?.[runtimeField]);
-      const inheritedFromSource = this.areContainerProcessArgsEqual(
-        clonedValue,
-        sourceImageConfig?.[runtimeField],
-      );
-      if (runtimeOrigin !== RUNTIME_ORIGIN_INHERITED) {
-        if (runtimeOrigin === RUNTIME_ORIGIN_UNKNOWN && inheritedFromSource) {
-          logContainer?.debug?.(
-            `Preserving ${runtimeField} because runtime origin is unknown; avoiding stale-default cleanup to prevent dropping explicit pins`,
-          );
-        }
-        continue;
-      }
-
-      if (!inheritedFromSource) {
-        continue;
-      }
-
-      const matchesTargetDefault = this.areContainerProcessArgsEqual(
-        clonedValue,
-        targetImageConfig?.[runtimeField],
-      );
-      if (matchesTargetDefault) {
+      if (
+        !this.shouldDropClonedRuntimeField(
+          runtimeField,
+          clonedValue,
+          sourceImageConfig,
+          targetImageConfig,
+          runtimeFieldOrigins,
+          logContainer,
+        )
+      ) {
         continue;
       }
 

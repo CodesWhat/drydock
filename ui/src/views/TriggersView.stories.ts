@@ -9,45 +9,68 @@ interface TriggerApiItem {
   configuration: Record<string, string>;
 }
 
-const triggerFixtures: TriggerApiItem[] = [
-  {
-    id: 't-slack',
-    name: 'Slack Alerts',
-    type: 'slack',
-    configuration: { channel: '#alerts', webhook: 'https://hooks.slack.com/services/xxx' },
-  },
-  {
-    id: 't-email',
-    name: 'SMTP Reports',
-    type: 'smtp',
-    configuration: { host: 'smtp.example.com', from: 'drydock@example.com' },
-  },
-  {
-    id: 't-webhook',
-    name: 'Webhook Fanout',
-    type: 'http',
-    configuration: { method: 'POST', endpoint: 'https://ops.example.com/hooks/drydock' },
-  },
-];
+const TRIGGERS_PATH = '/api/triggers';
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
-function installTriggersMock(data: TriggerApiItem[]) {
+const triggerFixtureRows = [
+  [
+    't-slack',
+    'Slack Alerts',
+    'slack',
+    { channel: '#alerts', webhook: 'https://hooks.slack.com/services/xxx' },
+  ],
+  ['t-email', 'SMTP Reports', 'smtp', { host: 'smtp.example.com', from: 'drydock@example.com' }],
+  [
+    't-webhook',
+    'Webhook Fanout',
+    'http',
+    { method: 'POST', endpoint: 'https://ops.example.com/hooks/drydock' },
+  ],
+] as const;
+
+const triggerFixtures: TriggerApiItem[] = triggerFixtureRows.map(
+  ([id, name, type, configuration]) => ({
+    id,
+    name,
+    type,
+    configuration,
+  }),
+);
+
+function jsonResponse(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: JSON_HEADERS,
+  });
+}
+
+function resolvePath(input: RequestInfo | URL): string {
+  if (input instanceof URL) {
+    return input.pathname;
+  }
+  if (typeof input === 'string') {
+    return new URL(input, 'http://localhost').pathname;
+  }
+  return new URL(input.url, 'http://localhost').pathname;
+}
+
+function installTriggersMock(data: readonly TriggerApiItem[]) {
   globalThis.fetch = async (input: RequestInfo | URL) => {
-    const raw =
-      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-    const path = raw.startsWith('http') ? new URL(raw).pathname : raw;
-
-    if (path === '/api/triggers') {
-      return new Response(JSON.stringify(data), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+    const path = resolvePath(input);
+    if (path === TRIGGERS_PATH) {
+      return jsonResponse(data);
     }
-
-    return new Response(JSON.stringify({ error: `No mock for ${path}` }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: `No mock for ${path}` }, 404);
   };
+}
+
+function createLoaders(data: readonly TriggerApiItem[]) {
+  return [
+    async () => {
+      installTriggersMock(data);
+      return {};
+    },
+  ];
 }
 
 const meta = {
@@ -68,12 +91,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const DefaultTable: Story = {
-  loaders: [
-    async () => {
-      installTriggersMock(triggerFixtures);
-      return {};
-    },
-  ],
+  loaders: createLoaders(triggerFixtures),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await waitFor(() => {
@@ -84,12 +102,7 @@ export const DefaultTable: Story = {
 };
 
 export const ListMode: Story = {
-  loaders: [
-    async () => {
-      installTriggersMock(triggerFixtures);
-      return {};
-    },
-  ],
+  loaders: createLoaders(triggerFixtures),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await waitFor(() => {
@@ -103,12 +116,7 @@ export const ListMode: Story = {
 };
 
 export const Empty: Story = {
-  loaders: [
-    async () => {
-      installTriggersMock([]);
-      return {};
-    },
-  ],
+  loaders: createLoaders([]),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await waitFor(() => {

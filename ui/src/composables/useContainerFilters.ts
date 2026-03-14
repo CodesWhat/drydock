@@ -1,6 +1,90 @@
-import { computed, ref, watch } from 'vue';
+import { computed, type Ref, ref, watch } from 'vue';
 import { preferences } from '../preferences/store';
 import type { Container } from '../types/container';
+
+const DEFAULT_FILTER_VALUE = 'all';
+
+interface ContainerFilterCriteria {
+  search: string;
+  status: string;
+  registry: string;
+  bouncer: string;
+  server: string;
+  kind: string;
+}
+
+type ContainerFilterMatcher = (container: Container, criteria: ContainerFilterCriteria) => boolean;
+
+interface PersistedFilterRefs {
+  status: Ref<string>;
+  registry: Ref<string>;
+  bouncer: Ref<string>;
+  server: Ref<string>;
+  kind: Ref<string>;
+}
+
+function getPersistedFilterValues(filters: PersistedFilterRefs) {
+  return {
+    status: filters.status.value,
+    registry: filters.registry.value,
+    bouncer: filters.bouncer.value,
+    server: filters.server.value,
+    kind: filters.kind.value,
+  };
+}
+
+function persistFilterValues(values: ReturnType<typeof getPersistedFilterValues>): void {
+  preferences.containers.filters.status = values.status;
+  preferences.containers.filters.registry = values.registry;
+  preferences.containers.filters.bouncer = values.bouncer;
+  preferences.containers.filters.server = values.server;
+  preferences.containers.filters.kind = values.kind;
+}
+
+function clearPersistedFilterRefs(filters: PersistedFilterRefs): void {
+  filters.status.value = DEFAULT_FILTER_VALUE;
+  filters.registry.value = DEFAULT_FILTER_VALUE;
+  filters.bouncer.value = DEFAULT_FILTER_VALUE;
+  filters.server.value = DEFAULT_FILTER_VALUE;
+  filters.kind.value = DEFAULT_FILTER_VALUE;
+}
+
+function matchesSearchFilter(container: Container, search: string): boolean {
+  if (!search) {
+    return true;
+  }
+  const query = search.toLowerCase();
+  return (
+    container.name.toLowerCase().includes(query) || container.image.toLowerCase().includes(query)
+  );
+}
+
+function matchesExactFilter(selected: string, candidate: string): boolean {
+  return selected === DEFAULT_FILTER_VALUE || selected === candidate;
+}
+
+function matchesKindFilter(container: Container, selectedKind: string): boolean {
+  if (selectedKind === DEFAULT_FILTER_VALUE) {
+    return true;
+  }
+  if (selectedKind === 'any') {
+    return Boolean(container.newTag);
+  }
+  return container.updateKind === selectedKind;
+}
+
+const CONTAINER_FILTER_MATCHERS: readonly ContainerFilterMatcher[] = [
+  (container, criteria) => matchesSearchFilter(container, criteria.search),
+  (container, criteria) => matchesExactFilter(criteria.status, container.status),
+  (container, criteria) => matchesExactFilter(criteria.registry, container.registry),
+  (container, criteria) => matchesExactFilter(criteria.bouncer, container.bouncer),
+  (container, criteria) => matchesExactFilter(criteria.server, container.server),
+  (container, criteria) => matchesKindFilter(container, criteria.kind),
+];
+
+function matchesContainerFilters(container: Container, criteria: ContainerFilterCriteria): boolean {
+  return CONTAINER_FILTER_MATCHERS.every((matcher) => matcher(container, criteria));
+}
 
 export function useContainerFilters(containers: { value: Container[] }) {
   const filterSearch = ref('');
@@ -10,47 +94,40 @@ export function useContainerFilters(containers: { value: Container[] }) {
   const filterServer = ref(preferences.containers.filters.server);
   const filterKind = ref(preferences.containers.filters.kind);
   const showFilters = ref(false);
+  const persistedFilterRefs = {
+    status: filterStatus,
+    registry: filterRegistry,
+    bouncer: filterBouncer,
+    server: filterServer,
+    kind: filterKind,
+  };
 
   watch([filterStatus, filterRegistry, filterBouncer, filterServer, filterKind], () => {
-    preferences.containers.filters.status = filterStatus.value;
-    preferences.containers.filters.registry = filterRegistry.value;
-    preferences.containers.filters.bouncer = filterBouncer.value;
-    preferences.containers.filters.server = filterServer.value;
-    preferences.containers.filters.kind = filterKind.value;
+    persistFilterValues(getPersistedFilterValues(persistedFilterRefs));
   });
 
   const activeFilterCount = computed(
     () =>
       [filterStatus, filterBouncer, filterRegistry, filterServer, filterKind].filter(
-        (f) => f.value !== 'all',
+        (f) => f.value !== DEFAULT_FILTER_VALUE,
       ).length,
   );
 
   const filteredContainers = computed(() => {
-    return containers.value.filter((c) => {
-      if (filterSearch.value) {
-        const q = filterSearch.value.toLowerCase();
-        if (!c.name.toLowerCase().includes(q) && !c.image.toLowerCase().includes(q)) return false;
-      }
-      if (filterStatus.value !== 'all' && c.status !== filterStatus.value) return false;
-      if (filterRegistry.value !== 'all' && c.registry !== filterRegistry.value) return false;
-      if (filterBouncer.value !== 'all' && c.bouncer !== filterBouncer.value) return false;
-      if (filterServer.value !== 'all' && c.server !== filterServer.value) return false;
-      if (filterKind.value !== 'all') {
-        if (filterKind.value === 'any' && !c.newTag) return false;
-        if (filterKind.value !== 'any' && c.updateKind !== filterKind.value) return false;
-      }
-      return true;
-    });
+    const criteria: ContainerFilterCriteria = {
+      search: filterSearch.value,
+      status: filterStatus.value,
+      registry: filterRegistry.value,
+      bouncer: filterBouncer.value,
+      server: filterServer.value,
+      kind: filterKind.value,
+    };
+    return containers.value.filter((container) => matchesContainerFilters(container, criteria));
   });
 
   function clearFilters() {
     filterSearch.value = '';
-    filterStatus.value = 'all';
-    filterRegistry.value = 'all';
-    filterBouncer.value = 'all';
-    filterServer.value = 'all';
-    filterKind.value = 'all';
+    clearPersistedFilterRefs(persistedFilterRefs);
   }
 
   return {

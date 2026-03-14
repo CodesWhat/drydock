@@ -7,76 +7,99 @@ interface ConfigMockOptions {
   iconCacheCleared?: number;
 }
 
-function installConfigMock(options: ConfigMockOptions = {}) {
-  let settings = {
-    internetlessMode: options.internetlessMode ?? false,
+interface ConfigMockState {
+  settings: {
+    internetlessMode: boolean;
   };
-  const cacheCleared = options.iconCacheCleared ?? 7;
+  cacheCleared: number;
+}
+
+interface MockRequestDetails {
+  path: string;
+  method: string;
+}
+
+function createJsonResponse(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+function getMockRequestDetails(input: RequestInfo | URL, init?: RequestInit): MockRequestDetails {
+  const raw =
+    typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+  const url = raw.startsWith('http') ? new URL(raw) : new URL(raw, 'http://localhost');
+  const method =
+    init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET');
+  return {
+    path: url.pathname,
+    method,
+  };
+}
+
+function parseSettingsUpdateBody(body: BodyInit | null | undefined): Partial<{
+  internetlessMode: boolean;
+}> {
+  return body ? (JSON.parse(String(body)) as Partial<{ internetlessMode: boolean }>) : {};
+}
+
+function handleConfigMockRequest(
+  state: ConfigMockState,
+  request: MockRequestDetails,
+  init?: RequestInit,
+): Response | undefined {
+  if (request.path === '/api/server' && request.method === 'GET') {
+    return createJsonResponse({
+      configuration: {
+        port: 3000,
+        feature: { containeractions: true, delete: true },
+        webhook: { enabled: true },
+        trustproxy: false,
+      },
+    });
+  }
+
+  if (request.path === '/api/app' && request.method === 'GET') {
+    return createJsonResponse({ version: '1.4.0' });
+  }
+
+  if (request.path === '/api/settings' && request.method === 'GET') {
+    return createJsonResponse(state.settings);
+  }
+
+  if (
+    request.path === '/api/settings' &&
+    (request.method === 'PATCH' || request.method === 'PUT')
+  ) {
+    state.settings = {
+      ...state.settings,
+      ...parseSettingsUpdateBody(init?.body),
+    };
+    return createJsonResponse(state.settings);
+  }
+
+  if (request.path === '/api/icons/cache' && request.method === 'DELETE') {
+    return createJsonResponse({ cleared: state.cacheCleared });
+  }
+
+  return undefined;
+}
+
+function installConfigMock(options: ConfigMockOptions = {}) {
+  const state: ConfigMockState = {
+    settings: {
+      internetlessMode: options.internetlessMode ?? false,
+    },
+    cacheCleared: options.iconCacheCleared ?? 7,
+  };
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const raw =
-      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-    const url = raw.startsWith('http') ? new URL(raw) : new URL(raw, 'http://localhost');
-    const path = url.pathname;
-    const method =
-      init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET');
-
-    if (path === '/api/server' && method === 'GET') {
-      return new Response(
-        JSON.stringify({
-          configuration: {
-            port: 3000,
-            feature: { containeractions: true, delete: true },
-            webhook: { enabled: true },
-            trustproxy: false,
-          },
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      );
-    }
-
-    if (path === '/api/app' && method === 'GET') {
-      return new Response(JSON.stringify({ version: '1.4.0' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (path === '/api/settings' && method === 'GET') {
-      return new Response(JSON.stringify(settings), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (path === '/api/settings' && (method === 'PATCH' || method === 'PUT')) {
-      const body = (init?.body ? JSON.parse(String(init.body)) : {}) as Partial<{
-        internetlessMode: boolean;
-      }>;
-      settings = {
-        ...settings,
-        ...body,
-      };
-      return new Response(JSON.stringify(settings), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (path === '/api/icons/cache' && method === 'DELETE') {
-      return new Response(JSON.stringify({ cleared: cacheCleared }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    return new Response(JSON.stringify({ error: `No mock for ${method} ${path}` }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const request = getMockRequestDetails(input, init);
+    return (
+      handleConfigMockRequest(state, request, init) ??
+      createJsonResponse({ error: `No mock for ${request.method} ${request.path}` }, 404)
+    );
   };
 }
 

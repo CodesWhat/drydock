@@ -541,12 +541,14 @@ describe('ContainerUpdateExecutor', () => {
       }),
     );
     expect(executor.recordRollbackTelemetry).toHaveBeenCalledWith(
-      expect.anything(),
-      'success',
-      'create_new_failed',
-      expect.stringContaining('Rollback completed after create_new_failed'),
-      '1.0.1',
-      '1.0.0',
+      expect.objectContaining({
+        container: expect.anything(),
+        outcome: 'success',
+        reason: 'create_new_failed',
+        details: expect.stringContaining('Rollback completed after create_new_failed'),
+        fromVersion: '1.0.1',
+        toVersion: '1.0.0',
+      }),
     );
   });
 
@@ -613,12 +615,14 @@ describe('ContainerUpdateExecutor', () => {
       }),
     );
     expect(executor.recordRollbackTelemetry).toHaveBeenCalledWith(
-      container,
-      'success',
-      'cleanup_old_failed',
-      expect.stringContaining('Rollback completed after cleanup_old_failed'),
-      '1.0.0',
-      '1.0.0',
+      expect.objectContaining({
+        container,
+        outcome: 'success',
+        reason: 'cleanup_old_failed',
+        details: expect.stringContaining('Rollback completed after cleanup_old_failed'),
+        fromVersion: '1.0.0',
+        toVersion: '1.0.0',
+      }),
     );
   });
 
@@ -659,12 +663,14 @@ describe('ContainerUpdateExecutor', () => {
       }),
     );
     expect(executor.recordRollbackTelemetry).toHaveBeenCalledWith(
-      expect.anything(),
-      'error',
-      'start_new_failed_rollback_failed',
-      expect.stringContaining('Rollback failed after start_new_failed'),
-      '1.0.1',
-      '1.0.0',
+      expect.objectContaining({
+        container: expect.anything(),
+        outcome: 'error',
+        reason: 'start_new_failed_rollback_failed',
+        details: expect.stringContaining('Rollback failed after start_new_failed'),
+        fromVersion: '1.0.1',
+        toVersion: '1.0.0',
+      }),
     );
   });
 });

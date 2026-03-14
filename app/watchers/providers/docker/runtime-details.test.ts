@@ -38,6 +38,40 @@ describe('docker runtime details module', () => {
     });
   });
 
+  test('handles empty and malformed inspect port bindings predictably', () => {
+    const details = getRuntimeDetailsFromInspect({
+      NetworkSettings: {
+        Ports: {
+          '80/tcp': [],
+          '81/tcp': [{ HostIp: '0.0.0.0', HostPort: '8081' }],
+          '82/tcp': [null, 'oops'],
+          '83/tcp': [{ HostPort: null }, { HostPort: '' }],
+        },
+      },
+    } as any);
+
+    expect(details.ports).toEqual(['80/tcp', '0.0.0.0:8081->81/tcp', '83/tcp']);
+  });
+
+  test('formats inspect mounts with source precedence and read-only suffix rules', () => {
+    const details = getRuntimeDetailsFromInspect({
+      Mounts: [
+        { Name: ' named-volume ', Source: '/ignored', Destination: ' /data ', RW: false },
+        { Source: ' /host/config ', Destination: ' /config ', RW: true },
+        { Source: '/host-only', RW: false },
+        { Destination: '/dest-only', RW: false },
+        { Source: ' ', Destination: '' },
+      ],
+    } as any);
+
+    expect(details.volumes).toEqual([
+      'named-volume:/data:ro',
+      '/host/config:/config',
+      '/host-only:ro',
+      '/dest-only:ro',
+    ]);
+  });
+
   test('extracts summary runtime details and leaves env empty', () => {
     const details = getRuntimeDetailsFromContainerSummary({
       Ports: [

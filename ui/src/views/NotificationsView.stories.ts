@@ -16,6 +16,123 @@ interface NotificationRuleApiItem {
   triggers: string[];
 }
 
+interface StoryMockRequest {
+  path: string;
+  method: string;
+  bodyText?: string;
+}
+
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+function jsonResponse(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: JSON_HEADERS,
+  });
+}
+
+async function resolveBodyText(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<string | undefined> {
+  if (init?.body !== undefined && init.body !== null) {
+    return String(init.body);
+  }
+
+  if (input instanceof Request) {
+    return await input.text();
+  }
+
+  return undefined;
+}
+
+async function parseRequest(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<StoryMockRequest> {
+  let raw: string;
+  if (typeof input === 'string') {
+    raw = input;
+  } else if (input instanceof URL) {
+    raw = input.toString();
+  } else {
+    raw = input.url;
+  }
+
+  const url = raw.startsWith('http') ? new URL(raw) : new URL(raw, 'http://localhost');
+  const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+  const bodyText = await resolveBodyText(input, init);
+
+  return { path: url.pathname, method, bodyText };
+}
+
+function parsePatchBody(request: StoryMockRequest): Partial<NotificationRuleApiItem> {
+  if (!request.bodyText) {
+    return {};
+  }
+  return JSON.parse(request.bodyText) as Partial<NotificationRuleApiItem>;
+}
+
+function mergeRuleUpdate(
+  rule: NotificationRuleApiItem,
+  body: Partial<NotificationRuleApiItem>,
+): NotificationRuleApiItem {
+  return {
+    ...rule,
+    ...body,
+    triggers: Array.isArray(body.triggers) ? [...new Set(body.triggers)] : rule.triggers,
+  };
+}
+
+function handleGetRequest(
+  request: StoryMockRequest,
+  rules: NotificationRuleApiItem[],
+  triggers: TriggerApiItem[],
+): Response | undefined {
+  if (request.path === '/api/triggers') {
+    return jsonResponse(triggers);
+  }
+
+  if (request.path === '/api/notifications') {
+    return jsonResponse(rules);
+  }
+
+  return undefined;
+}
+
+function handlePatchRequest(
+  request: StoryMockRequest,
+  rules: NotificationRuleApiItem[],
+): Response | undefined {
+  if (!request.path.startsWith('/api/notifications/')) {
+    return undefined;
+  }
+
+  const id = request.path.replace('/api/notifications/', '');
+  const index = rules.findIndex((rule) => rule.id === id);
+  if (index < 0) {
+    return jsonResponse({ error: 'Not found' }, 404);
+  }
+
+  const body = parsePatchBody(request);
+  rules[index] = mergeRuleUpdate(rules[index], body);
+  return jsonResponse(rules[index]);
+}
+
+function handleMockRequest(
+  request: StoryMockRequest,
+  rules: NotificationRuleApiItem[],
+  triggers: TriggerApiItem[],
+): Response | undefined {
+  if (request.method === 'GET') {
+    return handleGetRequest(request, rules, triggers);
+  }
+  if (request.method === 'PATCH') {
+    return handlePatchRequest(request, rules);
+  }
+  return undefined;
+}
+
 const triggerFixtures: TriggerApiItem[] = [
   { id: 'trig-slack', name: 'Slack Alerts', type: 'slack' },
   { id: 'trig-smtp', name: 'SMTP Reports', type: 'smtp' },
@@ -64,54 +181,11 @@ function installNotificationsMock(rules: NotificationRuleApiItem[], triggers: Tr
   const inMemoryRules = rules.map((rule) => ({ ...rule, triggers: [...rule.triggers] }));
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const raw =
-      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-    const path = raw.startsWith('http') ? new URL(raw).pathname : raw;
-    const method = init?.method?.toUpperCase() || 'GET';
-
-    if (path === '/api/triggers' && method === 'GET') {
-      return new Response(JSON.stringify(triggers), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (path === '/api/notifications' && method === 'GET') {
-      return new Response(JSON.stringify(inMemoryRules), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (path.startsWith('/api/notifications/') && method === 'PATCH') {
-      const id = path.replace('/api/notifications/', '');
-      const index = inMemoryRules.findIndex((rule) => rule.id === id);
-      if (index < 0) {
-        return new Response(JSON.stringify({ error: 'Not found' }), {
-          status: 404,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-
-      const body = init?.body ? JSON.parse(init.body as string) : {};
-      inMemoryRules[index] = {
-        ...inMemoryRules[index],
-        ...body,
-        triggers: Array.isArray(body.triggers)
-          ? [...new Set(body.triggers)]
-          : inMemoryRules[index].triggers,
-      };
-
-      return new Response(JSON.stringify(inMemoryRules[index]), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    return new Response(JSON.stringify({ error: `No mock for ${method} ${path}` }), {
-      status: 404,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const request = await parseRequest(input, init);
+    return (
+      handleMockRequest(request, inMemoryRules, triggers) ??
+      jsonResponse({ error: `No mock for ${request.method} ${request.path}` }, 404)
+    );
   };
 }
 

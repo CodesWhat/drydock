@@ -361,71 +361,102 @@ class Trigger extends Component {
     );
   }
 
+  private isUpdateAvailableAutoTriggerEnabled() {
+    // Keep backward compatibility: if update-available has no explicit trigger
+    // allow-list yet, legacy auto trigger behavior remains enabled.
+    return this.isTriggerEnabledForRule('update-available', {
+      allowAllWhenNoTriggers: true,
+      defaultWhenRuleMissing: true,
+    });
+  }
+
+  private shouldHandleSimpleContainerReport(containerReport: ContainerReport) {
+    return (
+      (containerReport.changed || !this.configuration.once) &&
+      containerReport.container.updateAvailable
+    );
+  }
+
+  private getContainerLogger(container: Container): Component['log'] {
+    return (
+      this.log.child({
+        container: fullName(container),
+      }) || this.log
+    );
+  }
+
+  private getSimpleModeThreshold() {
+    return (this.configuration.threshold ?? 'all').toLowerCase();
+  }
+
+  private async runUpdateAvailableSimpleTrigger(
+    container: Container,
+    logContainer: Component['log'],
+  ) {
+    if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
+      logContainer.debug('Threshold not reached => ignore');
+      return;
+    }
+
+    if (!this.mustTrigger(container)) {
+      logContainer.debug('Trigger conditions not met => ignore');
+      return;
+    }
+
+    logContainer.debug('Run');
+    const result = await this.trigger(container);
+    if (this.configuration.resolvenotifications && result) {
+      this.notificationResults.set(fullName(container), result);
+    }
+  }
+
+  private handleUpdateAvailableSimpleTriggerError(
+    error: unknown,
+    container: Container,
+    logContainer: Component['log'],
+  ) {
+    const errorMessage = Trigger.getErrorMessage(error);
+    if (this.shouldSuppressAutoTriggerError('update-available', container, errorMessage)) {
+      logContainer.debug(`Suppressed repeated error (${errorMessage})`);
+    } else {
+      logContainer.warn(`Error (${errorMessage})`);
+    }
+    logContainer.debug(error);
+  }
+
+  private incrementTriggerCounter(status: 'success' | 'error') {
+    getTriggerCounter()?.inc({
+      type: this.type,
+      name: this.name,
+      status,
+    });
+  }
+
   /**
    * Handle container report (simple mode).
    * @param containerReport
    * @returns {Promise<void>}
    */
   async handleContainerReport(containerReport: ContainerReport) {
-    // Keep backward compatibility: if update-available has no explicit trigger
-    // allow-list yet, legacy auto trigger behavior remains enabled.
-    if (
-      !this.isTriggerEnabledForRule('update-available', {
-        allowAllWhenNoTriggers: true,
-        defaultWhenRuleMissing: true,
-      })
-    ) {
+    if (!this.isUpdateAvailableAutoTriggerEnabled()) {
       return;
     }
 
     // Filter on changed containers with update available and passing trigger threshold
-    if (
-      (containerReport.changed || !this.configuration.once) &&
-      containerReport.container.updateAvailable
-    ) {
-      const logContainer =
-        this.log.child({
-          container: fullName(containerReport.container),
-        }) || this.log;
-      let status = 'error';
-      try {
-        const thresholdReached = Trigger.isThresholdReached(
-          containerReport.container,
-          (this.configuration.threshold ?? 'all').toLowerCase(),
-        );
-        if (!thresholdReached) {
-          logContainer.debug('Threshold not reached => ignore');
-        } else if (!this.mustTrigger(containerReport.container)) {
-          logContainer.debug('Trigger conditions not met => ignore');
-        } else {
-          logContainer.debug('Run');
-          const result = await this.trigger(containerReport.container);
-          if (this.configuration.resolvenotifications && result) {
-            this.notificationResults.set(fullName(containerReport.container), result);
-          }
-        }
-        status = 'success';
-      } catch (e: unknown) {
-        const errorMessage = Trigger.getErrorMessage(e);
-        if (
-          this.shouldSuppressAutoTriggerError(
-            'update-available',
-            containerReport.container,
-            errorMessage,
-          )
-        ) {
-          logContainer.debug(`Suppressed repeated error (${errorMessage})`);
-        } else {
-          logContainer.warn(`Error (${errorMessage})`);
-        }
-        logContainer.debug(e);
-      } finally {
-        getTriggerCounter()?.inc({
-          type: this.type,
-          name: this.name,
-          status,
-        });
-      }
+    if (!this.shouldHandleSimpleContainerReport(containerReport)) {
+      return;
+    }
+
+    const { container } = containerReport;
+    const logContainer = this.getContainerLogger(container);
+    let status: 'success' | 'error' = 'error';
+    try {
+      await this.runUpdateAvailableSimpleTrigger(container, logContainer);
+      status = 'success';
+    } catch (e: unknown) {
+      this.handleUpdateAvailableSimpleTriggerError(e, container, logContainer);
+    } finally {
+      this.incrementTriggerCounter(status);
     }
   }
 
@@ -435,14 +466,7 @@ class Trigger extends Component {
    * @returns {Promise<void>}
    */
   async handleContainerReports(containerReports: ContainerReport[]) {
-    // Keep backward compatibility: if update-available has no explicit trigger
-    // allow-list yet, legacy auto trigger behavior remains enabled.
-    if (
-      !this.isTriggerEnabledForRule('update-available', {
-        allowAllWhenNoTriggers: true,
-        defaultWhenRuleMissing: true,
-      })
-    ) {
+    if (!this.isUpdateAvailableAutoTriggerEnabled()) {
       return;
     }
 

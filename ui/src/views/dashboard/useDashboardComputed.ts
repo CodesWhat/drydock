@@ -1,4 +1,4 @@
-import { computed, type Ref } from 'vue';
+import { type ComputedRef, computed, type Ref } from 'vue';
 import { ROUTES } from '../../router/routes';
 import type { Container } from '../../types/container';
 import {
@@ -252,35 +252,67 @@ interface UseDashboardComputedInput {
   watchers: Ref<unknown[]>;
 }
 
-export function useDashboardComputed(input: UseDashboardComputedInput) {
+type DashboardContainerMetrics = ReturnType<typeof buildDashboardContainerMetrics>;
+type SecurityCounts = { clean: number; issues: number; notScanned: number };
+type SecuritySeverityTotals = { critical: number; high: number; medium: number; low: number };
+type ServerContainerCounts = { running: number; total: number };
+
+function hasMaintenanceWindow(watcher: unknown): boolean {
+  const configuration = getWatcherConfiguration(watcher);
+  const maintenanceWindow = configuration.maintenancewindow ?? configuration.maintenanceWindow;
+  return typeof maintenanceWindow === 'string' && maintenanceWindow.trim().length > 0;
+}
+
+function isMaintenanceWindowOpen(watcher: unknown): boolean {
+  const configuration = getWatcherConfiguration(watcher);
+  const open = configuration.maintenancewindowopen ?? configuration.maintenanceWindowOpen;
+  return open === true;
+}
+
+function parseMaintenanceWindowAt(watcher: unknown): number | undefined {
+  const configuration = getWatcherConfiguration(watcher);
+  const value = configuration.maintenancenextwindow ?? configuration.maintenanceNextWindow;
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function resolveMaintenanceCountdownLabel(
+  maintenanceWindowCount: number,
+  maintenanceWindowOpenCount: number,
+  nextMaintenanceWindowAt: number | undefined,
+  now: number,
+): string {
+  if (maintenanceWindowCount === 0) {
+    return '';
+  }
+  if (maintenanceWindowOpenCount > 0) {
+    return 'Open now';
+  }
+  if (!nextMaintenanceWindowAt) {
+    return 'Scheduled';
+  }
+  const remainingMs = nextMaintenanceWindowAt - now;
+  if (remainingMs <= 0) {
+    return 'Opening soon';
+  }
+  return formatMaintenanceDuration(remainingMs);
+}
+
+function useMaintenanceComputed(input: UseDashboardComputedInput) {
   const maintenanceWindowWatchers = computed(() =>
-    input.watchers.value.filter((watcher) => {
-      const configuration = getWatcherConfiguration(watcher);
-      const maintenanceWindow = configuration.maintenancewindow ?? configuration.maintenanceWindow;
-      return typeof maintenanceWindow === 'string' && maintenanceWindow.trim().length > 0;
-    }),
+    input.watchers.value.filter(hasMaintenanceWindow),
   );
 
   const maintenanceWindowOpenCount = computed(
-    () =>
-      maintenanceWindowWatchers.value.filter((watcher) => {
-        const configuration = getWatcherConfiguration(watcher);
-        const open = configuration.maintenancewindowopen ?? configuration.maintenanceWindowOpen;
-        return open === true;
-      }).length,
+    () => maintenanceWindowWatchers.value.filter(isMaintenanceWindowOpen).length,
   );
 
   const nextMaintenanceWindowAt = computed<number | undefined>(() => {
     const windows = maintenanceWindowWatchers.value
-      .map((watcher) => {
-        const configuration = getWatcherConfiguration(watcher);
-        return configuration.maintenancenextwindow ?? configuration.maintenanceNextWindow;
-      })
-      .map((value: unknown) => {
-        if (typeof value !== 'string') return undefined;
-        const parsed = Date.parse(value);
-        return Number.isNaN(parsed) ? undefined : parsed;
-      })
+      .map(parseMaintenanceWindowAt)
       .filter((value): value is number => value !== undefined);
 
     if (windows.length === 0) {
@@ -290,61 +322,69 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
     return Math.min(...windows);
   });
 
-  const maintenanceCountdownLabel = computed(() => {
-    if (maintenanceWindowWatchers.value.length === 0) {
-      return '';
-    }
-    if (maintenanceWindowOpenCount.value > 0) {
-      return 'Open now';
-    }
-    if (!nextMaintenanceWindowAt.value) {
-      return 'Scheduled';
-    }
-    const remainingMs = nextMaintenanceWindowAt.value - input.maintenanceCountdownNow.value;
-    if (remainingMs <= 0) {
-      return 'Opening soon';
-    }
-    return formatMaintenanceDuration(remainingMs);
-  });
+  const maintenanceCountdownLabel = computed(() =>
+    resolveMaintenanceCountdownLabel(
+      maintenanceWindowWatchers.value.length,
+      maintenanceWindowOpenCount.value,
+      nextMaintenanceWindowAt.value,
+      input.maintenanceCountdownNow.value,
+    ),
+  );
 
+  return {
+    maintenanceCountdownLabel,
+    maintenanceWindowWatchers,
+  };
+}
+
+function countSecurityByImage(aggregates: ImageSecurityAggregate[]): SecurityCounts {
+  let clean = 0;
+  let issues = 0;
+  let notScanned = 0;
+
+  for (const aggregate of aggregates) {
+    if (!aggregate.scanned) {
+      notScanned += 1;
+    } else if (aggregate.hasIssue) {
+      issues += 1;
+    } else {
+      clean += 1;
+    }
+  }
+
+  return { clean, issues, notScanned };
+}
+
+function sumSecuritySeverityTotals(aggregates: ImageSecurityAggregate[]): SecuritySeverityTotals {
+  return aggregates.reduce(
+    (totals, aggregate) => {
+      totals.critical += aggregate.summary.critical;
+      totals.high += aggregate.summary.high;
+      totals.medium += aggregate.summary.medium;
+      totals.low += aggregate.summary.low;
+      return totals;
+    },
+    { critical: 0, high: 0, medium: 0, low: 0 },
+  );
+}
+
+function computeSecurityArcLength(partialCount: number, totalCount: number): number {
+  return totalCount > 0 ? (partialCount / totalCount) * DONUT_CIRCUMFERENCE : 0;
+}
+
+function useSecurityComputed(input: UseDashboardComputedInput) {
   const containerMetrics = computed(() => buildDashboardContainerMetrics(input.containers.value));
+
   const securityByImage = computed<ImageSecurityAggregate[]>(
     () => containerMetrics.value.securityByImage,
   );
 
-  const securityCounts = computed(() => {
-    let clean = 0;
-    let issues = 0;
-    let notScanned = 0;
-
-    for (const aggregate of securityByImage.value) {
-      if (!aggregate.scanned) {
-        notScanned += 1;
-      } else if (aggregate.hasIssue) {
-        issues += 1;
-      } else {
-        clean += 1;
-      }
-    }
-
-    return { clean, issues, notScanned };
-  });
+  const securityCounts = computed(() => countSecurityByImage(securityByImage.value));
 
   const securityCleanCount = computed(() => securityCounts.value.clean);
   const securityIssueCount = computed(() => securityCounts.value.issues);
   const securityNotScannedCount = computed(() => securityCounts.value.notScanned);
-  const securitySeverityTotals = computed(() =>
-    securityByImage.value.reduce(
-      (totals, aggregate) => {
-        totals.critical += aggregate.summary.critical;
-        totals.high += aggregate.summary.high;
-        totals.medium += aggregate.summary.medium;
-        totals.low += aggregate.summary.low;
-        return totals;
-      },
-      { critical: 0, high: 0, medium: 0, low: 0 },
-    ),
-  );
+  const securitySeverityTotals = computed(() => sumSecuritySeverityTotals(securityByImage.value));
 
   const showSecuritySeverityBreakdown = computed(() => {
     const totals = securitySeverityTotals.value;
@@ -353,14 +393,90 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
 
   const securityTotalCount = computed(() => securityByImage.value.length);
 
-  const stats = computed<DashboardStatCard[]>(() => {
+  const securityCleanArcLength = computed(() =>
+    computeSecurityArcLength(securityCleanCount.value, securityTotalCount.value),
+  );
+
+  const securityIssueArcLength = computed(() =>
+    computeSecurityArcLength(securityIssueCount.value, securityTotalCount.value),
+  );
+
+  const securityNotScannedArcLength = computed(() =>
+    computeSecurityArcLength(securityNotScannedCount.value, securityTotalCount.value),
+  );
+
+  return {
+    containerMetrics,
+    securityCleanArcLength,
+    securityCleanCount,
+    securityIssueArcLength,
+    securityIssueCount,
+    securityNotScannedArcLength,
+    securityNotScannedCount,
+    securitySeverityTotals,
+    securityTotalCount,
+    showSecuritySeverityBreakdown,
+  };
+}
+
+function getUpdatesStatColor(updatesAvailable: number, total: number): string {
+  if (updatesAvailable === 0) {
+    return 'var(--dd-success)';
+  }
+  const ratio = total > 0 ? updatesAvailable / total : 0;
+  if (ratio >= 0.75) {
+    return 'var(--dd-danger)';
+  }
+  if (ratio >= 0.5) {
+    return 'var(--dd-warning)';
+  }
+  return 'var(--dd-caution)';
+}
+
+function getUpdatesStatMutedColor(updatesAvailable: number, total: number): string {
+  if (updatesAvailable === 0) {
+    return 'var(--dd-success-muted)';
+  }
+  const ratio = total > 0 ? updatesAvailable / total : 0;
+  if (ratio >= 0.75) {
+    return 'var(--dd-danger-muted)';
+  }
+  if (ratio >= 0.5) {
+    return 'var(--dd-warning-muted)';
+  }
+  return 'var(--dd-caution-muted)';
+}
+
+function useStatsComputed(
+  input: UseDashboardComputedInput,
+  containerMetrics: ComputedRef<DashboardContainerMetrics>,
+  securityTotalCount: ComputedRef<number>,
+) {
+  return computed<DashboardStatCard[]>(() => {
     const summary = input.containerSummary.value;
     const total = summary?.containers.total ?? containerMetrics.value.totalContainers;
     const running = summary?.containers.running ?? containerMetrics.value.runningContainers;
     const stopped = summary?.containers.stopped ?? Math.max(total - running, 0);
     const updatesAvailable = containerMetrics.value.updatesAvailable;
+    const freshUpdates = containerMetrics.value.freshUpdates;
     const securityIssues = containerMetrics.value.securityIssueImageCount;
     const registryCount = input.registries.value.length;
+
+    const updatesStatColor = getUpdatesStatColor(updatesAvailable, total);
+    const updatesStatMutedColor = getUpdatesStatMutedColor(updatesAvailable, total);
+    const securityStatColor =
+      securityIssues > 0
+        ? 'var(--dd-danger)'
+        : securityTotalCount.value > 0
+          ? 'var(--dd-success)'
+          : 'var(--dd-neutral)';
+    const securityStatMutedColor =
+      securityIssues > 0
+        ? 'var(--dd-danger-muted)'
+        : securityTotalCount.value > 0
+          ? 'var(--dd-success-muted)'
+          : 'var(--dd-neutral-muted)';
+
     return [
       {
         id: 'stat-containers',
@@ -377,39 +493,21 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
         label: 'Updates Available',
         value: String(updatesAvailable),
         icon: 'updates',
-        color: (() => {
-          if (updatesAvailable === 0) return 'var(--dd-success)';
-          const ratio = total > 0 ? updatesAvailable / total : 0;
-          if (ratio >= 0.75) return 'var(--dd-danger)';
-          if (ratio >= 0.5) return 'var(--dd-warning)';
-          return 'var(--dd-caution)';
-        })(),
-        colorMuted: (() => {
-          if (updatesAvailable === 0) return 'var(--dd-success-muted)';
-          const ratio = total > 0 ? updatesAvailable / total : 0;
-          if (ratio >= 0.75) return 'var(--dd-danger-muted)';
-          if (ratio >= 0.5) return 'var(--dd-warning-muted)';
-          return 'var(--dd-caution-muted)';
-        })(),
+        color: updatesStatColor,
+        colorMuted: updatesStatMutedColor,
         route: { path: ROUTES.CONTAINERS, query: { filterKind: 'any' } },
+        detail:
+          freshUpdates > 0
+            ? `${freshUpdates} new · ${updatesAvailable - freshUpdates} mature`
+            : undefined,
       },
       {
         id: 'stat-security',
         label: 'Security Issues',
         value: String(securityIssues),
         icon: 'security',
-        color:
-          securityIssues > 0
-            ? 'var(--dd-danger)'
-            : securityTotalCount.value > 0
-              ? 'var(--dd-success)'
-              : 'var(--dd-neutral)',
-        colorMuted:
-          securityIssues > 0
-            ? 'var(--dd-danger-muted)'
-            : securityTotalCount.value > 0
-              ? 'var(--dd-success-muted)'
-              : 'var(--dd-neutral-muted)',
+        color: securityStatColor,
+        colorMuted: securityStatMutedColor,
         route: ROUTES.SECURITY,
       },
       {
@@ -423,111 +521,152 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
       },
     ];
   });
+}
 
-  const recentUpdates = computed<RecentUpdateRow[]>(() => {
-    const registryFailures = input.containers.value
-      .filter((container) => !container.newTag && !!container.registryError)
-      .map((container) => ({
-        id: container.id,
-        name: container.name,
-        image: container.image,
-        icon: container.icon,
-        oldVer: container.currentTag,
-        newVer: 'check failed',
-        releaseLink: undefined,
-        status: 'error' as const,
-        updateKind: null,
-        running: container.status === 'running',
-        registryError: container.registryError,
-      }));
+function toRegistryFailureRecentUpdate(container: Container): RecentUpdateRow {
+  return {
+    id: container.id,
+    name: container.name,
+    image: container.image,
+    icon: container.icon,
+    oldVer: container.currentTag,
+    newVer: 'check failed',
+    releaseLink: undefined,
+    status: 'error',
+    updateKind: null,
+    running: container.status === 'running',
+    registryError: container.registryError,
+  };
+}
 
-    const availablePendingSlots = Math.max(RECENT_UPDATES_LIMIT - registryFailures.length, 0);
-    if (availablePendingSlots === 0) {
-      return registryFailures.slice(0, RECENT_UPDATES_LIMIT);
+function isPendingRecentUpdateContainer(container: Container): boolean {
+  return !!container.newTag || !!container.updatePolicyState;
+}
+
+function toPendingRecentUpdateCandidate(
+  container: Container,
+  recentStatusByContainer: Record<string, RecentAuditStatus>,
+): PendingRecentUpdateCandidate {
+  return {
+    detectedAt: parseDetectedAt(container.updateDetectedAt),
+    row: {
+      id: container.id,
+      name: container.name,
+      image: container.image,
+      icon: container.icon,
+      oldVer: container.currentTag,
+      newVer: deriveRecentUpdateVersion(container),
+      releaseLink: container.releaseLink,
+      status: deriveRecentUpdateStatus(container, recentStatusByContainer),
+      updateKind: container.updateKind ?? null,
+      running: container.status === 'running',
+      registryError: undefined,
+    },
+  };
+}
+
+function buildRecentUpdateRows(
+  containers: Container[],
+  recentStatusByContainer: Record<string, RecentAuditStatus>,
+): RecentUpdateRow[] {
+  const registryFailures = containers
+    .filter((container) => !container.newTag && !!container.registryError)
+    .map(toRegistryFailureRecentUpdate);
+
+  const availablePendingSlots = Math.max(RECENT_UPDATES_LIMIT - registryFailures.length, 0);
+  if (availablePendingSlots === 0) {
+    return registryFailures.slice(0, RECENT_UPDATES_LIMIT);
+  }
+
+  const topPendingUpdates: PendingRecentUpdateCandidate[] = [];
+  for (const container of containers) {
+    if (!isPendingRecentUpdateContainer(container)) {
+      continue;
     }
 
-    const topPendingUpdates: PendingRecentUpdateCandidate[] = [];
-    for (const container of input.containers.value) {
-      if (!container.newTag && !container.updatePolicyState) {
-        continue;
-      }
-
-      insertPendingRecentUpdate(
-        topPendingUpdates,
-        {
-          detectedAt: parseDetectedAt(container.updateDetectedAt),
-          row: {
-            id: container.id,
-            name: container.name,
-            image: container.image,
-            icon: container.icon,
-            oldVer: container.currentTag,
-            newVer: deriveRecentUpdateVersion(container),
-            releaseLink: container.releaseLink,
-            status: deriveRecentUpdateStatus(container, input.recentStatusByContainer.value),
-            updateKind: container.updateKind ?? null,
-            running: container.status === 'running',
-            registryError: undefined,
-          },
-        },
-        availablePendingSlots,
-      );
-    }
-
-    return [...registryFailures, ...topPendingUpdates.map((candidate) => candidate.row)].slice(
-      0,
-      RECENT_UPDATES_LIMIT,
+    insertPendingRecentUpdate(
+      topPendingUpdates,
+      toPendingRecentUpdateCandidate(container, recentStatusByContainer),
+      availablePendingSlots,
     );
-  });
+  }
 
-  const vulnerabilities = computed(() => {
+  return [...registryFailures, ...topPendingUpdates.map((candidate) => candidate.row)].slice(
+    0,
+    RECENT_UPDATES_LIMIT,
+  );
+}
+
+function useRecentUpdatesComputed(input: UseDashboardComputedInput) {
+  return computed<RecentUpdateRow[]>(() =>
+    buildRecentUpdateRows(input.containers.value, input.recentStatusByContainer.value),
+  );
+}
+
+function getContainerVulnerabilityTotal(container: Container): number {
+  return container.securitySummary
+    ? container.securitySummary.critical +
+        container.securitySummary.high +
+        container.securitySummary.medium +
+        container.securitySummary.low
+    : 0;
+}
+
+function compareVulnerableContainers(left: Container, right: Container): number {
+  const leftTotal = getContainerVulnerabilityTotal(left);
+  const rightTotal = getContainerVulnerabilityTotal(right);
+  if (rightTotal !== leftTotal) {
+    return rightTotal - leftTotal;
+  }
+  const leftCritical = left.securitySummary?.critical ?? 0;
+  const rightCritical = right.securitySummary?.critical ?? 0;
+  return rightCritical - leftCritical;
+}
+
+function toVulnerabilityRow(container: Container) {
+  return {
+    id: container.name,
+    severity: container.bouncer === 'blocked' ? 'CRITICAL' : 'HIGH',
+    package: container.image,
+    image: container.name,
+  };
+}
+
+function useVulnerabilitiesComputed(input: UseDashboardComputedInput) {
+  return computed(() => {
     return input.containers.value
       .filter((container) => container.bouncer === 'blocked' || container.bouncer === 'unsafe')
-      .sort((left, right) => {
-        const leftTotal = left.securitySummary
-          ? left.securitySummary.critical +
-            left.securitySummary.high +
-            left.securitySummary.medium +
-            left.securitySummary.low
-          : 0;
-        const rightTotal = right.securitySummary
-          ? right.securitySummary.critical +
-            right.securitySummary.high +
-            right.securitySummary.medium +
-            right.securitySummary.low
-          : 0;
-        if (rightTotal !== leftTotal) return rightTotal - leftTotal;
-        const leftCritical = left.securitySummary?.critical ?? 0;
-        const rightCritical = right.securitySummary?.critical ?? 0;
-        return rightCritical - leftCritical;
-      })
+      .sort(compareVulnerableContainers)
       .slice(0, 5)
-      .map((container) => ({
-        id: container.name,
-        severity: container.bouncer === 'blocked' ? 'CRITICAL' : 'HIGH',
-        package: container.image,
-        image: container.name,
-      }));
+      .map(toVulnerabilityRow);
   });
+}
 
-  const servers = computed<DashboardServerRow[]>(() => {
-    const list: DashboardServerRow[] = [];
-    const countsByServer = new Map<string, { running: number; total: number }>();
+function buildServerContainerCounts(containers: Container[]): Map<string, ServerContainerCounts> {
+  const countsByServer = new Map<string, ServerContainerCounts>();
 
-    for (const container of input.containers.value) {
-      const existing = countsByServer.get(container.server);
-      if (existing) {
-        existing.total += 1;
-        if (container.status === 'running') {
-          existing.running += 1;
-        }
-        continue;
+  for (const container of containers) {
+    const existing = countsByServer.get(container.server);
+    if (existing) {
+      existing.total += 1;
+      if (container.status === 'running') {
+        existing.running += 1;
       }
-      countsByServer.set(container.server, {
-        running: container.status === 'running' ? 1 : 0,
-        total: 1,
-      });
+      continue;
     }
+    countsByServer.set(container.server, {
+      running: container.status === 'running' ? 1 : 0,
+      total: 1,
+    });
+  }
+
+  return countsByServer;
+}
+
+function useServersComputed(input: UseDashboardComputedInput) {
+  return computed<DashboardServerRow[]>(() => {
+    const list: DashboardServerRow[] = [];
+    const countsByServer = buildServerContainerCounts(input.containers.value);
 
     const localContainerCounts = countsByServer.get('Local') ?? { running: 0, total: 0 };
     list.push({
@@ -557,39 +696,28 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
 
     return list;
   });
+}
 
-  const securityCleanArcLength = computed(() =>
-    securityTotalCount.value > 0
-      ? (securityCleanCount.value / securityTotalCount.value) * DONUT_CIRCUMFERENCE
-      : 0,
-  );
+function buildUpdateKindCounts(containers: Container[]): Record<UpdateKind, number> {
+  const counts: Record<UpdateKind, number> = {
+    major: 0,
+    minor: 0,
+    patch: 0,
+    digest: 0,
+  };
 
-  const securityIssueArcLength = computed(() =>
-    securityTotalCount.value > 0
-      ? (securityIssueCount.value / securityTotalCount.value) * DONUT_CIRCUMFERENCE
-      : 0,
-  );
-
-  const securityNotScannedArcLength = computed(() =>
-    securityTotalCount.value > 0
-      ? (securityNotScannedCount.value / securityTotalCount.value) * DONUT_CIRCUMFERENCE
-      : 0,
-  );
-
-  const updateBreakdownBuckets = computed<UpdateBreakdownBucket[]>(() => {
-    const counts: Record<UpdateKind, number> = {
-      major: 0,
-      minor: 0,
-      patch: 0,
-      digest: 0,
-    };
-
-    for (const container of input.containers.value) {
-      if (container.updateKind) {
-        counts[container.updateKind] += 1;
-      }
+  for (const container of containers) {
+    if (container.updateKind) {
+      counts[container.updateKind] += 1;
     }
+  }
 
+  return counts;
+}
+
+function useUpdateBreakdownComputed(input: UseDashboardComputedInput) {
+  const updateBreakdownBuckets = computed<UpdateBreakdownBucket[]>(() => {
+    const counts = buildUpdateKindCounts(input.containers.value);
     return UPDATE_BREAKDOWN_BUCKETS.map((bucket) => ({
       ...bucket,
       count: counts[bucket.kind],
@@ -599,6 +727,32 @@ export function useDashboardComputed(input: UseDashboardComputedInput) {
   const totalUpdates = computed(
     () => input.containers.value.filter((container) => container.updateKind).length,
   );
+
+  return {
+    totalUpdates,
+    updateBreakdownBuckets,
+  };
+}
+
+export function useDashboardComputed(input: UseDashboardComputedInput) {
+  const { maintenanceCountdownLabel, maintenanceWindowWatchers } = useMaintenanceComputed(input);
+  const {
+    containerMetrics,
+    securityCleanArcLength,
+    securityCleanCount,
+    securityIssueArcLength,
+    securityIssueCount,
+    securityNotScannedArcLength,
+    securityNotScannedCount,
+    securitySeverityTotals,
+    securityTotalCount,
+    showSecuritySeverityBreakdown,
+  } = useSecurityComputed(input);
+  const stats = useStatsComputed(input, containerMetrics, securityTotalCount);
+  const recentUpdates = useRecentUpdatesComputed(input);
+  const vulnerabilities = useVulnerabilitiesComputed(input);
+  const servers = useServersComputed(input);
+  const { totalUpdates, updateBreakdownBuckets } = useUpdateBreakdownComputed(input);
 
   return {
     DONUT_CIRCUMFERENCE,

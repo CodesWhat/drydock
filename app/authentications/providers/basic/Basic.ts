@@ -62,6 +62,10 @@ function parsePositiveInteger(raw: string): number | undefined {
   return parsed;
 }
 
+function isInRange(value: number, min: number, max: number): boolean {
+  return value >= min && value <= max;
+}
+
 function decodeBase64(raw: string): Buffer | undefined {
   if (raw.length === 0) {
     return undefined;
@@ -101,17 +105,17 @@ function parseArgon2Parameters(
   const passes = parsePositiveInteger(rawPasses);
   const parallelism = parsePositiveInteger(rawParallelism);
 
-  if (
-    !memory ||
-    !passes ||
-    !parallelism ||
-    memory < MIN_ARGON2_MEMORY ||
-    memory > MAX_ARGON2_MEMORY ||
-    passes < MIN_ARGON2_PASSES ||
-    passes > MAX_ARGON2_PASSES ||
-    parallelism < MIN_ARGON2_PARALLELISM ||
-    parallelism > MAX_ARGON2_PARALLELISM
-  ) {
+  if (memory === undefined || passes === undefined || parallelism === undefined) {
+    return undefined;
+  }
+
+  if (!isInRange(memory, MIN_ARGON2_MEMORY, MAX_ARGON2_MEMORY)) {
+    return undefined;
+  }
+  if (!isInRange(passes, MIN_ARGON2_PASSES, MAX_ARGON2_PASSES)) {
+    return undefined;
+  }
+  if (!isInRange(parallelism, MIN_ARGON2_PARALLELISM, MAX_ARGON2_PARALLELISM)) {
     return undefined;
   }
 

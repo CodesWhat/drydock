@@ -36,6 +36,7 @@ const {
   displayContainers,
   actionsMenuStyle,
   updateKindColor,
+  maturityColor,
   hasRegistryError,
   registryErrorTooltip,
   containerPolicyTooltip,
@@ -49,6 +50,16 @@ const {
   filterSearch,
   clearFilters,
 } = useContainersViewTemplateContext();
+
+function updateMaturityLabel(maturity: 'fresh' | 'settled' | null): 'NEW' | 'MATURE' {
+  return maturity === 'fresh' ? 'NEW' : 'MATURE';
+}
+
+function updateMaturityFallbackTooltip(
+  maturity: 'fresh' | 'settled' | null,
+): 'New update' | 'Mature update' {
+  return maturity === 'fresh' ? 'New update' : 'Mature update';
+}
 </script>
 
 <template>
@@ -142,6 +153,12 @@ const {
                       v-tooltip.top="tt(c.updateKind)">
                   <AppIcon :name="c.updateKind === 'major' ? 'chevrons-up' : c.updateKind === 'minor' ? 'chevron-up' : c.updateKind === 'patch' ? 'hashtag' : 'fingerprint'" :size="12" />
                 </span>
+                <span v-if="c.updateMaturity" class="badge px-1.5 py-0 text-[0.5625rem] inline-flex items-center gap-1"
+                      :style="{ backgroundColor: maturityColor(c.updateMaturity).bg, color: maturityColor(c.updateMaturity).text }"
+                      v-tooltip.top="tt(c.updateMaturityTooltip ?? updateMaturityFallbackTooltip(c.updateMaturity))">
+                  <AppIcon :name="c.updateMaturity === 'fresh' ? 'flame' : 'clock'" :size="12" />
+                  <span class="uppercase font-bold tracking-wide leading-none">{{ updateMaturityLabel(c.updateMaturity) }}</span>
+                </span>
                 <span v-if="c.bouncer === 'blocked'" class="badge px-1.5 py-0 text-[0.5625rem]"
                       style="background: var(--dd-danger-muted); color: var(--dd-danger);"
                       v-tooltip.top="tt('Blocked')">
@@ -227,11 +244,19 @@ const {
         </template>
         <!-- Kind badge -->
         <template #cell-kind="{ row: c }">
+          <div class="inline-flex items-center gap-1">
           <span v-if="c.updateKind" class="badge text-[0.5625rem] uppercase font-bold"
                 :style="{ backgroundColor: updateKindColor(c.updateKind).bg, color: updateKindColor(c.updateKind).text }">
             {{ c.updateKind }}
           </span>
           <span v-else class="text-[0.625rem] dd-text-muted">&mdash;</span>
+          <span v-if="c.updateMaturity" class="badge px-1.5 py-0 text-[0.5625rem] inline-flex items-center gap-1"
+                :style="{ backgroundColor: maturityColor(c.updateMaturity).bg, color: maturityColor(c.updateMaturity).text }"
+                v-tooltip.top="tt(c.updateMaturityTooltip ?? updateMaturityFallbackTooltip(c.updateMaturity))">
+            <AppIcon :name="c.updateMaturity === 'fresh' ? 'flame' : 'clock'" :size="11" />
+            <span class="uppercase font-bold tracking-wide leading-none">{{ updateMaturityLabel(c.updateMaturity) }}</span>
+          </span>
+          </div>
         </template>
         <!-- Status -->
         <template #cell-status="{ row: c }">
@@ -526,6 +551,12 @@ const {
                       v-tooltip.top="c.newTag">
                   {{ c.newTag }}
                 </span>
+                <span v-if="c.updateMaturity" class="badge px-1.5 py-0 text-[0.5625rem] ml-1 shrink-0 inline-flex items-center gap-1"
+                      :style="{ backgroundColor: maturityColor(c.updateMaturity).bg, color: maturityColor(c.updateMaturity).text }"
+                      v-tooltip.top="tt(c.updateMaturityTooltip ?? updateMaturityFallbackTooltip(c.updateMaturity))">
+                  <AppIcon :name="c.updateMaturity === 'fresh' ? 'flame' : 'clock'" :size="11" />
+                  <span class="uppercase font-bold tracking-wide leading-none">{{ updateMaturityLabel(c.updateMaturity) }}</span>
+                </span>
               </template>
               <template v-else>
                 <span
@@ -654,6 +685,12 @@ const {
             <span v-if="c.updateKind" class="badge text-[0.5625rem] uppercase font-bold max-md:!hidden"
                   :style="{ backgroundColor: updateKindColor(c.updateKind).bg, color: updateKindColor(c.updateKind).text }">
               {{ c.updateKind }}
+            </span>
+            <span v-if="c.updateMaturity" class="badge px-1.5 py-0 text-[0.5625rem] inline-flex items-center gap-1"
+                  :style="{ backgroundColor: maturityColor(c.updateMaturity).bg, color: maturityColor(c.updateMaturity).text }"
+                  v-tooltip.top="tt(c.updateMaturityTooltip ?? updateMaturityFallbackTooltip(c.updateMaturity))">
+              <AppIcon :name="c.updateMaturity === 'fresh' ? 'flame' : 'clock'" :size="11" />
+              <span class="uppercase font-bold tracking-wide leading-none">{{ updateMaturityLabel(c.updateMaturity) }}</span>
             </span>
             <!-- Status: icon on mobile, badge on desktop -->
             <AppIcon :name="c.status === 'running' ? 'play' : 'stop'" :size="13" class="shrink-0 md:!hidden"

@@ -149,6 +149,122 @@ class RegistryResolver {
     };
   }
 
+  getRequiredRegistryManagerMethods(requireNormalizeImage = false) {
+    const requiredMethods = ['getAuthPull', 'getImageFullName'];
+    if (requireNormalizeImage) {
+      requiredMethods.push('normalizeImage');
+    }
+    return requiredMethods;
+  }
+
+  ensureCompatibleRegistryManager(registryManager, options: Record<string, any> = {}) {
+    const {
+      source = 'unknown',
+      registryName,
+      requiredMethods = [],
+      requireNormalizeImage = false,
+    } = options;
+
+    if (!registryManager) {
+      return undefined;
+    }
+
+    if (
+      !this.isRegistryManagerCompatible(registryManager, {
+        requireNormalizeImage,
+      })
+    ) {
+      throw new TriggerPipelineError(
+        'registry-manager-misconfigured',
+        `Registry manager "${registryName}" is misconfigured (${source}); expected methods: ${requiredMethods.join(', ')}`,
+        {
+          source: 'RegistryResolver',
+        },
+      );
+    }
+
+    return registryManager;
+  }
+
+  findRegistryManagerByName(
+    registryState: Record<string, any> = {},
+    options: Record<string, any> = {},
+  ) {
+    const { registryName, requiredMethods = [], requireNormalizeImage = false } = options;
+
+    return this.ensureCompatibleRegistryManager(registryState[registryName], {
+      source: 'lookup by name',
+      registryName,
+      requiredMethods,
+      requireNormalizeImage,
+    });
+  }
+
+  findRegistryManagerByImageCandidate(registryState: Record<string, any> = {}, imageCandidate) {
+    for (const registryManager of Object.values(registryState)) {
+      if (typeof registryManager?.match !== 'function') {
+        continue;
+      }
+
+      try {
+        if (registryManager.match(imageCandidate)) {
+          return registryManager;
+        }
+      } catch {
+        // Ignore matcher errors and continue checking other registries.
+      }
+    }
+
+    return undefined;
+  }
+
+  findRegistryManagerByImageMatch(
+    container,
+    logContainer,
+    registryState: Record<string, any> = {},
+    options: Record<string, any> = {},
+  ) {
+    const { registryName, requiredMethods = [], requireNormalizeImage = false } = options;
+    const lookupCandidates = this.buildRegistryLookupCandidates(container?.image);
+
+    for (const imageCandidate of lookupCandidates) {
+      const byMatch = this.findRegistryManagerByImageCandidate(registryState, imageCandidate);
+      const byMatchCompatible = this.ensureCompatibleRegistryManager(byMatch, {
+        source: 'lookup by image match',
+        registryName,
+        requiredMethods,
+        requireNormalizeImage,
+      });
+
+      if (!byMatchCompatible) {
+        continue;
+      }
+
+      const matchedRegistryId =
+        typeof byMatchCompatible.getId === 'function' ? byMatchCompatible.getId() : 'unknown';
+      logContainer.debug?.(
+        `Resolved registry manager "${registryName}" using matcher "${matchedRegistryId}"`,
+      );
+      return byMatchCompatible;
+    }
+
+    return undefined;
+  }
+
+  createUnsupportedRegistryManagerError(registryState: Record<string, any> = {}, registryName) {
+    const knownRegistries = Object.keys(registryState);
+    const knownRegistriesAsString =
+      knownRegistries.length > 0 ? knownRegistries.join(', ') : 'none';
+
+    return new TriggerPipelineError(
+      'registry-manager-unsupported',
+      `Unsupported registry manager "${registryName}". Known registries: ${knownRegistriesAsString}. Configure a matching registry or provide a valid registry URL.`,
+      {
+        source: 'RegistryResolver',
+      },
+    );
+  }
+
   resolveRegistryManager(
     container,
     logContainer,
@@ -160,59 +276,26 @@ class RegistryResolver {
       requireNormalizeImage = false,
       registryName = container?.image?.registry?.name,
     } = options;
-    const requiredMethods = ['getAuthPull', 'getImageFullName'];
-    if (requireNormalizeImage) {
-      requiredMethods.push('normalizeImage');
-    }
-
-    const ensureCompatible = (registryManager, source) => {
-      if (!registryManager) {
-        return undefined;
-      }
-      if (
-        !this.isRegistryManagerCompatible(registryManager, {
-          requireNormalizeImage,
-        })
-      ) {
-        throw new TriggerPipelineError(
-          'registry-manager-misconfigured',
-          `Registry manager "${registryName}" is misconfigured (${source}); expected methods: ${requiredMethods.join(', ')}`,
-          {
-            source: 'RegistryResolver',
-          },
-        );
-      }
-      return registryManager;
+    const requiredMethods = this.getRequiredRegistryManagerMethods(requireNormalizeImage);
+    const registryLookupOptions = {
+      registryName,
+      requiredMethods,
+      requireNormalizeImage,
     };
 
-    const byName = ensureCompatible(registryState[registryName], 'lookup by name');
+    const byName = this.findRegistryManagerByName(registryState, registryLookupOptions);
     if (byName) {
       return byName;
     }
 
-    const lookupCandidates = this.buildRegistryLookupCandidates(container?.image);
-    for (const imageCandidate of lookupCandidates) {
-      const byMatch = Object.values(registryState).find((registryManager) => {
-        if (typeof registryManager?.match !== 'function') {
-          return false;
-        }
-        try {
-          return registryManager.match(imageCandidate);
-        } catch {
-          return false;
-        }
-      });
-      if (byMatch) {
-        const byMatchCompatible = ensureCompatible(byMatch, 'lookup by image match');
-        if (byMatchCompatible) {
-          const matchedRegistryId =
-            typeof byMatchCompatible.getId === 'function' ? byMatchCompatible.getId() : 'unknown';
-          logContainer.debug?.(
-            `Resolved registry manager "${registryName}" using matcher "${matchedRegistryId}"`,
-          );
-          return byMatchCompatible;
-        }
-      }
+    const byMatch = this.findRegistryManagerByImageMatch(
+      container,
+      logContainer,
+      registryState,
+      registryLookupOptions,
+    );
+    if (byMatch) {
+      return byMatch;
     }
 
     if (allowAnonymousFallback) {
@@ -222,16 +305,7 @@ class RegistryResolver {
       }
     }
 
-    const knownRegistries = Object.keys(registryState);
-    const knownRegistriesAsString =
-      knownRegistries.length > 0 ? knownRegistries.join(', ') : 'none';
-    throw new TriggerPipelineError(
-      'registry-manager-unsupported',
-      `Unsupported registry manager "${registryName}". Known registries: ${knownRegistriesAsString}. Configure a matching registry or provide a valid registry URL.`,
-      {
-        source: 'RegistryResolver',
-      },
-    );
+    throw this.createUnsupportedRegistryManagerError(registryState, registryName);
   }
 }
 

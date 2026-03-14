@@ -77,6 +77,8 @@ interface ApiContainerSecurityScan {
   summary?: ApiContainerSecuritySummary | null;
 }
 
+type SecurityScanType = 'scan' | 'updateScan';
+
 interface ApiContainerInput {
   id?: unknown;
   name?: unknown;
@@ -180,9 +182,16 @@ function isKnownRegistryHost(host: string | undefined, knownHosts: ReadonlySet<s
   return host !== undefined && knownHosts.has(host);
 }
 
-/** Derive bouncer status from security scan data. */
-function deriveBouncer(apiContainer: ApiContainerInput): 'safe' | 'unsafe' | 'blocked' {
-  const scan = apiContainer.security?.scan;
+function getSecurityScan(
+  apiContainer: ApiContainerInput,
+  scanType: SecurityScanType,
+): ApiContainerSecurityScan | undefined {
+  return apiContainer.security?.[scanType] ?? undefined;
+}
+
+function deriveBouncerFromScan(
+  scan: ApiContainerSecurityScan | undefined,
+): 'safe' | 'unsafe' | 'blocked' {
   if (!scan) return 'safe';
   if (scan.status === 'blocked') return 'blocked';
   const summary = scan.summary;
@@ -195,17 +204,16 @@ function deriveBouncer(apiContainer: ApiContainerInput): 'safe' | 'unsafe' | 'bl
   return 'safe';
 }
 
-/** Derive whether a container has any persisted security scan result. */
-function deriveSecurityScanState(apiContainer: ApiContainerInput): 'scanned' | 'not-scanned' {
-  const scan = apiContainer.security?.scan;
+function deriveSecurityScanStateFromScan(
+  scan: ApiContainerSecurityScan | undefined,
+): 'scanned' | 'not-scanned' {
   if (!scan || scan.status === 'not-scanned') return 'not-scanned';
   return 'scanned';
 }
 
-function deriveSecuritySummary(
-  apiContainer: ApiContainerInput,
+function normalizeSecuritySummary(
+  summary: ApiContainerSecuritySummary | null | undefined,
 ): ContainerSecuritySummary | undefined {
-  const summary = apiContainer.security?.scan?.summary;
   if (!summary || typeof summary !== 'object') {
     return undefined;
   }
@@ -216,49 +224,52 @@ function deriveSecuritySummary(
     high: normalizeSeverityCount(summary.high),
     critical: normalizeSeverityCount(summary.critical),
   };
+}
+
+function deriveSecuritySummaryFromScan(
+  scan: ApiContainerSecurityScan | undefined,
+): ContainerSecuritySummary | undefined {
+  return normalizeSecuritySummary(scan?.summary);
+}
+
+/** Derive bouncer status from security scan data. */
+function deriveBouncer(apiContainer: ApiContainerInput): 'safe' | 'unsafe' | 'blocked' {
+  return deriveBouncerFromScan(getSecurityScan(apiContainer, 'scan'));
+}
+
+/** Derive whether a container has any persisted security scan result. */
+function deriveSecurityScanState(apiContainer: ApiContainerInput): 'scanned' | 'not-scanned' {
+  return deriveSecurityScanStateFromScan(getSecurityScan(apiContainer, 'scan'));
+}
+
+function deriveSecuritySummary(
+  apiContainer: ApiContainerInput,
+): ContainerSecuritySummary | undefined {
+  return deriveSecuritySummaryFromScan(getSecurityScan(apiContainer, 'scan'));
 }
 
 /** Derive bouncer status from update scan data. */
 function deriveUpdateBouncer(
   apiContainer: ApiContainerInput,
 ): 'safe' | 'unsafe' | 'blocked' | undefined {
-  const scan = apiContainer.security?.updateScan;
-  if (!scan) return undefined;
-  if (scan.status === 'blocked') return 'blocked';
-  const summary = scan.summary;
-  if (
-    summary &&
-    (normalizeSeverityCount(summary.critical) > 0 || normalizeSeverityCount(summary.high) > 0)
-  ) {
-    return 'unsafe';
-  }
-  return 'safe';
+  const updateScan = getSecurityScan(apiContainer, 'updateScan');
+  if (!updateScan) return undefined;
+  return deriveBouncerFromScan(updateScan);
 }
 
 /** Derive whether a container has any persisted update security scan result. */
 function deriveUpdateSecurityScanState(
   apiContainer: ApiContainerInput,
 ): 'scanned' | 'not-scanned' | undefined {
-  const scan = apiContainer.security?.updateScan;
-  if (!scan) return undefined;
-  if (scan.status === 'not-scanned') return 'not-scanned';
-  return 'scanned';
+  const updateScan = getSecurityScan(apiContainer, 'updateScan');
+  if (!updateScan) return undefined;
+  return deriveSecurityScanStateFromScan(updateScan);
 }
 
 function deriveUpdateSecuritySummary(
   apiContainer: ApiContainerInput,
 ): ContainerSecuritySummary | undefined {
-  const summary = apiContainer.security?.updateScan?.summary;
-  if (!summary || typeof summary !== 'object') {
-    return undefined;
-  }
-  return {
-    unknown: normalizeSeverityCount(summary.unknown),
-    low: normalizeSeverityCount(summary.low),
-    medium: normalizeSeverityCount(summary.medium),
-    high: normalizeSeverityCount(summary.high),
-    critical: normalizeSeverityCount(summary.critical),
-  };
+  return deriveSecuritySummaryFromScan(getSecurityScan(apiContainer, 'updateScan'));
 }
 
 /** Compute the delta between current and update security summaries. */

@@ -1,3 +1,7 @@
+function isMergeableObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 export function deepMerge<T extends Record<string, unknown>>(
   target: T,
   source: Record<string, unknown>,
@@ -9,15 +13,8 @@ export function deepMerge<T extends Record<string, unknown>>(
     const tv = target[typedKey];
     const sv = source[key];
 
-    if (
-      tv !== null &&
-      sv !== null &&
-      typeof tv === 'object' &&
-      typeof sv === 'object' &&
-      !Array.isArray(tv) &&
-      !Array.isArray(sv)
-    ) {
-      deepMerge(tv as Record<string, unknown>, sv as Record<string, unknown>);
+    if (isMergeableObject(tv) && isMergeableObject(sv)) {
+      deepMerge(tv, sv);
     } else if (sv !== undefined) {
       target[typedKey] = sv as T[keyof T];
     }

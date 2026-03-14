@@ -157,15 +157,15 @@ describe('display utilities', () => {
   describe('maturityColor', () => {
     it('returns warning colors for fresh', () => {
       expect(maturityColor('fresh')).toEqual({
-        bg: 'var(--dd-warning-muted)',
-        text: 'var(--dd-warning)',
+        bg: 'color-mix(in srgb, var(--dd-warning) 35%, var(--dd-bg-card))',
+        text: 'var(--dd-text)',
       });
     });
 
     it('returns info colors for settled', () => {
       expect(maturityColor('settled')).toEqual({
-        bg: 'var(--dd-info-muted)',
-        text: 'var(--dd-info)',
+        bg: 'color-mix(in srgb, var(--dd-info) 35%, var(--dd-bg-card))',
+        text: 'var(--dd-text)',
       });
     });
 

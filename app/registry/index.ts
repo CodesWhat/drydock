@@ -216,6 +216,8 @@ function mergeProviderConfigurations(
 
 const LEGACY_PUBLIC_TOKEN_AUTH_PROVIDERS = ['hub', 'dhi'] as const;
 const TOKEN_AUTH_CREDENTIAL_KEYS = ['login', 'password', 'token', 'auth'] as const;
+type TokenAuthCredentialKey = (typeof TOKEN_AUTH_CREDENTIAL_KEYS)[number];
+type CredentialKeyPresence = Record<TokenAuthCredentialKey, boolean>;
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -230,6 +232,14 @@ function hasNonEmptyString(value: Record<string, unknown>, key: string): boolean
   return typeof candidate === 'string' && candidate.trim().length > 0;
 }
 
+function hasExactlyCredentialKeys(
+  keyPresence: CredentialKeyPresence,
+  expectedKeys: readonly TokenAuthCredentialKey[],
+): boolean {
+  const expectedKeySet = new Set(expectedKeys);
+  return TOKEN_AUTH_CREDENTIAL_KEYS.every((key) => keyPresence[key] === expectedKeySet.has(key));
+}
+
 function shouldFallbackLegacyPublicTokenAuthConfiguration(configuration: unknown): boolean {
   if (!isObjectRecord(configuration)) {
     return false;
@@ -242,33 +252,25 @@ function shouldFallbackLegacyPublicTokenAuthConfiguration(configuration: unknown
     return false;
   }
 
-  const hasLoginKey = hasOwnKey(configuration, 'login');
-  const hasPasswordKey = hasOwnKey(configuration, 'password');
-  const hasTokenKey = hasOwnKey(configuration, 'token');
-  const hasAuthKey = hasOwnKey(configuration, 'auth');
+  const keyPresence: CredentialKeyPresence = {
+    login: hasOwnKey(configuration, 'login'),
+    password: hasOwnKey(configuration, 'password'),
+    token: hasOwnKey(configuration, 'token'),
+    auth: hasOwnKey(configuration, 'auth'),
+  };
 
   const validLoginPasswordConfiguration =
-    hasLoginKey &&
-    hasPasswordKey &&
-    !hasTokenKey &&
-    !hasAuthKey &&
+    hasExactlyCredentialKeys(keyPresence, ['login', 'password']) &&
     hasNonEmptyString(configuration, 'login') &&
     hasNonEmptyString(configuration, 'password');
 
   const validLoginTokenConfiguration =
-    hasLoginKey &&
-    hasTokenKey &&
-    !hasPasswordKey &&
-    !hasAuthKey &&
+    hasExactlyCredentialKeys(keyPresence, ['login', 'token']) &&
     hasNonEmptyString(configuration, 'login') &&
     hasNonEmptyString(configuration, 'token');
 
   const validAuthConfiguration =
-    hasAuthKey &&
-    !hasLoginKey &&
-    !hasPasswordKey &&
-    !hasTokenKey &&
-    hasNonEmptyString(configuration, 'auth');
+    hasExactlyCredentialKeys(keyPresence, ['auth']) && hasNonEmptyString(configuration, 'auth');
 
   return !(
     validLoginPasswordConfiguration ||

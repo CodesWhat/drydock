@@ -9,6 +9,7 @@ import type { PreferencesSchema } from '../../preferences/schema';
 import type { useViewMode } from '../../preferences/useViewMode';
 import type { Container } from '../../types/container';
 import type {
+  maturityColor,
   parseServer,
   registryColorBg,
   registryColorText,
@@ -62,95 +63,11 @@ type ContainerLogsContext = Pick<
   | 'containerResumeAutoScroll'
 >;
 
-type ContainerSecurityContext = Pick<
-  ReturnType<typeof useContainerSecurity>,
-  | 'selectedRuntimeOrigins'
-  | 'runtimeOriginStyle'
-  | 'runtimeOriginLabel'
-  | 'selectedRuntimeDriftWarnings'
-  | 'selectedComposePaths'
-  | 'selectedLifecycleHooks'
-  | 'lifecycleHookTemplateVariables'
-  | 'selectedAutoRollbackConfig'
-  | 'selectedImageMetadata'
-  | 'detailVulnerabilityLoading'
-  | 'detailSbomLoading'
-  | 'loadDetailSecurityData'
-  | 'detailVulnerabilityError'
-  | 'vulnerabilitySummary'
-  | 'vulnerabilityTotal'
-  | 'vulnerabilityPreview'
-  | 'severityStyle'
-  | 'normalizeSeverity'
-  | 'getVulnerabilityPackage'
-  | 'selectedSbomFormat'
-  | 'loadDetailSbom'
-  | 'detailSbomError'
-  | 'sbomDocument'
-  | 'sbomComponentCount'
-  | 'sbomGeneratedAt'
->;
+type ContainerSecurityContext = ReturnType<typeof useContainerSecurity>;
 
-type ContainerActionsContext = Pick<
+type ContainerActionsContext = Omit<
   ReturnType<typeof useContainerActions>,
-  | 'actionInProgress'
-  | 'containerActionsDisabledReason'
-  | 'containerActionsEnabled'
-  | 'confirmDelete'
-  | 'confirmForceUpdate'
-  | 'confirmUpdate'
-  | 'confirmRollback'
-  | 'confirmRestart'
-  | 'confirmStop'
-  | 'containerPolicyTooltip'
-  | 'detailBackups'
-  | 'detailComposePreview'
-  | 'detailPreview'
-  | 'detailTriggers'
-  | 'detailUpdateOperations'
-  | 'formatOperationPhase'
-  | 'formatOperationStatus'
-  | 'formatRollbackReason'
-  | 'formatTimestamp'
-  | 'getContainerListPolicyState'
-  | 'getOperationStatusStyle'
-  | 'getTriggerKey'
-  | 'groupUpdateInProgress'
-  | 'policyError'
-  | 'policyInProgress'
-  | 'policyMessage'
-  | 'previewError'
-  | 'previewLoading'
-  | 'removeSkipDigestSelected'
-  | 'removeSkipTagSelected'
-  | 'rollbackError'
-  | 'rollbackInProgress'
-  | 'rollbackMessage'
-  | 'rollbackToBackup'
-  | 'runAssociatedTrigger'
-  | 'runContainerPreview'
-  | 'scanContainer'
-  | 'selectedSkipDigests'
-  | 'selectedSkipTags'
-  | 'selectedSnoozeUntil'
-  | 'selectedUpdatePolicy'
-  | 'skipCurrentForSelected'
-  | 'skipUpdate'
-  | 'snoozeDateInput'
-  | 'snoozeSelected'
-  | 'snoozeSelectedUntilDate'
-  | 'startContainer'
-  | 'triggerError'
-  | 'triggerMessage'
-  | 'triggerRunInProgress'
-  | 'triggersLoading'
-  | 'unsnoozeSelected'
-  | 'updateAllInGroup'
-  | 'updateContainer'
-  | 'updateOperationsError'
-  | 'updateOperationsLoading'
-  | 'clearSkipsSelected'
-  | 'clearPolicySelected'
+  'actionPending' | 'executeAction' | 'skippedUpdates' | 'backupsLoading'
 >;
 
 interface ContainersViewDisplayContainer extends Container {
@@ -207,6 +124,7 @@ export interface ContainersViewTemplateContext
   displayContainers: ComputedRef<ContainersViewDisplayContainer[]>;
   actionsMenuStyle: Ref<Record<string, string>>;
   updateKindColor: typeof updateKindColor;
+  maturityColor: typeof maturityColor;
   hasRegistryError: (container: Container) => boolean;
   registryErrorTooltip: (container: Container) => string;
   serverBadgeColor: typeof serverBadgeColor;

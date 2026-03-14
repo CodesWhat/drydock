@@ -102,55 +102,52 @@ function extractSortTimestamp(sessionPayload: Record<string, unknown>): number {
   );
 }
 
+function toStoredSession(sid: string, rawSession: unknown): StoredSession | undefined {
+  if (sid.length === 0) {
+    return undefined;
+  }
+
+  const sessionPayload = extractSessionPayload(rawSession);
+  if (!sessionPayload) {
+    return undefined;
+  }
+
+  return {
+    sid,
+    username: extractSessionUsername(sessionPayload),
+    sortTimestamp: extractSortTimestamp(sessionPayload),
+  };
+}
+
+function toStoredSessionFromArrayEntry(entry: unknown): StoredSession | undefined {
+  if (!entry || typeof entry !== 'object') {
+    return undefined;
+  }
+
+  const entryRecord = entry as Record<string, unknown>;
+  const sid = typeof entryRecord.sid === 'string' ? entryRecord.sid : '';
+  const rawSessionPayload = Object.hasOwn(entryRecord, 'session')
+    ? entryRecord.session
+    : entryRecord;
+  return toStoredSession(sid, rawSessionPayload);
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
+}
+
 function normalizeStoredSessions(rawSessions: unknown): StoredSession[] {
   if (!rawSessions || typeof rawSessions !== 'object') {
     return [];
   }
 
-  const sessions: StoredSession[] = [];
-
   if (Array.isArray(rawSessions)) {
-    rawSessions.forEach((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return;
-      }
-      const entryRecord = entry as Record<string, unknown>;
-      const sid = typeof entryRecord.sid === 'string' ? entryRecord.sid : '';
-      if (sid.length === 0) {
-        return;
-      }
-      const rawSessionPayload = Object.hasOwn(entryRecord, 'session')
-        ? entryRecord.session
-        : entryRecord;
-      const sessionPayload = extractSessionPayload(rawSessionPayload);
-      if (!sessionPayload) {
-        return;
-      }
-      sessions.push({
-        sid,
-        username: extractSessionUsername(sessionPayload),
-        sortTimestamp: extractSortTimestamp(sessionPayload),
-      });
-    });
-    return sessions;
+    return rawSessions.map(toStoredSessionFromArrayEntry).filter(isDefined);
   }
 
-  Object.entries(rawSessions as Record<string, unknown>).forEach(([sid, rawSession]) => {
-    if (sid.length === 0) {
-      return;
-    }
-    const sessionPayload = extractSessionPayload(rawSession);
-    if (!sessionPayload) {
-      return;
-    }
-    sessions.push({
-      sid,
-      username: extractSessionUsername(sessionPayload),
-      sortTimestamp: extractSortTimestamp(sessionPayload),
-    });
-  });
-
-  return sessions;
+  return Object.entries(rawSessions as Record<string, unknown>)
+    .map(([sid, rawSession]) => toStoredSession(sid, rawSession))
+    .filter(isDefined);
 }
 
 function listStoredSessions(sessionStore: SessionStoreLike): Promise<StoredSession[]> {

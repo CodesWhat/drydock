@@ -88,6 +88,19 @@ type ContainerUpdateAttemptState = {
   failureReason: string;
 };
 
+type RollbackTelemetryPayload = {
+  container: ContainerForUpdate;
+  outcome: 'success' | 'error' | 'info';
+  reason: string;
+  details: string;
+  fromVersion?: string;
+  toVersion?: string;
+};
+
+type PendingContainerUpdateOperation = NonNullable<
+  ReturnType<typeof updateOperationStore.getInProgressOperationByContainerName>
+>;
+
 export type ContainerUpdateExecutorDependencies = {
   getConfiguration: () => { dryrun?: boolean; [key: string]: unknown };
   getTriggerId: () => string;
@@ -138,14 +151,7 @@ export type ContainerUpdateExecutorDependencies = {
     logContainer: ContainerUpdateLogger,
   ) => Promise<unknown>;
   isContainerNotFoundError: (error: unknown) => boolean;
-  recordRollbackTelemetry: (
-    container: ContainerForUpdate,
-    status: 'success' | 'error' | 'info',
-    reason: string,
-    message: string,
-    fromVersion: string,
-    toVersion: string,
-  ) => void;
+  recordRollbackTelemetry: (payload: RollbackTelemetryPayload) => void;
   buildRuntimeConfigCompatibilityError: (
     error: unknown,
     containerName: string,
@@ -308,92 +314,130 @@ class ContainerUpdateExecutor {
     );
 
     if (activeByOriginalName && tempByRenamedName) {
-      const removedTemp = await this.stopAndRemoveContainerBestEffort(
+      await this.reconcileWithActiveAndTempContainers(dockerApi, pending, container, logContainer);
+      return;
+    }
+
+    if (tempByRenamedName) {
+      await this.reconcileWithTempContainerOnly(
         dockerApi,
-        pending.tempName,
-        logContainer,
-      );
-      updateOperationStore.updateOperation(pending.id, {
-        status: 'succeeded',
-        phase: 'recovered-cleanup-temp',
-        recoveredAt: new Date().toISOString(),
-      });
-      this.recordRollbackTelemetry(
+        pending,
         container,
-        'info',
-        'startup_reconcile_cleanup_temp',
-        removedTemp
-          ? `Recovered stale renamed container ${pending.tempName}`
-          : `Detected stale renamed container ${pending.tempName}, cleanup incomplete`,
-        pending.fromVersion,
-        pending.toVersion,
+        tempByRenamedName.container,
       );
       return;
     }
 
-    if (!activeByOriginalName && tempByRenamedName) {
-      let recoveryError: unknown;
-      try {
-        await tempByRenamedName.container.rename({ name: pending.oldName });
-        if (pending.oldContainerWasRunning && pending.oldContainerStopped) {
-          const restored = dockerApi.getContainer(pending.oldName);
-          await restored.start();
-        }
-      } catch (e: unknown) {
-        recoveryError = e;
+    if (activeByOriginalName) {
+      this.reconcileWithActiveContainerOnly(pending, container);
+      return;
+    }
+
+    this.reconcileWithMissingContainers(pending, container);
+  }
+
+  private async reconcileWithActiveAndTempContainers(
+    dockerApi: DockerApiLike,
+    pending: PendingContainerUpdateOperation,
+    container: ContainerForUpdate,
+    logContainer: ContainerUpdateLogger,
+  ): Promise<void> {
+    const removedTemp = await this.stopAndRemoveContainerBestEffort(
+      dockerApi,
+      pending.tempName,
+      logContainer,
+    );
+
+    updateOperationStore.updateOperation(pending.id, {
+      status: 'succeeded',
+      phase: 'recovered-cleanup-temp',
+      recoveredAt: new Date().toISOString(),
+    });
+    this.recordRollbackTelemetry({
+      container,
+      outcome: 'info',
+      reason: 'startup_reconcile_cleanup_temp',
+      details: removedTemp
+        ? `Recovered stale renamed container ${pending.tempName}`
+        : `Detected stale renamed container ${pending.tempName}, cleanup incomplete`,
+      fromVersion: pending.fromVersion,
+      toVersion: pending.toVersion,
+    });
+  }
+
+  private async reconcileWithTempContainerOnly(
+    dockerApi: DockerApiLike,
+    pending: PendingContainerUpdateOperation,
+    container: ContainerForUpdate,
+    tempContainer: DockerContainerHandle,
+  ): Promise<void> {
+    let recoveryError: unknown;
+    try {
+      await tempContainer.rename({ name: pending.oldName });
+      if (pending.oldContainerWasRunning && pending.oldContainerStopped) {
+        const restored = dockerApi.getContainer(pending.oldName);
+        await restored.start();
       }
-
-      const recovered = !recoveryError;
-      updateOperationStore.updateOperation(pending.id, {
-        status: recovered ? 'rolled-back' : 'failed',
-        phase: recovered ? 'recovered-rollback' : 'recovery-failed',
-        lastError: recoveryError ? getErrorMessage(recoveryError) : undefined,
-        recoveredAt: new Date().toISOString(),
-      });
-      this.recordRollbackTelemetry(
-        container,
-        recovered ? 'success' : 'error',
-        recovered ? 'startup_reconcile_restore_old' : 'startup_reconcile_restore_failed',
-        recovered
-          ? `Recovered interrupted update by restoring container name ${pending.oldName}`
-          : `Failed to recover interrupted update: ${getErrorMessage(recoveryError)}`,
-        pending.fromVersion,
-        pending.toVersion,
-      );
-      return;
+    } catch (e: unknown) {
+      recoveryError = e;
     }
 
-    if (activeByOriginalName && !tempByRenamedName) {
-      updateOperationStore.updateOperation(pending.id, {
-        status: 'succeeded',
-        phase: 'recovered-active',
-        recoveredAt: new Date().toISOString(),
-      });
-      this.recordRollbackTelemetry(
-        container,
-        'info',
-        'startup_reconcile_active_only',
-        `Recovered interrupted update operation ${pending.id} with active container ${pending.oldName}`,
-        pending.fromVersion,
-        pending.toVersion,
-      );
-      return;
-    }
+    const recovered = !recoveryError;
+    updateOperationStore.updateOperation(pending.id, {
+      status: recovered ? 'rolled-back' : 'failed',
+      phase: recovered ? 'recovered-rollback' : 'recovery-failed',
+      lastError: recoveryError ? getErrorMessage(recoveryError) : undefined,
+      recoveredAt: new Date().toISOString(),
+    });
+    this.recordRollbackTelemetry({
+      container,
+      outcome: recovered ? 'success' : 'error',
+      reason: recovered ? 'startup_reconcile_restore_old' : 'startup_reconcile_restore_failed',
+      details: recovered
+        ? `Recovered interrupted update by restoring container name ${pending.oldName}`
+        : `Failed to recover interrupted update: ${getErrorMessage(recoveryError)}`,
+      fromVersion: pending.fromVersion,
+      toVersion: pending.toVersion,
+    });
+  }
 
+  private reconcileWithActiveContainerOnly(
+    pending: PendingContainerUpdateOperation,
+    container: ContainerForUpdate,
+  ): void {
+    updateOperationStore.updateOperation(pending.id, {
+      status: 'succeeded',
+      phase: 'recovered-active',
+      recoveredAt: new Date().toISOString(),
+    });
+    this.recordRollbackTelemetry({
+      container,
+      outcome: 'info',
+      reason: 'startup_reconcile_active_only',
+      details: `Recovered interrupted update operation ${pending.id} with active container ${pending.oldName}`,
+      fromVersion: pending.fromVersion,
+      toVersion: pending.toVersion,
+    });
+  }
+
+  private reconcileWithMissingContainers(
+    pending: PendingContainerUpdateOperation,
+    container: ContainerForUpdate,
+  ): void {
     updateOperationStore.updateOperation(pending.id, {
       status: 'failed',
       phase: 'recovery-missing-containers',
       lastError: 'No active or temporary container found during update-operation recovery',
       recoveredAt: new Date().toISOString(),
     });
-    this.recordRollbackTelemetry(
+    this.recordRollbackTelemetry({
       container,
-      'error',
-      'startup_reconcile_missing_containers',
-      `Failed to recover interrupted update operation ${pending.id}: no containers found`,
-      pending.fromVersion,
-      pending.toVersion,
-    );
+      outcome: 'error',
+      reason: 'startup_reconcile_missing_containers',
+      details: `Failed to recover interrupted update operation ${pending.id}: no containers found`,
+      fromVersion: pending.fromVersion,
+      toVersion: pending.toVersion,
+    });
   }
 
   async execute(
@@ -669,18 +713,18 @@ class ContainerUpdateExecutor {
       lastError: getErrorMessage(error),
     });
 
-    this.recordRollbackTelemetry(
+    this.recordRollbackTelemetry({
       container,
-      rollbackSucceeded ? 'success' : 'error',
-      rollbackSucceeded
+      outcome: rollbackSucceeded ? 'success' : 'error',
+      reason: rollbackSucceeded
         ? attemptState.failureReason
         : `${attemptState.failureReason}_rollback_failed`,
-      rollbackSucceeded
+      details: rollbackSucceeded
         ? `Rollback completed after ${attemptState.failureReason} during container update`
         : `Rollback failed after ${attemptState.failureReason}: ${getErrorMessage(error)}`,
-      container.updateKind.remoteValue ?? container.image.tag.value,
-      container.updateKind.localValue ?? container.image.tag.value,
-    );
+      fromVersion: container.updateKind.remoteValue ?? container.image.tag.value,
+      toVersion: container.updateKind.localValue ?? container.image.tag.value,
+    });
 
     const compatibilityError = this.buildRuntimeConfigCompatibilityError(
       error,

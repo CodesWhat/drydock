@@ -40,6 +40,62 @@ export interface DockerEventsStreamFailureDependencies {
   scheduleDockerEventsReconnect: (reason: string, err?: any) => void;
 }
 
+function isDockerEventsReconnectEnabled(state: DockerEventsState) {
+  return Boolean(state.configuration.watchevents && state.isDockerEventsListenerActive);
+}
+
+function logPendingReconnect(state: DockerEventsState, reason: string) {
+  if (state.log && typeof state.log.debug === 'function') {
+    state.log.debug(`Docker event stream reconnect already scheduled; ignoring "${reason}" signal`);
+  }
+}
+
+function logReconnectScheduled(
+  state: DockerEventsState,
+  reason: string,
+  err: any,
+  reconnectDelayMs: number,
+) {
+  const errorMessage = err?.message ? ` (${err.message})` : '';
+  if (state.log && typeof state.log.warn === 'function') {
+    state.log.warn(
+      `Docker event stream ${reason}${errorMessage}; reconnect attempt #${state.dockerEventsReconnectAttempt} in ${reconnectDelayMs}ms`,
+    );
+  }
+}
+
+function logReconnectFailure(state: DockerEventsState, reconnectError: any) {
+  if (state.log && typeof state.log.warn === 'function') {
+    state.log.warn(
+      `Docker event stream reconnect attempt #${state.dockerEventsReconnectAttempt} failed (${reconnectError.message})`,
+    );
+  }
+}
+
+async function attemptDockerEventsReconnect(
+  state: DockerEventsState,
+  dependencies: DockerEventsReconnectDependencies,
+  maxDelayMs: number,
+) {
+  state.dockerEventsReconnectTimeout = undefined;
+  if (!isDockerEventsReconnectEnabled(state)) {
+    return;
+  }
+
+  try {
+    await dependencies.listenDockerEvents();
+  } catch (reconnectError: any) {
+    logReconnectFailure(state, reconnectError);
+    scheduleDockerEventsReconnect(
+      state,
+      dependencies,
+      'reconnect failure',
+      reconnectError,
+      maxDelayMs,
+    );
+  }
+}
+
 export function resetDockerEventsReconnectBackoff(
   state: DockerEventsState,
   baseDelayMs = DOCKER_EVENTS_RECONNECT_BASE_DELAY_MS,
@@ -75,16 +131,12 @@ export function scheduleDockerEventsReconnect(
   err?: any,
   maxDelayMs = DOCKER_EVENTS_RECONNECT_MAX_DELAY_MS,
 ) {
-  if (!state.configuration.watchevents || !state.isDockerEventsListenerActive) {
+  if (!isDockerEventsReconnectEnabled(state)) {
     return;
   }
 
   if (state.dockerEventsReconnectTimeout) {
-    if (state.log && typeof state.log.debug === 'function') {
-      state.log.debug(
-        `Docker event stream reconnect already scheduled; ignoring "${reason}" signal`,
-      );
-    }
+    logPendingReconnect(state, reason);
     return;
   }
 
@@ -92,35 +144,11 @@ export function scheduleDockerEventsReconnect(
   state.dockerEventsBuffer = '';
   state.dockerEventsReconnectAttempt += 1;
   const reconnectDelayMs = state.dockerEventsReconnectDelayMs;
-  const errorMessage = err?.message ? ` (${err.message})` : '';
-  if (state.log && typeof state.log.warn === 'function') {
-    state.log.warn(
-      `Docker event stream ${reason}${errorMessage}; reconnect attempt #${state.dockerEventsReconnectAttempt} in ${reconnectDelayMs}ms`,
-    );
-  }
+  logReconnectScheduled(state, reason, err, reconnectDelayMs);
   state.dockerEventsReconnectDelayMs = Math.min(state.dockerEventsReconnectDelayMs * 2, maxDelayMs);
 
   state.dockerEventsReconnectTimeout = setTimeout(async () => {
-    state.dockerEventsReconnectTimeout = undefined;
-    if (!state.configuration.watchevents || !state.isDockerEventsListenerActive) {
-      return;
-    }
-    try {
-      await dependencies.listenDockerEvents();
-    } catch (reconnectError: any) {
-      if (state.log && typeof state.log.warn === 'function') {
-        state.log.warn(
-          `Docker event stream reconnect attempt #${state.dockerEventsReconnectAttempt} failed (${reconnectError.message})`,
-        );
-      }
-      scheduleDockerEventsReconnect(
-        state,
-        dependencies,
-        'reconnect failure',
-        reconnectError,
-        maxDelayMs,
-      );
-    }
+    await attemptDockerEventsReconnect(state, dependencies, maxDelayMs);
   }, reconnectDelayMs);
 }
 

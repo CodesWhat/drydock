@@ -265,6 +265,34 @@ describe('useDashboardComputed update summary', () => {
     });
   });
 
+  it('shows new and mature counts in the updates stat detail when new updates exist', () => {
+    const now = Date.now();
+    const twoHoursAgo = new Date(now - 2 * 60 * 60 * 1000).toISOString();
+    const tenDaysAgo = new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const state = createState({
+      containers: [
+        makeBaseContainer({ id: 'fresh-1', updateKind: 'minor', updateDetectedAt: twoHoursAgo }),
+        makeBaseContainer({ id: 'settled-1', updateKind: 'patch', updateDetectedAt: tenDaysAgo }),
+        makeBaseContainer({ id: 'no-update', updateKind: null }),
+      ],
+    });
+    const updateStat = state.stats.value.find((card) => card.id === 'stat-updates');
+
+    expect(updateStat?.detail).toBe('1 new · 1 mature');
+  });
+
+  it('omits detail on updates stat when no fresh updates exist', () => {
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const state = createState({
+      containers: [
+        makeBaseContainer({ id: 'settled-1', updateKind: 'minor', updateDetectedAt: tenDaysAgo }),
+      ],
+    });
+    const updateStat = state.stats.value.find((card) => card.id === 'stat-updates');
+
+    expect(updateStat?.detail).toBeUndefined();
+  });
+
   it('reports registry totals from loaded registries in the stat cards', () => {
     const state = createState({
       containers: [makeBaseContainer({ id: 'registry-stat' })],

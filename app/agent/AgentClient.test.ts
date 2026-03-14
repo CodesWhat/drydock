@@ -238,6 +238,34 @@ describe('AgentClient', () => {
       );
     });
 
+    test('should strip sensitive field from env entries before storing', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockReturnValue({ id: 'c1' });
+      const container = {
+        id: 'c1',
+        name: 'test',
+        details: {
+          ports: [],
+          volumes: [],
+          env: [
+            { key: 'NORMAL', value: 'foo', sensitive: false },
+            { key: 'API_KEY', value: '[REDACTED]', sensitive: true },
+          ],
+        },
+      };
+      await client.processContainer(container);
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          details: expect.objectContaining({
+            env: [
+              { key: 'NORMAL', value: 'foo' },
+              { key: 'API_KEY', value: '[REDACTED]' },
+            ],
+          }),
+        }),
+      );
+    });
+
     test('should handle existing container without resultChanged function', async () => {
       const existing = { id: 'c1' }; // no resultChanged
       storeContainer.getContainer.mockReturnValue(existing);

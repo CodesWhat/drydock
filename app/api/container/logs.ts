@@ -13,20 +13,28 @@ interface LogStoreContainerApi {
 }
 
 interface LocalDockerContainerApi {
-  logs: (options: {
-    stdout: boolean;
-    stderr: boolean;
-    tail: number;
-    since: number;
-    timestamps: boolean;
-    follow: boolean;
-  }) => Promise<Buffer | string>;
+  logs: (options: LocalDockerLogsOptions) => Promise<Buffer | string>;
 }
 
 interface LocalDockerWatcherApi {
   dockerApi?: {
     getContainer: (containerName: string) => LocalDockerContainerApi;
   };
+}
+
+interface ParsedContainerLogQuery {
+  tail: number;
+  since: number;
+  timestamps: boolean;
+}
+
+interface LocalDockerLogsOptions {
+  stdout: boolean;
+  stderr: boolean;
+  tail: number;
+  since: number;
+  timestamps: boolean;
+  follow: boolean;
 }
 
 export interface LogHandlerDependencies {
@@ -46,37 +54,128 @@ export function isLocalDockerWatcherApi(value: unknown): value is LocalDockerWat
   );
 }
 
-export function createLogHandlers({
+/**
+ * Demultiplex Docker stream output.
+ * Docker uses an 8-byte header per frame: [streamType(1), padding(3), size(4BE)].
+ * This strips those headers and returns the raw log text.
+ */
+function demuxDockerStream(buffer: Buffer | string | Uint8Array) {
+  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  const lines = [];
+  let offset = 0;
+  while (offset + 8 <= buf.length) {
+    const size = buf.readUInt32BE(offset + 4);
+    offset += 8;
+    if (offset + size > buf.length) break;
+    lines.push(buf.subarray(offset, offset + size).toString('utf-8'));
+    offset += size;
+  }
+  return lines.join('');
+}
+
+function parseContainerLogQuery(req: Request): ParsedContainerLogQuery {
+  return {
+    tail: parseIntegerQueryParam(req.query.tail, 100),
+    since: parseIntegerQueryParam(req.query.since, 0),
+    timestamps: parseBooleanQueryParam(req.query.timestamps, true),
+  };
+}
+
+function buildLocalDockerLogsOptions(query: ParsedContainerLogQuery): LocalDockerLogsOptions {
+  return {
+    stdout: true,
+    stderr: true,
+    follow: false,
+    tail: query.tail,
+    since: query.since,
+    timestamps: query.timestamps,
+  };
+}
+
+function resolveLocalDockerWatcher(
+  container: Container,
+  getWatchers: LogHandlerDependencies['getWatchers'],
+): LocalDockerWatcherApi | undefined {
+  const watcherId = `docker.${container.watcher}`;
+  const watcher = getWatchers()[watcherId];
+  if (!isLocalDockerWatcherApi(watcher) || !watcher.dockerApi) {
+    return undefined;
+  }
+  return watcher;
+}
+
+async function handleAgentContainerLogs({
+  id,
+  container,
+  query,
+  getAgent,
+  getErrorMessage,
+  res,
+}: {
+  id: string;
+  container: Container;
+  query: ParsedContainerLogQuery;
+  getAgent: LogHandlerDependencies['getAgent'];
+  getErrorMessage: LogHandlerDependencies['getErrorMessage'];
+  res: Response;
+}): Promise<boolean> {
+  if (!container.agent) {
+    return false;
+  }
+
+  try {
+    const agent = getAgent(container.agent);
+    if (!agent) {
+      sendErrorResponse(res, 500, `Agent ${container.agent} not found`);
+      return true;
+    }
+    const result = await agent.getContainerLogs(id, query);
+    res.status(200).json(result);
+  } catch (error: unknown) {
+    sendErrorResponse(res, 500, `Error fetching logs from agent (${getErrorMessage(error)})`);
+  }
+  return true;
+}
+
+async function handleLocalContainerLogs({
+  id,
+  container,
+  query,
+  getWatchers,
+  getErrorMessage,
+  res,
+}: {
+  id: string;
+  container: Container;
+  query: ParsedContainerLogQuery;
+  getWatchers: LogHandlerDependencies['getWatchers'];
+  getErrorMessage: LogHandlerDependencies['getErrorMessage'];
+  res: Response;
+}): Promise<void> {
+  const watcher = resolveLocalDockerWatcher(container, getWatchers);
+  if (!watcher) {
+    sendErrorResponse(res, 500, `No watcher found for container ${id}`);
+    return;
+  }
+
+  try {
+    const logsBuffer = await watcher.dockerApi
+      .getContainer(container.name)
+      .logs(buildLocalDockerLogsOptions(query));
+    const logs = demuxDockerStream(logsBuffer);
+    res.status(200).json({ logs });
+  } catch (error: unknown) {
+    sendErrorResponse(res, 500, `Error fetching container logs (${getErrorMessage(error)})`);
+  }
+}
+
+function createGetContainerLogsHandler({
   storeContainer,
   getAgent,
   getWatchers,
   getErrorMessage,
 }: LogHandlerDependencies) {
-  /**
-   * Demultiplex Docker stream output.
-   * Docker uses an 8-byte header per frame: [streamType(1), padding(3), size(4BE)].
-   * This strips those headers and returns the raw log text.
-   */
-  function demuxDockerStream(buffer: Buffer | string | Uint8Array) {
-    const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
-    const lines = [];
-    let offset = 0;
-    while (offset + 8 <= buf.length) {
-      const size = buf.readUInt32BE(offset + 4);
-      offset += 8;
-      if (offset + size > buf.length) break;
-      lines.push(buf.subarray(offset, offset + size).toString('utf-8'));
-      offset += size;
-    }
-    return lines.join('');
-  }
-
-  /**
-   * Get container logs.
-   * @param req
-   * @param res
-   */
-  async function getContainerLogs(req: Request, res: Response) {
+  return async function getContainerLogs(req: Request, res: Response) {
     const id = getPathParamValue(req.params.id);
     const container = storeContainer.getContainer(id);
     if (!container) {
@@ -84,44 +183,32 @@ export function createLogHandlers({
       return;
     }
 
-    const tail = parseIntegerQueryParam(req.query.tail, 100);
-    const since = parseIntegerQueryParam(req.query.since, 0);
-    const timestamps = parseBooleanQueryParam(req.query.timestamps, true);
-
-    if (container.agent) {
-      try {
-        const agent = getAgent(container.agent);
-        if (!agent) {
-          sendErrorResponse(res, 500, `Agent ${container.agent} not found`);
-          return;
-        }
-        const result = await agent.getContainerLogs(id, { tail, since, timestamps });
-        res.status(200).json(result);
-      } catch (error: unknown) {
-        sendErrorResponse(res, 500, `Error fetching logs from agent (${getErrorMessage(error)})`);
-      }
+    const query = parseContainerLogQuery(req);
+    const handledByAgent = await handleAgentContainerLogs({
+      id,
+      container,
+      query,
+      getAgent,
+      getErrorMessage,
+      res,
+    });
+    if (handledByAgent) {
       return;
     }
 
-    const watcherId = `docker.${container.watcher}`;
-    const watcher = getWatchers()[watcherId];
-    if (!isLocalDockerWatcherApi(watcher) || !watcher.dockerApi) {
-      sendErrorResponse(res, 500, `No watcher found for container ${id}`);
-      return;
-    }
+    await handleLocalContainerLogs({
+      id,
+      container,
+      query,
+      getWatchers,
+      getErrorMessage,
+      res,
+    });
+  };
+}
 
-    try {
-      const logsBuffer = await watcher.dockerApi
-        .getContainer(container.name)
-        .logs({ stdout: true, stderr: true, tail, since, timestamps, follow: false });
-      const logs = demuxDockerStream(logsBuffer);
-      res.status(200).json({ logs });
-    } catch (error: unknown) {
-      sendErrorResponse(res, 500, `Error fetching container logs (${getErrorMessage(error)})`);
-    }
-  }
-
+export function createLogHandlers(dependencies: LogHandlerDependencies) {
   return {
-    getContainerLogs,
+    getContainerLogs: createGetContainerLogsHandler(dependencies),
   };
 }

@@ -42,6 +42,11 @@ const LokiStore = ConnectLoki(session);
 const router = express.Router();
 
 const AUTH_USER_CACHE_CONTROL = 'private, no-cache, no-store, must-revalidate';
+const LOGIN_SESSION_ERROR_RESPONSE = 'Unable to establish session';
+const LOGIN_SUCCESS_AUDIT_MESSAGE = 'Login succeeded';
+
+type LoginFinish = () => void;
+type LoginErrorHandler = (errorMessage: string, options?: { logWarning?: boolean }) => void;
 
 export { getAllIds };
 
@@ -75,120 +80,169 @@ function getUser(req: AuthRequest, res: Response): void {
   res.status(200).json(user);
 }
 
+function getRememberMePreference(req: AuthRequest): boolean {
+  return req.body?.remember !== undefined
+    ? req.body.remember === true
+    : req.session?.rememberMe === true;
+}
+
+function getAuthenticatedUsername(req: AuthRequest): string {
+  return typeof req.user?.username === 'string' ? req.user.username.trim() : '';
+}
+
+function createLoginFinish(resolve: () => void): LoginFinish {
+  let completed = false;
+  return () => {
+    if (completed) {
+      return;
+    }
+    completed = true;
+    resolve();
+  };
+}
+
+function handleLoginSuccess(req: AuthRequest, res: Response, finish: LoginFinish): void {
+  recordLoginAuditEvent(req, 'success', LOGIN_SUCCESS_AUDIT_MESSAGE);
+  getUser(req, res);
+  finish();
+}
+
+function handleLoginError(
+  req: AuthRequest,
+  res: Response,
+  finish: LoginFinish,
+  errorMessage: string,
+  options?: { logWarning?: boolean },
+): void {
+  if (options?.logWarning !== false) {
+    log.warn(errorMessage);
+  }
+  recordLoginAuditEvent(req, 'error', errorMessage);
+  sendErrorResponse(res, 500, LOGIN_SESSION_ERROR_RESPONSE);
+  finish();
+}
+
+function proceedWithLogin(
+  req: AuthRequest,
+  res: Response,
+  finish: LoginFinish,
+  failLogin: LoginErrorHandler,
+): Promise<void> {
+  return new Promise((resolveProceed) => {
+    if (typeof req.login !== 'function') {
+      handleLoginSuccess(req, res, finish);
+      resolveProceed();
+      return;
+    }
+
+    try {
+      req.login(req.user as UserWithUsername, (loginError: unknown) => {
+        if (loginError) {
+          failLogin(`Unable to persist login session (${getErrorMessage(loginError)})`);
+          resolveProceed();
+          return;
+        }
+
+        handleLoginSuccess(req, res, finish);
+        resolveProceed();
+      });
+    } catch (loginError: unknown) {
+      failLogin(`Unable to persist login session (${getErrorMessage(loginError)})`);
+      resolveProceed();
+    }
+  });
+}
+
+function enforceLoginSessionLimit(
+  req: AuthRequest,
+  res: Response,
+  finish: LoginFinish,
+  proceed: () => Promise<void>,
+  failLogin: LoginErrorHandler,
+): void {
+  const authenticatedUsername = getAuthenticatedUsername(req);
+  if (authenticatedUsername.length === 0) {
+    void proceed();
+    return;
+  }
+
+  try {
+    enforceSessionLimitBeforeLogin(req, authenticatedUsername, proceed, (errorMessage) => {
+      handleLoginError(req, res, finish, errorMessage, { logWarning: false });
+    });
+  } catch (enforceError: unknown) {
+    failLogin(`Unable to enforce session limit (${getErrorMessage(enforceError)})`);
+  }
+}
+
+function regenerateSessionForLogin(
+  req: AuthRequest,
+  onSuccess: () => void,
+  failLogin: LoginErrorHandler,
+): void {
+  if (!req.session || typeof req.session.regenerate !== 'function') {
+    failLogin('Unable to regenerate session during login (session unavailable)');
+    return;
+  }
+
+  let settled = false;
+  const settle = (callback: () => void): void => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    callback();
+  };
+
+  try {
+    req.session.regenerate((regenerateError: unknown) => {
+      if (regenerateError) {
+        settle(() =>
+          failLogin(
+            `Unable to regenerate session during login (${getErrorMessage(regenerateError)})`,
+          ),
+        );
+        return;
+      }
+
+      settle(onSuccess);
+    });
+  } catch (regenerateError: unknown) {
+    settle(() =>
+      failLogin(`Unable to regenerate session during login (${getErrorMessage(regenerateError)})`),
+    );
+  }
+}
+
 /**
  * Login user (and return it).
  * @param req
  * @param res
  */
 function login(req: AuthRequest, res: Response): Promise<void> {
-  const rememberMe =
-    req.body?.remember !== undefined
-      ? req.body.remember === true
-      : req.session?.rememberMe === true;
-
-  if (!req.session || typeof req.session.regenerate !== 'function') {
-    const errorMessage = 'Unable to regenerate session during login (session unavailable)';
-    log.warn(errorMessage);
-    recordLoginAuditEvent(req, 'error', errorMessage);
-    sendErrorResponse(res, 500, 'Unable to establish session');
-    return Promise.resolve();
-  }
+  const rememberMe = getRememberMePreference(req);
 
   return new Promise((resolve) => {
-    let completed = false;
-    const finish = (): void => {
-      if (completed) {
-        return;
-      }
-      completed = true;
-      resolve();
-    };
+    const finish = createLoginFinish(resolve);
+    const failLogin: LoginErrorHandler = (errorMessage, options) =>
+      handleLoginError(req, res, finish, errorMessage, options);
 
-    req.session?.regenerate((regenerateError: unknown) => {
-      if (regenerateError) {
-        const errorMessage = `Unable to regenerate session during login (${getErrorMessage(regenerateError)})`;
-        log.warn(errorMessage);
-        recordLoginAuditEvent(req, 'error', errorMessage);
-        sendErrorResponse(res, 500, 'Unable to establish session');
-        finish();
-        return;
-      }
-
-      if (!req.session) {
-        const errorMessage = 'Unable to persist session after regeneration';
-        log.warn(errorMessage);
-        recordLoginAuditEvent(req, 'error', errorMessage);
-        sendErrorResponse(res, 500, 'Unable to establish session');
-        finish();
-        return;
-      }
-
-      req.session.rememberMe = rememberMe;
-      applyRememberMe(req);
-
-      const proceedWithLogin = (): Promise<void> =>
-        new Promise((resolveProceed) => {
-          if (typeof req.login !== 'function') {
-            recordLoginAuditEvent(req, 'success', 'Login succeeded');
-            getUser(req, res);
-            finish();
-            resolveProceed();
-            return;
-          }
-
-          try {
-            req.login(req.user as UserWithUsername, (loginError: unknown) => {
-              if (loginError) {
-                const errorMessage = `Unable to persist login session (${getErrorMessage(loginError)})`;
-                log.warn(errorMessage);
-                recordLoginAuditEvent(req, 'error', errorMessage);
-                sendErrorResponse(res, 500, 'Unable to establish session');
-                finish();
-                resolveProceed();
-                return;
-              }
-
-              recordLoginAuditEvent(req, 'success', 'Login succeeded');
-              getUser(req, res);
-              finish();
-              resolveProceed();
-            });
-          } catch (loginError: unknown) {
-            const errorMessage = `Unable to persist login session (${getErrorMessage(loginError)})`;
-            log.warn(errorMessage);
-            recordLoginAuditEvent(req, 'error', errorMessage);
-            sendErrorResponse(res, 500, 'Unable to establish session');
-            finish();
-            resolveProceed();
-          }
-        });
-
-      const authenticatedUsername =
-        typeof req.user?.username === 'string' ? req.user.username.trim() : '';
-      if (authenticatedUsername.length > 0) {
-        try {
-          enforceSessionLimitBeforeLogin(
-            req,
-            authenticatedUsername,
-            proceedWithLogin,
-            (errorMessage) => {
-              recordLoginAuditEvent(req, 'error', errorMessage);
-              sendErrorResponse(res, 500, 'Unable to establish session');
-              finish();
-            },
-          );
-        } catch (enforceError: unknown) {
-          const errorMessage = `Unable to enforce session limit (${getErrorMessage(enforceError)})`;
-          log.warn(errorMessage);
-          recordLoginAuditEvent(req, 'error', errorMessage);
-          sendErrorResponse(res, 500, 'Unable to establish session');
-          finish();
+    regenerateSessionForLogin(
+      req,
+      () => {
+        if (!req.session) {
+          failLogin('Unable to persist session after regeneration');
+          return;
         }
-        return;
-      }
 
-      void proceedWithLogin();
-    });
+        req.session.rememberMe = rememberMe;
+        applyRememberMe(req);
+
+        const proceed = (): Promise<void> => proceedWithLogin(req, res, finish, failLogin);
+        enforceLoginSessionLimit(req, res, finish, proceed, failLogin);
+      },
+      failLogin,
+    );
   });
 }
 

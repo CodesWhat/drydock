@@ -459,6 +459,12 @@ describe('preferences migration', () => {
         const result = migrateFromLegacyKeys();
         expect(result.views.security.sortAsc).toBe(false);
       });
+
+      it('should ignore security migration when only an invalid security view mode is present', () => {
+        localStorage.setItem('dd-security-view-v1', 'invalid');
+        const result = migrateFromLegacyKeys();
+        expect(result.views.security).toEqual(DEFAULTS.views.security);
+      });
     });
 
     describe('agents sort migration', () => {
@@ -478,6 +484,12 @@ describe('preferences migration', () => {
         localStorage.setItem('dd-agents-sort-asc-v1', JSON.stringify(false));
         const result = migrateFromLegacyKeys();
         expect(result.views.agents.sortAsc).toBe(false);
+      });
+
+      it('should ignore agents migration when only an invalid agents view mode is present', () => {
+        localStorage.setItem('dd-agents-view-v1', 'invalid');
+        const result = migrateFromLegacyKeys();
+        expect(result.views.agents).toEqual(DEFAULTS.views.agents);
       });
     });
 

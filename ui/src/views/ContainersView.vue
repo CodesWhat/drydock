@@ -18,6 +18,7 @@ import { getAllContainers, getContainerGroups, refreshAllContainers } from '../s
 import type { Container } from '../types/container';
 import { mapApiContainers } from '../utils/container-mapper';
 import {
+  maturityColor,
   parseServer,
   registryColorBg,
   registryColorText,
@@ -674,6 +675,7 @@ provide(containersViewTemplateContextKey, {
   displayContainers,
   actionsMenuStyle,
   updateKindColor,
+  maturityColor,
   hasRegistryError,
   registryErrorTooltip,
   containerPolicyTooltip,

@@ -310,6 +310,22 @@ describe('useDashboardData', () => {
     warnSpy.mockRestore();
   });
 
+  it('treats registries as rendered data for background refresh error handling', async () => {
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const state = useDashboardData();
+    state.registries.value = [{ name: 'hub' }];
+    const failure = new Error('background refresh failed');
+
+    mocks.getAllContainers.mockRejectedValueOnce(failure);
+    mocks.getServer.mockRejectedValueOnce(failure);
+    await state.fetchDashboardData({ background: true });
+
+    expect(state.error.value).toBeNull();
+    expect(debugSpy).toHaveBeenCalledWith('background refresh failed');
+    warnSpy.mockRestore();
+  });
+
   it('surfaces summary refresh errors when no dashboard data has rendered yet', async () => {
     vi.useFakeTimers();
     mocks.getAllContainers.mockRejectedValue(new Error('initial load failed'));

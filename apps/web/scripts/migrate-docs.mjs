@@ -43,79 +43,99 @@ function extractTitle(content) {
 }
 
 // Extract description from first paragraph after heading
+const DESCRIPTION_MAX_LENGTH = 160;
+const DESCRIPTION_SKIP_PREFIXES = ["#", "![", "|", "?>", "!>"];
+
+function isSkippableDescriptionLine(line) {
+  return line === "" || DESCRIPTION_SKIP_PREFIXES.some((prefix) => line.startsWith(prefix));
+}
+
+function formatDescription(description) {
+  const sentenceMatch = description.match(/^(.+?[.!?])\s/);
+  if (sentenceMatch && sentenceMatch[1].length <= DESCRIPTION_MAX_LENGTH) {
+    return sentenceMatch[1];
+  }
+
+  return description.substring(0, DESCRIPTION_MAX_LENGTH);
+}
+
 function extractDescription(content) {
   const lines = content.split("\n");
-  let pastHeading = false;
-  let desc = "";
-  for (const line of lines) {
-    if (!pastHeading) {
-      if (/^#\s+/.test(line)) {
-        pastHeading = true;
-      }
-      continue;
-    }
-    const trimmed = line.trim();
-    if (trimmed === "") continue;
-    // Skip badges, images, other headings
-    if (trimmed.startsWith("#") || trimmed.startsWith("![") || trimmed.startsWith("|")) continue;
-    // Skip callout markers as description
-    if (trimmed.startsWith("?>") || trimmed.startsWith("!>")) continue;
-    desc = trimmed;
-    break;
-  }
-  // Take first sentence or up to 160 chars
-  if (desc) {
-    const sentenceMatch = desc.match(/^(.+?[.!?])\s/);
-    if (sentenceMatch && sentenceMatch[1].length <= 160) {
-      return sentenceMatch[1];
-    }
-    return desc.substring(0, 160);
-  }
-  return "";
+  const headingIndex = lines.findIndex((line) => /^#\s+/.test(line));
+  if (headingIndex === -1) return "";
+
+  const description =
+    lines
+      .slice(headingIndex + 1)
+      .map((line) => line.trim())
+      .find((line) => !isSkippableDescriptionLine(line)) ?? "";
+
+  if (description === "") return "";
+  return formatDescription(description);
 }
 
 // Convert Docsify callouts (?> and !>) to Fumadocs Callout components
+const INFO_CALLOUT_REGEX = /^\?>\s*(.*)/;
+const WARN_CALLOUT_REGEX = /^!>\s*(.*)/;
+const ANY_CALLOUT_REGEX = /^[?!]>\s/;
+
+function parseCalloutLine(line) {
+  const infoMatch = line.match(INFO_CALLOUT_REGEX);
+  if (infoMatch) {
+    return { type: "info", text: infoMatch[1] };
+  }
+
+  const warnMatch = line.match(WARN_CALLOUT_REGEX);
+  if (warnMatch) {
+    return { type: "warn", text: warnMatch[1] };
+  }
+
+  return null;
+}
+
+function isWrappedCalloutContinuation(text, nextLine) {
+  return text.endsWith("  ") && nextLine.trim() !== "" && !ANY_CALLOUT_REGEX.test(nextLine);
+}
+
+function consumeCalloutContinuation(lines, startIndex, initialText) {
+  let lineIndex = startIndex;
+  let text = initialText;
+
+  // Handle multi-line callouts:
+  // 1. Lines ending with \ are explicit continuations
+  // 2. Lines ending with two spaces continue into a non-empty, non-callout next line
+  while (lineIndex + 1 < lines.length) {
+    if (text.endsWith("\\")) {
+      text = text.slice(0, -1).trimEnd();
+    } else if (isWrappedCalloutContinuation(text, lines[lineIndex + 1])) {
+      text = text.trimEnd();
+    } else {
+      break;
+    }
+
+    lineIndex++;
+    text += "\n" + lines[lineIndex].trim();
+  }
+
+  return { lineIndex, text };
+}
+
 function convertCallouts(content) {
   const lines = content.split("\n");
   const result = [];
   let i = 0;
 
   while (i < lines.length) {
-    const infoMatch = lines[i].match(/^\?>\s*(.*)/);
-    const warnMatch = lines[i].match(/^!>\s*(.*)/);
-
-    if (infoMatch || warnMatch) {
-      const type = infoMatch ? "info" : "warn";
-      let text = (infoMatch || warnMatch)[1];
-
-      // Handle multi-line callouts:
-      // 1. Lines ending with \ are explicit continuations
-      // 2. Non-blank lines following that don't start with ?> or !> are continuation text
-      while (i + 1 < lines.length) {
-        if (text.endsWith("\\")) {
-          // Explicit continuation with backslash
-          text = text.slice(0, -1).trimEnd();
-          i++;
-          text += "\n" + lines[i].trim();
-        } else if (
-          text.endsWith("  ") &&
-          lines[i + 1].trim() !== "" &&
-          !lines[i + 1].match(/^[?!]>\s/)
-        ) {
-          // Trailing double-space line break followed by non-empty, non-callout line
-          text = text.trimEnd();
-          i++;
-          text += "\n" + lines[i].trim();
-        } else {
-          break;
-        }
-      }
-
-      result.push(`<Callout type="${type}">${text}</Callout>`);
-    } else {
+    const callout = parseCalloutLine(lines[i]);
+    if (!callout) {
       result.push(lines[i]);
+      i++;
+      continue;
     }
-    i++;
+
+    const { lineIndex, text } = consumeCalloutContinuation(lines, i, callout.text);
+    result.push(`<Callout type="${callout.type}">${text}</Callout>`);
+    i = lineIndex + 1;
   }
 
   return result.join("\n");

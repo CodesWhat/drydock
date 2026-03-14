@@ -171,134 +171,232 @@ function scheduleLegacyKeyCleanup(): void {
   setTimeout(() => cleanupLegacyKeys(), 0);
 }
 
-export function migrateFromLegacyKeys(): PreferencesSchema {
-  const prefs: Record<string, unknown> = { schemaVersion: 1 };
+const LEGACY_FILTER_KEYS = ['status', 'registry', 'bouncer', 'server', 'kind'] as const;
+const SIMPLE_VIEW_MODE_KEYS = [
+  ['triggers', 'dd-triggers-view-v1'],
+  ['watchers', 'dd-watchers-view-v1'],
+  ['servers', 'dd-servers-view-v1'],
+  ['registries', 'dd-registries-view-v1'],
+  ['notifications', 'dd-notifications-view-v1'],
+  ['auth', 'dd-auth-view-v1'],
+] as const;
 
-  // Theme
+function migrateThemePreference(): Record<string, string> | undefined {
   const family = readString('drydock-theme-family-v1');
   const variant = readString('drydock-theme-variant-v1');
-  if ((family && THEME_FAMILIES.has(family)) || (variant && THEME_VARIANTS.has(variant))) {
-    const t: Record<string, string> = {};
-    if (family && THEME_FAMILIES.has(family)) t.family = family;
-    if (variant && THEME_VARIANTS.has(variant)) t.variant = variant;
-    prefs.theme = t;
+  if (!family && !variant) {
+    return undefined;
   }
 
-  // Font
-  const font = readString('drydock-font-family-v1');
-  if (font && FONT_FAMILIES.has(font)) prefs.font = { family: font };
+  const theme: Record<string, string> = {};
+  if (family && THEME_FAMILIES.has(family)) {
+    theme.family = family;
+  }
+  if (variant && THEME_VARIANTS.has(variant)) {
+    theme.variant = variant;
+  }
 
-  // Icons
+  return Object.keys(theme).length > 0 ? theme : undefined;
+}
+
+function migrateFontPreference(): { family: string } | undefined {
+  const font = readString('drydock-font-family-v1');
+  if (font && FONT_FAMILIES.has(font)) {
+    return { family: font };
+  }
+  return undefined;
+}
+
+function migrateIconsPreference(): Record<string, unknown> | undefined {
   const iconLib = readString('drydock-icon-library-v1');
   const iconScaleRaw = readString('drydock-icon-scale-v1');
   const iconScale = iconScaleRaw ? Number.parseFloat(iconScaleRaw) : undefined;
   if (
-    (iconLib && ICON_LIBRARIES.has(iconLib)) ||
-    (iconScale !== undefined && isValidScale(iconScale))
+    (!iconLib || !ICON_LIBRARIES.has(iconLib)) &&
+    (iconScale === undefined || !isValidScale(iconScale))
   ) {
-    const i: Record<string, unknown> = {};
-    if (iconLib && ICON_LIBRARIES.has(iconLib)) i.library = iconLib;
-    if (iconScale !== undefined && isValidScale(iconScale)) i.scale = iconScale;
-    prefs.icons = i;
+    return undefined;
   }
 
-  // Appearance
+  const icons: Record<string, unknown> = {};
+  if (iconLib && ICON_LIBRARIES.has(iconLib)) {
+    icons.library = iconLib;
+  }
+  if (iconScale !== undefined && isValidScale(iconScale)) {
+    icons.scale = iconScale;
+  }
+  return icons;
+}
+
+function migrateAppearancePreference(): { radius: string } | undefined {
   const radius = readString('drydock-radius-v1');
-  if (radius && RADIUS_PRESETS.has(radius)) prefs.appearance = { radius };
+  if (radius && RADIUS_PRESETS.has(radius)) {
+    return { radius };
+  }
+  return undefined;
+}
 
-  // Layout
+function migrateLayoutPreference(): { sidebarCollapsed: boolean } | undefined {
   const sidebar = readString('dd-sidebar-v1');
-  if (sidebar !== undefined) {
-    const parsed = readJSON('dd-sidebar-v1', isBoolean);
-    if (parsed !== undefined) prefs.layout = { sidebarCollapsed: parsed };
+  if (sidebar === undefined) {
+    return undefined;
   }
 
-  // Containers
+  const parsed = readJSON('dd-sidebar-v1', isBoolean);
+  if (parsed === undefined) {
+    return undefined;
+  }
+  return { sidebarCollapsed: parsed };
+}
+
+function migrateContainerFilters(): Record<string, string> | undefined {
+  const filters = readJSON('dd-containers-filters-v1', isLegacyFilters);
+  if (!filters) {
+    return undefined;
+  }
+
+  const migrated: Record<string, string> = {};
+  for (const key of LEGACY_FILTER_KEYS) {
+    const value = filters[key];
+    if (typeof value === 'string') {
+      migrated[key] = value;
+    }
+  }
+
+  return Object.keys(migrated).length > 0 ? migrated : undefined;
+}
+
+function migrateContainersPreference(): Record<string, unknown> | undefined {
   const containers: Record<string, unknown> = {};
+
   const containerView = readString('dd-containers-view-v1');
-  if (containerView && isViewMode(containerView)) containers.viewMode = containerView;
+  if (containerView && isViewMode(containerView)) {
+    containers.viewMode = containerView;
+  }
 
   const tableActions = readString('dd-table-actions-v1');
-  if (tableActions && TABLE_ACTIONS.has(tableActions)) containers.tableActions = tableActions;
+  if (tableActions && TABLE_ACTIONS.has(tableActions)) {
+    containers.tableActions = tableActions;
+  }
 
   const groupByStack = readString('dd-group-by-stack-v1');
-  if (groupByStack === 'true' || groupByStack === 'false')
+  if (groupByStack === 'true' || groupByStack === 'false') {
     containers.groupByStack = groupByStack === 'true';
+  }
 
   const sort = readJSON('dd-containers-sort-v1', isSortObject);
-  if (sort) containers.sort = sort;
+  if (sort) {
+    containers.sort = sort;
+  }
 
-  const filters = readJSON('dd-containers-filters-v1', isLegacyFilters);
+  const filters = migrateContainerFilters();
   if (filters) {
-    const f: Record<string, string> = {};
-    for (const key of ['status', 'registry', 'bouncer', 'server', 'kind'] as const) {
-      if (typeof filters[key] === 'string') f[key] = filters[key] as string;
-    }
-    if (Object.keys(f).length > 0) containers.filters = f;
+    containers.filters = filters;
   }
 
   const columns = readJSON('dd-table-cols-v1', isStringArray);
-  if (columns) containers.columns = columns;
+  if (columns) {
+    containers.columns = columns;
+  }
 
-  if (Object.keys(containers).length > 0) prefs.containers = containers;
+  return Object.keys(containers).length > 0 ? containers : undefined;
+}
 
-  // Dashboard
+function migrateDashboardPreference(): { widgetOrder: string[] } | undefined {
   const widgetOrder = readJSON('dd-dashboard-widget-order-v3', isStringArray);
-  if (widgetOrder) prefs.dashboard = { widgetOrder };
+  if (widgetOrder) {
+    return { widgetOrder };
+  }
+  return undefined;
+}
 
-  // Views
-  const views: Record<string, unknown> = {};
-
-  // Security
+function migrateSecurityViewPreference(): Record<string, unknown> | undefined {
   const secView = readString('dd-security-view-v1');
   const secSortField = readString('dd-security-sort-field-v1');
   const secSortAsc = readJSON('dd-security-sort-asc-v1', isBoolean);
-  if ((secView && isViewMode(secView)) || secSortField !== undefined || secSortAsc !== undefined) {
-    const s: Record<string, unknown> = {};
-    if (secView && isViewMode(secView)) s.mode = secView;
-    if (secSortField !== undefined) s.sortField = secSortField;
-    if (secSortAsc !== undefined) s.sortAsc = secSortAsc;
-    views.security = s;
+  if (!secView && secSortField === undefined && secSortAsc === undefined) {
+    return undefined;
   }
 
-  // Audit
-  const auditView = readString('dd-audit-view-v1');
-  if (auditView && isViewMode(auditView)) views.audit = { mode: auditView };
+  const security: Record<string, unknown> = {};
+  if (secView && isViewMode(secView)) {
+    security.mode = secView;
+  }
+  if (secSortField !== undefined) {
+    security.sortField = secSortField;
+  }
+  if (secSortAsc !== undefined) {
+    security.sortAsc = secSortAsc;
+  }
 
-  // Agents
+  return Object.keys(security).length > 0 ? security : undefined;
+}
+
+function migrateAuditViewPreference(): { mode: string } | undefined {
+  const auditView = readString('dd-audit-view-v1');
+  if (auditView && isViewMode(auditView)) {
+    return { mode: auditView };
+  }
+  return undefined;
+}
+
+function migrateAgentsViewPreference(): Record<string, unknown> | undefined {
   const agentsView = readString('dd-agents-view-v1');
   const agentsSortKey = readString('dd-agents-sort-key-v1');
   const agentsSortAsc = readJSON('dd-agents-sort-asc-v1', isBoolean);
-  if (
-    (agentsView && isViewMode(agentsView)) ||
-    agentsSortKey !== undefined ||
-    agentsSortAsc !== undefined
-  ) {
-    const a: Record<string, unknown> = {};
-    if (agentsView && isViewMode(agentsView)) a.mode = agentsView;
-    if (agentsSortKey !== undefined) a.sortKey = agentsSortKey;
-    if (agentsSortAsc !== undefined) a.sortAsc = agentsSortAsc;
-    views.agents = a;
+  if (!agentsView && agentsSortKey === undefined && agentsSortAsc === undefined) {
+    return undefined;
   }
 
-  // Simple view modes
-  for (const [key, viewKey] of [
-    ['triggers', 'dd-triggers-view-v1'],
-    ['watchers', 'dd-watchers-view-v1'],
-    ['servers', 'dd-servers-view-v1'],
-    ['registries', 'dd-registries-view-v1'],
-    ['notifications', 'dd-notifications-view-v1'],
-    ['auth', 'dd-auth-view-v1'],
-  ] as const) {
+  const agents: Record<string, unknown> = {};
+  if (agentsView && isViewMode(agentsView)) {
+    agents.mode = agentsView;
+  }
+  if (agentsSortKey !== undefined) {
+    agents.sortKey = agentsSortKey;
+  }
+  if (agentsSortAsc !== undefined) {
+    agents.sortAsc = agentsSortAsc;
+  }
+
+  return Object.keys(agents).length > 0 ? agents : undefined;
+}
+
+function migrateSimpleViewModePreferences(): Record<string, { mode: string }> {
+  const views: Record<string, { mode: string }> = {};
+  for (const [key, viewKey] of SIMPLE_VIEW_MODE_KEYS) {
     const mode = readString(viewKey);
-    if (mode && isViewMode(mode)) views[key] = { mode };
+    if (mode && isViewMode(mode)) {
+      views[key] = { mode };
+    }
+  }
+  return views;
+}
+
+function migrateViewsPreference(): Record<string, unknown> | undefined {
+  const views: Record<string, unknown> = {};
+
+  const security = migrateSecurityViewPreference();
+  if (security) {
+    views.security = security;
   }
 
-  if (Object.keys(views).length > 0) prefs.views = views;
+  const audit = migrateAuditViewPreference();
+  if (audit) {
+    views.audit = audit;
+  }
 
-  const result = mergeDefaults(prefs);
+  const agents = migrateAgentsViewPreference();
+  if (agents) {
+    views.agents = agents;
+  }
 
-  // Try to write and verify
+  Object.assign(views, migrateSimpleViewModePreferences());
+
+  return Object.keys(views).length > 0 ? views : undefined;
+}
+
+function persistMigratedPreferences(result: PreferencesSchema): void {
   try {
     const json = JSON.stringify(result);
     localStorage.setItem('dd-preferences', json);
@@ -310,7 +408,52 @@ export function migrateFromLegacyKeys(): PreferencesSchema {
   } catch {
     // Write failed (quota/private browsing) — keep legacy keys intact
   }
+}
 
+export function migrateFromLegacyKeys(): PreferencesSchema {
+  const prefs: Record<string, unknown> = { schemaVersion: 1 };
+  const theme = migrateThemePreference();
+  if (theme) {
+    prefs.theme = theme;
+  }
+
+  const font = migrateFontPreference();
+  if (font) {
+    prefs.font = font;
+  }
+
+  const icons = migrateIconsPreference();
+  if (icons) {
+    prefs.icons = icons;
+  }
+
+  const appearance = migrateAppearancePreference();
+  if (appearance) {
+    prefs.appearance = appearance;
+  }
+
+  const layout = migrateLayoutPreference();
+  if (layout) {
+    prefs.layout = layout;
+  }
+
+  const containers = migrateContainersPreference();
+  if (containers) {
+    prefs.containers = containers;
+  }
+
+  const dashboard = migrateDashboardPreference();
+  if (dashboard) {
+    prefs.dashboard = dashboard;
+  }
+
+  const views = migrateViewsPreference();
+  if (views) {
+    prefs.views = views;
+  }
+
+  const result = mergeDefaults(prefs);
+  persistMigratedPreferences(result);
   return result;
 }
 

@@ -202,6 +202,68 @@ function printHelp(io: MigrateCliIo) {
   io.out('  --help          Show this help');
 }
 
+type ParseOptionStepResult = { kind: 'ok'; nextIndex: number } | { kind: 'error'; error: string };
+
+type ParseOptionValueResult =
+  | { kind: 'ok'; value: string; nextIndex: number }
+  | { kind: 'error'; error: string };
+
+type OptionHandler = (
+  args: string[],
+  index: number,
+  options: MigrateCliOptions,
+) => ParseOptionStepResult;
+
+function parseRequiredOptionValue(
+  args: string[],
+  index: number,
+  missingValueError: string,
+): ParseOptionValueResult {
+  const value = args[index + 1];
+  if (!value || value.startsWith('-')) {
+    return { kind: 'error', error: missingValueError };
+  }
+  return { kind: 'ok', value, nextIndex: index + 1 };
+}
+
+const OPTION_HANDLERS: Record<string, OptionHandler> = {
+  '--dry-run': (_args, index, options) => {
+    options.dryRun = true;
+    return { kind: 'ok', nextIndex: index };
+  },
+  '--help': (_args, index, options) => {
+    options.help = true;
+    return { kind: 'ok', nextIndex: index };
+  },
+  '-h': (_args, index, options) => {
+    options.help = true;
+    return { kind: 'ok', nextIndex: index };
+  },
+  '--file': (args, index, options) => {
+    const valueResult = parseRequiredOptionValue(args, index, '--file requires a path value');
+    if (valueResult.kind === 'error') {
+      return valueResult;
+    }
+    options.files.push(valueResult.value);
+    return { kind: 'ok', nextIndex: valueResult.nextIndex };
+  },
+  '--source': (args, index, options) => {
+    const valueResult = parseRequiredOptionValue(args, index, '--source requires a value');
+    if (valueResult.kind === 'error') {
+      return valueResult;
+    }
+    const source = parseMigrationSource(valueResult.value);
+    if (!source) {
+      return {
+        kind: 'error',
+        error: `Unsupported source "${valueResult.value}". Supported: ${SUPPORTED_MIGRATION_SOURCES.join(', ')}`,
+      };
+    }
+    options.source = source;
+    return { kind: 'ok', nextIndex: valueResult.nextIndex };
+  },
+};
+
 function parseOptions(args: string[]): ParseOptionsResult {
   const options: MigrateCliOptions = {
     files: [],
@@ -212,40 +274,15 @@ function parseOptions(args: string[]): ParseOptionsResult {
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
-    if (arg === '--dry-run') {
-      options.dryRun = true;
-      continue;
+    const handler = OPTION_HANDLERS[arg];
+    if (!handler) {
+      return { kind: 'error', error: `Unknown argument: ${arg}` };
     }
-    if (arg === '--help' || arg === '-h') {
-      options.help = true;
-      continue;
+    const result = handler(args, i, options);
+    if (result.kind === 'error') {
+      return result;
     }
-    if (arg === '--file') {
-      const value = args[i + 1];
-      if (!value || value.startsWith('-')) {
-        return { kind: 'error', error: '--file requires a path value' };
-      }
-      options.files.push(value);
-      i += 1;
-      continue;
-    }
-    if (arg === '--source') {
-      const value = args[i + 1];
-      if (!value || value.startsWith('-')) {
-        return { kind: 'error', error: '--source requires a value' };
-      }
-      const source = parseMigrationSource(value);
-      if (!source) {
-        return {
-          kind: 'error',
-          error: `Unsupported source "${value}". Supported: ${SUPPORTED_MIGRATION_SOURCES.join(', ')}`,
-        };
-      }
-      options.source = source;
-      i += 1;
-      continue;
-    }
-    return { kind: 'error', error: `Unknown argument: ${arg}` };
+    i = result.nextIndex;
   }
 
   return { kind: 'ok', options };
@@ -294,18 +331,246 @@ function writeContentToOpenFile(fileDescriptor: number, content: string) {
   }
 }
 
+function isConfigMigrateCommand(argv: string[]) {
+  return argv[0] === 'config' && argv[1] === 'migrate';
+}
+
+function resolveCliIo(io?: MigrateCliIo): MigrateCliIo {
+  return (
+    io || {
+      out: (message) => process.stdout.write(`${message}\n`),
+      err: (message) => process.stderr.write(`${message}\n`),
+    }
+  );
+}
+
+function getConfiguredFiles(options: MigrateCliOptions) {
+  return options.files.length > 0 ? options.files : [...DEFAULT_CONFIG_CANDIDATES];
+}
+
+type ResolveCandidateFilesResult =
+  | { kind: 'ok'; files: string[] }
+  | { kind: 'error'; error: string };
+
+function resolveCandidateFiles(
+  cwd: string,
+  configuredFiles: string[],
+): ResolveCandidateFilesResult {
+  try {
+    const files = configuredFiles.map((filePath) =>
+      resolveConfiguredPathWithinBase(cwd, filePath, {
+        label: '--file path',
+      }),
+    );
+    return { kind: 'ok', files: Array.from(new Set(files)) };
+  } catch (error) {
+    return { kind: 'error', error: (error as Error).message };
+  }
+}
+
+type MigrationStats = {
+  scannedFiles: number;
+  updatedFiles: number;
+  missingFiles: number;
+  envReplacements: number;
+  labelReplacements: number;
+};
+
+function createMigrationStats(): MigrationStats {
+  return {
+    scannedFiles: 0,
+    updatedFiles: 0,
+    missingFiles: 0,
+    envReplacements: 0,
+    labelReplacements: 0,
+  };
+}
+
+type OpenCandidateResult =
+  | { kind: 'ok'; fileDescriptor: number }
+  | { kind: 'missing' }
+  | { kind: 'symlink' }
+  | { kind: 'error'; error: string };
+
+function openCandidateFile(
+  candidate: string,
+  dryRun: boolean,
+  noFollowFlag: number,
+): OpenCandidateResult {
+  try {
+    const openFlags = dryRun ? fs.constants.O_RDONLY : fs.constants.O_RDWR;
+    const fileDescriptor = fs.openSync(candidate, openFlags | noFollowFlag);
+    return { kind: 'ok', fileDescriptor };
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return { kind: 'missing' };
+    }
+    if (isSymlinkPathError(error)) {
+      return { kind: 'symlink' };
+    }
+    return { kind: 'error', error: formatCliErrorMessage(error) };
+  }
+}
+
+type ReadCandidateResult =
+  | { kind: 'ok'; content: string }
+  | { kind: 'missing' }
+  | { kind: 'error'; error: string };
+
+function readCandidateFile(fileDescriptor: number): ReadCandidateResult {
+  try {
+    return { kind: 'ok', content: fs.readFileSync(fileDescriptor, 'utf-8') };
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return { kind: 'missing' };
+    }
+    return { kind: 'error', error: formatCliErrorMessage(error) };
+  }
+}
+
+type ProcessCandidateResult =
+  | { kind: 'missing' }
+  | { kind: 'skipped' }
+  | {
+      kind: 'processed';
+      updated: boolean;
+      envReplacements: number;
+      labelReplacements: number;
+    }
+  | { kind: 'error'; error: string };
+
+function processCandidate(
+  candidate: string,
+  migrateOptions: MigrateCliOptions,
+  io: MigrateCliIo,
+  noFollowFlag: number,
+): ProcessCandidateResult {
+  const openResult = openCandidateFile(candidate, migrateOptions.dryRun, noFollowFlag);
+  if (openResult.kind === 'missing') {
+    return { kind: 'missing' };
+  }
+  if (openResult.kind === 'symlink') {
+    io.err(`Refusing to process symlink: ${candidate}`);
+    return { kind: 'skipped' };
+  }
+  if (openResult.kind === 'error') {
+    return { kind: 'error', error: `Failed to inspect "${candidate}": ${openResult.error}` };
+  }
+
+  const candidateFileDescriptor = openResult.fileDescriptor;
+  try {
+    const readResult = readCandidateFile(candidateFileDescriptor);
+    if (readResult.kind === 'missing') {
+      return { kind: 'missing' };
+    }
+    if (readResult.kind === 'error') {
+      return { kind: 'error', error: `Failed to read "${candidate}": ${readResult.error}` };
+    }
+
+    const originalContent = readResult.content;
+    const migrated = migrateLegacyConfigContent(originalContent, migrateOptions.source);
+
+    if (migrated.content === originalContent) {
+      io.out(`UNCHANGED ${candidate}`);
+      return {
+        kind: 'processed',
+        updated: false,
+        envReplacements: migrated.envReplacements,
+        labelReplacements: migrated.labelReplacements,
+      };
+    }
+
+    if (!migrateOptions.dryRun) {
+      try {
+        writeContentToOpenFile(candidateFileDescriptor, migrated.content);
+      } catch (error) {
+        return {
+          kind: 'error',
+          error: `Failed to write "${candidate}": ${formatCliErrorMessage(error)}`,
+        };
+      }
+    }
+
+    const status = migrateOptions.dryRun ? 'DRY-RUN' : 'UPDATED';
+    io.out(
+      `${status} ${candidate} (env=${migrated.envReplacements}, labels=${migrated.labelReplacements})`,
+    );
+
+    return {
+      kind: 'processed',
+      updated: true,
+      envReplacements: migrated.envReplacements,
+      labelReplacements: migrated.labelReplacements,
+    };
+  } finally {
+    fs.closeSync(candidateFileDescriptor);
+  }
+}
+
+type ProcessCandidatesResult = { kind: 'ok'; stats: MigrationStats } | { kind: 'error' };
+
+function processCandidates(
+  candidates: string[],
+  migrateOptions: MigrateCliOptions,
+  io: MigrateCliIo,
+): ProcessCandidatesResult {
+  const stats = createMigrationStats();
+  const noFollowFlag = fs.constants.O_NOFOLLOW || 0;
+
+  for (const candidate of candidates) {
+    const result = processCandidate(candidate, migrateOptions, io, noFollowFlag);
+    if (result.kind === 'error') {
+      io.err(`Error: ${result.error}`);
+      return { kind: 'error' };
+    }
+    if (result.kind === 'missing') {
+      stats.missingFiles += 1;
+      continue;
+    }
+    if (result.kind === 'skipped') {
+      continue;
+    }
+    stats.scannedFiles += 1;
+    if (result.updated) {
+      stats.updatedFiles += 1;
+    }
+    stats.envReplacements += result.envReplacements;
+    stats.labelReplacements += result.labelReplacements;
+  }
+
+  return { kind: 'ok', stats };
+}
+
+function printNoFilesScannedMessage(io: MigrateCliIo, migrateOptions: MigrateCliOptions) {
+  io.out('No config files found to migrate.');
+  if (migrateOptions.files.length > 0) {
+    io.out(`Checked files: ${migrateOptions.files.join(', ')}`);
+    return;
+  }
+  io.out(
+    `Checked defaults: ${DEFAULT_CONFIG_CANDIDATES.join(', ')} (use --file to target specific files)`,
+  );
+}
+
+function printMigrationSummary(io: MigrateCliIo, stats: MigrationStats, dryRun: boolean) {
+  io.out('');
+  io.out(
+    `Summary: scanned=${stats.scannedFiles}, updated=${stats.updatedFiles}, missing=${stats.missingFiles}, env_rewrites=${stats.envReplacements}, label_rewrites=${stats.labelReplacements}`,
+  );
+  if (dryRun) {
+    io.out('Dry-run mode: no files were modified.');
+  }
+}
+
 export function runConfigMigrateCommandIfRequested(
   argv: string[],
   options: RunMigrateCliOptions = {},
 ): number | null {
-  if (argv[0] !== 'config' || argv[1] !== 'migrate') {
+  if (!isConfigMigrateCommand(argv)) {
     return null;
   }
 
-  const io: MigrateCliIo = options.io || {
-    out: (message) => process.stdout.write(`${message}\n`),
-    err: (message) => process.stderr.write(`${message}\n`),
-  };
+  const io = resolveCliIo(options.io);
   const cwd = options.cwd || process.cwd();
 
   const parsed = parseOptions(argv.slice(2));
@@ -320,109 +585,23 @@ export function runConfigMigrateCommandIfRequested(
     return 0;
   }
 
-  const configuredFiles =
-    migrateOptions.files.length > 0 ? migrateOptions.files : [...DEFAULT_CONFIG_CANDIDATES];
-
-  let candidateFiles: string[];
-  try {
-    candidateFiles = configuredFiles.map((filePath) =>
-      resolveConfiguredPathWithinBase(cwd, filePath, {
-        label: '--file path',
-      }),
-    );
-  } catch (error) {
-    io.err(`Error: ${(error as Error).message}`);
+  const configuredFiles = getConfiguredFiles(migrateOptions);
+  const resolvedCandidates = resolveCandidateFiles(cwd, configuredFiles);
+  if (resolvedCandidates.kind === 'error') {
+    io.err(`Error: ${resolvedCandidates.error}`);
     return 1;
   }
 
-  const uniqueCandidates = Array.from(new Set(candidateFiles));
-
-  let scannedFiles = 0;
-  let updatedFiles = 0;
-  let missingFiles = 0;
-  let envReplacements = 0;
-  let labelReplacements = 0;
-  const noFollowFlag = fs.constants.O_NOFOLLOW || 0;
-
-  for (const candidate of uniqueCandidates) {
-    let candidateFileDescriptor: number | null = null;
-    try {
-      try {
-        const openFlags = migrateOptions.dryRun ? fs.constants.O_RDONLY : fs.constants.O_RDWR;
-        candidateFileDescriptor = fs.openSync(candidate, openFlags | noFollowFlag);
-      } catch (error) {
-        if (isMissingPathError(error)) {
-          missingFiles += 1;
-          continue;
-        }
-        if (isSymlinkPathError(error)) {
-          io.err(`Refusing to process symlink: ${candidate}`);
-          continue;
-        }
-        io.err(`Error: Failed to inspect "${candidate}": ${formatCliErrorMessage(error)}`);
-        return 1;
-      }
-
-      let originalContent: string;
-      try {
-        originalContent = fs.readFileSync(candidateFileDescriptor, 'utf-8');
-      } catch (error) {
-        if (isMissingPathError(error)) {
-          missingFiles += 1;
-          continue;
-        }
-        io.err(`Error: Failed to read "${candidate}": ${formatCliErrorMessage(error)}`);
-        return 1;
-      }
-      scannedFiles += 1;
-
-      const migrated = migrateLegacyConfigContent(originalContent, migrateOptions.source);
-      envReplacements += migrated.envReplacements;
-      labelReplacements += migrated.labelReplacements;
-
-      if (migrated.content === originalContent) {
-        io.out(`UNCHANGED ${candidate}`);
-        continue;
-      }
-
-      updatedFiles += 1;
-      if (!migrateOptions.dryRun) {
-        try {
-          writeContentToOpenFile(candidateFileDescriptor, migrated.content);
-        } catch (error) {
-          io.err(`Error: Failed to write "${candidate}": ${formatCliErrorMessage(error)}`);
-          return 1;
-        }
-      }
-      const status = migrateOptions.dryRun ? 'DRY-RUN' : 'UPDATED';
-      io.out(
-        `${status} ${candidate} (env=${migrated.envReplacements}, labels=${migrated.labelReplacements})`,
-      );
-    } finally {
-      if (candidateFileDescriptor !== null) {
-        fs.closeSync(candidateFileDescriptor);
-      }
-    }
+  const processResult = processCandidates(resolvedCandidates.files, migrateOptions, io);
+  if (processResult.kind === 'error') {
+    return 1;
   }
 
-  if (scannedFiles === 0) {
-    io.out('No config files found to migrate.');
-    if (migrateOptions.files.length > 0) {
-      io.out(`Checked files: ${migrateOptions.files.join(', ')}`);
-    } else {
-      io.out(
-        `Checked defaults: ${DEFAULT_CONFIG_CANDIDATES.join(', ')} (use --file to target specific files)`,
-      );
-    }
+  if (processResult.stats.scannedFiles === 0) {
+    printNoFilesScannedMessage(io, migrateOptions);
     return 0;
   }
 
-  io.out('');
-  io.out(
-    `Summary: scanned=${scannedFiles}, updated=${updatedFiles}, missing=${missingFiles}, env_rewrites=${envReplacements}, label_rewrites=${labelReplacements}`,
-  );
-  if (migrateOptions.dryRun) {
-    io.out('Dry-run mode: no files were modified.');
-  }
+  printMigrationSummary(io, processResult.stats, migrateOptions.dryRun);
   return 0;
 }

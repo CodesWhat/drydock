@@ -168,22 +168,42 @@ function detectSbomComponentCount(document: ApiSbomDocument): number | undefined
   return undefined;
 }
 
-export function useContainerSecurity(input: UseContainerSecurityInput) {
-  const selectedRuntimeOrigins = computed(() => ({
+interface RuntimeOrigins {
+  entrypoint: RuntimeOrigin;
+  cmd: RuntimeOrigin;
+}
+
+interface DetailSecurityState {
+  detailVulnerabilityResult: Ref<Record<string, unknown> | null>;
+  detailVulnerabilityLoading: Ref<boolean>;
+  detailVulnerabilityError: Ref<string | null>;
+  detailSbomResult: Ref<Record<string, unknown> | null>;
+  detailSbomLoading: Ref<boolean>;
+  detailSbomError: Ref<string | null>;
+}
+
+function createSelectedRuntimeOrigins(
+  selectedContainerMeta: Readonly<Ref<Record<string, unknown> | undefined>>,
+) {
+  return computed<RuntimeOrigins>(() => ({
     entrypoint: getRuntimeOriginValue(
-      input.selectedContainerMeta.value?.labels,
+      selectedContainerMeta.value?.labels,
       'dd.runtime.entrypoint.origin',
       'wud.runtime.entrypoint.origin',
     ),
     cmd: getRuntimeOriginValue(
-      input.selectedContainerMeta.value?.labels,
+      selectedContainerMeta.value?.labels,
       'dd.runtime.cmd.origin',
       'wud.runtime.cmd.origin',
     ),
   }));
+}
 
-  const selectedLifecycleHooks = computed(() => {
-    const labels = input.selectedContainerMeta.value?.labels;
+function createSelectedLifecycleHooks(
+  selectedContainerMeta: Readonly<Ref<Record<string, unknown> | undefined>>,
+) {
+  return computed(() => {
+    const labels = selectedContainerMeta.value?.labels;
     const preUpdate = getPreferredLabelString(labels, 'dd.hook.pre', 'wud.hook.pre');
     const postUpdate = getPreferredLabelString(labels, 'dd.hook.post', 'wud.hook.post');
     const timeoutRaw = getPreferredLabelString(labels, 'dd.hook.timeout', 'wud.hook.timeout');
@@ -206,19 +226,13 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
             : 'Continue update on pre-hook failure',
     };
   });
+}
 
-  const lifecycleHookTemplateVariables = [
-    { name: 'DD_CONTAINER_NAME', description: 'Container name' },
-    { name: 'DD_CONTAINER_ID', description: 'Container ID' },
-    { name: 'DD_IMAGE_NAME', description: 'Image name (without registry)' },
-    { name: 'DD_IMAGE_TAG', description: 'Current image tag' },
-    { name: 'DD_UPDATE_KIND', description: 'Update type (tag or digest)' },
-    { name: 'DD_UPDATE_FROM', description: 'Current tag or digest' },
-    { name: 'DD_UPDATE_TO', description: 'New tag or digest' },
-  ];
-
-  const selectedAutoRollbackConfig = computed(() => {
-    const labels = input.selectedContainerMeta.value?.labels;
+function createSelectedAutoRollbackConfig(
+  selectedContainerMeta: Readonly<Ref<Record<string, unknown> | undefined>>,
+) {
+  return computed(() => {
+    const labels = selectedContainerMeta.value?.labels;
     const enabledRaw = getPreferredLabelString(labels, 'dd.rollback.auto', 'wud.rollback.auto');
     const enabled = parseBooleanLabelValue(enabledRaw);
     const windowRaw = getPreferredLabelString(labels, 'dd.rollback.window', 'wud.rollback.window');
@@ -241,9 +255,14 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
       intervalLabel: `${intervalMs}ms`,
     };
   });
+}
 
-  const selectedRuntimeDriftWarnings = computed<string[]>(() => {
-    if (!input.selectedContainerMeta.value) {
+function createSelectedRuntimeDriftWarnings(
+  selectedContainerMeta: Readonly<Ref<Record<string, unknown> | undefined>>,
+  selectedRuntimeOrigins: Readonly<Ref<RuntimeOrigins>>,
+) {
+  return computed<string[]>(() => {
+    if (!selectedContainerMeta.value) {
       return [];
     }
 
@@ -264,33 +283,39 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
       )}. Updates will preserve current values to avoid dropping explicit overrides, which can cause runtime drift.`,
     ];
   });
+}
 
-  const selectedComposePaths = computed<string[]>(() =>
-    getComposePathsFromMeta(input.selectedContainerMeta.value),
-  );
+function createSelectedComposePaths(
+  selectedContainerMeta: Readonly<Ref<Record<string, unknown> | undefined>>,
+) {
+  return computed<string[]>(() => getComposePathsFromMeta(selectedContainerMeta.value));
+}
 
-  function runtimeOriginLabel(origin: RuntimeOrigin): string {
-    if (origin === 'explicit') {
-      return 'Explicit';
-    }
-    if (origin === 'inherited') {
-      return 'Inherited';
-    }
-    return 'Unknown';
+function runtimeOriginLabel(origin: RuntimeOrigin): string {
+  if (origin === 'explicit') {
+    return 'Explicit';
   }
-
-  function runtimeOriginStyle(origin: RuntimeOrigin) {
-    if (origin === 'explicit') {
-      return { backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' };
-    }
-    if (origin === 'inherited') {
-      return { backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' };
-    }
-    return { backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' };
+  if (origin === 'inherited') {
+    return 'Inherited';
   }
+  return 'Unknown';
+}
 
-  const selectedImageMetadata = computed(() => {
-    const image = input.selectedContainerMeta.value?.image as Record<string, unknown> | undefined;
+function runtimeOriginStyle(origin: RuntimeOrigin) {
+  if (origin === 'explicit') {
+    return { backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' };
+  }
+  if (origin === 'inherited') {
+    return { backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' };
+  }
+  return { backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' };
+}
+
+function createSelectedImageMetadata(
+  selectedContainerMeta: Readonly<Ref<Record<string, unknown> | undefined>>,
+) {
+  return computed(() => {
+    const image = selectedContainerMeta.value?.image as Record<string, unknown> | undefined;
     const digest = image?.digest as Record<string, unknown> | undefined;
     const digestValue = digest?.value || digest?.repo;
     return {
@@ -300,16 +325,12 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
       created: typeof image?.created === 'string' ? image.created : undefined,
     };
   });
+}
 
-  const selectedSbomFormat = ref<'spdx-json' | 'cyclonedx-json'>('spdx-json');
-  const detailVulnerabilityResult = ref<Record<string, unknown> | null>(null);
-  const detailVulnerabilityLoading = ref(false);
-  const detailVulnerabilityError = ref<string | null>(null);
-  const detailSbomResult = ref<Record<string, unknown> | null>(null);
-  const detailSbomLoading = ref(false);
-  const detailSbomError = ref<string | null>(null);
-
-  const vulnerabilitySummary = computed(() => {
+function createVulnerabilitySummary(
+  detailVulnerabilityResult: Ref<Record<string, unknown> | null>,
+) {
+  return computed(() => {
     const summary = detailVulnerabilityResult.value?.summary as Record<string, number> | undefined;
     return {
       critical: summary?.critical ?? 0,
@@ -319,8 +340,20 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
       unknown: summary?.unknown ?? 0,
     };
   });
+}
 
-  const vulnerabilityTotal = computed(
+function createVulnerabilityTotal(
+  vulnerabilitySummary: Readonly<
+    Ref<{
+      critical: number;
+      high: number;
+      medium: number;
+      low: number;
+      unknown: number;
+    }>
+  >,
+) {
+  return computed(
     () =>
       vulnerabilitySummary.value.critical +
       vulnerabilitySummary.value.high +
@@ -328,73 +361,107 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
       vulnerabilitySummary.value.low +
       vulnerabilitySummary.value.unknown,
   );
+}
 
-  const vulnerabilityPreview = computed(() => {
+function createVulnerabilityPreview(
+  detailVulnerabilityResult: Ref<Record<string, unknown> | null>,
+) {
+  return computed(() => {
     const vulnerabilities = detailVulnerabilityResult.value?.vulnerabilities;
     if (!Array.isArray(vulnerabilities)) {
       return [];
     }
     return vulnerabilities.slice(0, 5);
   });
+}
 
-  const sbomDocument = computed(
-    () => detailSbomResult.value?.document as ApiSbomDocument | undefined,
-  );
-  const sbomGeneratedAt = computed(() => detailSbomResult.value?.generatedAt as string | undefined);
-  const sbomComponentCount = computed(() => detectSbomComponentCount(sbomDocument.value));
+function createSbomDocument(detailSbomResult: Ref<Record<string, unknown> | null>) {
+  return computed(() => detailSbomResult.value?.document as ApiSbomDocument | undefined);
+}
 
-  function severityStyle(severity: string) {
-    if (severity === 'CRITICAL') {
-      return { bg: 'var(--dd-danger-muted)', text: 'var(--dd-danger)' };
-    }
-    if (severity === 'HIGH') {
-      return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' };
-    }
-    if (severity === 'MEDIUM') {
-      return { bg: 'var(--dd-caution-muted)', text: 'var(--dd-caution)' };
-    }
-    return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)' };
+function createSbomGeneratedAt(detailSbomResult: Ref<Record<string, unknown> | null>) {
+  return computed(() => detailSbomResult.value?.generatedAt as string | undefined);
+}
+
+function createSbomComponentCount(sbomDocument: Readonly<Ref<ApiSbomDocument | undefined>>) {
+  return computed(() => detectSbomComponentCount(sbomDocument.value));
+}
+
+function severityStyle(severity: string) {
+  if (severity === 'CRITICAL') {
+    return { bg: 'var(--dd-danger-muted)', text: 'var(--dd-danger)' };
   }
-
-  function getVulnerabilityPackage(vulnerability: ApiVulnerability): string {
-    return vulnerability?.packageName || vulnerability?.package || 'unknown';
+  if (severity === 'HIGH') {
+    return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' };
   }
+  if (severity === 'MEDIUM') {
+    return { bg: 'var(--dd-caution-muted)', text: 'var(--dd-caution)' };
+  }
+  return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)' };
+}
 
+function getVulnerabilityPackage(vulnerability: ApiVulnerability): string {
+  return vulnerability?.packageName || vulnerability?.package || 'unknown';
+}
+
+function resetVulnerabilityState(state: DetailSecurityState) {
+  state.detailVulnerabilityResult.value = null;
+  state.detailVulnerabilityError.value = null;
+}
+
+function resetSbomState(state: DetailSecurityState) {
+  state.detailSbomResult.value = null;
+  state.detailSbomError.value = null;
+}
+
+function resetSecurityDataState(state: DetailSecurityState) {
+  resetVulnerabilityState(state);
+  resetSbomState(state);
+}
+
+function createDetailSecurityActions(
+  input: UseContainerSecurityInput,
+  selectedSbomFormat: Readonly<Ref<'spdx-json' | 'cyclonedx-json'>>,
+  state: DetailSecurityState,
+) {
   async function loadDetailVulnerabilities() {
     const containerId = input.selectedContainerId.value;
     if (!containerId) {
-      detailVulnerabilityResult.value = null;
-      detailVulnerabilityError.value = null;
+      resetVulnerabilityState(state);
       return;
     }
-    detailVulnerabilityLoading.value = true;
-    detailVulnerabilityError.value = null;
+
+    state.detailVulnerabilityLoading.value = true;
+    state.detailVulnerabilityError.value = null;
     try {
-      detailVulnerabilityResult.value = await fetchContainerVulnerabilities(containerId);
+      state.detailVulnerabilityResult.value = await fetchContainerVulnerabilities(containerId);
     } catch (e: unknown) {
-      detailVulnerabilityResult.value = null;
-      detailVulnerabilityError.value = errorMessage(e, 'Failed to load vulnerabilities');
+      state.detailVulnerabilityResult.value = null;
+      state.detailVulnerabilityError.value = errorMessage(e, 'Failed to load vulnerabilities');
     } finally {
-      detailVulnerabilityLoading.value = false;
+      state.detailVulnerabilityLoading.value = false;
     }
   }
 
   async function loadDetailSbom() {
     const containerId = input.selectedContainerId.value;
     if (!containerId) {
-      detailSbomResult.value = null;
-      detailSbomError.value = null;
+      resetSbomState(state);
       return;
     }
-    detailSbomLoading.value = true;
-    detailSbomError.value = null;
+
+    state.detailSbomLoading.value = true;
+    state.detailSbomError.value = null;
     try {
-      detailSbomResult.value = await fetchContainerSbom(containerId, selectedSbomFormat.value);
+      state.detailSbomResult.value = await fetchContainerSbom(
+        containerId,
+        selectedSbomFormat.value,
+      );
     } catch (e: unknown) {
-      detailSbomResult.value = null;
-      detailSbomError.value = errorMessage(e, 'Failed to load SBOM');
+      state.detailSbomResult.value = null;
+      state.detailSbomError.value = errorMessage(e, 'Failed to load SBOM');
     } finally {
-      detailSbomLoading.value = false;
+      state.detailSbomLoading.value = false;
     }
   }
 
@@ -402,17 +469,29 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
     await Promise.all([loadDetailVulnerabilities(), loadDetailSbom()]);
   }
 
+  return {
+    loadDetailSbom,
+    loadDetailSecurityData,
+  };
+}
+
+function setupDetailSecurityWatchers(
+  input: UseContainerSecurityInput,
+  selectedSbomFormat: Readonly<Ref<'spdx-json' | 'cyclonedx-json'>>,
+  state: DetailSecurityState,
+  actions: {
+    loadDetailSbom: () => Promise<void>;
+    loadDetailSecurityData: () => Promise<void>;
+  },
+) {
   watch(
     () => input.selectedContainerId.value,
     (containerId) => {
       if (!containerId) {
-        detailVulnerabilityResult.value = null;
-        detailVulnerabilityError.value = null;
-        detailSbomResult.value = null;
-        detailSbomError.value = null;
+        resetSecurityDataState(state);
         return;
       }
-      void loadDetailSecurityData();
+      void actions.loadDetailSecurityData();
     },
     { immediate: true },
   );
@@ -423,9 +502,66 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
       if (!input.selectedContainerId.value) {
         return;
       }
-      void loadDetailSbom();
+      void actions.loadDetailSbom();
     },
   );
+}
+
+const lifecycleHookTemplateVariables = [
+  { name: 'DD_CONTAINER_NAME', description: 'Container name' },
+  { name: 'DD_CONTAINER_ID', description: 'Container ID' },
+  { name: 'DD_IMAGE_NAME', description: 'Image name (without registry)' },
+  { name: 'DD_IMAGE_TAG', description: 'Current image tag' },
+  { name: 'DD_UPDATE_KIND', description: 'Update type (tag or digest)' },
+  { name: 'DD_UPDATE_FROM', description: 'Current tag or digest' },
+  { name: 'DD_UPDATE_TO', description: 'New tag or digest' },
+];
+
+export function useContainerSecurity(input: UseContainerSecurityInput) {
+  const selectedRuntimeOrigins = createSelectedRuntimeOrigins(input.selectedContainerMeta);
+  const selectedLifecycleHooks = createSelectedLifecycleHooks(input.selectedContainerMeta);
+  const selectedAutoRollbackConfig = createSelectedAutoRollbackConfig(input.selectedContainerMeta);
+  const selectedRuntimeDriftWarnings = createSelectedRuntimeDriftWarnings(
+    input.selectedContainerMeta,
+    selectedRuntimeOrigins,
+  );
+  const selectedComposePaths = createSelectedComposePaths(input.selectedContainerMeta);
+  const selectedImageMetadata = createSelectedImageMetadata(input.selectedContainerMeta);
+
+  const selectedSbomFormat = ref<'spdx-json' | 'cyclonedx-json'>('spdx-json');
+  const detailVulnerabilityResult = ref<Record<string, unknown> | null>(null);
+  const detailVulnerabilityLoading = ref(false);
+  const detailVulnerabilityError = ref<string | null>(null);
+  const detailSbomResult = ref<Record<string, unknown> | null>(null);
+  const detailSbomLoading = ref(false);
+  const detailSbomError = ref<string | null>(null);
+
+  const detailSecurityState: DetailSecurityState = {
+    detailVulnerabilityResult,
+    detailVulnerabilityLoading,
+    detailVulnerabilityError,
+    detailSbomResult,
+    detailSbomLoading,
+    detailSbomError,
+  };
+
+  const vulnerabilitySummary = createVulnerabilitySummary(detailVulnerabilityResult);
+  const vulnerabilityTotal = createVulnerabilityTotal(vulnerabilitySummary);
+  const vulnerabilityPreview = createVulnerabilityPreview(detailVulnerabilityResult);
+
+  const sbomDocument = createSbomDocument(detailSbomResult);
+  const sbomGeneratedAt = createSbomGeneratedAt(detailSbomResult);
+  const sbomComponentCount = createSbomComponentCount(sbomDocument);
+
+  const { loadDetailSbom, loadDetailSecurityData } = createDetailSecurityActions(
+    input,
+    selectedSbomFormat,
+    detailSecurityState,
+  );
+  setupDetailSecurityWatchers(input, selectedSbomFormat, detailSecurityState, {
+    loadDetailSbom,
+    loadDetailSecurityData,
+  });
 
   return {
     detailSbomError,

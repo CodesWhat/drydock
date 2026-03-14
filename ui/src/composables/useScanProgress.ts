@@ -66,40 +66,78 @@ interface ScanAllContainersOptions {
   runtimeLoading: boolean;
 }
 
-async function scanAllContainers(opts: ScanAllContainersOptions) {
-  if (scanning.value) return;
-  if (opts.runtimeLoading || !opts.scannerReady) return;
+function canStartScan(opts: ScanAllContainersOptions) {
+  if (scanning.value) {
+    return false;
+  }
+  if (opts.runtimeLoading || !opts.scannerReady) {
+    return false;
+  }
+  return true;
+}
 
+function startScanSession() {
   scanAbortController = new AbortController();
   const { signal } = scanAbortController;
   scanning.value = true;
   scanProgress.value = { done: 0, total: 0 };
+  return signal;
+}
+
+function endScanSession() {
+  scanAbortController = null;
+  scanning.value = false;
+}
+
+function throwUnlessAbortError(error: unknown) {
+  if (!isAbortError(error)) {
+    throw error;
+  }
+}
+
+async function processSingleContainer(containerId: string, signal: AbortSignal) {
   try {
-    const containers = await getAllContainers(signal);
-    scanProgress.value.total = containers.length;
-
-    for (const container of containers) {
-      if (signal.aborted) break;
-
-      try {
-        await scanContainerWithRetry(container.id, signal);
-      } catch {
-        if (signal.aborted) {
-          break;
-        }
-        // Individual scan failures shouldn't stop the batch
-      }
-
-      if (signal.aborted) break;
-      scanProgress.value.done++;
+    await scanContainerWithRetry(containerId, signal);
+  } catch {
+    if (signal.aborted) {
+      return false;
     }
+    // Individual scan failures shouldn't stop the batch
+  }
+
+  return !signal.aborted;
+}
+
+async function processContainerBatch(signal: AbortSignal) {
+  const containers = await getAllContainers(signal);
+  scanProgress.value.total = containers.length;
+
+  for (const container of containers) {
+    if (signal.aborted) {
+      break;
+    }
+
+    const shouldCountAsDone = await processSingleContainer(container.id, signal);
+    if (!shouldCountAsDone) {
+      break;
+    }
+
+    scanProgress.value.done++;
+  }
+}
+
+async function scanAllContainers(opts: ScanAllContainersOptions) {
+  if (!canStartScan(opts)) {
+    return;
+  }
+
+  const signal = startScanSession();
+  try {
+    await processContainerBatch(signal);
   } catch (error: unknown) {
-    if (!isAbortError(error)) {
-      throw error;
-    }
+    throwUnlessAbortError(error);
   } finally {
-    scanAbortController = null;
-    scanning.value = false;
+    endScanSession();
   }
 }
 

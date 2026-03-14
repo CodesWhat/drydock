@@ -186,6 +186,12 @@ export class AgentClient {
     // The container coming from Agent should already be normalized and have results
     // We rely on the Agent to perform Registry checks if configured
 
+    // Strip redaction metadata (e.g. `sensitive`) that the agent's event
+    // emitter may attach — the controller's Joi schema does not allow it.
+    if (container.details?.env && Array.isArray(container.details.env)) {
+      container.details.env = container.details.env.map(({ key, value }) => ({ key, value }));
+    }
+
     // Save to store logic with Change Detection
     const existing = storeContainer.getContainer(container.id);
     const containerReport = {
@@ -308,31 +314,54 @@ export class AgentClient {
       });
   }
 
+  private buildRuntimeInfoFromAck(data: any): AgentClientRuntimeInfo {
+    return {
+      ...this.info,
+      version: typeof data?.version === 'string' ? data.version : this.info.version,
+      os: typeof data?.os === 'string' ? data.os : this.info.os,
+      arch: typeof data?.arch === 'string' ? data.arch : this.info.arch,
+      cpus: Number.isFinite(data?.cpus) ? Number(data.cpus) : this.info.cpus,
+      memoryGb: Number.isFinite(data?.memoryGb) ? Number(data.memoryGb) : this.info.memoryGb,
+      uptimeSeconds: Number.isFinite(data?.uptimeSeconds)
+        ? Number(data.uptimeSeconds)
+        : this.info.uptimeSeconds,
+      lastSeen:
+        typeof data?.lastSeen === 'string' && data.lastSeen
+          ? data.lastSeen
+          : new Date().toISOString(),
+    };
+  }
+
+  private handleAckEvent(data: any) {
+    this.info = this.buildRuntimeInfoFromAck(data);
+    this.log.info(`Agent ${this.name} connected (version: ${data.version})`);
+    void this.handshake().catch((e: any) => {
+      this.log.error(`Handshake failed after dd:ack: ${e.message}`);
+    });
+  }
+
+  private async handleContainerChangeEvent(data: any) {
+    await this.processContainer(data as Container);
+  }
+
+  private handleContainerRemovedEvent(data: any) {
+    storeContainer.deleteContainer(data.id);
+  }
+
   async handleEvent(eventName: string, data: any) {
-    if (eventName === 'dd:ack') {
-      this.info = {
-        ...this.info,
-        version: typeof data?.version === 'string' ? data.version : this.info.version,
-        os: typeof data?.os === 'string' ? data.os : this.info.os,
-        arch: typeof data?.arch === 'string' ? data.arch : this.info.arch,
-        cpus: Number.isFinite(data?.cpus) ? Number(data.cpus) : this.info.cpus,
-        memoryGb: Number.isFinite(data?.memoryGb) ? Number(data.memoryGb) : this.info.memoryGb,
-        uptimeSeconds: Number.isFinite(data?.uptimeSeconds)
-          ? Number(data.uptimeSeconds)
-          : this.info.uptimeSeconds,
-        lastSeen:
-          typeof data?.lastSeen === 'string' && data.lastSeen
-            ? data.lastSeen
-            : new Date().toISOString(),
-      };
-      this.log.info(`Agent ${this.name} connected (version: ${data.version})`);
-      void this.handshake().catch((e: any) => {
-        this.log.error(`Handshake failed after dd:ack: ${e.message}`);
-      });
-    } else if (eventName === 'dd:container-added' || eventName === 'dd:container-updated') {
-      await this.processContainer(data as Container);
-    } else if (eventName === 'dd:container-removed') {
-      storeContainer.deleteContainer(data.id);
+    switch (eventName) {
+      case 'dd:ack':
+        this.handleAckEvent(data);
+        return;
+      case 'dd:container-added':
+      case 'dd:container-updated':
+        await this.handleContainerChangeEvent(data);
+        return;
+      case 'dd:container-removed':
+        this.handleContainerRemovedEvent(data);
+        return;
+      default:
+        return;
     }
   }
 

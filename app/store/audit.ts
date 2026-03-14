@@ -13,6 +13,15 @@ type AuditCollectionEntry = {
   timestampMs?: number;
 };
 
+type GetAuditEntriesQuery = {
+  action?: string;
+  container?: string;
+  from?: string;
+  to?: string;
+  skip?: number;
+  limit?: number;
+};
+
 function toTimestampMs(timestamp: string): number {
   const parsed = Date.parse(timestamp);
   return Number.isNaN(parsed) ? 0 : parsed;
@@ -37,6 +46,94 @@ function parseQueryTimestamp(value?: string): number | undefined {
     return undefined;
   }
   return Date.parse(value);
+}
+
+function hasInvalidDateRange(fromDate?: number, toDate?: number): boolean {
+  return Number.isNaN(fromDate) || Number.isNaN(toDate);
+}
+
+function buildCollectionQuery(query: GetAuditEntriesQuery): Record<string, string> {
+  const collectionQuery: Record<string, string> = {};
+  if (query.action) {
+    collectionQuery['data.action'] = query.action;
+  }
+  if (query.container) {
+    collectionQuery['data.containerName'] = query.container;
+  }
+  return collectionQuery;
+}
+
+function buildTimestampRangeQuery(
+  fromDate?: number,
+  toDate?: number,
+): { $gte?: number; $lte?: number } | undefined {
+  if (fromDate === undefined && toDate === undefined) {
+    return undefined;
+  }
+
+  const timestampRangeQuery: { $gte?: number; $lte?: number } = {};
+  if (fromDate !== undefined) {
+    timestampRangeQuery.$gte = fromDate;
+  }
+  if (toDate !== undefined) {
+    timestampRangeQuery.$lte = toDate;
+  }
+
+  return timestampRangeQuery;
+}
+
+function getChainedAuditEntries(
+  collectionQuery: Record<string, string>,
+  fromDate?: number,
+  toDate?: number,
+): AuditCollectionEntry[] | undefined {
+  if (typeof auditCollection?.chain !== 'function') {
+    return undefined;
+  }
+
+  let chainedResults = auditCollection.chain().find(collectionQuery);
+  const timestampRangeQuery = buildTimestampRangeQuery(fromDate, toDate);
+  if (timestampRangeQuery) {
+    chainedResults = chainedResults.find({ timestampMs: timestampRangeQuery });
+  }
+
+  if (
+    typeof chainedResults.simplesort !== 'function' ||
+    typeof chainedResults.data !== 'function'
+  ) {
+    return undefined;
+  }
+
+  return chainedResults.simplesort('timestampMs', true).data() as AuditCollectionEntry[];
+}
+
+function applyDateFilters(
+  entries: AuditCollectionEntry[],
+  fromDate?: number,
+  toDate?: number,
+): AuditCollectionEntry[] {
+  return entries.filter((entry) => {
+    const timestampMs = ensureTimestampMs(entry);
+    if (fromDate !== undefined && timestampMs < fromDate) {
+      return false;
+    }
+    if (toDate !== undefined && timestampMs > toDate) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function getFallbackAuditEntries(
+  collectionQuery: Record<string, string>,
+  fromDate?: number,
+  toDate?: number,
+): AuditCollectionEntry[] {
+  const entries = auditCollection.find(collectionQuery) as AuditCollectionEntry[];
+  const filteredEntries = applyDateFilters(entries, fromDate, toDate);
+
+  filteredEntries.sort((a, b) => ensureTimestampMs(b) - ensureTimestampMs(a));
+  return filteredEntries;
 }
 
 function paginateAuditEntries(
@@ -106,70 +203,24 @@ export function insertAudit(entry: AuditEntry): AuditEntry {
  * Get audit entries with optional filtering and pagination.
  * @param query
  */
-export function getAuditEntries(
-  query: {
-    action?: string;
-    container?: string;
-    from?: string;
-    to?: string;
-    skip?: number;
-    limit?: number;
-  } = {},
-): { entries: AuditEntry[]; total: number } {
+export function getAuditEntries(query: GetAuditEntriesQuery = {}): {
+  entries: AuditEntry[];
+  total: number;
+} {
   if (!auditCollection) {
     return { entries: [], total: 0 };
   }
 
   const fromDate = parseQueryTimestamp(query.from);
   const toDate = parseQueryTimestamp(query.to);
-  if (Number.isNaN(fromDate) || Number.isNaN(toDate)) {
+  if (hasInvalidDateRange(fromDate, toDate)) {
     return { entries: [], total: 0 };
   }
 
-  const collectionQuery: Record<string, string> = {};
-  if (query.action) {
-    collectionQuery['data.action'] = query.action;
-  }
-  if (query.container) {
-    collectionQuery['data.containerName'] = query.container;
-  }
-
-  if (typeof auditCollection.chain === 'function') {
-    let chainedResults = auditCollection.chain().find(collectionQuery);
-
-    if (fromDate !== undefined || toDate !== undefined) {
-      const timestampRangeQuery: Record<string, number> = {};
-      if (fromDate !== undefined) {
-        timestampRangeQuery.$gte = fromDate;
-      }
-      if (toDate !== undefined) {
-        timestampRangeQuery.$lte = toDate;
-      }
-      chainedResults = chainedResults.find({ timestampMs: timestampRangeQuery });
-    }
-
-    if (
-      typeof chainedResults.simplesort === 'function' &&
-      typeof chainedResults.data === 'function'
-    ) {
-      const results = chainedResults
-        .simplesort('timestampMs', true)
-        .data() as AuditCollectionEntry[];
-      return paginateAuditEntries(results, query.skip || 0, query.limit || 50);
-    }
-  }
-
-  let results = auditCollection.find(collectionQuery) as AuditCollectionEntry[];
-  if (fromDate !== undefined) {
-    results = results.filter((entry) => ensureTimestampMs(entry) >= fromDate);
-  }
-  if (toDate !== undefined) {
-    results = results.filter((entry) => ensureTimestampMs(entry) <= toDate);
-  }
-
-  // Sort newest first.
-  results.sort((a, b) => ensureTimestampMs(b) - ensureTimestampMs(a));
-
+  const collectionQuery = buildCollectionQuery(query);
+  const results =
+    getChainedAuditEntries(collectionQuery, fromDate, toDate) ??
+    getFallbackAuditEntries(collectionQuery, fromDate, toDate);
   return paginateAuditEntries(results, query.skip || 0, query.limit || 50);
 }
 
