@@ -63,6 +63,13 @@ export class AgentClient {
       throw new Error(`Invalid agent URL protocol: ${parsed.protocol}`);
     }
     this.baseUrl = parsed.origin;
+    const hasSecretConfigured =
+      typeof this.config.secret === 'string' && this.config.secret.trim().length > 0;
+    if (parsed.protocol === 'http:' && hasSecretConfigured) {
+      this.log.warn(
+        `Agent ${this.name} is configured with a secret over insecure HTTP (${this.baseUrl}). Configure HTTPS (certfile/cafile) to protect X-Dd-Agent-Secret.`,
+      );
+    }
 
     this.axiosOptions = {
       headers: {

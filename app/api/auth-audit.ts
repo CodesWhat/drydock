@@ -1,3 +1,4 @@
+import { sanitizeLogParam } from '../log/sanitize.js';
 import { recordAuditEvent } from './audit-events.js';
 import type { AuthRequest } from './auth-types.js';
 
@@ -19,6 +20,6 @@ export function recordLoginAuditEvent(
     action: 'auth-login',
     status,
     containerName: 'authentication',
-    details: `${details}; user=${auditUser}`,
+    details: `${details}; user=${sanitizeLogParam(auditUser)}`,
   });
 }

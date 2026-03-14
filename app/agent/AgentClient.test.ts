@@ -162,6 +162,18 @@ describe('AgentClient', () => {
           }),
       ).toThrowError('Invalid agent URL protocol: httpx:');
     });
+
+    test('should warn when secret is configured over plaintext http', () => {
+      const c = new AgentClient('a', {
+        host: 'myhost',
+        port: 4000,
+        secret: 's',
+      });
+
+      expect(c.log.warn).toHaveBeenCalledWith(
+        'Agent a is configured with a secret over insecure HTTP (http://myhost:4000). Configure HTTPS (certfile/cafile) to protect X-Dd-Agent-Secret.',
+      );
+    });
   });
 
   describe('init', () => {
