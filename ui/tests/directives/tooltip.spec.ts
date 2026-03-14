@@ -5,163 +5,137 @@ function binding(value: unknown): DirectiveBinding<any> {
   return { value } as DirectiveBinding<any>;
 }
 
-function createAnchor(rect: Partial<DOMRect> = {}): HTMLElement {
+function createAnchor(): HTMLElement {
   const el = document.createElement('button');
-  Object.defineProperty(el, 'getBoundingClientRect', {
-    value: () =>
-      ({
-        left: 100,
-        top: 100,
-        width: 40,
-        height: 20,
-        bottom: 120,
-        right: 140,
-        x: 100,
-        y: 100,
-        toJSON: () => ({}),
-        ...rect,
-      }) as DOMRect,
-  });
   document.body.appendChild(el);
   return el;
 }
 
 describe('tooltip directive', () => {
   beforeEach(() => {
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      cb(0);
-      return 1;
-    });
     vi.useFakeTimers();
   });
 
   afterEach(() => {
     document.body.innerHTML = '';
     vi.useRealTimers();
-    vi.unstubAllGlobals();
   });
 
-  it('shows and hides an immediate tooltip', () => {
+  it('shows and hides an immediate tooltip via classes and attributes', () => {
     const el = createAnchor();
     tooltip.mounted?.(el, binding('Hello'));
 
-    el.dispatchEvent(new Event('mouseenter'));
+    expect(el.classList.contains('dd-tooltip-anchor')).toBe(true);
+    expect(el.getAttribute('data-dd-tooltip')).toBe('Hello');
 
-    const tip = document.querySelector('[role="tooltip"]') as HTMLElement | null;
-    expect(tip).not.toBeNull();
-    expect(tip?.textContent).toBe('Hello');
+    el.dispatchEvent(new Event('mouseenter'));
+    expect(el.classList.contains('dd-tooltip-visible')).toBe(true);
 
     el.dispatchEvent(new Event('mouseleave'));
-    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    expect(el.classList.contains('dd-tooltip-visible')).toBe(false);
+
+    tooltip.beforeUnmount?.(el);
+    expect(el.classList.contains('dd-tooltip-anchor')).toBe(false);
+    expect(el.hasAttribute('data-dd-tooltip')).toBe(false);
   });
 
-  it('clamps horizontal position when tooltip would overflow viewport', () => {
-    const originalInnerWidth = window.innerWidth;
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      value: 100,
-    });
-
-    const el = createAnchor({ left: 90, width: 20, right: 110 });
-    const originalCreateElement = document.createElement.bind(document);
-    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
-      const created = originalCreateElement(tagName);
-      if (tagName === 'div') {
-        Object.defineProperty(created, 'getBoundingClientRect', {
-          value: () =>
-            ({
-              left: 0,
-              top: 0,
-              width: 80,
-              height: 20,
-              bottom: 20,
-              right: 80,
-              x: 0,
-              y: 0,
-              toJSON: () => ({}),
-            }) as DOMRect,
-        });
-      }
-      return created;
-    });
-
-    tooltip.mounted?.(el, binding('Clamp me'));
-    el.dispatchEvent(new Event('mouseenter'));
-
-    const tip = document.querySelector('[role="tooltip"]') as HTMLElement | null;
-    expect(tip).not.toBeNull();
-    expect(tip?.style.left).toBe('16px');
-
-    createElementSpy.mockRestore();
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      value: originalInnerWidth,
-    });
-  });
-
-  it('runs requestAnimationFrame reveal callback to finalize tooltip fade-in', () => {
-    const rafCallbacks: FrameRequestCallback[] = [];
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      rafCallbacks.push(cb);
-      return 1;
-    });
-
-    const el = createAnchor();
-    tooltip.mounted?.(el, binding('RAF'));
-    el.dispatchEvent(new Event('mouseenter'));
-
-    const tip = document.querySelector('[role="tooltip"]') as HTMLElement | null;
-    expect(tip).not.toBeNull();
-    expect(tip?.style.opacity).toBe('0');
-    expect(rafCallbacks).toHaveLength(1);
-
-    rafCallbacks[0](16);
-    expect(tip?.style.opacity).toBe('1');
-  });
-
-  it('supports delayed tooltips and cancels pending reveal on hide', () => {
+  it('supports delayed tooltips and clears pending timers on repeated show/hide', () => {
     const el = createAnchor();
     tooltip.mounted?.(el, binding({ value: 'Delayed', showDelay: 100 }));
 
     el.dispatchEvent(new Event('mouseenter'));
-    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    el.dispatchEvent(new Event('mouseenter')); // clear prior timer path
+    expect(el.classList.contains('dd-tooltip-visible')).toBe(false);
 
-    el.dispatchEvent(new Event('mouseleave'));
-    vi.advanceTimersByTime(120);
-    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    vi.advanceTimersByTime(99);
+    expect(el.classList.contains('dd-tooltip-visible')).toBe(false);
+
+    el.dispatchEvent(new Event('mouseleave')); // clear pending timer in hide()
+    vi.advanceTimersByTime(10);
+    expect(el.classList.contains('dd-tooltip-visible')).toBe(false);
+
+    el.dispatchEvent(new Event('mouseenter'));
+    vi.advanceTimersByTime(100);
+    expect(el.classList.contains('dd-tooltip-visible')).toBe(true);
   });
 
-  it('updates an existing tooltip binding and binds on updated when state is missing', () => {
-    const el = createAnchor({ top: 0, left: 0, width: 20, height: 10, bottom: 10, right: 20 });
+  it('updates existing bindings and binds from updated when state is missing', () => {
+    const el = createAnchor();
+
     tooltip.updated?.(el, binding('First'));
+    expect(el.getAttribute('data-dd-tooltip')).toBe('First');
 
     el.dispatchEvent(new Event('mouseenter'));
-    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('First');
+    expect(el.classList.contains('dd-tooltip-visible')).toBe(true);
 
-    tooltip.updated?.(el, binding({ value: 'Second', showDelay: 0 }));
+    tooltip.updated?.(el, binding({ value: 'Second', showDelay: 50 }));
     el.dispatchEvent(new Event('mouseleave'));
     el.dispatchEvent(new Event('mouseenter'));
-    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Second');
+    vi.advanceTimersByTime(49);
+    expect(el.classList.contains('dd-tooltip-visible')).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(el.classList.contains('dd-tooltip-visible')).toBe(true);
+    expect(el.getAttribute('data-dd-tooltip')).toBe('Second');
 
-    tooltip.beforeUnmount?.(el);
-    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    tooltip.updated?.(el, binding(''));
+    expect(el.classList.contains('dd-tooltip-visible')).toBe(false);
+    expect(el.hasAttribute('data-dd-tooltip')).toBe(false);
   });
 
-  it('handles empty values and unbind without prior bind', () => {
+  it('handles empty/object bindings and unbind without prior bind', () => {
     const el = createAnchor();
     tooltip.mounted?.(el, binding(''));
     el.dispatchEvent(new Event('mouseenter'));
-    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    expect(el.classList.contains('dd-tooltip-visible')).toBe(false);
+
+    const objectBindingEl = createAnchor();
+    tooltip.mounted?.(objectBindingEl, binding({}));
+    objectBindingEl.dispatchEvent(new Event('focus'));
+    expect(objectBindingEl.classList.contains('dd-tooltip-visible')).toBe(false);
 
     const fresh = createAnchor();
     expect(() => tooltip.beforeUnmount?.(fresh)).not.toThrow();
   });
 
-  it('handles object bindings with missing value and delay defaults', () => {
+  it('restores original title when unmounted', () => {
     const el = createAnchor();
-    tooltip.mounted?.(el, binding({}));
-    el.dispatchEvent(new Event('mouseenter'));
+    el.setAttribute('title', 'Native title');
+    tooltip.mounted?.(el, binding('Custom title'));
+    expect(el.getAttribute('title')).toBeNull();
 
-    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    tooltip.beforeUnmount?.(el);
+    expect(el.getAttribute('title')).toBe('Native title');
+  });
+
+  it('leaves title absent when none existed before mount', () => {
+    const el = createAnchor();
+    tooltip.mounted?.(el, binding('No native title'));
+
+    tooltip.beforeUnmount?.(el);
+    expect(el.hasAttribute('title')).toBe(false);
+  });
+
+  it('handles inconsistent title APIs where hasAttribute is true but getAttribute is null', () => {
+    const el = createAnchor();
+    const hasAttributeSpy = vi
+      .spyOn(el, 'hasAttribute')
+      .mockImplementation((name) =>
+        name === 'title' ? true : HTMLElement.prototype.hasAttribute.call(el, name),
+      );
+    const getAttributeSpy = vi
+      .spyOn(el, 'getAttribute')
+      .mockImplementation((name) =>
+        name === 'title' ? null : HTMLElement.prototype.getAttribute.call(el, name),
+      );
+
+    try {
+      tooltip.mounted?.(el, binding('Edge case'));
+      tooltip.beforeUnmount?.(el);
+    } finally {
+      hasAttributeSpy.mockRestore();
+      getAttributeSpy.mockRestore();
+    }
+
+    expect(el.classList.contains('dd-tooltip-anchor')).toBe(false);
   });
 });

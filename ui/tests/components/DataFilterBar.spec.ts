@@ -200,9 +200,11 @@ describe('DataFilterBar', () => {
       const filterButton = w.find('button[aria-label="Toggle filters"]');
       const filterControl = filterButton.element.parentElement as HTMLElement | null;
       expect(filterControl).not.toBeNull();
+      expect(filterControl?.getAttribute('data-dd-tooltip')).toBe('Filters');
       filterControl?.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
-      const tip = document.body.querySelector('[role="tooltip"]');
-      expect(tip?.textContent).toBe('Filters');
+      expect(filterControl?.classList.contains('dd-tooltip-visible')).toBe(true);
+      filterControl?.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false }));
+      expect(filterControl?.classList.contains('dd-tooltip-visible')).toBe(false);
       w.unmount();
     });
 
@@ -212,9 +214,11 @@ describe('DataFilterBar', () => {
         .findAll('button')
         .find((b) => b.attributes('aria-label') === 'Cards view');
       expect(cardsButton).toBeDefined();
+      expect(cardsButton?.attributes('data-dd-tooltip')).toBe('Cards view');
       await cardsButton?.trigger('mouseenter');
-      const tip = document.body.querySelector('[role="tooltip"]');
-      expect(tip?.textContent).toBe('Cards view');
+      expect(cardsButton?.classes()).toContain('dd-tooltip-visible');
+      await cardsButton?.trigger('mouseleave');
+      expect(cardsButton?.classes()).not.toContain('dd-tooltip-visible');
       w.unmount();
     });
   });

@@ -51,6 +51,27 @@ async function importMain() {
 describe('main bootstrap', {
   timeout: 15_000,
 }, () => {
+  const fontSizeClasses = [
+    'dd-font-size-80',
+    'dd-font-size-85',
+    'dd-font-size-90',
+    'dd-font-size-95',
+    'dd-font-size-100',
+    'dd-font-size-105',
+    'dd-font-size-110',
+    'dd-font-size-115',
+    'dd-font-size-120',
+    'dd-font-size-125',
+    'dd-font-size-130',
+  ];
+  const radiusClasses = [
+    'dd-radius-none',
+    'dd-radius-sharp',
+    'dd-radius-modern',
+    'dd-radius-soft',
+    'dd-radius-round',
+  ];
+
   beforeEach(() => {
     vi.resetModules();
     mocks.createApp.mockClear();
@@ -64,6 +85,7 @@ describe('main bootstrap', {
     mocks.app.mount.mockClear();
     mocks.createApp.mockReturnValue(mocks.app as never);
     localStorage.clear();
+    document.documentElement.classList.remove(...fontSizeClasses, ...radiusClasses);
   });
 
   it('registers core components and disables iconify API when internetless mode is enabled', async () => {
@@ -111,26 +133,46 @@ describe('main bootstrap', {
   });
 
   it('applies persisted non-default font size before mount', async () => {
-    const setPropertySpy = vi.spyOn(document.documentElement.style, 'setProperty');
     mocks.getSettings.mockResolvedValueOnce({ internetlessMode: false });
     localStorage.setItem('dd-preferences', JSON.stringify({ appearance: { fontSize: 1.25 } }));
 
     await importMain();
 
-    expect(setPropertySpy).toHaveBeenCalledWith('--dd-font-size', '1.25');
-    setPropertySpy.mockRestore();
+    expect(document.documentElement.classList.contains('dd-font-size-125')).toBe(true);
+    expect(document.documentElement.classList.contains('dd-font-size-100')).toBe(false);
+  });
+
+  it('skips invalid persisted font size values', async () => {
+    vi.doMock('@/preferences/validators', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@/preferences/validators')>();
+      return {
+        ...actual,
+        isValidFontSize: vi.fn(() => false),
+      };
+    });
+
+    mocks.getSettings.mockResolvedValueOnce({ internetlessMode: false });
+    localStorage.setItem('dd-preferences', JSON.stringify({ appearance: { fontSize: 9 } }));
+
+    try {
+      await importMain();
+
+      const hasFontSizeClass = fontSizeClasses.some((name) =>
+        document.documentElement.classList.contains(name),
+      );
+      expect(hasFontSizeClass).toBe(false);
+    } finally {
+      vi.doUnmock('@/preferences/validators');
+    }
   });
 
   it('applies persisted non-sharp radius before mount', async () => {
-    const setPropertySpy = vi.spyOn(document.documentElement.style, 'setProperty');
     mocks.getSettings.mockResolvedValueOnce({ internetlessMode: false });
     localStorage.setItem('dd-preferences', JSON.stringify({ appearance: { radius: 'soft' } }));
 
     await importMain();
 
-    expect(setPropertySpy).toHaveBeenCalledWith('--dd-radius', '12px');
-    expect(setPropertySpy).toHaveBeenCalledWith('--dd-radius-sm', '6px');
-    expect(setPropertySpy).toHaveBeenCalledWith('--dd-radius-lg', '16px');
-    setPropertySpy.mockRestore();
+    expect(document.documentElement.classList.contains('dd-radius-soft')).toBe(true);
+    expect(document.documentElement.classList.contains('dd-radius-sharp')).toBe(false);
   });
 });

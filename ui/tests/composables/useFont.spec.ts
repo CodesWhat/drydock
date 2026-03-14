@@ -1,13 +1,21 @@
 import { setTestPreferences } from '../helpers/preferences';
 
 describe('useFont', () => {
+  const fontClasses = [
+    'dd-font-ibm-plex-mono',
+    'dd-font-jetbrains-mono',
+    'dd-font-source-code-pro',
+    'dd-font-inconsolata',
+    'dd-font-commit-mono',
+    'dd-font-comic-mono',
+  ];
+
   beforeEach(() => {
     localStorage.clear();
     vi.resetModules();
     // Clean up any font link tags from previous tests
     document.querySelectorAll('link[data-font]').forEach((el) => el.remove());
-    document.documentElement.style.removeProperty('--drydock-font');
-    document.documentElement.style.removeProperty('--font-mono');
+    document.documentElement.classList.remove(...fontClasses);
   });
 
   async function loadUseFont() {
@@ -68,30 +76,25 @@ describe('useFont', () => {
   });
 
   describe('applyFont', () => {
-    it('should set both global font CSS variables on init', async () => {
+    it('should set the default font class on init', async () => {
       await loadUseFont();
-      const drydockFont = document.documentElement.style.getPropertyValue('--drydock-font');
-      const monoFont = document.documentElement.style.getPropertyValue('--font-mono');
-      expect(drydockFont).toBe('"IBM Plex Mono", monospace');
-      expect(monoFont).toBe('"IBM Plex Mono", monospace');
+      expect(document.documentElement.classList.contains('dd-font-ibm-plex-mono')).toBe(true);
     });
 
-    it('should apply saved font to both CSS variables on init', async () => {
+    it('should apply saved font class on init', async () => {
       setTestPreferences({ font: { family: 'jetbrains-mono' } });
       await loadUseFont();
-      const drydockFont = document.documentElement.style.getPropertyValue('--drydock-font');
-      const monoFont = document.documentElement.style.getPropertyValue('--font-mono');
-      expect(drydockFont).toBe('"JetBrains Mono", monospace');
-      expect(monoFont).toBe('"JetBrains Mono", monospace');
+      expect(document.documentElement.classList.contains('dd-font-jetbrains-mono')).toBe(true);
+      expect(document.documentElement.classList.contains('dd-font-ibm-plex-mono')).toBe(false);
     });
 
-    it('should not set CSS variables for an unknown font id', async () => {
+    it('should not change classes for an unknown font id', async () => {
       const { applyFont } = (await import('@/composables/useFont')).useFont();
-      document.documentElement.style.removeProperty('--drydock-font');
-      document.documentElement.style.removeProperty('--font-mono');
+      document.documentElement.classList.remove(...fontClasses);
       applyFont('nonexistent-font' as any);
-      expect(document.documentElement.style.getPropertyValue('--drydock-font')).toBe('');
-      expect(document.documentElement.style.getPropertyValue('--font-mono')).toBe('');
+      expect(fontClasses.some((name) => document.documentElement.classList.contains(name))).toBe(
+        false,
+      );
     });
   });
 });

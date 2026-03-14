@@ -297,6 +297,46 @@ describe('DataTable', () => {
       document.dispatchEvent(new MouseEvent('mouseup'));
       await nextTick();
     });
+
+    it('toggles body resize class during drag without relying on inline body styles', async () => {
+      const resizeColumns = [
+        { key: 'name', label: 'Name', sortable: true },
+        { key: 'status', label: 'Status', sortable: true },
+      ];
+      const w = mount(DataTable, {
+        props: { columns: resizeColumns, rows, rowKey: 'id' },
+        global: {
+          stubs: { AppIcon: { template: '<span class="app-icon-stub" />' } },
+        },
+      });
+
+      const firstHeader = w.findAll('thead th')[0];
+      const resizeHandle = firstHeader.find('[role="separator"]');
+      expect(resizeHandle.exists()).toBe(true);
+
+      vi.spyOn(firstHeader.element, 'getBoundingClientRect').mockReturnValue({
+        width: 120,
+        height: 24,
+        top: 0,
+        left: 0,
+        right: 120,
+        bottom: 24,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      await resizeHandle.trigger('mousedown', { clientX: 100, button: 0 });
+      expect(document.body.classList.contains('dd-col-resizing')).toBe(true);
+
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 140 }));
+      await nextTick();
+      expect(firstHeader.attributes('width')).toBe('160');
+
+      document.dispatchEvent(new MouseEvent('mouseup'));
+      await nextTick();
+      expect(document.body.classList.contains('dd-col-resizing')).toBe(false);
+    });
   });
 
   describe('empty state', () => {
