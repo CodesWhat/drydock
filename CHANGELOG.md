@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **CSRF validation behind reverse proxies** — Same-origin mutation checks now honor `X-Forwarded-Proto` and `X-Forwarded-Host` when present before falling back to direct request protocol/host, preventing false `403 CSRF validation failed` responses in TLS-terminating proxy setups. ([#146](https://github.com/CodesWhat/drydock/issues/146))
+- **Hosts page missing env-var-configured watchers** — The Hosts page hardcoded a single "Local" entry and only added agent-based hosts. Watchers configured via `DD_WATCHER_*` environment variables (e.g. remote Docker hosts) were never displayed, even though their containers appeared correctly on the Containers page. The page now fetches all watchers from the API and displays each local watcher with its actual name and connection address. ([#151](https://github.com/CodesWhat/drydock/issues/151))
 
 ## [1.4.1]
 

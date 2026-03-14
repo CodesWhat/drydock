@@ -5,6 +5,7 @@ import { useViewMode } from '../preferences/useViewMode';
 import { getAgents } from '../services/agent';
 import { getAllContainers } from '../services/container';
 import { getServer } from '../services/server';
+import { getAllWatchers } from '../services/watcher';
 import { errorMessage } from '../utils/error';
 
 interface ServerEntry {
@@ -96,30 +97,55 @@ function countImagesByWatcher(containers: Record<string, unknown>[]): Record<str
   return counts;
 }
 
+function deriveWatcherHost(config: Record<string, unknown>): string {
+  if (typeof config.socket === 'string' && config.socket) {
+    return `unix://${config.socket}`;
+  }
+  const host = typeof config.host === 'string' ? config.host : '';
+  const port = typeof config.port === 'number' ? config.port : undefined;
+  const protocol = typeof config.protocol === 'string' ? config.protocol : '';
+  if (host) {
+    return port ? `${protocol || 'http'}://${host}:${port}` : host;
+  }
+  return 'unknown';
+}
+
+function capitalize(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 async function fetchServers() {
   loading.value = true;
   error.value = null;
   try {
-    const [serverData, agentsData, containersData] = await Promise.all([
+    const [, agentsData, containersData, watchersData] = await Promise.all([
       getServer(),
       getAgents(),
       getAllContainers(),
+      getAllWatchers(),
     ]);
     const safeContainers = containersData ?? [];
     const containerCounts = countContainersByWatcher(safeContainers);
     const imageCounts = countImagesByWatcher(safeContainers);
     const entries: ServerEntry[] = [];
 
-    const localCounts = containerCounts.local ?? { total: 0, running: 0, stopped: 0 };
-    entries.push({
-      id: 'local',
-      name: 'Local',
-      host: 'unix:///var/run/docker.sock',
-      status: 'connected',
-      containers: localCounts,
-      images: imageCounts.local ?? 0,
-      lastSeen: 'Just now',
-    });
+    const localWatchers = (watchersData ?? []).filter((w: Record<string, unknown>) => !w.agent);
+
+    for (const watcher of localWatchers) {
+      const name = String(watcher.name ?? 'unknown');
+      const config = (watcher.configuration ?? {}) as Record<string, unknown>;
+      const counts = containerCounts[name] ?? { total: 0, running: 0, stopped: 0 };
+
+      entries.push({
+        id: String(watcher.id ?? name),
+        name: capitalize(name),
+        host: deriveWatcherHost(config),
+        status: 'connected',
+        containers: counts,
+        images: imageCounts[name] ?? 0,
+        lastSeen: 'Just now',
+      });
+    }
 
     for (const agent of agentsData) {
       const agentConnected = !!agent.connected;
