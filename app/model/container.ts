@@ -53,6 +53,8 @@ export interface ContainerUpdatePolicy {
   skipTags?: string[];
   skipDigests?: string[];
   snoozeUntil?: string;
+  maturityMode?: 'all' | 'mature';
+  maturityMinAgeDays?: number;
 }
 
 export interface ContainerSecurityState {
@@ -186,6 +188,8 @@ const schema = joi.object({
     skipTags: joi.array().items(joi.string()),
     skipDigests: joi.array().items(joi.string()),
     snoozeUntil: joi.string().isoDate(),
+    maturityMode: joi.string().valid('all', 'mature'),
+    maturityMinAgeDays: joi.number().integer().min(1).max(365),
   }),
   security: joi.object({
     scan: containerSecurityScanSchema,
@@ -430,6 +434,23 @@ function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKin
   if (updatePolicy.snoozeUntil) {
     const snoozeUntilDate = new Date(updatePolicy.snoozeUntil);
     if (!Number.isNaN(snoozeUntilDate.getTime()) && snoozeUntilDate.getTime() > Date.now()) {
+      return true;
+    }
+  }
+
+  if (updatePolicy.maturityMode === 'mature') {
+    const updateDetectedAtMs = Date.parse(container.updateDetectedAt || '');
+    const maturityMinAgeDays =
+      typeof updatePolicy.maturityMinAgeDays === 'number' &&
+      Number.isInteger(updatePolicy.maturityMinAgeDays) &&
+      updatePolicy.maturityMinAgeDays >= 1
+        ? updatePolicy.maturityMinAgeDays
+        : 7;
+    const maturityMinAgeMs = maturityMinAgeDays * 24 * 60 * 60 * 1000;
+    if (
+      !Number.isFinite(updateDetectedAtMs) ||
+      Date.now() - updateDetectedAtMs < maturityMinAgeMs
+    ) {
       return true;
     }
   }

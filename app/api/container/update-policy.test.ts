@@ -166,6 +166,94 @@ describe('api/container/update-policy', () => {
     });
   });
 
+  describe('maturity policy actions', () => {
+    test('sets mature-only policy with default threshold when minAgeDays is omitted', () => {
+      const harness = createHarness({
+        updatePolicy: {
+          skipTags: ['2.0.0'],
+        },
+      });
+
+      const res = callPatchContainerUpdatePolicy(harness.handlers, {
+        action: 'set-maturity-policy',
+        mode: 'mature',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(getUpdatedPolicy(harness.storeContainer)).toEqual({
+        skipTags: ['2.0.0'],
+        maturityMode: 'mature',
+        maturityMinAgeDays: 7,
+      });
+    });
+
+    test('sets maturity policy mode and threshold', () => {
+      const harness = createHarness();
+
+      const res = callPatchContainerUpdatePolicy(harness.handlers, {
+        action: 'set-maturity-policy',
+        mode: 'all',
+        minAgeDays: 3,
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(getUpdatedPolicy(harness.storeContainer)).toEqual({
+        maturityMode: 'all',
+        maturityMinAgeDays: 3,
+      });
+    });
+
+    test('clears maturity policy fields while keeping other policy values', () => {
+      const harness = createHarness({
+        updatePolicy: {
+          skipTags: ['2.0.0'],
+          maturityMode: 'mature',
+          maturityMinAgeDays: 10,
+        },
+      });
+
+      const res = callPatchContainerUpdatePolicy(harness.handlers, {
+        action: 'clear-maturity-policy',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(getUpdatedPolicy(harness.storeContainer)).toEqual({
+        skipTags: ['2.0.0'],
+      });
+    });
+
+    test.each([
+      [
+        'mode is missing',
+        { action: 'set-maturity-policy' },
+        'Invalid maturity mode; expected "all" or "mature"',
+      ],
+      [
+        'mode is invalid',
+        { action: 'set-maturity-policy', mode: 'fresh' },
+        'Invalid maturity mode; expected "all" or "mature"',
+      ],
+      [
+        'minAgeDays is zero',
+        { action: 'set-maturity-policy', mode: 'mature', minAgeDays: 0 },
+        'Invalid maturity minAgeDays value',
+      ],
+      [
+        'minAgeDays is above max',
+        { action: 'set-maturity-policy', mode: 'mature', minAgeDays: 366 },
+        'Invalid maturity minAgeDays value',
+      ],
+    ])('returns 400 when %s', (_label, body, expectedError) => {
+      const harness = createHarness();
+
+      const res = callPatchContainerUpdatePolicy(harness.handlers, body);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: expectedError });
+      expect(harness.storeContainer.updateContainer).not.toHaveBeenCalled();
+    });
+  });
+
   describe('error handling', () => {
     test('returns a generic error when unexpected failures occur', () => {
       const harness = createHarness();

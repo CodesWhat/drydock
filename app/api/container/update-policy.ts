@@ -17,8 +17,16 @@ export interface UpdatePolicyHandlerDependencies {
 
 const INVALID_SNOOZE_UNTIL_ERROR = 'Invalid snoozeUntil date';
 const INVALID_SNOOZE_DAYS_ERROR = 'Invalid snooze days value';
+const INVALID_MATURITY_MODE_ERROR = 'Invalid maturity mode; expected "all" or "mature"';
+const INVALID_MATURITY_DAYS_ERROR = 'Invalid maturity minAgeDays value';
 const GENERIC_UPDATE_POLICY_ERROR = 'Failed to update container policy';
-const SAFE_CLIENT_ERRORS = new Set([INVALID_SNOOZE_UNTIL_ERROR, INVALID_SNOOZE_DAYS_ERROR]);
+const DEFAULT_MATURITY_MIN_AGE_DAYS = 7;
+const SAFE_CLIENT_ERRORS = new Set([
+  INVALID_SNOOZE_UNTIL_ERROR,
+  INVALID_SNOOZE_DAYS_ERROR,
+  INVALID_MATURITY_MODE_ERROR,
+  INVALID_MATURITY_DAYS_ERROR,
+]);
 
 type UpdatePolicyActionResult = { policy: ContainerUpdatePolicy } | { error: string };
 type UniqStringsFn = UpdatePolicyHandlerDependencies['uniqStrings'];
@@ -50,6 +58,20 @@ function normalizeUpdatePolicy(
     }
   }
 
+  if (updatePolicy.maturityMode === 'all' || updatePolicy.maturityMode === 'mature') {
+    normalizedPolicy.maturityMode = updatePolicy.maturityMode;
+  }
+
+  const maturityMinAgeDays = Number(updatePolicy.maturityMinAgeDays);
+  if (
+    Number.isFinite(maturityMinAgeDays) &&
+    Number.isInteger(maturityMinAgeDays) &&
+    maturityMinAgeDays >= 1 &&
+    maturityMinAgeDays <= 365
+  ) {
+    normalizedPolicy.maturityMinAgeDays = maturityMinAgeDays;
+  }
+
   return normalizedPolicy;
 }
 
@@ -79,6 +101,23 @@ function getSnoozeUntilFromActionPayload(payload: Record<string, unknown> = {}):
   }
   const snoozeUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
   return snoozeUntil.toISOString();
+}
+
+function getMaturityMinAgeDaysFromActionPayload(
+  payload: Record<string, unknown> = {},
+  fallbackDays: number = DEFAULT_MATURITY_MIN_AGE_DAYS,
+): number {
+  const rawValue = payload.minAgeDays ?? fallbackDays;
+  const minAgeDays = Number(rawValue);
+  if (
+    !Number.isFinite(minAgeDays) ||
+    !Number.isInteger(minAgeDays) ||
+    minAgeDays < 1 ||
+    minAgeDays > 365
+  ) {
+    throw new Error(INVALID_MATURITY_DAYS_ERROR);
+  }
+  return minAgeDays;
 }
 
 function applySkipCurrentAction(
@@ -160,6 +199,22 @@ function applyPolicyAction(
       return { policy: updatePolicy };
     case 'clear':
       return { policy: {} };
+    case 'set-maturity-policy': {
+      const mode = typeof body.mode === 'string' ? body.mode.trim().toLowerCase() : '';
+      if (mode !== 'all' && mode !== 'mature') {
+        throw new TypeError(INVALID_MATURITY_MODE_ERROR);
+      }
+      updatePolicy.maturityMode = mode;
+      updatePolicy.maturityMinAgeDays = getMaturityMinAgeDaysFromActionPayload(
+        body,
+        updatePolicy.maturityMinAgeDays ?? DEFAULT_MATURITY_MIN_AGE_DAYS,
+      );
+      return { policy: updatePolicy };
+    }
+    case 'clear-maturity-policy':
+      delete updatePolicy.maturityMode;
+      delete updatePolicy.maturityMinAgeDays;
+      return { policy: updatePolicy };
     default:
       return { error: `Unknown action ${action}` };
   }

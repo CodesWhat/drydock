@@ -351,6 +351,84 @@ test('model should suppress updates when snoozed in the future', async () => {
   expect(containerValidated.updateKind.kind).toBe('tag');
 });
 
+test('model should suppress fresh updates when maturity mode requires mature updates', async () => {
+  const updateDetectedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+  const containerValidated = container.validate({
+    id: 'container-123456789',
+    name: 'test',
+    watcher: 'test',
+    updateDetectedAt,
+    updatePolicy: {
+      maturityMode: 'mature',
+      maturityMinAgeDays: 7,
+    },
+    image: {
+      id: 'image-123456789',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+        repo: undefined,
+      },
+      architecture: 'arch',
+      os: 'os',
+      created: '2021-06-12T05:33:38.440Z',
+    },
+    result: {
+      tag: '1.0.1',
+    },
+  });
+
+  expect(containerValidated.updateKind.kind).toBe('tag');
+  expect(containerValidated.updateAvailable).toBeFalsy();
+});
+
+test('model should allow mature updates when maturity threshold has elapsed', async () => {
+  const updateDetectedAt = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+  const containerValidated = container.validate({
+    id: 'container-123456789',
+    name: 'test',
+    watcher: 'test',
+    updateDetectedAt,
+    updatePolicy: {
+      maturityMode: 'mature',
+      maturityMinAgeDays: 7,
+    },
+    image: {
+      id: 'image-123456789',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.0.0',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+        repo: undefined,
+      },
+      architecture: 'arch',
+      os: 'os',
+      created: '2021-06-12T05:33:38.440Z',
+    },
+    result: {
+      tag: '1.0.1',
+    },
+  });
+
+  expect(containerValidated.updateKind.kind).toBe('tag');
+  expect(containerValidated.updateAvailable).toBeTruthy();
+});
+
 test('model should keep updateAvailable when remote tag changes past skipped value', async () => {
   const containerValidated = container.validate({
     id: 'container-123456789',
