@@ -1,7 +1,7 @@
 import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import yaml, { type Pair, type ParsedNode } from 'yaml';
+import yaml from 'yaml';
 import type { ContainerImage } from '../../../model/container.js';
 import type Registry from '../../../registries/Registry.js';
 import { getState } from '../../../registry/index.js';
@@ -9,8 +9,17 @@ import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../..
 import { sleep } from '../../../util/sleep.js';
 import Docker from '../docker/Docker.js';
 import ComposeFileLockManager from './ComposeFileLockManager.js';
+import ComposeFileParser, {
+  COMPOSE_CACHE_MAX_ENTRIES,
+  updateComposeServiceImageInText,
+  updateComposeServiceImagesInText,
+  YAML_MAX_ALIAS_COUNT,
+} from './ComposeFileParser.js';
+import PostStartExecutor, {
+  normalizePostStartEnvironmentValue,
+  normalizePostStartHooks,
+} from './PostStartExecutor.js';
 
-const YAML_MAX_ALIAS_COUNT = 10_000;
 const COMPOSE_RENAME_MAX_RETRIES = 5;
 const COMPOSE_RENAME_RETRY_MS = 200;
 const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project';
@@ -22,8 +31,6 @@ const COMPOSE_DIRECTORY_FILE_CANDIDATES = [
   'docker-compose.yaml',
   'docker-compose.yml',
 ];
-const COMPOSE_CACHE_MAX_ENTRIES = 256;
-const POST_START_ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SELF_CONTAINER_IDENTIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 const ROOT_MODE_BREAK_GLASS_HINT =
   'use socket proxy or adjust file permissions/group_add; break-glass root mode requires DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true';
@@ -235,62 +242,6 @@ function preserveExplicitDockerIoPrefix(
   return `docker.io/${targetImageReference}`;
 }
 
-function normalizePostStartHooks(postStart) {
-  if (!postStart) {
-    return [];
-  }
-  if (Array.isArray(postStart)) {
-    return postStart;
-  }
-  return [postStart];
-}
-
-function normalizePostStartCommand(command) {
-  if (Array.isArray(command)) {
-    return command.map((value) => `${value}`);
-  }
-  return ['sh', '-c', `${command}`];
-}
-
-function normalizePostStartEnvironmentValue(value) {
-  if (value === undefined || value === null) {
-    return '';
-  }
-  if (typeof value === 'object') {
-    try {
-      return JSON.stringify(value);
-    } catch {
-      return '';
-    }
-  }
-  return `${value}`;
-}
-
-function validatePostStartEnvironmentKey(key) {
-  if (!POST_START_ENVIRONMENT_KEY_PATTERN.test(key)) {
-    throw new Error(`Invalid compose post_start environment variable key "${key}"`);
-  }
-}
-
-function normalizePostStartEnvironment(environment) {
-  if (!environment) {
-    return undefined;
-  }
-  if (Array.isArray(environment)) {
-    return environment.map((value) => {
-      const normalized = `${value}`;
-      const separatorIndex = normalized.indexOf('=');
-      const key = separatorIndex >= 0 ? normalized.slice(0, separatorIndex) : normalized;
-      validatePostStartEnvironmentKey(key);
-      return normalized;
-    });
-  }
-  return Object.entries(environment).map(([key, value]) => {
-    validatePostStartEnvironmentKey(key);
-    return `${key}=${normalizePostStartEnvironmentValue(value)}`;
-  });
-}
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -308,164 +259,6 @@ function doesContainerBelongToCompose(compose, container) {
   // Rebuild image definition string
   const currentImage = registry.getImageFullName(container.image, container.image.tag.value);
   return Boolean(getServiceKey(compose, container, currentImage));
-}
-
-function getLineStartOffset(text, offset) {
-  const beforeOffset = Math.max(0, offset - 1);
-  return text.lastIndexOf('\n', beforeOffset) + 1;
-}
-
-function getLineIndentationAtOffset(text, offset) {
-  const lineStart = getLineStartOffset(text, offset);
-  return text.slice(lineStart, offset);
-}
-
-function getPreferredChildIndentation(parentIndentation) {
-  return `${parentIndentation}  `;
-}
-
-function getMapPairByKey(
-  mapNode: unknown,
-  keyName: string,
-): Pair<ParsedNode | null, ParsedNode | null> | undefined {
-  return (mapNode as { items: Pair<ParsedNode | null, ParsedNode | null>[] }).items.find(
-    (pair): pair is Pair<ParsedNode | null, ParsedNode | null> => {
-      const pairKeyValue = (pair?.key as { value?: unknown })?.value;
-      return `${pairKeyValue}` === keyName;
-    },
-  );
-}
-
-function formatReplacementImageValue(currentImageValueText, newImage) {
-  if (currentImageValueText.startsWith("'") && currentImageValueText.endsWith("'")) {
-    return `'${newImage.replace(/'/g, "''")}'`;
-  }
-  if (currentImageValueText.startsWith('"') && currentImageValueText.endsWith('"')) {
-    return JSON.stringify(newImage);
-  }
-  return newImage;
-}
-
-function parseComposeDocument(composeFileText) {
-  const parseDocumentOptions = {
-    keepSourceTokens: true,
-    maxAliasCount: YAML_MAX_ALIAS_COUNT,
-  };
-  const composeDoc = yaml.parseDocument(composeFileText, {
-    ...(parseDocumentOptions as unknown as { keepSourceTokens: true }),
-  });
-  if (composeDoc.errors?.length > 0) {
-    throw composeDoc.errors[0];
-  }
-  return composeDoc;
-}
-
-function buildComposeServiceImageTextEdit(composeFileText, composeDoc, serviceName, newImage) {
-  const newline = composeFileText.includes('\r\n') ? '\r\n' : '\n';
-  const servicesNode = composeDoc.get('services', true);
-  if (!yaml.isMap(servicesNode)) {
-    throw new Error('Unable to locate services section in compose file');
-  }
-
-  const servicePair = getMapPairByKey(servicesNode, serviceName);
-  if (!servicePair) {
-    throw new Error(`Unable to locate compose service ${serviceName}`);
-  }
-
-  const serviceValueNode = servicePair.value;
-  if (yaml.isMap(serviceValueNode)) {
-    const imagePair = getMapPairByKey(serviceValueNode, 'image');
-    if (imagePair) {
-      const imageValueRange = imagePair.value!.range!;
-      const imageValueStart = imageValueRange[0];
-      const imageValueEnd = imageValueRange[1];
-      const currentImageValueText = composeFileText.slice(imageValueStart, imageValueEnd);
-      const formattedImage = formatReplacementImageValue(currentImageValueText, newImage);
-      return {
-        start: imageValueStart,
-        end: imageValueEnd,
-        text: formattedImage,
-      };
-    }
-
-    if (serviceValueNode?.srcToken?.type === 'flow-collection') {
-      throw new Error(
-        `Unable to insert compose image for flow-style service ${serviceName} without image key`,
-      );
-    }
-  } else if (!(yaml.isScalar(serviceValueNode) && serviceValueNode.value === null)) {
-    throw new Error(`Unable to patch compose service ${serviceName} because it is not a map`);
-  }
-
-  const serviceKeyOffset = servicePair.key!.range![0];
-  const serviceIndentation = getLineIndentationAtOffset(composeFileText, serviceKeyOffset);
-  const imageIndentation = getPreferredChildIndentation(serviceIndentation);
-  const lineBreakOffset = composeFileText.indexOf('\n', serviceKeyOffset);
-
-  if (lineBreakOffset >= 0) {
-    const insertionOffset = lineBreakOffset + 1;
-    return {
-      start: insertionOffset,
-      end: insertionOffset,
-      text: `${imageIndentation}image: ${newImage}${newline}`,
-    };
-  }
-
-  return {
-    start: composeFileText.length,
-    end: composeFileText.length,
-    text: `${newline}${imageIndentation}image: ${newImage}`,
-  };
-}
-
-function applyComposeTextEdits(composeFileText, composeTextEdits) {
-  const sortedEdits = [...composeTextEdits].sort(
-    (left, right) => right.start - left.start || right.end - left.end,
-  );
-  let lastAppliedStart = composeFileText.length;
-  let updatedComposeText = composeFileText;
-  for (const composeTextEdit of sortedEdits) {
-    if (composeTextEdit.end > lastAppliedStart) {
-      throw new Error('Unable to apply overlapping compose edits');
-    }
-    updatedComposeText = `${updatedComposeText.slice(0, composeTextEdit.start)}${composeTextEdit.text}${updatedComposeText.slice(composeTextEdit.end)}`;
-    lastAppliedStart = composeTextEdit.start;
-  }
-  return updatedComposeText;
-}
-
-/**
- * Update only one compose service image line while preserving original
- * formatting, comments, and key ordering elsewhere in the file.
- */
-function updateComposeServiceImageInText(
-  composeFileText,
-  serviceName,
-  newImage,
-  composeDoc = null,
-) {
-  const doc = composeDoc || parseComposeDocument(composeFileText);
-  const composeTextEdit = buildComposeServiceImageTextEdit(
-    composeFileText,
-    doc,
-    serviceName,
-    newImage,
-  );
-  return applyComposeTextEdits(composeFileText, [composeTextEdit]);
-}
-
-function updateComposeServiceImagesInText(composeFileText, serviceImageUpdates, composeDoc = null) {
-  if (serviceImageUpdates.size === 0) {
-    return composeFileText;
-  }
-  const doc = composeDoc || parseComposeDocument(composeFileText);
-  const composeTextEdits = [];
-  for (const [serviceName, newImage] of serviceImageUpdates.entries()) {
-    composeTextEdits.push(
-      buildComposeServiceImageTextEdit(composeFileText, doc, serviceName, newImage),
-    );
-  }
-  return applyComposeTextEdits(composeFileText, composeTextEdits);
 }
 
 function buildComposePatchPreview(composeFile, service, currentImage, updateImage) {
@@ -489,15 +282,40 @@ class Dockercompose extends Docker {
   _composeFileLockManager = new ComposeFileLockManager({
     getLog: () => this.log,
   });
-  _composeCacheMaxEntries = COMPOSE_CACHE_MAX_ENTRIES;
-  _composeObjectCache = new Map<string, { mtimeMs: number; compose: unknown }>();
-  _composeDocumentCache = new Map<string, { mtimeMs: number; composeDoc: unknown }>();
+  _composeFileParser = new ComposeFileParser({
+    resolveComposeFilePath: (file) => this.resolveComposeFilePath(file),
+    getDefaultComposeFilePath: () => this.configuration?.file,
+    getLog: () => this.log,
+    composeCacheMaxEntries: COMPOSE_CACHE_MAX_ENTRIES,
+  });
+  _postStartExecutor = new PostStartExecutor({
+    getLog: () => this.log,
+    getWatcher: (container) => this.getWatcher(container as ComposeContainerReference),
+    isDryRun: () => this.configuration?.dryrun === true,
+    getDockerApiFromWatcher,
+  });
   _hostToContainerBindMountsLoaded = false;
   _hostToContainerBindMountsLoadPromise: Promise<void> | null = null;
   _hostToContainerBindMounts: HostToContainerBindMount[] = [];
 
   get _composeFileLocksHeld() {
     return this._composeFileLockManager._composeFileLocksHeld;
+  }
+
+  get _composeCacheMaxEntries() {
+    return this._composeFileParser._composeCacheMaxEntries;
+  }
+
+  set _composeCacheMaxEntries(maxEntries: number) {
+    this._composeFileParser.setComposeCacheMaxEntries(maxEntries);
+  }
+
+  get _composeObjectCache() {
+    return this._composeFileParser._composeObjectCache;
+  }
+
+  get _composeDocumentCache() {
+    return this._composeFileParser._composeDocumentCache;
   }
 
   /**
@@ -2194,125 +2012,8 @@ class Dockercompose extends Docker {
     );
   }
 
-  async resolvePostStartHooksContainer(container, serviceKey) {
-    const watcher = this.getWatcher(container);
-    const dockerApi = getDockerApiFromWatcher(watcher);
-    if (!dockerApi) {
-      this.log.warn(
-        `Skip compose post_start hooks for ${container.name} (${serviceKey}) because watcher Docker API is unavailable`,
-      );
-      return null;
-    }
-    const containerToUpdate = dockerApi.getContainer(container.name);
-    const containerState = await containerToUpdate.inspect();
-    if (!containerState?.State?.Running) {
-      this.log.info(
-        `Skip compose post_start hooks for ${container.name} (${serviceKey}) because container is not running`,
-      );
-      return null;
-    }
-    return containerToUpdate;
-  }
-
-  normalizePostStartHookConfiguration(hook, containerName, serviceKey) {
-    const hookConfiguration = typeof hook === 'string' ? { command: hook } : hook;
-    if (hookConfiguration?.command) {
-      return hookConfiguration;
-    }
-
-    this.log.warn(
-      `Skip invalid compose post_start hook for ${containerName} (${serviceKey}) because command is missing`,
-    );
-    return null;
-  }
-
-  buildPostStartHookExecOptions(hookConfiguration) {
-    return {
-      AttachStdout: true,
-      AttachStderr: true,
-      Cmd: normalizePostStartCommand(hookConfiguration.command),
-      User: hookConfiguration.user,
-      WorkingDir: hookConfiguration.working_dir,
-      Privileged: hookConfiguration.privileged,
-      Env: normalizePostStartEnvironment(hookConfiguration.environment),
-    };
-  }
-
-  async waitForPostStartHookExecStream(execStream): Promise<void> {
-    await new Promise((resolve, reject) => {
-      if (!execStream?.once) {
-        resolve(undefined);
-        return;
-      }
-      const onError = (e) => {
-        execStream.removeListener('end', onDone);
-        execStream.removeListener('close', onDone);
-        reject(e);
-      };
-      const onDone = () => {
-        execStream.removeListener('end', onDone);
-        execStream.removeListener('close', onDone);
-        execStream.removeListener('error', onError);
-        resolve(undefined);
-      };
-      execStream.once('end', onDone);
-      execStream.once('close', onDone);
-      execStream.once('error', onError);
-    });
-  }
-
-  ensurePostStartHookExecSucceeded(execResult, containerName, serviceKey): void {
-    if (execResult.ExitCode === 0) {
-      return;
-    }
-    throw new Error(
-      `Compose post_start hook failed for ${containerName} (${serviceKey}) with exit code ${execResult.ExitCode}`,
-    );
-  }
-
-  async runPostStartHook(containerToUpdate, container, serviceKey, hook): Promise<void> {
-    const hookConfiguration = this.normalizePostStartHookConfiguration(
-      hook,
-      container.name,
-      serviceKey,
-    );
-    if (!hookConfiguration) {
-      return;
-    }
-
-    const execOptions = this.buildPostStartHookExecOptions(hookConfiguration);
-    this.log.info(`Run compose post_start hook for ${container.name} (${serviceKey})`);
-    const exec = await containerToUpdate.exec(execOptions);
-    const execStream = await exec.start({
-      Detach: false,
-      Tty: false,
-    });
-    if (execStream?.resume) {
-      execStream.resume();
-    }
-    await this.waitForPostStartHookExecStream(execStream);
-    const execResult = await exec.inspect();
-    this.ensurePostStartHookExecSucceeded(execResult, container.name, serviceKey);
-  }
-
   async runServicePostStartHooks(container, serviceKey, service) {
-    if (this.configuration.dryrun || !service?.post_start) {
-      return;
-    }
-
-    const hooks = normalizePostStartHooks(service.post_start);
-    if (hooks.length === 0) {
-      return;
-    }
-
-    const containerToUpdate = await this.resolvePostStartHooksContainer(container, serviceKey);
-    if (!containerToUpdate) {
-      return;
-    }
-
-    for (const hook of hooks) {
-      await this.runPostStartHook(containerToUpdate, container, serviceKey, hook);
-    }
+    return this._postStartExecutor.runServicePostStartHooks(container, serviceKey, service);
   }
 
   /**
@@ -2395,37 +2096,15 @@ class Dockercompose extends Docker {
   }
 
   invalidateComposeCaches(filePath) {
-    this._composeObjectCache.delete(filePath);
-    this._composeDocumentCache.delete(filePath);
+    this._composeFileParser.invalidateComposeCaches(filePath);
   }
 
   setComposeCacheEntry(cache, filePath, value) {
-    if (this._composeCacheMaxEntries < 1) {
-      cache.clear();
-      return;
-    }
-    if (cache.has(filePath)) {
-      cache.delete(filePath);
-    }
-    cache.set(filePath, value);
-    while (cache.size > this._composeCacheMaxEntries) {
-      const oldestCacheKey = cache.keys().next().value;
-      cache.delete(oldestCacheKey);
-    }
+    this._composeFileParser.setComposeCacheEntry(cache, filePath, value);
   }
 
   getCachedComposeDocument(filePath, mtimeMs, composeFileText) {
-    const cachedComposeDocument = this._composeDocumentCache.get(filePath);
-    if (cachedComposeDocument && cachedComposeDocument.mtimeMs === mtimeMs) {
-      this.setComposeCacheEntry(this._composeDocumentCache, filePath, cachedComposeDocument);
-      return cachedComposeDocument.composeDoc;
-    }
-    const composeDoc = parseComposeDocument(composeFileText);
-    this.setComposeCacheEntry(this._composeDocumentCache, filePath, {
-      mtimeMs,
-      composeDoc,
-    });
-    return composeDoc;
+    return this._composeFileParser.getCachedComposeDocument(filePath, mtimeMs, composeFileText);
   }
 
   /**
@@ -2434,13 +2113,7 @@ class Dockercompose extends Docker {
    * @returns {Promise<Buffer>}
    */
   getComposeFile(file = null) {
-    const filePath = this.resolveComposeFilePath(file || this.configuration.file);
-    try {
-      return fs.readFile(filePath);
-    } catch (e) {
-      this.log.error(`Error when reading the docker-compose yaml file ${filePath} (${e.message})`);
-      throw e;
-    }
+    return this._composeFileParser.getComposeFile(file);
   }
 
   /**
