@@ -228,9 +228,7 @@ describe('ServersView', () => {
   });
 
   it('handles watchers with missing configuration gracefully', async () => {
-    mockGetAllWatchers.mockResolvedValue([
-      { id: 'docker.bare', type: 'docker', name: 'bare' },
-    ]);
+    mockGetAllWatchers.mockResolvedValue([{ id: 'docker.bare', type: 'docker', name: 'bare' }]);
     const wrapper = await mountServersView();
     const rows = tableRows(wrapper);
     expect(rows[0].host).toBe('unknown');
@@ -257,9 +255,7 @@ describe('ServersView', () => {
   });
 
   it('renders status badge colors for connected and disconnected', async () => {
-    mockGetAgents.mockResolvedValue([
-      { name: 'Down-Host', connected: false, host: '10.0.0.99' },
-    ]);
+    mockGetAgents.mockResolvedValue([{ name: 'Down-Host', connected: false, host: '10.0.0.99' }]);
     const wrapper = await mountServersView();
     const rows = tableRows(wrapper);
     expect(rows[0].status).toBe('connected');
