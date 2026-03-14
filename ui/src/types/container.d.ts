@@ -45,7 +45,7 @@ export interface Container {
   updateDetectedAt?: string;
   updateMaturity: 'fresh' | 'settled' | null;
   updateMaturityTooltip?: string;
-  updatePolicyState?: 'snoozed' | 'skipped';
+  updatePolicyState?: 'snoozed' | 'skipped' | 'maturity-blocked';
   suppressedUpdateTag?: string;
   registryError?: string;
   noUpdateReason?: string;

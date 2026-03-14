@@ -118,12 +118,15 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const activeFilterCount = ref(0);
   const filterSearch = ref('');
 
-  const policyMap: Record<string, { snoozed: boolean; skipped: boolean }> = {
-    alpha: { snoozed: false, skipped: false },
-    beta: { snoozed: true, skipped: false },
-    gamma: { snoozed: false, skipped: true },
-    delta: { snoozed: true, skipped: true },
-    epsilon: { snoozed: false, skipped: false },
+  const policyMap: Record<
+    string,
+    { snoozed: boolean; skipped: boolean; maturityBlocked: boolean }
+  > = {
+    alpha: { snoozed: false, skipped: false, maturityBlocked: false },
+    beta: { snoozed: true, skipped: false, maturityBlocked: false },
+    gamma: { snoozed: false, skipped: true, maturityBlocked: false },
+    delta: { snoozed: true, skipped: true, maturityBlocked: false },
+    epsilon: { snoozed: false, skipped: false, maturityBlocked: true },
   };
 
   const spies = {
@@ -196,10 +199,10 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       typeof c.registryError === 'string' && c.registryError.trim().length > 0,
     registryErrorTooltip: (c: Container) =>
       c.registryError ? `Registry error: ${c.registryError}` : 'Registry error',
-    containerPolicyTooltip: (name: string, kind: 'snoozed' | 'skipped') =>
+    containerPolicyTooltip: (name: string, kind: 'snoozed' | 'skipped' | 'maturity') =>
       `${name}-${kind}-tooltip`,
     getContainerListPolicyState: (name: string) =>
-      policyMap[name] ?? { snoozed: false, skipped: false },
+      policyMap[name] ?? { snoozed: false, skipped: false, maturityBlocked: false },
     serverBadgeColor: () => ({ bg: '#ddd', text: '#111' }),
     parseServer: (server: string) =>
       server.includes('local') ? { name: 'Local', env: 'dev' } : { name: 'Remote', env: null },
@@ -621,6 +624,36 @@ describe('ContainersGroupedViews', () => {
     await clear.trigger('click');
 
     expect(spies.clearFilters).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows maturity-blocked policy indicator when list policy state is blocked', async () => {
+    const maturityBlocked = makeContainer({
+      id: 'c-mature',
+      name: 'epsilon',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+    });
+    const { context, refs } = makeContext();
+    refs.containerViewMode.value = 'table';
+    refs.filteredContainers.value = [maturityBlocked];
+    refs.displayContainers.value = [maturityBlocked];
+    refs.renderGroups.value = [
+      {
+        key: 'group-maturity',
+        name: 'group-maturity',
+        containers: [maturityBlocked],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    expect(wrapper.find('[aria-label="Maturity-blocked updates"]').exists()).toBe(true);
   });
 
   it('covers group-header disabled states and disabled table action click handler', async () => {

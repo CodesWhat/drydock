@@ -189,6 +189,13 @@ function updateMaturityFallbackTooltip(
                       v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
                   <AppIcon name="skip-forward" :size="12" />
                 </span>
+                <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
+                      class="badge px-1.5 py-0 text-[0.5625rem]"
+                      style="background: var(--dd-primary-muted); color: var(--dd-primary);"
+                      aria-label="Maturity-blocked updates"
+                      v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+                  <AppIcon name="clock" :size="12" />
+                </span>
                 <span class="badge px-1.5 py-0 text-[0.5625rem]"
                       :style="{
                         backgroundColor: c.status === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
@@ -214,7 +221,7 @@ function updateMaturityFallbackTooltip(
           </div>
           <div v-else class="text-center">
             <span class="text-[0.6875rem] dd-text-secondary truncate block max-w-[140px] mx-auto" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
-            <div v-if="getContainerListPolicyState(c.name).snoozed || getContainerListPolicyState(c.name).skipped"
+            <div v-if="getContainerListPolicyState(c.name).snoozed || getContainerListPolicyState(c.name).skipped || getContainerListPolicyState(c.name).maturityBlocked"
                  class="mt-1 inline-flex items-center justify-center gap-1">
               <span v-if="getContainerListPolicyState(c.name).snoozed"
                     class="inline-flex items-center justify-center"
@@ -229,6 +236,13 @@ function updateMaturityFallbackTooltip(
                     aria-label="Skipped updates"
                     v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
                 <AppIcon name="skip-forward" :size="11" />
+              </span>
+              <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
+                    class="inline-flex items-center justify-center"
+                    style="color: var(--dd-primary);"
+                    aria-label="Maturity-blocked updates"
+                    v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+                <AppIcon name="clock" :size="11" />
               </span>
             </div>
             <div
@@ -534,6 +548,13 @@ function updateMaturityFallbackTooltip(
                     v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
                 <AppIcon name="skip-forward" :size="12" />
               </span>
+              <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
+                    class="inline-flex items-center justify-center"
+                    style="color: var(--dd-primary);"
+                    aria-label="Maturity-blocked updates"
+                    v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+                <AppIcon name="clock" :size="12" />
+              </span>
             </div>
           </div>
 
@@ -568,7 +589,7 @@ function updateMaturityFallbackTooltip(
                   <AppIcon name="warning" :size="11" class="shrink-0" />
                   <span class="truncate">{{ c.noUpdateReason }}</span>
                 </span>
-                <template v-else-if="getContainerListPolicyState(c.name).snoozed || getContainerListPolicyState(c.name).skipped">
+                <template v-else-if="getContainerListPolicyState(c.name).snoozed || getContainerListPolicyState(c.name).skipped || getContainerListPolicyState(c.name).maturityBlocked">
                   <span v-if="getContainerListPolicyState(c.name).snoozed"
                         class="inline-flex items-center justify-center ml-1"
                         style="color: var(--dd-info);"
@@ -582,6 +603,13 @@ function updateMaturityFallbackTooltip(
                         aria-label="Skipped updates"
                         v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
                     <AppIcon name="skip-forward" :size="13" />
+                  </span>
+                  <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
+                        class="inline-flex items-center justify-center"
+                        style="color: var(--dd-primary);"
+                        aria-label="Maturity-blocked updates"
+                        v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+                    <AppIcon name="clock" :size="13" />
                   </span>
                 </template>
                 <AppIcon v-else name="check" :size="14" class="ml-1" style="color: var(--dd-success);" />
@@ -722,6 +750,13 @@ function updateMaturityFallbackTooltip(
                   aria-label="Skipped updates"
                   v-tooltip.top="tt(containerPolicyTooltip(c.name, 'skipped'))">
               <AppIcon name="skip-forward" :size="12" />
+            </span>
+            <span v-if="getContainerListPolicyState(c.name).maturityBlocked"
+                  class="inline-flex items-center justify-center"
+                  style="color: var(--dd-primary);"
+                  aria-label="Maturity-blocked updates"
+                  v-tooltip.top="tt(containerPolicyTooltip(c.name, 'maturity'))">
+              <AppIcon name="clock" :size="12" />
             </span>
             <!-- Bouncer: icon in badge -->
             <span v-if="c.bouncer === 'blocked'" class="badge px-1.5 py-0 text-[0.5625rem]"

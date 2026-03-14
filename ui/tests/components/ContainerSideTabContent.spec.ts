@@ -4,6 +4,8 @@ import { nextTick, ref } from 'vue';
 import ContainerSideTabContent from '@/components/containers/ContainerSideTabContent.vue';
 
 const mockRevealContainerEnv = vi.fn();
+const mockSetMaturityPolicySelected = vi.fn();
+const mockClearMaturityPolicySelected = vi.fn();
 
 vi.mock('@/services/container', () => ({
   revealContainerEnv: (...args: unknown[]) => mockRevealContainerEnv(...args),
@@ -98,8 +100,8 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     containerResumeAutoScroll: vi.fn(),
     previewLoading: ref(false),
     runContainerPreview: vi.fn(),
-    actionInProgress: ref(false),
-    policyInProgress: ref(false),
+    actionInProgress: ref(null),
+    policyInProgress: ref(null),
     skipCurrentForSelected: vi.fn(),
     snoozeSelected: vi.fn(),
     snoozeDateInput: ref(''),
@@ -110,6 +112,13 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     selectedSkipDigests: ref([]),
     clearSkipsSelected: vi.fn(),
     selectedUpdatePolicy: ref({}),
+    selectedHasMaturityPolicy: ref(true),
+    selectedMaturityMode: ref('mature'),
+    selectedMaturityMinAgeDays: ref(7),
+    maturityModeInput: ref('all'),
+    maturityMinAgeDaysInput: ref(7),
+    setMaturityPolicySelected: mockSetMaturityPolicySelected,
+    clearMaturityPolicySelected: mockClearMaturityPolicySelected,
     clearPolicySelected: vi.fn(),
     policyMessage: ref(null),
     policyError: ref(null),
@@ -186,6 +195,8 @@ describe('ContainerSideTabContent - Environment Variables', () => {
       },
     };
     mockRevealContainerEnv.mockReset();
+    mockSetMaturityPolicySelected.mockReset();
+    mockClearMaturityPolicySelected.mockReset();
   });
 
   it('displays non-sensitive env var values directly', () => {
@@ -297,5 +308,25 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('no');
     expect(wrapper.text()).toContain('Patch preview:');
     expect(wrapper.text()).toContain('@@ -1,3 +1,3 @@');
+  });
+
+  it('wires maturity policy action controls in actions tab', async () => {
+    activeDetailTab.value = 'actions';
+
+    const wrapper = mountComponent();
+    expect(wrapper.text()).toContain('Maturity');
+    expect(wrapper.text()).toContain('Apply Maturity');
+
+    const controls = wrapper.findAll('button');
+    const applyButton = controls.find((button) => button.text().includes('Apply Maturity'));
+    const clearButton = controls.find((button) => button.text().includes('Clear Maturity'));
+    expect(applyButton).toBeDefined();
+    expect(clearButton).toBeDefined();
+
+    await applyButton?.trigger('click');
+    expect(mockSetMaturityPolicySelected).toHaveBeenCalledWith('all');
+
+    await clearButton?.trigger('click');
+    expect(mockClearMaturityPolicySelected).toHaveBeenCalledTimes(1);
   });
 });

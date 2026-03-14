@@ -582,6 +582,7 @@ describe('ContainersView', () => {
         skipped: true,
         skipCount: 1,
         snoozeUntil: '2099-01-01T00:00:00.000Z',
+        maturityBlocked: false,
       });
       expect(wrapper.find('.data-table [aria-label="Snoozed updates"]').exists()).toBe(true);
       expect(wrapper.find('.data-table [aria-label="Skipped updates"]').exists()).toBe(true);

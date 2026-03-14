@@ -315,6 +315,51 @@ describe('useContainerActions', () => {
     expect(mocks.updateContainerPolicy).not.toHaveBeenCalled();
   });
 
+  it('applies and clears maturity policy actions with defaults and validation', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    await composable.setMaturityPolicySelected('mature');
+    expect(mocks.updateContainerPolicy).toHaveBeenNthCalledWith(
+      1,
+      'container-1',
+      'set-maturity-policy',
+      {
+        mode: 'mature',
+        minAgeDays: 7,
+      },
+    );
+
+    composable.maturityMinAgeDaysInput.value = 21;
+    await composable.setMaturityPolicySelected('all');
+    expect(mocks.updateContainerPolicy).toHaveBeenNthCalledWith(
+      2,
+      'container-1',
+      'set-maturity-policy',
+      {
+        mode: 'all',
+        minAgeDays: 21,
+      },
+    );
+
+    await composable.clearMaturityPolicySelected();
+    expect(mocks.updateContainerPolicy).toHaveBeenNthCalledWith(
+      3,
+      'container-1',
+      'clear-maturity-policy',
+      {},
+    );
+
+    composable.maturityMinAgeDaysInput.value = 0;
+    await composable.setMaturityPolicySelected('mature');
+    expect(composable.policyError.value).toBe('Enter a maturity age between 1 and 365 days');
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledTimes(3);
+  });
+
   it('deletes selected container and closes detail views', async () => {
     const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable, closeFullPage, closePanel, loadContainers } = await mountActionsHarness({
@@ -468,6 +513,50 @@ describe('useContainerActions', () => {
       'Skipped updates policy active',
     );
     expect(composable.containerPolicyTooltip('api', 'snoozed')).toContain('Updates snoozed until');
+  });
+
+  it('derives maturity list-policy state and tooltip', async () => {
+    const now = Date.now();
+    const { composable } = await mountActionsHarness({
+      containerMetaMap: {
+        web: {
+          updateAvailable: false,
+          updateDetectedAt: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+          updateKind: {
+            kind: 'tag',
+            remoteValue: '2.0.0',
+          },
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 7,
+          },
+        },
+        api: {
+          updateAvailable: false,
+          updateDetectedAt: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
+          updateKind: {
+            kind: 'tag',
+            remoteValue: '5.0.0',
+          },
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 7,
+          },
+        },
+      },
+    });
+
+    expect(composable.getContainerListPolicyState('web')).toMatchObject({
+      maturityMode: 'mature',
+      maturityMinAgeDays: 7,
+      maturityBlocked: true,
+    });
+    expect(composable.getContainerListPolicyState('api')).toMatchObject({
+      maturityMode: 'mature',
+      maturityMinAgeDays: 7,
+      maturityBlocked: false,
+    });
+    expect(composable.containerPolicyTooltip('web', 'maturity')).toContain('Mature-only policy');
   });
 
   it('wires confirm stop/restart/force-update dialogs to their accept handlers', async () => {
@@ -913,6 +1002,7 @@ describe('useContainerActions', () => {
       snoozed: false,
       skipped: false,
       skipCount: 0,
+      maturityBlocked: false,
     });
   });
 

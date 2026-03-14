@@ -334,6 +334,7 @@ describe('useDashboardComputed update summary', () => {
     expect(state.getRecentUpdateStatusColor('updated')).toBe('var(--dd-success)');
     expect(state.getRecentUpdateStatusColor('pending')).toBe('var(--dd-warning)');
     expect(state.getRecentUpdateStatusColor('snoozed')).toBe('var(--dd-primary)');
+    expect(state.getRecentUpdateStatusColor('maturity-blocked')).toBe('var(--dd-primary)');
     expect(state.getRecentUpdateStatusColor('skipped')).toBe('var(--dd-text-muted)');
     expect(state.getRecentUpdateStatusColor('failed')).toBe('var(--dd-danger)');
     expect(state.getRecentUpdateStatusColor('error')).toBe('var(--dd-danger)');
@@ -341,6 +342,9 @@ describe('useDashboardComputed update summary', () => {
     expect(state.getRecentUpdateStatusMutedColor('updated')).toBe('var(--dd-success-muted)');
     expect(state.getRecentUpdateStatusMutedColor('pending')).toBe('var(--dd-warning-muted)');
     expect(state.getRecentUpdateStatusMutedColor('snoozed')).toBe('var(--dd-primary-muted)');
+    expect(state.getRecentUpdateStatusMutedColor('maturity-blocked')).toBe(
+      'var(--dd-primary-muted)',
+    );
     expect(state.getRecentUpdateStatusMutedColor('skipped')).toBe('var(--dd-bg-elevated)');
     expect(state.getRecentUpdateStatusMutedColor('failed')).toBe('var(--dd-danger-muted)');
     expect(state.getRecentUpdateStatusMutedColor('error')).toBe('var(--dd-danger-muted)');
@@ -348,6 +352,7 @@ describe('useDashboardComputed update summary', () => {
     expect(state.getRecentUpdateStatusIcon('updated')).toBe('check');
     expect(state.getRecentUpdateStatusIcon('pending')).toBe('pending');
     expect(state.getRecentUpdateStatusIcon('snoozed')).toBe('pending');
+    expect(state.getRecentUpdateStatusIcon('maturity-blocked')).toBe('clock');
     expect(state.getRecentUpdateStatusIcon('skipped')).toBe('skip-forward');
     expect(state.getRecentUpdateStatusIcon('failed')).toBe('xmark');
     expect(state.getRecentUpdateStatusIcon('error')).toBe('xmark');
@@ -689,6 +694,29 @@ describe('useDashboardComputed recent updates', () => {
         name: 'suppressed-empty',
         newVer: '',
         status: 'skipped',
+      }),
+    ]);
+  });
+
+  it('maps mature-only suppressed updates to maturity-blocked status', () => {
+    const state = createState({
+      containers: [
+        makeBaseContainer({
+          id: 'suppressed-maturity',
+          name: 'suppressed-maturity',
+          newTag: null,
+          suppressedUpdateTag: '4.0.0',
+          updatePolicyState: 'maturity-blocked',
+          updateDetectedAt: '2026-03-04T10:00:00.000Z',
+        }),
+      ],
+    });
+
+    expect(state.recentUpdates.value).toEqual([
+      expect.objectContaining({
+        name: 'suppressed-maturity',
+        newVer: '4.0.0',
+        status: 'maturity-blocked',
       }),
     ]);
   });

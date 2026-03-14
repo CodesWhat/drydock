@@ -56,6 +56,8 @@ interface ApiContainerUpdatePolicy {
   snoozeUntil?: unknown;
   skipTags?: unknown;
   skipDigests?: unknown;
+  maturityMode?: unknown;
+  maturityMinAgeDays?: unknown;
 }
 
 interface ApiContainerDetails {
@@ -379,6 +381,24 @@ function deriveUpdatePolicyState(apiContainer: ApiContainerInput): Container['up
     updatePolicy.skipDigests.includes(remoteValue)
   ) {
     return 'skipped';
+  }
+
+  const maturityMode = asNonEmptyString(updatePolicy.maturityMode);
+  if (maturityMode === 'mature') {
+    const defaultMinAgeDays = 7;
+    const configuredMinAgeDays = Number(updatePolicy.maturityMinAgeDays);
+    const minAgeDays =
+      Number.isFinite(configuredMinAgeDays) &&
+      Number.isInteger(configuredMinAgeDays) &&
+      configuredMinAgeDays >= 1
+        ? configuredMinAgeDays
+        : defaultMinAgeDays;
+    const updateDetectedAt = deriveUpdateDetectedAt(apiContainer);
+    const detectedAtMs = Date.parse(updateDetectedAt || '');
+    const minAgeMs = minAgeDays * 24 * 60 * 60 * 1000;
+    if (!Number.isFinite(detectedAtMs) || Date.now() - detectedAtMs < minAgeMs) {
+      return 'maturity-blocked';
+    }
   }
 
   return undefined;

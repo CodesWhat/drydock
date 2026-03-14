@@ -70,6 +70,8 @@ function getRecentUpdateStatusColor(status: RecentUpdateRow['status']): string {
       return 'var(--dd-warning)';
     case 'snoozed':
       return 'var(--dd-primary)';
+    case 'maturity-blocked':
+      return 'var(--dd-primary)';
     case 'skipped':
       return 'var(--dd-text-muted)';
     case 'failed':
@@ -85,6 +87,8 @@ function getRecentUpdateStatusMutedColor(status: RecentUpdateRow['status']): str
     case 'pending':
       return 'var(--dd-warning-muted)';
     case 'snoozed':
+      return 'var(--dd-primary-muted)';
+    case 'maturity-blocked':
       return 'var(--dd-primary-muted)';
     case 'skipped':
       return 'var(--dd-bg-elevated)';
@@ -102,6 +106,8 @@ function getRecentUpdateStatusIcon(status: RecentUpdateRow['status']): string {
       return 'pending';
     case 'snoozed':
       return 'pending';
+    case 'maturity-blocked':
+      return 'clock';
     case 'skipped':
       return 'skip-forward';
     case 'failed':
@@ -164,6 +170,9 @@ function deriveRecentUpdateStatus(
   }
   if (container.updatePolicyState === 'skipped') {
     return 'skipped';
+  }
+  if (container.updatePolicyState === 'maturity-blocked') {
+    return 'maturity-blocked';
   }
   return recentStatusByContainer[container.name] ?? 'pending';
 }

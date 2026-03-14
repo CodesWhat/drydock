@@ -569,6 +569,51 @@ describe('container-mapper', () => {
       expect((c as any).suppressedUpdateTag).toBeUndefined();
     });
 
+    it('marks updates as maturity-blocked when mature-only policy hides a fresh update', () => {
+      const freshDate = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+            remoteValue: '1.26',
+          },
+          result: { tag: '1.26' },
+          updateDetectedAt: freshDate,
+          updatePolicy: {
+            maturityMode: 'mature',
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBe('maturity-blocked');
+      expect((c as any).suppressedUpdateTag).toBe('1.26');
+    });
+
+    it('does not mark maturity-blocked when mature-only policy threshold is met', () => {
+      const oldDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+            remoteValue: '1.26',
+          },
+          result: { tag: '1.26' },
+          updateDetectedAt: oldDate,
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 7,
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBeUndefined();
+      expect((c as any).suppressedUpdateTag).toBeUndefined();
+    });
+
     it('falls back to result.digest for suppressed digest updates when remote digest is missing', () => {
       const c = mapApiContainer(
         makeApiContainer({

@@ -32,6 +32,10 @@ interface ContainerListPolicyState {
   skipped: boolean;
   skipCount: number;
   snoozeUntil?: string;
+  maturityMode?: 'all' | 'mature';
+  maturityMinAgeDays?: number;
+  maturityBlocked: boolean;
+  updateDetectedAt?: string;
 }
 
 interface UseContainerActionsInput {
@@ -51,8 +55,10 @@ const EMPTY_CONTAINER_POLICY_STATE: ContainerListPolicyState = {
   snoozed: false,
   skipped: false,
   skipCount: 0,
+  maturityBlocked: false,
 };
 const ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS = 250;
+const DEFAULT_MATURITY_MIN_AGE_DAYS = 7;
 
 function buildDetailComposePreview(
   preview: ContainerPreviewPayload | null,
@@ -202,6 +208,44 @@ function normalizePolicyEntries(values: unknown): string[] {
     .filter((value) => value.length > 0);
 }
 
+function normalizeMaturityMode(value: unknown): 'all' | 'mature' | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'all' || normalized === 'mature') {
+    return normalized;
+  }
+  return undefined;
+}
+
+function normalizeMaturityMinAgeDays(value: unknown): number | undefined {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 1 || parsed > 365) {
+    return undefined;
+  }
+  return parsed;
+}
+
+function resolveMaturityMinAgeDaysInput(value: unknown): number | undefined {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 1 || parsed > 365) {
+    return undefined;
+  }
+  return parsed;
+}
+
+function normalizeUpdateDetectedAt(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return undefined;
+  }
+  return new Date(parsed).toISOString();
+}
+
 function deriveContainerListPolicyState(
   containerMetaMap: Record<string, unknown>,
   containerName: string,
@@ -217,12 +261,37 @@ function deriveContainerListPolicyState(
   const skipCount =
     normalizePolicyEntries(policy.skipTags).length +
     normalizePolicyEntries(policy.skipDigests).length;
+  const maturityMode = normalizeMaturityMode(policy.maturityMode);
+  const maturityMinAgeDays =
+    normalizeMaturityMinAgeDays(policy.maturityMinAgeDays) ?? DEFAULT_MATURITY_MIN_AGE_DAYS;
+  const updateDetectedAt = normalizeUpdateDetectedAt(
+    meta && typeof meta === 'object'
+      ? (meta as Record<string, unknown>).updateDetectedAt
+      : undefined,
+  );
+  const updateDetectedAtMs = updateDetectedAt ? Date.parse(updateDetectedAt) : Number.NaN;
+  const hasSuppressedUpdateCandidate = Boolean(
+    meta &&
+      typeof meta === 'object' &&
+      (meta as Record<string, unknown>).updateAvailable === false &&
+      (meta as Record<string, unknown>).updateKind &&
+      typeof (meta as Record<string, unknown>).updateKind === 'object' &&
+      ((meta as Record<string, unknown>).updateKind as Record<string, unknown>).kind &&
+      (((meta as Record<string, unknown>).updateKind as Record<string, unknown>).kind === 'tag' ||
+        ((meta as Record<string, unknown>).updateKind as Record<string, unknown>).kind ===
+          'digest'),
+  );
 
   const rawSnoozeUntil = typeof policy.snoozeUntil === 'string' ? policy.snoozeUntil : undefined;
   const snoozeUntilMs = rawSnoozeUntil ? new Date(rawSnoozeUntil).getTime() : Number.NaN;
   const snoozed = Number.isFinite(snoozeUntilMs) && snoozeUntilMs > Date.now();
+  const maturityBlocked =
+    maturityMode === 'mature' &&
+    hasSuppressedUpdateCandidate &&
+    (!Number.isFinite(updateDetectedAtMs) ||
+      Date.now() - updateDetectedAtMs < maturityMinAgeDays * 24 * 60 * 60 * 1000);
 
-  if (!snoozed && skipCount === 0) {
+  if (!snoozed && skipCount === 0 && !maturityMode) {
     return EMPTY_CONTAINER_POLICY_STATE;
   }
 
@@ -231,17 +300,33 @@ function deriveContainerListPolicyState(
     skipped: skipCount > 0,
     skipCount,
     snoozeUntil: snoozed ? rawSnoozeUntil : undefined,
+    ...(maturityMode ? { maturityMode } : {}),
+    ...(maturityMode ? { maturityMinAgeDays } : {}),
+    ...(updateDetectedAt ? { updateDetectedAt } : {}),
+    maturityBlocked,
   };
 }
 
 function buildContainerPolicyTooltip(
   state: ContainerListPolicyState,
-  kind: 'snoozed' | 'skipped',
+  kind: 'snoozed' | 'skipped' | 'maturity',
 ): string {
   if (kind === 'snoozed') {
     return state.snoozeUntil
       ? `Updates snoozed until ${formatTimestamp(state.snoozeUntil)}`
       : 'Updates snoozed';
+  }
+  if (kind === 'maturity') {
+    if (state.maturityMode === 'mature') {
+      const minAgeDays = state.maturityMinAgeDays ?? DEFAULT_MATURITY_MIN_AGE_DAYS;
+      return state.maturityBlocked
+        ? `Mature-only policy blocks updates younger than ${minAgeDays} day${minAgeDays === 1 ? '' : 's'}`
+        : `Mature-only policy active (${minAgeDays} day${minAgeDays === 1 ? '' : 's'} minimum age)`;
+    }
+    if (state.maturityMode === 'all') {
+      return 'Maturity policy allows all updates';
+    }
+    return 'Maturity policy active';
   }
   if (state.skipCount <= 0) {
     return 'Skipped updates policy active';
@@ -717,6 +802,7 @@ function createSelectedPolicyActions(args: {
   refreshActionTabData: () => Promise<void>;
   policyError: Ref<string | null>;
   snoozeDateInput: Ref<string>;
+  maturityMinAgeDaysInput: Ref<number>;
 }) {
   async function skipCurrentForSelected() {
     await runForSelectedContainer(args.selectedContainer, async (containerName) => {
@@ -780,6 +866,30 @@ function createSelectedPolicyActions(args: {
     });
   }
 
+  async function setMaturityPolicySelected(mode: 'all' | 'mature') {
+    const minAgeDays = resolveMaturityMinAgeDaysInput(args.maturityMinAgeDaysInput.value);
+    if (minAgeDays === undefined) {
+      args.policyError.value = 'Enter a maturity age between 1 and 365 days';
+      return;
+    }
+    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
+      await args.applyPolicy(
+        containerName,
+        'set-maturity-policy',
+        { mode, minAgeDays },
+        mode === 'mature'
+          ? `Maturity policy set to mature-only (${minAgeDays} day${minAgeDays === 1 ? '' : 's'})`
+          : 'Maturity policy set to allow all updates',
+      );
+    });
+  }
+
+  async function clearMaturityPolicySelected() {
+    await runForSelectedContainer(args.selectedContainer, async (containerName) => {
+      await args.applyPolicy(containerName, 'clear-maturity-policy', {}, 'Maturity policy cleared');
+    });
+  }
+
   async function removeSkipSelected(kind: 'tag' | 'digest', value: string) {
     if (!value) {
       return;
@@ -805,9 +915,11 @@ function createSelectedPolicyActions(args: {
 
   return {
     clearPolicySelected,
+    clearMaturityPolicySelected,
     clearSkipsSelected,
     removeSkipDigestSelected,
     removeSkipTagSelected,
+    setMaturityPolicySelected,
     skipCurrentForSelected,
     snoozeSelected,
     snoozeSelectedUntilDate,
@@ -1013,10 +1125,23 @@ export function useContainerActions(input: UseContainerActionsInput) {
       ? selectedUpdatePolicy.value.skipDigests
       : [],
   );
+  const selectedMaturityMode = computed<'all' | 'mature' | undefined>(() =>
+    normalizeMaturityMode(selectedUpdatePolicy.value.maturityMode),
+  );
+  const selectedMaturityMinAgeDays = computed<number>(
+    () =>
+      normalizeMaturityMinAgeDays(selectedUpdatePolicy.value.maturityMinAgeDays) ??
+      DEFAULT_MATURITY_MIN_AGE_DAYS,
+  );
+  const selectedHasMaturityPolicy = computed<boolean>(
+    () => selectedMaturityMode.value !== undefined,
+  );
   const selectedSnoozeUntil = computed<string | undefined>(
     () => selectedUpdatePolicy.value.snoozeUntil as string | undefined,
   );
   const snoozeDateInput = ref('');
+  const maturityModeInput = ref<'all' | 'mature'>('all');
+  const maturityMinAgeDaysInput = ref<number>(DEFAULT_MATURITY_MIN_AGE_DAYS);
 
   function isContainerActionsEnabled(): boolean {
     return containerActionsEnabled.value;
@@ -1150,9 +1275,11 @@ export function useContainerActions(input: UseContainerActionsInput) {
 
   const {
     clearPolicySelected,
+    clearMaturityPolicySelected,
     clearSkipsSelected,
     removeSkipDigestSelected,
     removeSkipTagSelected,
+    setMaturityPolicySelected,
     skipCurrentForSelected,
     snoozeSelected,
     snoozeSelectedUntilDate,
@@ -1164,6 +1291,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     refreshActionTabData,
     policyError,
     snoozeDateInput,
+    maturityMinAgeDaysInput,
   });
 
   watch(
@@ -1190,6 +1318,22 @@ export function useContainerActions(input: UseContainerActionsInput) {
     () => selectedSnoozeUntil.value,
     (snoozeUntil) => {
       snoozeDateInput.value = toDateInputValue(snoozeUntil);
+    },
+    { immediate: true },
+  );
+
+  watch(
+    () => selectedMaturityMode.value,
+    (mode) => {
+      maturityModeInput.value = mode ?? 'all';
+    },
+    { immediate: true },
+  );
+
+  watch(
+    () => selectedMaturityMinAgeDays.value,
+    (minAgeDays) => {
+      maturityMinAgeDaysInput.value = minAgeDays;
     },
     { immediate: true },
   );
@@ -1317,7 +1461,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
     return deriveContainerListPolicyState(input.containerMetaMap.value, containerName);
   }
 
-  function containerPolicyTooltip(containerName: string, kind: 'snoozed' | 'skipped'): string {
+  function containerPolicyTooltip(
+    containerName: string,
+    kind: 'snoozed' | 'skipped' | 'maturity',
+  ): string {
     const state = getContainerListPolicyState(containerName);
     return buildContainerPolicyTooltip(state, kind);
   }
@@ -1329,7 +1476,10 @@ export function useContainerActions(input: UseContainerActionsInput) {
     containerActionsDisabledReason,
     containerActionsEnabled,
     clearPolicySelected,
+    clearMaturityPolicySelected,
     clearSkipsSelected,
+    maturityMinAgeDaysInput,
+    maturityModeInput,
     confirmDelete,
     confirmForceUpdate,
     confirmUpdate,
@@ -1365,10 +1515,14 @@ export function useContainerActions(input: UseContainerActionsInput) {
     runAssociatedTrigger,
     runContainerPreview,
     scanContainer,
+    selectedHasMaturityPolicy,
+    selectedMaturityMinAgeDays,
+    selectedMaturityMode,
     selectedSkipDigests,
     selectedSkipTags,
     selectedSnoozeUntil,
     selectedUpdatePolicy,
+    setMaturityPolicySelected,
     skipCurrentForSelected,
     skipUpdate,
     skippedUpdates,
