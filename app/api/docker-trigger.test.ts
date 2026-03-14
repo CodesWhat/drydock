@@ -175,6 +175,84 @@ describe('docker-trigger helper', () => {
     expect(result).toBe(true);
   });
 
+  test('treats compose trigger as compatible when container compose label path uses host mount prefix', () => {
+    const trigger = {
+      type: 'dockercompose',
+      configuration: { file: '/opt/drydock/test/monitoring/compose.yaml' },
+      getDefaultComposeFilePath: () => '/opt/drydock/test/monitoring/compose.yaml',
+      getComposeFilesForContainer: () => [
+        '/mnt/volume1/docker/stacks/test/monitoring/compose.yaml',
+      ],
+    };
+
+    const result = isTriggerCompatibleWithContainer(trigger, {
+      id: 'c1',
+      labels: {
+        'com.docker.compose.project.config_files':
+          '/mnt/volume1/docker/stacks/test/monitoring/compose.yaml',
+      },
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('rejects compose trigger when generic directory suffix match is ambiguous across different roots', () => {
+    const trigger = {
+      type: 'dockercompose',
+      configuration: { file: '/opt/drydock/stacks/compose.yaml' },
+      getDefaultComposeFilePath: () => '/opt/drydock/stacks/compose.yaml',
+      getComposeFilesForContainer: () => ['/mnt/volume1/docker/stacks/compose.yaml'],
+    };
+
+    const result = isTriggerCompatibleWithContainer(trigger, {
+      id: 'c1',
+      labels: {
+        'com.docker.compose.project.config_files': '/mnt/volume1/docker/stacks/compose.yaml',
+      },
+    });
+
+    expect(result).toBe(false);
+  });
+
+  test('treats compose trigger as compatible when configured as directory and compose label path uses host mount prefix', () => {
+    const trigger = {
+      type: 'dockercompose',
+      configuration: { file: '/opt/drydock/test/monitoring' },
+      getDefaultComposeFilePath: () => '/opt/drydock/test/monitoring',
+      getComposeFilesForContainer: () => [
+        '/mnt/volume1/docker/stacks/test/monitoring/compose.yaml',
+      ],
+    };
+
+    const result = isTriggerCompatibleWithContainer(trigger, {
+      id: 'c1',
+      labels: {
+        'com.docker.compose.project.config_files':
+          '/mnt/volume1/docker/stacks/test/monitoring/compose.yaml',
+      },
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('rejects compose trigger configured as generic directory when only ambiguous suffix segment matches', () => {
+    const trigger = {
+      type: 'dockercompose',
+      configuration: { file: '/opt/drydock/stacks' },
+      getDefaultComposeFilePath: () => '/opt/drydock/stacks',
+      getComposeFilesForContainer: () => ['/mnt/volume1/docker/stacks/compose.yaml'],
+    };
+
+    const result = isTriggerCompatibleWithContainer(trigger, {
+      id: 'c1',
+      labels: {
+        'com.docker.compose.project.config_files': '/mnt/volume1/docker/stacks/compose.yaml',
+      },
+    });
+
+    expect(result).toBe(false);
+  });
+
   test('rejects compose trigger when configured directory does not match container compose file', () => {
     const trigger = {
       type: 'dockercompose',
@@ -209,15 +287,19 @@ describe('docker-trigger helper', () => {
   test('prefers the compose trigger whose configured file matches the container compose labels', () => {
     const mysqlComposeTrigger = {
       type: 'dockercompose',
-      configuration: { file: '/opt/drydock/test/mysql.yml' },
-      getDefaultComposeFilePath: () => '/opt/drydock/test/mysql.yml',
-      getComposeFilesForContainer: () => ['/opt/drydock/test/monitoring.yml'],
+      configuration: { file: '/opt/drydock/test/mysql/compose.yaml' },
+      getDefaultComposeFilePath: () => '/opt/drydock/test/mysql/compose.yaml',
+      getComposeFilesForContainer: () => [
+        '/mnt/volume1/docker/stacks/test/monitoring/compose.yaml',
+      ],
     };
     const monitoringComposeTrigger = {
       type: 'dockercompose',
-      configuration: { file: '/opt/drydock/test/monitoring.yml' },
-      getDefaultComposeFilePath: () => '/opt/drydock/test/monitoring.yml',
-      getComposeFilesForContainer: () => ['/opt/drydock/test/monitoring.yml'],
+      configuration: { file: '/opt/drydock/test/monitoring/compose.yaml' },
+      getDefaultComposeFilePath: () => '/opt/drydock/test/monitoring/compose.yaml',
+      getComposeFilesForContainer: () => [
+        '/mnt/volume1/docker/stacks/test/monitoring/compose.yaml',
+      ],
     };
 
     const result = findDockerTriggerForContainer(
@@ -228,7 +310,8 @@ describe('docker-trigger helper', () => {
       {
         id: 'c1',
         labels: {
-          'com.docker.compose.project.config_files': '/opt/drydock/test/monitoring.yml',
+          'com.docker.compose.project.config_files':
+            '/mnt/volume1/docker/stacks/test/monitoring/compose.yaml',
         },
       },
       { triggerTypes: ['dockercompose'] },

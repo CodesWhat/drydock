@@ -258,24 +258,29 @@ describe('api/container/triggers', () => {
         id: 'dockercompose.mysql',
         type: 'dockercompose',
         name: 'mysql',
-        configuration: { file: '/opt/drydock/test/mysql.yml' },
-        getDefaultComposeFilePath: () => '/opt/drydock/test/mysql.yml',
-        getComposeFilesForContainer: () => ['/opt/drydock/test/monitoring.yml'],
+        configuration: { file: '/opt/drydock/test/mysql/compose.yaml' },
+        getDefaultComposeFilePath: () => '/opt/drydock/test/mysql/compose.yaml',
+        getComposeFilesForContainer: () => [
+          '/mnt/volume1/docker/stacks/test/monitoring/compose.yaml',
+        ],
       });
       const monitoringComposeTrigger = createTrigger({
         id: 'dockercompose.monitoring',
         type: 'dockercompose',
         name: 'monitoring',
-        configuration: { file: '/opt/drydock/test/monitoring.yml' },
-        getDefaultComposeFilePath: () => '/opt/drydock/test/monitoring.yml',
-        getComposeFilesForContainer: () => ['/opt/drydock/test/monitoring.yml'],
+        configuration: { file: '/opt/drydock/test/monitoring/compose.yaml' },
+        getDefaultComposeFilePath: () => '/opt/drydock/test/monitoring/compose.yaml',
+        getComposeFilesForContainer: () => [
+          '/mnt/volume1/docker/stacks/test/monitoring/compose.yaml',
+        ],
       });
 
       const harness = createHarness({
         container: {
           id: 'c1',
           labels: {
-            'com.docker.compose.project.config_files': '/opt/drydock/test/monitoring.yml',
+            'com.docker.compose.project.config_files':
+              '/mnt/volume1/docker/stacks/test/monitoring/compose.yaml',
           },
         },
         triggerMap: {
