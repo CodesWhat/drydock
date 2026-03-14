@@ -150,6 +150,14 @@ docker run \
 
 ### Reverse proxy (trust proxy)
 
+**Required when drydock runs behind a TLS-terminating reverse proxy** (Traefik, Nginx, Caddy, HAProxy, etc.). Without this setting, drydock cannot determine the real protocol or client IP from forwarded headers, which causes:
+
+- **CSRF validation failures** (403 errors on POST/PUT/DELETE requests) — drydock sees `http://` internally while the browser sends `Origin: https://...`
+- **Incorrect security headers** — HSTS and secure cookie flags may not be applied
+- **Wrong client IPs in logs and rate limiting** — drydock sees the proxy's IP instead of the real client
+
+Set `DD_SERVER_TRUSTPROXY=1` to trust one proxy hop. Use a higher number if you have chained proxies (e.g. CDN → load balancer → app proxy = `3`).
+
 <Tabs items={["Docker Compose (Trust Proxy)", "Docker (Trust Proxy)"]}>
 <Tab value="Docker Compose (Trust Proxy)">
 
@@ -172,6 +180,8 @@ docker run \
 ```
 </Tab>
 </Tabs>
+
+Your proxy must forward the `X-Forwarded-Proto` header so drydock knows whether the original request used HTTPS. Most proxies (Traefik, Caddy) do this by default. For Nginx, add `proxy_set_header X-Forwarded-Proto $scheme;` to your location block. See the [FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) for complete Traefik and Nginx examples.
 
 ## Advanced Tuning
 
