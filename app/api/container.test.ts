@@ -883,7 +883,42 @@ describe('Container Router', () => {
 
       expect(mockGetOperationsByContainerName).toHaveBeenCalledWith('nginx');
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ data: operations, total: operations.length });
+      expect(res.json).toHaveBeenCalledWith({
+        data: operations,
+        total: operations.length,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
+    });
+
+    test('should apply limit and offset pagination to update operations', () => {
+      storeContainer.getContainer.mockReturnValue({ id: 'c1', name: 'nginx' });
+      const operations = [{ id: 'op-1' }, { id: 'op-2' }, { id: 'op-3' }];
+      mockGetOperationsByContainerName.mockReturnValue(operations);
+
+      const handler = getHandler('get', '/:id/update-operations');
+      const res = createResponse();
+      handler(
+        {
+          params: { id: 'c1' },
+          query: { limit: '1', offset: '1' },
+        },
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [{ id: 'op-2' }],
+        total: 3,
+        limit: 1,
+        offset: 1,
+        hasMore: true,
+        _links: {
+          self: '/api/containers/c1/update-operations?limit=1&offset=1',
+          next: '/api/containers/c1/update-operations?limit=1&offset=2',
+        },
+      });
     });
   });
 
@@ -2302,7 +2337,7 @@ describe('Container Router', () => {
       const res = await callWatchContainer();
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Error when watching container c1',
+        error: 'Error when watching container c1 (watch error)',
       });
     });
 

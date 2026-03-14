@@ -5,6 +5,7 @@ import {
   errorResponse,
   jsonResponse,
   noContentResponse,
+  paginationQueryParams,
   triggerAgentPathParam,
   triggerNamePathParam,
   triggerTypePathParam,
@@ -246,7 +247,7 @@ export const containerPaths = {
       tags: ['Containers'],
       summary: 'Get persisted update-operation history for a container',
       operationId: 'getContainerUpdateOperations',
-      parameters: [containerIdPathParam],
+      parameters: [containerIdPathParam, ...paginationQueryParams],
       responses: {
         200: jsonResponse('Update operations', { $ref: '#/components/schemas/CollectionResult' }),
         401: errorResponse('Authentication required'),
