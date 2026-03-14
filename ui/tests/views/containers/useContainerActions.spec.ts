@@ -300,6 +300,28 @@ describe('useContainerActions', () => {
     expect(mocks.getContainerUpdateOperations).toHaveBeenCalledTimes(1);
   });
 
+  it('runs direct update/scan actions and guards unmapped containers', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    await composable.updateContainer('web');
+    await composable.scanContainer('web');
+
+    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    expect(mocks.scanContainer).toHaveBeenCalledWith('container-1');
+
+    mocks.updateContainer.mockClear();
+    mocks.scanContainer.mockClear();
+    await composable.updateContainer('api');
+    await composable.scanContainer('api');
+    expect(mocks.updateContainer).not.toHaveBeenCalled();
+    expect(mocks.scanContainer).not.toHaveBeenCalled();
+  });
+
   it('validates snooze-until input before policy updates', async () => {
     const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable } = await mountActionsHarness({
@@ -313,6 +335,24 @@ describe('useContainerActions', () => {
 
     expect(composable.policyError.value).toBe('Select a valid snooze date');
     expect(mocks.updateContainerPolicy).not.toHaveBeenCalled();
+  });
+
+  it('applies snooze-until policy when date input is valid', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    composable.snoozeDateInput.value = '2026-03-15';
+    await composable.snoozeSelectedUntilDate();
+
+    expect(mocks.updateContainerPolicy).toHaveBeenCalledWith(
+      'container-1',
+      'snooze',
+      expect.objectContaining({ snoozeUntil: expect.any(String) }),
+    );
   });
 
   it('applies and clears maturity policy actions with defaults and validation', async () => {
@@ -557,6 +597,100 @@ describe('useContainerActions', () => {
       maturityBlocked: false,
     });
     expect(composable.containerPolicyTooltip('web', 'maturity')).toContain('Mature-only policy');
+  });
+
+  it('normalizes unknown maturity mode strings and falls back to generic maturity tooltip text', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerMetaMap: {
+        web: {
+          updatePolicy: {
+            maturityMode: '  experimental  ',
+            skipTags: [],
+            skipDigests: [],
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedMaturityMode.value).toBeUndefined();
+    expect(composable.selectedHasMaturityPolicy.value).toBe(false);
+    expect(composable.getContainerListPolicyState('web')).toEqual({
+      snoozed: false,
+      skipped: false,
+      skipCount: 0,
+      maturityBlocked: false,
+    });
+    expect(composable.containerPolicyTooltip('web', 'maturity')).toBe('Maturity policy active');
+  });
+
+  it('guards selected skip policy arrays and returns values when arrays are present', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, containerMetaMap } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerMetaMap: {
+        web: {
+          updatePolicy: {
+            skipTags: 'stable',
+            skipDigests: null,
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedSkipTags.value).toEqual([]);
+    expect(composable.selectedSkipDigests.value).toEqual([]);
+
+    containerMetaMap.value = {
+      web: {
+        updatePolicy: {
+          skipTags: ['stable'],
+          skipDigests: ['sha256:1'],
+        },
+      },
+    };
+    await nextTick();
+
+    expect(composable.selectedSkipTags.value).toEqual(['stable']);
+    expect(composable.selectedSkipDigests.value).toEqual(['sha256:1']);
+  });
+
+  it('handles invalid detected-at timestamps and the allow-all maturity tooltip branch', async () => {
+    const { composable } = await mountActionsHarness({
+      containerMetaMap: {
+        web: {
+          updateAvailable: false,
+          updateDetectedAt: 'not-a-date',
+          updateKind: {
+            kind: 'tag',
+            remoteValue: '2.0.0',
+          },
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 7,
+          },
+        },
+        api: {
+          updatePolicy: {
+            maturityMode: 'all',
+            maturityMinAgeDays: 14,
+          },
+        },
+      },
+    });
+
+    expect(composable.getContainerListPolicyState('web')).toMatchObject({
+      maturityMode: 'mature',
+      maturityMinAgeDays: 7,
+      maturityBlocked: true,
+    });
+    expect(composable.getContainerListPolicyState('web')).not.toHaveProperty('updateDetectedAt');
+    expect(composable.containerPolicyTooltip('api', 'maturity')).toBe(
+      'Maturity policy allows all updates',
+    );
   });
 
   it('wires confirm stop/restart/force-update dialogs to their accept handlers', async () => {
@@ -998,6 +1132,21 @@ describe('useContainerActions', () => {
     await nextTick();
 
     expect(composable.snoozeDateInput.value).toBe('');
+    expect(composable.getContainerListPolicyState('web')).toEqual({
+      snoozed: false,
+      skipped: false,
+      skipCount: 0,
+      maturityBlocked: false,
+    });
+  });
+
+  it('returns empty policy state when metadata has no update-policy object', async () => {
+    const { composable } = await mountActionsHarness({
+      containerMetaMap: {
+        web: {},
+      },
+    });
+
     expect(composable.getContainerListPolicyState('web')).toEqual({
       snoozed: false,
       skipped: false,
