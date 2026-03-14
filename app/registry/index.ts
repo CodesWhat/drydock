@@ -88,8 +88,14 @@ const state: RegistryState = {
   agent: {},
 };
 
+const registrationWarnings: string[] = [];
+
 export function getState() {
   return state;
+}
+
+export function getRegistrationWarnings(): string[] {
+  return [...registrationWarnings];
 }
 
 /**
@@ -503,9 +509,10 @@ async function registerAuthentications() {
     | ProviderConfigurationsByProvider
     | null
     | undefined;
-  try {
-    if (!configurations || Object.keys(configurations).length === 0) {
-      log.info('No authentication configured => Allow anonymous access');
+
+  if (!configurations || Object.keys(configurations).length === 0) {
+    log.info('No authentication configured => Allow anonymous access');
+    try {
       await registerComponent({
         kind: 'authentication',
         provider: 'anonymous',
@@ -513,11 +520,44 @@ async function registerAuthentications() {
         configuration: {},
         componentPath: 'authentications/providers',
       });
+    } catch (e: any) {
+      log.warn(`Some authentications failed to register (${e.message})`);
+      log.debug(e);
     }
+    return;
+  }
+
+  try {
     await registerComponents('authentication', configurations, 'authentications/providers');
   } catch (e: any) {
-    log.warn(`Some authentications failed to register (${e.message})`);
+    const message = `Some authentications failed to register (${e.message})`;
+    log.warn(message);
     log.debug(e);
+    registrationWarnings.push(message);
+  }
+
+  // If all configured auth providers failed, attempt anonymous fallback.
+  // The Anonymous provider itself enforces fail-closed on fresh installs
+  // without DD_ANONYMOUS_AUTH_CONFIRM=true — the security boundary is
+  // inside Anonymous, not here.
+  if (Object.keys(state.authentication).length === 0) {
+    log.warn(
+      'All configured authentication providers failed to register — attempting anonymous fallback',
+    );
+    try {
+      await registerComponent({
+        kind: 'authentication',
+        provider: 'anonymous',
+        name: 'anonymous',
+        configuration: {},
+        componentPath: 'authentications/providers',
+      });
+    } catch (e: any) {
+      const fallbackMessage = `Anonymous authentication fallback also failed (${e.message}). Check your DD_AUTH_BASIC_* environment variables. Set DD_ANONYMOUS_AUTH_CONFIRM=true to allow anonymous access as a fallback.`;
+      log.error(fallbackMessage);
+      log.debug(e);
+      registrationWarnings.push(fallbackMessage);
+    }
   }
 }
 
@@ -693,4 +733,5 @@ export {
   getKnownProviderSet as testable_getKnownProviderSet,
   applySharedTriggerConfigurationByName as testable_applySharedTriggerConfigurationByName,
   log as testable_log,
+  registrationWarnings as testable_registrationWarnings,
 };
