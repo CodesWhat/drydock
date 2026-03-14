@@ -48,6 +48,17 @@ describe('update-maturity', () => {
   });
 
   describe('formatUpdateAge', () => {
+    it('uses Date.now when nowMs is omitted', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(NOW));
+      try {
+        const twoHoursAgo = new Date(NOW - 2 * ONE_HOUR).toISOString();
+        expect(formatUpdateAge(twoHoursAgo, true)).toBe('Available for 2 hours');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('returns undefined when no update available', () => {
       expect(formatUpdateAge('2026-03-10T00:00:00Z', false, NOW)).toBeUndefined();
     });

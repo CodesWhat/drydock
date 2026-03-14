@@ -481,6 +481,34 @@ describe('useContainerActions', () => {
     expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
   });
 
+  it('does not reload grouped containers when every update action fails', async () => {
+    const c1 = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0', bouncer: 'safe' });
+    const c2 = makeContainer({
+      id: 'container-2',
+      name: 'api',
+      newTag: '2.0.0',
+      bouncer: 'safe',
+    });
+    const { composable, loadContainers } = await mountActionsHarness({
+      containers: [c1, c2],
+      containerIdMap: {
+        web: 'container-1',
+        api: 'container-2',
+      },
+    });
+    mocks.updateContainer.mockRejectedValue(new Error('update failed'));
+    loadContainers.mockClear();
+
+    await composable.updateAllInGroup({
+      key: 'group-1',
+      containers: [c1, c2],
+    });
+
+    expect(mocks.updateContainer).toHaveBeenCalledTimes(2);
+    expect(loadContainers).not.toHaveBeenCalled();
+    expect(composable.groupUpdateInProgress.value.has('group-1')).toBe(false);
+  });
+
   it('tracks pending actions and polls until container reappears', async () => {
     vi.useFakeTimers();
     const web = makeContainer({ id: 'container-1', name: 'web' });
@@ -760,6 +788,33 @@ describe('useContainerActions', () => {
     expect(composable.containerPolicyTooltip('api', 'maturity')).toBe(
       'Maturity policy allows all updates',
     );
+  });
+
+  it('preserves detected-at metadata when list policy has skips but no maturity mode', async () => {
+    const detectedAt = '2026-03-14T12:00:00.000Z';
+    const { composable } = await mountActionsHarness({
+      containerMetaMap: {
+        web: {
+          updateAvailable: false,
+          updateDetectedAt: detectedAt,
+          updateKind: {
+            kind: 'tag',
+            remoteValue: '2.0.0',
+          },
+          updatePolicy: {
+            skipTags: ['stable'],
+          },
+        },
+      },
+    });
+
+    expect(composable.getContainerListPolicyState('web')).toMatchObject({
+      skipped: true,
+      skipCount: 1,
+      updateDetectedAt: detectedAt,
+      maturityBlocked: false,
+    });
+    expect(composable.getContainerListPolicyState('web')).not.toHaveProperty('maturityMode');
   });
 
   it('uses singular maturity and skipped tooltip wording when min age and skip count are one', async () => {
