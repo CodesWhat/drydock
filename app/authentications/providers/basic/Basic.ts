@@ -45,6 +45,7 @@ interface ParsedCryptHash {
 type LegacyHashFormat = 'sha1' | 'apr1' | 'md5' | 'crypt' | 'plain';
 const UNSUPPORTED_PLAIN_FALLBACK_PATTERNS: RegExp[] = [
   /^\$2[abxy]\$/i, // bcrypt variants
+  /v=19m=\d{4,},t=\d+,p=\d+/, // Mangled argon2 (Docker Compose $ interpolation strips $ delimiters)
 ];
 
 function normalizeHash(rawHash: string): string {

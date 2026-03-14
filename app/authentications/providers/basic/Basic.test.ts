@@ -1470,6 +1470,41 @@ describe('Basic Authentication', () => {
     });
   });
 
+  describe('mangled argon2 hashes (Docker Compose $ interpolation)', () => {
+    test('should reject mangled PHC argon2 hash where Compose stripped $ delimiters', () => {
+      // Docker Compose turns $argon2id$v=19$m=65536,t=3,p=4$salt$hash into
+      // "argon2idv=19m=65536,t=3,p=4salthash" (all $-prefixed segments interpolated as empty)
+      const mangledHash = 'argon2idv=19m=65536,t=3,p=4salthash';
+      expect(() =>
+        basic.validateConfiguration({
+          user: 'testuser',
+          hash: mangledHash,
+        }),
+      ).toThrow('must be an argon2id hash');
+    });
+
+    test('should reject mangled hash with realistic base64 fragments', () => {
+      // More realistic: Compose leaves behind the content after each $ (without the $)
+      const mangledHash =
+        'v=19m=65536,t=3,p=4AAAAAAAAAAAAAAAAAAAAAA+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+      expect(() =>
+        basic.validateConfiguration({
+          user: 'testuser',
+          hash: mangledHash,
+        }),
+      ).toThrow('must be an argon2id hash');
+    });
+
+    test('should not treat mangled argon2 hash as legacy hash format', () => {
+      const mangledHash = 'argon2idv=19m=65536,t=3,p=4salthash';
+      basic.configuration = {
+        user: 'testuser',
+        hash: mangledHash,
+      };
+      expect(basic.getMetadata()).toEqual({ usesLegacyHash: false });
+    });
+  });
+
   describe('getLegacyHashFormat malformed argon2id prefix', () => {
     test('should not treat malformed Drydock argon2id hash as plain fallback', () => {
       // Starts with "argon2id$" so looksLikeArgon2Hash returns true, but parsing fails
