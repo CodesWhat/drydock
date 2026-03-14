@@ -100,17 +100,13 @@ function sanitizeContainerDetailsForAgentSse(details: unknown): unknown {
   };
 }
 
-function sanitizeContainerLifecyclePayloadForAgentSse(
-  payload: event.ContainerLifecycleEventPayload,
-): event.ContainerLifecycleEventPayload {
+function sanitizeContainerLifecyclePayloadForAgentSse(payload: unknown): unknown {
   if (!payload || typeof payload !== 'object') {
     return payload;
   }
 
-  const payloadWithDetails = payload as event.ContainerLifecycleEventPayload & {
-    details?: unknown;
-  };
-  if (!payloadWithDetails.details) {
+  const payloadWithDetails = payload as Record<string, unknown>;
+  if (!Object.hasOwn(payloadWithDetails, 'details')) {
     return payload;
   }
 
@@ -120,10 +116,11 @@ function sanitizeContainerLifecyclePayloadForAgentSse(
   };
 }
 
-function getAgentContainerSsePayload(
-  payload: event.ContainerLifecycleEventPayload,
-): event.ContainerLifecycleEventPayload {
-  const containerId = typeof payload?.id === 'string' ? payload.id : undefined;
+function getAgentContainerSsePayload(payload: unknown): unknown {
+  const containerId =
+    payload && typeof payload === 'object' && typeof (payload as { id?: unknown }).id === 'string'
+      ? ((payload as { id: string }).id as string)
+      : undefined;
   if (containerId) {
     const containerRaw = storeContainer.getContainerRaw(containerId);
     if (containerRaw) {
