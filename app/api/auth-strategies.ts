@@ -64,11 +64,16 @@ export function getUniqueStrategies(): StrategyDescription[] {
 
 /**
  * Return the registered strategies from the registry.
+ * Includes any registration warnings so the login UI can surface them.
  * @param req
  * @param res
  */
 export function getStrategies(_req: Request, res: Response): void {
-  res.json(getUniqueStrategies());
+  const warnings = registry.getRegistrationWarnings();
+  res.json({
+    strategies: getUniqueStrategies(),
+    warnings,
+  });
 }
 
 export function getLogoutRedirectUrl(): string | undefined {

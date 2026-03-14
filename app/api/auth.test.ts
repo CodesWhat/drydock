@@ -77,6 +77,7 @@ vi.mock('../registry', () => ({
   getState: vi.fn(() => ({
     authentication: {},
   })),
+  getRegistrationWarnings: vi.fn(() => []),
 }));
 
 vi.mock('../log', () => ({ default: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
@@ -1607,11 +1608,14 @@ describe('Auth Router', () => {
       const res = createResponse();
       handler({}, res);
 
-      // Should be sorted by name and deduplicated
-      expect(res.json).toHaveBeenCalledWith([
-        { type: 'oauth', name: 'a' },
-        { type: 'basic', name: 'b' },
-      ]);
+      // Should be sorted by name and deduplicated, wrapped in { strategies, warnings }
+      expect(res.json).toHaveBeenCalledWith({
+        strategies: [
+          { type: 'oauth', name: 'a' },
+          { type: 'basic', name: 'b' },
+        ],
+        warnings: [],
+      });
     });
 
     test('getStrategies should deduplicate with near-linear type lookups', () => {

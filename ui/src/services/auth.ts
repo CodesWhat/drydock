@@ -11,7 +11,7 @@ let user = undefined;
  * Get auth strategies.
  * @returns {Promise<unknown>}
  */
-async function getStrategies() {
+async function getStrategies(): Promise<{ strategies: unknown[]; warnings: string[] }> {
   const response = await fetch('/auth/strategies', { credentials: 'include' });
   if (!response.ok) {
     throw new Error(`Failed to get auth strategies: ${response.statusText}`);
