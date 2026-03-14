@@ -99,18 +99,16 @@ describe('LoginView', () => {
     });
 
     it('displays registration warnings when no strategies and warnings exist', async () => {
-      const wrapper = await mountLogin([], [
-        'Some authentications failed to register ("hash" is required)',
-      ]);
+      const wrapper = await mountLogin(
+        [],
+        ['Some authentications failed to register ("hash" is required)'],
+      );
       expect(wrapper.text()).toContain('No authentication methods configured');
       expect(wrapper.text()).toContain('Some authentications failed to register');
     });
 
     it('does not display warnings when strategies exist', async () => {
-      const wrapper = await mountLogin(
-        [{ type: 'basic', name: 'basic' }],
-        ['Some warning'],
-      );
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }], ['Some warning']);
       expect(wrapper.text()).not.toContain('Some warning');
     });
   });
