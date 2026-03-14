@@ -10,6 +10,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1]
+
+### Added
+
+- **Headless mode (`DD_SERVER_UI_ENABLED`)** — Run drydock as an API-only service by setting `DD_SERVER_UI_ENABLED=false`. The REST API, SSE, and healthcheck endpoints remain fully functional while the UI is not served. Useful for controller nodes that only manage agents.
+- **Maturity-based update policy** — Per-container update maturity policy via `dd.updatePolicy.maturityMode` (`all` or `mature`) and `dd.updatePolicy.maturityMinAgeDays` (default 7). When set to `mature`, containers with updates detected less than the configured age threshold are blocked from triggering until the update has settled. UI shows NEW/MATURE badges with flame/clock icons on containers with available updates. ([#120](https://github.com/CodesWhat/drydock/discussions/120))
+- **`?groupByStack=true` URL parameter** — Bookmarkable URL parameter to enable stack grouping on the containers page. Also accepts `?groupByStack=1`. ([#145](https://github.com/CodesWhat/drydock/issues/145))
+
+### Changed
+
+- **Connection-lost overlay animation** — The connection-lost and reconnecting overlays now use a bounce animation for improved visual feedback.
+- **Watch target resolution refactored to discriminated union** — Internal refactor of the watch target resolution logic for improved type safety and maintainability.
+
+### Fixed
+
+- **Agent handshake validation failure** — Fixed agent API returning redacted container data (with `sensitive` field on env entries) instead of raw data, causing controller-side Joi validation to reject the handshake with `"details.env[0].sensitive" is not allowed`. ([#141](https://github.com/CodesWhat/drydock/issues/141))
+- **Compose trigger association** — Enforce compose-file affinity when associating triggers with containers, preventing incorrect trigger-container matching. ([#139](https://github.com/CodesWhat/drydock/issues/139))
+- **Update All button icon centering** — Fixed icon-text alignment in the Update All group header button to match the split button pattern used elsewhere.
+- **Selected card border clipping** — Fixed card border clipping on the first grid column in card view.
+
+### Security
+
+- **Username enumeration timing side-channel** — Eliminated timing difference between valid and invalid usernames during authentication.
+- **LokiJS metadata exposure** — Stripped internal LokiJS fields (`$loki`, `meta`) from settings API responses, agent API container responses, and `/app` endpoint.
+- **Permissions-Policy header** — Added `Permissions-Policy` header to restrict browser feature access (camera, microphone, geolocation, etc.).
+- **CSP and Cross-Origin-Embedder-Policy** — Tightened Content Security Policy and added COEP header.
+- **Production image hardening** — Removed `wget`, `nc`, and `npm` from the production Docker image; upgraded zlib.
+
+### Dependencies
+
+- **undici** — Bumped to 7.24.1 (fixes 12 CVEs including WebSocket memory consumption, CRLF injection, and request smuggling).
+
 ## [1.4.0] — 2026-02-28
 
 ### Breaking Changes
