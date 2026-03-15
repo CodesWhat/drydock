@@ -271,6 +271,8 @@ services:
 
 A socket proxy runs as a separate container with access to the Docker socket and exposes only the API endpoints Drydock needs. Drydock connects to the proxy over HTTP, so no socket mount is required at all.
 
+<Callout type="info">Running Drydock with Podman? See [Podman Quick Start](#podman-quick-start) for rootless/rootful socket paths and proxy setup details.</Callout>
+
 ```yaml
 services:
   drydock:
@@ -313,6 +315,114 @@ services:
 | Docker trigger (auto-updates) | All of the above **plus** `POST=1`, `NETWORKS=1` |
 
 <Callout type="warn">Container actions (start, stop, restart, update) require a Docker trigger to be configured. If you only want container actions without automatic updates, set `DD_TRIGGER_DOCKER_{name}_AUTO=false`. Without a Docker trigger, the UI will show "No docker trigger found for this container" when attempting actions.</Callout>
+
+### Podman Quick Start
+
+Podman works with Drydock through Podman's Docker-compatible API socket.
+
+<Callout type="warn">This section is documentation-only compatibility guidance for v1.5. Full Podman support (runtime auto-detection and a dedicated CI test matrix) is planned for **Phase 10.4**.</Callout>
+
+<Callout type="info">Background and user reports: [GitHub issue #152](https://github.com/CodesWhat/drydock/issues/152).</Callout>
+
+#### Socket path mapping (`podman.sock` vs `docker.sock`)
+
+Use Podman's host socket path, but mount it inside the Drydock container at `/var/run/docker.sock` so existing Drydock defaults still work.
+
+| Runtime mode | Host socket path | Path inside Drydock container | Drydock watcher variable |
+| --- | --- | --- | --- |
+| Docker | `/var/run/docker.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
+| Podman rootful | `/run/podman/podman.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
+| Podman rootless | `/run/user/<uid>/podman/podman.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
+
+#### Rootful vs rootless setup
+
+- **Rootful Podman socket:** `sudo systemctl enable --now podman.socket`
+- **Rootless Podman socket:** `systemctl --user enable --now podman.socket` (and optionally `loginctl enable-linger <user>` so the user socket survives logout)
+
+<Tabs items={["Podman Rootful (Direct Socket)", "Podman Rootless (Direct Socket)", "Podman + Socket Proxy"]}>
+<Tab value="Podman Rootful (Direct Socket)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    volumes:
+      - /run/podman/podman.sock:/var/run/docker.sock
+    environment:
+      - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
+    ports:
+      - 3000:3000
+```
+
+</Tab>
+<Tab value="Podman Rootless (Direct Socket)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    volumes:
+      - ${XDG_RUNTIME_DIR}/podman/podman.sock:/var/run/docker.sock
+    environment:
+      - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
+    ports:
+      - 3000:3000
+```
+
+</Tab>
+<Tab value="Podman + Socket Proxy">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    depends_on:
+      socket-proxy:
+        condition: service_healthy
+    environment:
+      - DD_WATCHER_LOCAL_HOST=socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+      - DD_TRIGGER_DOCKER_LOCAL_AUTO=false
+    ports:
+      - 3000:3000
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    environment:
+      - SOCKET_PATH=/run/podman/podman.sock
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - SERVICES=1
+      - POST=1
+      - NETWORKS=1
+    volumes:
+      - /run/podman/podman.sock:/run/podman/podman.sock
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">For rootless Podman with socket proxy, set `SOCKET_PATH=${XDG_RUNTIME_DIR}/podman/podman.sock` and mount the same host path into the proxy container.</Callout>
+
+#### Known limitations and tested versions
+
+| Topic | Status |
+| --- | --- |
+| Tested Podman version | `5.6.0` on Rocky Linux `9.7` (issue [#152](https://github.com/CodesWhat/drydock/issues/152)) |
+| Runtime auto-detection | Not implemented yet (planned in Phase 10.4) |
+| CI coverage | No dedicated Podman CI matrix yet (planned in Phase 10.4) |
+| Rootless networking | Can differ from Docker bridge behavior; see [Podman FAQ](/docs/faq#podman-rootless-networking-limitations) |
+
+For common Podman troubleshooting, see [FAQ Podman entries](/docs/faq#podman-socket-proxy-dns-resolution-fails-enotfound).
 
 ### Watch 1 local Docker host and 2 remote docker hosts at the same time
 
