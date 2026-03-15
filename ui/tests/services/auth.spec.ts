@@ -119,11 +119,14 @@ describe('Auth Service', () => {
   });
 
   describe('getStrategies', () => {
-    it('returns available authentication strategies', async () => {
-      const mockStrategies = [
-        { name: 'basic', type: 'basic' },
-        { name: 'oidc', type: 'oidc' },
-      ];
+    it('returns auth status payload with providers and errors', async () => {
+      const mockStrategies = {
+        providers: [
+          { name: 'basic', type: 'basic' },
+          { name: 'oidc', type: 'oidc' },
+        ],
+        errors: [{ provider: 'basic:ANDI', error: 'hash is required' }],
+      };
       fetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockStrategies,
@@ -131,7 +134,7 @@ describe('Auth Service', () => {
 
       const strategies = await getStrategies();
 
-      expect(fetch).toHaveBeenCalledWith('/auth/strategies', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/auth/status', {
         credentials: 'include',
       });
       expect(strategies).toEqual(mockStrategies);

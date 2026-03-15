@@ -16,6 +16,11 @@ interface Strategy {
   redirect?: boolean;
 }
 
+interface AuthProviderError {
+  provider: string;
+  error: string;
+}
+
 const strategies = ref<Strategy[]>([]);
 const loading = ref(true);
 const error = ref('');
@@ -27,7 +32,7 @@ const rememberMe = ref(false);
 const hasBasic = ref(false);
 const oidcStrategies = ref<Strategy[]>([]);
 const connectionLost = ref(false);
-const warnings = ref<string[]>([]);
+const authErrors = ref<AuthProviderError[]>([]);
 
 const INITIAL_RETRY_DELAY_MS = 5_000;
 const MAX_RETRY_DELAY_MS = 30_000;
@@ -118,11 +123,11 @@ function oidcIcon(name: string): string {
 
 async function loadStrategies() {
   const response = await getStrategies();
-  const data = response.strategies as Strategy[];
+  const data = response.providers as Strategy[];
   strategies.value = data;
   hasBasic.value = data.some((s: Strategy) => s.type === 'basic');
   oidcStrategies.value = data.filter((s: Strategy) => s.type === 'oidc');
-  warnings.value = response.warnings ?? [];
+  authErrors.value = response.errors ?? [];
   error.value = '';
   connectionLost.value = false;
   retryDelayMs = INITIAL_RETRY_DELAY_MS;
@@ -138,6 +143,23 @@ async function loadStrategies() {
   if (!hasBasic.value && oidcStrategies.value.length === 1 && oidcStrategies.value[0].redirect) {
     await handleOidc(oidcStrategies.value[0].name);
   }
+}
+
+function formatAuthProviderError(authProviderError: AuthProviderError): string {
+  const [rawType, ...nameParts] = authProviderError.provider.split(':');
+  const providerType = rawType?.toLowerCase() ?? '';
+  const providerName = nameParts.join(':').trim();
+
+  if (providerType === 'basic') {
+    return `Basic auth '${providerName || 'default'}': ${authProviderError.error}`;
+  }
+  if (providerType === 'oidc') {
+    return `OIDC provider '${providerName || 'default'}': ${authProviderError.error}`;
+  }
+  if (providerName.length > 0) {
+    return `${providerType} '${providerName}': ${authProviderError.error}`;
+  }
+  return `${authProviderError.provider}: ${authProviderError.error}`;
 }
 
 async function checkConnectivity() {
@@ -276,16 +298,16 @@ onUnmounted(() => {
 
         <!-- No strategies available -->
         <div v-if="!hasBasic && oidcStrategies.length === 0" class="text-center text-sm">
-          <p class="dd-text-muted">No authentication methods configured.</p>
-          <div v-if="warnings.length > 0" class="mt-3 text-left space-y-2">
+          <div v-if="authErrors.length > 0" class="mt-3 text-left space-y-2">
             <div
-              v-for="(warning, index) in warnings"
+              v-for="(authProviderError, index) in authErrors"
               :key="index"
               class="px-3 py-2 text-xs dd-rounded dd-bg-danger-muted dd-text-danger"
             >
-              {{ warning }}
+              {{ formatAuthProviderError(authProviderError) }}
             </div>
           </div>
+          <p v-else class="dd-text-muted">No authentication methods configured.</p>
         </div>
       </div>
       </div>

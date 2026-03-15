@@ -54,11 +54,11 @@ function parseJsonBody<T>(init?: RequestInit): T {
 }
 
 function handleStrategiesRequest(context: LoginMockRequestContext): Response | undefined {
-  if (context.path !== '/auth/strategies' || context.method !== 'GET') {
+  if (context.path !== '/api/v1/auth/status' || context.method !== 'GET') {
     return undefined;
   }
 
-  return createJsonResponse(context.options.strategies, 200);
+  return createJsonResponse({ providers: context.options.strategies, errors: [] }, 200);
 }
 
 function handleLoginRequest(context: LoginMockRequestContext): Response | undefined {

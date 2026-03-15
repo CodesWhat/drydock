@@ -31,6 +31,13 @@ const mockRecordAuditEvent = vi.hoisted(() => vi.fn());
 const mockValidateOpenApiJsonResponse = vi.hoisted(() =>
   vi.fn(() => ({ valid: true, errors: [] })),
 );
+const { mockRecordAuthLogin, mockSetAuthAccountLockedTotal, mockSetAuthIpLockedTotal } = vi.hoisted(
+  () => ({
+    mockRecordAuthLogin: vi.fn(),
+    mockSetAuthAccountLockedTotal: vi.fn(),
+    mockSetAuthIpLockedTotal: vi.fn(),
+  }),
+);
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter), json: mockExpressJson },
@@ -78,6 +85,7 @@ vi.mock('../registry', () => ({
     authentication: {},
   })),
   getRegistrationWarnings: vi.fn(() => []),
+  getAuthenticationRegistrationErrors: vi.fn(() => []),
 }));
 
 vi.mock('../log', () => ({ default: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
@@ -95,6 +103,11 @@ vi.mock('./openapi-contract.js', () => ({
 vi.mock('./rate-limit-key.js', () => ({
   createAuthenticatedRouteRateLimitKeyGenerator: mockCreateAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled: mockIsIdentityAwareRateLimitKeyingEnabled,
+}));
+vi.mock('../prometheus/auth.js', () => ({
+  recordAuthLogin: mockRecordAuthLogin,
+  setAuthAccountLockedTotal: mockSetAuthAccountLockedTotal,
+  setAuthIpLockedTotal: mockSetAuthIpLockedTotal,
 }));
 
 import session from 'express-session';
@@ -474,6 +487,9 @@ describe('Auth Router', () => {
       expect(lockedResponse.json).toHaveBeenCalledWith({
         error: 'Account temporarily locked due to repeated failed login attempts',
       });
+      expect(mockRecordAuthLogin).toHaveBeenCalledWith('locked', 'basic');
+      expect(mockSetAuthAccountLockedTotal).toHaveBeenLastCalledWith(1);
+      expect(mockSetAuthIpLockedTotal).toHaveBeenCalled();
     });
 
     test('should derive login identity from request body username', () => {
@@ -822,6 +838,8 @@ describe('Auth Router', () => {
         expect(res.json).toHaveBeenCalledWith({
           error: 'Account temporarily locked due to repeated failed login attempts',
         });
+        expect(mockRecordAuthLogin).toHaveBeenCalledWith('locked', 'basic');
+        expect(mockSetAuthAccountLockedTotal).toHaveBeenCalledWith(1);
       } finally {
         vi.useRealTimers();
       }
@@ -1279,6 +1297,19 @@ describe('Auth Router', () => {
       expect(app.get).toHaveBeenCalledWith('/api/auth/methods', authLimiter, expect.any(Function));
     });
 
+    test('should register public auth status endpoints for login-time diagnostics', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const authLimiter = mockRouter.use.mock.calls[0][0];
+      expect(app.get).toHaveBeenCalledWith(
+        '/api/v1/auth/status',
+        authLimiter,
+        expect.any(Function),
+      );
+      expect(app.get).toHaveBeenCalledWith('/api/auth/status', authLimiter, expect.any(Function));
+    });
+
     test('should include identity-aware key generator in auth limiter when enabled', () => {
       const keyGenerator = vi.fn(() => 'session:test');
       mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(true);
@@ -1353,7 +1384,7 @@ describe('Auth Router', () => {
       );
     });
 
-    test('should register /strategies, /remember, /login, /logout, /user routes', () => {
+    test('should register /strategies, /status, /remember, /login, /logout, /user routes', () => {
       const app = createApp();
       registry.getState.mockReturnValue({ authentication: {} });
       auth.init(app);
@@ -1362,6 +1393,7 @@ describe('Auth Router', () => {
       const postRoutes = mockRouter.post.mock.calls.map((c) => c[0]);
 
       expect(getRoutes).toContain('/strategies');
+      expect(getRoutes).toContain('/status');
       expect(getRoutes).toContain('/user');
       expect(postRoutes).toContain('/remember');
       expect(postRoutes).toContain('/login');
@@ -1658,6 +1690,37 @@ describe('Auth Router', () => {
 
       expect(res.json).toHaveBeenCalled();
       expect(typeReads).toBeLessThanOrEqual(80);
+    });
+
+    test('getStatus should return providers and auth registration errors', () => {
+      registry.getState.mockReturnValue({
+        authentication: {
+          'oauth.provider': {
+            getId: vi.fn(() => 'oauth.provider'),
+            getStrategy: vi.fn(() => ({})),
+            getStrategyDescription: vi.fn(() => ({
+              type: 'oauth',
+              name: 'provider',
+              logoutUrl: 'https://logout.example.com',
+            })),
+          },
+        },
+      });
+      registry.getAuthenticationRegistrationErrors.mockReturnValue([
+        { provider: 'basic:andi', error: 'hash is required' },
+      ]);
+      const app = createApp();
+      auth.init(app);
+
+      const statusCall = mockRouter.get.mock.calls.find((c) => c[0] === '/status');
+      const handler = statusCall[1];
+      const res = createResponse();
+      handler({}, res);
+
+      expect(res.json).toHaveBeenCalledWith({
+        providers: [{ type: 'oauth', name: 'provider', logoutUrl: 'https://logout.example.com' }],
+        errors: [{ provider: 'basic:andi', error: 'hash is required' }],
+      });
     });
 
     test('getUser should return req.user when present', () => {

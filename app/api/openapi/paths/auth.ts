@@ -1,6 +1,35 @@
 import { errorResponse, jsonResponse } from '../common.js';
 
 export const authPaths = {
+  '/api/auth/status': {
+    get: {
+      tags: ['Authentication'],
+      summary: 'Get authentication provider registration status',
+      operationId: 'getAuthStatus',
+      security: [],
+      responses: {
+        200: jsonResponse('Authentication provider status', {
+          type: 'object',
+          properties: {
+            providers: { type: 'array', items: { type: 'object' } },
+            errors: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  provider: { type: 'string' },
+                  error: { type: 'string' },
+                },
+                required: ['provider', 'error'],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ['providers', 'errors'],
+        }),
+      },
+    },
+  },
   '/api/auth/methods': {
     get: {
       tags: ['Authentication'],
@@ -17,7 +46,7 @@ export const authPaths = {
   '/auth/strategies': {
     get: {
       tags: ['Authentication'],
-      summary: 'Get enabled authentication strategies',
+      summary: 'Get enabled authentication strategies (legacy response shape)',
       operationId: 'getAuthStrategies',
       security: [],
       responses: {
