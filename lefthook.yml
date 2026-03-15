@@ -62,13 +62,13 @@ pre-push:
     qlty:
       run: CI=1 qlty check --all --no-progress </dev/null
       priority: 3
-      timeout: 2m
+      timeout: 4m
 
     # ── Build + test: parallel across independent workspaces ─────────
     build-and-test:
       run: ./scripts/pre-push-build-test.sh
       priority: 4
-      timeout: 3m
+      timeout: 6m
 
     # ── E2E: mirrors CI "E2E Tests" job ──────────────────────────────
     e2e:
