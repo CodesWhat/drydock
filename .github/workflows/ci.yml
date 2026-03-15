@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - 'release/**'
   pull_request:
     branches: [main]
   workflow_call:
@@ -184,6 +186,237 @@ jobs:
           build-args: DD_VERSION=ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  dast-build-image:
+    name: DAST Image Build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    needs: [build]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc  # v2.15.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+
+      - name: Docker build (DAST image)
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+        with:
+          context: .
+          push: false
+          load: true
+          tags: drydock:dev
+          build-args: DD_VERSION=ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Export DAST image artifact
+        run: |
+          mkdir -p artifacts/dast
+          docker save drydock:dev | gzip > artifacts/dast/drydock-dev-image.tar.gz
+
+      - name: Upload DAST image artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: dast-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/dast/drydock-dev-image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  dast-zap-baseline:
+    name: DAST (ZAP Baseline)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    needs: [dast-build-image]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc  # v2.15.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download DAST image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: dast-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/dast
+
+      - name: Load DAST image
+        run: docker load < artifacts/dast/drydock-dev-image.tar.gz
+
+      - name: Start QA stack
+        run: docker compose -p drydock-zap -f test/qa-compose.yml up -d
+
+      - name: Wait for QA health
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:3333/health >/dev/null 2>&1; then
+              echo "Drydock is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Drydock failed to become healthy after 120 seconds."
+          docker compose -p drydock-zap -f test/qa-compose.yml ps
+          exit 1
+
+      - name: Run ZAP baseline scan
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25  # v0.15.0
+        with:
+          target: http://localhost:3333
+          docker_name: ghcr.io/zaproxy/zaproxy:stable
+          allow_issue_writing: false
+          fail_action: true
+          cmd_options: '-I'
+
+      - name: Upload ZAP HTML report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: zap-baseline-html-${{ github.run_id }}-${{ github.run_attempt }}
+          path: report_html.html
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Show QA logs on failure
+        if: failure()
+        run: docker compose -p drydock-zap -f test/qa-compose.yml logs --no-color
+
+      - name: Stop QA stack
+        if: always()
+        run: docker compose -p drydock-zap -f test/qa-compose.yml down -v --remove-orphans
+
+  dast-nuclei:
+    name: DAST (Nuclei)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    needs: [dast-build-image]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc  # v2.15.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download DAST image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: dast-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/dast
+
+      - name: Load DAST image
+        run: docker load < artifacts/dast/drydock-dev-image.tar.gz
+
+      - name: Start QA stack
+        run: docker compose -p drydock-nuclei -f test/qa-compose.yml up -d
+
+      - name: Wait for QA health
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:3333/health >/dev/null 2>&1; then
+              echo "Drydock is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Drydock failed to become healthy after 120 seconds."
+          docker compose -p drydock-nuclei -f test/qa-compose.yml ps
+          exit 1
+
+      - name: Create Nuclei report directory
+        run: mkdir -p artifacts/dast
+
+      - name: Run Nuclei scan
+        id: nuclei_scan
+        continue-on-error: true
+        uses: projectdiscovery/nuclei-action@32a91c0da7be14c07b0ade6c14fa0f6e78d97c9c  # v3.1.0
+        with:
+          version: latest
+          args: -u http://localhost:3333 -as -severity medium,high,critical -json-export artifacts/dast/nuclei-report.json -silent
+
+      - name: Enforce Nuclei severity gate (medium+)
+        run: |
+          set -euo pipefail
+
+          report="artifacts/dast/nuclei-report.json"
+          scan_outcome="${{ steps.nuclei_scan.outcome }}"
+
+          if [ ! -f "${report}" ]; then
+            echo "Nuclei did not produce a JSON report."
+            if [ "${scan_outcome}" != "success" ]; then
+              echo "Nuclei action failed before report generation."
+              exit 1
+            fi
+            exit 0
+          fi
+
+          if [ ! -s "${report}" ]; then
+            echo "No medium+ findings detected."
+            if [ "${scan_outcome}" != "success" ]; then
+              echo "Nuclei action did not succeed."
+              exit 1
+            fi
+            exit 0
+          fi
+
+          finding_count="$(jq -s '[.[] | (if type == "array" then .[] else . end) | select(((.info.severity // .severity // "") | ascii_downcase | test("^(medium|high|critical)$")))] | length' "${report}")"
+          echo "Medium+ findings: ${finding_count}"
+
+          if [ "${scan_outcome}" != "success" ]; then
+            echo "Nuclei action did not complete successfully."
+            exit 1
+          fi
+
+          if [ "${finding_count}" -gt 0 ]; then
+            echo "Nuclei reported medium+ severity findings."
+            exit 1
+          fi
+
+      - name: Upload Nuclei JSON report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: nuclei-json-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/dast/nuclei-report.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Show QA logs on failure
+        if: failure()
+        run: docker compose -p drydock-nuclei -f test/qa-compose.yml logs --no-color
+
+      - name: Stop QA stack
+        if: always()
+        run: docker compose -p drydock-nuclei -f test/qa-compose.yml down -v --remove-orphans
+
   e2e:
     name: E2E Tests
     runs-on: ubuntu-latest
