@@ -16,6 +16,9 @@ export interface ProcessDockerEventDependencies {
 }
 
 function resolveContainerIdFromDockerEvent(dockerEvent: any) {
+  // Docker event payloads are not fully consistent across engine/API versions and transports:
+  // some emit the container id at the top level (`id`), while others nest it under `Actor.ID`.
+  // Read both paths so the watcher works reliably against local and remote daemons.
   if (typeof dockerEvent?.id === 'string' && dockerEvent.id !== '') {
     return dockerEvent.id;
   }

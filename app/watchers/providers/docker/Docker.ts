@@ -416,14 +416,7 @@ function hasSiblingDockerContainerWithName(
   if (!containerIds) {
     return false;
   }
-
-  for (const currentContainerId of containerIds) {
-    if (currentContainerId !== containerId) {
-      return true;
-    }
-  }
-
-  return false;
+  return containerIds.size > 1 || (containerIds.size === 1 && !containerIds.has(containerId));
 }
 
 function filterRecreatedContainerAliases(

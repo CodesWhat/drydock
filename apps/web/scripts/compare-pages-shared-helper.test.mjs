@@ -39,7 +39,8 @@ test("comparison-route-data defines all compare page slugs", () => {
   const source = readPage(comparisonRouteData);
 
   for (const slug of compareSlugs) {
-    assert.match(source, new RegExp(`\\b${slug}:\\s*\\{`));
+    assert.match(source, new RegExp(`from "\\./comparison-route-data/${slug}"`));
+    assert.match(source, new RegExp(`\\b${slug}:\\s*${slug}ComparisonRouteData\\b`));
   }
 
   assert.match(source, /\bexport function getComparisonRouteConfig\b/);

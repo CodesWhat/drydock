@@ -129,6 +129,7 @@ function parseArgon2Parameters(
   return { memory, passes, parallelism };
 }
 
+// m=memory, t=time/passes, p=parallelism
 const PHC_ARGON2_PARAMETER_KEYS = ['m', 't', 'p'] as const;
 type PhcArgon2ParameterKey = (typeof PHC_ARGON2_PARAMETER_KEYS)[number];
 
