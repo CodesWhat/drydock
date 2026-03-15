@@ -69,9 +69,9 @@ describe('WatchersView', () => {
     ]);
 
     mockGetAllContainers.mockResolvedValue([
-      { id: 'c-1', watcher: 'watcher-alpha' },
-      { id: 'c-2', watcher: 'watcher-alpha' },
-      { id: 'c-3', watcher: 'watcher-beta' },
+      { id: 'c-1', watcher: 'Alpha Watcher' },
+      { id: 'c-2', watcher: 'Alpha Watcher' },
+      { id: 'c-3', watcher: 'Beta Watcher' },
     ]);
 
     const wrapper = await mountWatchersView();
@@ -87,6 +87,47 @@ describe('WatchersView', () => {
       expect.arrayContaining([
         expect.objectContaining({ id: 'watcher-alpha', containers: 2 }),
         expect.objectContaining({ id: 'watcher-beta', containers: 1 }),
+      ]),
+    );
+  });
+
+  it('uses watcher name for container counts and defaults missing watchers to 0', async () => {
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'docker.esk00',
+        name: 'esk00',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+      },
+      {
+        id: 'docker.esk83',
+        name: 'esk83',
+        type: 'docker',
+        configuration: { cron: '0 * * * *' },
+      },
+      {
+        id: 'docker.empty',
+        name: 'empty',
+        type: 'docker',
+        configuration: { cron: '0 * * * *' },
+      },
+    ]);
+
+    mockGetAllContainers.mockResolvedValue([
+      { id: 'c-1', watcher: 'esk00' },
+      { id: 'c-2', watcher: 'esk00' },
+      { id: 'c-3', watcher: 'esk83' },
+    ]);
+
+    const wrapper = await mountWatchersView();
+    const table = wrapper.findComponent(dataViewStubs.DataTable);
+    const rows = table.props('rows') as Array<{ name: string; containers: number }>;
+
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'esk00', containers: 2 }),
+        expect.objectContaining({ name: 'esk83', containers: 1 }),
+        expect.objectContaining({ name: 'empty', containers: 0 }),
       ]),
     );
   });

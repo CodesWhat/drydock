@@ -63,7 +63,7 @@ function mapWatcher(watcher: ApiComponent, status = 'watching') {
     name: watcher.name,
     type: watcher.type,
     status,
-    containers: containerCounts.value[watcher.id] ?? totalContainers.value,
+    containers: containerCounts.value[watcher.name] ?? 0,
     cron: watcher.configuration?.cron ?? '',
     lastRun: '\u2014',
     config: Object.fromEntries(
