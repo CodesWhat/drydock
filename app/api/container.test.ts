@@ -637,6 +637,8 @@ describe('Container Router', () => {
         security: {
           issues: 2,
         },
+        hotUpdates: 0,
+        matureUpdates: 0,
       });
       expect(res.json.mock.calls[0][0]).not.toHaveProperty('vulnerabilities');
     });
@@ -671,6 +673,8 @@ describe('Container Router', () => {
         security: {
           issues: 1,
         },
+        hotUpdates: 0,
+        matureUpdates: 0,
       });
     });
   });

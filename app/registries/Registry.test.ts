@@ -210,6 +210,111 @@ describe('getImageManifestDigest', () => {
     );
   });
 
+  test('should include created date from schemaVersion 2 manifest config blob', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        return {
+          schemaVersion: 2,
+          config: {
+            digest: 'sha256:config',
+          },
+        };
+      }
+      if (options.url === 'url/image/blobs/sha256:config') {
+        return {
+          created: '2026-03-04T11:22:33.000Z',
+        };
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+      version: 2,
+      digest: 'sha256:manifest',
+      created: '2026-03-04T11:22:33.000Z',
+    });
+  });
+
+  test('should ignore invalid created date from schemaVersion 2 config blob', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        return {
+          schemaVersion: 2,
+          config: {
+            digest: 'sha256:config',
+          },
+        };
+      }
+      if (options.url === 'url/image/blobs/sha256:config') {
+        return {
+          created: 'invalid-date',
+        };
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+      version: 2,
+      digest: 'sha256:manifest',
+    });
+  });
+
+  test('should continue when schemaVersion 2 manifest config fetch fails', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        throw new Error('manifest config unavailable');
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+      version: 2,
+      digest: 'sha256:manifest',
+    });
+  });
+
   test('should return digest for container.image.v1 (schemaVersion 1)', async () => {
     const registryMocked = createMockedRegistry();
     registryMocked.callRegistry = (options) => {
@@ -388,6 +493,63 @@ describe('getImageManifestDigest', () => {
     registryMocked.callRegistry = callRegistryFn;
     await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow(
       'Unexpected error; no manifest found',
+    );
+  });
+});
+
+// --- getImagePublishedAt tests ---
+
+describe('getImagePublishedAt', () => {
+  test('should return created date from manifest metadata', async () => {
+    const registryMocked = createMockedRegistry();
+    vi.spyOn(registryMocked, 'getImageManifestDigest').mockResolvedValue({
+      digest: 'sha256:manifest',
+      created: '2026-03-04T11:22:33.000Z',
+      version: 2,
+    });
+
+    const publishedAt = await registryMocked.getImagePublishedAt(
+      imageInput({ tag: { value: 'latest' } }),
+      '1.2.3',
+    );
+
+    expect(publishedAt).toBe('2026-03-04T11:22:33.000Z');
+  });
+
+  test('should return undefined when manifest created is missing or invalid', async () => {
+    const registryMocked = createMockedRegistry();
+    const manifestSpy = vi.spyOn(registryMocked, 'getImageManifestDigest');
+    manifestSpy.mockResolvedValueOnce({
+      digest: 'sha256:manifest',
+      version: 2,
+    } as any);
+    manifestSpy.mockResolvedValueOnce({
+      digest: 'sha256:manifest',
+      created: 'invalid-date',
+      version: 2,
+    } as any);
+
+    const missingCreated = await registryMocked.getImagePublishedAt(imageInput());
+    const invalidCreated = await registryMocked.getImagePublishedAt(imageInput());
+
+    expect(missingCreated).toBeUndefined();
+    expect(invalidCreated).toBeUndefined();
+  });
+
+  test('should handle publish date lookup when image tag metadata is absent', async () => {
+    const registryMocked = createMockedRegistry();
+    const manifestSpy = vi.spyOn(registryMocked, 'getImageManifestDigest').mockResolvedValue({
+      digest: 'sha256:manifest',
+      created: '2026-03-04T11:22:33.000Z',
+      version: 2,
+    });
+
+    await registryMocked.getImagePublishedAt(imageInput({ tag: undefined }) as any);
+
+    expect(manifestSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'image',
+      }),
     );
   });
 });

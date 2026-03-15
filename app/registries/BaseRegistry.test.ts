@@ -495,3 +495,101 @@ test('authenticateBearerFromAuthUrl should evict expired cache entries from othe
     vi.useRealTimers();
   }
 });
+
+test('getImagePublishedAt should return created date from manifest metadata', async () => {
+  const getImageManifestDigestSpy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:abc123',
+      created: '2026-03-06T08:00:00.000Z',
+      version: 2,
+    });
+
+  const publishedAt = await baseRegistry.getImagePublishedAt({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    registry: { url: 'https://registry.example.com/v2' },
+  });
+
+  expect(getImageManifestDigestSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      tag: { value: 'latest' },
+    }),
+  );
+  expect(publishedAt).toBe('2026-03-06T08:00:00.000Z');
+});
+
+test('getImagePublishedAt should use provided tag override for lookup', async () => {
+  const getImageManifestDigestSpy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({
+      created: '2026-03-06T08:00:00.000Z',
+    });
+
+  await baseRegistry.getImagePublishedAt(
+    {
+      name: 'library/nginx',
+      tag: { value: 'latest' },
+      registry: { url: 'https://registry.example.com/v2' },
+    },
+    '1.26.0',
+  );
+
+  expect(getImageManifestDigestSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      tag: { value: '1.26.0' },
+    }),
+  );
+});
+
+test('getImagePublishedAt should return undefined when manifest metadata has no created field', async () => {
+  vi.spyOn(baseRegistry, 'getImageManifestDigest').mockResolvedValue({
+    digest: 'sha256:abc123',
+    version: 2,
+  });
+
+  const publishedAt = await baseRegistry.getImagePublishedAt({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    registry: { url: 'https://registry.example.com/v2' },
+  });
+
+  expect(publishedAt).toBeUndefined();
+});
+
+test('getImagePublishedAt should return undefined when created timestamp is invalid', async () => {
+  vi.spyOn(baseRegistry, 'getImageManifestDigest').mockResolvedValue({
+    digest: 'sha256:abc123',
+    created: 'not-a-date',
+    version: 2,
+  });
+
+  const publishedAt = await baseRegistry.getImagePublishedAt({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    registry: { url: 'https://registry.example.com/v2' },
+  });
+
+  expect(publishedAt).toBeUndefined();
+});
+
+test('getImagePublishedAt should handle images without tag metadata', async () => {
+  const getImageManifestDigestSpy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:abc123',
+      created: '2026-03-06T08:00:00.000Z',
+      version: 2,
+    });
+
+  await baseRegistry.getImagePublishedAt({
+    name: 'library/nginx',
+    registry: { url: 'https://registry.example.com/v2' },
+  } as any);
+
+  expect(getImageManifestDigestSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'library/nginx',
+    }),
+  );
+});

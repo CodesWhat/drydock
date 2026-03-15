@@ -808,6 +808,23 @@ describe('api/container/crud', () => {
       );
     });
 
+    test('maps status=up-to-date to updateAvailable=false', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', updateAvailable: false })],
+      });
+
+      callGetContainers(harness.handlers, {
+        status: 'up-to-date',
+      });
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        {
+          updateAvailable: false,
+        },
+        { limit: 0, offset: 0 },
+      );
+    });
+
     test('maps kind=digest to updateKind.kind filter', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1' })],
@@ -881,6 +898,301 @@ describe('api/container/crud', () => {
         error: expectedMessage,
       });
       expect(harness.deps.getContainersFromStore).not.toHaveBeenCalled();
+    });
+
+    test('preserves non-control query params in store filtering', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', labels: 'prod' })],
+      });
+
+      callGetContainers(harness.handlers, {
+        labels: 'prod',
+        watcher: 'local',
+      });
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        {
+          labels: 'prod',
+          watcher: 'local',
+        },
+        { limit: 0, offset: 0 },
+      );
+    });
+
+    test('supports array query values for sort and defaults when array contains no strings', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'alpha' })],
+      });
+
+      const resFromStringArray = callGetContainers(harness.handlers, {
+        sort: ['-name', 'name'],
+      });
+      expect(resFromStringArray.status).toHaveBeenCalledWith(200);
+
+      const resFromNonStringArray = callGetContainers(harness.handlers, {
+        sort: [1, 2] as any,
+      });
+      expect(resFromNonStringArray.status).toHaveBeenCalledWith(200);
+    });
+
+    test('computes update age fallback from firstSeenAt, publishedAt, and updateDetectedAt', () => {
+      vi.useFakeTimers();
+      const now = new Date('2026-03-15T00:00:00.000Z').getTime();
+      vi.setSystemTime(now);
+
+      try {
+        const harness = createHarness({
+          containers: [
+            createContainer({
+              id: 'c-min',
+              firstSeenAt: '2026-03-05T00:00:00.000Z',
+              result: { publishedAt: '2026-03-12T00:00:00.000Z' },
+            }),
+            createContainer({
+              id: 'c-first',
+              firstSeenAt: '2026-03-07T00:00:00.000Z',
+            }),
+            createContainer({
+              id: 'c-published',
+              result: { publishedAt: '2026-03-09T00:00:00.000Z' },
+            }),
+            createContainer({
+              id: 'c-detected',
+              updateDetectedAt: '2026-03-11T00:00:00.000Z',
+            }),
+            createContainer({
+              id: 'c-none',
+            }),
+          ],
+        });
+
+        const res = callGetContainers(harness.handlers, { sort: 'age' });
+        const payload = res.json.mock.calls[0][0];
+
+        expect(payload.data.map((container: { id: string }) => container.id)).toEqual([
+          'c-min',
+          'c-first',
+          'c-published',
+          'c-detected',
+          'c-none',
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('derives maturity filter from update age when updateMaturityLevel is missing', () => {
+      vi.useFakeTimers();
+      const now = new Date('2026-03-15T00:00:00.000Z').getTime();
+      vi.setSystemTime(now);
+      const previousThreshold = process.env.DD_UI_MATURITY_THRESHOLD_DAYS;
+      process.env.DD_UI_MATURITY_THRESHOLD_DAYS = '5';
+
+      try {
+        const harness = createHarness({
+          containers: [
+            createContainer({
+              id: 'c-hot',
+              firstSeenAt: '2026-03-14T00:00:00.000Z',
+            }),
+            createContainer({
+              id: 'c-mature',
+              result: { publishedAt: '2026-03-07T00:00:00.000Z' },
+            }),
+            createContainer({
+              id: 'c-established',
+              updateDetectedAt: '2026-02-01T00:00:00.000Z',
+            }),
+          ],
+        });
+
+        const hotRes = callGetContainers(harness.handlers, { maturity: 'hot' });
+        expect(hotRes.json.mock.calls[0][0].data).toEqual([
+          expect.objectContaining({ id: 'c-hot' }),
+        ]);
+
+        const matureRes = callGetContainers(harness.handlers, { maturity: 'mature' });
+        expect(matureRes.json.mock.calls[0][0].data).toEqual([
+          expect.objectContaining({ id: 'c-mature' }),
+        ]);
+
+        const establishedRes = callGetContainers(harness.handlers, { maturity: 'established' });
+        expect(establishedRes.json.mock.calls[0][0].data).toEqual([
+          expect.objectContaining({ id: 'c-established' }),
+        ]);
+      } finally {
+        if (previousThreshold === undefined) {
+          delete process.env.DD_UI_MATURITY_THRESHOLD_DAYS;
+        } else {
+          process.env.DD_UI_MATURITY_THRESHOLD_DAYS = previousThreshold;
+        }
+        vi.useRealTimers();
+      }
+    });
+
+    test('excludes containers without resolvable age when applying maturity filters', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c-no-age',
+          }),
+          createContainer({
+            id: 'c-hot',
+            firstSeenAt: '2026-03-14T00:00:00.000Z',
+          }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { maturity: 'hot' });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data.map((container: { id: string }) => container.id)).toEqual(['c-hot']);
+    });
+
+    test('uses watcher/name/id fallbacks when sorting by age with equal ages', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 1 as any,
+            name: 1 as any,
+            watcher: 1 as any,
+          }),
+          createContainer({
+            id: 'c2',
+            name: 'alpha',
+            watcher: 'local',
+          }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { sort: 'age' });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data.map((container: { id: unknown }) => container.id)).toEqual([1, 'c2']);
+    });
+
+    test('sorts by created date name tie-breaker when timestamps are equal', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c-beta',
+            name: 'beta',
+            image: {
+              registry: { name: 'hub', url: 'docker.io' },
+              name: 'library/nginx',
+              tag: { value: '1.0.0' },
+              created: '2026-03-01T00:00:00.000Z',
+            },
+          }),
+          createContainer({
+            id: 'c-alpha',
+            name: 'alpha',
+            image: {
+              registry: { name: 'hub', url: 'docker.io' },
+              name: 'library/nginx',
+              tag: { value: '1.0.0' },
+              created: '2026-03-01T00:00:00.000Z',
+            },
+          }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { sort: 'created' });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data.map((container: { id: string }) => container.id)).toEqual([
+        'c-alpha',
+        'c-beta',
+      ]);
+    });
+
+    test('sorts by created date with valid timestamps before invalid timestamps', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c-invalid-a',
+            name: 'invalid-a',
+            image: {
+              registry: { name: 'hub', url: 'docker.io' },
+              name: 'library/nginx',
+              tag: { value: '1.0.0' },
+              created: 'not-a-date',
+            },
+          }),
+          createContainer({
+            id: 'c-valid',
+            name: 'valid',
+            image: {
+              registry: { name: 'hub', url: 'docker.io' },
+              name: 'library/nginx',
+              tag: { value: '1.0.0' },
+              created: '2025-01-01T00:00:00.000Z',
+            },
+          }),
+          createContainer({
+            id: 'c-invalid-b',
+            name: 'invalid-b',
+          }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { sort: 'created' });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data.map((container: { id: string }) => container.id)).toEqual([
+        'c-valid',
+        'c-invalid-a',
+        'c-invalid-b',
+      ]);
+    });
+
+    test('sorts by created date when left entry is invalid and right entry is valid', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c-invalid',
+            image: {
+              registry: { name: 'hub', url: 'docker.io' },
+              name: 'library/nginx',
+              tag: { value: '1.0.0' },
+              created: 'not-a-date',
+            },
+          }),
+          createContainer({
+            id: 'c-valid',
+            image: {
+              registry: { name: 'hub', url: 'docker.io' },
+              name: 'library/nginx',
+              tag: { value: '1.0.0' },
+              created: '2025-01-01T00:00:00.000Z',
+            },
+          }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { sort: 'created' });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data.map((container: { id: string }) => container.id)).toEqual([
+        'c-valid',
+        'c-invalid',
+      ]);
+    });
+
+    test('returns generic invalid request message when a non-Error is thrown', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+      harness.deps.getContainersFromStore.mockImplementation(() => {
+        throw 'non-error';
+      });
+
+      const res = callGetContainers(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Invalid request',
+      });
     });
   });
 

@@ -461,15 +461,23 @@ export function clearAllCachedSecurityState() {
 }
 
 function getUpdateDetectedAt(containerCurrent, containerNext) {
+  return getUpdateLifecycleTimestamp(containerCurrent, containerNext, 'updateDetectedAt');
+}
+
+function getFirstSeenAt(containerCurrent, containerNext) {
+  return getUpdateLifecycleTimestamp(containerCurrent, containerNext, 'firstSeenAt');
+}
+
+function getUpdateLifecycleTimestamp(containerCurrent, containerNext, timestampField) {
   if (!containerNext.updateAvailable) {
     return undefined;
   }
 
   if (
-    typeof containerNext.updateDetectedAt === 'string' &&
-    containerNext.updateDetectedAt.length > 0
+    typeof containerNext[timestampField] === 'string' &&
+    containerNext[timestampField].length > 0
   ) {
-    return containerNext.updateDetectedAt;
+    return containerNext[timestampField];
   }
 
   if (!containerCurrent) {
@@ -485,10 +493,10 @@ function getUpdateDetectedAt(containerCurrent, containerNext) {
   }
 
   if (
-    typeof containerCurrent.updateDetectedAt === 'string' &&
-    containerCurrent.updateDetectedAt.length > 0
+    typeof containerCurrent[timestampField] === 'string' &&
+    containerCurrent[timestampField].length > 0
   ) {
-    return containerCurrent.updateDetectedAt;
+    return containerCurrent[timestampField];
   }
 
   return new Date().toISOString();
@@ -517,6 +525,7 @@ export function insertContainer(container) {
   }
   const containerToSave = validateContainer(container);
   containerToSave.updateDetectedAt = getUpdateDetectedAt(undefined, containerToSave);
+  containerToSave.firstSeenAt = getFirstSeenAt(undefined, containerToSave);
   containers.insert({
     data: containerToSave,
   });
@@ -557,6 +566,7 @@ export function updateContainer(container) {
   };
   const containerToReturn = validateContainer(containerMerged);
   containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
+  containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);
 
   if (containerCurrentDoc && typeof containers?.update === 'function') {
     containerCurrentDoc.data = containerToReturn;

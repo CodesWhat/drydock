@@ -45,6 +45,10 @@ interface RegistryManifestResponse {
   }[];
 }
 
+interface RegistryManifestConfigResponse {
+  created?: string;
+}
+
 /** Media types representing a manifest list / OCI index (multi-platform). */
 function isManifestList(mediaType: string | undefined): boolean {
   return (
@@ -243,6 +247,23 @@ class Registry extends Component {
   }
 
   /**
+   * Resolve published date for an image tag.
+   * Registries with richer metadata endpoints can override this.
+   */
+  async getImagePublishedAt(image: ContainerImage, tag?: string): Promise<string | undefined> {
+    const imageToInspect = structuredClone(image);
+    const tagToLookup = typeof tag === 'string' && tag.length > 0 ? tag : imageToInspect.tag?.value;
+    if (tagToLookup && imageToInspect.tag) {
+      imageToInspect.tag.value = tagToLookup;
+    }
+    const manifest = await this.getImageManifestDigest(imageToInspect);
+    if (typeof manifest?.created !== 'string') {
+      return undefined;
+    }
+    return Number.isNaN(Date.parse(manifest.created)) ? undefined : manifest.created;
+  }
+
+  /**
    * Handle schemaVersion 2 manifests (multi-platform list or single manifest).
    */
   private async handleSchemaV2(
@@ -285,7 +306,12 @@ class Registry extends Component {
       return this.fetchManifestDigestFromHead(image, manifestDigest, manifestMediaType);
     }
     if (manifestDigest && isLegacyImageConfig(manifestMediaType)) {
-      const result = { digest: manifestDigest, version: 1 };
+      const created = await this.fetchImageCreatedFromBlob(image, manifestDigest);
+      const result = {
+        digest: manifestDigest,
+        version: 1,
+        ...(created ? { created } : {}),
+      };
       log.debug(`Manifest found with [digest=${result.digest}, version=${result.version}]`);
       return result;
     }
@@ -310,12 +336,79 @@ class Registry extends Component {
       },
       resolveWithFullResponse: true,
     });
+    const resolvedManifestDigest =
+      responseManifest.headers['docker-content-digest'] || manifestDigest;
+    const created = await this.fetchImageCreatedFromManifestConfig(
+      image,
+      resolvedManifestDigest,
+      mediaType,
+    );
     const result = {
       digest: responseManifest.headers['docker-content-digest'],
       version: 2,
+      ...(created ? { created } : {}),
     };
     log.debug(`Manifest found with [digest=${result.digest}, version=${result.version}]`);
     return result;
+  }
+
+  private async fetchImageCreatedFromManifestConfig(
+    image: ContainerImage,
+    manifestDigest: string,
+    mediaType: string,
+  ): Promise<string | undefined> {
+    try {
+      const manifestResponse = await this.callRegistry<RegistryManifestResponse>({
+        image,
+        method: 'get',
+        url: `${image.registry.url}/${image.name}/manifests/${manifestDigest}`,
+        headers: {
+          Accept: mediaType,
+        },
+      });
+      const configDigest = manifestResponse?.config?.digest;
+      if (!configDigest) {
+        return undefined;
+      }
+      return this.fetchImageCreatedFromBlob(image, configDigest);
+    } catch (error: any) {
+      log.debug(
+        `Unable to fetch manifest config created date for ${this.getImageFullName(
+          image,
+          manifestDigest,
+        )} (${error.message})`,
+      );
+      return undefined;
+    }
+  }
+
+  private async fetchImageCreatedFromBlob(
+    image: ContainerImage,
+    digest: string,
+  ): Promise<string | undefined> {
+    try {
+      const configResponse = await this.callRegistry<RegistryManifestConfigResponse>({
+        image,
+        method: 'get',
+        url: `${image.registry.url}/${image.name}/blobs/${digest}`,
+        headers: {
+          Accept:
+            'application/vnd.oci.image.config.v1+json, application/vnd.docker.container.image.v1+json, application/json',
+        },
+      });
+      if (typeof configResponse?.created !== 'string') {
+        return undefined;
+      }
+      return Number.isNaN(Date.parse(configResponse.created)) ? undefined : configResponse.created;
+    } catch (error: any) {
+      log.debug(
+        `Unable to fetch image config blob created date for ${this.getImageFullName(
+          image,
+          digest,
+        )} (${error.message})`,
+      );
+      return undefined;
+    }
   }
 
   async callRegistry<T = any>(options: {

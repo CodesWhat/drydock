@@ -137,6 +137,65 @@ describe('Docker Hub Registry', () => {
     expect(result.headers.Authorization).toBe('Bearer public-token');
   });
 
+  test('should fetch published date from Docker Hub tag metadata', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { last_updated: '2026-03-01T12:34:56.000Z' } });
+
+    const publishedAt = await hub.getImagePublishedAt(
+      { name: 'library/nginx', tag: { value: 'latest' } },
+      '1.26.0',
+    );
+
+    expect(axios).toHaveBeenCalledWith({
+      method: 'GET',
+      url: 'https://hub.docker.com/v2/repositories/library/nginx/tags/1.26.0',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+    expect(publishedAt).toBe('2026-03-01T12:34:56.000Z');
+  });
+
+  test('should return undefined when Docker Hub tag metadata has no last_updated', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+
+    const publishedAt = await hub.getImagePublishedAt({
+      name: 'library/nginx',
+      tag: { value: 'latest' },
+    });
+
+    expect(publishedAt).toBeUndefined();
+  });
+
+  test('should return undefined when Docker Hub image name or tag is missing', async () => {
+    const { default: axios } = await import('axios');
+
+    const missingName = await hub.getImagePublishedAt({
+      tag: { value: 'latest' },
+    } as any);
+    const missingTag = await hub.getImagePublishedAt({
+      name: 'library/nginx',
+      tag: { value: '' },
+    });
+
+    expect(missingName).toBeUndefined();
+    expect(missingTag).toBeUndefined();
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('should return undefined when Docker Hub last_updated is not a valid date', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { last_updated: 'invalid-date' } });
+
+    const publishedAt = await hub.getImagePublishedAt({
+      name: 'library/nginx',
+      tag: { value: 'latest' },
+    });
+
+    expect(publishedAt).toBeUndefined();
+  });
+
   test('should validate string configuration', async () => {
     expect(() => hub.validateConfiguration('')).not.toThrow();
     expect(() => hub.validateConfiguration('some-string')).toThrow();

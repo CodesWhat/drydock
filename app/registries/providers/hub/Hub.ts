@@ -97,6 +97,28 @@ class Hub extends Custom {
     fullName = fullName.replaceAll('library/', '');
     return fullName;
   }
+
+  async getImagePublishedAt(image, tag?: string): Promise<string | undefined> {
+    const tagToLookup = typeof tag === 'string' && tag.length > 0 ? tag : image.tag?.value;
+    if (typeof image.name !== 'string' || image.name.length === 0 || !tagToLookup) {
+      return undefined;
+    }
+
+    const response = await axios({
+      method: 'GET',
+      url: `https://hub.docker.com/v2/repositories/${image.name}/tags/${encodeURIComponent(
+        tagToLookup,
+      )}`,
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+    const publishedAt = response?.data?.last_updated;
+    if (typeof publishedAt !== 'string') {
+      return undefined;
+    }
+    return Number.isNaN(Date.parse(publishedAt)) ? undefined : publishedAt;
+  }
 }
 
 export default Hub;

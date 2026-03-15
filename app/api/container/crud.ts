@@ -180,19 +180,7 @@ function parseContainerSortMode(sortQuery: unknown): ContainerSortMode {
   if (!sortValue) {
     return DEFAULT_CONTAINER_SORT_MODE;
   }
-  if (
-    sortValue === 'name' ||
-    sortValue === '-name' ||
-    sortValue === 'status' ||
-    sortValue === '-status' ||
-    sortValue === 'age' ||
-    sortValue === '-age' ||
-    sortValue === 'created' ||
-    sortValue === '-created'
-  ) {
-    return sortValue;
-  }
-  return DEFAULT_CONTAINER_SORT_MODE;
+  return sortValue as ContainerSortMode;
 }
 
 function parseContainerMaturityFilter(maturityQuery: unknown): ContainerMaturityFilter | undefined {
@@ -409,32 +397,31 @@ function sortContainers(containers: Container[], sortMode: ContainerSortMode): C
   return containersSorted;
 }
 
-function mapContainerListStatusFilter(statusQuery: unknown) {
+function mapContainerListStatusFilter(statusQuery: unknown): boolean | undefined {
   const statusFilter = getFirstNonEmptyQueryValue(statusQuery);
-  if (!statusFilter) {
-    return { value: undefined, error: undefined };
-  }
   if (statusFilter === 'update-available') {
-    return { value: true, error: undefined };
+    return true;
   }
   if (statusFilter === 'up-to-date') {
-    return { value: false, error: undefined };
+    return false;
   }
-  return { value: undefined, error: 'Invalid status filter value' };
+  return undefined;
 }
 
-function mapContainerListKindFilter(kindQuery: unknown) {
+function mapContainerListKindFilter(
+  kindQuery: unknown,
+):
+  | { 'updateKind.kind': 'digest' }
+  | { 'updateKind.semverDiff': 'major' | 'minor' | 'patch' }
+  | undefined {
   const kindFilter = getFirstNonEmptyQueryValue(kindQuery);
-  if (!kindFilter) {
-    return { value: undefined, error: undefined };
-  }
   if (kindFilter === 'digest') {
-    return { value: { 'updateKind.kind': 'digest' }, error: undefined };
+    return { 'updateKind.kind': 'digest' };
   }
   if (kindFilter === 'major' || kindFilter === 'minor' || kindFilter === 'patch') {
-    return { value: { 'updateKind.semverDiff': kindFilter }, error: undefined };
+    return { 'updateKind.semverDiff': kindFilter };
   }
-  return { value: undefined, error: 'Invalid kind filter value' };
+  return undefined;
 }
 
 function normalizeContainerListPagination(query: Request['query']) {
@@ -591,20 +578,14 @@ function buildContainerListResponse(
   const validatedQuery = validateContainerListQuery(query);
   const sortMode = validatedQuery.sortMode;
   const statusFilter = mapContainerListStatusFilter(validatedQuery.status);
-  if (statusFilter.error) {
-    throw new Error(statusFilter.error);
-  }
   const kindFilter = mapContainerListKindFilter(validatedQuery.kind);
-  if (kindFilter.error) {
-    throw new Error(kindFilter.error);
-  }
   const maturityFilter = parseContainerMaturityFilter(validatedQuery.maturity);
 
   const includeVulnerabilities = parseBooleanQueryParam(query.includeVulnerabilities, false);
   const filteredQuery = {
     ...(removeContainerListControlParams(query) as Record<string, unknown>),
-    ...(kindFilter.value || {}),
-    ...(statusFilter.value === undefined ? {} : { updateAvailable: statusFilter.value }),
+    ...(kindFilter || {}),
+    ...(statusFilter === undefined ? {} : { updateAvailable: statusFilter }),
     ...(validatedQuery.watcher ? { watcher: validatedQuery.watcher } : {}),
   } as Request['query'];
   const pagination = normalizeContainerListPagination(query);

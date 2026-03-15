@@ -285,6 +285,25 @@ class BaseRegistry extends Registry {
   }
 
   /**
+   * Resolve the remote image publish date from manifest metadata.
+   * Provider-specific implementations can override this when richer APIs exist.
+   */
+  async getImagePublishedAt(image, tag?: string): Promise<string | undefined> {
+    const imageToInspect = structuredClone(image);
+    const tagToLookup = typeof tag === 'string' && tag.length > 0 ? tag : imageToInspect.tag?.value;
+    if (typeof tagToLookup === 'string' && tagToLookup.length > 0 && imageToInspect.tag) {
+      imageToInspect.tag.value = tagToLookup;
+    }
+
+    const manifest = await this.getImageManifestDigest(imageToInspect);
+    if (typeof manifest?.created !== 'string') {
+      return undefined;
+    }
+
+    return Number.isNaN(Date.parse(manifest.created)) ? undefined : manifest.created;
+  }
+
+  /**
    * Normalize a registry URL-like value into a lowercase hostname.
    */
   getRegistryHostname(value: string): string {

@@ -527,6 +527,31 @@ test('insertContainer should stamp updateDetectedAt when update is available', a
   expect(typeof inserted.updateDetectedAt).toBe('string');
 });
 
+test('insertContainer should stamp firstSeenAt when update is available', async () => {
+  const collection = {
+    findOne: () => {},
+    insert: () => {},
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const base = createContainerFixture();
+  const containerWithUpdate = {
+    ...base,
+    image: {
+      ...base.image,
+      tag: { ...base.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '2.0.0' },
+  };
+
+  container.createCollections(db);
+  const inserted = container.insertContainer(containerWithUpdate);
+
+  expect(typeof inserted.firstSeenAt).toBe('string');
+});
+
 test('updateContainer should preserve updateDetectedAt when update has not changed', async () => {
   const existingDetectedAt = '2026-02-24T09:15:00.000Z';
   const existingFixture = createContainerFixture();
@@ -568,6 +593,49 @@ test('updateContainer should preserve updateDetectedAt when update has not chang
   const updated = container.updateContainer(containerToSave);
 
   expect(updated.updateDetectedAt).toBe(existingDetectedAt);
+});
+
+test('updateContainer should preserve firstSeenAt when update has not changed', async () => {
+  const existingFirstSeenAt = '2026-02-24T09:15:00.000Z';
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
+      },
+      result: { tag: '2.0.0' },
+      firstSeenAt: existingFirstSeenAt,
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '2.0.0' },
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  expect(updated.firstSeenAt).toBe(existingFirstSeenAt);
 });
 
 test('updateContainer should preserve explicit incoming updateDetectedAt when provided', async () => {
@@ -700,6 +768,50 @@ test('updateContainer should refresh updateDetectedAt when update result changes
   expect(updated.updateDetectedAt).not.toBe(existingDetectedAt);
 });
 
+test('updateContainer should refresh firstSeenAt when update result changes', async () => {
+  const existingFirstSeenAt = '2026-02-24T09:15:00.000Z';
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
+      },
+      result: { tag: '2.0.0' },
+      firstSeenAt: existingFirstSeenAt,
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '2.1.0' },
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  expect(updated.firstSeenAt).toBeDefined();
+  expect(updated.firstSeenAt).not.toBe(existingFirstSeenAt);
+});
+
 test('updateContainer should clear updateDetectedAt when update is no longer available', async () => {
   const existingFixture = createContainerFixture();
   const existingContainer = {
@@ -740,6 +852,48 @@ test('updateContainer should clear updateDetectedAt when update is no longer ava
   const updated = container.updateContainer(containerToSave);
 
   expect(updated.updateDetectedAt).toBeUndefined();
+});
+
+test('updateContainer should clear firstSeenAt when update is no longer available', async () => {
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
+      },
+      result: { tag: '2.0.0' },
+      firstSeenAt: '2026-02-24T09:15:00.000Z',
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '1.0.0' },
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  expect(updated.firstSeenAt).toBeUndefined();
 });
 
 test('getContainers should return all containers sorted by name', async () => {

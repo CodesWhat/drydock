@@ -2506,6 +2506,52 @@ describe('Docker Watcher', () => {
       });
     });
 
+    test('should resolve publishedAt using fallback tag expression when current tag is empty', async () => {
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: '' },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue([]),
+        getImagePublishedAt: vi.fn().mockResolvedValue('2026-03-01T10:00:00.000Z'),
+      };
+      registry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+      const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '');
+      expect(result.publishedAt).toEqual('2026-03-01T10:00:00.000Z');
+      expect(result.tag).toEqual('');
+    });
+
+    test('should ignore publish date values that are not strings', async () => {
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: '1.0.0' },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue(['1.0.0']),
+        getImagePublishedAt: vi.fn().mockResolvedValue(new Date('2026-03-10T10:00:00.000Z')),
+      };
+      registry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+      const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result).toEqual({ tag: '1.0.0' });
+    });
+
     test('should continue when publish date lookup fails', async () => {
       const container = {
         image: {
@@ -2529,6 +2575,28 @@ describe('Docker Watcher', () => {
       expect(mockLogChild.debug).toHaveBeenCalledWith(
         expect.stringContaining('publish date lookup failed'),
       );
+    });
+
+    test('should continue when publish date lookup fails and debug logger is unavailable', async () => {
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: '1.0.0' },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue(['1.0.0']),
+        getImagePublishedAt: vi.fn().mockRejectedValue(new Error('metadata unavailable')),
+      };
+      registry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+      const mockLogChild = { error: vi.fn(), warn: vi.fn() };
+
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result).toEqual({ tag: '1.0.0' });
     });
 
     test('should handle unsupported registry', async () => {
