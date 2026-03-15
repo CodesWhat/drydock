@@ -696,6 +696,31 @@ test('registerAuthentications should surface provider registration errors and lo
   ]);
 });
 
+test('registerAuthentications should preserve unknown-provider error messages', async () => {
+  const spyLog = vi.spyOn(registry.testable_log, 'error');
+  authentications = {
+    definitely_missing_provider: {
+      fallback: {},
+    },
+  };
+
+  await registry.testable_registerAuthentications();
+
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining('Some authentications failed to register'),
+  );
+  expect(registry.getAuthenticationRegistrationErrors()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        provider: 'definitely_missing_provider:fallback',
+        error: expect.stringContaining(
+          "Unknown authentication provider: 'definitely_missing_provider'.",
+        ),
+      }),
+    ]),
+  );
+});
+
 test('registerAuthentications should register anonymous auth on upgrade without confirmation', async () => {
   mockIsUpgrade.mockReturnValue(true);
   await registry.testable_registerAuthentications();
