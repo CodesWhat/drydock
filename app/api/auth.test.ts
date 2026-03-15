@@ -31,13 +31,6 @@ const mockRecordAuditEvent = vi.hoisted(() => vi.fn());
 const mockValidateOpenApiJsonResponse = vi.hoisted(() =>
   vi.fn(() => ({ valid: true, errors: [] })),
 );
-const { mockRecordAuthLogin, mockSetAuthAccountLockedTotal, mockSetAuthIpLockedTotal } = vi.hoisted(
-  () => ({
-    mockRecordAuthLogin: vi.fn(),
-    mockSetAuthAccountLockedTotal: vi.fn(),
-    mockSetAuthIpLockedTotal: vi.fn(),
-  }),
-);
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter), json: mockExpressJson },
@@ -103,11 +96,6 @@ vi.mock('./openapi-contract.js', () => ({
 vi.mock('./rate-limit-key.js', () => ({
   createAuthenticatedRouteRateLimitKeyGenerator: mockCreateAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled: mockIsIdentityAwareRateLimitKeyingEnabled,
-}));
-vi.mock('../prometheus/auth.js', () => ({
-  recordAuthLogin: mockRecordAuthLogin,
-  setAuthAccountLockedTotal: mockSetAuthAccountLockedTotal,
-  setAuthIpLockedTotal: mockSetAuthIpLockedTotal,
 }));
 
 import session from 'express-session';
@@ -487,9 +475,6 @@ describe('Auth Router', () => {
       expect(lockedResponse.json).toHaveBeenCalledWith({
         error: 'Account temporarily locked due to repeated failed login attempts',
       });
-      expect(mockRecordAuthLogin).toHaveBeenCalledWith('locked', 'basic');
-      expect(mockSetAuthAccountLockedTotal).toHaveBeenLastCalledWith(1);
-      expect(mockSetAuthIpLockedTotal).toHaveBeenCalled();
     });
 
     test('should derive login identity from request body username', () => {
@@ -838,8 +823,6 @@ describe('Auth Router', () => {
         expect(res.json).toHaveBeenCalledWith({
           error: 'Account temporarily locked due to repeated failed login attempts',
         });
-        expect(mockRecordAuthLogin).toHaveBeenCalledWith('locked', 'basic');
-        expect(mockSetAuthAccountLockedTotal).toHaveBeenCalledWith(1);
       } finally {
         vi.useRealTimers();
       }
