@@ -2,7 +2,9 @@
 # Pre-commit coverage gate: runs tests related to staged files and checks
 # that each staged source file maintains coverage thresholds.
 #
-# Only activates when .ts/.vue source files in app/ or ui/ are staged.
+# Only activates when instrumented source files are staged:
+# - app/*.ts
+# - ui/src/*.ts
 # Uses vitest --changed first and scopes coverage to staged files.
 # If dependency-based selection misses relevant tests, it retries with a
 # full vitest run to avoid false negatives on per-file thresholds.
@@ -15,7 +17,7 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
-# Collect staged .ts/.vue source files (excludes deletions and test files)
+# Collect staged source files (excludes deletions and test files)
 staged_app=()
 staged_ui=()
 
@@ -24,7 +26,7 @@ while IFS= read -r file; do
 	app/*.test.ts) ;; # skip test files — we measure source coverage
 	app/*.ts) staged_app+=("$file") ;;
 	ui/src/*.spec.ts) ;; # skip test files
-	ui/src/*.ts | ui/src/*.vue) staged_ui+=("$file") ;;
+	ui/src/*.ts) staged_ui+=("$file") ;;
 	esac
 done < <(git diff --cached --name-only --diff-filter=d)
 
