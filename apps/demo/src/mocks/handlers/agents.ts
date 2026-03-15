@@ -1,70 +1,45 @@
 import { HttpResponse, http } from 'msw';
 import { agents } from '../data/agents';
 
+type AgentLogEntryLevel = 'debug' | 'info';
+
+type AgentLogEntrySpec = {
+  level: AgentLogEntryLevel;
+  message: string;
+  offsetMs: number;
+};
+
+const agentLogSummarySpecs: AgentLogEntrySpec[] = [
+  { offsetMs: 300000, level: 'info', message: 'Agent connected to controller' },
+  { offsetMs: 240000, level: 'info', message: 'Starting container watch cycle' },
+  { offsetMs: 180000, level: 'info', message: 'Found 3 watched containers' },
+  { offsetMs: 120000, level: 'info', message: 'Registry check completed for all images' },
+  { offsetMs: 60000, level: 'info', message: 'Watch cycle completed — next run in 30m' },
+];
+
+const agentLogDetailSpecs: AgentLogEntrySpec[] = [
+  { offsetMs: 300000, level: 'info', message: 'Agent connected to controller' },
+  { offsetMs: 240000, level: 'info', message: 'Starting container watch cycle' },
+  { offsetMs: 180000, level: 'debug', message: 'Pulling manifest for prom/prometheus:v2.54.0' },
+  { offsetMs: 120000, level: 'info', message: 'Registry check completed' },
+  { offsetMs: 60000, level: 'info', message: 'Watch cycle completed' },
+];
+
+function buildAgentLogEntries(specs: AgentLogEntrySpec[]) {
+  const now = Date.now();
+  return specs.map((spec) => ({
+    timestamp: new Date(now - spec.offsetMs).toISOString(),
+    level: spec.level,
+    message: spec.message,
+  }));
+}
+
 export const agentHandlers = [
   http.get('/api/agents', () => HttpResponse.json({ data: agents })),
-
   http.get('/api/agents/:name/log', () =>
-    HttpResponse.json({
-      entries: [
-        {
-          timestamp: new Date(Date.now() - 300000).toISOString(),
-          level: 'info',
-          message: 'Agent connected to controller',
-        },
-        {
-          timestamp: new Date(Date.now() - 240000).toISOString(),
-          level: 'info',
-          message: 'Starting container watch cycle',
-        },
-        {
-          timestamp: new Date(Date.now() - 180000).toISOString(),
-          level: 'info',
-          message: 'Found 3 watched containers',
-        },
-        {
-          timestamp: new Date(Date.now() - 120000).toISOString(),
-          level: 'info',
-          message: 'Registry check completed for all images',
-        },
-        {
-          timestamp: new Date(Date.now() - 60000).toISOString(),
-          level: 'info',
-          message: 'Watch cycle completed — next run in 30m',
-        },
-      ],
-    }),
+    HttpResponse.json({ entries: buildAgentLogEntries(agentLogSummarySpecs) }),
   ),
-
   http.get('/api/agents/:name/log/entries', () =>
-    HttpResponse.json({
-      entries: [
-        {
-          timestamp: new Date(Date.now() - 300000).toISOString(),
-          level: 'info',
-          message: 'Agent connected to controller',
-        },
-        {
-          timestamp: new Date(Date.now() - 240000).toISOString(),
-          level: 'info',
-          message: 'Starting container watch cycle',
-        },
-        {
-          timestamp: new Date(Date.now() - 180000).toISOString(),
-          level: 'debug',
-          message: 'Pulling manifest for prom/prometheus:v2.54.0',
-        },
-        {
-          timestamp: new Date(Date.now() - 120000).toISOString(),
-          level: 'info',
-          message: 'Registry check completed',
-        },
-        {
-          timestamp: new Date(Date.now() - 60000).toISOString(),
-          level: 'info',
-          message: 'Watch cycle completed',
-        },
-      ],
-    }),
+    HttpResponse.json({ entries: buildAgentLogEntries(agentLogDetailSpecs) }),
   ),
 ];
