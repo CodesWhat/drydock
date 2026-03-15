@@ -55,7 +55,7 @@ function onItemKeydown(event: KeyboardEvent, item: Record<string, unknown>) {
 <template>
   <div class="space-y-2">
     <div v-for="item in items" :key="getKey(item, itemKey)"
-         class="dd-rounded overflow-hidden transition-[color,background-color,border-color,opacity,transform,box-shadow] cursor-pointer"
+         class="dd-rounded transition-[color,background-color,border-color,opacity,transform,box-shadow] cursor-pointer"
          role="button"
          tabindex="0"
          :aria-expanded="expandable ? String(isExpanded(item)) : undefined"
@@ -69,7 +69,7 @@ function onItemKeydown(event: KeyboardEvent, item: Record<string, unknown>) {
          @keydown="onItemKeydown($event, item)"
          @click="activateItem(item)">
       <!-- Header -->
-      <div class="flex items-center gap-3 px-5 py-3 transition-colors hover:dd-bg-elevated">
+      <div class="flex items-center gap-3 px-5 py-3 transition-colors hover:dd-bg-elevated rounded-[inherit]">
         <slot name="header" :item="item" :expanded="expandable && isExpanded(item)" />
         <AppIcon v-if="expandable"
                  :name="isExpanded(item) ? 'chevron-up' : 'chevron-down'"

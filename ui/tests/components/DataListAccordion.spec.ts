@@ -157,6 +157,30 @@ describe('DataListAccordion', () => {
       const firstItem = w.findAll('.space-y-2 > div')[0];
       expect(firstItem.attributes('aria-label')).toContain('Alpha');
     });
+
+    it('activates item on Enter key', async () => {
+      const w = factory();
+      const rows = w.findAll('.space-y-2 > div');
+      await rows[0].trigger('keydown', { key: 'Enter' });
+      expect(w.emitted('item-click')?.[0]).toEqual([items[0]]);
+    });
+
+    it('activates item on Space key', async () => {
+      const w = factory(
+        { expandable: true },
+        { details: ({ item }: any) => `Details: ${item.name}` },
+      );
+      const rows = w.findAll('.space-y-2 > div');
+      await rows[1].trigger('keydown', { key: ' ' });
+      expect(w.text()).toContain('Details: Beta');
+    });
+
+    it('ignores other keys', async () => {
+      const w = factory();
+      const rows = w.findAll('.space-y-2 > div');
+      await rows[0].trigger('keydown', { key: 'Tab' });
+      expect(w.emitted('item-click')).toBeUndefined();
+    });
   });
 
   describe('selection', () => {
