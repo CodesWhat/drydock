@@ -66,6 +66,7 @@
     "undici": "^7.22.0",
     "unix-crypt-td-js": "1.1.4",
     "uuid": "^13.0.0",
+    "ws": "^8.19.0",
     "yaml": "2.8.2"
   },
   "overrides": {

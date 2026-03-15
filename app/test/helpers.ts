@@ -14,6 +14,8 @@ import { vi } from 'vitest';
 export function createMockResponse() {
   return {
     status: vi.fn().mockReturnThis(),
+    set: vi.fn().mockReturnThis(),
+    setHeader: vi.fn(),
     json: vi.fn(),
     sendStatus: vi.fn(),
     send: vi.fn(),
