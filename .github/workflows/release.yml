@@ -2,8 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [main]
-    tags: ['*']
+    tags: ['v*']
 
 permissions: read-all
 
@@ -77,8 +76,6 @@ jobs:
             docker.io/codeswhat/drydock
             quay.io/codeswhat/drydock
           tags: |
-            # branch name (main)
-            type=ref,event=branch
             # full semver on tags (e.g. 9.0.0)
             type=semver,pattern={{version}}
             # major.minor on tags (e.g. 9.0)
