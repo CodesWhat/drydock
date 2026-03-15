@@ -76,11 +76,17 @@ pre-push:
       priority: 5
       timeout: 2m
 
+    # ── Browser E2E: Playwright critical UI flows ───────────────────
+    e2e-playwright:
+      run: cd e2e && npm run test:playwright
+      priority: 6
+      timeout: 5m
+
     # ── Advisory: mirrors CI advisory jobs (non-blocking) ────────────
     zizmor:
       glob: '.github/workflows/*.yml'
       run: zizmor .github/workflows/ || true
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
-      priority: 6
+      priority: 7
       timeout: 30s

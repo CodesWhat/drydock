@@ -467,6 +467,93 @@ jobs:
         if: always()
         run: ./scripts/cleanup-test-containers.sh
 
+  playwright:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    needs: [build]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc  # v2.15.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      - name: Build drydock QA image
+        run: docker build --build-arg DD_VERSION=ci --tag drydock:dev .
+
+      - name: Start QA stack
+        run: docker compose -p drydock-playwright -f test/qa-compose.yml up -d
+
+      - name: Wait for QA health
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:3333/api/health >/dev/null 2>&1; then
+              echo "Drydock QA is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Drydock QA failed to become healthy after 120 seconds."
+          docker compose -p drydock-playwright -f test/qa-compose.yml ps
+          exit 1
+
+      - name: Run Playwright tests
+        run: npm run test:playwright
+        working-directory: e2e
+
+      - name: Upload Playwright HTML report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: playwright-html-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e2e/playwright-report
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: playwright-traces-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e2e/test-results
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Show QA logs on failure
+        if: failure()
+        run: docker compose -p drydock-playwright -f test/qa-compose.yml logs --no-color
+
+      - name: Stop QA stack
+        if: always()
+        run: docker compose -p drydock-playwright -f test/qa-compose.yml down -v --remove-orphans
+
   load-test-smoke:
     name: Load Test (Smoke)
     runs-on: ubuntu-latest
