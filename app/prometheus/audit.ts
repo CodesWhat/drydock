@@ -6,4 +6,4 @@ const { init, getCounter: getAuditCounter } = createCounter(
   ['action'],
 );
 
-export { init, getAuditCounter };
+export { getAuditCounter, init };

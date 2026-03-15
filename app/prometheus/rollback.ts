@@ -6,4 +6,4 @@ const { init, getCounter: getRollbackCounter } = createCounter(
   ['type', 'name', 'outcome', 'reason'],
 );
 
-export { init, getRollbackCounter };
+export { getRollbackCounter, init };

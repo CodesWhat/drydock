@@ -12,7 +12,7 @@ import { sanitizeLogParam } from '../log/sanitize.js';
 import { toPositiveInteger } from '../util/parse.js';
 import { hasValidCommandPath } from './runtime.js';
 
-export { SECURITY_SBOM_FORMATS, toPositiveInteger, type SecuritySeverity, type SecuritySbomFormat };
+export { SECURITY_SBOM_FORMATS, type SecuritySbomFormat, type SecuritySeverity, toPositiveInteger };
 export type SecurityScanStatus = 'passed' | 'blocked' | 'error';
 export type SecuritySignatureStatus = 'verified' | 'unverified' | 'error';
 export type SecuritySbomStatus = 'generated' | 'error';

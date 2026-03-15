@@ -1412,19 +1412,19 @@ class Docker extends Watcher {
 export default Docker;
 
 export {
-  getLabel as testable_getLabel,
-  getCurrentPrefix as testable_getCurrentPrefix,
   filterBySegmentCount as testable_filterBySegmentCount,
-  getContainerName as testable_getContainerName,
   getContainerDisplayName as testable_getContainerDisplayName,
-  normalizeConfigNumberValue as testable_normalizeConfigNumberValue,
-  shouldUpdateDisplayNameFromContainerName as testable_shouldUpdateDisplayNameFromContainerName,
+  getContainerName as testable_getContainerName,
+  getCurrentPrefix as testable_getCurrentPrefix,
   getFirstDigitIndex as testable_getFirstDigitIndex,
   getImageForRegistryLookup as testable_getImageForRegistryLookup,
-  normalizeContainer as testable_normalizeContainer,
-  getOldContainers as testable_getOldContainers,
-  pruneOldContainers as testable_pruneOldContainers,
   getImageReferenceCandidatesFromPattern as testable_getImageReferenceCandidatesFromPattern,
   getImgsetSpecificity as testable_getImgsetSpecificity,
   getInspectValueByPath as testable_getInspectValueByPath,
+  getLabel as testable_getLabel,
+  getOldContainers as testable_getOldContainers,
+  normalizeConfigNumberValue as testable_normalizeConfigNumberValue,
+  normalizeContainer as testable_normalizeContainer,
+  pruneOldContainers as testable_pruneOldContainers,
+  shouldUpdateDisplayNameFromContainerName as testable_shouldUpdateDisplayNameFromContainerName,
 };

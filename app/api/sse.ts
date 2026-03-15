@@ -379,19 +379,19 @@ function resetInitializationStateForTests(): void {
 
 // For testing
 export {
-  clients as _clients,
   activeSseClientRegistryTestAdapter as _activeSseClientRegistry,
+  broadcastContainerEvent as _broadcastContainerEvent,
+  broadcastScanCompleted as _broadcastScanCompleted,
+  broadcastScanStarted as _broadcastScanStarted,
+  broadcastSelfUpdate as _broadcastSelfUpdate,
+  clearPendingSelfUpdateAcks as _clearPendingSelfUpdateAcks,
+  clients as _clients,
   connectionsPerIp as _connectionsPerIp,
   connectionsPerSession as _connectionsPerSession,
   MAX_CONNECTIONS_PER_IP as _MAX_CONNECTIONS_PER_IP,
   MAX_CONNECTIONS_PER_SESSION as _MAX_CONNECTIONS_PER_SESSION,
-  SSE_HEARTBEAT_INTERVAL_MS as _SSE_HEARTBEAT_INTERVAL_MS,
   pendingSelfUpdateAcks as _pendingSelfUpdateAcks,
-  sweepStaleSseState as _sweepStaleSseState,
-  clearPendingSelfUpdateAcks as _clearPendingSelfUpdateAcks,
   resetInitializationStateForTests as _resetInitializationStateForTests,
-  broadcastSelfUpdate as _broadcastSelfUpdate,
-  broadcastScanStarted as _broadcastScanStarted,
-  broadcastScanCompleted as _broadcastScanCompleted,
-  broadcastContainerEvent as _broadcastContainerEvent,
+  SSE_HEARTBEAT_INTERVAL_MS as _SSE_HEARTBEAT_INTERVAL_MS,
+  sweepStaleSseState as _sweepStaleSseState,
 };
