@@ -49,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **SSE self-update ack hardening** — Added validation for empty `clientId`/`clientToken`, non-ack broadcast mode, and client-not-bound-to-operation rejection.
 - **FAQ: removed insecure seccomp advice** — Removed the "Core dumped on Raspberry PI" FAQ entry that recommended `--security-opt seccomp=unconfined`, which completely disables the kernel's syscall sandbox. The underlying libseccomp2 bug was fixed in all supported OS versions since 2021.
 
+### Documentation
+
+- **Docker socket security guide** — Expanded watcher docs with comprehensive security section: comparison table of all access methods, socket proxy setup (recommended), remote Docker over TLS with cert generation walkthrough, rootless Docker guide, full Docker API endpoint reference showing exactly which endpoints Drydock uses for read-only monitoring vs write operations (updates).
+
 ### Dependencies
 
 - **biome** — Bumped to 2.4.7 with import ordering fixes for new lint rules.

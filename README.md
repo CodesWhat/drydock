@@ -321,6 +321,7 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 | **v2.4.0** | Data Safety & Templates | Scheduled backups (S3, SFTP), compose templates, secret management |
 | **v3.0.0** | Advanced Platform | Network topology, GPU monitoring, full i18n translations |
 | **v3.1.0** | Enterprise Access & Compliance | RBAC, LDAP/AD, environment-scoped permissions, audit logging, Wolfi hardened image |
+| **v3.2.0** | Drydock Socket Proxy | Built-in companion proxy container (allowlist-filtered Docker API), rootless Docker & remote TLS security docs |
 
 <hr>
 
