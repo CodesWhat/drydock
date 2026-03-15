@@ -103,4 +103,4 @@ async function logout() {
   return response.json();
 }
 
-export { getStrategies, getUser, loginBasic, setRememberMe, getOidcRedirection, logout };
+export { getOidcRedirection, getStrategies, getUser, loginBasic, logout, setRememberMe };

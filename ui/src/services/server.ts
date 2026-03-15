@@ -21,4 +21,4 @@ async function getSecurityRuntime() {
   return response.json();
 }
 
-export { getServer, getSecurityRuntime };
+export { getSecurityRuntime, getServer };

@@ -353,24 +353,23 @@ async function revealContainerEnv(containerId: string) {
   return response.json();
 }
 
+export type { ContainerGroup };
 export {
-  getAllContainers,
-  getContainerRecentStatus,
-  getContainerSummary,
-  getContainerGroups,
-  refreshAllContainers,
-  refreshContainer,
   deleteContainer,
-  getContainerTriggers,
+  getAllContainers,
+  getContainerGroups,
   getContainerLogs,
+  getContainerRecentStatus,
+  getContainerSbom,
+  getContainerSummary,
+  getContainerTriggers,
   getContainerUpdateOperations,
   getContainerVulnerabilities,
   getSecurityVulnerabilityOverview,
-  getContainerSbom,
+  refreshAllContainers,
+  refreshContainer,
   revealContainerEnv,
   runTrigger,
   scanContainer,
   updateContainerPolicy,
 };
-
-export type { ContainerGroup };

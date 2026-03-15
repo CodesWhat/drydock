@@ -60,4 +60,4 @@ async function getAuthentication({ type, name, agent }: AuthenticationDetailPath
   return response.json();
 }
 
-export { getAuthProviderIcon, getAuthProviderColor, getAllAuthentications, getAuthentication };
+export { getAllAuthentications, getAuthentication, getAuthProviderColor, getAuthProviderIcon };

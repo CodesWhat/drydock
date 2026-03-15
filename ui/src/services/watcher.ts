@@ -48,4 +48,4 @@ async function getWatcher({ type, name, agent }: WatcherDetailPathOptions) {
   return response.json();
 }
 
-export { getWatcherProviderIcon, getWatcherProviderColor, getAllWatchers, getWatcher };
+export { getAllWatchers, getWatcher, getWatcherProviderColor, getWatcherProviderIcon };

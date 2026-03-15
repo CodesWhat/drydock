@@ -46,4 +46,4 @@ async function updateContainer(containerId: string) {
   return response.json();
 }
 
-export { startContainer, stopContainer, restartContainer, updateContainer };
+export { restartContainer, startContainer, stopContainer, updateContainer };
