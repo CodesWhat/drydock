@@ -3,8 +3,9 @@
 # that each staged source file maintains coverage thresholds.
 #
 # Only activates when .ts/.vue source files in app/ or ui/ are staged.
-# Uses vitest --changed to find affected tests, and --coverage.include
-# to scope coverage measurement to only the staged files.
+# Uses vitest --changed first and scopes coverage to staged files.
+# If dependency-based selection misses relevant tests, it retries with a
+# full vitest run to avoid false negatives on per-file thresholds.
 #
 # Thresholds: 100% lines/functions/statements, 95% branches.
 # Branch threshold is slightly relaxed because v8 coverage reports
@@ -56,7 +57,7 @@ if [[ ${#staged_app[@]} -gt 0 ]]; then
 	done
 	echo "🧪 Running coverage for ${#staged_app[@]} staged app file(s)..."
 	# shellcheck disable=SC2086
-	run "app-coverage" bash -c "cd app && npx vitest run --changed $COVERAGE_FLAGS ${include_args[*]}"
+	run "app-coverage" bash -c "cd app && npx vitest run --changed $COVERAGE_FLAGS ${include_args[*]} || { echo '↩️  app --changed coverage failed; retrying full run'; npx vitest run $COVERAGE_FLAGS ${include_args[*]}; }"
 fi
 
 if [[ ${#staged_ui[@]} -gt 0 ]]; then
@@ -67,7 +68,7 @@ if [[ ${#staged_ui[@]} -gt 0 ]]; then
 	done
 	echo "🧪 Running coverage for ${#staged_ui[@]} staged ui file(s)..."
 	# shellcheck disable=SC2086
-	run "ui-coverage" bash -c "cd ui && npx vitest run --changed $COVERAGE_FLAGS ${include_args[*]}"
+	run "ui-coverage" bash -c "cd ui && npx vitest run --changed $COVERAGE_FLAGS ${include_args[*]} || { echo '↩️  ui --changed coverage failed; retrying full run'; npx vitest run $COVERAGE_FLAGS ${include_args[*]}; }"
 fi
 
 for i in "${!pids[@]}"; do
