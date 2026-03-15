@@ -82,6 +82,33 @@ function c(opts: {
   };
 }
 
+const noKnownVulnerabilities = { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 };
+const lscrMediaEnv = [
+  { key: 'PUID', value: '1000' },
+  { key: 'PGID', value: '1000' },
+  { key: 'TZ', value: 'America/New_York' },
+];
+
+type ContainerOptions = Parameters<typeof c>[0];
+
+function lscrMediaContainer(
+  opts: Omit<
+    ContainerOptions,
+    'registryType' | 'registryUrl' | 'scanStatus' | 'scanSummary' | 'group' | 'env'
+  > &
+    Partial<Pick<ContainerOptions, 'scanStatus' | 'scanSummary' | 'group' | 'env'>>,
+) {
+  return c({
+    ...opts,
+    registryType: 'lscr',
+    registryUrl: 'https://lscr.io',
+    scanStatus: opts.scanStatus ?? 'scanned',
+    scanSummary: opts.scanSummary ?? noKnownVulnerabilities,
+    group: opts.group ?? 'media',
+    env: opts.env ?? lscrMediaEnv,
+  });
+}
+
 export const containers = [
   c({
     id: 'a1b2c3d4e5f6',
@@ -189,68 +216,38 @@ export const containers = [
     ],
     env: [{ key: 'JELLYFIN_PublishedServerUrl', value: 'https://jellyfin.local' }],
   }),
-  c({
+  lscrMediaContainer({
     id: 'a7b8c9d0e1f2',
     name: 'sonarr',
     displayName: 'Sonarr',
     displayIcon: 'sh-sonarr',
     image: 'linuxserver/sonarr',
     tag: '4.0.10',
-    registryType: 'lscr',
-    registryUrl: 'https://lscr.io',
-    scanStatus: 'scanned',
-    scanSummary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
-    group: 'media',
     ports: ['8989:8989/tcp'],
     volumes: ['sonarr-config:/config', '/media/tv:/tv', '/media/downloads:/downloads'],
-    env: [
-      { key: 'PUID', value: '1000' },
-      { key: 'PGID', value: '1000' },
-      { key: 'TZ', value: 'America/New_York' },
-    ],
   }),
-  c({
+  lscrMediaContainer({
     id: 'b8c9d0e1f2a3',
     name: 'radarr',
     displayName: 'Radarr',
     displayIcon: 'sh-radarr',
     image: 'linuxserver/radarr',
     tag: '5.14.0',
-    registryType: 'lscr',
-    registryUrl: 'https://lscr.io',
-    scanStatus: 'scanned',
-    scanSummary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
-    group: 'media',
     ports: ['7878:7878/tcp'],
     volumes: ['radarr-config:/config', '/media/movies:/movies', '/media/downloads:/downloads'],
-    env: [
-      { key: 'PUID', value: '1000' },
-      { key: 'PGID', value: '1000' },
-      { key: 'TZ', value: 'America/New_York' },
-    ],
   }),
-  c({
+  lscrMediaContainer({
     id: 'c9d0e1f2a3b4',
     name: 'prowlarr',
     displayName: 'Prowlarr',
     displayIcon: 'sh-prowlarr',
     image: 'linuxserver/prowlarr',
     tag: '1.25.0',
-    registryType: 'lscr',
-    registryUrl: 'https://lscr.io',
     newTag: '1.26.1',
     semverDiff: 'minor',
     updateDetectedAt: daysAgo(14),
-    scanStatus: 'scanned',
-    scanSummary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
-    group: 'media',
     ports: ['9696:9696/tcp'],
     volumes: ['prowlarr-config:/config'],
-    env: [
-      { key: 'PUID', value: '1000' },
-      { key: 'PGID', value: '1000' },
-      { key: 'TZ', value: 'America/New_York' },
-    ],
   }),
   c({
     id: 'd0e1f2a3b4c5',
@@ -333,7 +330,7 @@ export const containers = [
     displayName: 'Drydock',
     displayIcon: 'sh-drydock',
     image: 'codeswhat/drydock',
-    tag: '1.4.0',
+    tag: '1.4.1',
     registryType: 'ghcr',
     registryUrl: 'https://ghcr.io',
     scanStatus: 'scanned',

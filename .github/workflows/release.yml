@@ -2,8 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [main]
-    tags: ['*']
+    tags: ['v*']
 
 permissions: read-all
 
@@ -77,8 +76,6 @@ jobs:
             docker.io/codeswhat/drydock
             quay.io/codeswhat/drydock
           tags: |
-            # branch name (main)
-            type=ref,event=branch
             # full semver on tags (e.g. 9.0.0)
             type=semver,pattern={{version}}
             # major.minor on tags (e.g. 9.0)
@@ -126,7 +123,7 @@ jobs:
 
       - name: Install cosign
         if: always() && (steps.build.outcome == 'success' || steps.build-retry.outcome == 'success')
-        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad  # v4.0.0
+        uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22  # v4.1.0
 
       - name: Sign container images
         if: always() && steps.digest.outputs.value

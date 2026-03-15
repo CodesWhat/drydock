@@ -42,6 +42,12 @@ interface ParsedCryptHash {
   encodedHash: string;
 }
 
+interface Argon2Parameters {
+  memory: number;
+  passes: number;
+  parallelism: number;
+}
+
 type LegacyHashFormat = 'sha1' | 'apr1' | 'md5' | 'crypt' | 'plain';
 const UNSUPPORTED_PLAIN_FALLBACK_PATTERNS: RegExp[] = [
   /^\$2[abxy]\$/i, // bcrypt variants
@@ -101,7 +107,7 @@ function parseArgon2Parameters(
   rawMemory: string,
   rawPasses: string,
   rawParallelism: string,
-): { memory: number; passes: number; parallelism: number } | undefined {
+): Argon2Parameters | undefined {
   const memory = parsePositiveInteger(rawMemory);
   const passes = parsePositiveInteger(rawPasses);
   const parallelism = parsePositiveInteger(rawParallelism);
@@ -123,53 +129,77 @@ function parseArgon2Parameters(
   return { memory, passes, parallelism };
 }
 
-function parsePhcArgon2Parameters(
-  rawParameters: string,
-): { memory: number; passes: number; parallelism: number } | undefined {
-  const entries = rawParameters.split(',');
-  if (entries.length !== 3) {
+// m=memory, t=time/passes, p=parallelism
+const PHC_ARGON2_PARAMETER_KEYS = ['m', 't', 'p'] as const;
+type PhcArgon2ParameterKey = (typeof PHC_ARGON2_PARAMETER_KEYS)[number];
+
+function isPhcArgon2ParameterKey(key: string): key is PhcArgon2ParameterKey {
+  return PHC_ARGON2_PARAMETER_KEYS.includes(key as PhcArgon2ParameterKey);
+}
+
+function parsePhcArgon2ParameterEntry(
+  entry: string,
+): { key: PhcArgon2ParameterKey; value: string } | undefined {
+  const parts = entry.split('=');
+  if (parts.length !== 2) {
     return undefined;
   }
 
-  let rawMemory: string | undefined;
-  let rawPasses: string | undefined;
-  let rawParallelism: string | undefined;
+  const [key, value] = parts;
+  if (value === undefined || !isPhcArgon2ParameterKey(key)) {
+    return undefined;
+  }
+
+  return { key, value };
+}
+
+function parsePhcArgon2Parameters(rawParameters: string): Argon2Parameters | undefined {
+  const entries = rawParameters.split(',');
+  if (entries.length !== PHC_ARGON2_PARAMETER_KEYS.length) {
+    return undefined;
+  }
+
+  const parameters: Partial<Record<PhcArgon2ParameterKey, string>> = {};
 
   for (const entry of entries) {
-    const [key, value, ...extra] = entry.split('=');
-    if (!key || value === undefined || extra.length > 0) {
+    const parsed = parsePhcArgon2ParameterEntry(entry);
+    if (!parsed) {
       return undefined;
     }
 
-    switch (key) {
-      case 'm':
-        if (rawMemory !== undefined) {
-          return undefined;
-        }
-        rawMemory = value;
-        break;
-      case 't':
-        if (rawPasses !== undefined) {
-          return undefined;
-        }
-        rawPasses = value;
-        break;
-      case 'p':
-        if (rawParallelism !== undefined) {
-          return undefined;
-        }
-        rawParallelism = value;
-        break;
-      default:
-        return undefined;
+    if (parameters[parsed.key] !== undefined) {
+      return undefined;
     }
+
+    parameters[parsed.key] = parsed.value;
   }
 
+  const rawMemory = parameters.m;
+  const rawPasses = parameters.t;
+  const rawParallelism = parameters.p;
   if (!rawMemory || !rawPasses || !rawParallelism) {
     return undefined;
   }
 
   return parseArgon2Parameters(rawMemory, rawPasses, rawParallelism);
+}
+
+function hasMinArgon2Lengths(salt: Buffer, hash: Buffer): boolean {
+  return salt.length >= MIN_SALT_SIZE && hash.length >= MIN_HASH_SIZE;
+}
+
+function parseArgon2Payload(
+  params: Argon2Parameters | undefined,
+  salt: Buffer | undefined,
+  hash: Buffer | undefined,
+): ParsedArgon2Hash | undefined {
+  if (!params || !salt || !hash) {
+    return undefined;
+  }
+  if (!hasMinArgon2Lengths(salt, hash)) {
+    return undefined;
+  }
+  return { ...params, salt, hash };
 }
 
 function parseDrydockArgon2Hash(normalizedHash: string): ParsedArgon2Hash | undefined {
@@ -182,11 +212,7 @@ function parseDrydockArgon2Hash(normalizedHash: string): ParsedArgon2Hash | unde
   const salt = decodeBase64(parts[4]);
   const hash = decodeBase64(parts[5]);
 
-  if (!params || !salt || !hash || salt.length < MIN_SALT_SIZE || hash.length < MIN_HASH_SIZE) {
-    return undefined;
-  }
-
-  return { ...params, salt, hash };
+  return parseArgon2Payload(params, salt, hash);
 }
 
 function parsePhcArgon2Hash(normalizedHash: string): ParsedArgon2Hash | undefined {
@@ -204,11 +230,7 @@ function parsePhcArgon2Hash(normalizedHash: string): ParsedArgon2Hash | undefine
   const salt = decodeBase64(parts[4]);
   const hash = decodeBase64(parts[5]);
 
-  if (!params || !salt || !hash || salt.length < MIN_SALT_SIZE || hash.length < MIN_HASH_SIZE) {
-    return undefined;
-  }
-
-  return { ...params, salt, hash };
+  return parseArgon2Payload(params, salt, hash);
 }
 
 function looksLikeArgon2Hash(rawHash: string): boolean {

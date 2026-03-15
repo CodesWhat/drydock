@@ -6,4 +6,4 @@ const { init, getCounter: getWebhookCounter } = createCounter(
   ['action'],
 );
 
-export { init, getWebhookCounter };
+export { getWebhookCounter, init };

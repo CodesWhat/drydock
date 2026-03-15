@@ -8,6 +8,11 @@ import { getErrorMessage } from '../util/error.js';
 
 const STRATEGY_IDS: string[] = [];
 
+interface AuthStatusResponse {
+  providers: StrategyDescription[];
+  errors: registry.AuthenticationRegistrationError[];
+}
+
 /**
  * Get all strategies id.
  * @returns {[]}
@@ -62,6 +67,17 @@ export function getUniqueStrategies(): StrategyDescription[] {
   );
 }
 
+function getAuthStatusPayload(): AuthStatusResponse {
+  return {
+    providers: getUniqueStrategies(),
+    errors: registry.getAuthenticationRegistrationErrors(),
+  };
+}
+
+export function getAuthStatus(_req: Request, res: Response): void {
+  res.json(getAuthStatusPayload());
+}
+
 /**
  * Return the registered strategies from the registry.
  * Includes any registration warnings so the login UI can surface them.
@@ -69,9 +85,10 @@ export function getUniqueStrategies(): StrategyDescription[] {
  * @param res
  */
 export function getStrategies(_req: Request, res: Response): void {
+  const status = getAuthStatusPayload();
   const warnings = registry.getRegistrationWarnings();
   res.json({
-    strategies: getUniqueStrategies(),
+    strategies: status.providers,
     warnings,
   });
 }

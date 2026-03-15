@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Decompose useContainerActions** — Split the 1200-line composable into focused modules: `useContainerBackups`, `useContainerPolicy`, `useContainerPreview`, and `useContainerTriggers`.
 - **Registry error handling** — Replaced `catch (e: any)` with `catch (e: unknown)` and `getErrorMessage(e)` in component registration and trigger/watcher startup.
 - **E2E test resilience** — Container row count assertions now use `toBeGreaterThan(0)` instead of hardcoded counts, preventing false failures when the QA environment has a different number of containers.
+- **Extract runtime config evaluation context type** — Consolidated scattered runtime field evaluation parameters into a typed `ClonedRuntimeFieldEvaluationContext` interface for trigger providers.
+- **Argon2 hash parsing type safety** — Extracted `Argon2Parameters` interface, parameter key type guard, and PHC parameter parsing into a reusable function for improved type safety.
+- **Extract agent client initialization methods** — Extracted URL parsing, HTTPS detection, protocol validation, and TLS configuration from monolithic constructor into focused private methods.
+- **Extract shared self-hosted registry config schema** — Deduplicated the registry configuration schema (url, login, password, auth, cafile, insecure, clientcert, clientkey) into a reusable helper shared by Custom and SelfHostedBasic registry providers.
 
 ### Fixed
 
@@ -32,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Security overview container count** — The security vulnerability overview now uses the lightweight store count instead of loading all container objects just to count them.
 - **Compose path deduplication** — Replaced `indexOf`-based dedup with `Set` for compose file path detection in container security view.
 - **Build provenance attestation** — CI attestation step now runs with `if: always()` so provenance is attested even when prior optional steps are skipped.
+- **Container recreate alias duplicates in triggers** — When containers were recreated externally (via Portainer or `docker compose up`), Docker's transient `<id-prefix>_<name>` aliases were treated as new containers, producing duplicate entries in MQTT Home Assistant discovery sensors and Telegram notifications. Added alias deduplication filtering and force-removal of stale container IDs on recreate detection. ([#156](https://github.com/CodesWhat/drydock/issues/156))
+- **Stale store data after external container recreation** — Watch-at-start scan was suppressed when the store already had container data, leaving stale records from the previous run after external container recreation. Removed the suppression so every startup runs a full scan with alias filtering. ([#157](https://github.com/CodesWhat/drydock/issues/157))
+- **Watcher container counts on Hosts page** — Per-watcher container counts on the Hosts page used `watcher.id` (e.g. `docker.esk83`) as the lookup key instead of `watcher.name` (e.g. `esk83`), causing counts to display as zero for env-var-configured watchers. ([#155](https://github.com/CodesWhat/drydock/issues/155))
+- **Docker images tagged `:main` with no version** — CI release workflow triggered on both main branch pushes and version tags, producing Docker images tagged `:main` that showed `DD_VERSION=main` instead of a real version number. Release workflow now only triggers on version tags (`v*`). ([#154](https://github.com/CodesWhat/drydock/issues/154))
+- **Maturity badge sizing and tooltip clipping** — Fixed maturity badge height mismatch with other text badges and removed `overflow-hidden` from DataListAccordion that clipped tooltips in list view.
 
 ### Security
 
@@ -39,6 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Auth audit log injection** — Login identity values are now sanitized with `sanitizeLogParam()` before inclusion in audit log details, preventing log injection via crafted usernames.
 - **SSE self-update ack hardening** — Added validation for empty `clientId`/`clientToken`, non-ack broadcast mode, and client-not-bound-to-operation rejection.
 - **FAQ: removed insecure seccomp advice** — Removed the "Core dumped on Raspberry PI" FAQ entry that recommended `--security-opt seccomp=unconfined`, which completely disables the kernel's syscall sandbox. The underlying libseccomp2 bug was fixed in all supported OS versions since 2021.
+
+### Dependencies
+
+- **biome** — Bumped to 2.4.7 with import ordering fixes for new lint rules.
+- **vitest** — Bumped to 4.1.0 in app workspace with fast-check/vitest 0.3.0 and knip 5.86.0.
+- **UI packages** — Bumped vue, vitest, storybook, and icon packages.
+- **CI actions** — Bumped zizmor-action to v0.5.2 and cosign-installer to v4.1.0.
 
 ## [1.4.1]
 

@@ -14,6 +14,7 @@ const log = logger.child({ component: 'registry' });
 import Agent from '../agent/components/Agent.js';
 import type Authentication from '../authentications/providers/Authentication.js';
 import {
+  ddEnvVars,
   getAgentConfigurations,
   getAuthenticationConfigurations,
   getRegistryConfigurations,
@@ -48,6 +49,11 @@ export interface RegistryState {
   registry: { [key: string]: Registry };
   authentication: { [key: string]: Authentication };
   agent: { [key: string]: Agent };
+}
+
+export interface AuthenticationRegistrationError {
+  provider: string;
+  error: string;
 }
 
 interface RegistrationOptions {
@@ -89,6 +95,7 @@ const state: RegistryState = {
 };
 
 const registrationWarnings: string[] = [];
+const authenticationRegistrationErrors: AuthenticationRegistrationError[] = [];
 
 export function getState() {
   return state;
@@ -96,6 +103,10 @@ export function getState() {
 
 export function getRegistrationWarnings(): string[] {
   return [...registrationWarnings];
+}
+
+export function getAuthenticationRegistrationErrors(): AuthenticationRegistrationError[] {
+  return [...authenticationRegistrationErrors];
 }
 
 /**
@@ -505,10 +516,14 @@ async function registerRegistries() {
  * Register authentications.
  */
 async function registerAuthentications() {
+  authenticationRegistrationErrors.length = 0;
   const configurations = getAuthenticationConfigurations() as
     | ProviderConfigurationsByProvider
     | null
     | undefined;
+  const hasAuthEnvConfiguration = Object.keys(ddEnvVars).some((envKey) =>
+    envKey.toUpperCase().startsWith('DD_AUTH_'),
+  );
 
   if (!configurations || Object.keys(configurations).length === 0) {
     log.info('No authentication configured => Allow anonymous access');
@@ -521,19 +536,77 @@ async function registerAuthentications() {
         componentPath: 'authentications/providers',
       });
     } catch (e: any) {
-      log.warn(`Some authentications failed to register (${e.message})`);
+      log.error(`Some authentications failed to register (${e.message})`);
       log.debug(e);
+    }
+    if (hasAuthEnvConfiguration) {
+      log.error(
+        'Detected DD_AUTH_* environment variables, but no configured authentication providers were registered successfully. Validate DD_AUTH_* values (for basic auth: DD_AUTH_BASIC_<NAME>_USER and DD_AUTH_BASIC_<NAME>_HASH). Drydock will continue running without auth if anonymous access is allowed.',
+      );
     }
     return;
   }
 
-  try {
-    await registerComponents('authentication', configurations, 'authentications/providers');
-  } catch (e: any) {
-    const message = `Some authentications failed to register (${e.message})`;
-    log.warn(message);
-    log.debug(e);
+  const registrationAttempts = Object.keys(configurations).flatMap((provider) => {
+    const providerConfigurations = configurations[provider];
+    return Object.keys(providerConfigurations).map((name) => ({
+      provider: provider.toLowerCase(),
+      name,
+      configuration: providerConfigurations[name] as ComponentConfiguration,
+    }));
+  });
+  const registrationResults = await Promise.allSettled(
+    registrationAttempts.map((attempt) =>
+      registerComponent({
+        kind: 'authentication',
+        provider: attempt.provider,
+        name: attempt.name,
+        configuration: attempt.configuration,
+        componentPath: 'authentications/providers',
+      }),
+    ),
+  );
+  const failures = registrationResults
+    .map((result, index) => ({ result, attempt: registrationAttempts[index] }))
+    .filter(
+      (
+        candidate,
+      ): candidate is {
+        result: PromiseRejectedResult;
+        attempt: (typeof registrationAttempts)[number];
+      } => candidate.result.status === 'rejected',
+    );
+  const successfulRegistrations = registrationResults.length - failures.length;
+
+  if (failures.length > 0) {
+    const failureMessages = failures.map((failure) => getErrorMessage(failure.result.reason));
+    const message = `Some authentications failed to register (${failureMessages.join('; ')})`;
+    log.error(message);
+    failures.forEach((failure) => log.debug(failure.result.reason));
     registrationWarnings.push(message);
+
+    authenticationRegistrationErrors.push(
+      ...failures.map(({ attempt, result }) => {
+        const rawMessage = getErrorMessage(result.reason);
+        const wrappedMessageMatch = rawMessage.match(
+          /^Error when registering component .* \((?<error>.*)\)$/,
+        );
+        const normalizedMessage = (wrappedMessageMatch?.groups?.error ?? rawMessage).replaceAll(
+          /"([^"]+)"/g,
+          '$1',
+        );
+        return {
+          provider: `${attempt.provider}:${attempt.name}`,
+          error: normalizedMessage,
+        };
+      }),
+    );
+  }
+
+  if (hasAuthEnvConfiguration && successfulRegistrations === 0) {
+    log.error(
+      'Detected DD_AUTH_* environment variables, but no configured authentication providers were registered successfully. Validate DD_AUTH_* values (for basic auth: DD_AUTH_BASIC_<NAME>_USER and DD_AUTH_BASIC_<NAME>_HASH). Drydock will continue running without auth if anonymous access is allowed.',
+    );
   }
 
   // If all configured auth providers failed, attempt anonymous fallback.
@@ -541,7 +614,7 @@ async function registerAuthentications() {
   // without DD_ANONYMOUS_AUTH_CONFIRM=true — the security boundary is
   // inside Anonymous, not here.
   if (Object.keys(state.authentication).length === 0) {
-    log.warn(
+    log.error(
       'All configured authentication providers failed to register — attempting anonymous fallback',
     );
     try {
@@ -716,22 +789,22 @@ export async function init(options: RegistrationOptions = {}) {
 
 // The following exports are meant for testing only
 export {
+  applySharedTriggerConfigurationByName as testable_applySharedTriggerConfigurationByName,
+  applyTriggerGroupDefaults as testable_applyTriggerGroupDefaults,
+  deregisterAll as testable_deregisterAll,
+  deregisterAuthentications as testable_deregisterAuthentications,
+  deregisterComponent as testable_deregisterComponent,
+  deregisterRegistries as testable_deregisterRegistries,
+  deregisterTriggers as testable_deregisterTriggers,
+  deregisterWatchers as testable_deregisterWatchers,
+  getKnownProviderSet as testable_getKnownProviderSet,
+  log as testable_log,
+  registerAuthentications as testable_registerAuthentications,
   registerComponent as testable_registerComponent,
   registerComponents as testable_registerComponents,
   registerRegistries as testable_registerRegistries,
   registerTriggers as testable_registerTriggers,
   registerWatchers as testable_registerWatchers,
-  registerAuthentications as testable_registerAuthentications,
-  deregisterComponent as testable_deregisterComponent,
-  deregisterRegistries as testable_deregisterRegistries,
-  deregisterTriggers as testable_deregisterTriggers,
-  deregisterWatchers as testable_deregisterWatchers,
-  deregisterAuthentications as testable_deregisterAuthentications,
-  deregisterAll as testable_deregisterAll,
-  shutdown as testable_shutdown,
-  applyTriggerGroupDefaults as testable_applyTriggerGroupDefaults,
-  getKnownProviderSet as testable_getKnownProviderSet,
-  applySharedTriggerConfigurationByName as testable_applySharedTriggerConfigurationByName,
-  log as testable_log,
   registrationWarnings as testable_registrationWarnings,
+  shutdown as testable_shutdown,
 };

@@ -6,4 +6,4 @@ const { init, getCounter: getTriggerCounter } = createCounter(
   ['type', 'name', 'status'],
 );
 
-export { init, getTriggerCounter };
+export { getTriggerCounter, init };

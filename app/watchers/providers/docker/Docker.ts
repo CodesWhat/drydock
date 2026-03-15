@@ -163,6 +163,7 @@ const DEBOUNCED_WATCH_CRON_MS = 5000;
 const DOCKER_EVENTS_BUFFER_MAX_BYTES = 1024 * 1024;
 const MAINTENANCE_WINDOW_QUEUE_POLL_MS = 60 * 1000;
 const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
+const RECREATED_CONTAINER_NAME_PATTERN = /^([a-f0-9]{12})_(.+)$/i;
 
 type ContainerLabelOverrideKey = Exclude<
   keyof ContainerLabelOverrides,
@@ -318,7 +319,9 @@ async function pruneOldContainers(
   newContainers: Container[],
   containersFromTheStore: Container[],
   dockerApi: DockerApiContainerInspector,
+  options: { forceRemoveContainerIds?: Set<string> } = {},
 ) {
+  const forceRemoveContainerIds = options.forceRemoveContainerIds || new Set<string>();
   const containersToRemove = getOldContainers(newContainers, containersFromTheStore);
   const newContainerNameKeys = new Set(
     newContainers
@@ -326,6 +329,16 @@ async function pruneOldContainers(
       .map((container) => `${container.watcher || ''}::${container.name}`),
   );
   for (const containerToRemove of containersToRemove) {
+    if (
+      typeof containerToRemove.id === 'string' &&
+      forceRemoveContainerIds.has(containerToRemove.id)
+    ) {
+      // These IDs come from recreated-alias filtering and are known-stale entries.
+      // Skip inspect/status verification so Docker cannot "revive" the stale alias
+      // when it still exists briefly during container recreation.
+      storeContainer.deleteContainer(containerToRemove.id);
+      continue;
+    }
     const staleContainerNameKey = `${containerToRemove.watcher || ''}::${containerToRemove.name || ''}`;
     if (
       typeof containerToRemove.name === 'string' &&
@@ -346,6 +359,105 @@ async function pruneOldContainers(
       storeContainer.deleteContainer(containerToRemove.id);
     }
   }
+}
+
+function getRecreatedContainerBaseName(container: { Id?: unknown; Names?: unknown }) {
+  const containerId = typeof container.Id === 'string' ? container.Id : '';
+  if (containerId === '') {
+    return undefined;
+  }
+
+  const containerName = getContainerName(container);
+  if (containerName === '') {
+    return undefined;
+  }
+
+  const recreatedNameMatch = containerName.match(RECREATED_CONTAINER_NAME_PATTERN);
+  if (!recreatedNameMatch) {
+    return undefined;
+  }
+
+  const [, shortIdPrefix, baseName] = recreatedNameMatch;
+  if (baseName === '' || !containerId.toLowerCase().startsWith(shortIdPrefix.toLowerCase())) {
+    return undefined;
+  }
+
+  return baseName;
+}
+
+function getDockerContainerId(container: { Id?: unknown }) {
+  return typeof container.Id === 'string' ? container.Id : '';
+}
+
+function buildDockerContainerNameToIds(containers: any[]) {
+  const dockerContainerNameToIds = new Map<string, Set<string>>();
+
+  for (const container of containers) {
+    const containerName = getContainerName(container);
+    const containerId = getDockerContainerId(container);
+    if (containerName === '' || containerId === '') {
+      continue;
+    }
+
+    const idsForName = dockerContainerNameToIds.get(containerName) || new Set<string>();
+    idsForName.add(containerId);
+    dockerContainerNameToIds.set(containerName, idsForName);
+  }
+
+  return dockerContainerNameToIds;
+}
+
+function hasSiblingDockerContainerWithName(
+  dockerContainerNameToIds: Map<string, Set<string>>,
+  containerName: string,
+  containerId: string,
+) {
+  const containerIds = dockerContainerNameToIds.get(containerName);
+  if (!containerIds) {
+    return false;
+  }
+  return containerIds.size > 1 || (containerIds.size === 1 && !containerIds.has(containerId));
+}
+
+function filterRecreatedContainerAliases(
+  containers: any[],
+  containersFromTheStore: Container[],
+): { containersToWatch: any[]; skippedContainerIds: Set<string> } {
+  const storeContainerNames = new Set(
+    containersFromTheStore
+      .filter((container) => typeof container.name === 'string' && container.name !== '')
+      .map((container) => container.name),
+  );
+
+  const dockerContainerNameToIds = buildDockerContainerNameToIds(containers);
+
+  const containersToWatch = [];
+  const skippedContainerIds = new Set<string>();
+  for (const container of containers) {
+    const containerId = getDockerContainerId(container);
+    const recreatedContainerBaseName = getRecreatedContainerBaseName(container);
+
+    if (!recreatedContainerBaseName || containerId === '') {
+      containersToWatch.push(container);
+      continue;
+    }
+
+    const hasDockerContainerWithBaseName = hasSiblingDockerContainerWithName(
+      dockerContainerNameToIds,
+      recreatedContainerBaseName,
+      containerId,
+    );
+    const hasStoreContainerWithBaseName = storeContainerNames.has(recreatedContainerBaseName);
+
+    if (hasDockerContainerWithBaseName || hasStoreContainerWithBaseName) {
+      skippedContainerIds.add(containerId);
+      continue;
+    }
+
+    containersToWatch.push(container);
+  }
+
+  return { containersToWatch, skippedContainerIds };
 }
 
 function resolveLabelsFromContainer(
@@ -670,15 +782,6 @@ class Docker extends Watcher {
     this.watchCron = cron.schedule(this.configuration.cron, () => this.watchFromCron(), {
       maxRandomDelay: this.configuration.jitter,
     });
-
-    // Resolve watchatstart based on this watcher persisted state.
-    // Keep explicit "false" untouched; default "true" is disabled only when
-    // this watcher already has containers in store.
-    const isWatcherStoreEmpty =
-      storeContainer.getContainers({
-        watcher: this.name,
-      }).length === 0;
-    this.configuration.watchatstart = this.configuration.watchatstart && isWatcherStoreEmpty;
 
     // watch at startup if enabled (after all components have been registered)
     if (this.configuration.watchatstart) {
@@ -1047,6 +1150,16 @@ class Docker extends Watcher {
   async getContainers(): Promise<Container[]> {
     this.ensureLogger();
     await this.ensureRemoteAuthHeaders();
+    let containersFromTheStore: Container[] = [];
+    try {
+      containersFromTheStore = storeContainer.getContainers({
+        watcher: this.name,
+      });
+    } catch (e: any) {
+      this.log.warn(
+        `Error when trying to get the existing containers from the store (${e.message})`,
+      );
+    }
     const listContainersOptions: Dockerode.ContainerListOptions = {};
     if (this.configuration.watchall) {
       listContainersOptions.all = true;
@@ -1068,7 +1181,12 @@ class Docker extends Watcher {
         this.configuration.watchbydefault,
       ),
     );
-    const containerPromises = filteredContainers.map((container: any) =>
+    const { containersToWatch, skippedContainerIds } = filterRecreatedContainerAliases(
+      filteredContainers,
+      containersFromTheStore,
+    );
+
+    const containerPromises = containersToWatch.map((container: any) =>
       this.addImageDetailsToContainer(container, {
         includeTags: getLabel(container.Labels, ddTagInclude, wudTagInclude),
         excludeTags: getLabel(container.Labels, ddTagExclude, wudTagExclude),
@@ -1096,10 +1214,9 @@ class Docker extends Watcher {
 
     // Prune old containers from the store
     try {
-      const containersFromTheStore = storeContainer.getContainers({
-        watcher: this.name,
+      await pruneOldContainers(containersToReturn, containersFromTheStore, this.dockerApi, {
+        forceRemoveContainerIds: skippedContainerIds,
       });
-      await pruneOldContainers(containersToReturn, containersFromTheStore, this.dockerApi);
     } catch (e: any) {
       this.log.warn(`Error when trying to prune the old containers (${e.message})`);
     }
@@ -1412,19 +1529,20 @@ class Docker extends Watcher {
 export default Docker;
 
 export {
-  getLabel as testable_getLabel,
-  getCurrentPrefix as testable_getCurrentPrefix,
   filterBySegmentCount as testable_filterBySegmentCount,
-  getContainerName as testable_getContainerName,
+  filterRecreatedContainerAliases as testable_filterRecreatedContainerAliases,
   getContainerDisplayName as testable_getContainerDisplayName,
-  normalizeConfigNumberValue as testable_normalizeConfigNumberValue,
-  shouldUpdateDisplayNameFromContainerName as testable_shouldUpdateDisplayNameFromContainerName,
+  getContainerName as testable_getContainerName,
+  getCurrentPrefix as testable_getCurrentPrefix,
   getFirstDigitIndex as testable_getFirstDigitIndex,
   getImageForRegistryLookup as testable_getImageForRegistryLookup,
-  normalizeContainer as testable_normalizeContainer,
-  getOldContainers as testable_getOldContainers,
-  pruneOldContainers as testable_pruneOldContainers,
   getImageReferenceCandidatesFromPattern as testable_getImageReferenceCandidatesFromPattern,
   getImgsetSpecificity as testable_getImgsetSpecificity,
   getInspectValueByPath as testable_getInspectValueByPath,
+  getLabel as testable_getLabel,
+  getOldContainers as testable_getOldContainers,
+  normalizeConfigNumberValue as testable_normalizeConfigNumberValue,
+  normalizeContainer as testable_normalizeContainer,
+  pruneOldContainers as testable_pruneOldContainers,
+  shouldUpdateDisplayNameFromContainerName as testable_shouldUpdateDisplayNameFromContainerName,
 };

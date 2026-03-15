@@ -2153,7 +2153,7 @@ export default Dockercompose;
 export {
   hasExplicitRegistryHost as testable_hasExplicitRegistryHost,
   normalizeImplicitLatest as testable_normalizeImplicitLatest,
-  normalizePostStartHooks as testable_normalizePostStartHooks,
   normalizePostStartEnvironmentValue as testable_normalizePostStartEnvironmentValue,
+  normalizePostStartHooks as testable_normalizePostStartHooks,
   updateComposeServiceImageInText as testable_updateComposeServiceImageInText,
 };

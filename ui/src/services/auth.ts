@@ -8,11 +8,14 @@ import { errorMessage } from '../utils/error';
 let user = undefined;
 
 /**
- * Get auth strategies.
+ * Get auth provider status.
  * @returns {Promise<unknown>}
  */
-async function getStrategies(): Promise<{ strategies: unknown[]; warnings: string[] }> {
-  const response = await fetch('/auth/strategies', { credentials: 'include' });
+async function getStrategies(): Promise<{
+  providers: unknown[];
+  errors: Array<{ provider: string; error: string }>;
+}> {
+  const response = await fetch('/api/v1/auth/status', { credentials: 'include' });
   if (!response.ok) {
     throw new Error(`Failed to get auth strategies: ${response.statusText}`);
   }
@@ -103,4 +106,4 @@ async function logout() {
   return response.json();
 }
 
-export { getStrategies, getUser, loginBasic, setRememberMe, getOidcRedirection, logout };
+export { getOidcRedirection, getStrategies, getUser, loginBasic, logout, setRememberMe };

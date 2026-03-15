@@ -64,6 +64,9 @@ beforeEach(async () => {
   authentications = {};
   agents = {};
   mockIsUpgrade.mockReturnValue(true);
+  Object.keys(configuration.ddEnvVars).forEach((envKey) => {
+    delete configuration.ddEnvVars[envKey];
+  });
 
   // Ensure default implementations return the variables
   mockGetRegistryConfigurations.mockImplementation(() => registries);
@@ -672,20 +675,49 @@ test('registerAuthentications should register all auth strategies', async () => 
   };
   await registry.testable_registerAuthentications();
   expect(Object.keys(registry.getState().authentication)).toEqual(['basic.john', 'basic.jane']);
+  expect(registry.getAuthenticationRegistrationErrors()).toEqual([]);
 });
 
-test('registerAuthentications should warn when registration errors occur', async () => {
-  const spyLog = vi.spyOn(registry.testable_log, 'warn');
+test('registerAuthentications should surface provider registration errors and log at error level', async () => {
+  const spyLog = vi.spyOn(registry.testable_log, 'error');
   authentications = {
     basic: {
-      john: {
-        fail: true,
+      andi: {
+        user: 'ANDI',
       },
     },
   };
   await registry.testable_registerAuthentications();
   expect(spyLog).toHaveBeenCalledWith(
-    'Some authentications failed to register (Error when registering component basic ("user" is required))',
+    'Some authentications failed to register (Error when registering component basic ("hash" is required))',
+  );
+  expect(registry.getAuthenticationRegistrationErrors()).toEqual([
+    { provider: 'basic:andi', error: 'hash is required' },
+  ]);
+});
+
+test('registerAuthentications should preserve unknown-provider error messages', async () => {
+  const spyLog = vi.spyOn(registry.testable_log, 'error');
+  authentications = {
+    definitely_missing_provider: {
+      fallback: {},
+    },
+  };
+
+  await registry.testable_registerAuthentications();
+
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining('Some authentications failed to register'),
+  );
+  expect(registry.getAuthenticationRegistrationErrors()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        provider: 'definitely_missing_provider:fallback',
+        error: expect.stringContaining(
+          "Unknown authentication provider: 'definitely_missing_provider'.",
+        ),
+      }),
+    ]),
   );
 });
 
@@ -696,9 +728,23 @@ test('registerAuthentications should register anonymous auth on upgrade without 
   expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
 });
 
+test('registerAuthentications should log an error when DD_AUTH env vars exist without provider config', async () => {
+  const spyLog = vi.spyOn(registry.testable_log, 'error');
+  configuration.ddEnvVars.DD_AUTH_BASIC_PRIMARY_USER = 'alice';
+  mockIsUpgrade.mockReturnValue(true);
+
+  await registry.testable_registerAuthentications();
+
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining(
+      'Detected DD_AUTH_* environment variables, but no configured authentication providers were registered successfully.',
+    ),
+  );
+});
+
 test('registerAuthentications should fail-closed on fresh install without confirmation', async () => {
   mockIsUpgrade.mockReturnValue(false);
-  const spyLog = vi.spyOn(registry.testable_log, 'warn');
+  const spyLog = vi.spyOn(registry.testable_log, 'error');
   await registry.testable_registerAuthentications();
 
   expect(Object.keys(registry.getState().authentication)).toEqual([]);
@@ -727,7 +773,7 @@ test('registerAuthentications should register anonymous auth when confirmation i
 test('registerAuthentications should fallback to anonymous when all configured providers fail and confirmation is enabled', async () => {
   const previousAnonymousConfirmation = process.env.DD_ANONYMOUS_AUTH_CONFIRM;
   process.env.DD_ANONYMOUS_AUTH_CONFIRM = 'true';
-  const spyLog = vi.spyOn(registry.testable_log, 'warn');
+  const spyLog = vi.spyOn(registry.testable_log, 'error');
 
   try {
     mockIsUpgrade.mockReturnValue(false);
@@ -777,7 +823,7 @@ test('registerAuthentications should log error when all configured providers fai
 
 test('registerAuthentications should fallback to anonymous when all configured providers fail on upgrade', async () => {
   mockIsUpgrade.mockReturnValue(true);
-  const spyLog = vi.spyOn(registry.testable_log, 'warn');
+  const spyLog = vi.spyOn(registry.testable_log, 'error');
 
   authentications = {
     basic: {
@@ -791,6 +837,33 @@ test('registerAuthentications should fallback to anonymous when all configured p
   expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
   expect(spyLog).toHaveBeenCalledWith(
     expect.stringContaining('All configured authentication providers failed to register'),
+  );
+});
+
+test('registerAuthentications should log startup health guidance when DD_AUTH vars exist but no provider registers', async () => {
+  configuration.ddEnvVars.DD_AUTH_BASIC_ANDI_USER = 'ANDI';
+  mockIsUpgrade.mockReturnValue(true);
+  const spyLog = vi.spyOn(registry.testable_log, 'error');
+
+  authentications = {
+    basic: {
+      andi: {
+        user: 'ANDI',
+      },
+    },
+  };
+  await registry.testable_registerAuthentications();
+
+  expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining(
+      'Detected DD_AUTH_* environment variables, but no configured authentication providers were registered successfully.',
+    ),
+  );
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining(
+      'Validate DD_AUTH_* values (for basic auth: DD_AUTH_BASIC_<NAME>_USER and DD_AUTH_BASIC_<NAME>_HASH).',
+    ),
   );
 });
 

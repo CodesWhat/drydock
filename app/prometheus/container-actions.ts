@@ -6,4 +6,4 @@ const { init, getCounter: getContainerActionsCounter } = createCounter(
   ['action'],
 );
 
-export { init, getContainerActionsCounter };
+export { getContainerActionsCounter, init };

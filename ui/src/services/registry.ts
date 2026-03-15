@@ -106,4 +106,4 @@ async function getRegistry({ type, name, agent }: RegistryDetailPathOptions) {
   return response.json();
 }
 
-export { getRegistryProviderIcon, getRegistryProviderColor, getAllRegistries, getRegistry };
+export { getAllRegistries, getRegistry, getRegistryProviderColor, getRegistryProviderIcon };

@@ -25,6 +25,7 @@ import {
 } from './auth-session.js';
 import {
   getAllIds,
+  getAuthStatus,
   getLogoutRedirectUrl,
   getStrategies,
   registerStrategies,
@@ -391,10 +392,13 @@ export function init(app: Application): void {
 
   // Return strategies
   router.get('/strategies', getStrategies);
+  router.get('/status', getAuthStatus);
 
   // Compatibility alias for clients that still call the legacy API path.
   // This endpoint must stay unauthenticated so the login screen can render.
   app.get('/api/auth/methods', authLimiter, getStrategies);
+  app.get('/api/v1/auth/status', authLimiter, getAuthStatus);
+  app.get('/api/auth/status', authLimiter, getAuthStatus);
 
   // Login route with its own authentication middleware (before global auth guard)
   router.post('/login', authenticateLogin, login);

@@ -33,6 +33,11 @@ type RuntimeConfigOptions = {
   logContainer?: RuntimeConfigLogger;
 };
 
+type ClonedRuntimeFieldEvaluationContext = Pick<
+  RuntimeConfigOptions,
+  'sourceImageConfig' | 'targetImageConfig' | 'runtimeFieldOrigins' | 'logContainer'
+>;
+
 export type RuntimeConfigManagerDependencies = {
   getPreferredLabelValue: (
     labels: Record<string, string> | undefined,
@@ -271,15 +276,14 @@ class ContainerRuntimeConfigManager {
   shouldDropClonedRuntimeField(
     runtimeField: RuntimeProcessField,
     clonedValue: unknown,
-    sourceImageConfig: RuntimeConfigObject | undefined,
-    targetImageConfig: RuntimeConfigObject | undefined,
-    runtimeFieldOrigins: RuntimeFieldOrigins | undefined,
-    logContainer: RuntimeConfigLogger | undefined,
+    evaluationContext: ClonedRuntimeFieldEvaluationContext,
   ) {
     if (clonedValue === undefined) {
       return false;
     }
 
+    const { sourceImageConfig, targetImageConfig, runtimeFieldOrigins, logContainer } =
+      evaluationContext;
     const runtimeOrigin = this.normalizeRuntimeFieldOrigin(runtimeFieldOrigins?.[runtimeField]);
     const inheritedFromSource = this.areContainerProcessArgsEqual(
       clonedValue,
@@ -321,19 +325,16 @@ class ContainerRuntimeConfigManager {
     logContainer: RuntimeConfigLogger | undefined,
   ) {
     const sanitizedConfig = { ...(containerConfig || {}) };
+    const evaluationContext: ClonedRuntimeFieldEvaluationContext = {
+      sourceImageConfig,
+      targetImageConfig,
+      runtimeFieldOrigins,
+      logContainer,
+    };
 
     for (const runtimeField of RUNTIME_PROCESS_FIELDS) {
       const clonedValue = containerConfig?.[runtimeField];
-      if (
-        !this.shouldDropClonedRuntimeField(
-          runtimeField,
-          clonedValue,
-          sourceImageConfig,
-          targetImageConfig,
-          runtimeFieldOrigins,
-          logContainer,
-        )
-      ) {
+      if (!this.shouldDropClonedRuntimeField(runtimeField, clonedValue, evaluationContext)) {
         continue;
       }
 

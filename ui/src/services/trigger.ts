@@ -156,4 +156,4 @@ async function runTrigger({
   return json;
 }
 
-export { getTriggerProviderIcon, getTriggerProviderColor, getAllTriggers, getTrigger, runTrigger };
+export { getAllTriggers, getTrigger, getTriggerProviderColor, getTriggerProviderIcon, runTrigger };

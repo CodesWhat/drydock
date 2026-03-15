@@ -33,4 +33,4 @@ async function clearIconCache(): Promise<{ cleared: number }> {
   return response.json();
 }
 
-export { getSettings, updateSettings, clearIconCache };
+export { clearIconCache, getSettings, updateSettings };

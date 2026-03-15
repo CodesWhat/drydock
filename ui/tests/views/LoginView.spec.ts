@@ -44,8 +44,8 @@ function trackWrapper(wrapper: VueWrapper) {
   return wrapper;
 }
 
-async function mountLogin(strategies: any[] = [], warnings: string[] = []) {
-  mockGetStrategies.mockResolvedValue({ strategies, warnings });
+async function mountLogin(providers: any[] = [], errors: any[] = []) {
+  mockGetStrategies.mockResolvedValue({ providers, errors });
   const wrapper = trackWrapper(mountWithPlugins(LoginView));
   await flushPromises();
   return wrapper;
@@ -98,18 +98,18 @@ describe('LoginView', () => {
       expect(wrapper.text()).toContain('No authentication methods configured');
     });
 
-    it('displays registration warnings when no strategies and warnings exist', async () => {
-      const wrapper = await mountLogin(
-        [],
-        ['Some authentications failed to register ("hash" is required)'],
-      );
-      expect(wrapper.text()).toContain('No authentication methods configured');
-      expect(wrapper.text()).toContain('Some authentications failed to register');
+    it('displays auth provider errors when no auth methods are available', async () => {
+      const wrapper = await mountLogin([], [{ provider: 'basic:ANDI', error: 'hash is required' }]);
+      expect(wrapper.text()).not.toContain('No authentication methods configured');
+      expect(wrapper.text()).toContain("Basic auth 'ANDI': hash is required");
     });
 
-    it('does not display warnings when strategies exist', async () => {
-      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }], ['Some warning']);
-      expect(wrapper.text()).not.toContain('Some warning');
+    it('does not display auth provider errors when methods exist', async () => {
+      const wrapper = await mountLogin(
+        [{ type: 'basic', name: 'basic' }],
+        [{ provider: 'basic:ANDI', error: 'hash is required' }],
+      );
+      expect(wrapper.text()).not.toContain("Basic auth 'ANDI': hash is required");
     });
   });
 
@@ -387,7 +387,7 @@ describe('LoginView', () => {
       mockGetStrategies
         .mockRejectedValueOnce(new Error('offline'))
         .mockRejectedValueOnce(new Error('still offline'))
-        .mockResolvedValueOnce({ strategies: [{ type: 'basic', name: 'basic' }], warnings: [] });
+        .mockResolvedValueOnce({ providers: [{ type: 'basic', name: 'basic' }], errors: [] });
 
       const wrapper = trackWrapper(mountWithPlugins(LoginView));
       await flushPromises();
