@@ -314,11 +314,13 @@ Other compatible proxies include [linuxserver/docker-socket-proxy](https://githu
 
 Instead of mounting the socket at all, Drydock can connect to a remote Docker host over the network using mutual TLS (mTLS). This is ideal for multi-host setups or when you want to completely avoid socket mounts.
 
-**Step 1: Generate TLS certificates on the Docker host**
+#### Step 1: Generate TLS certificates on the Docker host
 
 Follow the official [Docker TLS guide](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket) to generate a CA, server certificate, and client certificate.
 
-**Step 2: Configure the Docker daemon** to listen on a TLS port by adding to `/etc/docker/daemon.json`:
+#### Step 2: Configure the Docker daemon
+
+Configure the daemon to listen on a TLS port by adding this to `/etc/docker/daemon.json`:
 
 ```json
 {
@@ -331,7 +333,9 @@ Follow the official [Docker TLS guide](https://docs.docker.com/engine/security/p
 }
 ```
 
-**Step 3: Configure Drydock** with the client certificates:
+#### Step 3: Configure Drydock
+
+Configure Drydock with the client certificates:
 
 ```yaml
 services:
