@@ -1,38 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/vue3';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import DataListAccordion from './DataListAccordion.vue';
-
-interface WatcherItem {
-  id: string;
-  name: string;
-  endpoint: string;
-  status: 'connected' | 'disconnected';
-  containers: number;
-}
-
-const watchers: WatcherItem[] = [
-  {
-    id: 'local',
-    name: 'Local Docker',
-    endpoint: 'unix:///var/run/docker.sock',
-    status: 'connected',
-    containers: 18,
-  },
-  {
-    id: 'edge-1',
-    name: 'Edge Cluster 1',
-    endpoint: 'tcp://10.42.0.12:2376',
-    status: 'connected',
-    containers: 9,
-  },
-  {
-    id: 'edge-2',
-    name: 'Edge Cluster 2',
-    endpoint: 'tcp://10.42.0.13:2376',
-    status: 'disconnected',
-    containers: 0,
-  },
-];
+import {
+  type SampleWatcherItem as WatcherItem,
+  sampleWatcherItems as watchers,
+} from './stories/sampleData';
 
 const meta = {
   component: DataListAccordion,

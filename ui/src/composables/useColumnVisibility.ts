@@ -42,6 +42,7 @@ const allColumns: ColumnDef[] = [
     style: '',
     required: false,
   },
+  { key: 'imageAge', label: 'Image Age', px: 'px-3', style: '', required: false },
   { key: 'server', label: 'Host', px: 'px-3', style: '', required: false },
   {
     key: 'registry',

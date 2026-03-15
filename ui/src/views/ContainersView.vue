@@ -293,6 +293,41 @@ const {
 const route = useRoute();
 const VALID_FILTER_KINDS = new Set(['all', 'any', 'major', 'minor', 'patch', 'digest']);
 
+function resolveRouteParamId(rawValue: unknown): string | undefined {
+  if (Array.isArray(rawValue)) {
+    return typeof rawValue[0] === 'string' ? rawValue[0] : undefined;
+  }
+  return typeof rawValue === 'string' ? rawValue : undefined;
+}
+
+const isContainerLogsRoute = computed(() => route.name === 'container-logs');
+
+function syncRouteDrivenContainerLogsView(): void {
+  if (!isContainerLogsRoute.value) {
+    return;
+  }
+
+  const containerIdFromRoute = resolveRouteParamId((route.params as Record<string, unknown>)?.id);
+  if (!containerIdFromRoute) {
+    return;
+  }
+
+  const targetContainer =
+    containers.value.find((container) => container.id === containerIdFromRoute) ??
+    containers.value.find(
+      (container) => containerIdMap.value[container.name] === containerIdFromRoute,
+    );
+
+  if (!targetContainer) {
+    return;
+  }
+
+  selectedContainer.value = targetContainer;
+  activeDetailTab.value = 'logs';
+  detailPanelOpen.value = false;
+  containerFullPage.value = true;
+}
+
 function applyFilterKindFromQuery(queryValue: unknown) {
   const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
   if (raw === undefined || raw === null) {
@@ -330,6 +365,14 @@ applyFilterKindFromQuery(route.query.filterKind);
 watch(
   () => route.query.filterKind,
   (value) => applyFilterKindFromQuery(value),
+);
+
+watch(
+  [() => route.name, () => route.path, () => route.params, () => containers.value.length],
+  () => {
+    syncRouteDrivenContainerLogsView();
+  },
+  { immediate: true },
 );
 
 const serverNames = computed(() => [
@@ -389,6 +432,10 @@ const sortedContainers = computed(() => {
     } else if (key === 'version') {
       leftValue = left.currentTag;
       rightValue = right.currentTag;
+    } else if (key === 'imageAge') {
+      const leftMs = left.imageCreated ? new Date(left.imageCreated).getTime() : 0;
+      const rightMs = right.imageCreated ? new Date(right.imageCreated).getTime() : 0;
+      return leftMs < rightMs ? -dir : leftMs > rightMs ? dir : 0;
     } else {
       return 0;
     }
@@ -554,6 +601,10 @@ const tableColumns = computed(() =>
 );
 
 onMounted(() => {
+  if (isContainerLogsRoute.value) {
+    return;
+  }
+
   const saved = detailPanelStorage.read();
   if (!saved) {
     return;

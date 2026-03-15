@@ -41,6 +41,7 @@ export function useDetailPanel() {
 
   const detailTabs = [
     { id: 'overview', label: 'Overview', icon: 'info' },
+    { id: 'stats', label: 'Stats', icon: 'uptime' },
     { id: 'logs', label: 'Logs', icon: 'logs' },
     { id: 'environment', label: 'Environment', icon: 'config' },
     { id: 'labels', label: 'Labels', icon: 'containers' },

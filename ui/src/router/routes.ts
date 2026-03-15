@@ -20,6 +20,7 @@ export const ROUTES = {
   LOGIN: '/login',
   DASHBOARD: '/',
   CONTAINERS: '/containers',
+  CONTAINER_LOGS: '/containers/:id/logs',
   SECURITY: '/security',
   SERVERS: '/servers',
   CONFIG: '/config',

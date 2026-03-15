@@ -250,6 +250,16 @@ function mountComponent() {
     global: {
       stubs: {
         AppIcon: { template: '<span class="app-icon-stub" />', props: ['name', 'size'] },
+        ContainerLogs: {
+          props: ['containerId', 'containerName', 'compact'],
+          template:
+            '<div data-test="container-logs-stub" :data-id="containerId" :data-name="containerName" :data-compact="compact === undefined ? `false` : `true`">{{ containerName }}</div>',
+        },
+        ContainerStats: {
+          props: ['containerId', 'compact'],
+          template:
+            '<div data-test="container-stats-stub" :data-id="containerId" :data-compact="compact === undefined ? `false` : `true`"></div>',
+        },
       },
       directives: {
         tooltip: {},
@@ -713,29 +723,16 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(loadDetailSbom).toHaveBeenCalledTimes(1);
   });
 
-  it('renders logs tab rows and handles scroll-resume controls', async () => {
+  it('renders compact logs tab via container logs component', () => {
     activeDetailTab.value = 'logs';
-    getContainerLogs.mockReturnValue([
-      '2026-03-13T20:00:00.000Z [warn] first warning',
-      '2026-03-13T20:00:01.000Z [error] second error',
-    ]);
-    containerScrollBlocked.value = true;
-    containerAutoFetchInterval.value = 15;
 
     const wrapper = mountComponent();
-    const intervalSelect = wrapper.find('select');
-    const logContainer = wrapper.find('[style*="max-height: calc(100vh - 400px);"]');
-    const resumeButton = findButtonByText(wrapper, 'Resume');
+    const logsStub = wrapper.find('[data-test="container-logs-stub"]');
 
-    await intervalSelect.setValue('30');
-    await logContainer.trigger('scroll');
-    await resumeButton?.trigger('click');
-
-    expect(wrapper.text()).toContain('Container Logs');
-    expect(wrapper.text()).toContain('2 lines');
-    expect(containerAutoFetchInterval.value).toBe(30);
-    expect(containerHandleLogScroll).toHaveBeenCalledTimes(1);
-    expect(containerResumeAutoScroll).toHaveBeenCalledTimes(1);
+    expect(logsStub.exists()).toBe(true);
+    expect(logsStub.attributes('data-id')).toBe('container-1');
+    expect(logsStub.attributes('data-name')).toBe('nginx');
+    expect(logsStub.attributes('data-compact')).toBe('true');
   });
 
   it('renders labels list when labels exist', () => {
@@ -1016,19 +1013,17 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(dataWrapper.text()).toContain('timeout');
   });
 
-  it('renders labels empty state and logs without auto-scroll pause', async () => {
+  it('renders labels empty state and logs component without inline pause controls', async () => {
     activeDetailTab.value = 'labels';
     const labelsWrapper = mountComponent();
     expect(labelsWrapper.text()).toContain('No labels assigned');
 
     activeDetailTab.value = 'logs';
-    getContainerLogs.mockReturnValue(['2026-03-13T20:00:02.000Z [info] steady-state']);
-    containerScrollBlocked.value = true;
-    containerAutoFetchInterval.value = 0;
     await nextTick();
 
     const logsWrapper = mountComponent();
-    expect(logsWrapper.text()).toContain('1 lines');
+    const logsStub = logsWrapper.find('[data-test="container-logs-stub"]');
+    expect(logsStub.exists()).toBe(true);
     expect(logsWrapper.text()).not.toContain('Auto-scroll paused');
   });
 

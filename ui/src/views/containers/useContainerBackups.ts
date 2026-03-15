@@ -2,6 +2,7 @@ import { type Ref, ref } from 'vue';
 import { getBackups, rollback } from '../../services/backup';
 import { getContainerUpdateOperations as fetchContainerUpdateOperations } from '../../services/container';
 import { errorMessage } from '../../utils/error';
+import { loadContainerDetailListState } from './loadContainerDetailListState';
 
 interface UseContainerBackupsInput {
   selectedContainerId: Readonly<Ref<string | undefined>>;
@@ -66,31 +67,6 @@ export function getOperationStatusStyle(status: unknown) {
     backgroundColor: 'var(--dd-info-muted)',
     color: 'var(--dd-info)',
   };
-}
-
-async function loadContainerDetailListState(args: {
-  containerId: string | undefined;
-  loading: Ref<boolean>;
-  error: Ref<string | null>;
-  value: Ref<Record<string, unknown>[]>;
-  loader: (containerId: string) => Promise<unknown[]>;
-  failureMessage: string;
-}) {
-  if (!args.containerId) {
-    args.value.value = [];
-    return;
-  }
-
-  args.loading.value = true;
-  args.error.value = null;
-  try {
-    args.value.value = (await args.loader(args.containerId)) as Record<string, unknown>[];
-  } catch (e: unknown) {
-    args.value.value = [];
-    args.error.value = errorMessage(e, args.failureMessage);
-  } finally {
-    args.loading.value = false;
-  }
 }
 
 async function loadDetailUpdateOperationsState(args: {

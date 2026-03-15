@@ -8,6 +8,7 @@ export const DASHBOARD_WIDGET_IDS = [
   'stat-registries',
   'recent-updates',
   'security-overview',
+  'resource-usage',
   'host-status',
   'update-breakdown',
 ] as const;

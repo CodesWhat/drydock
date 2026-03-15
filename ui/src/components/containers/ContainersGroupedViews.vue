@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { getContainerViewKey } from '../../utils/container-view-key';
+import { imageAge } from '../../utils/audit-helpers';
 
 const {
   filteredContainers,
@@ -293,6 +294,13 @@ function updateMaturityFallbackTooltip(
           </span>
           <span v-else v-tooltip.top="tt(c.bouncer)" class="cursor-default">
             <AppIcon name="warning" :size="14" style="color: var(--dd-warning);" />
+          </span>
+        </template>
+        <!-- Image Age -->
+        <template #cell-imageAge="{ row: c }">
+          <span class="text-[0.6875rem] dd-text-secondary whitespace-nowrap"
+                v-tooltip.top="c.imageCreated ? tt(new Date(c.imageCreated).toLocaleString()) : undefined">
+            {{ imageAge(c.imageCreated) }}
           </span>
         </template>
         <!-- Server -->

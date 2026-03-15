@@ -7,6 +7,7 @@ import {
 } from '../../services/container';
 import { getAllRegistries } from '../../services/registry';
 import { getServer } from '../../services/server';
+import { type ContainerStatsSummaryItem, getAllContainerStats } from '../../services/stats';
 import { getAllWatchers } from '../../services/watcher';
 import type { Container } from '../../types/container';
 import { mapApiContainers } from '../../utils/container-mapper';
@@ -33,6 +34,7 @@ interface DashboardStateRefs {
   loading: Ref<boolean>;
   error: Ref<string | null>;
   containerSummary: Ref<DashboardContainerSummary | null>;
+  containerStats: Ref<ContainerStatsSummaryItem[]>;
   containers: Ref<Container[]>;
   serverInfo: Ref<DashboardServerInfo | null>;
   agents: Ref<DashboardAgent[]>;
@@ -43,6 +45,7 @@ interface DashboardStateRefs {
 
 interface DashboardDataResponse {
   containersRes: unknown;
+  containerStatsRes: ContainerStatsSummaryItem[];
   serverRes: DashboardServerInfo;
   agentsRes: DashboardAgent[];
   watchersRes: unknown;
@@ -146,6 +149,7 @@ function isPageVisible(): boolean {
 function hasRenderedDashboardData(state: DashboardStateRefs): boolean {
   const hasRenderedCollections = [
     state.containers.value,
+    state.containerStats.value,
     state.watchers.value,
     state.registries.value,
     state.agents.value,
@@ -161,6 +165,7 @@ function hasRenderedDashboardData(state: DashboardStateRefs): boolean {
 function applyFetchedDashboardData(state: DashboardStateRefs, response: DashboardDataResponse) {
   state.containers.value = mapApiContainers(response.containersRes);
   state.containerSummary.value = buildContainerSummaryFromContainers(state.containers.value);
+  state.containerStats.value = response.containerStatsRes;
   state.serverInfo.value = response.serverRes;
   state.agents.value = response.agentsRes;
   state.watchers.value = Array.isArray(response.watchersRes) ? response.watchersRes : [];
@@ -180,17 +185,26 @@ function createDashboardDataFetchers(state: DashboardStateRefs) {
     }
 
     try {
-      const [containersRes, serverRes, agentsRes, watchersRes, registriesRes, recentStatusRes] =
-        await Promise.all([
-          getAllContainers(),
-          getServer(),
-          getAgents(),
-          getAllWatchers(),
-          getAllRegistries(),
-          getContainerRecentStatus(),
-        ]);
+      const [
+        containersRes,
+        containerStatsRes,
+        serverRes,
+        agentsRes,
+        watchersRes,
+        registriesRes,
+        recentStatusRes,
+      ] = await Promise.all([
+        getAllContainers(),
+        getAllContainerStats(),
+        getServer(),
+        getAgents(),
+        getAllWatchers(),
+        getAllRegistries(),
+        getContainerRecentStatus(),
+      ]);
       applyFetchedDashboardData(state, {
         containersRes,
+        containerStatsRes,
         serverRes,
         agentsRes,
         watchersRes,
@@ -235,6 +249,7 @@ export function useDashboardData() {
   const loading = ref(true);
   const error = ref<string | null>(null);
   const containerSummary = ref<DashboardContainerSummary | null>(null);
+  const containerStats = ref<ContainerStatsSummaryItem[]>([]);
   const containers = ref<Container[]>([]);
   const serverInfo = ref<DashboardServerInfo | null>(null);
   const agents = ref<DashboardAgent[]>([]);
@@ -247,6 +262,7 @@ export function useDashboardData() {
     loading,
     error,
     containerSummary,
+    containerStats,
     containers,
     serverInfo,
     agents,
@@ -308,6 +324,7 @@ export function useDashboardData() {
   return {
     agents,
     containerSummary,
+    containerStats,
     containers,
     error,
     fetchDashboardData,

@@ -31,6 +31,7 @@ import { formatUpdateAge, getUpdateMaturity } from './update-maturity';
 interface ApiContainerImage {
   name?: unknown;
   variant?: unknown;
+  created?: unknown;
   registry?: {
     name?: unknown;
     url?: unknown;
@@ -343,6 +344,14 @@ function deriveReleaseLink(apiContainer: ApiContainerInput): string | undefined 
   return trimmed;
 }
 
+function deriveImageCreated(apiContainer: ApiContainerInput): string | undefined {
+  const value = asNonEmptyString(apiContainer.image?.created);
+  if (!value) return undefined;
+  const parsedAt = Date.parse(value);
+  if (Number.isNaN(parsedAt)) return undefined;
+  return new Date(parsedAt).toISOString();
+}
+
 function deriveUpdateDetectedAt(apiContainer: ApiContainerInput): string | undefined {
   const value = asNonEmptyString(apiContainer.updateDetectedAt);
   if (!value) return undefined;
@@ -562,6 +571,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     updateSecurityScanState: deriveUpdateSecurityScanState(apiContainer),
     updateSecuritySummary: updateSummary,
     securityDelta: computeSecurityDelta(currentSummary, updateSummary),
+    imageCreated: deriveImageCreated(apiContainer),
     server: deriveServer(apiContainer),
     includeTags: asNonEmptyString(apiContainer.includeTags),
     excludeTags: asNonEmptyString(apiContainer.excludeTags),

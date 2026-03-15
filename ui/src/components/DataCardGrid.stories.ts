@@ -1,20 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/vue3';
 import { expect, fn, userEvent, within } from 'storybook/test';
 import DataCardGrid from './DataCardGrid.vue';
-
-interface ServiceCard {
-  id: string;
-  name: string;
-  server: string;
-  status: 'healthy' | 'degraded' | 'offline';
-  updates: number;
-}
-
-const services: ServiceCard[] = [
-  { id: 'gateway', name: 'API Gateway', server: 'edge-1', status: 'healthy', updates: 0 },
-  { id: 'worker', name: 'Background Worker', server: 'edge-2', status: 'degraded', updates: 2 },
-  { id: 'reports', name: 'Reports Service', server: 'edge-3', status: 'offline', updates: 1 },
-];
+import {
+  type SampleServiceCard as ServiceCard,
+  sampleServiceCards as services,
+} from './stories/sampleData';
 
 const meta = {
   component: DataCardGrid,

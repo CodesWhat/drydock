@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
+import ContainerLogs from './ContainerLogs.vue';
+import ContainerStats from './ContainerStats.vue';
 import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
@@ -79,13 +81,6 @@ const {
   sbomDocument,
   sbomComponentCount,
   sbomGeneratedAt,
-  LOG_AUTO_FETCH_INTERVALS,
-  containerAutoFetchInterval,
-  getContainerLogs,
-  containerLogRef,
-  containerHandleLogScroll,
-  containerScrollBlocked,
-  containerResumeAutoScroll,
   previewLoading,
   runContainerPreview,
   actionInProgress,
@@ -517,47 +512,18 @@ const {
             </div>
           </div>
 
+          <!-- Stats tab -->
+          <div v-if="activeDetailTab === 'stats'">
+            <ContainerStats :container-id="selectedContainer.id" compact />
+          </div>
+
           <!-- Logs tab -->
           <div v-if="activeDetailTab === 'logs'">
-            <div class="dd-rounded overflow-hidden"
-                 :style="{ backgroundColor: 'var(--dd-bg-code)' }">
-              <div class="px-3 py-2 flex items-center justify-between gap-2"
-                   style="border-bottom: 1px solid var(--dd-log-divider);">
-                <span class="text-[0.625rem] font-semibold uppercase tracking-wider" style="color: var(--dd-log-text-muted);">
-                  Container Logs
-                </span>
-                <div class="flex items-center gap-2">
-                  <select v-model.number="containerAutoFetchInterval"
-                          class="px-1.5 py-1 dd-rounded text-[0.5625rem] font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-                    <option v-for="opt in LOG_AUTO_FETCH_INTERVALS" :key="opt.value" :value="opt.value">
-                      {{ opt.label }}
-                    </option>
-                  </select>
-                  <span class="text-[0.5625rem] font-mono" style="color: var(--dd-log-text-muted);">
-                    {{ getContainerLogs(selectedContainer.name).length }} lines
-                  </span>
-                </div>
-              </div>
-              <div ref="containerLogRef" class="overflow-auto" style="max-height: calc(100vh - 400px);"
-                   @scroll="containerHandleLogScroll">
-                <div v-for="(line, i) in getContainerLogs(selectedContainer.name)" :key="i"
-                     class="px-3 py-0.5 font-mono text-[0.625rem] leading-relaxed whitespace-pre"
-                     :style="{ borderBottom: i < getContainerLogs(selectedContainer.name).length - 1 ? '1px solid var(--dd-log-line)' : 'none' }">
-                  <span style="color: var(--dd-log-text-muted);">{{ line.substring(0, 24) }}</span>
-                  <span :style="{ color: line.includes('[error]') || line.includes('[crit]') || line.includes('[emerg]') ? 'var(--dd-danger)' : line.includes('[warn]') ? 'var(--dd-warning)' : 'var(--dd-log-text)' }">{{ line.substring(24) }}</span>
-                </div>
-              </div>
-              <div v-if="containerScrollBlocked && containerAutoFetchInterval > 0"
-                   class="flex items-center justify-between px-3 py-1.5 text-[0.5625rem]"
-                   style="border-top: 1px solid var(--dd-log-divider);">
-                <span class="font-semibold" style="color: var(--dd-warning);">Auto-scroll paused</span>
-                <button class="px-2 py-0.5 dd-rounded text-[0.5625rem] font-semibold"
-                        :style="{ backgroundColor: 'var(--dd-warning)', color: 'var(--dd-bg)' }"
-                        @click="containerResumeAutoScroll">
-                  Resume
-                </button>
-              </div>
-            </div>
+            <ContainerLogs
+              :container-id="selectedContainer.id"
+              :container-name="selectedContainer.name"
+              compact
+            />
           </div>
 
           <!-- Environment tab -->

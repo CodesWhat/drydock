@@ -56,6 +56,7 @@ export interface Container {
   updateSecurityScanState?: 'scanned' | 'not-scanned';
   updateSecuritySummary?: ContainerSecuritySummary;
   securityDelta?: ContainerSecurityDelta;
+  imageCreated?: string;
   server: string;
   includeTags?: string;
   excludeTags?: string;

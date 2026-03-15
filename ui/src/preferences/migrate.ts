@@ -310,26 +310,40 @@ function migrateDashboardPreference(): { widgetOrder: string[] } | undefined {
   return undefined;
 }
 
-function migrateSecurityViewPreference(): Record<string, unknown> | undefined {
-  const secView = readString('dd-security-view-v1');
-  const secSortField = readString('dd-security-sort-field-v1');
-  const secSortAsc = readJSON('dd-security-sort-asc-v1', isBoolean);
-  if (!secView && secSortField === undefined && secSortAsc === undefined) {
+function migrateSortableViewPreference(args: {
+  viewKey: string;
+  sortFieldKey: string;
+  sortFieldOutputKey: string;
+  sortAscKey: string;
+}): Record<string, unknown> | undefined {
+  const view = readString(args.viewKey);
+  const sortField = readString(args.sortFieldKey);
+  const sortAsc = readJSON(args.sortAscKey, isBoolean);
+  if (!view && sortField === undefined && sortAsc === undefined) {
     return undefined;
   }
 
-  const security: Record<string, unknown> = {};
-  if (secView && isViewMode(secView)) {
-    security.mode = secView;
+  const preference: Record<string, unknown> = {};
+  if (view && isViewMode(view)) {
+    preference.mode = view;
   }
-  if (secSortField !== undefined) {
-    security.sortField = secSortField;
+  if (sortField !== undefined) {
+    preference[args.sortFieldOutputKey] = sortField;
   }
-  if (secSortAsc !== undefined) {
-    security.sortAsc = secSortAsc;
+  if (sortAsc !== undefined) {
+    preference.sortAsc = sortAsc;
   }
 
-  return Object.keys(security).length > 0 ? security : undefined;
+  return Object.keys(preference).length > 0 ? preference : undefined;
+}
+
+function migrateSecurityViewPreference(): Record<string, unknown> | undefined {
+  return migrateSortableViewPreference({
+    viewKey: 'dd-security-view-v1',
+    sortFieldKey: 'dd-security-sort-field-v1',
+    sortFieldOutputKey: 'sortField',
+    sortAscKey: 'dd-security-sort-asc-v1',
+  });
 }
 
 function migrateAuditViewPreference(): { mode: string } | undefined {
@@ -341,25 +355,12 @@ function migrateAuditViewPreference(): { mode: string } | undefined {
 }
 
 function migrateAgentsViewPreference(): Record<string, unknown> | undefined {
-  const agentsView = readString('dd-agents-view-v1');
-  const agentsSortKey = readString('dd-agents-sort-key-v1');
-  const agentsSortAsc = readJSON('dd-agents-sort-asc-v1', isBoolean);
-  if (!agentsView && agentsSortKey === undefined && agentsSortAsc === undefined) {
-    return undefined;
-  }
-
-  const agents: Record<string, unknown> = {};
-  if (agentsView && isViewMode(agentsView)) {
-    agents.mode = agentsView;
-  }
-  if (agentsSortKey !== undefined) {
-    agents.sortKey = agentsSortKey;
-  }
-  if (agentsSortAsc !== undefined) {
-    agents.sortAsc = agentsSortAsc;
-  }
-
-  return Object.keys(agents).length > 0 ? agents : undefined;
+  return migrateSortableViewPreference({
+    viewKey: 'dd-agents-view-v1',
+    sortFieldKey: 'dd-agents-sort-key-v1',
+    sortFieldOutputKey: 'sortKey',
+    sortAscKey: 'dd-agents-sort-asc-v1',
+  });
 }
 
 function migrateSimpleViewModePreferences(): Record<string, { mode: string }> {

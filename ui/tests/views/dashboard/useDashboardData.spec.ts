@@ -6,6 +6,7 @@ import { useDashboardData } from '@/views/dashboard/useDashboardData';
 const mocks = vi.hoisted(() => ({
   getAgents: vi.fn(),
   getAllContainers: vi.fn(),
+  getAllContainerStats: vi.fn(),
   getContainerRecentStatus: vi.fn(),
   getContainerSummary: vi.fn(),
   getAllRegistries: vi.fn(),
@@ -22,6 +23,10 @@ vi.mock('@/services/container', () => ({
   getAllContainers: mocks.getAllContainers,
   getContainerRecentStatus: mocks.getContainerRecentStatus,
   getContainerSummary: mocks.getContainerSummary,
+}));
+
+vi.mock('@/services/stats', () => ({
+  getAllContainerStats: mocks.getAllContainerStats,
 }));
 
 vi.mock('@/services/registry', () => ({
@@ -96,6 +101,7 @@ describe('useDashboardData', () => {
     vi.resetAllMocks();
 
     mocks.getAllContainers.mockResolvedValue([{ id: 'api-c1' }]);
+    mocks.getAllContainerStats.mockResolvedValue([]);
     mocks.getServer.mockResolvedValue({ configuration: { webhook: { enabled: true } } });
     mocks.getAgents.mockResolvedValue([{ name: 'agent-1', connected: true }]);
     mocks.getAllWatchers.mockResolvedValue([]);
@@ -149,6 +155,7 @@ describe('useDashboardData', () => {
     expect(state.loading.value).toBe(false);
     expect(state.error.value).toBeNull();
     expect(state.containers.value).toEqual([makeContainer()]);
+    expect(state.containerStats.value).toEqual([]);
     expect(state.serverInfo.value).toEqual({ configuration: { webhook: { enabled: true } } });
     expect(state.agents.value).toEqual([{ name: 'agent-1', connected: true }]);
     expect(state.watchers.value).toHaveLength(4);

@@ -16,4 +16,8 @@ describe('ROUTES', () => {
 
     expect(duplicatePaths).toEqual([]);
   });
+
+  it('defines a dedicated container logs route with an id param', () => {
+    expect(ROUTES.CONTAINER_LOGS).toBe('/containers/:id/logs');
+  });
 });

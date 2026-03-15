@@ -19,6 +19,10 @@ vi.mock('@/services/container', () => ({
   getContainerSummary: vi.fn(),
 }));
 
+vi.mock('@/services/stats', () => ({
+  getAllContainerStats: vi.fn(),
+}));
+
 vi.mock('@/services/agent', () => ({
   getAgents: vi.fn(),
 }));
@@ -62,9 +66,11 @@ import {
 } from '@/services/container';
 import { getAllRegistries } from '@/services/registry';
 import { getServer } from '@/services/server';
+import { getAllContainerStats } from '@/services/stats';
 import { getAllWatchers } from '@/services/watcher';
 
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
+const mockGetAllContainerStats = getAllContainerStats as ReturnType<typeof vi.fn>;
 const mockGetContainerRecentStatus = getContainerRecentStatus as ReturnType<typeof vi.fn>;
 const mockGetContainerSummary = getContainerSummary as ReturnType<typeof vi.fn>;
 const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
@@ -97,6 +103,7 @@ interface DashboardDataOverrides {
   registries?: any[];
   auditEntries?: any[];
   recentStatuses?: Record<string, string>;
+  containerStats?: any[];
 }
 
 function mapAuditEntriesToRecentStatuses(auditEntries: any[]): Record<string, string> {
@@ -127,6 +134,7 @@ async function mountDashboard(
   overrides: DashboardDataOverrides = {},
 ) {
   mockGetAllContainers.mockResolvedValue(containers);
+  mockGetAllContainerStats.mockResolvedValue(overrides.containerStats ?? []);
   mockGetContainerSummary.mockResolvedValue({
     containers: {
       total: containers.length,
@@ -989,6 +997,67 @@ describe('DashboardView', () => {
     });
   });
 
+  describe('resource usage widget', () => {
+    it('renders top cpu and memory containers from live stats summary', async () => {
+      const wrapper = await mountDashboard(
+        [makeContainer()],
+        [],
+        {},
+        {
+          containerStats: [
+            {
+              id: 'c1',
+              name: 'web',
+              status: 'running',
+              watcher: 'local',
+              agent: undefined,
+              stats: {
+                containerId: 'c1',
+                cpuPercent: 30,
+                memoryUsageBytes: 300,
+                memoryLimitBytes: 600,
+                memoryPercent: 50,
+                networkRxBytes: 1,
+                networkTxBytes: 2,
+                blockReadBytes: 3,
+                blockWriteBytes: 4,
+                timestamp: '2026-03-14T10:00:00.000Z',
+              },
+            },
+            {
+              id: 'c2',
+              name: 'db',
+              status: 'running',
+              watcher: 'local',
+              agent: undefined,
+              stats: {
+                containerId: 'c2',
+                cpuPercent: 80,
+                memoryUsageBytes: 500,
+                memoryLimitBytes: 1_000,
+                memoryPercent: 50,
+                networkRxBytes: 1,
+                networkTxBytes: 2,
+                blockReadBytes: 3,
+                blockWriteBytes: 4,
+                timestamp: '2026-03-14T10:00:00.000Z',
+              },
+            },
+          ],
+        },
+      );
+
+      const resourceWidget = wrapper.find('[data-widget-id="resource-usage"]');
+      expect(resourceWidget.text()).toContain('Resource Usage');
+      expect(resourceWidget.text()).toContain('Top CPU');
+      expect(resourceWidget.text()).toContain('Top Memory');
+      expect(resourceWidget.text()).toContain('db');
+      expect(resourceWidget.text()).toContain('web');
+      expect(resourceWidget.text()).toContain('55.0%');
+      expect(resourceWidget.text()).toContain('800 B / 1.6 KB');
+    });
+  });
+
   describe('dashboard widget ordering', () => {
     it('hydrates widget order from preferences', async () => {
       const { preferences } = await import('@/preferences/store');
@@ -1000,6 +1069,7 @@ describe('DashboardView', () => {
         'host-status',
         'recent-updates',
         'security-overview',
+        'resource-usage',
         'update-breakdown',
       ];
 
@@ -1014,6 +1084,9 @@ describe('DashboardView', () => {
       expect(
         wrapper.find('[data-widget-id="security-overview"]').attributes('data-widget-order'),
       ).toBe('6');
+      expect(
+        wrapper.find('[data-widget-id="resource-usage"]').attributes('data-widget-order'),
+      ).toBe('7');
     });
 
     it('reorders widgets on drop and persists the new order', async () => {
@@ -1050,6 +1123,7 @@ describe('DashboardView', () => {
         'update-breakdown',
         'recent-updates',
         'security-overview',
+        'resource-usage',
         'host-status',
       ]);
     });

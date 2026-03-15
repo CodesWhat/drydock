@@ -2,6 +2,7 @@ import { type Ref, ref } from 'vue';
 import { getContainerTriggers, runTrigger as runContainerTrigger } from '../../services/container';
 import type { ApiContainerTrigger } from '../../types/api';
 import { errorMessage } from '../../utils/error';
+import { loadContainerDetailListState } from './loadContainerDetailListState';
 
 interface UseContainerTriggersInput {
   selectedContainerId: Readonly<Ref<string | undefined>>;
@@ -9,31 +10,6 @@ interface UseContainerTriggersInput {
   containerActionsDisabledReason: Readonly<Ref<string>>;
   loadContainers: () => Promise<void>;
   refreshActionTabData: () => Promise<void>;
-}
-
-async function loadContainerDetailListState(args: {
-  containerId: string | undefined;
-  loading: Ref<boolean>;
-  error: Ref<string | null>;
-  value: Ref<Record<string, unknown>[]>;
-  loader: (containerId: string) => Promise<unknown[]>;
-  failureMessage: string;
-}) {
-  if (!args.containerId) {
-    args.value.value = [];
-    return;
-  }
-
-  args.loading.value = true;
-  args.error.value = null;
-  try {
-    args.value.value = (await args.loader(args.containerId)) as Record<string, unknown>[];
-  } catch (e: unknown) {
-    args.value.value = [];
-    args.error.value = errorMessage(e, args.failureMessage);
-  } finally {
-    args.loading.value = false;
-  }
 }
 
 export function getTriggerKey(trigger: ApiContainerTrigger): string {

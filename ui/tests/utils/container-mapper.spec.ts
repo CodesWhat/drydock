@@ -752,6 +752,29 @@ describe('container-mapper', () => {
       expect(c.updateDetectedAt).toBeUndefined();
     });
 
+    it('maps imageCreated from api image.created when valid', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: { name: 'nginx', tag: { value: '1.0' }, created: '2025-06-15T10:00:00.000Z' },
+        }),
+      );
+      expect(c.imageCreated).toBe('2025-06-15T10:00:00.000Z');
+    });
+
+    it('ignores invalid imageCreated values', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: { name: 'nginx', tag: { value: '1.0' }, created: 'bad-date' },
+        }),
+      );
+      expect(c.imageCreated).toBeUndefined();
+    });
+
+    it('sets imageCreated to undefined when not provided', () => {
+      const c = mapApiContainer(makeApiContainer({}));
+      expect(c.imageCreated).toBeUndefined();
+    });
+
     it('sets updateMaturity to fresh when update is recent', () => {
       const recentDate = new Date(Date.now() - 2 * 86_400_000).toISOString();
       const c = mapApiContainer(

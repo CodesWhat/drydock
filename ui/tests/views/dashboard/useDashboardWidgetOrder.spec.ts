@@ -100,6 +100,7 @@ describe('useDashboardWidgetOrder', () => {
       'update-breakdown',
       'recent-updates',
       'security-overview',
+      'resource-usage',
       'host-status',
     ]);
     expect(state.draggedWidgetId.value).toBeNull();

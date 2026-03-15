@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
 import { ROUTES } from '../router/routes';
+import { getUsageThresholdColor, getUsageThresholdMutedColor } from '../utils/stats-thresholds';
+import { summarizeContainerResourceUsage } from '../utils/stats-summary';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
 import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
@@ -24,6 +27,7 @@ const {
 const {
   agents,
   containerSummary,
+  containerStats,
   containers,
   error,
   fetchDashboardData,
@@ -34,6 +38,20 @@ const {
   serverInfo,
   watchers,
 } = useDashboardData();
+
+function formatBytes(value: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let nextValue = Math.max(0, Number.isFinite(value) ? value : 0);
+  let unitIndex = 0;
+  while (nextValue >= 1024 && unitIndex < units.length - 1) {
+    nextValue /= 1024;
+    unitIndex += 1;
+  }
+  const precision = unitIndex === 0 ? 0 : 1;
+  return `${nextValue.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+const resourceUsage = computed(() => summarizeContainerResourceUsage(containerStats.value));
 
 const {
   DONUT_CIRCUMFERENCE,
@@ -396,6 +414,130 @@ const {
                    class="p-2.5 dd-rounded text-[0.6875rem] text-center dd-text-muted"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 No vulnerabilities reported
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resource Usage Widget (1/3) -->
+        <div
+             data-widget-id="resource-usage"
+             :data-widget-order="widgetOrderIndex('resource-usage')"
+             draggable="true"
+             aria-label="Resource Usage widget"
+             class="dashboard-widget dd-rounded overflow-hidden"
+             :class="{ 'opacity-60': draggedWidgetId === 'resource-usage' }"
+             :style="{
+               ...widgetOrderStyle('resource-usage'),
+               backgroundColor: 'var(--dd-bg-card)',
+             }"
+             @dragstart="onWidgetDragStart('resource-usage', $event)"
+             @dragover="onWidgetDragOver('resource-usage', $event)"
+             @drop="onWidgetDrop('resource-usage', $event)"
+             @dragend="onWidgetDragEnd">
+          <div class="flex items-center justify-between px-5 py-3.5"
+               :style="{ borderBottom: '1px solid var(--dd-border)' }">
+            <div class="flex items-center gap-2">
+              <AppIcon name="uptime" :size="14" class="text-drydock-secondary" />
+              <h2 class="text-sm font-semibold dd-text">
+                Resource Usage
+              </h2>
+            </div>
+            <button class="text-[0.6875rem] font-medium text-drydock-secondary hover:underline"
+                    @click="navigateTo(ROUTES.CONTAINERS)">View all &rarr;</button>
+          </div>
+
+          <div class="p-4 space-y-4">
+            <div>
+              <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-2 dd-text-muted">
+                Total Usage ({{ resourceUsage.watchedContainers }} watched)
+              </div>
+              <div class="space-y-2">
+                <div>
+                  <div class="flex items-center justify-between text-[0.625rem] dd-text-secondary mb-1">
+                    <span>CPU</span>
+                    <span>{{ resourceUsage.totalCpuPercent.toFixed(1) }}%</span>
+                  </div>
+                  <div class="h-2 dd-rounded overflow-hidden" :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+                    <div
+                      class="h-full dd-rounded transition-[width,color,background-color]"
+                      :style="{
+                        width: `${resourceUsage.totalCpuPercent}%`,
+                        backgroundColor: getUsageThresholdColor(resourceUsage.totalCpuPercent),
+                      }" />
+                  </div>
+                </div>
+
+                <div>
+                  <div class="flex items-center justify-between text-[0.625rem] dd-text-secondary mb-1">
+                    <span>Memory</span>
+                    <span>
+                      {{ formatBytes(resourceUsage.totalMemoryUsageBytes) }} / {{ formatBytes(resourceUsage.totalMemoryLimitBytes) }} ({{ resourceUsage.totalMemoryPercent.toFixed(1) }}%)
+                    </span>
+                  </div>
+                  <div class="h-2 dd-rounded overflow-hidden" :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+                    <div
+                      class="h-full dd-rounded transition-[width,color,background-color]"
+                      :style="{
+                        width: `${resourceUsage.totalMemoryPercent}%`,
+                        backgroundColor: getUsageThresholdColor(resourceUsage.totalMemoryPercent),
+                      }" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-3">
+              <div>
+                <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-2 dd-text-muted">
+                  Top CPU
+                </div>
+                <div class="space-y-1.5">
+                  <div
+                    v-for="row in resourceUsage.topCpu"
+                    :key="`cpu-${row.id}`"
+                    class="px-2.5 py-2 dd-rounded"
+                    :style="{ backgroundColor: getUsageThresholdMutedColor(row.cpuPercent) }">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="text-[0.6875rem] font-semibold truncate dd-text">{{ row.name }}</span>
+                      <span class="text-[0.625rem] font-semibold" :style="{ color: getUsageThresholdColor(row.cpuPercent) }">
+                        {{ row.cpuPercent.toFixed(1) }}%
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    v-if="resourceUsage.topCpu.length === 0"
+                    class="px-2.5 py-2 dd-rounded text-[0.6875rem] text-center dd-text-muted"
+                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                    No live CPU data
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div class="text-[0.625rem] font-semibold uppercase tracking-wider mb-2 dd-text-muted">
+                  Top Memory
+                </div>
+                <div class="space-y-1.5">
+                  <div
+                    v-for="row in resourceUsage.topMemory"
+                    :key="`memory-${row.id}`"
+                    class="px-2.5 py-2 dd-rounded"
+                    :style="{ backgroundColor: getUsageThresholdMutedColor(row.memoryPercent) }">
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="text-[0.6875rem] font-semibold truncate dd-text">{{ row.name }}</span>
+                      <span class="text-[0.625rem] font-semibold" :style="{ color: getUsageThresholdColor(row.memoryPercent) }">
+                        {{ row.memoryPercent.toFixed(1) }}%
+                      </span>
+                    </div>
+                  </div>
+                  <div
+                    v-if="resourceUsage.topMemory.length === 0"
+                    class="px-2.5 py-2 dd-rounded text-[0.6875rem] text-center dd-text-muted"
+                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                    No live memory data
+                  </div>
+                </div>
               </div>
             </div>
           </div>

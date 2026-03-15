@@ -57,7 +57,17 @@ export const DEFAULTS: PreferencesSchema = {
       server: 'all',
       kind: 'all',
     },
-    columns: ['icon', 'name', 'version', 'kind', 'status', 'bouncer', 'server', 'registry'],
+    columns: [
+      'icon',
+      'name',
+      'version',
+      'kind',
+      'status',
+      'bouncer',
+      'imageAge',
+      'server',
+      'registry',
+    ],
   },
   dashboard: {
     widgetOrder: [
@@ -67,6 +77,7 @@ export const DEFAULTS: PreferencesSchema = {
       'stat-registries',
       'recent-updates',
       'security-overview',
+      'resource-usage',
       'host-status',
       'update-breakdown',
     ],
