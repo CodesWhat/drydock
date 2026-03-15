@@ -1,32 +1,14 @@
 import BaseRegistry from '../../BaseRegistry.js';
+import { getSelfHostedBasicConfigurationSchema } from '../shared/selfHostedBasicConfigurationSchema.js';
 
 /**
  * Docker Custom Registry V2 integration.
  */
 class Custom extends BaseRegistry {
   getConfigurationSchema() {
-    const authSchema = this.joi
+    return this.joi
       .alternatives()
-      .try(this.joi.string().base64(), this.joi.string().valid(''));
-
-    const customConfigSchema = this.joi
-      .object()
-      .keys({
-        url: this.joi.string().uri().required(),
-        login: this.joi.string(),
-        password: this.joi.string(),
-        auth: authSchema,
-        cafile: this.joi.string(),
-        insecure: this.joi.boolean(),
-        clientcert: this.joi.string(),
-        clientkey: this.joi.string(),
-      })
-      .and('login', 'password')
-      .without('login', 'auth')
-      .without('password', 'auth')
-      .and('clientcert', 'clientkey');
-
-    return this.joi.alternatives([this.joi.string().allow(''), customConfigSchema]);
+      .try(this.joi.string().allow(''), getSelfHostedBasicConfigurationSchema(this.joi));
   }
 
   maskConfiguration() {
