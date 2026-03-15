@@ -382,6 +382,47 @@ function getRecreatedContainerBaseName(container: { Id?: unknown; Names?: unknow
   return baseName;
 }
 
+function getDockerContainerId(container: { Id?: unknown }) {
+  return typeof container.Id === 'string' ? container.Id : '';
+}
+
+function buildDockerContainerNameToIds(containers: any[]) {
+  const dockerContainerNameToIds = new Map<string, Set<string>>();
+
+  for (const container of containers) {
+    const containerName = getContainerName(container);
+    const containerId = getDockerContainerId(container);
+    if (containerName === '' || containerId === '') {
+      continue;
+    }
+
+    const idsForName = dockerContainerNameToIds.get(containerName) || new Set<string>();
+    idsForName.add(containerId);
+    dockerContainerNameToIds.set(containerName, idsForName);
+  }
+
+  return dockerContainerNameToIds;
+}
+
+function hasSiblingDockerContainerWithName(
+  dockerContainerNameToIds: Map<string, Set<string>>,
+  containerName: string,
+  containerId: string,
+) {
+  const containerIds = dockerContainerNameToIds.get(containerName);
+  if (!containerIds) {
+    return false;
+  }
+
+  for (const currentContainerId of containerIds) {
+    if (currentContainerId !== containerId) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function filterRecreatedContainerAliases(
   containers: any[],
   containersFromTheStore: Container[],
@@ -392,23 +433,12 @@ function filterRecreatedContainerAliases(
       .map((container) => container.name),
   );
 
-  const dockerContainerNameToIds = new Map<string, Set<string>>();
-  for (const container of containers) {
-    const containerName = getContainerName(container);
-    const containerId = typeof container.Id === 'string' ? container.Id : '';
-    if (containerName === '' || containerId === '') {
-      continue;
-    }
-
-    const idsForName = dockerContainerNameToIds.get(containerName) || new Set<string>();
-    idsForName.add(containerId);
-    dockerContainerNameToIds.set(containerName, idsForName);
-  }
+  const dockerContainerNameToIds = buildDockerContainerNameToIds(containers);
 
   const containersToWatch = [];
   const skippedContainerIds = new Set<string>();
   for (const container of containers) {
-    const containerId = typeof container.Id === 'string' ? container.Id : '';
+    const containerId = getDockerContainerId(container);
     const recreatedContainerBaseName = getRecreatedContainerBaseName(container);
 
     if (!recreatedContainerBaseName || containerId === '') {
@@ -416,12 +446,10 @@ function filterRecreatedContainerAliases(
       continue;
     }
 
-    const dockerIdsForBaseName = dockerContainerNameToIds.get(recreatedContainerBaseName);
-    const hasDockerContainerWithBaseName = Boolean(
-      dockerIdsForBaseName &&
-        Array.from(dockerIdsForBaseName).some(
-          (otherContainerId) => otherContainerId !== containerId,
-        ),
+    const hasDockerContainerWithBaseName = hasSiblingDockerContainerWithName(
+      dockerContainerNameToIds,
+      recreatedContainerBaseName,
+      containerId,
     );
     const hasStoreContainerWithBaseName = storeContainerNames.has(recreatedContainerBaseName);
 
@@ -758,15 +786,6 @@ class Docker extends Watcher {
     this.watchCron = cron.schedule(this.configuration.cron, () => this.watchFromCron(), {
       maxRandomDelay: this.configuration.jitter,
     });
-
-    // Resolve watchatstart based on this watcher persisted state.
-    // Keep explicit "false" untouched; default "true" is disabled only when
-    // this watcher already has containers in store.
-    const isWatcherStoreEmpty =
-      storeContainer.getContainers({
-        watcher: this.name,
-      }).length === 0;
-    this.configuration.watchatstart = this.configuration.watchatstart && isWatcherStoreEmpty;
 
     // watch at startup if enabled (after all components have been registered)
     if (this.configuration.watchatstart) {

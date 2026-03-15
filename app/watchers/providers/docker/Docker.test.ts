@@ -696,16 +696,15 @@ describe('Docker Watcher', () => {
       expect(mockDebounce).not.toHaveBeenCalled();
     });
 
-    test('should disable watchatstart when watcher state already exists in store', async () => {
+    test('should keep watchatstart enabled when watcher state already exists in store', async () => {
       storeContainer.getContainers.mockReturnValue([{ id: 'existing' }]);
       await docker.register('watcher', 'docker', 'test', {
         watchatstart: true,
+        watchevents: false,
       });
       docker.init();
-      expect(storeContainer.getContainers).toHaveBeenCalledWith({
-        watcher: 'test',
-      });
-      expect(docker.configuration.watchatstart).toBe(false);
+      expect(docker.configuration.watchatstart).toBe(true);
+      expect(docker.watchCronTimeout).toBeDefined();
     });
 
     test('should keep watchatstart disabled when explicitly set to false', async () => {
@@ -2271,6 +2270,34 @@ describe('Docker Watcher', () => {
 
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old1');
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old2');
+    });
+
+    test('should continue when pruneOldContainers throws during stale record cleanup', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      docker.log = createMockLog(['warn']);
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'old1', watcher: 'test', name: 'svc' } as any,
+      ]);
+      storeContainer.deleteContainer.mockImplementation(() => {
+        throw new Error('Delete failed');
+      });
+      mockDockerApi.listContainers.mockResolvedValue([
+        {
+          Id: 'new1',
+          Labels: { 'dd.watch': 'true' },
+          Names: ['/svc'],
+        },
+      ]);
+      docker.addImageDetailsToContainer = vi
+        .fn()
+        .mockResolvedValue({ id: 'new1', watcher: 'test', name: 'svc' });
+
+      const result = await docker.getContainers();
+
+      expect(result).toEqual([{ id: 'new1', watcher: 'test', name: 'svc' }]);
+      expect(docker.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Error when trying to prune the old containers (Delete failed)'),
+      );
     });
 
     test('should handle pruning error', async () => {
@@ -5416,6 +5443,77 @@ describe('Docker Watcher', () => {
       expect(Array.from(result.skippedContainerIds)).toEqual([
         '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
       ]);
+    });
+
+    test('filterRecreatedContainerAliases should ignore containers with missing Id or Names', () => {
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          { Names: ['/abc123_myapp'] },
+          { Id: 'name-missing' },
+          { Id: '', Names: ['/def456_myapp'] },
+          { Id: 'valid1', Names: ['/valid1_myapp'] },
+        ],
+        [],
+      );
+      expect(result.containersToWatch).toHaveLength(4);
+      expect(result.skippedContainerIds.size).toBe(0);
+    });
+
+    test('filterRecreatedContainerAliases should keep alias when no sibling and no store match', () => {
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/7ea6b8a42686_termix'],
+          },
+        ],
+        [],
+      );
+      expect(result.containersToWatch).toHaveLength(1);
+      expect(result.skippedContainerIds.size).toBe(0);
+    });
+
+    test('filterRecreatedContainerAliases should keep alias when base-name map only has the same container id', () => {
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/7ea6b8a42686_termix'],
+          },
+          {
+            Id: '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10',
+            Names: ['/termix'],
+          },
+        ],
+        [],
+      );
+      expect(result.containersToWatch).toHaveLength(2);
+      expect(result.skippedContainerIds.size).toBe(0);
+    });
+
+    test('filterRecreatedContainerAliases should skip alias when a sibling container already uses the base name', () => {
+      const aliasContainerId = '7ea6b8a42686fbe3a9cb18f1b0d4d4a24f02f9fe6cb9f6e85e6fce7b2a1c9a10';
+      const result = testable_filterRecreatedContainerAliases(
+        [
+          {
+            Id: aliasContainerId,
+            Names: ['/7ea6b8a42686_termix'],
+          },
+          {
+            Id: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+            Names: ['/termix'],
+          },
+        ],
+        [],
+      );
+
+      expect(result.containersToWatch).toEqual([
+        {
+          Id: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          Names: ['/termix'],
+        },
+      ]);
+      expect(Array.from(result.skippedContainerIds)).toEqual([aliasContainerId]);
     });
 
     test('filterRecreatedContainerAliases should keep names that are not self-id-prefixed aliases', () => {
