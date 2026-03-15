@@ -50,56 +50,89 @@ export class AgentClient {
     this.name = name;
     this.config = config;
     this.log = logger.child({ component: `agent-client.${name}` });
-    const port = this.config.port || 3000;
-    let candidateUrl = `${this.config.host}:${port}`;
-    // Add protocol if not present
-    if (!candidateUrl.startsWith('http')) {
-      const useHttps = Boolean(this.config.certfile) || Boolean(this.config.cafile) || port === 443;
-      candidateUrl = `http${useHttps ? 's' : ''}://${candidateUrl}`;
-    }
-    // Validate the URL to prevent request forgery (CodeQL js/request-forgery)
-    const parsed = new URL(candidateUrl);
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
-      throw new Error(`Invalid agent URL protocol: ${parsed.protocol}`);
-    }
-    this.baseUrl = parsed.origin;
-    const hasSecretConfigured =
-      typeof this.config.secret === 'string' && this.config.secret.trim().length > 0;
-    if (parsed.protocol === 'http:' && hasSecretConfigured) {
-      this.log.warn(
-        `Agent ${this.name} is configured with a secret over insecure HTTP (${this.baseUrl}). Configure HTTPS (certfile/cafile) to protect X-Dd-Agent-Secret.`,
-      );
-    }
-
-    this.axiosOptions = {
-      headers: {
-        'X-Dd-Agent-Secret': this.config.secret,
-      },
-    };
-
-    if (this.config.certfile || this.config.cafile) {
-      const caPath = this.config.cafile
-        ? resolveConfiguredPath(this.config.cafile, { label: `${name} ca file` })
-        : undefined;
-      const certPath = this.config.certfile
-        ? resolveConfiguredPath(this.config.certfile, { label: `${name} cert file` })
-        : undefined;
-      const keyPath = this.config.keyfile
-        ? resolveConfiguredPath(this.config.keyfile, { label: `${name} key file` })
-        : undefined;
-      // Intentional: custom CA / mTLS for agent communication
-      // lgtm[js/disabling-certificate-validation]
-      this.axiosOptions.httpsAgent = new https.Agent({
-        ca: caPath ? fs.readFileSync(caPath) : undefined,
-        cert: certPath ? fs.readFileSync(certPath) : undefined,
-        key: keyPath ? fs.readFileSync(keyPath) : undefined,
-      });
-    }
+    const parsedBaseUrl = this.parseBaseUrl();
+    this.baseUrl = parsedBaseUrl.origin;
+    this.warnIfSecretConfiguredOverHttp(parsedBaseUrl.protocol);
+    this.axiosOptions = this.buildAxiosOptions();
 
     this.isConnected = false;
     this.info = {};
     this.reconnectTimer = null;
     this.reconnectAttempts = 0;
+  }
+
+  private parseBaseUrl(): URL {
+    // Validate the URL to prevent request forgery (CodeQL js/request-forgery)
+    const parsed = new URL(this.getCandidateUrl());
+    this.validateProtocol(parsed.protocol);
+    return parsed;
+  }
+
+  private getCandidateUrl(): string {
+    const port = this.config.port || 3000;
+    const candidateUrl = `${this.config.host}:${port}`;
+    // Add protocol if not present
+    if (candidateUrl.startsWith('http')) {
+      return candidateUrl;
+    }
+    const useHttps = this.shouldUseHttps(port);
+    return `http${useHttps ? 's' : ''}://${candidateUrl}`;
+  }
+
+  private shouldUseHttps(port: number): boolean {
+    return Boolean(this.config.certfile) || Boolean(this.config.cafile) || port === 443;
+  }
+
+  private validateProtocol(protocol: string) {
+    if (!['http:', 'https:'].includes(protocol)) {
+      throw new Error(`Invalid agent URL protocol: ${protocol}`);
+    }
+  }
+
+  private warnIfSecretConfiguredOverHttp(protocol: string) {
+    const hasSecretConfigured =
+      typeof this.config.secret === 'string' && this.config.secret.trim().length > 0;
+    if (protocol === 'http:' && hasSecretConfigured) {
+      this.log.warn(
+        `Agent ${this.name} is configured with a secret over insecure HTTP (${this.baseUrl}). Configure HTTPS (certfile/cafile) to protect X-Dd-Agent-Secret.`,
+      );
+    }
+  }
+
+  private buildAxiosOptions(): AxiosRequestConfig {
+    const options: AxiosRequestConfig = {
+      headers: {
+        'X-Dd-Agent-Secret': this.config.secret,
+      },
+    };
+
+    if (this.shouldBuildHttpsAgent()) {
+      options.httpsAgent = this.buildHttpsAgent();
+    }
+
+    return options;
+  }
+
+  private shouldBuildHttpsAgent(): boolean {
+    return Boolean(this.config.certfile) || Boolean(this.config.cafile);
+  }
+
+  private buildHttpsAgent(): https.Agent {
+    const caPath = this.resolveTlsPath(this.config.cafile, `${this.name} ca file`);
+    const certPath = this.resolveTlsPath(this.config.certfile, `${this.name} cert file`);
+    const keyPath = this.resolveTlsPath(this.config.keyfile, `${this.name} key file`);
+
+    // Intentional: custom CA / mTLS for agent communication
+    // lgtm[js/disabling-certificate-validation]
+    return new https.Agent({
+      ca: caPath ? fs.readFileSync(caPath) : undefined,
+      cert: certPath ? fs.readFileSync(certPath) : undefined,
+      key: keyPath ? fs.readFileSync(keyPath) : undefined,
+    });
+  }
+
+  private resolveTlsPath(path: string | undefined, label: string): string | undefined {
+    return path ? resolveConfiguredPath(path, { label }) : undefined;
   }
 
   async init() {
