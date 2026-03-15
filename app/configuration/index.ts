@@ -359,6 +359,7 @@ export function getWebhookConfiguration() {
   const configurationFromEnv = get('dd.server.webhook', ddEnvVars);
   const configurationSchema = joi.object().keys({
     enabled: joi.boolean().default(false),
+    secret: joi.string().allow('').default(''),
     token: joi.string().allow('').default(''),
     tokens: joi
       .object({
@@ -384,6 +385,7 @@ export function getWebhookConfiguration() {
     configuration.tokens?.watch,
     configuration.tokens?.update,
   ].some((token) => typeof token === 'string' && token.length > 0);
+  const hasSecret = typeof configuration.secret === 'string' && configuration.secret.length > 0;
 
   const endpointTokens = [
     configuration.tokens?.watchall,
@@ -403,9 +405,9 @@ export function getWebhookConfiguration() {
     );
   }
 
-  if (configuration.enabled && !hasAnyToken) {
+  if (configuration.enabled && !hasAnyToken && !hasSecret) {
     throw new Error(
-      'At least one webhook token (DD_SERVER_WEBHOOK_TOKEN or DD_SERVER_WEBHOOK_TOKENS_*) must be configured when webhooks are enabled',
+      'At least one webhook auth mechanism (DD_SERVER_WEBHOOK_SECRET, DD_SERVER_WEBHOOK_TOKEN, or DD_SERVER_WEBHOOK_TOKENS_*) must be configured when webhooks are enabled',
     );
   }
 

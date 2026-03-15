@@ -31,6 +31,7 @@ import * as registry from '../../../registry/index.js';
 import { failClosedAuth } from '../../../security/auth.js';
 import * as storeContainer from '../../../store/container.js';
 import { sleep } from '../../../util/sleep.js';
+import { consumeFreshContainerScheduledPollSkip } from '../../registry-webhook-fresh.js';
 import Watcher from '../../Watcher.js';
 import { updateContainerFromInspect as updateContainerFromInspectState } from './container-event-update.js';
 import {
@@ -557,6 +558,7 @@ class Docker extends Watcher {
   public remoteOidcDeviceCodeCompleted?: boolean;
   public remoteAuthBlockedReason?: string;
   public isWatcherDeregistered: boolean = false;
+  public isCronWatchInProgress: boolean = false;
 
   ensureLogger() {
     if (!this.log) {
@@ -1053,7 +1055,13 @@ class Docker extends Watcher {
     this.log.info(`Cron started (${this.configuration.cron})`);
 
     // Get container reports
-    const containerReports = await this.watch();
+    this.isCronWatchInProgress = true;
+    let containerReports: ContainerReport[] = [];
+    try {
+      containerReports = await this.watch();
+    } finally {
+      this.isCronWatchInProgress = false;
+    }
 
     // Count container reports
     const containerReportsCount = containerReports.length;
@@ -1094,6 +1102,18 @@ class Docker extends Watcher {
       this.log.warn(`Error when trying to get the list of the containers to watch (${e.message})`);
     }
     try {
+      if (this.isCronWatchInProgress) {
+        containers = containers.filter((container) => {
+          const shouldSkip = consumeFreshContainerScheduledPollSkip(container.id);
+          if (shouldSkip) {
+            this.log.debug(
+              `${fullName(container)} - Skipping scheduled poll because a registry webhook already triggered an immediate check`,
+            );
+          }
+          return !shouldSkip;
+        });
+      }
+
       const containerReportsSettled = await Promise.allSettled(
         containers.map((container) => this.watchContainer(container)),
       );

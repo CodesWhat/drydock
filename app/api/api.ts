@@ -30,6 +30,7 @@ import * as storeRouter from './store.js';
 import * as triggerRouter from './trigger.js';
 import * as watcherRouter from './watcher.js';
 import * as webhookRouter from './webhook.js';
+import * as webhooksRouter from './webhooks.js';
 
 /**
  * Init the API router.
@@ -54,7 +55,11 @@ export function init(): express.Router {
   });
   router.use(apiLimiter);
 
-  const mutationJsonBodyParser = express.json();
+  const mutationJsonBodyParser = express.json({
+    verify: (req, _res, buffer) => {
+      (req as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+    },
+  });
   router.use(requireJsonContentTypeForMutations);
   router.use((req, res, next) => {
     if (shouldParseJsonBody(req.method)) {
@@ -65,6 +70,7 @@ export function init(): express.Router {
 
   // Mount webhook router (uses its own bearer token auth)
   router.use('/webhook', webhookRouter.init());
+  router.use('/webhooks', webhooksRouter.init());
 
   // Public OpenAPI document for integrations and API clients.
   router.get('/openapi.json', async (_req: Request, res: Response) => {
