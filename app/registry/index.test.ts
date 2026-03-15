@@ -703,6 +703,20 @@ test('registerAuthentications should register anonymous auth on upgrade without 
   expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
 });
 
+test('registerAuthentications should log an error when DD_AUTH env vars exist without provider config', async () => {
+  const spyLog = vi.spyOn(registry.testable_log, 'error');
+  configuration.ddEnvVars.DD_AUTH_BASIC_PRIMARY_USER = 'alice';
+  mockIsUpgrade.mockReturnValue(true);
+
+  await registry.testable_registerAuthentications();
+
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining(
+      'Detected DD_AUTH_* environment variables, but no configured authentication providers were registered successfully.',
+    ),
+  );
+});
+
 test('registerAuthentications should fail-closed on fresh install without confirmation', async () => {
   mockIsUpgrade.mockReturnValue(false);
   const spyLog = vi.spyOn(registry.testable_log, 'error');
