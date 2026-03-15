@@ -2480,6 +2480,57 @@ describe('Docker Watcher', () => {
       expect(result).toEqual({ tag: '1.0.0' });
     });
 
+    test('should include result publishedAt when registry can resolve publish date', async () => {
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: '1.0.0' },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue(['1.0.0']),
+        getImagePublishedAt: vi.fn().mockResolvedValue('2026-03-10T10:00:00.000Z'),
+      };
+      registry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+      const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '1.0.0');
+      expect(result).toEqual({
+        tag: '1.0.0',
+        publishedAt: '2026-03-10T10:00:00.000Z',
+      });
+    });
+
+    test('should continue when publish date lookup fails', async () => {
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: '1.0.0' },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue(['1.0.0']),
+        getImagePublishedAt: vi.fn().mockRejectedValue(new Error('metadata unavailable')),
+      };
+      registry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+      const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result).toEqual({ tag: '1.0.0' });
+      expect(mockLogChild.debug).toHaveBeenCalledWith(
+        expect.stringContaining('publish date lookup failed'),
+      );
+    });
+
     test('should handle unsupported registry', async () => {
       const container = {
         image: {
@@ -2911,9 +2962,18 @@ describe('Docker Watcher', () => {
       mockTag.isGreater.mockImplementation(
         (version1, version2) => rank[version1] >= rank[version2],
       );
-      mockTag.parse.mockImplementation((version) =>
-        rank[version] ? { major: 1, minor: 0, patch: 0 } : null,
-      );
+      mockTag.parse.mockImplementation((version) => {
+        const score = rank[version];
+        if (!score) {
+          return null;
+        }
+        return {
+          major: Number.parseInt(version.split('.')[0], 10),
+          minor: Number.parseInt(version.split('.')[1], 10),
+          patch: Number.parseInt(version.split('.')[2], 10),
+          prerelease: [],
+        };
+      });
 
       const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
 
@@ -2962,7 +3022,10 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(result).toEqual({ tag: '3.0.0' });
+      expect(result).toEqual({
+        tag: '3.0.0',
+        suggestedTag: expect.stringMatching(/^\d+\.\d+\.\d+$/),
+      });
       expect(mockLogChild.warn).toHaveBeenCalledWith(
         expect.stringContaining('is not semver but includeTags filter'),
       );
@@ -2994,6 +3057,66 @@ describe('Docker Watcher', () => {
       const result = await docker.findNewVersion(container, mockLogChild);
 
       // Without includeTags, non-semver tags should not get any advice
+      expect(result).toEqual({ tag: 'latest' });
+    });
+
+    test('should add suggestedTag for latest-tagged containers using highest stable semver', async () => {
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: 'latest', semver: false },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue(['latest', '1.27.2', '1.27.3', '1.28.0-rc.1']),
+      };
+      registry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+
+      mockTag.parse.mockImplementation((tag) => {
+        if (tag === '1.27.2') return { major: 1, minor: 27, patch: 2, prerelease: [] };
+        if (tag === '1.27.3') return { major: 1, minor: 27, patch: 3, prerelease: [] };
+        if (tag === '1.28.0-rc.1') return { major: 1, minor: 28, patch: 0, prerelease: ['rc', 1] };
+        return null;
+      });
+
+      const result = await docker.findNewVersion(container as any, {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      });
+
+      expect(result).toEqual({ tag: 'latest', suggestedTag: '1.27.3' });
+    });
+
+    test('should not add suggestedTag when latest-tagged container has no stable semver tags', async () => {
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: 'latest', semver: false },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        getTags: vi.fn().mockResolvedValue(['latest', 'nightly', '1.28.0-beta']),
+      };
+      registry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+
+      mockTag.parse.mockImplementation((tag) => {
+        if (tag === '1.28.0-beta') return { major: 1, minor: 28, patch: 0, prerelease: ['beta'] };
+        return null;
+      });
+
+      const result = await docker.findNewVersion(container as any, {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      });
+
       expect(result).toEqual({ tag: 'latest' });
     });
   });

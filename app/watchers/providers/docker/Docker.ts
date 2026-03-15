@@ -30,6 +30,7 @@ import type { ComponentConfiguration } from '../../../registry/Component.js';
 import * as registry from '../../../registry/index.js';
 import { failClosedAuth } from '../../../security/auth.js';
 import * as storeContainer from '../../../store/container.js';
+import { suggest as suggestTag } from '../../../tag/suggest.js';
 import { sleep } from '../../../util/sleep.js';
 import { consumeFreshContainerScheduledPollSkip } from '../../registry-webhook-fresh.js';
 import Watcher from '../../Watcher.js';
@@ -264,6 +265,7 @@ interface ContainerTagLookupProvider {
     created?: string;
     version?: number;
   }>;
+  getImagePublishedAt?: (image: Container['image'], tag?: string) => Promise<string | undefined>;
 }
 
 interface ContainerWatchLogger {
@@ -1439,6 +1441,11 @@ class Docker extends Watcher {
       result.noUpdateReason = noUpdateReason;
     }
 
+    const suggestedTag = suggestTag(container, tags, logContainer);
+    if (suggestedTag !== null) {
+      result.suggestedTag = suggestedTag;
+    }
+
     // Must watch digest? => Find local/remote digests on registry
     if (container.image.digest.watch && container.image.digest.repo) {
       await this.handleDigestWatch(container, registryProvider, tagsCandidates, result);
@@ -1448,6 +1455,24 @@ class Docker extends Watcher {
     if (tagsCandidates && tagsCandidates.length > 0) {
       [result.tag] = tagsCandidates;
     }
+
+    const publishedTag = result.tag || container.image.tag.value;
+    try {
+      if (typeof registryProvider.getImagePublishedAt === 'function') {
+        const publishedAt = await registryProvider.getImagePublishedAt(
+          container.image,
+          publishedTag,
+        );
+        if (typeof publishedAt === 'string') {
+          result.publishedAt = publishedAt;
+        }
+      }
+    } catch (error: any) {
+      if (typeof logContainer.debug === 'function') {
+        logContainer.debug(`Remote publish date lookup failed (${error.message})`);
+      }
+    }
+
     return result;
   }
 

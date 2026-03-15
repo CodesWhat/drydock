@@ -505,6 +505,144 @@ test('model should allow mature updates when maturity threshold has elapsed', as
   expect(containerValidated.updateAvailable).toBeTruthy();
 });
 
+test('model should compute updateAge from the earlier of firstSeenAt and publishedAt', async () => {
+  vi.useFakeTimers();
+  try {
+    const now = new Date('2026-03-15T12:00:00.000Z');
+    vi.setSystemTime(now);
+    const firstSeenAt = new Date(now.getTime() - daysToMs(2)).toISOString();
+    const publishedAt = new Date(now.getTime() - daysToMs(5)).toISOString();
+
+    const containerValidated = container.validate({
+      id: 'container-123456789',
+      name: 'test',
+      watcher: 'test',
+      firstSeenAt,
+      image: {
+        id: 'image-123456789',
+        registry: {
+          name: 'hub',
+          url: 'https://hub',
+        },
+        name: 'organization/image',
+        tag: {
+          value: '1.0.0',
+          semver: true,
+        },
+        digest: {
+          watch: false,
+          repo: undefined,
+        },
+        architecture: 'arch',
+        os: 'os',
+        created: '2021-06-12T05:33:38.440Z',
+      },
+      result: {
+        tag: '1.0.1',
+        publishedAt,
+      },
+    });
+
+    expect(containerValidated.updateAge).toBe(daysToMs(5));
+    expect(containerValidated.updateMaturityLevel).toBe('hot');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('model should classify updates older than 30 days as established', async () => {
+  vi.useFakeTimers();
+  try {
+    const now = new Date('2026-03-15T12:00:00.000Z');
+    vi.setSystemTime(now);
+    const firstSeenAt = new Date(now.getTime() - daysToMs(35)).toISOString();
+
+    const containerValidated = container.validate({
+      id: 'container-123456789',
+      name: 'test',
+      watcher: 'test',
+      firstSeenAt,
+      image: {
+        id: 'image-123456789',
+        registry: {
+          name: 'hub',
+          url: 'https://hub',
+        },
+        name: 'organization/image',
+        tag: {
+          value: '1.0.0',
+          semver: true,
+        },
+        digest: {
+          watch: false,
+          repo: undefined,
+        },
+        architecture: 'arch',
+        os: 'os',
+        created: '2021-06-12T05:33:38.440Z',
+      },
+      result: {
+        tag: '1.0.1',
+      },
+    });
+
+    expect(containerValidated.updateAge).toBe(daysToMs(35));
+    expect(containerValidated.updateMaturityLevel).toBe('established');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('model should use DD_UI_MATURITY_THRESHOLD_DAYS for hot/mature cutoff', async () => {
+  const previousThreshold = process.env.DD_UI_MATURITY_THRESHOLD_DAYS;
+  vi.useFakeTimers();
+  try {
+    process.env.DD_UI_MATURITY_THRESHOLD_DAYS = '3';
+    const now = new Date('2026-03-15T12:00:00.000Z');
+    vi.setSystemTime(now);
+    const firstSeenAt = new Date(now.getTime() - daysToMs(4)).toISOString();
+
+    const containerValidated = container.validate({
+      id: 'container-123456789',
+      name: 'test',
+      watcher: 'test',
+      firstSeenAt,
+      image: {
+        id: 'image-123456789',
+        registry: {
+          name: 'hub',
+          url: 'https://hub',
+        },
+        name: 'organization/image',
+        tag: {
+          value: '1.0.0',
+          semver: true,
+        },
+        digest: {
+          watch: false,
+          repo: undefined,
+        },
+        architecture: 'arch',
+        os: 'os',
+        created: '2021-06-12T05:33:38.440Z',
+      },
+      result: {
+        tag: '1.0.1',
+      },
+    });
+
+    expect(containerValidated.updateAge).toBe(daysToMs(4));
+    expect(containerValidated.updateMaturityLevel).toBe('mature');
+  } finally {
+    vi.useRealTimers();
+    if (previousThreshold === undefined) {
+      delete process.env.DD_UI_MATURITY_THRESHOLD_DAYS;
+    } else {
+      process.env.DD_UI_MATURITY_THRESHOLD_DAYS = previousThreshold;
+    }
+  }
+});
+
 test('model should keep updateAvailable when remote tag changes past skipped value', async () => {
   const containerValidated = container.validate({
     id: 'container-123456789',
@@ -1232,6 +1370,42 @@ test('resultChanged should return true when digest differs', async () => {
       os: 'os',
     },
     result: { tag: 'v1', digest: 'sha256:def' },
+  });
+
+  expect(containerValidated.resultChanged(other)).toBeTruthy();
+});
+
+test('resultChanged should return true when suggestedTag differs', async () => {
+  const containerValidated = container.validate({
+    id: 'container-123456789',
+    name: 'test',
+    watcher: 'test',
+    image: {
+      id: 'image-123456789',
+      registry: { name: 'hub', url: 'https://hub' },
+      name: 'organization/image',
+      tag: { value: 'latest', semver: false },
+      digest: { watch: false },
+      architecture: 'arch',
+      os: 'os',
+    },
+    result: { tag: 'latest', suggestedTag: '1.0.0' },
+  });
+
+  const other = container.validate({
+    id: 'container-123456789',
+    name: 'test',
+    watcher: 'test',
+    image: {
+      id: 'image-123456789',
+      registry: { name: 'hub', url: 'https://hub' },
+      name: 'organization/image',
+      tag: { value: 'latest', semver: false },
+      digest: { watch: false },
+      architecture: 'arch',
+      os: 'os',
+    },
+    result: { tag: 'latest', suggestedTag: '1.0.1' },
   });
 
   expect(containerValidated.resultChanged(other)).toBeTruthy();

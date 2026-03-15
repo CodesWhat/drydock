@@ -17,6 +17,7 @@ const baseContainer = {
   },
   result: {
     link: 'https://example.com/release',
+    suggestedTag: '1.2.3',
   },
 };
 
@@ -92,6 +93,11 @@ describe('trigger-expression-parser', () => {
       },
     });
     expect(output).toBe('suffix');
+  });
+
+  test('renderSimple should expose suggestedTag template variable', () => {
+    const output = renderSimple('Pin to ${suggestedTag}', baseContainer as any);
+    expect(output).toBe('Pin to 1.2.3');
   });
 });
 

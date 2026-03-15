@@ -357,6 +357,7 @@ export function renderSimple(template: string, container: Container): string {
     semver: container.updateKind?.semverDiff ?? '',
     local: container.updateKind?.localValue ?? '',
     remote: container.updateKind?.remoteValue ?? '',
+    suggestedTag: container.result?.suggestedTag ?? '',
     link: container.result?.link ?? '',
   };
   return safeInterpolate(template, vars);

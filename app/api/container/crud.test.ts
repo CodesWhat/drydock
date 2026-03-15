@@ -253,6 +253,33 @@ describe('api/container/crud', () => {
       });
     });
 
+    test('returns suggestedTag in container result payload when available', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            result: {
+              tag: 'latest',
+              suggestedTag: '1.27.3',
+            },
+          }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [
+            expect.objectContaining({
+              result: expect.objectContaining({ suggestedTag: '1.27.3' }),
+            }),
+          ],
+        }),
+      );
+    });
+
     test('normalizes negative/invalid pagination to zero and returns all results', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1' }), createContainer({ id: 'c2' })],
@@ -512,6 +539,320 @@ describe('api/container/crud', () => {
         hasMore: false,
       });
     });
+
+    test('supports sort=age and returns oldest updates first', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', updateAge: 2_000 }),
+          createContainer({ id: 'c2', updateAge: 8_000 }),
+          createContainer({ id: 'c3', updateAge: 4_000 }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { sort: 'age' });
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({ id: 'c2' }),
+          expect.objectContaining({ id: 'c3' }),
+          expect.objectContaining({ id: 'c1' }),
+        ],
+        total: 3,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
+    });
+
+    test('supports maturity filter for hot|mature|established', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', updateMaturityLevel: 'hot' }),
+          createContainer({ id: 'c2', updateMaturityLevel: 'mature' }),
+          createContainer({ id: 'c3', updateMaturityLevel: 'established' }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { maturity: 'mature' });
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({}, { limit: 0, offset: 0 });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ id: 'c2' })],
+        total: 1,
+        limit: 0,
+        offset: 0,
+        hasMore: false,
+      });
+    });
+
+    test('sorts containers by name ascending by default', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', name: 'zulu' }),
+          createContainer({ id: 'c2', name: 'alpha' }),
+          createContainer({ id: 'c3', name: 'bravo' }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, {});
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.data.map((container: { name: string }) => container.name)).toEqual([
+        'alpha',
+        'bravo',
+        'zulu',
+      ]);
+    });
+
+    test('sorts containers by name descending when sort=-name', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', name: 'alpha' }),
+          createContainer({ id: 'c2', name: 'charlie' }),
+          createContainer({ id: 'c3', name: 'bravo' }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { sort: '-name' });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.data.map((container: { name: string }) => container.name)).toEqual([
+        'charlie',
+        'bravo',
+        'alpha',
+      ]);
+    });
+
+    test('sorts by update status with available updates first', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', name: 'no-update', updateAvailable: false }),
+          createContainer({ id: 'c2', name: 'has-update-a', updateAvailable: true }),
+          createContainer({ id: 'c3', name: 'has-update-b', updateAvailable: true }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { sort: 'status' });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(
+        payload.data.map((container: { name: string; updateAvailable: boolean }) => ({
+          name: container.name,
+          updateAvailable: container.updateAvailable,
+        })),
+      ).toEqual([
+        { name: 'has-update-a', updateAvailable: true },
+        { name: 'has-update-b', updateAvailable: true },
+        { name: 'no-update', updateAvailable: false },
+      ]);
+    });
+
+    test('sorts by update age with oldest updates first', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-15T12:00:00.000Z'));
+      try {
+        const harness = createHarness({
+          containers: [
+            createContainer({
+              id: 'c1',
+              name: 'newest-update',
+              updateAvailable: true,
+              updateDetectedAt: '2026-03-14T12:00:00.000Z',
+            }),
+            createContainer({
+              id: 'c2',
+              name: 'oldest-update',
+              updateAvailable: true,
+              updateDetectedAt: '2026-02-01T12:00:00.000Z',
+            }),
+            createContainer({
+              id: 'c3',
+              name: 'no-update',
+              updateAvailable: false,
+            }),
+          ],
+        });
+
+        const res = callGetContainers(harness.handlers, { sort: 'age' });
+        const payload = res.json.mock.calls[0][0];
+
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(payload.data.map((container: { name: string }) => container.name)).toEqual([
+          'oldest-update',
+          'newest-update',
+          'no-update',
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('sorts by image creation date', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            name: 'new-image',
+            image: {
+              registry: { name: 'hub', url: 'docker.io' },
+              name: 'library/nginx',
+              tag: { value: '1.0.0' },
+              created: '2026-03-01T00:00:00.000Z',
+            },
+          }),
+          createContainer({
+            id: 'c2',
+            name: 'old-image',
+            image: {
+              registry: { name: 'hub', url: 'docker.io' },
+              name: 'library/nginx',
+              tag: { value: '1.0.0' },
+              created: '2025-01-01T00:00:00.000Z',
+            },
+          }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, { sort: 'created' });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.data.map((container: { name: string }) => container.name)).toEqual([
+        'old-image',
+        'new-image',
+      ]);
+    });
+
+    test('applies sorting before pagination', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', name: 'charlie' }),
+          createContainer({ id: 'c2', name: 'alpha' }),
+          createContainer({ id: 'c3', name: 'bravo' }),
+        ],
+      });
+
+      const res = callGetContainers(harness.handlers, {
+        sort: 'name',
+        limit: '1',
+        offset: '1',
+      });
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.data).toEqual([expect.objectContaining({ name: 'bravo' })]);
+      expect(payload.total).toBe(3);
+      expect(payload.hasMore).toBe(true);
+    });
+
+    test('maps status/kind/watcher filters to store query fields with AND semantics', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+
+      callGetContainers(harness.handlers, {
+        status: 'update-available',
+        kind: 'major',
+        watcher: 'local',
+      });
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        {
+          updateAvailable: true,
+          'updateKind.semverDiff': 'major',
+          watcher: 'local',
+        },
+        { limit: 0, offset: 0 },
+      );
+    });
+
+    test('maps kind=digest to updateKind.kind filter', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+
+      callGetContainers(harness.handlers, {
+        kind: 'digest',
+      });
+
+      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+        {
+          'updateKind.kind': 'digest',
+        },
+        { limit: 0, offset: 0 },
+      );
+    });
+
+    test('filters by update maturity buckets', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-15T12:00:00.000Z'));
+      try {
+        const harness = createHarness({
+          containers: [
+            createContainer({
+              id: 'c-hot',
+              name: 'hot-update',
+              updateAvailable: true,
+              updateDetectedAt: '2026-03-13T12:00:00.000Z',
+            }),
+            createContainer({
+              id: 'c-mature',
+              name: 'mature-update',
+              updateAvailable: true,
+              updateDetectedAt: '2026-03-05T12:00:00.000Z',
+            }),
+            createContainer({
+              id: 'c-established',
+              name: 'established-update',
+              updateAvailable: true,
+              updateDetectedAt: '2026-01-01T12:00:00.000Z',
+            }),
+          ],
+        });
+
+        const hotRes = callGetContainers(harness.handlers, { maturity: 'hot' });
+        expect(hotRes.json.mock.calls[0][0].data).toEqual([
+          expect.objectContaining({ id: 'c-hot' }),
+        ]);
+
+        const matureRes = callGetContainers(harness.handlers, { maturity: 'mature' });
+        expect(matureRes.json.mock.calls[0][0].data).toEqual([
+          expect.objectContaining({ id: 'c-mature' }),
+        ]);
+
+        const establishedRes = callGetContainers(harness.handlers, { maturity: 'established' });
+        expect(establishedRes.json.mock.calls[0][0].data).toEqual([
+          expect.objectContaining({ id: 'c-established' }),
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test.each([
+      [{ sort: 'latest-first' }, 'Invalid sort value'],
+      [{ status: 'running' }, 'Invalid status filter value'],
+      [{ kind: 'prerelease' }, 'Invalid kind filter value'],
+      [{ maturity: 'fresh' }, 'Invalid maturity filter value'],
+    ])('returns 400 for invalid container-list filters: %o', (query, expectedMessage) => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1' })],
+      });
+
+      const res = callGetContainers(harness.handlers, query);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: expectedMessage,
+      });
+      expect(harness.deps.getContainersFromStore).not.toHaveBeenCalled();
+    });
   });
 
   describe('summary and lookup handlers', () => {
@@ -549,6 +890,8 @@ describe('api/container/crud', () => {
         security: {
           issues: 2,
         },
+        hotUpdates: 0,
+        matureUpdates: 0,
       });
     });
 
@@ -576,6 +919,8 @@ describe('api/container/crud', () => {
         security: {
           issues: 0,
         },
+        hotUpdates: 0,
+        matureUpdates: 0,
       });
     });
 
@@ -599,7 +944,46 @@ describe('api/container/crud', () => {
         security: {
           issues: 0,
         },
+        hotUpdates: 0,
+        matureUpdates: 0,
       });
+    });
+
+    test('includes hot and mature update counters in summary', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            updateAvailable: true,
+            updateMaturityLevel: 'hot',
+          }),
+          createContainer({
+            id: 'c2',
+            updateAvailable: true,
+            updateMaturityLevel: 'mature',
+          }),
+          createContainer({
+            id: 'c3',
+            updateAvailable: true,
+            updateMaturityLevel: 'established',
+          }),
+          createContainer({
+            id: 'c4',
+            updateAvailable: false,
+            updateMaturityLevel: 'hot',
+          }),
+        ],
+      });
+
+      const res = callGetContainerSummary(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hotUpdates: 1,
+          matureUpdates: 2,
+        }),
+      );
     });
 
     test('returns aggregated vulnerabilities grouped by image for the security view', () => {
