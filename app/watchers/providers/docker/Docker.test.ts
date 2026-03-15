@@ -4,6 +4,10 @@ import { fullName } from '../../../model/container.js';
 import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { mockConstructor } from '../../../test/mock-constructor.js';
+import {
+  _resetRegistryWebhookFreshStateForTests,
+  markContainerFreshForScheduledPollSkip,
+} from '../../registry-webhook-fresh.js';
 import Docker, {
   testable_filterBySegmentCount,
   testable_filterRecreatedContainerAliases,
@@ -315,6 +319,7 @@ describe('Docker Watcher', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    _resetRegistryWebhookFreshStateForTests();
 
     // Setup dockerode mock
     mockDockerApi = {
@@ -1890,6 +1895,35 @@ describe('Docker Watcher', () => {
         changed: false,
       });
       expect(event.emitContainerReports).toHaveBeenCalledWith(result);
+    });
+
+    test('should skip containers refreshed by registry webhooks on the next scheduled poll', async () => {
+      const freshContainer = {
+        id: 'fresh-id',
+        name: 'fresh-container',
+        watcher: 'test',
+      };
+      const regularContainer = {
+        id: 'regular-id',
+        name: 'regular-container',
+        watcher: 'test',
+      };
+      docker.log = createMockLog(['warn', 'info', 'debug']);
+      docker.getContainers = vi.fn().mockResolvedValue([freshContainer, regularContainer]);
+      docker.watchContainer = vi.fn().mockImplementation(async (container) => ({
+        container: { ...container, updateAvailable: false },
+        changed: false,
+      }));
+      markContainerFreshForScheduledPollSkip('fresh-id');
+
+      const result = await docker.watchFromCron();
+
+      expect(docker.watchContainer).toHaveBeenCalledTimes(1);
+      expect(docker.watchContainer).toHaveBeenCalledWith(regularContainer);
+      expect(result).toHaveLength(1);
+      expect(docker.log.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Skipping scheduled poll'),
+      );
     });
   });
 

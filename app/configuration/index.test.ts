@@ -937,6 +937,7 @@ describe('getAuthenticationConfigurations', () => {
 describe('getWebhookConfiguration', () => {
   beforeEach(() => {
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL;
@@ -947,6 +948,7 @@ describe('getWebhookConfiguration', () => {
   test('should return disabled webhook by default', () => {
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: false,
+      secret: '',
       token: '',
       tokens: {
         watchall: '',
@@ -962,7 +964,25 @@ describe('getWebhookConfiguration', () => {
 
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: true,
+      secret: '',
       token: 'secret-token',
+      tokens: {
+        watchall: '',
+        watch: '',
+        update: '',
+      },
+    });
+  });
+
+  test('should allow enabling registry webhooks with HMAC secret and no bearer token', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET = 'webhook-signing-secret';
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
+
+    expect(configuration.getWebhookConfiguration()).toStrictEqual({
+      enabled: true,
+      secret: 'webhook-signing-secret',
+      token: '',
       tokens: {
         watchall: '',
         watch: '',
@@ -980,6 +1000,7 @@ describe('getWebhookConfiguration', () => {
 
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: true,
+      secret: '',
       token: '',
       tokens: {
         watchall: 'watchall-token',
@@ -1001,8 +1022,9 @@ describe('getWebhookConfiguration', () => {
     );
   });
 
-  test('should throw when webhook is enabled without shared or endpoint tokens', () => {
+  test('should throw when webhook is enabled without tokens or HMAC secret', () => {
     configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL;
     delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH;
@@ -1023,6 +1045,7 @@ describe('getWebhookConfiguration', () => {
 
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: false,
+      secret: '',
       token: '',
       tokens: {
         watchall: '',
@@ -1046,6 +1069,7 @@ describe('getWebhookConfiguration', () => {
         ...(originalDd?.server || {}),
         webhook: {
           enabled: false,
+          secret: '',
           token: '',
           tokens: {
             watchall: '',
@@ -1058,6 +1082,7 @@ describe('getWebhookConfiguration', () => {
 
     expect(configuration.getWebhookConfiguration()).toStrictEqual({
       enabled: false,
+      secret: '',
       token: '',
       tokens: {
         watchall: '',

@@ -68,6 +68,7 @@ vi.mock('./backup', mockInit);
 vi.mock('./container-actions', mockInit);
 vi.mock('./audit', mockInit);
 vi.mock('./webhook', mockInit);
+vi.mock('./webhooks', mockInit);
 vi.mock('./sse', mockInit);
 vi.mock('./auth', () => ({
   requireAuthentication: vi.fn((req, res, next) => next()),
@@ -261,6 +262,7 @@ describe('API Router', () => {
     const containerActionsRouter = await import('./container-actions.js');
     const auditRouter = await import('./audit.js');
     const webhookRouter = await import('./webhook.js');
+    const webhooksRouter = await import('./webhooks.js');
     await import('./sse.js');
 
     expect(appRouter.init).toHaveBeenCalled();
@@ -282,6 +284,7 @@ describe('API Router', () => {
     expect(containerActionsRouter.init).toHaveBeenCalled();
     expect(auditRouter.init).toHaveBeenCalled();
     expect(webhookRouter.init).toHaveBeenCalled();
+    expect(webhooksRouter.init).toHaveBeenCalled();
   });
 
   test('should use requireAuthentication middleware', async () => {
