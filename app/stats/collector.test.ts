@@ -313,6 +313,24 @@ describe('stats/collector', () => {
 
   test('gracefully handles invalid stream results and stream startup errors', async () => {
     const getContainer = vi.fn(() => ({ id: 'c1', name: 'web', watcher: 'local' }));
+    const getWatchersNull = vi.fn(() => ({
+      'docker.local': {
+        dockerApi: {
+          getContainer: vi.fn(() => ({ stats: vi.fn(async () => null) })),
+        },
+      },
+    }));
+    const collectorNull = createContainerStatsCollector({
+      getContainerById: getContainer,
+      getWatchers: getWatchersNull,
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+    const releaseNull = collectorNull.watch('c1');
+    await Promise.resolve();
+    releaseNull();
+
     const getWatchersInvalid = vi.fn(() => ({
       'docker.local': {
         dockerApi: {
