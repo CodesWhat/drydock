@@ -4,6 +4,17 @@ import path from 'node:path';
 import express from 'express';
 import { ClientSecretPost, Configuration } from 'openid-client';
 import * as configuration from '../../../configuration/index.js';
+
+const { mockRecordAuthLogin, mockObserveAuthLoginDuration } = vi.hoisted(() => ({
+  mockRecordAuthLogin: vi.fn(),
+  mockObserveAuthLoginDuration: vi.fn(),
+}));
+
+vi.mock('../../../prometheus/auth.js', () => ({
+  recordAuthLogin: mockRecordAuthLogin,
+  observeAuthLoginDuration: mockObserveAuthLoginDuration,
+}));
+
 import Oidc from './Oidc.js';
 
 const app = express();
@@ -135,6 +146,8 @@ beforeEach(() => {
     debug: vi.fn(),
     warn: vi.fn(),
   };
+  mockRecordAuthLogin.mockClear();
+  mockObserveAuthLoginDuration.mockClear();
 });
 
 test('validateConfiguration should return validated configuration when valid', async () => {
@@ -1465,4 +1478,54 @@ test('stale lock cleanup timer should delete session lock when operation outlive
   mapGetSpy.mockRestore();
   mapDeleteSpy.mockRestore();
   vi.useRealTimers();
+});
+
+test('callback should record oidc success metrics on successful authentication', async () => {
+  mockSuccessfulGrant(openidClientMock);
+  const { session } = await performRedirect(oidc, openidClientMock);
+  const state = Object.keys(session.oidc.default.pending)[0];
+  const req = createCallbackReq(`/auth/oidc/default/cb?code=abc&state=${state}`, session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(mockRecordAuthLogin).toHaveBeenCalledWith('success', 'oidc');
+  expect(mockObserveAuthLoginDuration).toHaveBeenCalledWith('success', 'oidc', expect.any(Number));
+});
+
+test('callback should record oidc invalid metrics when callback state is missing', async () => {
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc', {
+    oidc: {
+      default: {
+        pending: {
+          'valid-state': createPendingCheck(),
+        },
+      },
+    },
+  });
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect401JsonMessage(res, 'OIDC callback is missing state. Please retry authentication.');
+  expect(mockRecordAuthLogin).toHaveBeenCalledWith('invalid', 'oidc');
+  expect(mockObserveAuthLoginDuration).toHaveBeenCalledWith('invalid', 'oidc', expect.any(Number));
+});
+
+test('callback should record oidc error metrics when session login fails', async () => {
+  mockSuccessfulGrant(openidClientMock);
+  const { session } = await performRedirect(oidc, openidClientMock);
+  const state = Object.keys(session.oidc.default.pending)[0];
+  const req = createCallbackReq(
+    `/auth/oidc/default/cb?code=abc&state=${state}`,
+    session,
+    (_user, done) => done(new Error('login failed')),
+  );
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect401Json(res);
+  expect(mockRecordAuthLogin).toHaveBeenCalledWith('error', 'oidc');
+  expect(mockObserveAuthLoginDuration).toHaveBeenCalledWith('error', 'oidc', expect.any(Number));
 });

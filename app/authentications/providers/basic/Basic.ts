@@ -1,5 +1,10 @@
 import { argon2, createHash, timingSafeEqual } from 'node:crypto';
 import { createRequire } from 'node:module';
+import {
+  observeAuthLoginDuration,
+  recordAuthLogin,
+  recordAuthUsernameMismatch,
+} from '../../../prometheus/auth.js';
 import Authentication from '../Authentication.js';
 import BasicStrategy from './BasicStrategy.js';
 
@@ -465,6 +470,10 @@ function isLegacyHash(hash: string): boolean {
   return getLegacyHashFormat(hash) !== undefined;
 }
 
+function getElapsedSeconds(startedAt: bigint): number {
+  return Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
+}
+
 /**
  * Basic authentication backed by argon2id password hashes.
  * Legacy v1.3.9 hash formats are accepted with deprecation warnings.
@@ -550,14 +559,21 @@ class Basic extends Authentication {
     const userMatches =
       providedUser.length > 0 &&
       timingSafeEqual(hashValue(providedUser), hashValue(this.configuration.user));
+    const verificationStartedAt = process.hrtime.bigint();
+    const completeVerification = (outcome: 'success' | 'invalid' | 'error'): void => {
+      recordAuthLogin(outcome, 'basic');
+      observeAuthLoginDuration(outcome, 'basic', getElapsedSeconds(verificationStartedAt));
+    };
 
     // No user or different user? => still run argon2 to prevent timing side-channel,
     // then reject.  This equalizes response time regardless of whether the username
     // matched, eliminating username-enumeration via latency measurement.
     if (!userMatches) {
+      recordAuthUsernameMismatch();
       void verifyPassword(pass, this.configuration.hash)
         .catch(() => {})
         .finally(() => {
+          completeVerification('invalid');
           done(null, false);
         });
       return;
@@ -566,15 +582,18 @@ class Basic extends Authentication {
     void verifyPassword(pass, this.configuration.hash)
       .then((passwordMatches) => {
         if (!passwordMatches) {
+          completeVerification('invalid');
           done(null, false);
           return;
         }
 
+        completeVerification('success');
         done(null, {
           username: this.configuration.user,
         });
       })
       .catch(() => {
+        completeVerification('error');
         done(null, false);
       });
   }

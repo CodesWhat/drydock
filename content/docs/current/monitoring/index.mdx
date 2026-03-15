@@ -130,6 +130,81 @@ When a watcher logger cannot be initialized, drydock falls back to structured st
 
 `dd_legacy_input_total` tracks local fallback usage of legacy `WUD_*` env vars and `wud.*` labels so you can monitor migration progress in your own Prometheus/Grafana stack. No data is sent to external services.
 
+### Auth Abuse Observability
+
+Use the auth metrics below to detect brute-force and username-enumeration activity:
+
+- `drydock_auth_login_total{outcome,provider}` where `outcome` is `success|invalid|locked|error` and `provider` is `basic|oidc`
+- `drydock_auth_login_duration_seconds{outcome,provider}` histogram
+- `drydock_auth_username_mismatch_total` counter
+- `drydock_auth_account_locked_total` gauge
+- `drydock_auth_ip_locked_total` gauge
+
+#### Recommended alert rules
+
+```yaml
+groups:
+  - name: drydock-auth
+    rules:
+      - alert: DrydockAuthInvalidSpike
+        expr: sum(rate(drydock_auth_login_total{provider="basic",outcome=~"invalid|locked"}[5m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Drydock auth invalid/locked attempts are spiking"
+
+      - alert: DrydockAuthUsernameEnumerationSpike
+        expr: increase(drydock_auth_username_mismatch_total[5m]) > 25
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Potential username enumeration against /auth/login"
+
+      - alert: DrydockAuthLockoutPressure
+        expr: drydock_auth_account_locked_total > 10 or drydock_auth_ip_locked_total > 5
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Many auth identities are currently locked"
+
+      - alert: DrydockAuthVerificationLatencyP99High
+        expr: histogram_quantile(0.99, sum by (le, provider) (rate(drydock_auth_login_duration_seconds_bucket[5m]))) > 0.75
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Auth verification p99 latency is elevated"
+```
+
+Tune thresholds from your baseline traffic and expected operator behavior.
+
+#### Lockout tuning guidance
+
+| Env var | Start with | Increase when | Decrease when |
+| --- | --- | --- | --- |
+| `DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS` | `5` | frequent false-positive lockouts | repeated credential stuffing succeeds before lock |
+| `DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS` | `25` | many users share one egress IP (NAT, VPN, office proxy) | concentrated brute-force from single IPs |
+| `DD_AUTH_LOCKOUT_WINDOW_MS` | `900000` (15 min) | bursty legitimate retries should not accumulate | attackers spread attempts over time to bypass lockouts |
+| `DD_AUTH_LOCKOUT_DURATION_MS` | `900000` (15 min) | lockouts are too disruptive for operators | attackers resume immediately after lock expires |
+
+Operational notes:
+
+- Change one variable at a time and compare `drydock_auth_login_total` + lock gauges for at least one full work cycle.
+- If `drydock_auth_username_mismatch_total` rises while `success` stays flat, lower attempt thresholds and tighten upstream rate limits.
+- If lock gauges stay non-zero for long periods, consider a longer window with slightly higher thresholds to reduce operator churn.
+
+#### Reverse proxy / WAF recommendations for `/auth/login`
+
+- Enforce per-IP rate limits before Drydock (example: burst `10`, sustained `1-2 req/s`).
+- Add stricter failed-login controls (for example, block/challenge after `20` failed attempts in `5m` per IP).
+- Apply limits on username + IP tuples when your proxy supports composite keys.
+- Trust only known upstream proxies so source IP extraction cannot be spoofed.
+- Log and alert on WAF blocks/challenges so they correlate with `drydock_auth_*` spikes.
+- Keep `/metrics` protected unless your monitoring network is strictly isolated.
+
 ### Audit timeline event coverage
 
 Use the audit API (`/api/audit`) and Audit UI view to track runtime events alongside metrics. Current event coverage includes:

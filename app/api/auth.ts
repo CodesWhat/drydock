@@ -45,11 +45,16 @@ const router = express.Router();
 const AUTH_USER_CACHE_CONTROL = 'private, no-cache, no-store, must-revalidate';
 const LOGIN_SESSION_ERROR_RESPONSE = 'Unable to establish session';
 const LOGIN_SUCCESS_AUDIT_MESSAGE = 'Login succeeded';
+let sessionMiddleware: ReturnType<typeof session> | undefined;
 
 type LoginFinish = () => void;
 type LoginErrorHandler = (errorMessage: string, options?: { logWarning?: boolean }) => void;
 
 export { getAllIds };
+
+export function getSessionMiddleware() {
+  return sessionMiddleware;
+}
 
 export function _resetLoginLockoutStateForTests(): void {
   resetLoginLockoutStateForTests();
@@ -326,24 +331,23 @@ export function init(app: Application): void {
   }
 
   // Init express session
-  app.use(
-    session({
-      store: new LokiStore({
-        path: `${store.getConfiguration().path}/${store.getConfiguration().file}`,
-        // Keep store retention >= longest auth cookie lifespan (remember-me).
-        ttl: getCookieMaxAge(REMEMBER_ME_DAYS) / 1000,
-      }),
-      secret: getSessionSecretKey(),
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        httpOnly: true,
-        sameSite: sessionCookieSameSite,
-        secure: sessionCookieSecure,
-        maxAge: getCookieMaxAge(DEFAULT_SESSION_DAYS),
-      },
+  sessionMiddleware = session({
+    store: new LokiStore({
+      path: `${store.getConfiguration().path}/${store.getConfiguration().file}`,
+      // Keep store retention >= longest auth cookie lifespan (remember-me).
+      ttl: getCookieMaxAge(REMEMBER_ME_DAYS) / 1000,
     }),
-  );
+    secret: getSessionSecretKey(),
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      sameSite: sessionCookieSameSite,
+      secure: sessionCookieSecure,
+      maxAge: getCookieMaxAge(DEFAULT_SESSION_DAYS),
+    },
+  });
+  app.use(sessionMiddleware);
 
   // Init passport middleware
   app.use(passport.initialize());

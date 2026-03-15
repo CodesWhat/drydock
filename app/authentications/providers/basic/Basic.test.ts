@@ -5,6 +5,12 @@ var { mockArgon2, mockArgon2Sync, mockTimingSafeEqual } = vi.hoisted(() => ({
     (left: Buffer, right: Buffer) => left.length === right.length && left.equals(right),
   ),
 }));
+var { mockRecordAuthLogin, mockObserveAuthLoginDuration, mockRecordAuthUsernameMismatch } =
+  vi.hoisted(() => ({
+    mockRecordAuthLogin: vi.fn(),
+    mockObserveAuthLoginDuration: vi.fn(),
+    mockRecordAuthUsernameMismatch: vi.fn(),
+  }));
 
 vi.mock('node:crypto', async () => {
   const actual = await vi.importActual<typeof import('node:crypto')>('node:crypto');
@@ -25,6 +31,12 @@ vi.mock('node:crypto', async () => {
     timingSafeEqual: mockTimingSafeEqual,
   };
 });
+
+vi.mock('../../../prometheus/auth.js', () => ({
+  recordAuthLogin: mockRecordAuthLogin,
+  observeAuthLoginDuration: mockObserveAuthLoginDuration,
+  recordAuthUsernameMismatch: mockRecordAuthUsernameMismatch,
+}));
 
 import { argon2Sync, createHash, randomBytes } from 'node:crypto';
 import Basic from './Basic.js';
@@ -110,6 +122,9 @@ describe('Basic Authentication', () => {
     mockArgon2.mockClear();
     mockArgon2Sync.mockClear();
     mockTimingSafeEqual.mockClear();
+    mockRecordAuthLogin.mockClear();
+    mockObserveAuthLoginDuration.mockClear();
+    mockRecordAuthUsernameMismatch.mockClear();
   });
 
   test('should create instance', async () => {
@@ -158,6 +173,14 @@ describe('Basic Authentication', () => {
         resolve();
       });
     });
+
+    expect(mockRecordAuthLogin).toHaveBeenCalledWith('success', 'basic');
+    expect(mockObserveAuthLoginDuration).toHaveBeenCalledWith(
+      'success',
+      'basic',
+      expect.any(Number),
+    );
+    expect(mockRecordAuthUsernameMismatch).not.toHaveBeenCalled();
   });
 
   test('should derive password with argon2id parameters', async () => {
@@ -206,6 +229,13 @@ describe('Basic Authentication', () => {
 
     // Argon2 must still be called even on username mismatch (timing side-channel mitigation)
     expect(mockArgon2).toHaveBeenCalled();
+    expect(mockRecordAuthUsernameMismatch).toHaveBeenCalledTimes(1);
+    expect(mockRecordAuthLogin).toHaveBeenCalledWith('invalid', 'basic');
+    expect(mockObserveAuthLoginDuration).toHaveBeenCalledWith(
+      'invalid',
+      'basic',
+      expect.any(Number),
+    );
   });
 
   test('should compare usernames with timingSafeEqual', async () => {
@@ -290,6 +320,14 @@ describe('Basic Authentication', () => {
         resolve();
       });
     });
+
+    expect(mockRecordAuthUsernameMismatch).not.toHaveBeenCalled();
+    expect(mockRecordAuthLogin).toHaveBeenCalledWith('invalid', 'basic');
+    expect(mockObserveAuthLoginDuration).toHaveBeenCalledWith(
+      'invalid',
+      'basic',
+      expect.any(Number),
+    );
   });
 
   test('should reject null user', async () => {

@@ -235,6 +235,19 @@ describe('Auth Router', () => {
     });
   });
 
+  describe('getSessionMiddleware', () => {
+    test('returns the initialized session middleware', () => {
+      const app = createApp();
+      registry.getState.mockReturnValue({
+        authentication: {},
+      });
+
+      auth.init(app);
+
+      expect(auth.getSessionMiddleware()).toBe('session-middleware');
+    });
+  });
+
   describe('requireAuthentication', () => {
     test('should call next when user is authenticated', () => {
       const req = { isAuthenticated: vi.fn(() => true) };
