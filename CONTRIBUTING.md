@@ -121,16 +121,15 @@ Scope is optional. Subject line should be imperative, lowercase, no trailing per
 
 [Lefthook](https://github.com/evilmartians/lefthook) runs a piped (sequential, fail-fast) pipeline on every `git push`:
 
-|Step|What it does|
-|---|---|
-|`ts-nocheck`|Rejects any `@ts-nocheck` directives|
-|`biome`|Biome lint and format check|
-|`qlty`|Full qlty lint pass (`qlty check --all`)|
-|`build-and-test`|Parallel build + test for both `app/` and `ui/`|
-|`e2e`|Cucumber E2E tests against a fresh Drydock instance|
-|`zizmor`|GitHub Actions workflow linting (advisory, skipped if not installed)|
-|`snyk-deps`|Dependency vulnerability scan (skipped if Snyk not installed)|
-|`snyk-code`|Static analysis security scan (skipped if Snyk not installed)|
+|Priority|Step|What it does|On Failure|
+|---|---|---|---|
+|0|`clean-tree`|Block push if uncommitted changes exist|Fail|
+|1|`ts-nocheck`|Rejects any `@ts-nocheck` directives|Fail|
+|2|`biome`|Biome lint and format check|Fail|
+|3|`qlty`|Full qlty lint pass (`qlty check --all`)|Fail|
+|4|`build-and-test`|Parallel build + test for both `app/` and `ui/`|Fail|
+|5|`e2e`|Cucumber E2E tests against a fresh Drydock instance|Fail|
+|6|`zizmor`|GitHub Actions workflow linting (advisory, skipped if not installed)|Skip if not installed|
 
 If lefthook passes locally, CI will pass. Fix any issues **before** pushing.
 
