@@ -66,6 +66,56 @@ describe('container event update helpers', () => {
     );
   });
 
+  test('processDockerEvent falls back to Actor.ID when top-level id is missing', async () => {
+    const ensureRemoteAuthHeaders = vi.fn().mockResolvedValue(undefined);
+    const inspectContainer = vi.fn().mockResolvedValue({ State: { Status: 'running' } });
+    const containerFound = createMockContainer();
+    const getContainerFromStore = vi.fn().mockReturnValue(containerFound);
+    const updateContainerFromInspectMock = vi.fn();
+
+    await processDockerEvent(
+      { Action: 'start', Actor: { ID: 'container123' } },
+      {
+        watchCronDebounced: vi.fn(),
+        ensureRemoteAuthHeaders,
+        inspectContainer,
+        getContainerFromStore,
+        updateContainerFromInspect: updateContainerFromInspectMock,
+        debug: vi.fn(),
+      },
+    );
+
+    expect(ensureRemoteAuthHeaders).toHaveBeenCalledTimes(1);
+    expect(inspectContainer).toHaveBeenCalledWith('container123');
+    expect(getContainerFromStore).toHaveBeenCalledWith('container123');
+    expect(updateContainerFromInspectMock).toHaveBeenCalledWith(
+      containerFound,
+      expect.objectContaining({ State: { Status: 'running' } }),
+    );
+  });
+
+  test('processDockerEvent debounces a full refresh when event has no container id', async () => {
+    const watchCronDebounced = vi.fn().mockResolvedValue(undefined);
+    const inspectContainer = vi.fn();
+    const debug = vi.fn();
+
+    await processDockerEvent(
+      { Action: 'start' },
+      {
+        watchCronDebounced,
+        ensureRemoteAuthHeaders: vi.fn(),
+        inspectContainer,
+        getContainerFromStore: vi.fn(),
+        updateContainerFromInspect: vi.fn(),
+        debug,
+      },
+    );
+
+    expect(watchCronDebounced).toHaveBeenCalledTimes(1);
+    expect(inspectContainer).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining('container id is missing'));
+  });
+
   test('processDockerEvent logs debug and swallows inspect failures', async () => {
     const debug = vi.fn();
 

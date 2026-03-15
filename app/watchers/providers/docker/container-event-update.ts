@@ -15,14 +15,32 @@ export interface ProcessDockerEventDependencies {
   debug: (message: string) => void;
 }
 
+function resolveContainerIdFromDockerEvent(dockerEvent: any) {
+  if (typeof dockerEvent?.id === 'string' && dockerEvent.id !== '') {
+    return dockerEvent.id;
+  }
+
+  if (typeof dockerEvent?.Actor?.ID === 'string' && dockerEvent.Actor.ID !== '') {
+    return dockerEvent.Actor.ID;
+  }
+
+  return undefined;
+}
+
 export async function processDockerEvent(
   dockerEvent: any,
   dependencies: ProcessDockerEventDependencies,
 ) {
   const action = dockerEvent.Action;
-  const containerId = dockerEvent.id;
+  const containerId = resolveContainerIdFromDockerEvent(dockerEvent);
 
   if (action === 'destroy' || action === 'create') {
+    await dependencies.watchCronDebounced();
+    return;
+  }
+
+  if (!containerId) {
+    dependencies.debug(`Skipping docker event action=[${action}] because container id is missing`);
     await dependencies.watchCronDebounced();
     return;
   }
