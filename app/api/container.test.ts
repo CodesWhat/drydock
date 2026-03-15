@@ -211,10 +211,13 @@ describe('Container Router', () => {
       const router = containerRouter.init();
       expect(router.use).toHaveBeenCalledWith('nocache-middleware');
       expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/stats', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/summary', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/recent-status', expect.any(Function));
       expect(router.post).toHaveBeenCalledWith('/watch', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/:id/stats', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/:id/stats/stream', expect.any(Function));
       expect(router.delete).toHaveBeenCalledWith(
         '/:id',
         expect.any(Function),
@@ -2375,10 +2378,10 @@ describe('Container Router', () => {
     }
 
     /** Helper: invoke getContainerLogs handler */
-    async function callGetContainerLogs(id = 'c1', query = {}) {
+    async function callGetContainerLogs(id = 'c1', query = {}, requestOverrides = {}) {
       const handler = getHandler('get', '/:id/logs');
       const res = createResponse();
-      await handler({ params: { id }, query }, res);
+      await handler({ params: { id }, query, ...requestOverrides }, res);
       return res;
     }
 
@@ -2408,13 +2411,18 @@ describe('Container Router', () => {
       expect(mockDockerContainer.logs).toHaveBeenCalledWith({
         stdout: true,
         stderr: true,
-        tail: 100,
+        tail: 1000,
         since: 0,
         timestamps: true,
         follow: false,
       });
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ logs: logText });
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'text/plain; charset=utf-8');
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        'attachment; filename="my-container-logs.txt"',
+      );
+      expect(res.send).toHaveBeenCalledWith(logText);
     });
 
     test('should demux logs when docker API returns a non-Buffer payload', async () => {
@@ -2433,7 +2441,7 @@ describe('Container Router', () => {
 
       const res = await callGetContainerLogs('c1');
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ logs: logText });
+      expect(res.send).toHaveBeenCalledWith(logText);
     });
 
     test('should ignore truncated docker stream frames', async () => {
@@ -2455,7 +2463,7 @@ describe('Container Router', () => {
 
       const res = await callGetContainerLogs('c1');
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ logs: '' });
+      expect(res.send).toHaveBeenCalledWith('');
     });
 
     test('should pass query params to docker logs', async () => {
@@ -2471,10 +2479,16 @@ describe('Container Router', () => {
       });
       registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
 
-      await callGetContainerLogs('c1', { tail: '50', since: '1700000000', timestamps: 'false' });
+      await callGetContainerLogs('c1', {
+        stdout: 'false',
+        stderr: 'true',
+        tail: '50',
+        since: '1700000000',
+        timestamps: 'false',
+      });
 
       expect(mockDockerContainer.logs).toHaveBeenCalledWith({
-        stdout: true,
+        stdout: false,
         stderr: true,
         tail: 50,
         since: 1700000000,
@@ -2526,7 +2540,7 @@ describe('Container Router', () => {
       expect(mockDockerContainer.logs).toHaveBeenCalledWith({
         stdout: true,
         stderr: true,
-        tail: 100,
+        tail: 1000,
         since: 0,
         timestamps: true,
         follow: false,
@@ -2551,7 +2565,7 @@ describe('Container Router', () => {
       expect(mockDockerContainer.logs).toHaveBeenCalledWith({
         stdout: true,
         stderr: true,
-        tail: 100,
+        tail: 1000,
         since: 0,
         timestamps: true,
         follow: false,
@@ -2576,7 +2590,7 @@ describe('Container Router', () => {
       expect(mockDockerContainer.logs).toHaveBeenCalledWith({
         stdout: true,
         stderr: true,
-        tail: 100,
+        tail: 1000,
         since: 0,
         timestamps: true,
         follow: false,
@@ -2596,12 +2610,36 @@ describe('Container Router', () => {
       const res = await callGetContainerLogs('c1');
 
       expect(mockAgent.getContainerLogs).toHaveBeenCalledWith('c1', {
-        tail: 100,
+        tail: 1000,
         since: 0,
         timestamps: true,
       });
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ logs: 'agent logs' });
+      expect(res.send).toHaveBeenCalledWith('agent logs');
+    });
+
+    test('should gzip log download when client accepts gzip', async () => {
+      const logText = 'compressed logs';
+      const mockLogs = dockerStreamBuffer(logText);
+      const mockDockerContainer = { logs: vi.fn().mockResolvedValue(mockLogs) };
+      const mockWatcher = {
+        dockerApi: { getContainer: vi.fn().mockReturnValue(mockDockerContainer) },
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'gzip me',
+        watcher: 'local',
+      });
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
+
+      const res = await callGetContainerLogs('c1', {}, { headers: { 'accept-encoding': 'gzip' } });
+
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        'attachment; filename="gzip_me-logs.txt.gz"',
+      );
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Encoding', 'gzip');
+      expect(res.send).toHaveBeenCalledWith(expect.any(Buffer));
     });
 
     test('should return 500 when agent not found for agent container', async () => {

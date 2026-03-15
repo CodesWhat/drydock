@@ -16,6 +16,7 @@ import {
   updateDigestScanCache,
   verifyImageSignature,
 } from '../security/scan.js';
+import { createContainerStatsCollector } from '../stats/collector.js';
 import * as auditStore from '../store/audit.js';
 import * as storeContainer from '../store/container.js';
 import * as updateOperationStore from '../store/update-operation.js';
@@ -33,6 +34,7 @@ import {
   resolveContainerImageFullName,
   resolveContainerRegistryAuth,
 } from './container/shared.js';
+import { createStatsHandlers } from './container/stats.js';
 import { createTriggerHandlers } from './container/triggers.js';
 import { createUpdatePolicyHandlers } from './container/update-policy.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
@@ -163,6 +165,11 @@ const triggerHandlers = createTriggerHandlers({
   log,
 });
 
+const containerStatsCollector = createContainerStatsCollector({
+  getContainerById: (id) => storeContainer.getContainer(id),
+  getWatchers: () => registry.getState().watcher || {},
+});
+
 const updatePolicyHandlers = createUpdatePolicyHandlers({
   storeContainer,
   uniqStrings,
@@ -196,6 +203,11 @@ const logHandlers = createLogHandlers({
   getErrorMessage,
 });
 
+const statsHandlers = createStatsHandlers({
+  storeContainer,
+  statsCollector: containerStatsCollector,
+});
+
 export const deleteContainer = crudHandlers.deleteContainer;
 export const getContainerTriggers = triggerHandlers.getContainerTriggers;
 
@@ -215,9 +227,12 @@ export function init() {
   router.use(nocache());
   router.get('/', crudHandlers.getContainers);
   router.post('/watch', crudHandlers.watchContainers);
+  router.get('/stats', statsHandlers.getAllContainerStats);
   router.get('/summary', crudHandlers.getContainerSummary);
   router.get('/recent-status', getContainerRecentStatus);
   router.get('/security/vulnerabilities', crudHandlers.getContainerSecurityVulnerabilities);
+  router.get('/:id/stats', statsHandlers.getContainerStats);
+  router.get('/:id/stats/stream', statsHandlers.streamContainerStats);
   router.get('/:id', crudHandlers.getContainer);
   router.get('/:id/update-operations', crudHandlers.getContainerUpdateOperations);
   router.delete(

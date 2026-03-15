@@ -415,6 +415,74 @@ export const openApiSchemas = {
     required: ['logs'],
     additionalProperties: true,
   },
+  ContainerStatsSnapshot: {
+    type: 'object',
+    properties: {
+      containerId: { type: 'string' },
+      cpuPercent: { type: 'number', minimum: 0 },
+      memoryUsageBytes: { type: 'number', minimum: 0 },
+      memoryLimitBytes: { type: 'number', minimum: 0 },
+      memoryPercent: { type: 'number', minimum: 0 },
+      networkRxBytes: { type: 'number', minimum: 0 },
+      networkTxBytes: { type: 'number', minimum: 0 },
+      blockReadBytes: { type: 'number', minimum: 0 },
+      blockWriteBytes: { type: 'number', minimum: 0 },
+      timestamp: { type: 'string', format: 'date-time' },
+    },
+    required: [
+      'containerId',
+      'cpuPercent',
+      'memoryUsageBytes',
+      'memoryLimitBytes',
+      'memoryPercent',
+      'networkRxBytes',
+      'networkTxBytes',
+      'blockReadBytes',
+      'blockWriteBytes',
+      'timestamp',
+    ],
+    additionalProperties: false,
+  },
+  ContainerStatsResponse: {
+    type: 'object',
+    properties: {
+      data: {
+        anyOf: [{ $ref: '#/components/schemas/ContainerStatsSnapshot' }, { type: 'null' }],
+      },
+      history: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ContainerStatsSnapshot' },
+      },
+    },
+    required: ['data', 'history'],
+    additionalProperties: false,
+  },
+  ContainerStatsSummaryItem: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      name: { type: 'string' },
+      status: { type: ['string', 'null'] },
+      watcher: { type: 'string' },
+      agent: { type: ['string', 'null'] },
+      stats: {
+        anyOf: [{ $ref: '#/components/schemas/ContainerStatsSnapshot' }, { type: 'null' }],
+      },
+    },
+    required: ['id', 'name', 'status', 'watcher', 'agent', 'stats'],
+    additionalProperties: false,
+  },
+  ContainerStatsSummaryResponse: {
+    type: 'object',
+    properties: {
+      data: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ContainerStatsSummaryItem' },
+      },
+    },
+    required: ['data'],
+    additionalProperties: false,
+  },
   PreviewResponse: {
     type: 'object',
     properties: {
