@@ -337,7 +337,11 @@ Use Podman's host socket path, but mount it inside the Drydock container at `/va
 #### Rootful vs rootless setup
 
 - **Rootful Podman socket:** `sudo systemctl enable --now podman.socket`
-- **Rootless Podman socket:** `systemctl --user enable --now podman.socket` (and optionally `loginctl enable-linger <user>` so the user socket survives logout)
+- **Rootless Podman socket:** `systemctl --user enable --now podman.socket`
+
+<Callout type="warn">**Production rootless deployments:** You **must** run `loginctl enable-linger <user>` so the user systemd instance (and all rootless containers) survives logout. Without it, Podman containers stop when the user session ends.</Callout>
+
+<Callout type="info">**Rootful vs rootless:** Rootless Podman is recommended for production because it runs the entire container stack without root privileges. Use rootful only when you need privileged ports (&lt;1024) or specific kernel features.</Callout>
 
 <Tabs items={["Podman Rootful (Direct Socket)", "Podman Rootless (Direct Socket)", "Podman + Socket Proxy"]}>
 <Tab value="Podman Rootful (Direct Socket)">
@@ -413,6 +417,10 @@ services:
 
 <Callout type="info">For rootless Podman with socket proxy, set `SOCKET_PATH=${XDG_RUNTIME_DIR}/podman/podman.sock` and mount the same host path into the proxy container.</Callout>
 
+<Callout type="warn">Some users have reported intermittent `503` errors when using `tecnativa/docker-socket-proxy` with Podman ([tecnativa/docker-socket-proxy#66](https://github.com/Tecnativa/docker-socket-proxy/issues/66)). If you experience this, prefer direct socket mount over the proxy — the direct mount examples above are the most reliable option with Podman.</Callout>
+
+<Callout type="info">**Docker Compose trigger compatibility:** The Docker Compose trigger (`DD_TRIGGER_DOCKERCOMPOSE_*`) works with Podman — it inherits the socket connection from your watcher configuration. No additional Podman-specific trigger settings are needed.</Callout>
+
 #### Known limitations and tested versions
 
 | Topic | Status |
@@ -421,8 +429,10 @@ services:
 | Runtime auto-detection | Not implemented yet (planned in Phase 10.4) |
 | CI coverage | No dedicated Podman CI matrix yet (planned in Phase 10.4) |
 | Rootless networking | Can differ from Docker bridge behavior; see [Podman FAQ](/docs/faq#podman-rootless-networking-limitations) |
+| SELinux (RHEL/Rocky/Fedora) | Socket mounts need `:Z` flag; see [SELinux FAQ](/docs/faq#selinux-blocks-podman-socket-access-permission-denied) |
+| `podman-compose` networking | Pod-based networking breaks service-name DNS; use `podman compose` instead; see [FAQ](/docs/faq#podman-compose-vs-podman-compose-networking) |
 
-For common Podman troubleshooting, see [FAQ Podman entries](/docs/faq#podman-socket-proxy-dns-resolution-fails-enotfound).
+For common Podman troubleshooting, see [FAQ Podman entries](/docs/faq#selinux-blocks-podman-socket-access-permission-denied).
 
 ### Watch 1 local Docker host and 2 remote docker hosts at the same time
 

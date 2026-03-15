@@ -47,6 +47,31 @@ services:
 
 Drydock automatically retries with exponential backoff (1s → 30s max) and will recover once the proxy becomes available, but the health check prevents unnecessary retries during startup.
 
+## SELinux blocks Podman socket access (Permission denied)
+
+On RHEL, Rocky Linux, Fedora, and CentOS with SELinux enforcing, you may see `permission denied` or `EACCES` when Drydock tries to connect to the Podman socket. This is caused by SELinux denying the container access to the host socket file.
+
+**Fix:** Add the `:Z` flag to your socket volume mount so SELinux relabels the socket for the container:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    volumes:
+      - /run/podman/podman.sock:/var/run/docker.sock:Z
+```
+
+<Callout type="info">The `:Z` flag applies a private SELinux label, granting exclusive access to this container. If multiple containers need the same socket, use `:z` (lowercase) for a shared label instead. Check `ausearch -m avc -ts recent` to confirm SELinux denials are the cause.</Callout>
+
+## `podman-compose` vs `podman compose` networking
+
+If service-name DNS (e.g. `socket-proxy`) fails between containers, check which compose tool you are using:
+
+- **`podman-compose`** (third-party Python tool) groups containers into a single **pod** where all containers share `localhost`. Service names are not resolvable — containers communicate via `localhost:<port>` instead.
+- **`podman compose`** (Podman 4.0+ built-in) uses proper container networking with service-name DNS, matching Docker Compose behavior.
+
+**Recommendation:** Use `podman compose` (built-in, Podman 4.0+) or Docker Compose with the Podman socket for proper service-name DNS resolution. If you must use `podman-compose`, replace hostname references like `socket-proxy` with `localhost` and ensure port mappings are correct.
+
 ## Podman socket proxy DNS resolution fails (ENOTFOUND)
 
 If you see `getaddrinfo ENOTFOUND socket-proxy` with Podman, this is usually service-name DNS, not an API compatibility problem.
