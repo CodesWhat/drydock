@@ -1,6 +1,11 @@
 import type { Request, Response } from 'express';
+import joi from 'joi';
 import type { AgentClient } from '../../agent/AgentClient.js';
 import type { Container, ContainerReport } from '../../model/container.js';
+import {
+  maturityMinAgeDaysToMilliseconds,
+  resolveMaturityMinAgeDays,
+} from '../../model/maturity-policy.js';
 import { getContainerStatusSummary } from '../../util/container-summary.js';
 import { sendErrorResponse } from '../error-response.js';
 import { buildPaginationLinks, type PaginationLinks } from '../pagination-links.js';
@@ -94,16 +99,342 @@ export interface CrudHandlerDependencies {
 
 const CONTAINER_LIST_MAX_LIMIT = 200;
 const WATCH_CONTAINERS_MAX_IDS = 200;
+type ContainerMaturityFilter = 'hot' | 'mature' | 'established';
+type ContainerSortMode =
+  | 'name'
+  | '-name'
+  | 'status'
+  | '-status'
+  | 'age'
+  | '-age'
+  | 'created'
+  | '-created';
+const DEFAULT_CONTAINER_SORT_MODE: ContainerSortMode = 'name';
+const DEFAULT_UI_MATURITY_THRESHOLD_DAYS = 7;
+const ESTABLISHED_UPDATE_AGE_DAYS = 30;
+
+const CONTAINER_LIST_QUERY_SCHEMA = joi.object({
+  sort: joi
+    .string()
+    .valid('name', '-name', 'status', '-status', 'age', '-age', 'created', '-created')
+    .messages({
+      'any.only': 'Invalid sort value',
+    }),
+  status: joi.string().valid('update-available', 'up-to-date').messages({
+    'any.only': 'Invalid status filter value',
+  }),
+  kind: joi.string().valid('major', 'minor', 'patch', 'digest').messages({
+    'any.only': 'Invalid kind filter value',
+  }),
+  watcher: joi.string().trim().min(1).messages({
+    'string.empty': 'Invalid watcher filter value',
+    'string.min': 'Invalid watcher filter value',
+  }),
+  maturity: joi.string().valid('hot', 'mature', 'established').messages({
+    'any.only': 'Invalid maturity filter value',
+  }),
+});
 
 function removeContainerListControlParams(query: Request['query']): Request['query'] {
   const filteredQuery: Record<string, unknown> = {};
   Object.entries(query || {}).forEach(([key, value]) => {
-    if (key === 'includeVulnerabilities' || key === 'limit' || key === 'offset') {
+    if (
+      key === 'includeVulnerabilities' ||
+      key === 'limit' ||
+      key === 'offset' ||
+      key === 'sort' ||
+      key === 'maturity' ||
+      key === 'status' ||
+      key === 'kind' ||
+      key === 'watcher'
+    ) {
       return;
     }
     filteredQuery[key] = value;
   });
   return filteredQuery as Request['query'];
+}
+
+function getFirstQueryValue(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (typeof item === 'string') {
+        return item.trim();
+      }
+    }
+    return undefined;
+  }
+  return typeof value === 'string' ? value.trim() : undefined;
+}
+
+function getFirstNonEmptyQueryValue(value: unknown): string | undefined {
+  const queryValue = getFirstQueryValue(value);
+  if (!queryValue || queryValue.length === 0) {
+    return undefined;
+  }
+  return queryValue;
+}
+
+function parseContainerSortMode(sortQuery: unknown): ContainerSortMode {
+  const sortValue = getFirstNonEmptyQueryValue(sortQuery);
+  if (!sortValue) {
+    return DEFAULT_CONTAINER_SORT_MODE;
+  }
+  if (
+    sortValue === 'name' ||
+    sortValue === '-name' ||
+    sortValue === 'status' ||
+    sortValue === '-status' ||
+    sortValue === 'age' ||
+    sortValue === '-age' ||
+    sortValue === 'created' ||
+    sortValue === '-created'
+  ) {
+    return sortValue;
+  }
+  return DEFAULT_CONTAINER_SORT_MODE;
+}
+
+function parseContainerMaturityFilter(maturityQuery: unknown): ContainerMaturityFilter | undefined {
+  const normalized = getFirstNonEmptyQueryValue(maturityQuery)?.toLowerCase();
+  if (normalized === 'hot' || normalized === 'mature' || normalized === 'established') {
+    return normalized;
+  }
+  return undefined;
+}
+
+interface ValidatedContainerListQuery {
+  sortMode: ContainerSortMode;
+  status?: 'update-available' | 'up-to-date';
+  kind?: 'major' | 'minor' | 'patch' | 'digest';
+  watcher?: string;
+  maturity?: ContainerMaturityFilter;
+}
+
+function validateContainerListQuery(query: Request['query']): ValidatedContainerListQuery {
+  const { value, error } = CONTAINER_LIST_QUERY_SCHEMA.validate(
+    {
+      sort: getFirstQueryValue(query.sort),
+      status: getFirstQueryValue(query.status),
+      kind: getFirstQueryValue(query.kind),
+      watcher: getFirstQueryValue(query.watcher),
+      maturity: getFirstQueryValue(query.maturity),
+    },
+    {
+      abortEarly: true,
+    },
+  );
+
+  if (error) {
+    throw new Error(error.details?.[0]?.message || 'Invalid query parameters');
+  }
+
+  return {
+    sortMode: parseContainerSortMode(value.sort),
+    status: value.status,
+    kind: value.kind,
+    watcher: value.watcher,
+    maturity: value.maturity,
+  };
+}
+
+function getContainerUpdateAge(container: Container): number | undefined {
+  if (typeof container.updateAge === 'number' && Number.isFinite(container.updateAge)) {
+    return container.updateAge;
+  }
+
+  const firstSeenAtMs = Date.parse(container.firstSeenAt || '');
+  const publishedAtMs = Date.parse(container.result?.publishedAt || '');
+  const updateDetectedAtMs = Date.parse(container.updateDetectedAt || '');
+  let startedAtMs: number | undefined;
+  if (Number.isFinite(firstSeenAtMs) && Number.isFinite(publishedAtMs)) {
+    startedAtMs = Math.min(firstSeenAtMs, publishedAtMs);
+  } else if (Number.isFinite(firstSeenAtMs)) {
+    startedAtMs = firstSeenAtMs;
+  } else if (Number.isFinite(publishedAtMs)) {
+    startedAtMs = publishedAtMs;
+  } else if (Number.isFinite(updateDetectedAtMs)) {
+    startedAtMs = updateDetectedAtMs;
+  }
+
+  return startedAtMs === undefined ? undefined : Math.max(0, Date.now() - startedAtMs);
+}
+
+function resolveUiMaturityThresholdDays(): number {
+  return resolveMaturityMinAgeDays(
+    process.env.DD_UI_MATURITY_THRESHOLD_DAYS,
+    DEFAULT_UI_MATURITY_THRESHOLD_DAYS,
+  );
+}
+
+function getContainerMaturityLevel(container: Container): ContainerMaturityFilter | undefined {
+  if (
+    container.updateMaturityLevel === 'hot' ||
+    container.updateMaturityLevel === 'mature' ||
+    container.updateMaturityLevel === 'established'
+  ) {
+    return container.updateMaturityLevel;
+  }
+
+  const updateAge = getContainerUpdateAge(container);
+  if (updateAge === undefined) {
+    return undefined;
+  }
+  if (updateAge >= maturityMinAgeDaysToMilliseconds(ESTABLISHED_UPDATE_AGE_DAYS)) {
+    return 'established';
+  }
+  return updateAge >= maturityMinAgeDaysToMilliseconds(resolveUiMaturityThresholdDays())
+    ? 'mature'
+    : 'hot';
+}
+
+function applyContainerMaturityFilter(
+  containers: Container[],
+  maturityFilter: ContainerMaturityFilter | undefined,
+): Container[] {
+  if (!maturityFilter) {
+    return containers;
+  }
+  return containers.filter((container) => getContainerMaturityLevel(container) === maturityFilter);
+}
+
+function getContainerNameForSort(container: Container): string {
+  return typeof container.name === 'string' ? container.name : '';
+}
+
+function getContainerIdForSort(container: Container): string {
+  return typeof container.id === 'string' ? container.id : '';
+}
+
+function getContainerWatcherForSort(container: Container): string {
+  return typeof container.watcher === 'string' ? container.watcher : '';
+}
+
+function sortContainersByAge(containers: Container[]): Container[] {
+  const containersSorted = [...containers];
+  containersSorted.sort((leftContainer, rightContainer) => {
+    const leftAge = getContainerUpdateAge(leftContainer);
+    const rightAge = getContainerUpdateAge(rightContainer);
+    if (leftAge !== undefined && rightAge !== undefined && leftAge !== rightAge) {
+      return rightAge - leftAge;
+    }
+    if (leftAge !== undefined && rightAge === undefined) {
+      return -1;
+    }
+    if (leftAge === undefined && rightAge !== undefined) {
+      return 1;
+    }
+    const leftName = `${getContainerWatcherForSort(leftContainer)}.${getContainerNameForSort(
+      leftContainer,
+    )}.${getContainerIdForSort(leftContainer)}`;
+    const rightName = `${getContainerWatcherForSort(rightContainer)}.${getContainerNameForSort(
+      rightContainer,
+    )}.${getContainerIdForSort(rightContainer)}`;
+    return leftName.localeCompare(rightName);
+  });
+  return containersSorted;
+}
+
+function sortContainersByStatus(containers: Container[]): Container[] {
+  const containersSorted = [...containers];
+  containersSorted.sort((leftContainer, rightContainer) => {
+    if (leftContainer.updateAvailable !== rightContainer.updateAvailable) {
+      return leftContainer.updateAvailable ? -1 : 1;
+    }
+    return getContainerNameForSort(leftContainer).localeCompare(
+      getContainerNameForSort(rightContainer),
+    );
+  });
+  return containersSorted;
+}
+
+function sortContainersByCreatedDate(containers: Container[]): Container[] {
+  const containersSorted = [...containers];
+  containersSorted.sort((leftContainer, rightContainer) => {
+    const leftCreatedAtMs = Date.parse(leftContainer.image?.created || '');
+    const rightCreatedAtMs = Date.parse(rightContainer.image?.created || '');
+    if (Number.isFinite(leftCreatedAtMs) && Number.isFinite(rightCreatedAtMs)) {
+      if (leftCreatedAtMs !== rightCreatedAtMs) {
+        return leftCreatedAtMs - rightCreatedAtMs;
+      }
+      return getContainerNameForSort(leftContainer).localeCompare(
+        getContainerNameForSort(rightContainer),
+      );
+    }
+    if (Number.isFinite(leftCreatedAtMs)) {
+      return -1;
+    }
+    if (Number.isFinite(rightCreatedAtMs)) {
+      return 1;
+    }
+    return getContainerNameForSort(leftContainer).localeCompare(
+      getContainerNameForSort(rightContainer),
+    );
+  });
+  return containersSorted;
+}
+
+function sortContainersByName(containers: Container[], descending = false): Container[] {
+  const containersSorted = [...containers];
+  containersSorted.sort((leftContainer, rightContainer) => {
+    const nameCompare = getContainerNameForSort(leftContainer).localeCompare(
+      getContainerNameForSort(rightContainer),
+    );
+    return descending ? -nameCompare : nameCompare;
+  });
+  return containersSorted;
+}
+
+function sortContainers(containers: Container[], sortMode: ContainerSortMode): Container[] {
+  const isDescending = sortMode.startsWith('-');
+  const normalizedSortMode = (isDescending ? sortMode.slice(1) : sortMode) as Exclude<
+    ContainerSortMode,
+    '-name' | '-status' | '-age' | '-created'
+  >;
+
+  let containersSorted: Container[];
+  if (normalizedSortMode === 'status') {
+    containersSorted = sortContainersByStatus(containers);
+  } else if (normalizedSortMode === 'age') {
+    containersSorted = sortContainersByAge(containers);
+  } else if (normalizedSortMode === 'created') {
+    containersSorted = sortContainersByCreatedDate(containers);
+  } else {
+    containersSorted = sortContainersByName(containers);
+  }
+
+  if (isDescending) {
+    containersSorted.reverse();
+  }
+  return containersSorted;
+}
+
+function mapContainerListStatusFilter(statusQuery: unknown) {
+  const statusFilter = getFirstNonEmptyQueryValue(statusQuery);
+  if (!statusFilter) {
+    return { value: undefined, error: undefined };
+  }
+  if (statusFilter === 'update-available') {
+    return { value: true, error: undefined };
+  }
+  if (statusFilter === 'up-to-date') {
+    return { value: false, error: undefined };
+  }
+  return { value: undefined, error: 'Invalid status filter value' };
+}
+
+function mapContainerListKindFilter(kindQuery: unknown) {
+  const kindFilter = getFirstNonEmptyQueryValue(kindQuery);
+  if (!kindFilter) {
+    return { value: undefined, error: undefined };
+  }
+  if (kindFilter === 'digest') {
+    return { value: { 'updateKind.kind': 'digest' }, error: undefined };
+  }
+  if (kindFilter === 'major' || kindFilter === 'minor' || kindFilter === 'patch') {
+    return { value: { 'updateKind.semverDiff': kindFilter }, error: undefined };
+  }
+  return { value: undefined, error: 'Invalid kind filter value' };
 }
 
 function normalizeContainerListPagination(query: Request['query']) {
@@ -257,14 +588,56 @@ function buildContainerListResponse(
   query: Request['query'],
   basePath: '/api/containers' | '/api/containers/watch',
 ): ContainerListResponse {
+  const validatedQuery = validateContainerListQuery(query);
+  const sortMode = validatedQuery.sortMode;
+  const statusFilter = mapContainerListStatusFilter(validatedQuery.status);
+  if (statusFilter.error) {
+    throw new Error(statusFilter.error);
+  }
+  const kindFilter = mapContainerListKindFilter(validatedQuery.kind);
+  if (kindFilter.error) {
+    throw new Error(kindFilter.error);
+  }
+  const maturityFilter = parseContainerMaturityFilter(validatedQuery.maturity);
+
   const includeVulnerabilities = parseBooleanQueryParam(query.includeVulnerabilities, false);
-  const filteredQuery = removeContainerListControlParams(query);
+  const filteredQuery = {
+    ...(removeContainerListControlParams(query) as Record<string, unknown>),
+    ...(kindFilter.value || {}),
+    ...(statusFilter.value === undefined ? {} : { updateAvailable: statusFilter.value }),
+    ...(validatedQuery.watcher ? { watcher: validatedQuery.watcher } : {}),
+  } as Request['query'];
   const pagination = normalizeContainerListPagination(query);
-  const pagedContainers = context.getContainersFromStore(filteredQuery, pagination);
-  const total =
-    pagination.limit === 0 && pagination.offset === 0
-      ? pagedContainers.length
-      : context.getContainerCountFromStore(filteredQuery);
+  const hasAdvancedQuery =
+    getFirstNonEmptyQueryValue(query.sort) !== undefined ||
+    getFirstNonEmptyQueryValue(query.status) !== undefined ||
+    getFirstNonEmptyQueryValue(query.kind) !== undefined ||
+    maturityFilter !== undefined;
+  let pagedContainers: Container[];
+  let total: number;
+
+  if (hasAdvancedQuery) {
+    const containersToSort = context.getContainersFromStore(filteredQuery, {
+      limit: 0,
+      offset: 0,
+    });
+    const maturityFilteredContainers = applyContainerMaturityFilter(
+      containersToSort,
+      maturityFilter,
+    );
+    const sortedContainers = sortContainers(maturityFilteredContainers, sortMode);
+    total = sortedContainers.length;
+    pagedContainers = paginateCollection(sortedContainers, pagination);
+  } else {
+    pagedContainers = context.getContainersFromStore(filteredQuery, pagination);
+    const sortedPagedContainers = sortContainers(pagedContainers, sortMode);
+    total =
+      pagination.limit === 0 && pagination.offset === 0
+        ? sortedPagedContainers.length
+        : context.getContainerCountFromStore(filteredQuery);
+    pagedContainers = sortedPagedContainers;
+  }
+
   const redactedContainers = context.redactContainersRuntimeEnv(pagedContainers);
   const data = includeVulnerabilities
     ? redactedContainers
@@ -286,6 +659,15 @@ function buildContainerListResponse(
     hasMore,
     ...(links ? { _links: links } : {}),
   };
+}
+
+function getContainersHandler(context: CrudHandlerContext, req: Request, res: Response) {
+  try {
+    res.status(200).json(buildContainerListResponse(context, req.query, '/api/containers'));
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Invalid request';
+    sendErrorResponse(res, 400, message);
+  }
 }
 
 function getContainerOrNotFound(context: CrudHandlerContext, id: string, res: Response) {
@@ -346,18 +728,25 @@ function extractContainerEnv(container: Container) {
     }));
 }
 
-function getContainersHandler(context: CrudHandlerContext, req: Request, res: Response) {
-  res.status(200).json(buildContainerListResponse(context, req.query, '/api/containers'));
-}
-
 function getContainerSummaryHandler(context: CrudHandlerContext, _req: Request, res: Response) {
   const containers = context.getContainersFromStore({});
   const containerStatus = getContainerStatusSummary(containers);
+  const hotUpdates = containers.filter(
+    (container) => container.updateAvailable && container.updateMaturityLevel === 'hot',
+  ).length;
+  const matureUpdates = containers.filter(
+    (container) =>
+      container.updateAvailable &&
+      (container.updateMaturityLevel === 'mature' ||
+        container.updateMaturityLevel === 'established'),
+  ).length;
   res.status(200).json({
     containers: containerStatus,
     security: {
       issues: getSecurityIssueCount(containers),
     },
+    hotUpdates,
+    matureUpdates,
   });
 }
 

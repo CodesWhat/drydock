@@ -64,12 +64,52 @@ function groupCrudDeps(deps: GroupedCrudDepsInput): CrudDependencies {
   };
 }
 
+function getValueByPath(record: Record<string, unknown>, path: string): unknown {
+  const pathSegments = path.split('.');
+  let currentValue: unknown = record;
+  for (const segment of pathSegments) {
+    if (!currentValue || typeof currentValue !== 'object') {
+      return undefined;
+    }
+    currentValue = (currentValue as Record<string, unknown>)[segment];
+  }
+  return currentValue;
+}
+
+function filterAndSortContainers(
+  containers: Record<string, unknown>[],
+  query: Record<string, unknown>,
+) {
+  const queryEntries = Object.entries(query || {});
+  const filteredContainers = containers.filter((container) =>
+    queryEntries.every(
+      ([queryPath, queryValue]) => getValueByPath(container, queryPath) === queryValue,
+    ),
+  );
+  return [...filteredContainers].sort((leftContainer, rightContainer) => {
+    const watcherCompare = `${leftContainer.watcher ?? ''}`.localeCompare(
+      `${rightContainer.watcher ?? ''}`,
+    );
+    if (watcherCompare !== 0) {
+      return watcherCompare;
+    }
+    const nameCompare = `${leftContainer.name ?? ''}`.localeCompare(`${rightContainer.name ?? ''}`);
+    if (nameCompare !== 0) {
+      return nameCompare;
+    }
+    return `${leftContainer.image?.tag?.value ?? ''}`.localeCompare(
+      `${rightContainer.image?.tag?.value ?? ''}`,
+    );
+  });
+}
+
 function createHarness(options: { containers?: any[] } = {}) {
   const containers = options.containers ?? [];
   const byId = new Map(containers.map((container) => [container.id, container]));
 
   const deps = {
-    getContainersFromStore: vi.fn((_query: Record<string, unknown>, pagination?: any) => {
+    getContainersFromStore: vi.fn((query: Record<string, unknown> = {}, pagination?: any) => {
+      const matchingContainers = filterAndSortContainers(containers, query);
       const limit =
         typeof pagination?.limit === 'number' && Number.isFinite(pagination.limit)
           ? Math.max(0, Math.trunc(pagination.limit))
@@ -79,14 +119,16 @@ function createHarness(options: { containers?: any[] } = {}) {
           ? Math.max(0, Math.trunc(pagination.offset))
           : 0;
       if (limit === 0 && offset === 0) {
-        return containers;
+        return matchingContainers;
       }
       if (limit === 0) {
-        return containers.slice(offset);
+        return matchingContainers.slice(offset);
       }
-      return containers.slice(offset, offset + limit);
+      return matchingContainers.slice(offset, offset + limit);
     }),
-    getContainerCountFromStore: vi.fn((_query: Record<string, unknown>) => containers.length),
+    getContainerCountFromStore: vi.fn(
+      (query: Record<string, unknown> = {}) => filterAndSortContainers(containers, query).length,
+    ),
     storeContainer: {
       getContainer: vi.fn((id: string) => byId.get(id)),
       deleteContainer: vi.fn((id: string) => {
@@ -286,13 +328,13 @@ describe('api/container/crud', () => {
       });
 
       const res = callGetContainers(harness.handlers, {
-        watcher: 'docker',
+        watcher: 'local',
         limit: '-25',
         offset: 'invalid',
       });
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        { watcher: 'docker' },
+        { watcher: 'local' },
         { limit: 0, offset: 0 },
       );
       expect(res.status).toHaveBeenCalledWith(200);
@@ -315,14 +357,14 @@ describe('api/container/crud', () => {
       });
 
       const res = callGetContainers(harness.handlers, {
-        watcher: 'docker',
+        watcher: 'local',
         includeVulnerabilities: 'false',
         limit: ['1', '99'],
         offset: ['1', '99'],
       });
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        { watcher: 'docker' },
+        { watcher: 'local' },
         { limit: 1, offset: 1 },
       );
       expect(res.status).toHaveBeenCalledWith(200);
@@ -333,8 +375,8 @@ describe('api/container/crud', () => {
         offset: 1,
         hasMore: true,
         _links: {
-          self: '/api/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=1',
-          next: '/api/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=2',
+          self: '/api/containers?watcher=local&includeVulnerabilities=false&limit=1&offset=1',
+          next: '/api/containers?watcher=local&includeVulnerabilities=false&limit=1&offset=2',
         },
       });
     });
@@ -349,13 +391,13 @@ describe('api/container/crud', () => {
       });
 
       callGetContainers(harness.handlers, {
-        watcher: 'docker',
+        watcher: 'local',
         limit: ['1', '99'],
         offset: ['1', '99'],
       });
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        { watcher: 'docker' },
+        { watcher: 'local' },
         { limit: 1, offset: 1 },
       );
     });
@@ -370,18 +412,18 @@ describe('api/container/crud', () => {
       });
 
       const res = callGetContainers(harness.handlers, {
-        watcher: 'docker',
+        watcher: 'local',
         limit: '1',
         offset: '1',
       });
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledTimes(1);
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        { watcher: 'docker' },
+        { watcher: 'local' },
         { limit: 1, offset: 1 },
       );
       expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledTimes(1);
-      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith({ watcher: 'docker' });
+      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith({ watcher: 'local' });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [expect.objectContaining({ id: 'c2' })],
@@ -390,8 +432,8 @@ describe('api/container/crud', () => {
         offset: 1,
         hasMore: true,
         _links: {
-          self: '/api/containers?watcher=docker&limit=1&offset=1',
-          next: '/api/containers?watcher=docker&limit=1&offset=2',
+          self: '/api/containers?watcher=local&limit=1&offset=1',
+          next: '/api/containers?watcher=local&limit=1&offset=2',
         },
       });
     });
@@ -654,43 +696,37 @@ describe('api/container/crud', () => {
     });
 
     test('sorts by update age with oldest updates first', () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2026-03-15T12:00:00.000Z'));
-      try {
-        const harness = createHarness({
-          containers: [
-            createContainer({
-              id: 'c1',
-              name: 'newest-update',
-              updateAvailable: true,
-              updateDetectedAt: '2026-03-14T12:00:00.000Z',
-            }),
-            createContainer({
-              id: 'c2',
-              name: 'oldest-update',
-              updateAvailable: true,
-              updateDetectedAt: '2026-02-01T12:00:00.000Z',
-            }),
-            createContainer({
-              id: 'c3',
-              name: 'no-update',
-              updateAvailable: false,
-            }),
-          ],
-        });
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            name: 'newest-update',
+            updateAvailable: true,
+            updateAge: 2_000,
+          }),
+          createContainer({
+            id: 'c2',
+            name: 'oldest-update',
+            updateAvailable: true,
+            updateAge: 8_000,
+          }),
+          createContainer({
+            id: 'c3',
+            name: 'no-update',
+            updateAvailable: false,
+          }),
+        ],
+      });
 
-        const res = callGetContainers(harness.handlers, { sort: 'age' });
-        const payload = res.json.mock.calls[0][0];
+      const res = callGetContainers(harness.handlers, { sort: 'age' });
+      const payload = res.json.mock.calls[0][0];
 
-        expect(res.status).toHaveBeenCalledWith(200);
-        expect(payload.data.map((container: { name: string }) => container.name)).toEqual([
-          'oldest-update',
-          'newest-update',
-          'no-update',
-        ]);
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.data.map((container: { name: string }) => container.name)).toEqual([
+        'oldest-update',
+        'newest-update',
+        'no-update',
+      ]);
     });
 
     test('sorts by image creation date', () => {
@@ -790,55 +826,48 @@ describe('api/container/crud', () => {
     });
 
     test('filters by update maturity buckets', () => {
-      vi.useFakeTimers();
-      vi.setSystemTime(new Date('2026-03-15T12:00:00.000Z'));
-      try {
-        const harness = createHarness({
-          containers: [
-            createContainer({
-              id: 'c-hot',
-              name: 'hot-update',
-              updateAvailable: true,
-              updateDetectedAt: '2026-03-13T12:00:00.000Z',
-            }),
-            createContainer({
-              id: 'c-mature',
-              name: 'mature-update',
-              updateAvailable: true,
-              updateDetectedAt: '2026-03-05T12:00:00.000Z',
-            }),
-            createContainer({
-              id: 'c-established',
-              name: 'established-update',
-              updateAvailable: true,
-              updateDetectedAt: '2026-01-01T12:00:00.000Z',
-            }),
-          ],
-        });
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c-hot',
+            name: 'hot-update',
+            updateAvailable: true,
+            updateMaturityLevel: 'hot',
+          }),
+          createContainer({
+            id: 'c-mature',
+            name: 'mature-update',
+            updateAvailable: true,
+            updateMaturityLevel: 'mature',
+          }),
+          createContainer({
+            id: 'c-established',
+            name: 'established-update',
+            updateAvailable: true,
+            updateMaturityLevel: 'established',
+          }),
+        ],
+      });
 
-        const hotRes = callGetContainers(harness.handlers, { maturity: 'hot' });
-        expect(hotRes.json.mock.calls[0][0].data).toEqual([
-          expect.objectContaining({ id: 'c-hot' }),
-        ]);
+      const hotRes = callGetContainers(harness.handlers, { maturity: 'hot' });
+      expect(hotRes.json.mock.calls[0][0].data).toEqual([expect.objectContaining({ id: 'c-hot' })]);
 
-        const matureRes = callGetContainers(harness.handlers, { maturity: 'mature' });
-        expect(matureRes.json.mock.calls[0][0].data).toEqual([
-          expect.objectContaining({ id: 'c-mature' }),
-        ]);
+      const matureRes = callGetContainers(harness.handlers, { maturity: 'mature' });
+      expect(matureRes.json.mock.calls[0][0].data).toEqual([
+        expect.objectContaining({ id: 'c-mature' }),
+      ]);
 
-        const establishedRes = callGetContainers(harness.handlers, { maturity: 'established' });
-        expect(establishedRes.json.mock.calls[0][0].data).toEqual([
-          expect.objectContaining({ id: 'c-established' }),
-        ]);
-      } finally {
-        vi.useRealTimers();
-      }
+      const establishedRes = callGetContainers(harness.handlers, { maturity: 'established' });
+      expect(establishedRes.json.mock.calls[0][0].data).toEqual([
+        expect.objectContaining({ id: 'c-established' }),
+      ]);
     });
 
     test.each([
       [{ sort: 'latest-first' }, 'Invalid sort value'],
       [{ status: 'running' }, 'Invalid status filter value'],
       [{ kind: 'prerelease' }, 'Invalid kind filter value'],
+      [{ watcher: '   ' }, 'Invalid watcher filter value'],
       [{ maturity: 'fresh' }, 'Invalid maturity filter value'],
     ])('returns 400 for invalid container-list filters: %o', (query, expectedMessage) => {
       const harness = createHarness({
@@ -1959,7 +1988,7 @@ describe('api/container/crud', () => {
         'docker.remote': watcherB,
       });
 
-      const res = await callWatchContainers(harness.handlers, { query: { watcher: 'docker' } });
+      const res = await callWatchContainers(harness.handlers, { query: { watcher: 'local' } });
 
       expect(watcherA.watch).toHaveBeenCalledTimes(1);
       expect(watcherB.watch).toHaveBeenCalledTimes(1);
