@@ -333,6 +333,9 @@ async function pruneOldContainers(
       typeof containerToRemove.id === 'string' &&
       forceRemoveContainerIds.has(containerToRemove.id)
     ) {
+      // These IDs come from recreated-alias filtering and are known-stale entries.
+      // Skip inspect/status verification so Docker cannot "revive" the stale alias
+      // when it still exists briefly during container recreation.
       storeContainer.deleteContainer(containerToRemove.id);
       continue;
     }
